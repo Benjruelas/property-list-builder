@@ -8,9 +8,22 @@
  * @returns {Promise<{pmtilesUrl: string, layerName: string}|null>} PMTiles info or null if failed
  */
 const BLOB_STORAGE_BASE = 'https://c26a6qe6znzs7fed.public.blob.vercel-storage.com'
-const API_BASE_URL = import.meta.env.DEV 
-  ? '/api' // Use relative path for Vite proxy in development
-  : 'https://property-list-builder-3uy05rezg-bens-projects-4d788495.vercel.app/api'
+
+// Use relative path in development (goes through vite proxy)
+// Use current window location in production to ensure we're hitting the right deployment
+const getApiBaseUrl = () => {
+  if (import.meta.env.DEV) {
+    return '/api'  // Will use vite proxy to localhost:3000
+  }
+  // In production, use the current origin to ensure we're hitting the right deployment
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api`
+  }
+  // Fallback for SSR or if window is not available
+  return import.meta.env.VITE_API_URL || 'https://property-list-builder.vercel.app/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 /**
  * Directly construct PMTiles URL (for development or fallback)
