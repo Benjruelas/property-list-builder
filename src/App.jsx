@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { MapContainer, TileLayer, useMapEvents, Circle, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, useMapEvents, Circle, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
@@ -575,12 +575,13 @@ function App() {
         minZoom={1}
         maxZoom={24}
         style={{ height: '100vh', width: '100%' }}
-        zoomControl={true}
+        zoomControl={false}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
+        <ZoomControl position="bottomright" />
         <MapController 
           userLocation={userLocation}
           onMapReady={(map) => { 
