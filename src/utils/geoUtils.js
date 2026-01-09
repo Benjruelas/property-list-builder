@@ -24,6 +24,10 @@ export const getCountyFromCoords = (lat, lng) => {
   if (lat >= 32.5 && lat <= 33.0 && lng >= -98.0 && lng <= -97.5) {
     return 'parker'
   }
+  // Ellis County
+  if (lat >= 32.1 && lat <= 32.8 && lng >= -96.9 && lng <= -96.5) {
+    return 'ellis'
+  }
   
   // Default to tarrant if unknown
   return 'tarrant'

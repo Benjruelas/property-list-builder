@@ -112,6 +112,7 @@ export function PMTilesParcelLayer({
   const pmtilesRef = useRef(null)
   const isInitializedRef = useRef(false)
   const pmtilesHeaderRef = useRef(null)
+  const currentPmtilesUrlRef = useRef(null) // Track current PMTiles URL
   
   // Store current state in refs so event handlers always see latest values
   const selectedParcelsRef = useRef(selectedParcels)
@@ -145,20 +146,42 @@ export function PMTilesParcelLayer({
     let isInitialized = isInitializedRef.current
     let pmtilesHeader = pmtilesHeaderRef.current
 
-    // Initialize PMTiles (only once)
+    // Check if PMTiles URL has changed - if so, reset and reload
+    if (currentPmtilesUrlRef.current && currentPmtilesUrlRef.current !== pmtilesUrl) {
+      console.log('PMTiles URL changed from', currentPmtilesUrlRef.current, 'to', pmtilesUrl, '- resetting and reloading...')
+      // Clear existing layers
+      parcelLayerGroup.clearLayers()
+      tileCache.clear()
+      // Reset initialization state
+      isInitialized = false
+      isInitializedRef.current = false
+      pmtilesRef.current = null
+      pmtilesHeaderRef.current = null
+      pmtiles = null
+      pmtilesHeader = null
+    }
+
+    // Initialize PMTiles (re-initialize if URL changed)
     const initPMTiles = async () => {
-      if (isInitialized && pmtiles) {
+      if (isInitialized && pmtiles && currentPmtilesUrlRef.current === pmtilesUrl) {
         loadTiles()
         return
       }
       
       try {
+        console.log('Initializing PMTiles from URL:', pmtilesUrl)
+        // Clear old layers when switching counties
+        parcelLayerGroup.clearLayers()
+        tileCache.clear()
+        
         pmtiles = new PMTiles(pmtilesUrl)
         pmtilesRef.current = pmtiles
+        currentPmtilesUrlRef.current = pmtilesUrl
         // Get header to verify PMTiles is accessible
         pmtilesHeader = await pmtiles.getHeader()
         pmtilesHeaderRef.current = pmtilesHeader
         console.log('PMTiles loaded:', {
+          url: pmtilesUrl,
           minZoom: pmtilesHeader.minZoom,
           maxZoom: pmtilesHeader.maxZoom,
           tileType: pmtilesHeader.tileType

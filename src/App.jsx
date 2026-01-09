@@ -20,8 +20,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-function MapController({ userLocation, onMapReady, onRecenterMap }) {
-  const map = useMapEvents({})
+function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange }) {
+  const map = useMap()
 
   // Store map instance reference
   useEffect(() => {
@@ -30,7 +30,7 @@ function MapController({ userLocation, onMapReady, onRecenterMap }) {
     }
   }, [map, onMapReady])
 
-  // Center map on user location when it's available
+  // Center map on user location when it's available (only initially)
   useEffect(() => {
     if (userLocation) {
       map.setView([userLocation.lat, userLocation.lng], 17, {
@@ -53,6 +53,36 @@ function MapController({ userLocation, onMapReady, onRecenterMap }) {
       })
     }
   }, [map, userLocation, onRecenterMap])
+
+  // Monitor map viewport changes to detect county
+  useEffect(() => {
+    if (!onCountyChange) return
+
+    const detectCounty = () => {
+      const center = map.getCenter()
+      const county = getCountyFromCoords(center.lat, center.lng)
+      onCountyChange(county)
+    }
+
+    // Detect county initially
+    detectCounty()
+
+    // Listen to map move events (pan, zoom) - use debounce to avoid excessive calls
+    let timeoutId = null
+    const handleMapChange = () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      timeoutId = setTimeout(detectCounty, 300) // Debounce 300ms
+    }
+
+    map.on('moveend', handleMapChange)
+    map.on('zoomend', handleMapChange)
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      map.off('moveend', handleMapChange)
+      map.off('zoomend', handleMapChange)
+    }
+  }, [map, onCountyChange])
 
   return null
 }
@@ -155,18 +185,26 @@ function App() {
     loadPublicLists()
   }, [])
 
-  // Load PMTiles URL when user location is determined
-  useEffect(() => {
-    if (!userLocation) return
+  // Load PMTiles URL based on viewport county (detected by MapController)
+  const handleCountyChange = useCallback((county) => {
+    if (!county) {
+      return
+    }
 
-    const county = getCountyFromCoords(userLocation.lat, userLocation.lng)
+    // If county hasn't changed, don't reload
+    if (county === currentCounty && pmtilesUrl) {
+      return
+    }
+
+    console.log(`County changed from ${currentCounty || 'none'} to ${county}`)
     setCurrentCounty(county)
 
-    // Get PMTiles URL for the county
+    // Get PMTiles URL for the new county
     setIsLoading(true)
     getCountyPMTilesUrl(county)
       .then((data) => {
         if (data && data.pmtilesUrl) {
+          console.log(`Loading PMTiles for ${county} county:`, data.pmtilesUrl)
           setPmtilesUrl(data.pmtilesUrl)
         }
         setIsLoading(false)
@@ -175,7 +213,7 @@ function App() {
         console.error('Error loading PMTiles URL:', error)
         setIsLoading(false)
       })
-  }, [userLocation])
+  }, [currentCounty, pmtilesUrl])
 
   // Refresh public lists
   const handlePublicListsChange = useCallback(async () => {
@@ -589,6 +627,7 @@ function App() {
             mapRef.current = map
           }}
           onRecenterMap={setRecenterMap}
+          onCountyChange={handleCountyChange}
         />
         {userLocation && (
           <LocationMarker 
