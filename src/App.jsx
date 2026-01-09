@@ -4,6 +4,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
+import { AddressSearch } from './components/AddressSearch'
 import { ListPanel } from './components/ListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
 import { ToastContainer, showToast } from './components/ui/toast'
@@ -671,6 +672,16 @@ function App() {
           />
         )}
       </MapContainer>
+
+      <AddressSearch
+        onLocationFound={(location) => {
+          console.log('Address found:', location)
+          showToast(`Navigated to: ${location.address}`, 'success')
+          // The map will be centered by AddressSearch component
+          // County detection will happen automatically via MapController
+        }}
+        mapInstanceRef={mapInstanceRef}
+      />
 
       <MapControls
         onRecenter={handleRecenter}

@@ -206,6 +206,16 @@ export function PMTilesParcelLayer({
       const bounds = map.getBounds()
       const zoom = map.getZoom()
 
+      // Prevent loading parcels when zoomed out too far (performance optimization)
+      // At zoom < 12, too many tiles would be loaded, causing freezing
+      const MIN_ZOOM_FOR_PARCELS = 12
+      if (zoom < MIN_ZOOM_FOR_PARCELS) {
+        console.log(`Zoom level ${zoom} is too low for parcel display (minimum: ${MIN_ZOOM_FOR_PARCELS}). Clearing parcels.`)
+        parcelLayerGroup.clearLayers()
+        tileCache.clear()
+        return
+      }
+
       // Get the actual zoom level to request from PMTiles
       // PMTiles has tiles at 10-14, so use the closest available zoom
       if (!pmtilesHeader) {
@@ -244,6 +254,20 @@ export function PMTilesParcelLayer({
 
       let tilesLoaded = 0
       let featuresFound = 0
+
+      // Calculate number of tiles to load
+      const tileCountX = maxX - minX + 1
+      const tileCountY = maxY - minY + 1
+      const totalTiles = tileCountX * tileCountY
+
+      // Limit the number of tiles to prevent freezing (performance optimization)
+      const MAX_TILES_TO_LOAD = 50 // Maximum tiles to load at once
+      if (totalTiles > MAX_TILES_TO_LOAD) {
+        console.warn(`Too many tiles to load (${totalTiles} tiles). Clearing parcels. Zoom in further to view parcels.`)
+        parcelLayerGroup.clearLayers()
+        tileCache.clear()
+        return
+      }
 
       // Clear existing layers before loading new ones to prevent duplicates
       parcelLayerGroup.clearLayers()
