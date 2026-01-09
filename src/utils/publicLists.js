@@ -3,10 +3,20 @@
  */
 
 // Use relative path in development (goes through vite proxy)
-// Use production URL in production
-const API_BASE_URL = import.meta.env.DEV 
-  ? '/api'  // Will use vite proxy to localhost:3001 (vercel dev)
-  : (import.meta.env.VITE_API_URL || 'https://property-list-builder-3uy05rezg-bens-projects-4d788495.vercel.app/api')
+// Use production URL in production - use current window location for dynamic detection
+const getApiBaseUrl = () => {
+  if (import.meta.env.DEV) {
+    return '/api'  // Will use vite proxy to localhost:3001 (vercel dev)
+  }
+  // In production, use the current origin to ensure we're hitting the right deployment
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api`
+  }
+  // Fallback for SSR or if window is not available
+  return import.meta.env.VITE_API_URL || 'https://property-list-builder.vercel.app/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 /**
  * Fetch all public lists

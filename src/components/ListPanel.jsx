@@ -144,7 +144,7 @@ export function ListPanel({
     if (isPublic) {
       // Delete public list via callback
       if (onDeletePublicList) {
-        onDeletePublicList(listId)
+        await onDeletePublicList(listId)
       }
     } else {
       // Delete private list
@@ -309,16 +309,16 @@ export function ListPanel({
                             // In single parcel mode, clicking the list adds the parcel
                             onAddParcelsToList(list.id, false)
                           } else {
-                            // Normal mode: toggle selection
-                            handleSelectList(list.id)
+                            // Normal mode: open list contents
+                            if (onViewListContents) {
+                              onViewListContents(list.id)
+                            }
                           }
                         }}
                         title={
                           isAddingSingleParcel 
                             ? "Click to add parcel to this list" 
-                            : selectedListId === list.id 
-                              ? "Click to deselect and remove highlighting" 
-                              : "Click to select and highlight parcels"
+                            : "Click to view list contents"
                         }
                       >
                         <div className="flex-1 min-w-0">
@@ -340,14 +340,20 @@ export function ListPanel({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8"
+                              className={cn(
+                                "h-8 w-8",
+                                selectedListId === list.id && "text-blue-600 bg-blue-50"
+                              )}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                if (onViewListContents) {
-                                  onViewListContents(list.id)
+                                // Eye button: highlight parcels on map
+                                if (selectedListId === list.id) {
+                                  onDeselectList()
+                                } else {
+                                  onSelectList(list.id)
                                 }
                               }}
-                              title="View list contents"
+                              title={selectedListId === list.id ? "Click to deselect and remove highlighting" : "Click to highlight parcels on map"}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -405,16 +411,16 @@ export function ListPanel({
                             // In single parcel mode, clicking the list adds the parcel
                             onAddParcelsToList(list.id, true)
                           } else {
-                            // Normal mode: toggle selection
-                            handleSelectList(list.id)
+                            // Normal mode: open list contents
+                            if (onViewListContents) {
+                              onViewListContents(list.id)
+                            }
                           }
                         }}
                         title={
                           isAddingSingleParcel 
                             ? "Click to add parcel to this list" 
-                            : selectedListId === list.id 
-                              ? "Click to deselect and remove highlighting" 
-                              : "Click to select and highlight parcels"
+                            : "Click to view list contents"
                         }
                       >
                         <div className="flex-1 min-w-0">
@@ -436,14 +442,20 @@ export function ListPanel({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8"
+                              className={cn(
+                                "h-8 w-8",
+                                selectedListId === list.id && "text-blue-600 bg-blue-50"
+                              )}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                if (onViewListContents) {
-                                  onViewListContents(list.id)
+                                // Eye button: highlight parcels on map
+                                if (selectedListId === list.id) {
+                                  onDeselectList()
+                                } else {
+                                  onSelectList(list.id)
                                 }
                               }}
-                              title="View list contents"
+                              title={selectedListId === list.id ? "Click to deselect and remove highlighting" : "Click to highlight parcels on map"}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
