@@ -1,35 +1,57 @@
 /**
- * Get county name from coordinates (approximate)
- * Adjust these boundaries based on your actual county data
+ * Get county name from coordinates
+ * Boundaries extracted from actual GeoJSON bounding boxes
+ * Check order matters due to overlaps - check more specific/unique counties first
  */
 export const getCountyFromCoords = (lat, lng) => {
-  // Texas county boundaries (approximate)
-  // Tarrant County
-  if (lat >= 32.5 && lat <= 33.1 && lng >= -97.4 && lng <= -97.0) {
-    return 'tarrant'
-  }
-  // Dallas County
-  if (lat >= 32.7 && lat <= 33.2 && lng >= -96.9 && lng <= -96.6) {
-    return 'dallas'
-  }
-  // Denton County
-  if (lat >= 33.0 && lat <= 33.5 && lng >= -97.2 && lng <= -96.9) {
-    return 'denton'
-  }
-  // Johnson County
-  if (lat >= 32.2 && lat < 32.5 && lng >= -97.5 && lng <= -97.1) {
-    return 'johnson'
-  }
-  // Parker County
-  if (lat >= 32.5 && lat <= 33.0 && lng >= -98.0 && lng <= -97.5) {
+  // Boundaries from actual GeoJSON files:
+  // Parker: lat [32.5505, 33.0117], lng [-98.0686, -97.5375]
+  // Dallas: lat [32.5450, 32.9897], lng [-97.0387, -96.5170]
+  // Tarrant: lat [32.5484, 32.9940], lng [-97.5530, -97.0311]
+  // Johnson: lat [32.1342, 32.5621], lng [-97.6452, -97.0775]
+  // Ellis: lat [32.0521, 32.5490], lng [-97.0871, -96.3830]
+  
+  // Use tighter boundaries with priority order to handle overlaps
+  
+  // 1. Parker County (clearly west, lng < -97.5)
+  // lat [32.5505, 33.0117], lng [-98.0686, -97.5375]
+  if (lng < -97.5 && lat >= 32.55 && lat <= 33.02) {
     return 'parker'
   }
-  // Ellis County
-  if (lat >= 32.1 && lat <= 32.8 && lng >= -96.9 && lng <= -96.5) {
+  
+  // 2. Dallas County (clearly east, lng > -97.0)
+  // lat [32.5450, 32.9897], lng [-97.0387, -96.5170]
+  if (lng > -97.0 && lat >= 32.54 && lat <= 32.99) {
+    return 'dallas'
+  }
+  
+  // 3. Johnson County (southern, west of Tarrant)
+  // lat [32.1342, 32.5621], lng [-97.6452, -97.0775]
+  if (lat < 32.56 && lng < -97.1 && lng >= -97.65) {
+    return 'johnson'
+  }
+  
+  // 4. Ellis County (southern, east of Tarrant)
+  // lat [32.0521, 32.5490], lng [-97.0871, -96.3830]
+  if (lat < 32.55 && lng > -97.1 && lng <= -96.38) {
     return 'ellis'
   }
   
-  // Default to tarrant if unknown
+  // 5. Tarrant County (central area between others - check last)
+  // lat [32.5484, 32.9940], lng [-97.5530, -97.0311]
+  // This is in the middle, overlaps with Dallas/Parker boundaries
+  if (lat >= 32.54 && lat <= 32.99 && lng >= -97.56 && lng <= -97.03) {
+    return 'tarrant'
+  }
+  
+  // 6. Denton County (estimated - north of Tarrant/Dallas)
+  // Rough estimate: lat > 33.0, lng -97.2 to -96.9
+  if (lat > 32.99 && lat <= 33.5 && lng >= -97.2 && lng <= -96.9) {
+    return 'denton'
+  }
+  
+  // Default to tarrant if unknown (most common area)
+  console.warn(`County not detected for coordinates: lat=${lat}, lng=${lng}, defaulting to tarrant`)
   return 'tarrant'
 }
 
@@ -57,4 +79,6 @@ export const isPointInBounds = (lat, lng, bounds) => {
          lng >= bounds.west && 
          lng <= bounds.east
 }
+
+
 
