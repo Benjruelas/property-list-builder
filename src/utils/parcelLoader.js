@@ -16,14 +16,12 @@ const getApiBaseUrl = () => {
     return '/api'  // Will use vite proxy to localhost:3000
   }
   // In production, use the current origin to ensure we're hitting the right deployment
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && window.location) {
     return `${window.location.origin}/api`
   }
   // Fallback for SSR or if window is not available
   return import.meta.env.VITE_API_URL || 'https://property-list-builder.vercel.app/api'
 }
-
-const API_BASE_URL = getApiBaseUrl()
 
 /**
  * Directly construct PMTiles URL (for development or fallback)
@@ -34,19 +32,23 @@ const getDirectPMTilesUrl = (county) => {
 }
 
 export const getCountyPMTilesUrl = async (county) => {
-  // In development, use direct URL (blob is public, no API needed)
-  if (import.meta.env.DEV) {
-    const pmtilesUrl = getDirectPMTilesUrl(county)
-    console.log(`Development mode: Using direct PMTiles URL for ${county}:`, pmtilesUrl)
-    return {
-      pmtilesUrl: pmtilesUrl,
-      layerName: 'parcels'
-    }
+  // Since PMTiles are stored in public blob storage, we can use direct URLs
+  // This avoids CORS issues and API calls entirely
+  const pmtilesUrl = getDirectPMTilesUrl(county)
+  console.log(`Using direct PMTiles URL for ${county}:`, pmtilesUrl)
+  return {
+    pmtilesUrl: pmtilesUrl,
+    layerName: 'parcels'
   }
-
+  
+  // Note: If you want to use the API route in the future, uncomment below:
+  /*
   // In production, try API first, fallback to direct URL
+  // Get API URL dynamically each time to ensure we have the latest origin
+  const apiBaseUrl = getApiBaseUrl()
   try {
-    const url = `${API_BASE_URL}/parcels?county=${county}`
+    const url = `${apiBaseUrl}/parcels?county=${county}`
+    console.log(`Fetching PMTiles URL from: ${url}`)
     const response = await fetch(url)
     
     if (response.ok) {
@@ -77,6 +79,7 @@ export const getCountyPMTilesUrl = async (county) => {
       layerName: 'parcels'
     }
   }
+  */
 }
 
 

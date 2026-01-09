@@ -34,8 +34,7 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
   useEffect(() => {
     if (userLocation) {
       map.setView([userLocation.lat, userLocation.lng], 17, {
-        animate: true,
-        duration: 0.5
+        animate: false  // Don't animate initially - faster load
       })
     }
   }, [userLocation, map])
@@ -59,13 +58,35 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     if (!onCountyChange) return
 
     const detectCounty = () => {
-      const center = map.getCenter()
-      const county = getCountyFromCoords(center.lat, center.lng)
-      onCountyChange(county)
+      try {
+        const center = map.getCenter()
+        if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') {
+          console.warn('Map center not available yet', center)
+          return
+        }
+        const county = getCountyFromCoords(center.lat, center.lng)
+        console.log('📍 Detected county:', county, 'from center:', center.lat, center.lng)
+        onCountyChange(county)
+      } catch (error) {
+        console.error('Error detecting county:', error)
+      }
     }
 
-    // Detect county initially
-    detectCounty()
+    // Wait for map to be ready and initialized before detecting county
+    const checkAndDetect = () => {
+      if (map.getCenter && map.getCenter().lat && map.getCenter().lng) {
+        detectCounty()
+      } else {
+        // Map not ready yet, try again
+        setTimeout(checkAndDetect, 100)
+      }
+    }
+
+    // Initial detection - wait for map to be ready
+    map.whenReady(() => {
+      // Add a small delay to ensure map is fully initialized
+      setTimeout(checkAndDetect, 300)
+    })
 
     // Listen to map move events (pan, zoom) - use debounce to avoid excessive calls
     let timeoutId = null
@@ -188,11 +209,13 @@ function App() {
   // Load PMTiles URL based on viewport county (detected by MapController)
   const handleCountyChange = useCallback((county) => {
     if (!county) {
+      console.warn('handleCountyChange called with no county')
       return
     }
 
     // If county hasn't changed, don't reload
     if (county === currentCounty && pmtilesUrl) {
+      console.log(`County ${county} already loaded, skipping`)
       return
     }
 
@@ -201,16 +224,19 @@ function App() {
 
     // Get PMTiles URL for the new county
     setIsLoading(true)
+    console.log(`Fetching PMTiles URL for ${county} county...`)
     getCountyPMTilesUrl(county)
       .then((data) => {
         if (data && data.pmtilesUrl) {
-          console.log(`Loading PMTiles for ${county} county:`, data.pmtilesUrl)
+          console.log(`✅ Loading PMTiles for ${county} county:`, data.pmtilesUrl)
           setPmtilesUrl(data.pmtilesUrl)
+        } else {
+          console.error(`❌ No PMTiles URL returned for ${county} county`)
         }
         setIsLoading(false)
       })
       .catch((error) => {
-        console.error('Error loading PMTiles URL:', error)
+        console.error('❌ Error loading PMTiles URL:', error)
         setIsLoading(false)
       })
   }, [currentCounty, pmtilesUrl])
