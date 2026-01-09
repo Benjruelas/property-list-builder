@@ -1,0 +1,8 @@
+node_modules
+*.pmtiles
+*.geojson
+pmtiles_output/
+parcel_data/
+.DS_Store
+*.log
+
