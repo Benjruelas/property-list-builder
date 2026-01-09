@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 .vercel
 .env*.local
+
+# Large data files (hosted separately)
+*.pmtiles
+*.geojson
+pmtiles_output/
+parcel_data/
