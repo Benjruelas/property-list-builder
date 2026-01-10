@@ -52,48 +52,91 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       // Use Nominatim (OpenStreetMap) geocoding - free, no API key needed
       // Try multiple search strategies for better results
       
-      // Strategy 1: Search with Texas, USA appended
-      let encodedQuery = encodeURIComponent(`${searchQuery}, Texas, USA`)
-      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1&bounded=1&viewbox=-99.5,31.5,-96.0,33.5`
+      // Try multiple search strategies for better results
+      let data = []
       
-      console.log('Searching for address:', searchQuery)
+      // Strategy 1: Search as-is (for complete addresses like "123 Main St, Fort Worth, TX")
+      let encodedQuery = encodeURIComponent(searchQuery)
+      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1`
+      
+      console.log('🔍 Searching for address:', searchQuery)
       console.log('Query URL:', url)
 
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'PropertyListBuilder/1.0', // Required by Nominatim
-          'Accept-Language': 'en-US,en'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`Geocoding failed: ${response.status}`)
-      }
-
-      let data = await response.json()
-      console.log('Nominatim results:', data)
-      
-      // If no results, try without "Texas, USA" suffix (might be more specific address)
-      if (!data || data.length === 0) {
-        console.log('No results with Texas suffix, trying without...')
-        encodedQuery = encodeURIComponent(searchQuery)
-        url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1`
-        
-        const response2 = await fetch(url, {
+      try {
+        const response = await fetch(url, {
           headers: {
-            'User-Agent': 'PropertyListBuilder/1.0',
+            'User-Agent': 'PropertyListBuilder/1.0', // Required by Nominatim
             'Accept-Language': 'en-US,en'
           }
         })
+
+        if (response.ok) {
+          data = await response.json()
+          console.log('Nominatim results (direct):', data.length, 'results')
+        }
+      } catch (err) {
+        console.warn('First search attempt failed:', err)
+      }
+      
+      // Strategy 2: If no results or few results, try with Texas, USA appended
+      if (!data || data.length < 3) {
+        console.log('Trying search with Texas, USA suffix...')
+        encodedQuery = encodeURIComponent(`${searchQuery}, Texas, USA`)
+        url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1`
         
-        if (response2.ok) {
-          data = await response2.json()
-          console.log('Nominatim results (without suffix):', data)
+        try {
+          const response2 = await fetch(url, {
+            headers: {
+              'User-Agent': 'PropertyListBuilder/1.0',
+              'Accept-Language': 'en-US,en'
+            }
+          })
+          
+          if (response2.ok) {
+            const data2 = await response2.json()
+            console.log('Nominatim results (with Texas suffix):', data2.length, 'results')
+            // Merge results, avoiding duplicates
+            if (data2 && data2.length > 0) {
+              const existingIds = new Set(data.map(r => r.place_id))
+              const newResults = data2.filter(r => !existingIds.has(r.place_id))
+              data = [...data, ...newResults]
+            }
+          }
+        } catch (err) {
+          console.warn('Second search attempt failed:', err)
+        }
+      }
+      
+      // Strategy 3: Try with bounding box for DFW area if still no good results
+      if (!data || data.length === 0) {
+        console.log('Trying search with DFW area bounding box...')
+        encodedQuery = encodeURIComponent(`${searchQuery}, DFW, Texas`)
+        url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1&bounded=1&viewbox=-99.5,31.5,-96.0,33.5`
+        
+        try {
+          const response3 = await fetch(url, {
+            headers: {
+              'User-Agent': 'PropertyListBuilder/1.0',
+              'Accept-Language': 'en-US,en'
+            }
+          })
+          
+          if (response3.ok) {
+            const data3 = await response3.json()
+            console.log('Nominatim results (with bounding box):', data3?.length || 0, 'results')
+            if (data3 && data3.length > 0) {
+              data = data3
+            }
+          }
+        } catch (err) {
+          console.warn('Third search attempt failed:', err)
         }
       }
 
       // Filter results to prioritize Texas addresses
       if (data && data.length > 0) {
+        console.log(`✅ Found ${data.length} total results`)
+        
         // Sort: Texas addresses first, then others
         const sortedData = data.sort((a, b) => {
           const aIsTexas = a.address?.state === 'Texas' || a.display_name?.includes('Texas') || false
@@ -104,14 +147,18 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         })
         
         // Limit to top 5 results
-        setResults(sortedData.slice(0, 5))
+        const finalResults = sortedData.slice(0, 5)
+        console.log(`✅ Showing ${finalResults.length} results to user`)
+        setResults(finalResults)
+        setError(null)
       } else {
+        console.warn('❌ No results found for query:', searchQuery)
         setResults([])
-        setError('No addresses found. Try a different search term.')
+        setError(`No addresses found for "${searchQuery}". Try including: street number, street name, city, and state (e.g., "123 Main St, Fort Worth, TX").`)
       }
     } catch (err) {
-      console.error('Geocoding error:', err)
-      setError(`Failed to search address: ${err.message}. Please try again.`)
+      console.error('❌ Geocoding error:', err)
+      setError(`Search failed: ${err.message}. Please check your connection and try again.`)
       setResults([])
     } finally {
       setIsSearching(false)
@@ -254,13 +301,22 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
               </ul>
             ) : query.length >= 3 && !isSearching && !error ? (
               <div className="p-3 text-sm text-gray-500 text-center">
-                No results found
+                <div>No results found for "{query}"</div>
+                <div className="text-xs mt-2 text-gray-400">
+                  Try including street number, city name, or zip code
+                </div>
               </div>
             ) : query.length > 0 && query.length < 3 ? (
               <div className="p-3 text-sm text-gray-500 text-center">
                 Type at least 3 characters to search
               </div>
             ) : null}
+            
+            {error && !isSearching && (
+              <div className="p-3 text-xs text-gray-500 text-center">
+                Tip: Try searching with street number, street name, city, and state
+              </div>
+            )}
           </div>
         </div>
       )}
