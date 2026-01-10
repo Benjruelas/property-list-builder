@@ -162,6 +162,7 @@ function App() {
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null) // Reference to parcel layer functions
+  const currentPopupRef = useRef(null) // Reference to current Leaflet popup
 
   // Recenter map function passed to MapController
   const recenterMapRef = useRef(null)
@@ -415,6 +416,19 @@ function App() {
       })
     } else {
       // Single click: show popup and highlight
+      // First, close any existing popup
+      if (mapInstanceRef.current) {
+        if (currentPopupRef.current) {
+          mapInstanceRef.current.closePopup(currentPopupRef.current)
+        } else {
+          // Close any open popup (fallback)
+          mapInstanceRef.current.closePopup()
+        }
+        currentPopupRef.current = null
+      }
+      
+      // Update clicked parcel ID (this will trigger style updates via useEffect in PMTilesParcelLayer)
+      // The previous parcel's highlighting will be removed automatically when clickedParcelId changes
       setClickedParcelId(parcelId)
       
       // Store parcel data for adding to list
@@ -448,7 +462,19 @@ function App() {
               </div>
             </div>
           `)
-          .openOn(mapInstanceRef.current)
+        
+        // Store popup reference and open it
+        currentPopupRef.current = popup
+        popup.openOn(mapInstanceRef.current)
+        
+        // Clear popup reference and clicked parcel ID when popup is closed
+        popup.on('remove', () => {
+          if (currentPopupRef.current === popup) {
+            currentPopupRef.current = null
+            // Clear clicked parcel ID when popup is manually closed by user
+            setClickedParcelId(null)
+          }
+        })
       }
     }
     
@@ -519,6 +545,10 @@ function App() {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.closePopup()
       }
+      if (currentPopupRef.current) {
+        currentPopupRef.current = null
+      }
+      setClickedParcelId(null) // Clear highlight
       setClickedParcelData(null)
       setShowListSelector(false)
       setIsListPanelOpen(false)
