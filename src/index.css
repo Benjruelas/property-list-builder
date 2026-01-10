@@ -72,21 +72,22 @@
 }
 
 /* Align zoom controls below search button on the left */
-/* Search button: top-3 (12px) + button height (48px mobile/40px desktop) + gap-2 (8px) = 68px mobile / 60px desktop */
+/* Match spacing exactly: top-3 (12px) + button height (48px mobile/40px desktop) + gap-2 (8px) = 68px mobile / 60px desktop */
+/* This matches the spacing of buttons on the right side */
 .leaflet-top.leaflet-left {
-  top: 68px !important; /* Position below search button with gap */
-  left: 12px !important;
+  top: 68px !important; /* 12px (top-3) + 48px (h-12) + 8px (gap-2) */
+  left: 12px !important; /* Match left-3 from search button container */
 }
 
 @media (min-width: 640px) {
   .leaflet-top.leaflet-left {
-    top: 60px !important; /* Smaller button height on desktop */
+    top: 60px !important; /* 12px (top-3) + 40px (h-10) + 8px (gap-2) */
   }
 }
 
 .leaflet-control-zoom a {
-  width: 48px !important;
-  height: 48px !important;
+  width: 48px !important; /* Match h-12 on mobile */
+  height: 48px !important; /* Match h-12 on mobile */
   line-height: 48px !important;
   font-size: 24px !important;
   font-weight: 600 !important;
@@ -94,6 +95,16 @@
   color: #1f2937 !important;
   border: 2px solid #e5e7eb !important;
   touch-action: manipulation !important;
+}
+
+@media (min-width: 640px) {
+  .leaflet-control-zoom a {
+    width: 40px !important; /* Match h-10 on desktop */
+    height: 40px !important; /* Match h-10 on desktop */
+    line-height: 40px !important;
+    font-size: 20px !important;
+  }
+}
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
 }
 
