@@ -164,7 +164,16 @@ export function PMTilesParcelLayer({
     // Initialize PMTiles (re-initialize if URL changed)
     const initPMTiles = async () => {
       if (isInitialized && pmtiles && currentPmtilesUrlRef.current === pmtilesUrl) {
-        loadTiles()
+        // Map is already initialized, just load tiles if map is ready
+        if (map && map.whenReady) {
+          map.whenReady(() => {
+            setTimeout(() => {
+              loadTiles()
+            }, 100)
+          })
+        } else {
+          loadTiles()
+        }
         return
       }
       
@@ -188,8 +197,19 @@ export function PMTilesParcelLayer({
         })
         isInitialized = true
         isInitializedRef.current = true
-        // Trigger initial tile load
-        loadTiles()
+        // Trigger initial tile load after ensuring map is fully ready
+        if (map && map.whenReady) {
+          map.whenReady(() => {
+            setTimeout(() => {
+              loadTiles()
+            }, 200)
+          })
+        } else {
+          // Fallback if whenReady is not available
+          setTimeout(() => {
+            loadTiles()
+          }, 200)
+        }
       } catch (error) {
         console.error('Error initializing PMTiles:', error)
       }
@@ -203,8 +223,25 @@ export function PMTilesParcelLayer({
         return
       }
 
-      const bounds = map.getBounds()
-      const zoom = map.getZoom()
+      // Check if map is fully initialized before getting bounds
+      if (!map || !map.getBounds || !map.getZoom) {
+        console.warn('Map not ready for tile loading')
+        return
+      }
+
+      let bounds, zoom
+      try {
+        bounds = map.getBounds()
+        zoom = map.getZoom()
+      } catch (error) {
+        console.warn('Error getting map bounds/zoom, map may not be ready:', error)
+        return
+      }
+
+      if (!bounds || typeof zoom !== 'number' || isNaN(zoom)) {
+        console.warn('Invalid map bounds or zoom')
+        return
+      }
 
       // Prevent loading parcels when zoomed out too far (performance optimization)
       // At zoom < 12, too many tiles would be loaded, causing freezing
@@ -507,8 +544,11 @@ export function PMTilesParcelLayer({
     }
 
     // Load tiles when map moves (debounced to avoid excessive calls)
-    map.on('moveend', debouncedLoadTiles)
-    map.on('zoomend', debouncedLoadTiles)
+    // Only add listeners if map is ready
+    if (map && map.on) {
+      map.on('moveend', debouncedLoadTiles)
+      map.on('zoomend', debouncedLoadTiles)
+    }
 
     // Function to update existing polygon styles (called when selection changes)
     const updatePolygonStyles = () => {
@@ -534,13 +574,23 @@ export function PMTilesParcelLayer({
 
     // Cleanup on unmount only
     return () => {
-      map.off('moveend', onMoveEnd)
-      map.off('zoomend', onMoveEnd)
-      if (layerGroupRef.current) {
-        map.removeLayer(layerGroupRef.current)
+      if (loadTilesTimeout) clearTimeout(loadTilesTimeout)
+      if (map && map.off) {
+        // Remove event listeners using the same function reference
+        map.off('moveend', debouncedLoadTiles)
+        map.off('zoomend', debouncedLoadTiles)
+      }
+      if (layerGroupRef.current && map && map.removeLayer) {
+        try {
+          map.removeLayer(layerGroupRef.current)
+        } catch (error) {
+          console.warn('Error removing layer group:', error)
+        }
         layerGroupRef.current = null
       }
-      tileCacheRef.current.clear()
+      if (tileCacheRef.current) {
+        tileCacheRef.current.clear()
+      }
       pmtilesRef.current = null
       isInitializedRef.current = false
       pmtilesHeaderRef.current = null
