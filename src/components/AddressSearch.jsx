@@ -91,7 +91,8 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       // DFW center approximately: 32.7767, -96.7970
       const encodedQuery = encodeURIComponent(trimmedQuery)
       const proximity = '-96.7970,32.7767' // [lng, lat] format, bias results toward DFW
-      const bbox = '-99.5,-96.0,31.5,33.5' // [minLng, maxLng, minLat, maxLat] - DFW area bounding box
+      // Mapbox bbox format: minLon,minLat,maxLon,maxLat (west,south,east,north)
+      const bbox = '-99.5,31.5,-96.0,33.5' // DFW area bounding box
       
       // Use autocomplete endpoint for better suggestions
       const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${accessToken}&proximity=${proximity}&bbox=${bbox}&limit=5&country=us&types=address,poi,place&autocomplete=true`
