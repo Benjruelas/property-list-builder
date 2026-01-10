@@ -74,15 +74,6 @@
   display: block !important;
 }
 
-/* Reset all margins first */
-.leaflet-control-zoom a {
-  margin: 0 !important;
-}
-
-/* Add gap between zoom buttons - match gap-2 (8px) spacing */
-.leaflet-control-zoom a.leaflet-control-zoom-out {
-  margin-top: 8px !important; /* Match gap-2 (8px) spacing between zoom buttons */
-}
 
 /* Align zoom controls below search button on the left */
 /* Match spacing exactly: top-3 (12px) + button height (48px mobile/40px desktop) + gap-2 (8px) = 68px mobile / 60px desktop */
@@ -118,6 +109,19 @@
   align-items: center !important;
   justify-content: center !important;
   text-decoration: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Zoom-in button (first) - no top margin */
+.leaflet-control-zoom a.leaflet-control-zoom-in {
+  margin-top: 0 !important;
+}
+
+/* Zoom-out button (second) - 8px gap from zoom-in */
+.leaflet-control-zoom a.leaflet-control-zoom-out {
+  margin-top: 8px !important; /* Match gap-2 (8px) spacing */
 }
 
 @media (min-width: 640px) {
