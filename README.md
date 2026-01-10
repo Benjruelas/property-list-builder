@@ -16,12 +16,33 @@ A mobile webapp for selecting parcels on a map and building an exportable list o
 
 - Node.js 18+
 - npm or yarn
+- Mapbox account (free) - [Sign up here](https://account.mapbox.com/auth/signup/)
 
 ### Installation
 
 ```bash
 npm install
 ```
+
+### Environment Variables
+
+Create a `.env.local` file in the project root:
+
+```bash
+VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
+```
+
+**Getting your Mapbox Access Token:**
+1. Sign up for a free Mapbox account at [mapbox.com](https://www.mapbox.com/)
+2. Go to your [Account page](https://account.mapbox.com/)
+3. Scroll to "Access tokens"
+4. Copy your **Default Public Token** (starts with `pk.`)
+5. Add it to `.env.local` as shown above
+
+**Mapbox Free Tier:**
+- 100,000 geocoding requests per month
+- No credit card required
+- Perfect for development and small-scale production use
 
 ### Development
 
