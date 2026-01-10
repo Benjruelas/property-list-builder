@@ -114,16 +114,23 @@ function LocationMarker({ position }) {
   const circleRef = useRef(null)
 
   useEffect(() => {
-    if (circleRef.current) {
+    if (circleRef.current && position) {
+      // Smoothly update marker position when location changes
+      circleRef.current.setLatLng([position.lat, position.lng])
       // Bring to front to ensure it's visible above other layers
       circleRef.current.bringToFront()
     }
   }, [position])
 
+  // Only render if we have a valid position
+  if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number') {
+    return null
+  }
+
   return (
     <Circle
       ref={circleRef}
-      center={position}
+      center={[position.lat, position.lng]}
       radius={7.5}
       pathOptions={{
         color: '#000000',
@@ -161,34 +168,105 @@ function App() {
     recenterMapRef.current = func
   }, [])
 
-      // Get user's current location
-      useEffect(() => {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              const location = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-              }
-              setUserLocation(location)
-            },
-            (error) => {
-              // Silently fail and use default location - no alerts on mobile
-              console.error('Error getting location:', error)
-              // Default to Dallas, TX if geolocation fails
-              setUserLocation({ lat: 32.7767, lng: -96.7970 })
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
-            }
-          )
-        } else {
-          // Default to Dallas, TX if geolocation not available
-          setUserLocation({ lat: 32.7767, lng: -96.7970 })
+  // Track user's current location in real-time
+  useEffect(() => {
+    let watchId = null
+    let lastUpdateTime = 0
+    const UPDATE_THROTTLE_MS = 1000 // Update at most once per second to avoid excessive renders
+
+    if (navigator.geolocation) {
+      // First, try to get current position quickly
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
+          setUserLocation(location)
+          lastUpdateTime = Date.now()
+          console.log('📍 Initial location obtained:', location)
+        },
+        (error) => {
+          // Silently fail and use default location - no alerts on mobile
+          console.error('Error getting initial location:', error)
+          // Default to Dallas, TX if geolocation fails
+          setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
         }
-      }, [])
+      )
+
+      // Then, watch for position updates continuously
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const now = Date.now()
+          // Throttle updates to avoid excessive re-renders
+          if (now - lastUpdateTime < UPDATE_THROTTLE_MS) {
+            return
+          }
+
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
+
+          // Only update if location has changed significantly (at least 5 meters)
+          // This prevents jittery updates when GPS accuracy is low
+          setUserLocation((prevLocation) => {
+            if (!prevLocation) {
+              return location
+            }
+
+            // Calculate distance between old and new position (rough approximation)
+            const latDiff = Math.abs(location.lat - prevLocation.lat)
+            const lngDiff = Math.abs(location.lng - prevLocation.lng)
+            // ~111,000 meters per degree latitude, varies by longitude but close enough
+            const distanceMeters = Math.sqrt(
+              Math.pow(latDiff * 111000, 2) + 
+              Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
+            )
+
+            // Only update if moved at least 5 meters
+            if (distanceMeters >= 5) {
+              console.log(`📍 Location updated: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)} (moved ${distanceMeters.toFixed(1)}m)`)
+              lastUpdateTime = now
+              return location
+            }
+
+            return prevLocation
+          })
+        },
+        (error) => {
+          // Log error but don't stop watching
+          console.error('Error watching location:', error)
+          // Keep previous location if available
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 5000 // Accept cached position up to 5 seconds old
+        }
+      )
+
+      console.log('📍 Started watching location (watchId:', watchId, ')')
+    } else {
+      // Default to Dallas, TX if geolocation not available
+      setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
+    }
+
+    // Cleanup: stop watching when component unmounts
+    return () => {
+      if (watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId)
+        console.log('📍 Stopped watching location (watchId:', watchId, ')')
+      }
+    }
+  }, [])
 
   // Load public lists on mount
   useEffect(() => {
@@ -658,7 +736,7 @@ function App() {
         />
         {userLocation && (
           <LocationMarker 
-            position={[userLocation.lat, userLocation.lng]}
+            position={userLocation}
           />
         )}
         {pmtilesUrl && (
