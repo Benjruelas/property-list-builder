@@ -14,7 +14,8 @@ export function PMTilesParcelLayer({
   clickedParcelId,
   selectedParcels,
   selectedListId,
-  publicLists
+  publicLists,
+  onLayerReady // Callback to expose layer functions
 }) {
   const map = useMap()
 
@@ -131,6 +132,147 @@ export function PMTilesParcelLayer({
   useEffect(() => {
     listParcelIdsRef.current = listParcelIds
   }, [listParcelIds])
+
+  // Simple point-in-polygon algorithm (ray casting)
+  const isPointInPolygon = (point, polygon) => {
+    const [x, y] = point
+    let inside = false
+    
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const [xi, yi] = polygon[i]
+      const [xj, yj] = polygon[j]
+      
+      const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+      if (intersect) inside = !inside
+    }
+    
+    return inside
+  }
+
+  // Function to find parcel at a given location and trigger click
+  const findParcelAtLocationRef = useRef((lat, lng) => {
+    if (!layerGroupRef.current || !onParcelClick) {
+      return false
+    }
+
+    const point = L.latLng(lat, lng)
+    let foundParcel = null
+    let closestDistance = Infinity
+    let closestParcel = null
+
+    // Iterate through all layers to find the parcel containing or closest to the point
+    layerGroupRef.current.eachLayer((layer) => {
+      if (layer.eachLayer) {
+        // Feature group (tile), iterate through its polygons
+        layer.eachLayer((subLayer) => {
+          if (subLayer._parcelId && subLayer instanceof L.Polygon) {
+            const bounds = subLayer.getBounds()
+            
+            // Check if point is within bounds first (quick check)
+            if (bounds.contains(point)) {
+              try {
+                // Get polygon's latlngs and check if point is actually inside
+                const latlngs = subLayer.getLatLngs()
+                if (Array.isArray(latlngs) && latlngs.length > 0) {
+                  // Handle nested arrays (polygons with holes)
+                  const firstRing = Array.isArray(latlngs[0]) && typeof latlngs[0][0] === 'object' 
+                    ? latlngs[0] 
+                    : latlngs
+                  
+                  if (firstRing.length >= 3) {
+                    // Convert to simple [lat, lng] array format
+                    const polygonPoints = firstRing.map(ll => {
+                      if (Array.isArray(ll)) return ll
+                      return [ll.lat, ll.lng]
+                    })
+                    
+                    if (isPointInPolygon([lat, lng], polygonPoints)) {
+                      foundParcel = subLayer
+                      return false // Stop iteration - found exact match
+                    }
+                  }
+                }
+              } catch (error) {
+                console.warn('Error checking point in polygon:', error)
+              }
+            }
+            
+            // Track closest polygon as fallback
+            const center = bounds.getCenter()
+            const distance = point.distanceTo(center)
+            if (distance < closestDistance) {
+              closestDistance = distance
+              closestParcel = subLayer
+            }
+          }
+        })
+      } else if (layer._parcelId && layer instanceof L.Polygon) {
+        // Direct polygon layer
+        const bounds = layer.getBounds()
+        if (bounds.contains(point)) {
+          try {
+            const latlngs = layer.getLatLngs()
+            if (Array.isArray(latlngs) && latlngs.length > 0) {
+              const firstRing = Array.isArray(latlngs[0]) && typeof latlngs[0][0] === 'object'
+                ? latlngs[0]
+                : latlngs
+              
+              if (firstRing.length >= 3) {
+                const polygonPoints = firstRing.map(ll => {
+                  if (Array.isArray(ll)) return ll
+                  return [ll.lat, ll.lng]
+                })
+                
+                if (isPointInPolygon([lat, lng], polygonPoints)) {
+                  foundParcel = layer
+                  return false
+                }
+              }
+            }
+          } catch (error) {
+            console.warn('Error checking point in polygon:', error)
+          }
+        }
+        
+        // Track closest
+        const center = bounds.getCenter()
+        const distance = point.distanceTo(center)
+        if (distance < closestDistance) {
+          closestDistance = distance
+          closestParcel = layer
+        }
+      }
+    })
+
+    // Use found parcel or fallback to closest one (within reasonable distance - 50 meters)
+    const targetParcel = foundParcel || (closestDistance < 50 ? closestParcel : null)
+
+    if (targetParcel && targetParcel._parcelId) {
+      const parcelId = targetParcel._parcelId
+      const properties = targetParcel._properties || {}
+      
+      console.log('📍 Found parcel at location:', parcelId, foundParcel ? '(exact match)' : '(closest, ' + closestDistance.toFixed(1) + 'm away)')
+      
+      onParcelClick({
+        latlng: point,
+        properties: properties,
+        geometry: null,
+        parcelId: parcelId
+      })
+      return true
+    }
+
+    return false
+  })
+
+  // Expose the function via callback
+  useEffect(() => {
+    if (onLayerReady) {
+      onLayerReady({
+        findParcelAtLocation: findParcelAtLocationRef.current
+      })
+    }
+  }, [onLayerReady])
 
   useEffect(() => {
     if (!pmtilesUrl) return
@@ -442,6 +584,7 @@ export function PMTilesParcelLayer({
                 interactive: true // Ensure clickable
               })
               polygon._parcelId = parcelId // Store ID for later reference
+              polygon._properties = properties // Store properties for later reference
               
               // Add click handler - use the actual click event latlng for better accuracy
               if (onParcelClick) {

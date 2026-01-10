@@ -161,6 +161,7 @@ function App() {
   const [showListSelector, setShowListSelector] = useState(false) // Show list selector in popup
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
+  const parcelLayerRef = useRef(null) // Reference to parcel layer functions
 
   // Recenter map function passed to MapController
   const recenterMapRef = useRef(null)
@@ -747,6 +748,9 @@ function App() {
             selectedParcels={selectedParcels}
             selectedListId={selectedListId}
             publicLists={publicLists}
+            onLayerReady={(layerFunctions) => {
+              parcelLayerRef.current = layerFunctions
+            }}
           />
         )}
       </MapContainer>
@@ -757,6 +761,28 @@ function App() {
           showToast(`Navigated to: ${location.address}`, 'success')
           // The map will be centered by AddressSearch component
           // County detection will happen automatically via MapController
+          
+          // After map centers, wait for parcels to load, then find and highlight the parcel
+          setTimeout(() => {
+            if (parcelLayerRef.current && parcelLayerRef.current.findParcelAtLocation) {
+              console.log('🔍 Searching for parcel at:', location.lat, location.lng)
+              const found = parcelLayerRef.current.findParcelAtLocation(location.lat, location.lng)
+              if (!found) {
+                console.log('📍 No parcel found at this location - may need to zoom in or parcels may not be loaded yet')
+              }
+            } else {
+              console.log('⚠️ Parcel layer not ready yet, retrying...')
+              // Retry after a longer delay if layer isn't ready
+              setTimeout(() => {
+                if (parcelLayerRef.current && parcelLayerRef.current.findParcelAtLocation) {
+                  const found = parcelLayerRef.current.findParcelAtLocation(location.lat, location.lng)
+                  if (!found) {
+                    console.log('📍 No parcel found at this location after retry')
+                  }
+                }
+              }, 2000)
+            }
+          }, 1500) // Wait 1.5 seconds for map to center and parcels to load
         }}
         mapInstanceRef={mapInstanceRef}
       />
