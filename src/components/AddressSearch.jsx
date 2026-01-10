@@ -50,13 +50,19 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
 
     try {
       // Use Nominatim (OpenStreetMap) geocoding - free, no API key needed
-      // Add Texas, USA to improve results for our area
-      const encodedQuery = encodeURIComponent(`${searchQuery}, Texas, USA`)
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=5&addressdetails=1&extratags=1`
+      // Try multiple search strategies for better results
+      
+      // Strategy 1: Search with Texas, USA appended
+      let encodedQuery = encodeURIComponent(`${searchQuery}, Texas, USA`)
+      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1&bounded=1&viewbox=-99.5,31.5,-96.0,33.5`
+      
+      console.log('Searching for address:', searchQuery)
+      console.log('Query URL:', url)
 
       const response = await fetch(url, {
         headers: {
-          'User-Agent': 'PropertyListBuilder/1.0' // Required by Nominatim
+          'User-Agent': 'PropertyListBuilder/1.0', // Required by Nominatim
+          'Accept-Language': 'en-US,en'
         }
       })
 
@@ -64,11 +70,48 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         throw new Error(`Geocoding failed: ${response.status}`)
       }
 
-      const data = await response.json()
-      setResults(data || [])
+      let data = await response.json()
+      console.log('Nominatim results:', data)
+      
+      // If no results, try without "Texas, USA" suffix (might be more specific address)
+      if (!data || data.length === 0) {
+        console.log('No results with Texas suffix, trying without...')
+        encodedQuery = encodeURIComponent(searchQuery)
+        url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1`
+        
+        const response2 = await fetch(url, {
+          headers: {
+            'User-Agent': 'PropertyListBuilder/1.0',
+            'Accept-Language': 'en-US,en'
+          }
+        })
+        
+        if (response2.ok) {
+          data = await response2.json()
+          console.log('Nominatim results (without suffix):', data)
+        }
+      }
+
+      // Filter results to prioritize Texas addresses
+      if (data && data.length > 0) {
+        // Sort: Texas addresses first, then others
+        const sortedData = data.sort((a, b) => {
+          const aIsTexas = a.address?.state === 'Texas' || a.display_name?.includes('Texas') || false
+          const bIsTexas = b.address?.state === 'Texas' || b.display_name?.includes('Texas') || false
+          if (aIsTexas && !bIsTexas) return -1
+          if (!aIsTexas && bIsTexas) return 1
+          return 0
+        })
+        
+        // Limit to top 5 results
+        setResults(sortedData.slice(0, 5))
+      } else {
+        setResults([])
+        setError('No addresses found. Try a different search term.')
+      }
     } catch (err) {
       console.error('Geocoding error:', err)
-      setError('Failed to search address. Please try again.')
+      setError(`Failed to search address: ${err.message}. Please try again.`)
       setResults([])
     } finally {
       setIsSearching(false)
