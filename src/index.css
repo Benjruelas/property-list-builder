@@ -71,10 +71,17 @@
   margin: 0 0 0 0 !important;
 }
 
-/* Align zoom controls with custom buttons on the left */
+/* Align zoom controls below search button on the left */
+/* Search button: top-3 (12px) + button height (48px mobile/40px desktop) + gap-2 (8px) = 68px mobile / 60px desktop */
 .leaflet-top.leaflet-left {
-  top: 68px !important; /* 12px (top-3) + 48px (button height) + 8px (gap-2) */
+  top: 68px !important; /* Position below search button with gap */
   left: 12px !important;
+}
+
+@media (min-width: 640px) {
+  .leaflet-top.leaflet-left {
+    top: 60px !important; /* Smaller button height on desktop */
+  }
 }
 
 .leaflet-control-zoom a {
