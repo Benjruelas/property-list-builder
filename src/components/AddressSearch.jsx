@@ -121,7 +121,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
   }
 
   return (
-    <div className="absolute top-3 left-3 z-[1000]">
+    <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2">
       <Button
         onClick={handleToggle}
         size="icon"

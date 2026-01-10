@@ -68,12 +68,12 @@
 .leaflet-control-zoom {
   border: none !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
-  margin: 12px 0 0 12px !important;
+  margin: 0 0 0 0 !important;
 }
 
 /* Align zoom controls with custom buttons on the left */
 .leaflet-top.leaflet-left {
-  top: 12px !important;
+  top: 68px !important; /* 12px (top-3) + 48px (button height) + 8px (gap-2) */
   left: 12px !important;
 }
 
