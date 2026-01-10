@@ -252,35 +252,65 @@ export function PMTilesParcelLayer({
         se: [se.lat, se.lng]
       })
 
-      let tilesLoaded = 0
-      let featuresFound = 0
+      // Track which tiles should be visible in current viewport
+      const tilesInViewport = new Set()
+      
+      // Build set of tiles that should be visible
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          tilesInViewport.add(`${requestedZoom}/${x}/${y}`)
+        }
+      }
 
-      // Calculate number of tiles to load
+      // Calculate number of tiles to potentially load
       const tileCountX = maxX - minX + 1
       const tileCountY = maxY - minY + 1
       const totalTiles = tileCountX * tileCountY
 
-      // Limit the number of tiles to prevent freezing (performance optimization)
-      const MAX_TILES_TO_LOAD = 50 // Maximum tiles to load at once
-      if (totalTiles > MAX_TILES_TO_LOAD) {
-        console.warn(`Too many tiles to load (${totalTiles} tiles). Clearing parcels. Zoom in further to view parcels.`)
-        parcelLayerGroup.clearLayers()
-        tileCache.clear()
-        return
+      // First pass: Ensure cached tiles that are in viewport are on the map
+      let cachedTilesAdded = 0
+      tileCache.forEach((tileGroup, tileKey) => {
+        if (tilesInViewport.has(tileKey)) {
+          // Tile should be visible - ensure it's on the map
+          if (!parcelLayerGroup.hasLayer(tileGroup)) {
+            parcelLayerGroup.addLayer(tileGroup)
+          }
+          cachedTilesAdded++
+        } else {
+          // Tile is outside viewport - remove from map but keep in cache
+          if (parcelLayerGroup.hasLayer(tileGroup)) {
+            parcelLayerGroup.removeLayer(tileGroup)
+          }
+        }
+      })
+
+      // Count how many new tiles need to be loaded
+      const newTilesToLoad = Array.from(tilesInViewport).filter(key => !tileCache.has(key)).length
+      
+      // Limit the number of NEW tiles to load (don't count cached ones)
+      const MAX_TILES_TO_LOAD = 50
+      if (newTilesToLoad > MAX_TILES_TO_LOAD) {
+        console.warn(`Too many new tiles to load (${newTilesToLoad} new, ${cachedTilesAdded} cached). Zoom in to load more.`)
+        // Still show cached tiles, just don't load new ones beyond the limit
       }
 
-      // Clear existing layers before loading new ones to prevent duplicates
-      parcelLayerGroup.clearLayers()
+      let newTilesLoaded = 0
+      let featuresFound = 0
 
-      // Load tiles
+      // Second pass: Load only new tiles that aren't in cache
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
           const tileKey = `${requestedZoom}/${x}/${y}`
           
-          // Skip if already loaded and still in viewport
-          if (tileCache.has(tileKey) && map.hasLayer(tileCache.get(tileKey))) {
-            tilesLoaded++; // Count as loaded if already present
+          // Skip if already in cache (already handled above)
+          if (tileCache.has(tileKey)) {
             continue
+          }
+
+          // Check if we've hit the limit for new tiles
+          if (newTilesLoaded >= MAX_TILES_TO_LOAD) {
+            console.log(`Reached limit of ${MAX_TILES_TO_LOAD} new tiles, skipping remaining tiles`)
+            break
           }
 
           try {
@@ -313,7 +343,7 @@ export function PMTilesParcelLayer({
             }
 
             console.log(`Tile ${tileKey}: Found ${parcelsLayer.length} features in layer "${parcelsLayer.name || 'unknown'}"`)
-            tilesLoaded++
+            newTilesLoaded++
 
             // Create a temporary layer group for this tile's features
             const tileFeatureGroup = L.featureGroup()
@@ -461,22 +491,24 @@ export function PMTilesParcelLayer({
       
       const totalLayers = parcelLayerGroup.getLayers().length
       if (totalLayers > 0) {
-        console.log(`✅ Added ${totalLayers} total parcels to map (${tilesLoaded} tiles loaded, ${featuresFound} features processed)`)
+        console.log(`✅ Map updated: ${totalLayers} parcels visible (${cachedTilesAdded} cached tiles reused, ${newTilesLoaded} new tiles loaded, ${featuresFound} new features)`)
       } else {
-        console.log(`⚠️ No parcels found in current viewport (${tilesLoaded} tiles checked, ${featuresFound} features found)`)
+        console.log(`⚠️ No parcels in viewport (${cachedTilesAdded} cached, ${newTilesLoaded} new tiles loaded)`)
       }
     }
 
-    // Load tiles when map moves
-    const onMoveEnd = () => {
-      // Don't clear layers here - let loadTiles handle it
-      // This prevents flickering
-      tileCache.clear()
-      loadTiles()
+    // Debounce tile loading to avoid excessive calls during panning
+    let loadTilesTimeout = null
+    const debouncedLoadTiles = () => {
+      if (loadTilesTimeout) clearTimeout(loadTilesTimeout)
+      loadTilesTimeout = setTimeout(() => {
+        loadTiles()
+      }, 150) // Wait 150ms after last movement
     }
 
-    map.on('moveend', onMoveEnd)
-    map.on('zoomend', onMoveEnd)
+    // Load tiles when map moves (debounced to avoid excessive calls)
+    map.on('moveend', debouncedLoadTiles)
+    map.on('zoomend', debouncedLoadTiles)
 
     // Function to update existing polygon styles (called when selection changes)
     const updatePolygonStyles = () => {
