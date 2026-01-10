@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils'
 import { getCountyFromCoords } from '@/utils/geoUtils'
 
 /**
- * Address search component using Nominatim (OpenStreetMap) geocoding
- * Free, no API key required, but has rate limiting
+ * Enhanced address search with intelligent query parsing and multiple geocoding strategies
+ * Handles: street addresses, coordinates, city names, zip codes, and partial addresses
  */
 export function AddressSearch({ onLocationFound, mapInstanceRef }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -18,20 +18,285 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
   const inputRef = useRef(null)
   const searchTimeoutRef = useRef(null)
 
+  // Smart address normalization and parsing
+  const normalizeQuery = (rawQuery) => {
+    const trimmed = rawQuery.trim()
+    
+    // Check if it's coordinates (e.g., "32.7767, -96.7970" or "32.7767,-96.7970")
+    const coordMatch = trimmed.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/)
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1])
+      const lng = parseFloat(coordMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { type: 'coordinates', lat, lng, original: trimmed }
+      }
+    }
+    
+    // Normalize address: remove extra spaces, handle common abbreviations
+    let normalized = trimmed
+      .replace(/\s+/g, ' ') // Multiple spaces to single
+      .replace(/\b(street|st\.?)\b/gi, 'St')
+      .replace(/\b(avenue|ave\.?)\b/gi, 'Ave')
+      .replace(/\b(road|rd\.?)\b/gi, 'Rd')
+      .replace(/\b(drive|dr\.?)\b/gi, 'Dr')
+      .replace(/\b(boulevard|blvd\.?)\b/gi, 'Blvd')
+      .replace(/\b(lane|ln\.?)\b/gi, 'Ln')
+      .replace(/\b(court|ct\.?)\b/gi, 'Ct')
+      .replace(/\b(place|pl\.?)\b/gi, 'Pl')
+      .trim()
+    
+    return { type: 'address', query: normalized, original: trimmed }
+  }
+
+  // Generate multiple search query variations
+  const generateSearchQueries = (normalizedQuery) => {
+    const queries = []
+    const original = normalizedQuery.original
+    
+    // Extract potential components
+    const parts = original.split(',').map(p => p.trim()).filter(Boolean)
+    const hasZip = /\b\d{5}(-\d{4})?\b/.test(original)
+    const hasState = /\b(tx|texas)\b/i.test(original)
+    const hasCity = parts.length >= 2
+    
+    // Query 1: Original query (for complete addresses)
+    queries.push(original)
+    
+    // Query 2: Add "Texas, USA" if not present
+    if (!hasState && !hasCity) {
+      queries.push(`${original}, Texas, USA`)
+    } else if (!hasState) {
+      queries.push(`${original}, Texas`)
+    }
+    
+    // Query 3: For street addresses, try with DFW area cities
+    if (parts.length >= 2 && parts[0].match(/\d+/)) {
+      // Looks like a street address
+      const streetPart = parts[0]
+      if (parts.length === 1) {
+        // Just street, add common DFW cities
+        queries.push(`${streetPart}, Fort Worth, TX`)
+        queries.push(`${streetPart}, Dallas, TX`)
+        queries.push(`${streetPart}, Arlington, TX`)
+      } else if (parts.length === 2) {
+        // Street + city, add state
+        queries.push(`${streetPart}, ${parts[1]}, TX`)
+      }
+    }
+    
+    // Query 4: If zip code found, search by zip
+    if (hasZip) {
+      const zipMatch = original.match(/\b(\d{5}(-\d{4})?)\b/)
+      if (zipMatch) {
+        queries.push(`${zipMatch[1]}, Texas`)
+      }
+    }
+    
+    // Query 5: Try with bounding box for DFW area (for any Texas-related query)
+    if (hasState || hasCity || /\b(7[6-7]\d{3}|75\d{3})\b/.test(original) || /\b\d+\s+\w+\s+(st|street|ave|avenue|rd|road|dr|drive|blvd|boulevard|ln|lane|ct|court|pl|place)\b/i.test(original)) {
+      queries.push(`${original}, DFW, Texas`)
+    }
+    
+    return [...new Set(queries)] // Remove duplicates
+  }
+
+  // Perform geocoding with multiple strategies
+  const performSearch = async (rawQuery) => {
+    if (!rawQuery.trim() || rawQuery.length < 2) {
+      return
+    }
+
+    setIsSearching(true)
+    setError(null)
+    setResults([])
+
+    try {
+      // Normalize and parse query
+      const normalized = normalizeQuery(rawQuery)
+      
+      // Handle coordinates directly
+      if (normalized.type === 'coordinates') {
+        const { lat, lng } = normalized
+        const county = getCountyFromCoords(lat, lng)
+        const supportedCounties = ['tarrant', 'dallas', 'ellis', 'johnson', 'parker']
+        const isSupported = supportedCounties.includes(county.toLowerCase())
+        
+        const coordinateResult = {
+          display_name: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+          lat: lat.toString(),
+          lon: lng.toString(),
+          address: {
+            county: county.charAt(0).toUpperCase() + county.slice(1) + ' County',
+            state: 'Texas'
+          },
+          _isCoordinate: true,
+          _isSupported: isSupported
+        }
+        
+        setResults([coordinateResult])
+        setIsSearching(false)
+        return
+      }
+      
+      // Generate multiple query variations
+      const searchQueries = generateSearchQueries(normalized)
+      console.log('🔍 Search queries generated:', searchQueries)
+      
+      // DFW area bounding box for viewbox parameter
+      const viewbox = '-99.5,31.5,-96.0,33.5' // minLon,minLat,maxLon,maxLat
+      
+      // Try each query strategy in parallel (with rate limiting awareness)
+      const allResults = []
+      const seenPlaceIds = new Set()
+      
+      for (const searchQuery of searchQueries.slice(0, 5)) { // Limit to 5 strategies to avoid rate limiting
+        try {
+          const encodedQuery = encodeURIComponent(searchQuery)
+          
+          // Use structured query for better results when possible
+          const isStructured = searchQuery.includes(',') && searchQuery.split(',').length >= 2
+          
+          let url
+          if (isStructured && searchQuery.includes('TX') || searchQuery.includes('Texas')) {
+            // Use structured query with viewbox for Texas addresses
+            url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=8&addressdetails=1&extratags=1&countrycodes=us&viewbox=${viewbox}&bounded=0&email=property-list-builder@example.com`
+          } else {
+            // Standard search with viewbox hint
+            url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=8&addressdetails=1&extratags=1&countrycodes=us&viewbox=${viewbox}&bounded=0&email=property-list-builder@example.com`
+          }
+          
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'PropertyListBuilder/1.0 (https://property-list-builder.vercel.app)',
+              'Accept-Language': 'en-US,en',
+              'Referer': 'https://property-list-builder.vercel.app'
+            }
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            
+            if (data && Array.isArray(data) && data.length > 0) {
+              // Add results, avoiding duplicates
+              for (const result of data) {
+                if (result.place_id && !seenPlaceIds.has(result.place_id)) {
+                  seenPlaceIds.add(result.place_id)
+                  allResults.push(result)
+                }
+              }
+              
+              // If we have good results, we can stop early
+              if (allResults.length >= 10) {
+                break
+              }
+            }
+          } else if (response.status === 429) {
+            console.warn('Rate limited by Nominatim, slowing down...')
+            // Wait a bit before next request
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        } catch (err) {
+          console.warn(`Search failed for query "${searchQuery}":`, err.message)
+          // Continue to next query
+        }
+        
+        // Small delay between requests to respect rate limits
+        if (searchQueries.indexOf(searchQuery) < searchQueries.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+      }
+      
+      // Rank and filter results
+      if (allResults.length > 0) {
+        // Score and rank results
+        const scoredResults = allResults.map(result => {
+          let score = 0
+          const address = result.address || {}
+          const displayName = (result.display_name || '').toLowerCase()
+          const queryLower = normalized.original.toLowerCase()
+          
+          // Boost Texas addresses
+          if (address.state === 'Texas' || displayName.includes('texas')) {
+            score += 100
+          }
+          
+          // Boost addresses in DFW area (Tarrant, Dallas, and surrounding counties)
+          const lat = parseFloat(result.lat)
+          const lng = parseFloat(result.lon)
+          if (lat >= 32.5 && lat <= 33.5 && lng >= -99.5 && lng <= -96.0) {
+            score += 50
+          }
+          
+          // Boost if query appears in display name
+          const queryWords = queryLower.split(/\s+/)
+          queryWords.forEach(word => {
+            if (word.length >= 3 && displayName.includes(word)) {
+              score += 10
+            }
+          })
+          
+          // Boost house/building numbers
+          const hasNumber = /\d+/.test(queryLower) && /\d+/.test(displayName)
+          if (hasNumber) {
+            score += 20
+          }
+          
+          // Boost addresses (has house number + street)
+          if (address.house_number && address.road) {
+            score += 30
+          }
+          
+          // Penalize results too far from DFW
+          if (lat < 31 || lat > 34 || lng < -100 || lng > -95) {
+            score -= 50
+          }
+          
+          return { ...result, _score: score }
+        })
+        
+        // Sort by score (highest first), then by importance
+        scoredResults.sort((a, b) => {
+          if (b._score !== a._score) {
+            return b._score - a._score
+          }
+          return (b.importance || 0) - (a.importance || 0)
+        })
+        
+        // Limit to top 5 results
+        const finalResults = scoredResults.slice(0, 5)
+        console.log(`✅ Found ${allResults.length} total results, showing top ${finalResults.length}`)
+        
+        setResults(finalResults)
+        setError(null)
+      } else {
+        console.warn('❌ No results found for any query variation')
+        setResults([])
+        setError(`No addresses found. Try: "123 Main St, Fort Worth, TX" or coordinates like "32.7767, -96.7970"`)
+      }
+    } catch (err) {
+      console.error('❌ Search error:', err)
+      setError(`Search failed: ${err.message}. Please try again.`)
+      setResults([])
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
   // Debounced search
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current)
     }
 
-    if (!query.trim() || query.length < 3) {
+    if (!query.trim() || query.length < 2) {
       setResults([])
+      setError(null)
       return
     }
 
     searchTimeoutRef.current = setTimeout(() => {
       performSearch(query)
-    }, 500) // 500ms debounce
+    }, 400) // Slightly faster debounce
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -40,148 +305,19 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
     }
   }, [query])
 
-  const performSearch = async (searchQuery) => {
-    if (!searchQuery.trim() || searchQuery.length < 3) {
-      return
-    }
-
-    setIsSearching(true)
-    setError(null)
-
-    try {
-      // Use Nominatim (OpenStreetMap) geocoding - free, no API key needed
-      // Try multiple search strategies for better results
-      
-      // Try multiple search strategies for better results
-      let data = []
-      
-      // Strategy 1: Search as-is (for complete addresses like "123 Main St, Fort Worth, TX")
-      let encodedQuery = encodeURIComponent(searchQuery)
-      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1`
-      
-      console.log('🔍 Searching for address:', searchQuery)
-      console.log('Query URL:', url)
-
-      try {
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'PropertyListBuilder/1.0', // Required by Nominatim
-            'Accept-Language': 'en-US,en'
-          }
-        })
-
-        if (response.ok) {
-          data = await response.json()
-          console.log('Nominatim results (direct):', data.length, 'results')
-        }
-      } catch (err) {
-        console.warn('First search attempt failed:', err)
-      }
-      
-      // Strategy 2: If no results or few results, try with Texas, USA appended
-      if (!data || data.length < 3) {
-        console.log('Trying search with Texas, USA suffix...')
-        encodedQuery = encodeURIComponent(`${searchQuery}, Texas, USA`)
-        url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1`
-        
-        try {
-          const response2 = await fetch(url, {
-            headers: {
-              'User-Agent': 'PropertyListBuilder/1.0',
-              'Accept-Language': 'en-US,en'
-            }
-          })
-          
-          if (response2.ok) {
-            const data2 = await response2.json()
-            console.log('Nominatim results (with Texas suffix):', data2.length, 'results')
-            // Merge results, avoiding duplicates
-            if (data2 && data2.length > 0) {
-              const existingIds = new Set(data.map(r => r.place_id))
-              const newResults = data2.filter(r => !existingIds.has(r.place_id))
-              data = [...data, ...newResults]
-            }
-          }
-        } catch (err) {
-          console.warn('Second search attempt failed:', err)
-        }
-      }
-      
-      // Strategy 3: Try with bounding box for DFW area if still no good results
-      if (!data || data.length === 0) {
-        console.log('Trying search with DFW area bounding box...')
-        encodedQuery = encodeURIComponent(`${searchQuery}, DFW, Texas`)
-        url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=10&addressdetails=1&extratags=1&bounded=1&viewbox=-99.5,31.5,-96.0,33.5`
-        
-        try {
-          const response3 = await fetch(url, {
-            headers: {
-              'User-Agent': 'PropertyListBuilder/1.0',
-              'Accept-Language': 'en-US,en'
-            }
-          })
-          
-          if (response3.ok) {
-            const data3 = await response3.json()
-            console.log('Nominatim results (with bounding box):', data3?.length || 0, 'results')
-            if (data3 && data3.length > 0) {
-              data = data3
-            }
-          }
-        } catch (err) {
-          console.warn('Third search attempt failed:', err)
-        }
-      }
-
-      // Filter results to prioritize Texas addresses
-      if (data && data.length > 0) {
-        console.log(`✅ Found ${data.length} total results`)
-        
-        // Sort: Texas addresses first, then others
-        const sortedData = data.sort((a, b) => {
-          const aIsTexas = a.address?.state === 'Texas' || a.display_name?.includes('Texas') || false
-          const bIsTexas = b.address?.state === 'Texas' || b.display_name?.includes('Texas') || false
-          if (aIsTexas && !bIsTexas) return -1
-          if (!aIsTexas && bIsTexas) return 1
-          return 0
-        })
-        
-        // Limit to top 5 results
-        const finalResults = sortedData.slice(0, 5)
-        console.log(`✅ Showing ${finalResults.length} results to user`)
-        setResults(finalResults)
-        setError(null)
-      } else {
-        console.warn('❌ No results found for query:', searchQuery)
-        setResults([])
-        setError(`No addresses found for "${searchQuery}". Try including: street number, street name, city, and state (e.g., "123 Main St, Fort Worth, TX").`)
-      }
-    } catch (err) {
-      console.error('❌ Geocoding error:', err)
-      setError(`Search failed: ${err.message}. Please check your connection and try again.`)
-      setResults([])
-    } finally {
-      setIsSearching(false)
-    }
-  }
-
   const handleSelectResult = (result) => {
     const lat = parseFloat(result.lat)
     const lng = parseFloat(result.lon)
     const displayName = result.display_name || query
 
-    // Get map instance from ref
     const map = mapInstanceRef?.current
 
-    // Center map on the location
     if (map && typeof map.setView === 'function') {
-      // Zoom to an appropriate level (street level) where parcels will be visible
       map.setView([lat, lng], 17, {
         animate: true,
         duration: 0.5
       })
 
-      // Callback after a short delay to ensure map has moved
       setTimeout(() => {
         if (onLocationFound) {
           onLocationFound({ lat, lng, address: displayName })
@@ -191,7 +327,6 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       onLocationFound({ lat, lng, address: displayName })
     }
 
-    // Close search
     setIsOpen(false)
     setQuery('')
     setResults([])
@@ -202,6 +337,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       setIsOpen(false)
       setQuery('')
       setResults([])
+      setError(null)
     } else {
       setIsOpen(true)
       setTimeout(() => {
@@ -229,7 +365,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
               <Input
                 ref={inputRef}
                 type="text"
-                placeholder="Search address..."
+                placeholder="Search address or coordinates..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="pr-8"
@@ -245,6 +381,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
                 setIsOpen(false)
                 setQuery('')
                 setResults([])
+                setError(null)
               }}
               className="h-8 w-8"
             >
@@ -262,7 +399,6 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
             {results.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {results.map((result, index) => {
-                  // Check if this result is in a supported county
                   const lat = parseFloat(result.lat)
                   const lng = parseFloat(result.lon)
                   const county = getCountyFromCoords(lat, lng)
@@ -271,7 +407,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
                   
                   return (
                     <li
-                      key={index}
+                      key={result.place_id || result._isCoordinate ? `coord-${lat}-${lng}` : index}
                       onClick={() => handleSelectResult(result)}
                       className={cn(
                         "p-3 hover:bg-blue-50 cursor-pointer transition-colors",
@@ -299,28 +435,21 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
                   )
                 })}
               </ul>
-            ) : query.length >= 3 && !isSearching && !error ? (
+            ) : query.length >= 2 && !isSearching && !error ? (
               <div className="p-3 text-sm text-gray-500 text-center">
                 <div>No results found for "{query}"</div>
                 <div className="text-xs mt-2 text-gray-400">
-                  Try including street number, city name, or zip code
+                  Try: street address, city name, zip code, or coordinates (lat, lng)
                 </div>
               </div>
-            ) : query.length > 0 && query.length < 3 ? (
+            ) : query.length > 0 && query.length < 2 ? (
               <div className="p-3 text-sm text-gray-500 text-center">
-                Type at least 3 characters to search
+                Type at least 2 characters to search
               </div>
             ) : null}
-            
-            {error && !isSearching && (
-              <div className="p-3 text-xs text-gray-500 text-center">
-                Tip: Try searching with street number, street name, city, and state
-              </div>
-            )}
           </div>
         </div>
       )}
     </div>
   )
 }
-
