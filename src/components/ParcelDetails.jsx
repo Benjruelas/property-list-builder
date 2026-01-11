@@ -26,7 +26,6 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
     { label: 'Property ID', value: properties.PROP_ID },
     { label: 'Address', value: address },
     { label: 'Owner', value: properties.OWNER_NAME },
-    { label: 'Land Use', value: properties.LOC_LAND_U },
   ]
 
   const propertyDetails = [
@@ -103,15 +102,15 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
 
           {/* Display any additional properties that aren't in our predefined categories */}
           <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm text-gray-500">
-              <p className="font-semibold mb-2">All Properties:</p>
-              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                {Object.entries(properties)
-                  .filter(([key]) => 
-                    !['PROP_ID', 'SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'OWNER_NAME', 'LOC_LAND_U', 
-                      'YEAR_BUILT', 'SQFT', 'ACRES', 'BEDROOMS', 'BATHROOMS', 
-                      'TOTAL_VALUE', 'LAND_VALUE', 'IMPROVEMENT_VALUE'].includes(key)
-                  )
+              <div className="text-sm text-gray-500">
+                <p className="font-semibold mb-2">All Properties:</p>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  {Object.entries(properties)
+                    .filter(([key]) => 
+                      !['PROP_ID', 'SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'OWNER_NAME', 
+                        'YEAR_BUILT', 'SQFT', 'ACRES', 'BEDROOMS', 'BATHROOMS', 
+                        'TOTAL_VALUE', 'LAND_VALUE', 'IMPROVEMENT_VALUE'].includes(key)
+                    )
                   .map(([key, value]) => (
                     <div key={key} className="text-xs">
                       <span className="font-medium text-gray-600">{key}:</span>{' '}
