@@ -114,11 +114,30 @@ export default async function handler(req, res) {
       
       // Otherwise, it might be queue metadata
       if (data.pending === false && data.download_url) {
-        return res.status(200).json({
-          status: 'completed',
-          downloadUrl: data.download_url,
-          message: 'Queue completed - download CSV from download_url'
-        })
+        // Download CSV from download_url and parse it
+        try {
+          const csvResponse = await fetch(data.download_url, {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`
+            }
+          })
+          
+          if (!csvResponse.ok) {
+            console.error('Failed to download CSV:', csvResponse.status)
+            return res.status(500).json({ error: 'Failed to download results CSV' })
+          }
+          
+          const csvText = await csvResponse.text()
+          const results = parseCsvResults(csvText)
+          
+          return res.status(200).json({
+            status: 'completed',
+            results: results
+          })
+        } catch (error) {
+          console.error('Error downloading/parsing CSV:', error)
+          return res.status(500).json({ error: 'Failed to process results CSV', message: error.message })
+        }
       }
       
       return res.status(200).json({
@@ -128,11 +147,11 @@ export default async function handler(req, res) {
     } else if (contentType.includes('text/csv')) {
       // If it's CSV, parse it
       const csvText = await queueResponse.text()
-      // For now, return status indicating CSV is available
+      const results = parseCsvResults(csvText)
+      
       return res.status(200).json({
         status: 'completed',
-        message: 'Results available as CSV',
-        csvData: csvText
+        results: results
       })
     } else {
       // Unknown content type
