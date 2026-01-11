@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { X, MapPin, Home, DollarSign, Calendar, Square, Users, Info, Phone, Mail } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { Button } from './ui/button'
@@ -20,7 +20,25 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
   // Get skip traced contact info
   // Try multiple ID formats to ensure we find the skip trace data
   const parcelId = parcelData.id || parcelData.properties?.PROP_ID
-  const skipTracedInfo = parcelId ? getSkipTracedParcel(parcelId) : null
+  
+  // Use state to track skip trace info and refresh when dialog opens or parcelData changes
+  const [skipTracedInfo, setSkipTracedInfo] = useState(null)
+  
+  // Re-read skip trace data when dialog opens or parcelData changes
+  useEffect(() => {
+    if (isOpen && parcelId) {
+      const info = getSkipTracedParcel(parcelId)
+      setSkipTracedInfo(info)
+      
+      // Also re-read after a short delay to catch async updates
+      const timeout = setTimeout(() => {
+        const updatedInfo = getSkipTracedParcel(parcelId)
+        setSkipTracedInfo(updatedInfo)
+      }, 500)
+      
+      return () => clearTimeout(timeout)
+    }
+  }, [isOpen, parcelId, parcelData])
 
   // Calculate age (Current Year - Year Built)
   const currentYear = new Date().getFullYear()
