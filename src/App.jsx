@@ -794,7 +794,8 @@ function App() {
         .map(parcel => {
           const parcelId = parcel.id || parcel
           const props = parcel.properties || parcel
-          const address = parcel.address || props.SITUS_ADDR || props.SITE_ADDR || props.ADDRESS || ''
+          // Use MAIL_ADDR for skip tracing (has full address with city, state, zip)
+          const address = props.MAIL_ADDR || props.MAILING_ADDR || parcel.address || props.SITUS_ADDR || props.SITE_ADDR || props.ADDRESS || ''
           const ownerName = props.OWNER_NAME || ''
           return { parcelId, address, ownerName }
         })
@@ -861,11 +862,12 @@ function App() {
     }
 
     const parcelId = parcelData.id
-    const address = parcelData.address || parcelData.properties?.SITUS_ADDR || parcelData.properties?.SITE_ADDR || parcelData.properties?.ADDRESS || ''
+    // Use MAIL_ADDR for skip tracing (has full address with city, state, zip)
+    const address = parcelData.properties?.MAIL_ADDR || parcelData.properties?.MAILING_ADDR || parcelData.address || parcelData.properties?.SITUS_ADDR || parcelData.properties?.SITE_ADDR || parcelData.properties?.ADDRESS || ''
     const ownerName = parcelData.properties?.OWNER_NAME || ''
 
     if (!address) {
-      showToast('Parcel address is required for skip tracing', 'error')
+      showToast('Parcel mailing address is required for skip tracing', 'error')
       return
     }
 
