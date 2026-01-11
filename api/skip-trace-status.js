@@ -10,6 +10,129 @@
  * Base URL: https://tracerfy.com/v1/api/
  */
 
+/**
+ * Parse CSV results from Tracerfy API
+ * @param {string} csvText - CSV text content
+ * @returns {Array} Parsed results array
+ */
+function parseCsvResults(csvText) {
+  if (!csvText || !csvText.trim()) {
+    return []
+  }
+  
+  const lines = csvText.trim().split('\n')
+  if (lines.length < 2) {
+    return [] // Need at least header + 1 data row
+  }
+  
+  // Parse header
+  const header = parseCsvLine(lines[0])
+  const headerMap = {}
+  header.forEach((col, index) => {
+    headerMap[col.toLowerCase().trim()] = index
+  })
+  
+  // Parse data rows
+  const results = []
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCsvLine(lines[i])
+    if (row.length === 0) continue
+    
+    // Extract phone numbers
+    const phones = [
+      getField(row, headerMap, 'primary_phone'),
+      getField(row, headerMap, 'mobile_1'),
+      getField(row, headerMap, 'mobile_2'),
+      getField(row, headerMap, 'mobile_3'),
+      getField(row, headerMap, 'mobile_4'),
+      getField(row, headerMap, 'mobile_5'),
+      getField(row, headerMap, 'landline_1'),
+      getField(row, headerMap, 'landline_2'),
+      getField(row, headerMap, 'landline_3')
+    ].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i) // Remove duplicates
+    
+    // Extract emails
+    const emails = [
+      getField(row, headerMap, 'email_1'),
+      getField(row, headerMap, 'email_2'),
+      getField(row, headerMap, 'email_3'),
+      getField(row, headerMap, 'email_4'),
+      getField(row, headerMap, 'email_5')
+    ].filter(Boolean)
+    
+    // Extract mailing address
+    const mailingAddress = [
+      getField(row, headerMap, 'mail_address'),
+      getField(row, headerMap, 'mail_city'),
+      getField(row, headerMap, 'mail_state'),
+      getField(row, headerMap, 'mail_zip')
+    ].filter(Boolean).join(', ')
+    
+    results.push({
+      phone: phones[0] || null,
+      phoneNumbers: phones,
+      email: emails[0] || null,
+      emails: emails,
+      address: mailingAddress || null
+    })
+  }
+  
+  return results
+}
+
+/**
+ * Parse a CSV line, handling quoted fields
+ * @param {string} line - CSV line
+ * @returns {Array} Array of field values
+ */
+function parseCsvLine(line) {
+  const fields = []
+  let current = ''
+  let inQuotes = false
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    const nextChar = line[i + 1]
+    
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        // Escaped quote
+        current += '"'
+        i++ // Skip next quote
+      } else {
+        // Toggle quote state
+        inQuotes = !inQuotes
+      }
+    } else if (char === ',' && !inQuotes) {
+      // Field separator
+      fields.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  
+  // Add last field
+  fields.push(current.trim())
+  
+  return fields
+}
+
+/**
+ * Get field value from row using header map
+ * @param {Array} row - Data row
+ * @param {Object} headerMap - Map of column name to index
+ * @param {string} fieldName - Field name to look up
+ * @returns {string|null} Field value or null
+ */
+function getField(row, headerMap, fieldName) {
+  const index = headerMap[fieldName.toLowerCase().trim()]
+  if (index !== undefined && row[index]) {
+    return row[index].trim() || null
+  }
+  return null
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
