@@ -3,7 +3,7 @@ import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info, Phone, C
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { cn } from '@/lib/utils'
-import { isParcelSkipTraced } from '@/utils/skipTrace'
+import { isParcelSkipTraced, getSkipTracedParcel } from '@/utils/skipTrace'
 
 export function ParcelListPanel({ 
   isOpen, 
@@ -252,6 +252,41 @@ export function ParcelListPanel({
                             <span className="text-gray-900">{new Date(parcel.addedAt).toLocaleDateString()}</span>
                           </div>
                         )}
+                        {/* Contact Information (from skip tracing) */}
+                        {(() => {
+                          const skipTracedInfo = getSkipTracedParcel(parcelId)
+                          if (!skipTracedInfo) return null
+                          
+                          return (
+                            <div className="pt-2 border-t border-gray-200 mt-2">
+                              <div className="text-sm font-semibold text-gray-700 mb-2">Contact Information:</div>
+                              {skipTracedInfo.phone && (
+                                <div className="text-sm">
+                                  <span className="font-semibold text-gray-700">Phone:</span>{' '}
+                                  <span className="text-gray-900">{skipTracedInfo.phone}</span>
+                                </div>
+                              )}
+                              {skipTracedInfo.email && (
+                                <div className="text-sm">
+                                  <span className="font-semibold text-gray-700">Email:</span>{' '}
+                                  <span className="text-gray-900">{skipTracedInfo.email}</span>
+                                </div>
+                              )}
+                              {skipTracedInfo.address && (
+                                <div className="text-sm">
+                                  <span className="font-semibold text-gray-700">Mailing Address:</span>{' '}
+                                  <span className="text-gray-900">{skipTracedInfo.address}</span>
+                                </div>
+                              )}
+                              {skipTracedInfo.skipTracedAt && (
+                                <div className="text-sm">
+                                  <span className="font-semibold text-gray-700">Skip Traced On:</span>{' '}
+                                  <span className="text-gray-900">{new Date(skipTracedInfo.skipTracedAt).toLocaleDateString()}</span>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                         <div className="flex flex-wrap gap-2 mt-2">
                           {onOpenParcelDetails && (
                             <Button
