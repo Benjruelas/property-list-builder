@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2 } from 'lucide-react'
+import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -11,7 +11,8 @@ export function ParcelListPanel({
   publicLists,
   onCenterParcel,
   onBack,
-  onRemoveParcel
+  onRemoveParcel,
+  onOpenParcelDetails
 }) {
   const [expandedParcels, setExpandedParcels] = useState(new Set())
   const [parcels, setParcels] = useState([])
@@ -233,26 +234,50 @@ export function ParcelListPanel({
                             <span className="text-gray-900">{new Date(parcel.addedAt).toLocaleDateString()}</span>
                           </div>
                         )}
-                        <div className="flex gap-2 mt-2">
-                          {(parcel.lat && parcel.lng) && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleCenterParcel(parcel)
-                              }}
-                            >
-                              <MapPin className="h-4 w-4 mr-2" />
-                              Center on Map
-                            </Button>
-                          )}
+                        <div className="flex flex-col gap-2 mt-2">
+                          <div className="flex gap-2">
+                            {onOpenParcelDetails && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  // Prepare parcel data in the format expected by ParcelDetails
+                                  const parcelData = {
+                                    id: parcelId,
+                                    properties: props,
+                                    address: address,
+                                    lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
+                                    lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
+                                  }
+                                  onOpenParcelDetails(parcelData)
+                                }}
+                              >
+                                <Info className="h-4 w-4 mr-2" />
+                                More Details
+                              </Button>
+                            )}
+                            {(parcel.lat && parcel.lng) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={onOpenParcelDetails ? "flex-1" : "w-full"}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleCenterParcel(parcel)
+                                }}
+                              >
+                                <MapPin className="h-4 w-4 mr-2" />
+                                Center on Map
+                              </Button>
+                            )}
+                          </div>
                           {onRemoveParcel && (
                             <Button
                               variant="destructive"
                               size="sm"
-                              className={parcel.lat && parcel.lng ? "flex-1" : "w-full"}
+                              className="w-full"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 const isPublic = selectedListId?.startsWith('public_')

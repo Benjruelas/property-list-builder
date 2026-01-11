@@ -745,8 +745,12 @@ function App() {
     }
   }, [selectedListId, handlePublicListsChange])
 
-  // Function to open parcel details
-  const handleOpenParcelDetails = useCallback(() => {
+  // Function to open parcel details (can accept parcel data or use clickedParcelData)
+  const handleOpenParcelDetails = useCallback((parcelData = null) => {
+    // If parcelData is provided (from list), use it; otherwise use clickedParcelData
+    if (parcelData) {
+      setClickedParcelData(parcelData)
+    }
     setIsParcelDetailsOpen(true)
   }, [])
 
@@ -897,6 +901,7 @@ function App() {
           setViewingListId(null)
         }}
         onRemoveParcel={handleRemoveParcelFromList}
+        onOpenParcelDetails={handleOpenParcelDetails}
       />
 
       <ParcelDetails
