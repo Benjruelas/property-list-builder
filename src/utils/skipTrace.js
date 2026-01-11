@@ -20,7 +20,7 @@ const API_BASE_URL = getApiBaseUrl()
 /**
  * Skip trace a single parcel or multiple parcels
  * @param {Array} parcels - Array of { parcelId, address, ownerName }
- * @returns {Promise} Result with job ID (async) or contact information
+ * @returns {Promise} Result with job ID (async)
  */
 export const skipTraceParcels = async (parcels) => {
   try {
@@ -123,7 +123,7 @@ export const getSkipTracedParcel = (parcelId) => {
 }
 
 /**
- * Save skip traced parcel data to storage
+ * Save skip traced parcel data to storage (global list)
  * @param {string} parcelId - Parcel ID
  * @param {Object} contactInfo - Contact information { phone, email, address, skipTracedAt }
  */
@@ -138,8 +138,36 @@ export const saveSkipTracedParcel = (parcelId, contactInfo) => {
     }
     
     localStorage.setItem('skip_traced_parcels', JSON.stringify(skipTracedParcels))
+    console.log('💾 Saved skip traced parcel:', parcelId, contactInfo)
   } catch (error) {
     console.error('Error saving skip traced parcel:', error)
+  }
+}
+
+/**
+ * Save multiple skip traced parcels at once
+ * @param {Array} results - Array of { parcelId, phone, email, address, skipTracedAt }
+ */
+export const saveSkipTracedParcels = (results) => {
+  try {
+    const stored = localStorage.getItem('skip_traced_parcels')
+    const skipTracedParcels = stored ? JSON.parse(stored) : {}
+    
+    results.forEach(result => {
+      if (result.parcelId) {
+        skipTracedParcels[result.parcelId] = {
+          phone: result.phone || null,
+          email: result.email || null,
+          address: result.address || null,
+          skipTracedAt: result.skipTracedAt || new Date().toISOString()
+        }
+      }
+    })
+    
+    localStorage.setItem('skip_traced_parcels', JSON.stringify(skipTracedParcels))
+    console.log(`💾 Saved ${results.length} skip traced parcels`)
+  } catch (error) {
+    console.error('Error saving skip traced parcels:', error)
   }
 }
 
@@ -153,7 +181,7 @@ export const isParcelSkipTraced = (parcelId) => {
 }
 
 /**
- * Get all skip traced parcels
+ * Get all skip traced parcels (global list)
  * @returns {Object} Object mapping parcelId to contact info
  */
 export const getAllSkipTracedParcels = () => {
@@ -165,4 +193,3 @@ export const getAllSkipTracedParcels = () => {
     return {}
   }
 }
-
