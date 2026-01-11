@@ -163,6 +163,7 @@ function App() {
   const [clickedParcelData, setClickedParcelData] = useState(null) // Store full parcel data for popup
   const [publicLists, setPublicLists] = useState([])
   const [showListSelector, setShowListSelector] = useState(false) // Show list selector in popup
+  const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null) // Reference to parcel layer functions
@@ -450,10 +451,9 @@ function App() {
       }
       setClickedParcelData(parcelData)
       
-      // Check if parcel has been skip traced
+      // Check if parcel has been skip traced or is in progress
       const hasSkipTraced = isParcelSkipTraced(parcelId)
-      const getContactButtonText = hasSkipTraced ? '✓ Contact Found' : 'Get Contact'
-      const getContactButtonBg = hasSkipTraced ? '#059669' : '#16a34a'
+      const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
       
       if (mapInstanceRef.current) {
         const popup = L.popup()
@@ -464,6 +464,8 @@ function App() {
               <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
               ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
               ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
+              ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 4px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
+              ${isSkipTracingInProgress ? `<div style="margin: 8px 0; padding: 6px 8px; background: #fef3c7; border-radius: 4px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #d97706;"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span style="font-size: 12px; color: #d97706; font-weight: 600;">Skip Tracing...</span></div>` : ''}
               <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px;">
                 <button 
                   id="more-details-btn-${parcelId}"
@@ -472,13 +474,13 @@ function App() {
                 >
                   More Details
                 </button>
-                <button 
+                ${!hasSkipTraced && !isSkipTracingInProgress ? `<button 
                   id="get-contact-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: ${getContactButtonBg}; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  style="width: 100%; padding: 8px 12px; background: #16a34a; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.skipTraceParcel()"
                 >
-                  ${getContactButtonText}
-                </button>
+                  Get Contact
+                </button>` : ''}
                 <button 
                   id="add-to-list-btn-${parcelId}"
                   style="width: 100%; padding: 8px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
@@ -871,7 +873,7 @@ function App() {
       console.error('Bulk skip trace error:', error)
       showToast(`Bulk skip trace failed: ${error.message}`, 'error')
     }
-  }, [publicLists])
+  }, [publicLists, skipTracingInProgress])
 
   // Handle skip tracing a single parcel (from popup or list)
   const handleSkipTraceParcel = useCallback(async (parcelData) => {
@@ -896,7 +898,16 @@ function App() {
       return
     }
 
+    // Check if already in progress
+    if (skipTracingInProgress.has(parcelId)) {
+      showToast('Skip trace already in progress for this parcel', 'info')
+      return
+    }
+
     try {
+      // Mark as in progress
+      setSkipTracingInProgress(prev => new Set(prev).add(parcelId))
+      
       showToast('Starting skip trace...', 'info', 2000)
       
       // Submit skip trace job
@@ -936,11 +947,71 @@ function App() {
           skipTraced: getSkipTracedParcel(parcelId)
         })
       }
+      
+      // Refresh popup to show status icon
+      if (mapInstanceRef.current && clickedParcelId === parcelId) {
+        const latlng = clickedParcelData.latlng
+        const address = clickedParcelData.address || clickedParcelData.properties?.SITUS_ADDR || clickedParcelData.properties?.SITE_ADDR || clickedParcelData.properties?.ADDRESS || 'No address'
+        const properties = clickedParcelData.properties || {}
+        const parcelId = clickedParcelData.id
+        
+        // Calculate age
+        const currentYear = new Date().getFullYear()
+        const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
+        const age = yearBuilt ? currentYear - yearBuilt : null
+        
+        const hasSkipTraced = isParcelSkipTraced(parcelId)
+        
+        if (mapInstanceRef.current) {
+          const popup = L.popup()
+            .setLatLng(latlng)
+            .setContent(`
+              <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
+                <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+                <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
+                ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
+                ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
+                ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 4px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px;">
+                  <button 
+                    id="more-details-btn-${parcelId}"
+                    style="width: 100%; padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                    onclick="window.openParcelDetails()"
+                  >
+                    More Details
+                  </button>
+                  ${!hasSkipTraced ? `<button 
+                    id="get-contact-btn-${parcelId}"
+                    style="width: 100%; padding: 8px 12px; background: #16a34a; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                    onclick="window.skipTraceParcel()"
+                  >
+                    Get Contact
+                  </button>` : ''}
+                  <button 
+                    id="add-to-list-btn-${parcelId}"
+                    style="width: 100%; padding: 8px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                    onclick="window.addParcelToList('${parcelId}')"
+                  >
+                    Add to List
+                  </button>
+                </div>
+              </div>
+            `)
+            .openOn(mapInstanceRef.current)
+        }
+      }
     } catch (error) {
       console.error('Skip trace error:', error)
       showToast(`Skip trace failed: ${error.message}`, 'error')
+    } finally {
+      // Remove from in progress
+      setSkipTracingInProgress(prev => {
+        const next = new Set(prev)
+        next.delete(parcelId)
+        return next
+      })
     }
-  }, [clickedParcelData])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress])
 
   // Expose function to window for popup button
   useEffect(() => {
@@ -1098,6 +1169,7 @@ function App() {
         onRemoveParcel={handleRemoveParcelFromList}
         onOpenParcelDetails={handleOpenParcelDetails}
         onSkipTraceParcel={handleSkipTraceParcel}
+        skipTracingInProgress={skipTracingInProgress}
       />
 
       <ParcelDetails
