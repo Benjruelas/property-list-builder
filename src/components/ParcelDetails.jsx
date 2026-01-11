@@ -18,7 +18,8 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
                   'No address available'
 
   // Get skip traced contact info
-  const parcelId = parcelData.id
+  // Try multiple ID formats to ensure we find the skip trace data
+  const parcelId = parcelData.id || parcelData.properties?.PROP_ID
   const skipTracedInfo = parcelId ? getSkipTracedParcel(parcelId) : null
 
   // Calculate age (Current Year - Year Built)
