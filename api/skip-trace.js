@@ -199,6 +199,12 @@ export default async function handler(req, res) {
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Tracerfy API error:', response.status, errorText)
+      
+      // For 429 rate limit errors, return a specific error message
+      if (response.status === 429) {
+        return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment and try again.', details: errorText })
+      }
+      
       return res.status(response.status).json({ error: 'Skip tracing failed', details: errorText })
     }
 
