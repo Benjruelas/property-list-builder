@@ -765,6 +765,94 @@ function App() {
     setIsParcelDetailsOpen(true)
   }, [])
 
+  // Handle bulk skip tracing all parcels in a list
+  const handleBulkSkipTraceList = useCallback(async (listId, isPublic = false) => {
+    try {
+      // Get list parcels
+      let list = null
+      if (isPublic) {
+        list = publicLists.find(l => l.id === listId)
+      } else {
+        const stored = localStorage.getItem('property_lists')
+        if (stored) {
+          const lists = JSON.parse(stored)
+          list = lists.find(l => l.id === listId)
+        }
+      }
+
+      if (!list || !list.parcels || list.parcels.length === 0) {
+        showToast('List is empty', 'warning')
+        return
+      }
+
+      // Prepare parcels for skip tracing (filter out already skip traced ones)
+      const parcelsToTrace = list.parcels
+        .filter(parcel => {
+          const parcelId = parcel.id || parcel
+          return !isParcelSkipTraced(parcelId)
+        })
+        .map(parcel => {
+          const parcelId = parcel.id || parcel
+          const props = parcel.properties || parcel
+          const address = parcel.address || props.SITUS_ADDR || props.SITE_ADDR || props.ADDRESS || ''
+          const ownerName = props.OWNER_NAME || ''
+          return { parcelId, address, ownerName }
+        })
+        .filter(p => p.address) // Only include parcels with addresses
+
+      if (parcelsToTrace.length === 0) {
+        showToast('No parcels to skip trace (all already traced or missing addresses)', 'info')
+        return
+      }
+
+      const confirmed = await showConfirm(
+        `Skip trace ${parcelsToTrace.length} parcel${parcelsToTrace.length > 1 ? 's' : ''} from "${list.name}"? This may take a few minutes.`,
+        'Bulk Skip Trace'
+      )
+      if (!confirmed) {
+        return
+      }
+
+      showToast(`Starting bulk skip trace for ${parcelsToTrace.length} parcels...`, 'info', 3000)
+      
+      // Submit skip trace job
+      const result = await skipTraceParcels(parcelsToTrace)
+      
+      if (!result.jobId) {
+        throw new Error('No job ID returned')
+      }
+
+      showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
+      
+      // Poll for results (with timeout - may need longer for bulk)
+      const results = await pollSkipTraceJobUntilComplete(result.jobId, 60, 5000)
+      
+      if (results.length === 0) {
+        throw new Error('No results returned')
+      }
+
+      // Save all results to global list
+      const resultsWithParcelIds = results.map((contactInfo, index) => {
+        const originalParcel = parcelsToTrace[index]
+        return {
+          parcelId: originalParcel.parcelId,
+          phone: contactInfo.phone || null,
+          email: contactInfo.email || null,
+          address: contactInfo.address || null,
+          skipTracedAt: new Date().toISOString()
+        }
+      })
+      
+      saveSkipTracedParcels(resultsWithParcelIds)
+
+      showToast(`Successfully skip traced ${results.length} parcel${results.length > 1 ? 's' : ''}!`, 'success')
+      
+    } catch (error) {
+      console.error('Bulk skip trace error:', error)
+      showToast(`Bulk skip trace failed: ${error.message}`, 'error')
+    }
+  }, [publicLists])
+
   // Handle skip tracing a single parcel (from popup or list)
   const handleSkipTraceParcel = useCallback(async (parcelData) => {
     if (!parcelData) {
@@ -960,6 +1048,7 @@ function App() {
           setViewingListId(listId)
           setIsParcelListPanelOpen(true)
         }}
+        onBulkSkipTrace={handleBulkSkipTraceList}
         isAddingSingleParcel={showListSelector && !!clickedParcelData}
       />
 
@@ -969,7 +1058,7 @@ function App() {
           setIsParcelListPanelOpen(false)
           setViewingListId(null)
         }}
-        selectedListId={viewingListId || selectedListId}
+        selectedListId={viewingListId}
         publicLists={publicLists}
         onCenterParcel={(location) => {
           if (mapRef.current) {
@@ -985,6 +1074,7 @@ function App() {
         }}
         onRemoveParcel={handleRemoveParcelFromList}
         onOpenParcelDetails={handleOpenParcelDetails}
+        onSkipTraceParcel={handleSkipTraceParcel}
       />
 
       <ParcelDetails

@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info } from 'lucide-react'
+import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info, Phone } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { cn } from '@/lib/utils'
+import { isParcelSkipTraced } from '@/utils/skipTrace'
 
 export function ParcelListPanel({ 
   isOpen, 
@@ -12,7 +13,8 @@ export function ParcelListPanel({
   onCenterParcel,
   onBack,
   onRemoveParcel,
-  onOpenParcelDetails
+  onOpenParcelDetails,
+  onSkipTraceParcel
 }) {
   const [expandedParcels, setExpandedParcels] = useState(new Set())
   const [parcels, setParcels] = useState([])
@@ -249,12 +251,12 @@ export function ParcelListPanel({
                             <span className="text-gray-900">{new Date(parcel.addedAt).toLocaleDateString()}</span>
                           </div>
                         )}
-                        <div className="flex gap-2 mt-2">
+                        <div className="flex flex-wrap gap-2 mt-2">
                           {onOpenParcelDetails && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className={parcel.lat && parcel.lng ? "flex-1" : "w-full"}
+                              className="flex-1 min-w-[120px]"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 // Prepare parcel data in the format expected by ParcelDetails
@@ -272,11 +274,38 @@ export function ParcelListPanel({
                               More Details
                             </Button>
                           )}
+                          {onSkipTraceParcel && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "flex-1 min-w-[120px]",
+                                isParcelSkipTraced(parcelId) && "bg-green-50 text-green-700 border-green-200"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                // Prepare parcel data
+                                const parcelData = {
+                                  id: parcelId,
+                                  properties: props,
+                                  address: address,
+                                  lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
+                                  lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
+                                }
+                                onSkipTraceParcel(parcelData)
+                                // Refresh after skip trace completes (will need to add callback or refresh trigger)
+                                setTimeout(() => setRefreshTrigger(prev => prev + 1), 3000)
+                              }}
+                            >
+                              <Phone className="h-4 w-4 mr-2" />
+                              {isParcelSkipTraced(parcelId) ? '✓ Contact' : 'Get Contact'}
+                            </Button>
+                          )}
                           {(parcel.lat && parcel.lng) && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className={onOpenParcelDetails ? "flex-1" : "w-full"}
+                              className="flex-1 min-w-[120px]"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleCenterParcel(parcel)

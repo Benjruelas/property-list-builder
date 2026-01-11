@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, RefreshCw, Plus, Eye, Trash2, Lock, Globe, Check } from 'lucide-react'
+import { X, RefreshCw, Plus, Eye, Trash2, Lock, Globe, Check, Phone } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,7 @@ export function ListPanel({
   onPublicListsChange,
   onDeletePublicList,
   onViewListContents,
+  onBulkSkipTrace,
   isAddingSingleParcel = false
 }) {
   const [privateLists, setPrivateLists] = useState([])
@@ -372,6 +373,20 @@ export function ListPanel({
                               <Plus className="h-4 w-4" />
                             </Button>
                           )}
+                          {!isAddingSingleParcel && onBulkSkipTrace && list.parcels && list.parcels.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-100"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onBulkSkipTrace(list.id, false)
+                              }}
+                              title="Skip trace all parcels in this list"
+                            >
+                              <Phone className="h-4 w-4" />
+                            </Button>
+                          )}
                           {!isAddingSingleParcel && (
                             <Button
                               variant="ghost"
@@ -472,6 +487,20 @@ export function ListPanel({
                               title="Add selected parcels to this list"
                             >
                               <Plus className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {!isAddingSingleParcel && onBulkSkipTrace && list.parcels && list.parcels.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-100"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onBulkSkipTrace(list.id, true)
+                              }}
+                              title="Skip trace all parcels in this list"
+                            >
+                              <Phone className="h-4 w-4" />
                             </Button>
                           )}
                           {!isAddingSingleParcel && (

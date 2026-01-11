@@ -1,7 +1,8 @@
 import React from 'react'
-import { X, MapPin, Home, DollarSign, Calendar, Square, Users, Info } from 'lucide-react'
+import { X, MapPin, Home, DollarSign, Calendar, Square, Users, Info, Phone, Mail } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { Button } from './ui/button'
+import { getSkipTracedParcel } from '@/utils/skipTrace'
 
 /**
  * ParcelDetails component - Displays all available parcel data in a nice format
@@ -16,6 +17,10 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
                   properties.ADDRESS || 
                   'No address available'
 
+  // Get skip traced contact info
+  const parcelId = parcelData.id
+  const skipTracedInfo = parcelId ? getSkipTracedParcel(parcelId) : null
+
   // Calculate age (Current Year - Year Built)
   const currentYear = new Date().getFullYear()
   const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
@@ -28,6 +33,14 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
     { label: 'Owner', value: properties.OWNER_NAME },
     { label: 'Land Use', value: properties.LOC_LAND_U },
   ]
+
+  // Contact information (from skip tracing)
+  const contactInfo = skipTracedInfo ? [
+    { label: 'Phone', value: skipTracedInfo.phone, icon: <Phone className="h-4 w-4" /> },
+    { label: 'Email', value: skipTracedInfo.email, icon: <Mail className="h-4 w-4" /> },
+    { label: 'Mailing Address', value: skipTracedInfo.address },
+    { label: 'Skip Traced On', value: skipTracedInfo.skipTracedAt ? new Date(skipTracedInfo.skipTracedAt).toLocaleDateString() : null },
+  ].filter(item => item.value) : []
 
   const propertyDetails = [
     { label: 'Year Built', value: properties.YEAR_BUILT },
@@ -78,6 +91,20 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
     )
   }
 
+  // Helper to render contact info row (with icon support)
+  const renderContactRow = (item) => {
+    if (!item.value) return null
+    return (
+      <div key={item.label} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
+        <div className="flex items-center gap-2">
+          {item.icon && <span className="text-gray-500">{item.icon}</span>}
+          <span className="font-semibold text-gray-700">{item.label}:</span>
+        </div>
+        <span className="text-gray-900 text-right flex-1 ml-4">{item.value}</span>
+      </div>
+    )
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -88,18 +115,31 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Basic Information */}
-          {renderSection('Basic Information', <Info className="h-5 w-5" />, basicInfo)}
+              <div className="space-y-6 py-4">
+                {/* Basic Information */}
+                {renderSection('Basic Information', <Info className="h-5 w-5" />, basicInfo)}
 
-          {/* Property Details */}
-          {renderSection('Property Details', <Home className="h-5 w-5" />, propertyDetails)}
+                {/* Contact Information (from skip tracing) */}
+                {contactInfo.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+                      <Phone className="h-5 w-5" />
+                      <span>Contact Information</span>
+                    </div>
+                    <div className="space-y-0">
+                      {contactInfo.map(renderContactRow)}
+                    </div>
+                  </div>
+                )}
 
-          {/* Financial Information */}
-          {renderSection('Financial Information', <DollarSign className="h-5 w-5" />, financialInfo)}
+                {/* Property Details */}
+                {renderSection('Property Details', <Home className="h-5 w-5" />, propertyDetails)}
 
-          {/* Location Information */}
-          {renderSection('Location', <MapPin className="h-5 w-5" />, locationInfo)}
+                {/* Financial Information */}
+                {renderSection('Financial Information', <DollarSign className="h-5 w-5" />, financialInfo)}
+
+                {/* Location Information */}
+                {renderSection('Location', <MapPin className="h-5 w-5" />, locationInfo)}
 
           {/* Display any additional properties that aren't in our predefined categories */}
           <div className="pt-4 border-t border-gray-200">
