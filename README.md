@@ -44,6 +44,13 @@ VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
 - No credit card required
 - Perfect for development and small-scale production use
 
+**Tracerfy API Key (for Skip Tracing):**
+1. Sign up for a Tracerfy account at [tracerfy.com](https://tracerfy.com/)
+2. Navigate to your account settings/dashboard
+3. Generate your API key (Bearer token)
+4. Add `TRACERFY_API_KEY` to your Vercel project environment variables (Settings → Environment Variables)
+5. Pricing: $0.02 per record for skip tracing
+
 ### Development
 
 ```bash
