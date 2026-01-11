@@ -14,7 +14,8 @@ export function ParcelListPanel({
   onBack,
   onRemoveParcel,
   onOpenParcelDetails,
-  onSkipTraceParcel
+  onSkipTraceParcel,
+  skipTracingInProgress = new Set()
 }) {
   const [expandedParcels, setExpandedParcels] = useState(new Set())
   const [parcels, setParcels] = useState([])
