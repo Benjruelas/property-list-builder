@@ -14,6 +14,7 @@ import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
 import { fetchPublicLists, addParcelsToPublicList, removeParcelsFromPublicList, deletePublicList } from './utils/publicLists'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
+import { CheckCircle2, Loader2 } from 'lucide-react'
 
 // Fix for default marker icons in React-Leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -814,39 +815,57 @@ function App() {
         return
       }
 
+      // Mark all as in progress
+      setSkipTracingInProgress(prev => {
+        const next = new Set(prev)
+        parcelsToTrace.forEach(p => next.add(p.parcelId))
+        return next
+      })
+
       showToast(`Starting bulk skip trace for ${parcelsToTrace.length} parcels...`, 'info', 3000)
       
-      // Submit skip trace job
-      const result = await skipTraceParcels(parcelsToTrace)
-      
-      if (!result.jobId) {
-        throw new Error('No job ID returned')
-      }
-
-      showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
-      
-      // Poll for results (with timeout - may need longer for bulk)
-      const results = await pollSkipTraceJobUntilComplete(result.jobId, 60, 5000)
-      
-      if (results.length === 0) {
-        throw new Error('No results returned')
-      }
-
-      // Save all results to global list
-      const resultsWithParcelIds = results.map((contactInfo, index) => {
-        const originalParcel = parcelsToTrace[index]
-        return {
-          parcelId: originalParcel.parcelId,
-          phone: contactInfo.phone || null,
-          email: contactInfo.email || null,
-          address: contactInfo.address || null,
-          skipTracedAt: new Date().toISOString()
+      try {
+        // Submit skip trace job
+        const result = await skipTraceParcels(parcelsToTrace)
+        
+        if (!result.jobId) {
+          throw new Error('No job ID returned')
         }
-      })
-      
-      saveSkipTracedParcels(resultsWithParcelIds)
 
-      showToast(`Successfully skip traced ${results.length} parcel${results.length > 1 ? 's' : ''}!`, 'success')
+        showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
+        
+        // Poll for results (with timeout - may need longer for bulk)
+        const results = await pollSkipTraceJobUntilComplete(result.jobId, 60, 5000)
+        
+        if (results.length === 0) {
+          throw new Error('No results returned')
+        }
+
+        // Save all results to global list
+        const resultsWithParcelIds = results.map((contactInfo, index) => {
+          const originalParcel = parcelsToTrace[index]
+          return {
+            parcelId: originalParcel.parcelId,
+            phone: contactInfo.phone || null,
+            email: contactInfo.email || null,
+            phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
+            emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
+            address: contactInfo.address || null,
+            skipTracedAt: new Date().toISOString()
+          }
+        })
+        
+        saveSkipTracedParcels(resultsWithParcelIds)
+
+        showToast(`Successfully skip traced ${results.length} parcel${results.length > 1 ? 's' : ''}!`, 'success')
+      } finally {
+        // Remove all from in progress
+        setSkipTracingInProgress(prev => {
+          const next = new Set(prev)
+          parcelsToTrace.forEach(p => next.delete(p.parcelId))
+          return next
+        })
+      }
       
     } catch (error) {
       console.error('Bulk skip trace error:', error)
@@ -902,6 +921,8 @@ function App() {
       saveSkipTracedParcel(parcelId, {
         phone: contactInfo.phone || null,
         email: contactInfo.email || null,
+        phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
+        emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
         address: contactInfo.address || null,
         skipTracedAt: new Date().toISOString()
       })

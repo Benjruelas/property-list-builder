@@ -275,31 +275,56 @@ export function ParcelListPanel({
                             </Button>
                           )}
                           {onSkipTraceParcel && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={cn(
-                                "flex-1 min-w-[120px]",
-                                isParcelSkipTraced(parcelId) && "bg-green-50 text-green-700 border-green-200"
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                // Prepare parcel data
-                                const parcelData = {
-                                  id: parcelId,
-                                  properties: props,
-                                  address: address,
-                                  lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
-                                  lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
-                                }
-                                onSkipTraceParcel(parcelData)
-                                // Refresh after skip trace completes (will need to add callback or refresh trigger)
-                                setTimeout(() => setRefreshTrigger(prev => prev + 1), 3000)
-                              }}
-                            >
-                              <Phone className="h-4 w-4 mr-2" />
-                              {isParcelSkipTraced(parcelId) ? '✓ Contact' : 'Get Contact'}
-                            </Button>
+                            (() => {
+                              const hasSkipTraced = isParcelSkipTraced(parcelId)
+                              const isInProgress = skipTracingInProgress.has(parcelId)
+                              
+                              if (hasSkipTraced || isInProgress) {
+                                return (
+                                  <div className={cn(
+                                    "flex items-center gap-2 px-3 py-2 rounded-md border text-sm",
+                                    hasSkipTraced ? "bg-green-50 text-green-700 border-green-200" : "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                  )}>
+                                    {hasSkipTraced ? (
+                                      <>
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        <span>Contact Found</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>Skip Tracing...</span>
+                                      </>
+                                    )}
+                                  </div>
+                                )
+                              }
+                              
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1 min-w-[120px]"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    // Prepare parcel data
+                                    const parcelData = {
+                                      id: parcelId,
+                                      properties: props,
+                                      address: address,
+                                      lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
+                                      lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
+                                    }
+                                    onSkipTraceParcel(parcelData)
+                                    // Refresh after skip trace completes (will need to add callback or refresh trigger)
+                                    setTimeout(() => setRefreshTrigger(prev => prev + 1), 3000)
+                                  }}
+                                >
+                                  <Phone className="h-4 w-4 mr-2" />
+                                  Get Contact
+                                </Button>
+                              )
+                            })()
                           )}
                           {(parcel.lat && parcel.lng) && (
                             <Button

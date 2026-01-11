@@ -125,7 +125,7 @@ export const getSkipTracedParcel = (parcelId) => {
 /**
  * Save skip traced parcel data to storage (global list)
  * @param {string} parcelId - Parcel ID
- * @param {Object} contactInfo - Contact information { phone, email, address, skipTracedAt }
+ * @param {Object} contactInfo - Contact information { phone, email, phoneNumbers, emails, address, skipTracedAt }
  */
 export const saveSkipTracedParcel = (parcelId, contactInfo) => {
   try {
@@ -133,12 +133,16 @@ export const saveSkipTracedParcel = (parcelId, contactInfo) => {
     const skipTracedParcels = stored ? JSON.parse(stored) : {}
     
     skipTracedParcels[parcelId] = {
-      ...contactInfo,
+      phone: contactInfo.phone || null,
+      email: contactInfo.email || null,
+      phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
+      emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
+      address: contactInfo.address || null,
       skipTracedAt: contactInfo.skipTracedAt || new Date().toISOString()
     }
     
     localStorage.setItem('skip_traced_parcels', JSON.stringify(skipTracedParcels))
-    console.log('💾 Saved skip traced parcel:', parcelId, contactInfo)
+    console.log('💾 Saved skip traced parcel:', parcelId, skipTracedParcels[parcelId])
   } catch (error) {
     console.error('Error saving skip traced parcel:', error)
   }
@@ -146,7 +150,7 @@ export const saveSkipTracedParcel = (parcelId, contactInfo) => {
 
 /**
  * Save multiple skip traced parcels at once
- * @param {Array} results - Array of { parcelId, phone, email, address, skipTracedAt }
+ * @param {Array} results - Array of { parcelId, phone, email, phoneNumbers, emails, address, skipTracedAt }
  */
 export const saveSkipTracedParcels = (results) => {
   try {
@@ -158,6 +162,8 @@ export const saveSkipTracedParcels = (results) => {
         skipTracedParcels[result.parcelId] = {
           phone: result.phone || null,
           email: result.email || null,
+          phoneNumbers: result.phoneNumbers || (result.phone ? [result.phone] : []),
+          emails: result.emails || (result.email ? [result.email] : []),
           address: result.address || null,
           skipTracedAt: result.skipTracedAt || new Date().toISOString()
         }

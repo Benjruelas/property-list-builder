@@ -36,11 +36,31 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
 
   // Contact information (from skip tracing)
   const contactInfo = skipTracedInfo ? [
-    { label: 'Phone', value: skipTracedInfo.phone, icon: <Phone className="h-4 w-4" /> },
-    { label: 'Email', value: skipTracedInfo.email, icon: <Mail className="h-4 w-4" /> },
-    { label: 'Mailing Address', value: skipTracedInfo.address },
-    { label: 'Skip Traced On', value: skipTracedInfo.skipTracedAt ? new Date(skipTracedInfo.skipTracedAt).toLocaleDateString() : null },
-  ].filter(item => item.value) : []
+    // Primary phone
+    ...(skipTracedInfo.phone ? [{ label: 'Phone', value: skipTracedInfo.phone, icon: <Phone className="h-4 w-4" /> }] : []),
+    // All phone numbers (if more than just primary)
+    ...(skipTracedInfo.phoneNumbers && skipTracedInfo.phoneNumbers.length > 1 
+      ? skipTracedInfo.phoneNumbers.slice(1).map((phone, idx) => ({ 
+          label: `Phone ${idx + 2}`, 
+          value: phone, 
+          icon: <Phone className="h-4 w-4" /> 
+        }))
+      : []),
+    // Primary email
+    ...(skipTracedInfo.email ? [{ label: 'Email', value: skipTracedInfo.email, icon: <Mail className="h-4 w-4" /> }] : []),
+    // All emails (if more than just primary)
+    ...(skipTracedInfo.emails && skipTracedInfo.emails.length > 1 
+      ? skipTracedInfo.emails.slice(1).map((email, idx) => ({ 
+          label: `Email ${idx + 2}`, 
+          value: email, 
+          icon: <Mail className="h-4 w-4" /> 
+        }))
+      : []),
+    // Mailing address
+    ...(skipTracedInfo.address ? [{ label: 'Mailing Address', value: skipTracedInfo.address }] : []),
+    // Skip traced date
+    ...(skipTracedInfo.skipTracedAt ? [{ label: 'Skip Traced On', value: new Date(skipTracedInfo.skipTracedAt).toLocaleDateString() }] : []),
+  ] : []
 
   const propertyDetails = [
     { label: 'Year Built', value: properties.YEAR_BUILT },
