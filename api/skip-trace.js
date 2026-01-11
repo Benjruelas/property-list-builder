@@ -34,68 +34,109 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Skip tracing service not configured' })
     }
 
-    // Parse addresses to extract components
-    // Tracerfy API requires: address, city, state, first_name, last_name, mail_address, mail_city, mail_state
-    // For now, we'll use the same address for both property and mailing
-    const parseAddress = (addressStr) => {
-      // Simple parsing: assume format like "123 Main St, City, TX 12345" or "123 Main St, City, TX"
-      const parts = addressStr.split(',').map(p => p.trim())
-      if (parts.length >= 3) {
-        const street = parts[0]
-        const city = parts[1]
-        const stateZip = parts[2].split(/\s+/)
-        const state = stateZip[0]
-        const zip = stateZip[1] || ''
-        return { street, city, state, zip }
-      } else if (parts.length === 2) {
-        return { street: parts[0], city: parts[1], state: 'TX', zip: '' }
-      }
-      return { street: addressStr, city: '', state: 'TX', zip: '' }
-    }
-
+    // Parse names - split into first and last name
     const parseName = (nameStr) => {
-      const parts = nameStr.trim().split(/\s+/)
+      if (!nameStr || !nameStr.trim()) return { first: '', last: '' }
+      const parts = nameStr.trim().split(/\s+/).filter(p => p.length > 0)
       if (parts.length === 0) return { first: '', last: '' }
       if (parts.length === 1) return { first: '', last: parts[0] }
+      // Last part is typically last name, rest is first name
       const last = parts[parts.length - 1]
       const first = parts.slice(0, -1).join(' ')
       return { first, last }
     }
 
-    // Build CSV with required columns
+    // Parse addresses - Tracerfy requires city and state (not empty)
+    // Many parcel addresses are just street addresses, so we need to extract city/state if present
+    const parseAddress = (addressStr) => {
+      if (!addressStr || !addressStr.trim()) return null
+      
+      const parts = addressStr.split(',').map(p => p.trim()).filter(p => p.length > 0)
+      let street = addressStr
+      let city = ''
+      let state = ''
+      let zip = ''
+      
+      if (parts.length >= 3) {
+        // Format: "123 Main St, City, TX 12345" or "123 Main St, City, TX"
+        street = parts[0]
+        city = parts[1]
+        const lastPart = parts[parts.length - 1]
+        // Try to extract state and zip from last part
+        const stateZipMatch = lastPart.match(/^([A-Z]{2})(\s+(\d{5}(?:-\d{4})?))?$/)
+        if (stateZipMatch) {
+          state = stateZipMatch[1]
+          zip = stateZipMatch[3] || ''
+        } else {
+          // If no match, treat last part as state
+          state = lastPart.toUpperCase().substring(0, 2)
+        }
+      } else if (parts.length === 2) {
+        // Format: "123 Main St, City" or "123 Main St, TX"
+        street = parts[0]
+        const secondPart = parts[1]
+        // Check if second part is a state (2 letters) or city
+        if (/^[A-Z]{2}$/.test(secondPart.toUpperCase())) {
+          state = secondPart.toUpperCase()
+          city = '' // No city
+        } else {
+          city = secondPart
+          state = 'TX' // Default to Texas
+        }
+      } else {
+        // Just street address - no city/state
+        street = parts[0]
+        // We'll filter these out as Tracerfy requires city and state
+        return null
+      }
+      
+      // Tracerfy requires city and state - filter out if missing
+      if (!city || !state) {
+        return null
+      }
+      
+      return { street, city, state, zip }
+    }
+
+    // Escape CSV field
+    const escapeCsvField = (field) => {
+      const str = String(field || '').trim()
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }
+
+    // Build CSV with required columns - filter out invalid rows
     const csvRows = parcels.map(p => {
       const address = (p.address || '').trim()
       const ownerName = (p.ownerName || '').trim()
       
-      if (!address) return null
+      if (!address || !ownerName) return null
       
       const addr = parseAddress(address)
+      if (!addr) return null // Skip if address parsing failed (no city/state)
+      
       const name = parseName(ownerName)
+      if (!name.last) return null // Skip if no last name
       
       // Tracerfy requires these columns (using same address for property and mailing)
-      const escapeCsvField = (field) => {
-        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
-          return `"${field.replace(/"/g, '""')}"`
-        }
-        return field
-      }
-      
       return [
         escapeCsvField(addr.street),      // address
-        escapeCsvField(addr.city),        // city
-        escapeCsvField(addr.state),       // state
-        escapeCsvField(addr.zip),         // zip
-        escapeCsvField(name.first),       // first_name
-        escapeCsvField(name.last),        // last_name
+        escapeCsvField(addr.city),        // city (required, non-empty)
+        escapeCsvField(addr.state),       // state (required, non-empty)
+        escapeCsvField(addr.zip),         // zip (optional)
+        escapeCsvField(name.first),       // first_name (can be empty)
+        escapeCsvField(name.last),        // last_name (required)
         escapeCsvField(addr.street),      // mail_address (using same as property)
-        escapeCsvField(addr.city),        // mail_city
-        escapeCsvField(addr.state),       // mail_state
-        escapeCsvField(addr.zip)          // mailing_zip
+        escapeCsvField(addr.city),        // mail_city (required)
+        escapeCsvField(addr.state),       // mail_state (required)
+        escapeCsvField(addr.zip)          // mailing_zip (optional)
       ].join(',')
     }).filter(Boolean)
 
     if (csvRows.length === 0) {
-      return res.status(400).json({ error: 'No valid addresses found' })
+      return res.status(400).json({ error: 'No valid addresses found. Addresses must include city and state (e.g., "123 Main St, City, TX")' })
     }
 
     const csvHeader = 'address,city,state,zip,first_name,last_name,mail_address,mail_city,mail_state,mailing_zip'
