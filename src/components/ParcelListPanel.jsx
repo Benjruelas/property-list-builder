@@ -173,7 +173,22 @@ export function ParcelListPanel({
                     </div>
                     
                     {isExpanded && (
-                      <div className="px-3 pb-3 space-y-2 border-t bg-gray-50">
+                      <div className="px-3 pb-3 space-y-2 border-t bg-gray-50 relative">
+                        {onRemoveParcel && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 h-8 w-8 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const isPublic = selectedListId?.startsWith('public_')
+                              handleRemoveParcel(selectedListId, parcelId, isPublic)
+                            }}
+                            title="Remove from List"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                         {props.OWNER_NAME && (
                           <div className="pt-2 text-sm">
                             <span className="font-semibold text-gray-700">Owner:</span>{' '}
@@ -234,58 +249,41 @@ export function ParcelListPanel({
                             <span className="text-gray-900">{new Date(parcel.addedAt).toLocaleDateString()}</span>
                           </div>
                         )}
-                        <div className="flex flex-col gap-2 mt-2">
-                          <div className="flex gap-2">
-                            {onOpenParcelDetails && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex-1"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  // Prepare parcel data in the format expected by ParcelDetails
-                                  const parcelData = {
-                                    id: parcelId,
-                                    properties: props,
-                                    address: address,
-                                    lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
-                                    lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
-                                  }
-                                  onOpenParcelDetails(parcelData)
-                                }}
-                              >
-                                <Info className="h-4 w-4 mr-2" />
-                                More Details
-                              </Button>
-                            )}
-                            {(parcel.lat && parcel.lng) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className={onOpenParcelDetails ? "flex-1" : "w-full"}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleCenterParcel(parcel)
-                                }}
-                              >
-                                <MapPin className="h-4 w-4 mr-2" />
-                                Center on Map
-                              </Button>
-                            )}
-                          </div>
-                          {onRemoveParcel && (
+                        <div className="flex gap-2 mt-2">
+                          {onOpenParcelDetails && (
                             <Button
-                              variant="destructive"
+                              variant="outline"
                               size="sm"
-                              className="w-full"
+                              className={parcel.lat && parcel.lng ? "flex-1" : "w-full"}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                const isPublic = selectedListId?.startsWith('public_')
-                                handleRemoveParcel(selectedListId, parcelId, isPublic)
+                                // Prepare parcel data in the format expected by ParcelDetails
+                                const parcelData = {
+                                  id: parcelId,
+                                  properties: props,
+                                  address: address,
+                                  lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
+                                  lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
+                                }
+                                onOpenParcelDetails(parcelData)
                               }}
                             >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Remove from List
+                              <Info className="h-4 w-4 mr-2" />
+                              More Details
+                            </Button>
+                          )}
+                          {(parcel.lat && parcel.lng) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={onOpenParcelDetails ? "flex-1" : "w-full"}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCenterParcel(parcel)
+                              }}
+                            >
+                              <MapPin className="h-4 w-4 mr-2" />
+                              Center on Map
                             </Button>
                           )}
                         </div>
