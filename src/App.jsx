@@ -843,23 +843,119 @@ function App() {
           throw new Error('No results returned')
         }
 
-        // Save all results to global list
-        const resultsWithParcelIds = results.map((contactInfo, index) => {
-          const originalParcel = parcelsToTrace[index]
-          return {
-            parcelId: originalParcel.parcelId,
-            phone: contactInfo.phone || null,
-            email: contactInfo.email || null,
-            phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
-            emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
-            address: contactInfo.address || null,
-            skipTracedAt: new Date().toISOString()
+        // Import address utilities (client-side parseAddress matching server-side logic)
+        const parseAddress = (addressStr) => {
+          if (!addressStr || !addressStr.trim()) return null
+          const parts = addressStr.split(',').map(p => p.trim()).filter(p => p.length > 0)
+          let street = addressStr
+          let city = ''
+          let state = 'TX'
+          let zip = ''
+          
+          if (parts.length >= 3) {
+            street = parts[0]
+            city = parts[1]
+            const lastPart = parts[parts.length - 1]
+            const stateZipMatch = lastPart.match(/^([A-Z]{2})(\s+(\d{5}(?:-\d{4})?))?$/i)
+            if (stateZipMatch) {
+              state = stateZipMatch[1].toUpperCase()
+              zip = stateZipMatch[3] || ''
+            } else if (/^[A-Z]{2}$/i.test(lastPart)) {
+              state = lastPart.toUpperCase()
+            }
+          } else if (parts.length === 2) {
+            street = parts[0]
+            const secondPart = parts[1]
+            if (/^[A-Z]{2}$/i.test(secondPart)) {
+              state = secondPart.toUpperCase()
+              city = 'Fort Worth'
+            } else {
+              city = secondPart
+              state = 'TX'
+            }
+          } else {
+            street = parts[0]
+            city = 'Fort Worth'
+            state = 'TX'
+          }
+          
+          if (!city) city = 'Fort Worth'
+          if (!state) state = 'TX'
+          
+          return { street, city, state, zip }
+        }
+        
+        const normalizeAddress = (addressStr) => {
+          if (!addressStr) return ''
+          return addressStr.toLowerCase().trim().replace(/\s+/g, ' ')
+        }
+        
+        const buildAddressKey = (street, city, state) => {
+          return normalizeAddress([street, city, state].filter(Boolean).join(', '))
+        }
+        
+        // Match results to parcels by address instead of index
+        // Build a map of normalized addresses to original parcels
+        // IMPORTANT: Parse the full address string into components (street, city, state)
+        // to match the format returned by Tracerfy (separate columns)
+        const addressToParcelMap = new Map()
+        parcelsToTrace.forEach(parcel => {
+          const parsed = parseAddress(parcel.address)
+          if (parsed) {
+            // Build normalized key from components (street, city, state) - same format as Tracerfy returns
+            const normalized = buildAddressKey(parsed.street, parsed.city, parsed.state)
+            if (normalized) {
+              if (!addressToParcelMap.has(normalized)) {
+                addressToParcelMap.set(normalized, [])
+              }
+              addressToParcelMap.get(normalized).push(parcel)
+            }
           }
         })
         
+        // Match results to parcels
+        const resultsWithParcelIds = []
+        const matchedParcelIds = new Set()
+        
+        results.forEach((contactInfo) => {
+          // Tracerfy returns inputAddress as "street, city, state" (already normalized)
+          // OR we can build it from inputAddressRaw, inputCity, inputState
+          const matchKey = contactInfo.inputAddress || buildAddressKey(
+            contactInfo.inputAddressRaw || '',
+            contactInfo.inputCity || '',
+            contactInfo.inputState || ''
+          )
+          
+          if (matchKey && addressToParcelMap.has(matchKey)) {
+            const matchingParcels = addressToParcelMap.get(matchKey)
+            const matchedParcel = matchingParcels.find(p => !matchedParcelIds.has(p.parcelId))
+            
+            if (matchedParcel) {
+              matchedParcelIds.add(matchedParcel.parcelId)
+              resultsWithParcelIds.push({
+                parcelId: matchedParcel.parcelId,
+                phone: contactInfo.phone || null,
+                email: contactInfo.email || null,
+                phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
+                emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
+                address: contactInfo.address || null,
+                skipTracedAt: new Date().toISOString()
+              })
+            }
+          }
+        })
+        
+        // Log unmatched results for debugging
+        if (results.length !== resultsWithParcelIds.length) {
+          console.warn(`⚠️ Only matched ${resultsWithParcelIds.length} of ${results.length} skip trace results to parcels`)
+        }
+        
         saveSkipTracedParcels(resultsWithParcelIds)
 
-        showToast(`Successfully skip traced ${results.length} parcel${results.length > 1 ? 's' : ''}!`, 'success')
+        // Show success message with matched count (not total results count)
+        const matchedCount = resultsWithParcelIds.length
+        const totalRequested = parcelsToTrace.length
+        showToast(`Successfully skip traced ${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''}!`, 'success')
       } finally {
         // Remove all from in progress
         setSkipTracingInProgress(prev => {
@@ -940,7 +1036,7 @@ function App() {
 
       showToast('Skip trace completed successfully!', 'success')
       
-      // Update clicked parcel data if it's the current parcel
+      // Update clicked parcel data if it's the current parcel (for both map popup and list)
       if (clickedParcelData && clickedParcelData.id === parcelId) {
         setClickedParcelData({
           ...clickedParcelData,
@@ -1179,6 +1275,7 @@ function App() {
         onRemoveParcel={handleRemoveParcelFromList}
         onOpenParcelDetails={handleOpenParcelDetails}
         onSkipTraceParcel={handleSkipTraceParcel}
+        onBulkSkipTrace={handleBulkSkipTraceList}
         skipTracingInProgress={skipTracingInProgress}
       />
 

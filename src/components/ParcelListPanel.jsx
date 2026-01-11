@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info, Phone, CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { isParcelSkipTraced, getSkipTracedParcel } from '@/utils/skipTrace'
 
@@ -15,6 +15,7 @@ export function ParcelListPanel({
   onRemoveParcel,
   onOpenParcelDetails,
   onSkipTraceParcel,
+  onBulkSkipTrace,
   skipTracingInProgress = new Set()
 }) {
   const [expandedParcels, setExpandedParcels] = useState(new Set())
@@ -135,7 +136,24 @@ export function ParcelListPanel({
             <DialogTitle className="flex-1 text-xl font-semibold">
               {listName || 'Parcels'}
             </DialogTitle>
+            {onBulkSkipTrace && parcels.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-100"
+                onClick={() => {
+                  const isPublic = selectedListId?.startsWith('public_')
+                  onBulkSkipTrace(selectedListId, isPublic)
+                }}
+                title="Skip trace all parcels in this list"
+              >
+                <Phone className="h-4 w-4" />
+              </Button>
+            )}
           </div>
+          <DialogDescription className="sr-only">
+            List of parcels in {listName || 'this list'}. Click on a parcel to view details.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="px-6 py-4 overflow-y-auto max-h-[calc(80vh-200px)]">

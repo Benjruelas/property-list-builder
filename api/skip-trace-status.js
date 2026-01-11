@@ -60,7 +60,7 @@ function parseCsvResults(csvText) {
       getField(row, headerMap, 'email_5')
     ].filter(Boolean)
     
-    // Extract mailing address
+    // Extract mailing address (output address from Tracerfy)
     const mailingAddress = [
       getField(row, headerMap, 'mail_address'),
       getField(row, headerMap, 'mail_city'),
@@ -68,12 +68,35 @@ function parseCsvResults(csvText) {
       getField(row, headerMap, 'mail_zip')
     ].filter(Boolean).join(', ')
     
+    // Extract input address fields (for matching back to original parcels)
+    const inputAddress = getField(row, headerMap, 'address') || ''
+    const inputCity = getField(row, headerMap, 'city') || ''
+    const inputState = getField(row, headerMap, 'state') || ''
+    const inputZip = getField(row, headerMap, 'zip') || ''
+    const inputFirstName = getField(row, headerMap, 'first_name') || ''
+    const inputLastName = getField(row, headerMap, 'last_name') || ''
+    
+    // Build normalized input address for matching (address, city, state)
+    const inputAddressForMatching = [
+      inputAddress,
+      inputCity,
+      inputState
+    ].filter(Boolean).join(', ').toLowerCase().trim()
+    
     results.push({
       phone: phones[0] || null,
       phoneNumbers: phones,
       email: emails[0] || null,
       emails: emails,
-      address: mailingAddress || null
+      address: mailingAddress || null,
+      // Include input address fields for matching
+      inputAddress: inputAddressForMatching,
+      inputAddressRaw: inputAddress,
+      inputCity: inputCity,
+      inputState: inputState,
+      inputZip: inputZip,
+      inputFirstName: inputFirstName,
+      inputLastName: inputLastName
     })
   }
   
@@ -212,7 +235,7 @@ export default async function handler(req, res) {
             row.email_5
           ].filter(Boolean)
           
-          // Combine mailing address
+          // Combine mailing address (output address from Tracerfy)
           const mailingAddress = [
             row.mail_address,
             row.mail_city,
@@ -220,12 +243,35 @@ export default async function handler(req, res) {
             row.mail_zip
           ].filter(Boolean).join(', ')
           
+          // Extract input address fields (for matching back to original parcels)
+          const inputAddress = (row.address || '').trim()
+          const inputCity = (row.city || '').trim()
+          const inputState = (row.state || '').trim()
+          const inputZip = (row.zip || '').trim()
+          const inputFirstName = (row.first_name || '').trim()
+          const inputLastName = (row.last_name || '').trim()
+          
+          // Build normalized input address for matching (address, city, state)
+          const inputAddressForMatching = [
+            inputAddress,
+            inputCity,
+            inputState
+          ].filter(Boolean).join(', ').toLowerCase().trim()
+          
           return {
             phone: phones[0] || null, // Primary phone
             phoneNumbers: phones, // All phones
             email: emails[0] || null, // Primary email
             emails: emails, // All emails
-            address: mailingAddress || null
+            address: mailingAddress || null,
+            // Include input address fields for matching
+            inputAddress: inputAddressForMatching,
+            inputAddressRaw: inputAddress,
+            inputCity: inputCity,
+            inputState: inputState,
+            inputZip: inputZip,
+            inputFirstName: inputFirstName,
+            inputLastName: inputLastName
           }
         })
         

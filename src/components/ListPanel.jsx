@@ -68,6 +68,43 @@ export function ListPanel({
     }
   }, [isOpen, onPublicListsChange])
 
+  // Listen for storage events (for private lists updated in other tabs/components)
+  // Also reload private lists when publicLists prop changes (indicates lists may have been updated)
+  // This ensures parcel counts update after parcels are added to lists
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleStorageChange = (e) => {
+      if (e.key === STORAGE_KEY) {
+        loadPrivateLists()
+      }
+    }
+
+    // Listen for storage events (fires when localStorage is updated in another tab/context)
+    window.addEventListener('storage', handleStorageChange)
+
+    // Also reload when publicLists prop changes (public lists updated)
+    loadPrivateLists()
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+    }
+  }, [publicListsProp, isOpen])
+
+  // Poll for localStorage changes when panel is open (since storage event only fires across tabs)
+  // This ensures parcel counts update when parcels are added to private lists
+  useEffect(() => {
+    if (!isOpen) return
+
+    const intervalId = setInterval(() => {
+      loadPrivateLists()
+    }, 500) // Check every 500ms when panel is open
+
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [isOpen])
+
   // Debug: Log when publicLists prop changes
   useEffect(() => {
     console.log('ListPanel: publicLists prop changed:', publicLists?.length || 0, 'lists')
