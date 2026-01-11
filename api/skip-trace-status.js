@@ -3,8 +3,11 @@
  * Polls Tracerfy API for skip trace job status and results
  * 
  * GET: Check job status and get results
- * Query: ?jobId=xxx
+ * Query: ?jobId=xxx (or queueId)
  * Returns: { status: 'completed'|'processing', results: [...] }
+ * 
+ * Documentation: https://tracerfy.com/skip-tracing-api-documentation/
+ * Base URL: https://tracerfy.com/v1/api/
  */
 
 export default async function handler(req, res) {
@@ -21,10 +24,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { jobId } = req.query
+    const { jobId, queueId } = req.query
+    const id = queueId || jobId // Support both for backward compatibility
 
-    if (!jobId) {
-      return res.status(400).json({ error: 'jobId query parameter is required' })
+    if (!id) {
+      return res.status(400).json({ error: 'jobId or queueId query parameter is required' })
     }
 
     const apiKey = process.env.TRACERFY_API_KEY
@@ -32,42 +36,109 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Skip tracing service not configured' })
     }
 
-    // Poll Tracerfy API for job status
-    const TRACERFY_API_BASE = process.env.TRACERFY_API_BASE || 'https://api.tracerfy.com'
-    const response = await fetch(`${TRACERFY_API_BASE}/queue/${jobId}`, {
+    // Poll Tracerfy API for queue status
+    // First check if queue is complete via /queues/ endpoint
+    const TRACERFY_API_BASE = process.env.TRACERFY_API_BASE || 'https://tracerfy.com/v1/api'
+    
+    // Get queue details
+    const queueResponse = await fetch(`${TRACERFY_API_BASE}/queue/${id}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`
       }
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Tracerfy API error:', response.status, errorText)
-      return res.status(response.status).json({ error: 'Failed to fetch job status', details: errorText })
+    if (!queueResponse.ok) {
+      const errorText = await queueResponse.text()
+      console.error('Tracerfy API error:', queueResponse.status, errorText)
+      return res.status(queueResponse.status).json({ error: 'Failed to fetch queue status', details: errorText })
     }
 
-    const result = await response.json()
+    // If queue endpoint returns data, it means the queue exists
+    // For pending queues, the endpoint might return empty or status
+    // For completed queues, it returns the CSV data
+    const contentType = queueResponse.headers.get('content-type') || ''
     
-    // Parse results based on Tracerfy API format
-    // Format may vary - adjust based on actual API response
-    const status = result.status || result.state || 'processing'
-    const isComplete = status === 'completed' || status === 'done' || status === 'success'
-    
-    if (isComplete && result.results) {
-      // Parse CSV results if API returns CSV download URL
-      // For now, assume JSON format
-      const results = Array.isArray(result.results) ? result.results : []
+    if (contentType.includes('application/json')) {
+      // Check if it's queue metadata or results
+      const data = await queueResponse.json()
+      
+      // If it's an array, it's the results (completed queue)
+      if (Array.isArray(data)) {
+        // Transform Tracerfy results to our format
+        const results = data.map((row, index) => {
+          // Combine all phone numbers (primary_phone, mobile_1-5, landline_1-3)
+          const phones = [
+            row.primary_phone,
+            row.mobile_1,
+            row.mobile_2,
+            row.mobile_3,
+            row.mobile_4,
+            row.mobile_5,
+            row.landline_1,
+            row.landline_2,
+            row.landline_3
+          ].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i) // Remove duplicates
+          
+          // Combine all emails (email_1-5)
+          const emails = [
+            row.email_1,
+            row.email_2,
+            row.email_3,
+            row.email_4,
+            row.email_5
+          ].filter(Boolean)
+          
+          // Combine mailing address
+          const mailingAddress = [
+            row.mail_address,
+            row.mail_city,
+            row.mail_state,
+            row.mail_zip
+          ].filter(Boolean).join(', ')
+          
+          return {
+            phone: phones[0] || null, // Primary phone
+            phoneNumbers: phones, // All phones
+            email: emails[0] || null, // Primary email
+            emails: emails, // All emails
+            address: mailingAddress || null
+          }
+        })
+        
+        return res.status(200).json({
+          status: 'completed',
+          results: results
+        })
+      }
+      
+      // Otherwise, it might be queue metadata
+      if (data.pending === false && data.download_url) {
+        return res.status(200).json({
+          status: 'completed',
+          downloadUrl: data.download_url,
+          message: 'Queue completed - download CSV from download_url'
+        })
+      }
       
       return res.status(200).json({
+        status: 'processing',
+        message: 'Queue is still processing'
+      })
+    } else if (contentType.includes('text/csv')) {
+      // If it's CSV, parse it
+      const csvText = await queueResponse.text()
+      // For now, return status indicating CSV is available
+      return res.status(200).json({
         status: 'completed',
-        results: results,
-        downloadUrl: result.download_url || result.downloadUrl
+        message: 'Results available as CSV',
+        csvData: csvText
       })
     } else {
+      // Unknown content type
       return res.status(200).json({
         status: 'processing',
-        message: 'Job is still processing'
+        message: 'Queue is still processing'
       })
     }
 
@@ -76,4 +147,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Internal server error', message: error.message })
   }
 }
-

@@ -49,7 +49,9 @@ VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
 2. Navigate to your account settings/dashboard
 3. Generate your API key (Bearer token)
 4. Add `TRACERFY_API_KEY` to your Vercel project environment variables (Settings → Environment Variables)
-5. Pricing: $0.02 per record for skip tracing
+5. API Base URL: `https://tracerfy.com/v1/api/` (default, can be overridden with `TRACERFY_API_BASE`)
+6. Pricing: $0.02 per record for normal trace (1 credit/lead), $0.30 for enhanced trace (15 credits/lead)
+7. Documentation: [Tracerfy API Documentation](https://tracerfy.com/skip-tracing-api-documentation/)
 
 ### Development
 
