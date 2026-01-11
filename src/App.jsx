@@ -456,8 +456,6 @@ function App() {
               <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
               <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
               ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
-              ${properties.PROP_ID ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Property ID:</strong> ${properties.PROP_ID}</p>` : ''}
-              ${properties.LOC_LAND_U ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Land Use:</strong> ${properties.LOC_LAND_U}</p>` : ''}
               ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
               <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px;">
                 <button 

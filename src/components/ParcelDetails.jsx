@@ -26,6 +26,7 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
     { label: 'Property ID', value: properties.PROP_ID },
     { label: 'Address', value: address },
     { label: 'Owner', value: properties.OWNER_NAME },
+    { label: 'Land Use', value: properties.LOC_LAND_U },
   ]
 
   const propertyDetails = [
@@ -107,7 +108,7 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                   {Object.entries(properties)
                     .filter(([key]) => 
-                      !['PROP_ID', 'SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'OWNER_NAME', 
+                      !['PROP_ID', 'SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'OWNER_NAME', 'LOC_LAND_U', 
                         'YEAR_BUILT', 'SQFT', 'ACRES', 'BEDROOMS', 'BATHROOMS', 
                         'TOTAL_VALUE', 'LAND_VALUE', 'IMPROVEMENT_VALUE'].includes(key)
                     )
