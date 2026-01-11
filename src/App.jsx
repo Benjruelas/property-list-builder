@@ -949,24 +949,34 @@ function App() {
       }
       
       // Refresh popup to show status icon
-      if (mapInstanceRef.current && clickedParcelId === parcelId) {
-        const latlng = clickedParcelData.latlng
+      if (mapInstanceRef.current && clickedParcelId === parcelId && clickedParcelData) {
+        // Get latlng - could be in latlng property or lat/lng properties
+        const latlng = clickedParcelData.latlng || (clickedParcelData.lat && clickedParcelData.lng ? [clickedParcelData.lat, clickedParcelData.lng] : null)
+        
+        if (!latlng) {
+          console.warn('Cannot refresh popup: missing latlng', clickedParcelData)
+          return
+        }
+        
         const address = clickedParcelData.address || clickedParcelData.properties?.SITUS_ADDR || clickedParcelData.properties?.SITE_ADDR || clickedParcelData.properties?.ADDRESS || 'No address'
         const properties = clickedParcelData.properties || {}
-        const parcelId = clickedParcelData.id
+        const parcelIdForPopup = clickedParcelData.id
         
         // Calculate age
         const currentYear = new Date().getFullYear()
         const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
         const age = yearBuilt ? currentYear - yearBuilt : null
         
-        const hasSkipTraced = isParcelSkipTraced(parcelId)
+        const hasSkipTraced = isParcelSkipTraced(parcelIdForPopup)
         
         if (mapInstanceRef.current) {
+          // Convert latlng to L.LatLng if it's an array
+          const leafletLatLng = Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng
+          
           const popup = L.popup()
-            .setLatLng(latlng)
+            .setLatLng(leafletLatLng)
             .setContent(`
-              <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
+              <div style="min-width: 200px;" id="parcel-popup-${parcelIdForPopup}">
                 <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
                 <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
                 ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
@@ -974,21 +984,21 @@ function App() {
                 ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 4px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
                 <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px;">
                   <button 
-                    id="more-details-btn-${parcelId}"
-                    style="width: 100%; padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                    onclick="window.openParcelDetails()"
-                  >
-                    More Details
-                  </button>
-                  ${!hasSkipTraced ? `<button 
-                    id="get-contact-btn-${parcelId}"
-                    style="width: 100%; padding: 8px 12px; background: #16a34a; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                    onclick="window.skipTraceParcel()"
-                  >
-                    Get Contact
-                  </button>` : ''}
-                  <button 
-                    id="add-to-list-btn-${parcelId}"
+                  id="more-details-btn-${parcelIdForPopup}"
+                  style="width: 100%; padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.openParcelDetails()"
+                >
+                  More Details
+                </button>
+                ${!hasSkipTraced ? `<button 
+                  id="get-contact-btn-${parcelIdForPopup}"
+                  style="width: 100%; padding: 8px 12px; background: #16a34a; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.skipTraceParcel()"
+                >
+                  Get Contact
+                </button>` : ''}
+                <button 
+                  id="add-to-list-btn-${parcelIdForPopup}"
                     style="width: 100%; padding: 8px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
                     onclick="window.addParcelToList('${parcelId}')"
                   >
