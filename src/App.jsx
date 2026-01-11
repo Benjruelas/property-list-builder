@@ -13,6 +13,7 @@ import { ConfirmDialog, showConfirm } from './components/ui/confirm-dialog'
 import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
 import { fetchPublicLists, addParcelsToPublicList, removeParcelsFromPublicList, deletePublicList } from './utils/publicLists'
+import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 
 // Fix for default marker icons in React-Leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -448,6 +449,11 @@ function App() {
       }
       setClickedParcelData(parcelData)
       
+      // Check if parcel has been skip traced
+      const hasSkipTraced = isParcelSkipTraced(parcelId)
+      const getContactButtonText = hasSkipTraced ? '✓ Contact Found' : 'Get Contact'
+      const getContactButtonBg = hasSkipTraced ? '#059669' : '#16a34a'
+      
       if (mapInstanceRef.current) {
         const popup = L.popup()
           .setLatLng(latlng)
@@ -464,6 +470,13 @@ function App() {
                   onclick="window.openParcelDetails()"
                 >
                   More Details
+                </button>
+                <button 
+                  id="get-contact-btn-${parcelId}"
+                  style="width: 100%; padding: 8px 12px; background: ${getContactButtonBg}; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.skipTraceParcel()"
+                >
+                  ${getContactButtonText}
                 </button>
                 <button 
                   id="add-to-list-btn-${parcelId}"
@@ -752,6 +765,72 @@ function App() {
     setIsParcelDetailsOpen(true)
   }, [])
 
+  // Handle skip tracing a single parcel (from popup or list)
+  const handleSkipTraceParcel = useCallback(async (parcelData) => {
+    if (!parcelData) {
+      showToast('No parcel selected', 'error')
+      return
+    }
+
+    const parcelId = parcelData.id
+    const address = parcelData.address || parcelData.properties?.SITUS_ADDR || parcelData.properties?.SITE_ADDR || parcelData.properties?.ADDRESS || ''
+    const ownerName = parcelData.properties?.OWNER_NAME || ''
+
+    if (!address) {
+      showToast('Parcel address is required for skip tracing', 'error')
+      return
+    }
+
+    // Check if already skip traced
+    if (isParcelSkipTraced(parcelId)) {
+      showToast('This parcel has already been skip traced', 'info')
+      return
+    }
+
+    try {
+      showToast('Starting skip trace...', 'info', 2000)
+      
+      // Submit skip trace job
+      const result = await skipTraceParcels([{ parcelId, address, ownerName }])
+      
+      if (!result.jobId) {
+        throw new Error('No job ID returned')
+      }
+
+      showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
+      
+      // Poll for results (with timeout)
+      const results = await pollSkipTraceJobUntilComplete(result.jobId, 30, 5000)
+      
+      if (results.length === 0) {
+        throw new Error('No results returned')
+      }
+
+      const contactInfo = results[0]
+      
+      // Save to global list
+      saveSkipTracedParcel(parcelId, {
+        phone: contactInfo.phone || null,
+        email: contactInfo.email || null,
+        address: contactInfo.address || null,
+        skipTracedAt: new Date().toISOString()
+      })
+
+      showToast('Skip trace completed successfully!', 'success')
+      
+      // Update clicked parcel data if it's the current parcel
+      if (clickedParcelData && clickedParcelData.id === parcelId) {
+        setClickedParcelData({
+          ...clickedParcelData,
+          skipTraced: getSkipTracedParcel(parcelId)
+        })
+      }
+    } catch (error) {
+      console.error('Skip trace error:', error)
+      showToast(`Skip trace failed: ${error.message}`, 'error')
+    }
+  }, [clickedParcelData])
+
   // Expose function to window for popup button
   useEffect(() => {
     window.openParcelDetails = handleOpenParcelDetails
@@ -759,11 +838,17 @@ function App() {
       setShowListSelector(true)
       setIsListPanelOpen(true)
     }
+    window.skipTraceParcel = () => {
+      if (clickedParcelData) {
+        handleSkipTraceParcel(clickedParcelData)
+      }
+    }
     return () => {
       delete window.openParcelDetails
       delete window.addParcelToList
+      delete window.skipTraceParcel
     }
-  }, [handleOpenParcelDetails])
+  }, [handleOpenParcelDetails, handleSkipTraceParcel, clickedParcelData])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
