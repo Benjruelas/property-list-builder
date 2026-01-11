@@ -48,17 +48,22 @@ export default async function handler(req, res) {
     })
 
     const csvContent = `Address,Owner Name\n${csvRows.join('\n')}`
-    const csvBuffer = Buffer.from(csvContent, 'utf-8')
-
-    // Create multipart/form-data manually for compatibility with Node.js fetch
-    const boundary = `----WebKitFormBoundary${Math.random().toString(36).substring(2, 15)}`
-    const formDataBody = Buffer.concat([
-      Buffer.from(`--${boundary}\r\n`),
-      Buffer.from(`Content-Disposition: form-data; name="file"; filename="parcels.csv"\r\n`),
-      Buffer.from(`Content-Type: text/csv\r\n\r\n`),
-      csvBuffer,
-      Buffer.from(`\r\n--${boundary}--\r\n`)
-    ])
+    
+    // Create multipart/form-data manually for Node.js compatibility
+    const boundary = `----WebKitFormBoundary${Date.now()}${Math.random().toString(36).substring(2, 9)}`
+    const delimiter = `\r\n--${boundary}\r\n`
+    const closeDelim = `\r\n--${boundary}--\r\n`
+    
+    const bodyParts = [
+      `--${boundary}\r\n`,
+      `Content-Disposition: form-data; name="file"; filename="parcels.csv"\r\n`,
+      `Content-Type: text/csv\r\n\r\n`,
+      csvContent,
+      closeDelim
+    ]
+    
+    const body = bodyParts.join('')
+    const bodyBuffer = Buffer.from(body, 'utf-8')
 
     // Submit to Tracerfy API
     const TRACERFY_API_BASE = process.env.TRACERFY_API_BASE || 'https://api.tracerfy.com'
@@ -67,9 +72,9 @@ export default async function handler(req, res) {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': formDataBody.length.toString()
+        'Content-Length': bodyBuffer.length.toString()
       },
-      body: formDataBody
+      body: bodyBuffer
     })
 
     if (!response.ok) {
