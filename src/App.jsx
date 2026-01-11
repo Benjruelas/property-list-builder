@@ -7,6 +7,7 @@ import { MapControls } from './components/MapControls'
 import { AddressSearch } from './components/AddressSearch'
 import { ListPanel } from './components/ListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
+import { ParcelDetails } from './components/ParcelDetails'
 import { ToastContainer, showToast } from './components/ui/toast'
 import { ConfirmDialog, showConfirm } from './components/ui/confirm-dialog'
 import { getCountyFromCoords } from './utils/geoUtils'
@@ -151,6 +152,7 @@ function App() {
   const [isListPanelOpen, setIsListPanelOpen] = useState(false)
   const [isParcelListPanelOpen, setIsParcelListPanelOpen] = useState(false)
   const [viewingListId, setViewingListId] = useState(null) // List ID being viewed in ParcelListPanel
+  const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false) // Parcel details panel
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
   const [selectedListId, setSelectedListId] = useState(null)
   const [selectedParcels, setSelectedParcels] = useState(new Set())
@@ -431,6 +433,11 @@ function App() {
       // The previous parcel's highlighting will be removed automatically when clickedParcelId changes
       setClickedParcelId(parcelId)
       
+      // Calculate age (Current Year - Year Built)
+      const currentYear = new Date().getFullYear()
+      const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
+      const age = yearBuilt ? currentYear - yearBuilt : null
+      
       // Store parcel data for adding to list
       const parcelData = {
         id: parcelId,
@@ -451,7 +458,15 @@ function App() {
               ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
               ${properties.PROP_ID ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Property ID:</strong> ${properties.PROP_ID}</p>` : ''}
               ${properties.LOC_LAND_U ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Land Use:</strong> ${properties.LOC_LAND_U}</p>` : ''}
-              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+              ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px;">
+                <button 
+                  id="more-details-btn-${parcelId}"
+                  style="width: 100%; padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.openParcelDetails()"
+                >
+                  More Details
+                </button>
                 <button 
                   id="add-to-list-btn-${parcelId}"
                   style="width: 100%; padding: 8px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
@@ -730,16 +745,23 @@ function App() {
     }
   }, [selectedListId, handlePublicListsChange])
 
+  // Function to open parcel details
+  const handleOpenParcelDetails = useCallback(() => {
+    setIsParcelDetailsOpen(true)
+  }, [])
+
   // Expose function to window for popup button
   useEffect(() => {
+    window.openParcelDetails = handleOpenParcelDetails
     window.addParcelToList = () => {
       setShowListSelector(true)
       setIsListPanelOpen(true)
     }
     return () => {
+      delete window.openParcelDetails
       delete window.addParcelToList
     }
-  }, [])
+  }, [handleOpenParcelDetails])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
@@ -876,6 +898,13 @@ function App() {
         }}
         onRemoveParcel={handleRemoveParcelFromList}
       />
+
+      <ParcelDetails
+        isOpen={isParcelDetailsOpen}
+        onClose={() => setIsParcelDetailsOpen(false)}
+        parcelData={clickedParcelData}
+      />
+
       <ToastContainer />
       <ConfirmDialog />
     </div>
