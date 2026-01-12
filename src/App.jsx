@@ -6,6 +6,7 @@ import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
 import { AddressSearch } from './components/AddressSearch'
 import { ListPanel } from './components/ListPanel'
+import { SkipTracedListPanel } from './components/SkipTracedListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
 import { ParcelDetails } from './components/ParcelDetails'
 import { ToastContainer, showToast } from './components/ui/toast'
@@ -14,7 +15,8 @@ import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
 import { fetchPublicLists, addParcelsToPublicList, removeParcelsFromPublicList, deletePublicList } from './utils/publicLists'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
+import { CheckCircle2, Loader2, Phone } from 'lucide-react'
 
 // Fix for default marker icons in React-Leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -152,6 +154,7 @@ function App() {
   const [currentCounty, setCurrentCounty] = useState(null)
   const [pmtilesUrl, setPmtilesUrl] = useState(null)
   const [isListPanelOpen, setIsListPanelOpen] = useState(false)
+  const [isSkipTracedListPanelOpen, setIsSkipTracedListPanelOpen] = useState(false)
   const [isParcelListPanelOpen, setIsParcelListPanelOpen] = useState(false)
   const [viewingListId, setViewingListId] = useState(null) // List ID being viewed in ParcelListPanel
   const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false) // Parcel details panel
@@ -837,10 +840,19 @@ function App() {
         showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
         
         // Poll for results (with timeout - may need longer for bulk)
-        const results = await pollSkipTraceJobUntilComplete(result.jobId, 60, 5000)
+        // Use longer timeout on mobile to account for slower networks and background throttling
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        const maxRetries = isMobile ? 120 : 60 // Double retries on mobile for bulk operations
+        const interval = isMobile ? 6000 : 5000 // Slightly longer interval on mobile
         
+        const results = await pollSkipTraceJobUntilComplete(result.jobId, maxRetries, interval)
+        
+        // Note: Empty results array is valid - it means no contact info was found
+        // Only throw error if we actually got an error, not if results are empty
         if (results.length === 0) {
-          throw new Error('No results returned')
+          console.warn('⚠️ Bulk skip trace completed but returned no results. This may mean no contact information was found for any parcels.')
+          showToast('Bulk skip trace completed, but no contact information was found for any parcels.', 'warning')
+          return
         }
 
         // Import address utilities (client-side parseAddress matching server-side logic)
@@ -952,6 +964,18 @@ function App() {
         
         saveSkipTracedParcels(resultsWithParcelIds)
 
+        // Add list to skip traced list (with all parcels that were skip traced)
+        // Map matched results back to full parcel objects from the original list
+        const matchedParcelIdsSet = new Set(resultsWithParcelIds.map(r => r.parcelId))
+        const skipTracedParcels = list.parcels.filter(p => {
+          const pid = p.id || p.properties?.PROP_ID || p
+          return matchedParcelIdsSet.has(pid)
+        })
+        
+        if (skipTracedParcels.length > 0) {
+          addListToSkipTracedList(listId, list.name, skipTracedParcels)
+        }
+
         // Show success message with matched count (not total results count)
         const matchedCount = resultsWithParcelIds.length
         const totalRequested = parcelsToTrace.length
@@ -1016,10 +1040,20 @@ function App() {
       showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
       
       // Poll for results (with timeout)
-      const results = await pollSkipTraceJobUntilComplete(result.jobId, 30, 5000)
+      // Use longer timeout on mobile to account for slower networks and background throttling
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      const maxRetries = isMobile ? 60 : 30 // Double retries on mobile
+      const interval = isMobile ? 6000 : 5000 // Slightly longer interval on mobile
       
+      const results = await pollSkipTraceJobUntilComplete(result.jobId, maxRetries, interval)
+      
+      // Note: Empty results array is valid - it means no contact info was found
+      // Only throw error if we actually got an error, not if results are empty
       if (results.length === 0) {
-        throw new Error('No results returned')
+        console.warn('⚠️ Skip trace completed but returned no results. This may mean no contact information was found for this parcel.')
+        // Don't throw error - empty results is a valid outcome
+        showToast('Skip trace completed, but no contact information was found for this parcel.', 'warning')
+        return
       }
 
       const contactInfo = results[0]
@@ -1033,6 +1067,9 @@ function App() {
         address: contactInfo.address || null,
         skipTracedAt: new Date().toISOString()
       })
+
+      // Add to skip traced list
+      addParcelToSkipTracedList(parcelData)
 
       showToast('Skip trace completed successfully!', 'success')
       
@@ -1220,6 +1257,7 @@ function App() {
         isMultiSelectActive={isMultiSelectActive}
         onOpenListPanel={() => setIsListPanelOpen(true)}
         selectedListId={selectedListId}
+        onOpenSkipTracedListPanel={() => setIsSkipTracedListPanelOpen(true)}
       />
 
       <ListPanel
@@ -1283,6 +1321,12 @@ function App() {
         isOpen={isParcelDetailsOpen}
         onClose={() => setIsParcelDetailsOpen(false)}
         parcelData={clickedParcelData}
+      />
+
+      <SkipTracedListPanel
+        isOpen={isSkipTracedListPanelOpen}
+        onClose={() => setIsSkipTracedListPanelOpen(false)}
+        onOpenParcelDetails={handleOpenParcelDetails}
       />
 
       <ToastContainer />

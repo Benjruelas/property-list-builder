@@ -98,12 +98,13 @@ export function ListPanel({
 
     const intervalId = setInterval(() => {
       loadPrivateLists()
-    }, 500) // Check every 500ms when panel is open
+    }, 1000) // Check every 1 second when panel is open
 
     return () => {
       clearInterval(intervalId)
     }
   }, [isOpen])
+
 
   // Debug: Log when publicLists prop changes
   useEffect(() => {

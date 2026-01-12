@@ -205,6 +205,12 @@ export default async function handler(req, res) {
     // For completed queues, it returns the CSV data
     const contentType = queueResponse.headers.get('content-type') || ''
     
+    console.log(`📡 Queue ${id} response:`, {
+      status: queueResponse.status,
+      contentType,
+      contentLength: queueResponse.headers.get('content-length')
+    })
+    
     if (contentType.includes('application/json')) {
       // Check if it's queue metadata or results
       const data = await queueResponse.json()
@@ -299,6 +305,9 @@ export default async function handler(req, res) {
           const csvText = await csvResponse.text()
           const results = parseCsvResults(csvText)
           
+          // Log results for debugging
+          console.log(`✅ Returning ${results.length} skip trace results for queue ${id} (CSV download format)`)
+          
           return res.status(200).json({
             status: 'completed',
             results: results
@@ -317,6 +326,9 @@ export default async function handler(req, res) {
       // If it's CSV, parse it
       const csvText = await queueResponse.text()
       const results = parseCsvResults(csvText)
+      
+      // Log results for debugging
+      console.log(`✅ Returning ${results.length} skip trace results for queue ${id} (direct CSV format)`)
       
       return res.status(200).json({
         status: 'completed',

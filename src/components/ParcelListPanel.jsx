@@ -281,8 +281,26 @@ export function ParcelListPanel({
                               {skipTracedInfo.phone && (
                                 <div className="text-sm">
                                   <span className="font-semibold text-gray-700">Phone:</span>{' '}
-                                  <span className="text-gray-900">{skipTracedInfo.phone}</span>
+                                  <a 
+                                    href={`tel:${skipTracedInfo.phone.replace(/[^\d+]/g, '')}`}
+                                    className="text-blue-600 hover:text-blue-800 hover:underline"
+                                  >
+                                    {skipTracedInfo.phone}
+                                  </a>
                                 </div>
+                              )}
+                              {skipTracedInfo.phoneNumbers && skipTracedInfo.phoneNumbers.length > 1 && (
+                                skipTracedInfo.phoneNumbers.slice(1).map((phone, idx) => (
+                                  <div key={idx} className="text-sm">
+                                    <span className="font-semibold text-gray-700">Phone {idx + 2}:</span>{' '}
+                                    <a 
+                                      href={`tel:${phone.replace(/[^\d+]/g, '')}`}
+                                      className="text-blue-600 hover:text-blue-800 hover:underline"
+                                    >
+                                      {phone}
+                                    </a>
+                                  </div>
+                                ))
                               )}
                               {skipTracedInfo.email && (
                                 <div className="text-sm">

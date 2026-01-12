@@ -8,21 +8,13 @@ import { getSkipTracedParcel } from '@/utils/skipTrace'
  * ParcelDetails component - Displays all available parcel data in a nice format
  */
 export function ParcelDetails({ isOpen, onClose, parcelData }) {
-  if (!parcelData) return null
-
-  const properties = parcelData.properties || {}
-  const address = parcelData.address || 
-                  properties.SITUS_ADDR || 
-                  properties.SITE_ADDR || 
-                  properties.ADDRESS || 
-                  'No address available'
-
-  // Get skip traced contact info
-  // Try multiple ID formats to ensure we find the skip trace data
-  const parcelId = parcelData.id || parcelData.properties?.PROP_ID
-  
+  // Hooks must be called before any early returns
   // Use state to track skip trace info and refresh when dialog opens or parcelData changes
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
+  
+  // Get skip traced contact info
+  // Try multiple ID formats to ensure we find the skip trace data
+  const parcelId = parcelData?.id || parcelData?.properties?.PROP_ID
   
   // Re-read skip trace data when dialog opens or parcelData changes
   useEffect(() => {
@@ -40,6 +32,16 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
     }
   }, [isOpen, parcelId, parcelData])
 
+  // Early return after hooks
+  if (!parcelData) return null
+
+  const properties = parcelData.properties || {}
+  const address = parcelData.address || 
+                  properties.SITUS_ADDR || 
+                  properties.SITE_ADDR || 
+                  properties.ADDRESS || 
+                  'No address available'
+
   // Calculate age (Current Year - Year Built)
   const currentYear = new Date().getFullYear()
   const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
@@ -56,29 +58,31 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
   // Contact information (from skip tracing)
   const contactInfo = skipTracedInfo ? [
     // Primary phone
-    ...(skipTracedInfo.phone ? [{ label: 'Phone', value: skipTracedInfo.phone, icon: <Phone className="h-4 w-4" /> }] : []),
+    ...(skipTracedInfo.phone ? [{ label: 'Phone', value: skipTracedInfo.phone, icon: <Phone className="h-4 w-4" />, isPhone: true }] : []),
     // All phone numbers (if more than just primary)
     ...(skipTracedInfo.phoneNumbers && skipTracedInfo.phoneNumbers.length > 1 
       ? skipTracedInfo.phoneNumbers.slice(1).map((phone, idx) => ({ 
           label: `Phone ${idx + 2}`, 
           value: phone, 
-          icon: <Phone className="h-4 w-4" /> 
+          icon: <Phone className="h-4 w-4" />,
+          isPhone: true
         }))
       : []),
     // Primary email
-    ...(skipTracedInfo.email ? [{ label: 'Email', value: skipTracedInfo.email, icon: <Mail className="h-4 w-4" /> }] : []),
+    ...(skipTracedInfo.email ? [{ label: 'Email', value: skipTracedInfo.email, icon: <Mail className="h-4 w-4" />, isPhone: false }] : []),
     // All emails (if more than just primary)
     ...(skipTracedInfo.emails && skipTracedInfo.emails.length > 1 
       ? skipTracedInfo.emails.slice(1).map((email, idx) => ({ 
           label: `Email ${idx + 2}`, 
           value: email, 
-          icon: <Mail className="h-4 w-4" /> 
+          icon: <Mail className="h-4 w-4" />,
+          isPhone: false
         }))
       : []),
     // Mailing address
-    ...(skipTracedInfo.address ? [{ label: 'Mailing Address', value: skipTracedInfo.address }] : []),
+    ...(skipTracedInfo.address ? [{ label: 'Mailing Address', value: skipTracedInfo.address, isPhone: false }] : []),
     // Skip traced date
-    ...(skipTracedInfo.skipTracedAt ? [{ label: 'Skip Traced On', value: new Date(skipTracedInfo.skipTracedAt).toLocaleDateString() }] : []),
+    ...(skipTracedInfo.skipTracedAt ? [{ label: 'Skip Traced On', value: new Date(skipTracedInfo.skipTracedAt).toLocaleDateString(), isPhone: false }] : []),
   ] : []
 
   const propertyDetails = [
@@ -130,16 +134,36 @@ export function ParcelDetails({ isOpen, onClose, parcelData }) {
     )
   }
 
+  // Helper to normalize phone number for tel: links (remove formatting, keep digits and +)
+  const normalizePhoneNumber = (phone) => {
+    if (!phone) return ''
+    // Remove all non-digit characters except +
+    return phone.replace(/[^\d+]/g, '')
+  }
+
   // Helper to render contact info row (with icon support)
   const renderContactRow = (item) => {
     if (!item.value) return null
+    
+    const isPhone = item.isPhone === true
+    const phoneLink = isPhone ? `tel:${normalizePhoneNumber(item.value)}` : null
+    
     return (
       <div key={item.label} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
         <div className="flex items-center gap-2">
           {item.icon && <span className="text-gray-500">{item.icon}</span>}
           <span className="font-semibold text-gray-700">{item.label}:</span>
         </div>
-        <span className="text-gray-900 text-right flex-1 ml-4">{item.value}</span>
+        {isPhone && phoneLink ? (
+          <a 
+            href={phoneLink}
+            className="text-blue-600 hover:text-blue-800 hover:underline text-right flex-1 ml-4"
+          >
+            {item.value}
+          </a>
+        ) : (
+          <span className="text-gray-900 text-right flex-1 ml-4">{item.value}</span>
+        )}
       </div>
     )
   }

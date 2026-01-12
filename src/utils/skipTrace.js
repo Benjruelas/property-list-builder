@@ -80,12 +80,30 @@ export const pollSkipTraceJob = async (jobId) => {
  * @returns {Promise} Results when complete
  */
 export const pollSkipTraceJobUntilComplete = async (jobId, maxRetries = 30, interval = 5000) => {
+  console.log(`🔄 Starting polling for job ${jobId} (max ${maxRetries} attempts, ${interval}ms interval)`)
+  
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      console.log(`🔄 Poll attempt ${attempt + 1}/${maxRetries} for job ${jobId}`)
       const status = await pollSkipTraceJob(jobId)
       
+      console.log(`📊 Poll response:`, { status: status.status, resultsCount: status.results?.length || 0, hasResults: !!status.results })
+      
       if (status.status === 'completed') {
-        return status.results || []
+        const results = status.results || []
+        console.log(`✅ Job completed with ${results.length} results`)
+        
+        // If status is completed but results is empty, this might be a valid case (no contact info found)
+        // But we should still return the empty array rather than throwing an error
+        if (results.length === 0) {
+          console.warn(`⚠️ Job marked as completed but no results returned. This may mean no contact information was found.`)
+        }
+        
+        return results
+      }
+      
+      if (status.status === 'processing' || status.status === 'pending') {
+        console.log(`⏳ Job still ${status.status}, waiting ${interval}ms before next poll...`)
       }
       
       // Wait before next poll
@@ -93,11 +111,17 @@ export const pollSkipTraceJobUntilComplete = async (jobId, maxRetries = 30, inte
         await new Promise(resolve => setTimeout(resolve, interval))
       }
     } catch (error) {
-      console.error(`Poll attempt ${attempt + 1} failed:`, error)
-      if (attempt === maxRetries - 1) {
+      console.error(`❌ Poll attempt ${attempt + 1} failed:`, error)
+      
+      // On mobile, network errors might be more common - retry with exponential backoff
+      if (attempt < maxRetries - 1) {
+        const backoffDelay = Math.min(interval * Math.pow(1.5, attempt), 30000) // Max 30s backoff
+        console.log(`⏸️ Waiting ${backoffDelay}ms before retry (exponential backoff)`)
+        await new Promise(resolve => setTimeout(resolve, backoffDelay))
+      } else {
+        // Last attempt failed
         throw error
       }
-      await new Promise(resolve => setTimeout(resolve, interval))
     }
   }
   
