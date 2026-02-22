@@ -1,6 +1,8 @@
 /**
  * Vercel Serverless Function
- * Polls Tracerfy API for skip trace job status and results
+ * Polls Tracerfy API for skip trace job status and results (DISABLED by default)
+ * 
+ * To enable Tracerfy, set USE_TRACERFY=true in environment variables
  * 
  * GET: Check job status and get results
  * Query: ?jobId=xxx (or queueId)
@@ -157,6 +159,14 @@ function getField(row, headerMap, fieldName) {
 }
 
 export default async function handler(req, res) {
+  // Disable Tracerfy by default
+  const USE_TRACERFY = process.env.USE_TRACERFY === 'true'
+  if (!USE_TRACERFY) {
+    return res.status(503).json({ 
+      error: 'Tracerfy API is disabled.',
+      message: 'Set USE_TRACERFY=true to enable Tracerfy'
+    })
+  }
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')

@@ -29,7 +29,16 @@ npm install
 Create a `.env.local` file in the project root:
 
 ```bash
+# Mapbox (for map tiles)
 VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
+
+# Firebase Authentication (see FIREBASE_SETUP.md for setup instructions)
+VITE_FIREBASE_API_KEY=your_firebase_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
 ```
 
 **Getting your Mapbox Access Token:**
@@ -44,14 +53,13 @@ VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
 - No credit card required
 - Perfect for development and small-scale production use
 
-**Tracerfy API Key (for Skip Tracing):**
-1. Sign up for a Tracerfy account at [tracerfy.com](https://tracerfy.com/)
-2. Navigate to your account settings/dashboard
-3. Generate your API key (Bearer token)
-4. Add `TRACERFY_API_KEY` to your Vercel project environment variables (Settings → Environment Variables)
-5. API Base URL: `https://tracerfy.com/v1/api/` (default, can be overridden with `TRACERFY_API_BASE`)
-6. Pricing: $0.02 per record for normal trace (1 credit/lead), $0.30 for enhanced trace (15 credits/lead)
-7. Documentation: [Tracerfy API Documentation](https://tracerfy.com/skip-tracing-api-documentation/)
+**Skip Tracing API:**
+Skip tracing functionality is currently disabled by default. To enable skip tracing:
+- **SkipSherpa**: See `SKIPSHERPA_SETUP.md` for setup instructions (disabled by default)
+- **Tracerfy**: Set `TRACERFY_API_KEY` and `USE_TRACERFY=true` in environment variables (disabled by default)
+
+**Firebase Authentication:**
+See [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) for detailed setup instructions for email/password and Google authentication.
 
 ### Development
 

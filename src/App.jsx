@@ -1,7 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { MapContainer, TileLayer, useMapEvents, Circle, useMap, ZoomControl } from 'react-leaflet'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import { MapContainer, TileLayer, useMapEvents, Marker, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+// leaflet-rotate expects L globally; must load after leaflet
+if (typeof window !== 'undefined') window.L = L
+import 'leaflet-rotate'
+import { CompassOrientation } from './components/CompassOrientation'
+import { MapOverlayPane } from './components/MapOverlayPane'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
 import { AddressSearch } from './components/AddressSearch'
@@ -9,13 +15,25 @@ import { ListPanel } from './components/ListPanel'
 import { SkipTracedListPanel } from './components/SkipTracedListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
 import { ParcelDetails } from './components/ParcelDetails'
+import { EmailTemplatesPanel } from './components/EmailTemplatesPanel'
+import { EmailComposer } from './components/EmailComposer'
+import { BulkEmailPreview } from './components/BulkEmailPreview'
+import { Login } from './components/Login'
+import { SignUp } from './components/SignUp'
+import { ForgotPassword } from './components/ForgotPassword'
 import { ToastContainer, showToast } from './components/ui/toast'
 import { ConfirmDialog, showConfirm } from './components/ui/confirm-dialog'
+import { useAuth } from './contexts/AuthContext'
+import { MapTypeProvider } from './contexts/MapTypeContext'
 import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
-import { fetchPublicLists, addParcelsToPublicList, removeParcelsFromPublicList, deletePublicList } from './utils/publicLists'
+import { fetchLists, createList, updateList, deleteList } from './utils/lists'
+import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
+import { listToCsv } from './utils/exportList'
+import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
+import { useDeviceHeading } from './hooks/useDeviceHeading'
 import { CheckCircle2, Loader2, Phone } from 'lucide-react'
 
 // Fix for default marker icons in React-Leaflet
@@ -80,17 +98,21 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
 
     // Wait for map to be ready and initialized before detecting county
     const checkAndDetect = () => {
-      if (map.getCenter && map.getCenter().lat && map.getCenter().lng) {
-        detectCounty()
-      } else {
-        // Map not ready yet, try again
+      try {
+        const center = map.getCenter?.()
+        if (center && typeof center.lat === 'number' && typeof center.lng === 'number') {
+          detectCounty()
+        } else {
+          setTimeout(checkAndDetect, 100)
+        }
+      } catch {
+        // Map/leaflet-rotate may not be fully initialized (e.g. _leaflet_pos)
         setTimeout(checkAndDetect, 100)
       }
     }
 
     // Initial detection - wait for map to be ready
     map.whenReady(() => {
-      // Add a small delay to ensure map is fully initialized
       setTimeout(checkAndDetect, 300)
     })
 
@@ -114,16 +136,29 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
   return null
 }
 
-function LocationMarker({ position }) {
-  const map = useMap()
-  const circleRef = useRef(null)
+// Navigation icon SVG (matches lucide-react Navigation) - arrow; base rotation -45° so tip points north
+const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>`
+
+function LocationMarker({ position, heading, isCompassActive, mapType }) {
+  const markerRef = useRef(null)
+
+  // Rotation: when compass on, map rotates so "up" = user's direction (marker points up).
+  // When compass off, rotate by heading so arrow points in direction user faces on north-up map.
+  // Base -45° because Lucide Navigation tip is upper-right; we want tip-up = north.
+  const rotation = -45 + (isCompassActive ? 0 : (heading ?? 0))
+
+  const icon = useMemo(() => {
+    return L.divIcon({
+      html: `<div class="user-location-marker" style="transform: rotate(${rotation}deg); color: ${mapType === 'satellite' ? '#ffffff' : '#000000'};">${NAVIGATION_ICON_SVG}</div>`,
+      className: '',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    })
+  }, [rotation, mapType])
 
   useEffect(() => {
-    if (circleRef.current && position) {
-      // Smoothly update marker position when location changes
-      circleRef.current.setLatLng([position.lat, position.lng])
-      // Bring to front to ensure it's visible above other layers
-      circleRef.current.bringToFront()
+    if (markerRef.current && position) {
+      markerRef.current.setLatLng([position.lat, position.lng])
     }
   }, [position])
 
@@ -133,22 +168,51 @@ function LocationMarker({ position }) {
   }
 
   return (
-    <Circle
-      ref={circleRef}
-      center={[position.lat, position.lng]}
-      radius={7.5}
-      pathOptions={{
-        color: '#000000',
-        fillColor: '#000000',
-        fillOpacity: 1,
-        weight: 3
-      }}
-      pane="overlayPane"
+    <Marker
+      ref={markerRef}
+      position={[position.lat, position.lng]}
+      icon={icon}
+      pane="markerPane"
     />
   )
 }
 
 function App() {
+  const { currentUser, logout, loading: authLoading } = useAuth()
+  
+  // Debug: Log current user state
+  useEffect(() => {
+    console.log('🔐 App currentUser state:', currentUser ? currentUser.email : 'null', 'loading:', authLoading)
+  }, [currentUser, authLoading])
+
+  // Handle logout - close all panels and clear state
+  const handleLogout = useCallback(async () => {
+    console.log('🚪 Logging out...')
+    try {
+      // Close all panels before logout
+      setIsListPanelOpen(false)
+      setIsSkipTracedListPanelOpen(false)
+      setIsParcelListPanelOpen(false)
+      setIsParcelDetailsOpen(false)
+      setIsEmailTemplatesPanelOpen(false)
+      setIsEmailComposerOpen(false)
+      setIsBulkEmailPreviewOpen(false)
+      setIsMultiSelectActive(false)
+      setSelectedParcels(new Set())
+      setSelectedParcelsData(new Map())
+      setClickedParcelId(null)
+      setClickedParcelData(null)
+      
+      // Call Firebase logout
+      await logout()
+      console.log('✅ Logout successful')
+    } catch (error) {
+      console.error('❌ Logout error:', error)
+    }
+  }, [logout])
+  const [isLoginOpen, setIsLoginOpen] = useState(false)
+  const [isSignUpOpen, setIsSignUpOpen] = useState(false)
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [currentCounty, setCurrentCounty] = useState(null)
@@ -158,19 +222,33 @@ function App() {
   const [isParcelListPanelOpen, setIsParcelListPanelOpen] = useState(false)
   const [viewingListId, setViewingListId] = useState(null) // List ID being viewed in ParcelListPanel
   const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false) // Parcel details panel
+  const [isEmailTemplatesPanelOpen, setIsEmailTemplatesPanelOpen] = useState(false)
+  const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false)
+  const [isBulkEmailPreviewOpen, setIsBulkEmailPreviewOpen] = useState(false)
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
+  const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
+  const [emailComposerRecipient, setEmailComposerRecipient] = useState({ email: '', name: '' })
+  const [bulkEmailList, setBulkEmailList] = useState(null)
+  const [bulkEmailListId, setBulkEmailListId] = useState(null)
+  const [isSendingBulkEmails, setIsSendingBulkEmails] = useState(false)
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
-  const [selectedListId, setSelectedListId] = useState(null)
+  const [mapType, setMapType] = useState('satellite') // 'street' | 'satellite'
+  const [isCompassActive, setIsCompassActive] = useState(false)
+  const heading = useDeviceHeading() // Compass heading in degrees (0-360), null until DeviceOrientation fires
+  const [selectedListIds, setSelectedListIds] = useState([]) // Max 5 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
   const [clickedParcelId, setClickedParcelId] = useState(null)
   const [clickedParcelData, setClickedParcelData] = useState(null) // Store full parcel data for popup
-  const [publicLists, setPublicLists] = useState([])
+  const [lists, setLists] = useState([])
+  const getToken = useCallback(() => auth.currentUser?.getIdToken?.() ?? Promise.resolve(null), [])
   const [showListSelector, setShowListSelector] = useState(false) // Show list selector in popup
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null) // Reference to parcel layer functions
   const currentPopupRef = useRef(null) // Reference to current Leaflet popup
+  const parcelDetailsSourceRef = useRef('map') // 'map' = opened from map popup, 'list' = opened from list panel
 
   // Recenter map function passed to MapController
   const recenterMapRef = useRef(null)
@@ -278,22 +356,234 @@ function App() {
     }
   }, [])
 
-  // Load public lists on mount
+  // Load user lists when signed in
+  const refreshLists = useCallback(async () => {
+    if (!currentUser) return
+    try {
+      const next = await fetchLists(getToken)
+      setLists(next)
+    } catch (error) {
+      console.error('Error loading lists:', error)
+    }
+  }, [currentUser, getToken])
+
   useEffect(() => {
-    const loadPublicLists = async () => {
+    if (currentUser) refreshLists()
+    else setLists([])
+  }, [currentUser, refreshLists])
+
+  // Background polling for skip trace jobs
+  useEffect(() => {
+    // Clean up old jobs on mount
+    cleanupOldJobs()
+
+    const processSkipTraceJob = async (job) => {
       try {
-        console.log('Loading public lists...')
-        const lists = await fetchPublicLists()
-        console.log('Loaded public lists:', lists)
-        setPublicLists(lists)
+        console.log(`🔄 Processing skip trace job: ${job.jobId} for list "${job.listName}"`)
+        
+        // Update job status to processing
+        updateSkipTraceJob(job.jobId, { status: 'processing' })
+
+        // Poll for results
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        const maxRetries = isMobile ? 120 : 60
+        const interval = isMobile ? 6000 : 5000
+        
+        const results = await pollSkipTraceJobUntilComplete(job.jobId, maxRetries, interval)
+        
+        // Process results
+        if (results.length === 0) {
+          console.warn(`⚠️ Job ${job.jobId} completed but returned no results`)
+          updateSkipTraceJob(job.jobId, {
+            status: 'completed',
+            results: [],
+            completedAt: new Date().toISOString()
+          })
+          
+          // Remove from in progress
+          setSkipTracingInProgress(prev => {
+            const next = new Set(prev)
+            job.parcelsToTrace.forEach(p => next.delete(p.parcelId))
+            return next
+          })
+          
+          showToast(`Skip trace completed for "${job.listName}", but no contact information was found.`, 'warning')
+          return
+        }
+
+        // Address matching utilities (same as in handleBulkSkipTraceList)
+        const parseAddress = (addressStr) => {
+          if (!addressStr || !addressStr.trim()) return null
+          const parts = addressStr.split(',').map(p => p.trim()).filter(p => p.length > 0)
+          let street = addressStr
+          let city = ''
+          let state = 'TX'
+          let zip = ''
+          
+          if (parts.length >= 3) {
+            street = parts[0]
+            city = parts[1]
+            const lastPart = parts[parts.length - 1]
+            const stateZipMatch = lastPart.match(/^([A-Z]{2})(\s+(\d{5}(?:-\d{4})?))?$/i)
+            if (stateZipMatch) {
+              state = stateZipMatch[1].toUpperCase()
+              zip = stateZipMatch[3] || ''
+            } else if (/^[A-Z]{2}$/i.test(lastPart)) {
+              state = lastPart.toUpperCase()
+            }
+          } else if (parts.length === 2) {
+            street = parts[0]
+            const secondPart = parts[1]
+            if (/^[A-Z]{2}$/i.test(secondPart)) {
+              state = secondPart.toUpperCase()
+              city = 'Fort Worth'
+            } else {
+              city = secondPart
+              state = 'TX'
+            }
+          } else {
+            street = parts[0]
+            city = 'Fort Worth'
+            state = 'TX'
+          }
+          
+          if (!city) city = 'Fort Worth'
+          if (!state) state = 'TX'
+          
+          return { street, city, state, zip }
+        }
+        
+        const normalizeAddress = (addressStr) => {
+          if (!addressStr) return ''
+          return addressStr.toLowerCase().trim().replace(/\s+/g, ' ')
+        }
+        
+        const buildAddressKey = (street, city, state) => {
+          return normalizeAddress([street, city, state].filter(Boolean).join(', '))
+        }
+        
+        // Match results to parcels
+        const addressToParcelMap = new Map()
+        job.parcelsToTrace.forEach(parcel => {
+          const parsed = parseAddress(parcel.address)
+          if (parsed) {
+            const normalized = buildAddressKey(parsed.street, parsed.city, parsed.state)
+            if (normalized) {
+              if (!addressToParcelMap.has(normalized)) {
+                addressToParcelMap.set(normalized, [])
+              }
+              addressToParcelMap.get(normalized).push(parcel)
+            }
+          }
+        })
+        
+        const resultsWithParcelIds = []
+        const matchedParcelIds = new Set()
+        
+        results.forEach((contactInfo) => {
+          const matchKey = contactInfo.inputAddress || buildAddressKey(
+            contactInfo.inputAddressRaw || '',
+            contactInfo.inputCity || '',
+            contactInfo.inputState || ''
+          )
+          
+          if (matchKey && addressToParcelMap.has(matchKey)) {
+            const matchingParcels = addressToParcelMap.get(matchKey)
+            const matchedParcel = matchingParcels.find(p => !matchedParcelIds.has(p.parcelId))
+            
+            if (matchedParcel) {
+              matchedParcelIds.add(matchedParcel.parcelId)
+              resultsWithParcelIds.push({
+                parcelId: matchedParcel.parcelId,
+                phone: contactInfo.phone || null,
+                email: contactInfo.email || null,
+                phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
+                emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
+                address: contactInfo.address || null,
+                skipTracedAt: new Date().toISOString()
+              })
+            }
+          }
+        })
+        
+        // Save results
+        saveSkipTracedParcels(resultsWithParcelIds)
+
+        // Get list to add to skip traced list
+        let list = null
+        list = lists.find(l => l.id === job.listId)
+
+        if (list) {
+          const matchedParcelIdsSet = new Set(resultsWithParcelIds.map(r => r.parcelId))
+          const skipTracedParcels = list.parcels.filter(p => {
+            const pid = p.id || p.properties?.PROP_ID || p
+            return matchedParcelIdsSet.has(pid)
+          })
+          
+          if (skipTracedParcels.length > 0) {
+            addListToSkipTracedList(job.listId, job.listName, skipTracedParcels)
+          }
+        }
+
+        // Update job status
+        updateSkipTraceJob(job.jobId, {
+          status: 'completed',
+          results: resultsWithParcelIds,
+          completedAt: new Date().toISOString()
+        })
+
+        // Remove from in progress
+        setSkipTracingInProgress(prev => {
+          const next = new Set(prev)
+          job.parcelsToTrace.forEach(p => next.delete(p.parcelId))
+          return next
+        })
+
+        // Show success notification
+        const matchedCount = resultsWithParcelIds.length
+        const totalRequested = job.parcelsToTrace.length
+        showToast(`✅ Skip trace completed for "${job.listName}": ${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found!`, 'success', 8000)
+        
       } catch (error) {
-        console.error('Error loading public lists:', error)
-        // Don't show alert on initial load, just log
+        console.error(`❌ Error processing skip trace job ${job.jobId}:`, error)
+        updateSkipTraceJob(job.jobId, {
+          status: 'failed',
+          error: error.message,
+          completedAt: new Date().toISOString()
+        })
+        
+        // Remove from in progress
+        setSkipTracingInProgress(prev => {
+          const next = new Set(prev)
+          job.parcelsToTrace.forEach(p => next.delete(p.parcelId))
+          return next
+        })
+        
+        showToast(`❌ Skip trace failed for "${job.listName}": ${error.message}`, 'error', 8000)
       }
     }
 
-    loadPublicLists()
-  }, [])
+    // Poll for pending jobs every 10 seconds
+    const pollInterval = setInterval(() => {
+      const pendingJobs = getPendingSkipTraceJobs()
+      
+      if (pendingJobs.length > 0) {
+        console.log(`📋 Found ${pendingJobs.length} pending skip trace job(s)`)
+        
+        // Process jobs one at a time (don't process if one is already running)
+        pendingJobs.forEach(job => {
+          // Only process if status is pending (not already processing)
+          if (job.status === 'pending') {
+            processSkipTraceJob(job)
+          }
+        })
+      }
+    }, 10000) // Check every 10 seconds
+
+    return () => {
+      clearInterval(pollInterval)
+    }
+  }, [lists])
 
   // Load PMTiles URL based on viewport county (detected by MapController)
   const handleCountyChange = useCallback((county) => {
@@ -330,65 +620,50 @@ function App() {
       })
   }, [currentCounty, pmtilesUrl])
 
-  // Refresh public lists
-  const handlePublicListsChange = useCallback(async () => {
+  const handleShareList = useCallback(async (listId, sharedWith) => {
     try {
-      console.log('handlePublicListsChange called - fetching public lists...')
-      // Add a small retry mechanism for serverless cold starts
-      let lists = []
-      let retries = 3
-      
-      while (retries > 0) {
-        lists = await fetchPublicLists()
-        console.log(`handlePublicListsChange - fetched lists (attempt ${4 - retries}):`, lists.length, 'lists')
-        
-        // If we got lists, or this is our last attempt, break
-        if (lists.length > 0 || retries === 1) {
-          break
-        }
-        
-        // Wait a bit before retrying (allows serverless function instance to warm up)
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        retries--
-      }
-      
-      setPublicLists(lists)
-      console.log('handlePublicListsChange - state updated with', lists.length, 'lists')
+      await updateList(getToken, listId, { sharedWith })
+      await refreshLists()
+      showToast('List sharing updated', 'success')
     } catch (error) {
-      console.error('Error refreshing public lists:', error)
+      showToast(error.message || 'Failed to update sharing', 'error')
     }
-  }, [])
+  }, [getToken, refreshLists])
 
-  // Delete a public list
-  const handleDeletePublicList = useCallback(async (listId) => {
+  // Delete a list (owner only)
+  const handleDeleteList = useCallback(async (listId) => {
     const confirmed = await showConfirm(
-      'Are you sure you want to delete this public list? This action cannot be undone.',
-      'Delete Public List'
+      'Are you sure you want to delete this list? This cannot be undone.',
+      'Delete List'
     )
-    if (!confirmed) {
-      return
-    }
-
+    if (!confirmed) return
     try {
-      await deletePublicList(listId)
-      
-      // Refresh public lists
-      await handlePublicListsChange()
-      
-      // If this list was selected, deselect it
-      if (selectedListId === listId) {
-        setSelectedListId(null)
-      }
-      
-      showToast('Public list deleted successfully', 'success')
+      await deleteList(getToken, listId)
+      await refreshLists()
+      setSelectedListIds(prev => prev.filter(id => id !== listId))
+      showToast('List deleted', 'success')
     } catch (error) {
-      console.error('Error deleting public list:', error)
-      showToast(`Failed to delete public list: ${error.message}`, 'error')
+      showToast(error.message || 'Failed to delete list', 'error')
     }
-  }, [selectedListId, handlePublicListsChange])
+  }, [getToken, refreshLists])
 
   // Handle parcel click
   const handleParcelClick = useCallback((event) => {
+    // Wait for auth to finish loading before checking
+    if (authLoading) {
+      console.log('⏳ Auth still loading, ignoring parcel click')
+      return
+    }
+    
+    // Require authentication for parcel interactions
+    if (!currentUser || !currentUser.uid) {
+      console.log('❌ No current user, showing login prompt. currentUser:', currentUser, 'authLoading:', authLoading)
+      setIsLoginOpen(true)
+      showToast('Please sign in to interact with parcels', 'info')
+      return
+    }
+    console.log('✅ User authenticated, allowing parcel interaction:', currentUser.email)
+
     const { latlng, properties, parcelId: eventParcelId } = event
     // Use parcelId from event if available, otherwise generate from properties or latlng
     const parcelId = eventParcelId || properties.PROP_ID || `${latlng.lat.toFixed(6)}-${latlng.lng.toFixed(6)}`
@@ -458,8 +733,15 @@ function App() {
       const hasSkipTraced = isParcelSkipTraced(parcelId)
       const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
       
+      const listsWithParcel = (lists || []).filter(l => 
+        (l.parcels || []).some(p => (p.id || p) === parcelId)
+      )
+      const listNamesHtml = listsWithParcel.length > 0
+        ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcel.map(l => l.name).join(', ')}</p>`
+        : ''
+      
       if (mapInstanceRef.current) {
-        const popup = L.popup()
+        const popup = L.popup({ className: mapType === 'satellite' ? 'parcel-popup-liquid-glass' : '' })
           .setLatLng(latlng)
           .setContent(`
             <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
@@ -467,26 +749,27 @@ function App() {
               <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
               ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
               ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
-              ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 4px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
-              ${isSkipTracingInProgress ? `<div style="margin: 8px 0; padding: 6px 8px; background: #fef3c7; border-radius: 4px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #d97706;"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span style="font-size: 12px; color: #d97706; font-weight: 600;">Skip Tracing...</span></div>` : ''}
-              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px;">
+              ${listNamesHtml || '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'}
+              ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
+              ${isSkipTracingInProgress ? `<div style="margin: 8px 0; padding: 6px 8px; background: #fef3c7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #d97706;"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span style="font-size: 12px; color: #d97706; font-weight: 600;">Skip Tracing...</span></div>` : ''}
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.5); display: flex; flex-direction: column; gap: 8px;">
                 <button 
                   id="more-details-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.openParcelDetails()"
                 >
                   More Details
                 </button>
                 ${!hasSkipTraced && !isSkipTracingInProgress ? `<button 
                   id="get-contact-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: #16a34a; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.skipTraceParcel()"
                 >
                   Get Contact
                 </button>` : ''}
                 <button 
                   id="add-to-list-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.addParcelToList('${parcelId}')"
                 >
                   Add to List
@@ -517,15 +800,19 @@ function App() {
       parcelId,
       isMultiSelectActive
     })
-  }, [isMultiSelectActive, publicLists])
+  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, mapType])
   
   // Add single parcel to list (called from popup button)
-  const handleAddSingleParcelToList = useCallback(async (listId, isPublic = false) => {
+  const handleAddSingleParcelToList = useCallback(async (listId) => {
     if (!clickedParcelData) {
       showToast('No parcel selected', 'error')
       return
     }
-
+    const list = lists.find(l => l.id === listId)
+    if (!list) {
+      showToast('List not found', 'error')
+      return
+    }
     const parcelToAdd = {
       id: clickedParcelData.id,
       properties: clickedParcelData.properties,
@@ -534,61 +821,25 @@ function App() {
       lng: clickedParcelData.lng,
       addedAt: new Date().toISOString()
     }
-
+    const existingIds = new Set((list.parcels || []).map(p => p.id || p))
+    if (existingIds.has(parcelToAdd.id)) {
+      showToast('Parcel already in this list', 'warning')
+      return
+    }
     try {
-      if (isPublic) {
-        const result = await addParcelsToPublicList(listId, [parcelToAdd])
-        await handlePublicListsChange()
-        const list = publicLists.find(l => l.id === listId)
-        const listName = list ? list.name : 'list'
-        showToast(`Added parcel to ${listName}`, 'success')
-      } else {
-        const stored = localStorage.getItem('property_lists')
-        if (!stored) {
-          showToast('Error: No local storage found', 'error')
-          return
-        }
-
-        const lists = JSON.parse(stored)
-        const listIndex = lists.findIndex(list => list.id === listId)
-        if (listIndex === -1) {
-          showToast('Error: List not found', 'error')
-          return
-        }
-
-        const list = lists[listIndex]
-        const existingIds = new Set(list.parcels.map(p => p.id || p))
-        
-        if (existingIds.has(parcelToAdd.id)) {
-          showToast('Parcel already in this list', 'warning')
-          return
-        }
-        
-        lists[listIndex] = {
-          ...list,
-          parcels: [...list.parcels, parcelToAdd]
-        }
-
-        localStorage.setItem('property_lists', JSON.stringify(lists))
-        showToast(`Added parcel to ${list.name}`, 'success')
-      }
-      
-      // Close popup and panel
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.closePopup()
-      }
-      if (currentPopupRef.current) {
-        currentPopupRef.current = null
-      }
-      setClickedParcelId(null) // Clear highlight
+      await updateList(getToken, listId, { parcels: [...(list.parcels || []), parcelToAdd] })
+      await refreshLists()
+      showToast(`Added parcel to ${list.name}`, 'success')
+      if (mapInstanceRef.current) mapInstanceRef.current.closePopup()
+      if (currentPopupRef.current) currentPopupRef.current = null
+      setClickedParcelId(null)
       setClickedParcelData(null)
       setShowListSelector(false)
       setIsListPanelOpen(false)
     } catch (error) {
-      console.error('Error adding parcel to list:', error)
-      showToast(`Failed to add parcel: ${error.message}`, 'error')
+      showToast(error.message || 'Failed to add parcel', 'error')
     }
-  }, [clickedParcelData, publicLists, handlePublicListsChange])
+  }, [clickedParcelData, lists, getToken, refreshLists])
 
   // Recenter map on user location
   const handleRecenter = useCallback(() => {
@@ -597,24 +848,65 @@ function App() {
     }
   }, [])
 
+  // Toggle compass mode (map orients to face user's direction)
+  const handleToggleCompass = useCallback(async () => {
+    if (isCompassActive) {
+      setIsCompassActive(false)
+      return
+    }
+    // When turning ON: iOS requires permission from user gesture
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const permission = await DeviceOrientationEvent.requestPermission()
+        if (permission === 'granted') {
+          setIsCompassActive(true)
+        } else {
+          showToast('Compass access denied. Enable in Settings to orient the map.', 'error')
+        }
+      } catch (err) {
+        console.warn('DeviceOrientation permission:', err)
+        showToast('Could not enable compass. Try again or check device settings.', 'error')
+      }
+    } else {
+      // Non-iOS or permission not required
+      setIsCompassActive(true)
+    }
+  }, [isCompassActive])
+
   // Toggle multi-select mode
   const handleToggleMultiSelect = useCallback(() => {
+    // Wait for auth to finish loading before checking
+    if (authLoading) {
+      console.log('⏳ Auth still loading, waiting...')
+      return
+    }
+    
+    // Require authentication for multi-select
+    if (!currentUser || !currentUser.uid) {
+      console.log('❌ No current user, showing login prompt for multi-select')
+      setIsLoginOpen(true)
+      showToast('Please sign in to use multi-select', 'info')
+      return
+    }
+    console.log('✅ User authenticated, toggling multi-select:', currentUser.email)
     setIsMultiSelectActive(prev => !prev)
     setSelectedParcels(new Set()) // Clear selection when toggling mode
     setSelectedParcelsData(new Map()) // Clear parcel data
     setClickedParcelId(null) // Clear single click highlight
-  }, [])
+  }, [currentUser])
 
-  // Add selected parcels to list (handles both public and private)
-  const handleAddParcelsToList = useCallback(async (listId, isPublic = false) => {
+  // Add selected parcels to list
+  const handleAddParcelsToList = useCallback(async (listId) => {
     const parcelIds = Array.from(selectedParcels)
-    
     if (parcelIds.length === 0) {
       alert('No parcels selected')
       return
     }
-
-    // Prepare parcels with full data
+    const list = lists.find(l => l.id === listId)
+    if (!list) {
+      showToast('List not found', 'error')
+      return
+    }
     const parcelsWithData = parcelIds.map(parcelId => {
       const parcelData = selectedParcelsData.get(parcelId)
       if (parcelData) {
@@ -627,165 +919,421 @@ function App() {
           addedAt: new Date().toISOString()
         }
       }
-      // Fallback if data not available
-      return {
-        id: parcelId,
-        addedAt: new Date().toISOString()
-      }
+      return { id: parcelId, addedAt: new Date().toISOString() }
     })
-
-    try {
-      if (isPublic) {
-        // Add to public list via API (send full parcel data)
-        const result = await addParcelsToPublicList(listId, parcelsWithData)
-        
-        // Refresh public lists
-        await handlePublicListsChange()
-        
-        const list = publicLists.find(l => l.id === listId)
-        const listName = list ? list.name : 'list'
-        
-        setSelectedParcels(new Set())
-        setSelectedParcelsData(new Map())
-        setIsMultiSelectActive(false)
-        
-        // If this list is selected, update the highlight
-        if (selectedListId === listId) {
-          setSelectedListId(null)
-          setTimeout(() => setSelectedListId(listId), 0)
-        }
-        
-        showToast(`Added ${result.parcelsAdded || parcelIds.length} parcels to ${listName}`, 'success')
-      } else {
-        // Add to private list in localStorage
-        const stored = localStorage.getItem('property_lists')
-        if (!stored) {
-          showToast('Error: No local storage found', 'error')
-          return
-        }
-
-        const lists = JSON.parse(stored)
-        const listIndex = lists.findIndex(list => list.id === listId)
-        if (listIndex === -1) {
-          showToast('Error: List not found', 'error')
-          return
-        }
-
-        const list = lists[listIndex]
-        // Use parcels with full data
-        const newParcels = parcelsWithData
-
-        // Merge with existing parcels, avoiding duplicates
-        const existingIds = new Set(list.parcels.map(p => p.id || p))
-        const uniqueNewParcels = newParcels.filter(p => !existingIds.has(p.id))
-        
-        lists[listIndex] = {
-          ...list,
-          parcels: [...list.parcels, ...uniqueNewParcels]
-        }
-
-        localStorage.setItem('property_lists', JSON.stringify(lists))
-        setSelectedParcels(new Set())
-        setSelectedParcelsData(new Map())
-        setIsMultiSelectActive(false)
-        
-        // If this list is selected, update the highlight
-        if (selectedListId === listId) {
-          setSelectedListId(null)
-          setTimeout(() => setSelectedListId(listId), 0)
-        }
-        
-        showToast(`Added ${uniqueNewParcels.length} parcels to ${list.name}`, 'success')
-      }
-    } catch (error) {
-      console.error('Error adding parcels to list:', error)
-      showToast(`Failed to add parcels: ${error.message}`, 'error')
+    const existingIds = new Set((list.parcels || []).map(p => p.id || p))
+    const uniqueNew = parcelsWithData.filter(p => !existingIds.has(p.id))
+    if (uniqueNew.length === 0) {
+      showToast('Selected parcels are already in this list', 'warning')
+      return
     }
-  }, [selectedParcels, publicLists, selectedListId, handlePublicListsChange])
+    try {
+      await updateList(getToken, listId, { parcels: [...(list.parcels || []), ...uniqueNew] })
+      await refreshLists()
+      setSelectedParcels(new Set())
+      setSelectedParcelsData(new Map())
+      setIsMultiSelectActive(false)
+      if (!selectedListIds.includes(listId)) {
+        setSelectedListIds(prev => {
+          const next = prev.filter(id => id !== listId).concat(listId)
+          return next.slice(-5) // keep max 5
+        })
+      }
+      showToast(`Added ${uniqueNew.length} parcels to ${list.name}`, 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to add parcels', 'error')
+    }
+  }, [selectedParcels, selectedParcelsData, lists, selectedListIds, getToken, refreshLists])
 
   // Remove parcel from list
-  const handleRemoveParcelFromList = useCallback(async (listId, parcelId, isPublic = false) => {
+  const handleRemoveParcelFromList = useCallback(async (listId, parcelId) => {
     const confirmed = await showConfirm(
       'Are you sure you want to remove this parcel from the list?',
       'Remove Parcel'
     )
-    if (!confirmed) {
+    if (!confirmed) return
+    const list = lists.find(l => l.id === listId)
+    if (!list) {
+      showToast('List not found', 'error')
       return
     }
-
     try {
-      if (isPublic) {
-        await removeParcelsFromPublicList(listId, [parcelId])
-        // Refresh public lists to get updated data
-        await handlePublicListsChange()
-        
-        // If this list is selected, update the highlight
-        if (selectedListId === listId) {
-          setSelectedListId(null)
-          setTimeout(() => setSelectedListId(listId), 0)
-        }
-        
-        showToast('Parcel removed from list', 'success')
-      } else {
-        const stored = localStorage.getItem('property_lists')
-        if (!stored) {
-          showToast('Error: No local storage found', 'error')
-          return
-        }
-
-        const lists = JSON.parse(stored)
-        const listIndex = lists.findIndex(list => list.id === listId)
-        if (listIndex === -1) {
-          showToast('Error: List not found', 'error')
-          return
-        }
-
-        const list = lists[listIndex]
-        lists[listIndex] = {
-          ...list,
-          parcels: list.parcels.filter(p => (p.id || p) !== parcelId)
-        }
-
-        localStorage.setItem('property_lists', JSON.stringify(lists))
-        
-        // If this list is selected, update the highlight
-        if (selectedListId === listId) {
-          setSelectedListId(null)
-          setTimeout(() => setSelectedListId(listId), 0)
-        }
-        
-        showToast('Parcel removed from list', 'success')
+      await updateList(getToken, listId, { removeParcels: [parcelId] })
+      await refreshLists()
+      if (!selectedListIds.includes(listId)) {
+        setSelectedListIds(prev => {
+          const next = prev.filter(id => id !== listId).concat(listId)
+          return next.slice(-5) // keep max 5
+        })
       }
+      showToast('Parcel removed from list', 'success')
     } catch (error) {
-      console.error('Error removing parcel from list:', error)
-      showToast(`Failed to remove parcel: ${error.message}`, 'error')
+      showToast(error.message || 'Failed to remove parcel', 'error')
     }
-  }, [selectedListId, handlePublicListsChange])
+  }, [lists, selectedListIds, getToken, refreshLists])
 
   // Function to open parcel details (can accept parcel data or use clickedParcelData)
   const handleOpenParcelDetails = useCallback((parcelData = null) => {
+    // Wait for auth to finish loading before checking
+    if (authLoading) {
+      console.log('⏳ Auth still loading, waiting...')
+      return
+    }
+    
+    // Require authentication to view parcel details
+    if (!currentUser || !currentUser.uid) {
+      console.log('❌ No current user, showing login prompt for parcel details')
+      setIsLoginOpen(true)
+      showToast('Please sign in to view parcel details', 'info')
+      return
+    }
+    console.log('✅ User authenticated, opening parcel details:', currentUser.email)
+    // Track source: from list (parcelData passed) vs map (popup)
+    parcelDetailsSourceRef.current = parcelData ? 'list' : 'map'
     // If parcelData is provided (from list), use it; otherwise use clickedParcelData
     if (parcelData) {
       setClickedParcelData(parcelData)
     }
+    // Close parcel popup when opening More Details panel (only exists when opened from map)
+    if (mapInstanceRef.current && currentPopupRef.current) {
+      mapInstanceRef.current.closePopup(currentPopupRef.current)
+      currentPopupRef.current = null
+    }
     setIsParcelDetailsOpen(true)
+  }, [currentUser, authLoading])
+
+  // Reopen parcel popup (used when More Details is closed via X)
+  const openParcelPopup = useCallback((data) => {
+    if (!mapInstanceRef.current || !data) return
+    const parcelId = data.id || data.properties?.PROP_ID
+    const address = data.address || data.properties?.SITUS_ADDR || data.properties?.SITE_ADDR || data.properties?.ADDRESS || 'No address'
+    const properties = data.properties || {}
+    const latlng = L.latLng(data.lat ?? data.latlng?.lat, data.lng ?? data.latlng?.lng)
+    const currentYear = new Date().getFullYear()
+    const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
+    const age = yearBuilt ? currentYear - yearBuilt : null
+    const hasSkipTraced = isParcelSkipTraced(parcelId)
+    const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
+    const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
+    const listNamesHtml = listsWithParcel.length > 0
+      ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcel.map(l => l.name).join(', ')}</p>`
+      : ''
+    const popup = L.popup({ className: mapType === 'satellite' ? 'parcel-popup-liquid-glass' : '' })
+      .setLatLng(latlng)
+      .setContent(`
+        <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
+          <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+          <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
+          ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
+          ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
+          ${listNamesHtml || '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'}
+          ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
+          ${isSkipTracingInProgress ? `<div style="margin: 8px 0; padding: 6px 8px; background: #fef3c7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #d97706;"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span style="font-size: 12px; color: #d97706; font-weight: 600;">Skip Tracing...</span></div>` : ''}
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.5); display: flex; flex-direction: column; gap: 8px;">
+            <button id="more-details-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.openParcelDetails()">More Details</button>
+            ${!hasSkipTraced && !isSkipTracingInProgress ? `<button id="get-contact-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.skipTraceParcel()">Get Contact</button>` : ''}
+            <button id="add-to-list-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.addParcelToList('${parcelId}')">Add to List</button>
+          </div>
+        </div>
+      `)
+    currentPopupRef.current = popup
+    popup.openOn(mapInstanceRef.current)
+    popup.on('remove', () => {
+      if (currentPopupRef.current === popup) {
+        currentPopupRef.current = null
+        setClickedParcelId(null)
+      }
+    })
+  }, [lists, skipTracingInProgress, mapType])
+
+  const handleParcelDetailsClose = useCallback((options = {}) => {
+    setIsParcelDetailsOpen(false)
+    // Only reopen map popup when ParcelDetails was opened from map (More Details button), not from list
+    const openedFromMap = parcelDetailsSourceRef.current === 'map'
+    if (options.reopenPopup && openedFromMap && clickedParcelData && mapInstanceRef.current) {
+      openParcelPopup(clickedParcelData)
+    } else {
+      setClickedParcelId(null)
+      setClickedParcelData(null)
+      if (currentPopupRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.closePopup(currentPopupRef.current)
+      }
+      currentPopupRef.current = null
+    }
+  }, [clickedParcelData, openParcelPopup])
+
+  // Handle email click from parcel details
+  const handleEmailClick = useCallback((email, parcelData) => {
+    // Wait for auth to finish loading before checking
+    if (authLoading) {
+      console.log('⏳ Auth still loading, waiting...')
+      return
+    }
+    
+    // Require authentication for email features
+    if (!currentUser || !currentUser.uid) {
+      console.log('❌ No current user, showing login prompt for email')
+      setIsLoginOpen(true)
+      showToast('Please sign in to send emails', 'info')
+      return
+    }
+    console.log('✅ User authenticated, opening email templates:', currentUser.email)
+    // Open email templates panel to select a template (single parcel mode)
+    setIsBulkEmailMode(false)
+    setEmailComposerParcelData(parcelData)
+    setEmailComposerRecipient({ email, name: parcelData?.properties?.OWNER_NAME || '' })
+    setIsEmailTemplatesPanelOpen(true)
+  }, [currentUser, authLoading])
+
+  // Handle opening email templates from MapControls button (bulk mode)
+  const handleOpenEmailTemplates = useCallback(() => {
+    // Wait for auth to finish loading before checking
+    if (authLoading) {
+      console.log('⏳ Auth still loading, waiting...')
+      return
+    }
+    
+    if (!currentUser || !currentUser.uid) {
+      console.log('❌ No current user, showing login prompt for email templates')
+      setIsLoginOpen(true)
+      return
+    }
+    console.log('✅ User authenticated, opening email templates:', currentUser.email)
+    setIsBulkEmailMode(true)
+    setEmailComposerParcelData(null)
+    setEmailComposerRecipient({ email: '', name: '' })
+    setBulkEmailList(null)
+    setBulkEmailListId(null)
+    setIsEmailTemplatesPanelOpen(true)
+  }, [currentUser, authLoading])
+
+  // Handle email button click from list (opens template selection, then preview)
+  const handleBulkEmailFromList = useCallback((listId) => {
+    setBulkEmailListId(listId)
+    setIsListPanelOpen(false)
+    setIsBulkEmailMode(true)
+    setEmailComposerParcelData(null)
+    setEmailComposerRecipient({ email: '', name: '' })
+    setIsEmailTemplatesPanelOpen(true)
   }, [])
 
-  // Handle bulk skip tracing all parcels in a list
-  const handleBulkSkipTraceList = useCallback(async (listId, isPublic = false) => {
-    try {
-      // Get list parcels
-      let list = null
-      if (isPublic) {
-        list = publicLists.find(l => l.id === listId)
-      } else {
-        const stored = localStorage.getItem('property_lists')
-        if (stored) {
-          const lists = JSON.parse(stored)
-          list = lists.find(l => l.id === listId)
+  // Track if we're in bulk email mode
+  const [isBulkEmailMode, setIsBulkEmailMode] = useState(false)
+
+  // Handle template selection from EmailTemplatesPanel
+  const handleTemplateSelect = useCallback(async (template) => {
+    if (isBulkEmailMode) {
+      if (bulkEmailListId) {
+        setSelectedEmailTemplate(template)
+        setIsEmailTemplatesPanelOpen(false)
+        setIsListPanelOpen(false)
+        try {
+          const list = lists.find(l => l.id === bulkEmailListId)
+          if (!list) {
+            showToast('List not found', 'error')
+            return
+          }
+
+          // Check if list has any parcels with emails
+          const { getSkipTracedParcel } = await import('./utils/skipTrace')
+          const parcelsWithEmails = list.parcels.filter(parcel => {
+            const parcelId = parcel.id || parcel.properties?.PROP_ID || parcel
+            const skipTracedInfo = getSkipTracedParcel(parcelId)
+            return skipTracedInfo && skipTracedInfo.email
+          })
+
+          if (parcelsWithEmails.length === 0) {
+            showToast('No parcels in this list have email addresses', 'warning')
+            return
+          }
+
+          setBulkEmailList(list)
+          setIsBulkEmailPreviewOpen(true)
+        } catch (error) {
+          console.error('Error showing preview:', error)
+          showToast('Error loading list preview', 'error')
         }
+      } else {
+        // No list selected yet - prompt for list selection
+        setSelectedEmailTemplate(template)
+        setIsEmailTemplatesPanelOpen(false)
+        setIsListPanelOpen(true)
+        setShowListSelector(true)
+        showToast('Select a list to email', 'info')
+      }
+    } else {
+      setSelectedEmailTemplate(template)
+      setIsEmailTemplatesPanelOpen(false)
+      setIsEmailComposerOpen(true)
+    }
+  }, [isBulkEmailMode, bulkEmailListId, lists])
+
+  // Handle list selection for bulk email (after template is selected)
+  const handleBulkEmailListSelected = useCallback(async (listId) => {
+    if (!selectedEmailTemplate) {
+      showToast('No template selected', 'error')
+      return
+    }
+    const list = lists.find(l => l.id === listId)
+    if (!list || !list.parcels || list.parcels.length === 0) {
+      showToast('List is empty', 'warning')
+      return
+    }
+
+    // Check if list has any parcels with emails
+    const { getSkipTracedParcel } = await import('./utils/skipTrace')
+    const parcelsWithEmails = list.parcels.filter(parcel => {
+      const parcelId = parcel.id || parcel.properties?.PROP_ID || parcel
+      const skipTracedInfo = getSkipTracedParcel(parcelId)
+      return skipTracedInfo && skipTracedInfo.email
+    })
+
+    if (parcelsWithEmails.length === 0) {
+      showToast('No parcels in this list have email addresses', 'warning')
+      return
+    }
+
+    setBulkEmailList(list)
+    setBulkEmailListId(listId)
+    setIsListPanelOpen(false)
+    setShowListSelector(false)
+    setIsBulkEmailPreviewOpen(true)
+  }, [selectedEmailTemplate, lists])
+
+  // Handle bulk email confirmation from preview panel
+  const handleBulkEmailConfirm = useCallback(async ({ template, listId }) => {
+    if (!template) {
+      showToast('No template selected', 'error')
+      return
+    }
+    const TEST_EMAIL = 'benjruelas@gmail.com'
+    const list = lists.find(l => l.id === listId)
+    if (!list || !list.parcels || list.parcels.length === 0) {
+      showToast('List is empty', 'warning')
+      return
+    }
+
+    // Get skip traced data for all parcels
+    const { getSkipTracedParcel } = await import('./utils/skipTrace')
+    const { replaceTemplateTags } = await import('./utils/emailTemplates')
+
+    const parcelsWithEmails = []
+    for (const parcel of list.parcels) {
+      const parcelId = parcel.id || parcel.properties?.PROP_ID || parcel
+      const skipTracedInfo = getSkipTracedParcel(parcelId)
+      
+      if (skipTracedInfo && skipTracedInfo.email) {
+        parcelsWithEmails.push({
+          parcel,
+          email: skipTracedInfo.email,
+          skipTracedInfo
+        })
+      }
+    }
+
+    if (parcelsWithEmails.length === 0) {
+      showToast('No parcels in this list have email addresses', 'warning')
+      return
+    }
+
+    const confirmed = await showConfirm(
+      `Send email to ${parcelsWithEmails.length} parcel${parcelsWithEmails.length > 1 ? 's' : ''} in "${list.name}"? ${TEST_EMAIL !== parcelsWithEmails[0].email ? `(Testing - all emails will go to ${TEST_EMAIL})` : ''}`,
+      'Bulk Email'
+    )
+    if (!confirmed) return
+
+    // Send emails one by one (open mailto links)
+    // Use test email for all emails during testing
+    let sentCount = 0
+    for (const { parcel, email, skipTracedInfo } of parcelsWithEmails) {
+      const parcelData = {
+        id: parcel.id || parcel.properties?.PROP_ID || parcel,
+        properties: parcel.properties || parcel,
+        address: parcel.address || parcel.properties?.SITUS_ADDR || parcel.properties?.SITE_ADDR || '',
+        ownerName: parcel.properties?.OWNER_NAME || ''
       }
 
+      const subject = replaceTemplateTags(template.subject || '', parcelData)
+      const body = replaceTemplateTags(template.body || '', parcelData)
+
+      // Use test email instead of actual recipient email
+      const mailtoLink = `mailto:${TEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      
+      // Open in new window/tab to avoid blocking
+      window.open(mailtoLink, '_blank')
+      sentCount++
+
+      // Small delay between emails to avoid overwhelming the browser
+      if (sentCount < parcelsWithEmails.length) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
+
+    showToast(`✅ Successfully sent ${sentCount} email${sentCount > 1 ? 's' : ''} to ${TEST_EMAIL}!`, 'success', 8000)
+    
+    // Reset state
+    setSelectedEmailTemplate(null)
+    setIsListPanelOpen(false)
+    setShowListSelector(false)
+    setIsBulkEmailMode(false)
+    setIsBulkEmailPreviewOpen(false)
+    setBulkEmailList(null)
+    setBulkEmailListId(null)
+    setIsSendingBulkEmails(false)
+  }, [lists])
+
+  // Handle export list as CSV and email to user
+  const handleExportList = useCallback(async (listId) => {
+    const list = lists.find(l => l.id === listId)
+    if (!list) {
+      showToast('List not found', 'error')
+      return
+    }
+
+    if (!list.parcels || list.parcels.length === 0) {
+      showToast('List is empty', 'warning')
+      return
+    }
+
+    if (!currentUser?.email) {
+      showToast('Please sign in to export lists', 'error')
+      return
+    }
+
+    // Testing: all emails (including CSV export) go to this address
+    const TEST_EMAIL = 'benjruelas@gmail.com'
+
+    try {
+      const csvContent = listToCsv(list)
+      const res = await fetch('/api/export-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listName: list.name,
+          csvContent,
+          userEmail: TEST_EMAIL
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.message || data.error || `Export failed (${res.status})`)
+      }
+
+      showToast(`Export sent to ${TEST_EMAIL}`, 'success')
+    } catch (err) {
+      console.error('Export list error:', err)
+      showToast(err.message || 'Failed to export list', 'error')
+    }
+  }, [lists, currentUser])
+
+  const handleBulkEmailList = useCallback(async (listId) => {
+    await handleBulkEmailListSelected(listId)
+  }, [handleBulkEmailListSelected])
+
+  const handleBulkSkipTraceList = useCallback(async (listId) => {
+    try {
+      const list = lists.find(l => l.id === listId)
       if (!list || !list.parcels || list.parcels.length === 0) {
         showToast('List is empty', 'warning')
         return
@@ -813,7 +1361,7 @@ function App() {
       }
 
       const confirmed = await showConfirm(
-        `Skip trace ${parcelsToTrace.length} parcel${parcelsToTrace.length > 1 ? 's' : ''} from "${list.name}"? This may take a few minutes.`,
+        `Skip trace ${parcelsToTrace.length} parcel${parcelsToTrace.length > 1 ? 's' : ''} from "${list.name}"? This will run in the background and you'll be notified when complete.`,
         'Bulk Skip Trace'
       )
       if (!confirmed) {
@@ -837,151 +1385,20 @@ function App() {
           throw new Error('No job ID returned')
         }
 
-        showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
-        
-        // Poll for results (with timeout - may need longer for bulk)
-        // Use longer timeout on mobile to account for slower networks and background throttling
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-        const maxRetries = isMobile ? 120 : 60 // Double retries on mobile for bulk operations
-        const interval = isMobile ? 6000 : 5000 // Slightly longer interval on mobile
-        
-        const results = await pollSkipTraceJobUntilComplete(result.jobId, maxRetries, interval)
-        
-        // Note: Empty results array is valid - it means no contact info was found
-        // Only throw error if we actually got an error, not if results are empty
-        if (results.length === 0) {
-          console.warn('⚠️ Bulk skip trace completed but returned no results. This may mean no contact information was found for any parcels.')
-          showToast('Bulk skip trace completed, but no contact information was found for any parcels.', 'warning')
-          return
-        }
-
-        // Import address utilities (client-side parseAddress matching server-side logic)
-        const parseAddress = (addressStr) => {
-          if (!addressStr || !addressStr.trim()) return null
-          const parts = addressStr.split(',').map(p => p.trim()).filter(p => p.length > 0)
-          let street = addressStr
-          let city = ''
-          let state = 'TX'
-          let zip = ''
-          
-          if (parts.length >= 3) {
-            street = parts[0]
-            city = parts[1]
-            const lastPart = parts[parts.length - 1]
-            const stateZipMatch = lastPart.match(/^([A-Z]{2})(\s+(\d{5}(?:-\d{4})?))?$/i)
-            if (stateZipMatch) {
-              state = stateZipMatch[1].toUpperCase()
-              zip = stateZipMatch[3] || ''
-            } else if (/^[A-Z]{2}$/i.test(lastPart)) {
-              state = lastPart.toUpperCase()
-            }
-          } else if (parts.length === 2) {
-            street = parts[0]
-            const secondPart = parts[1]
-            if (/^[A-Z]{2}$/i.test(secondPart)) {
-              state = secondPart.toUpperCase()
-              city = 'Fort Worth'
-            } else {
-              city = secondPart
-              state = 'TX'
-            }
-          } else {
-            street = parts[0]
-            city = 'Fort Worth'
-            state = 'TX'
-          }
-          
-          if (!city) city = 'Fort Worth'
-          if (!state) state = 'TX'
-          
-          return { street, city, state, zip }
-        }
-        
-        const normalizeAddress = (addressStr) => {
-          if (!addressStr) return ''
-          return addressStr.toLowerCase().trim().replace(/\s+/g, ' ')
-        }
-        
-        const buildAddressKey = (street, city, state) => {
-          return normalizeAddress([street, city, state].filter(Boolean).join(', '))
-        }
-        
-        // Match results to parcels by address instead of index
-        // Build a map of normalized addresses to original parcels
-        // IMPORTANT: Parse the full address string into components (street, city, state)
-        // to match the format returned by Tracerfy (separate columns)
-        const addressToParcelMap = new Map()
-        parcelsToTrace.forEach(parcel => {
-          const parsed = parseAddress(parcel.address)
-          if (parsed) {
-            // Build normalized key from components (street, city, state) - same format as Tracerfy returns
-            const normalized = buildAddressKey(parsed.street, parsed.city, parsed.state)
-            if (normalized) {
-              if (!addressToParcelMap.has(normalized)) {
-                addressToParcelMap.set(normalized, [])
-              }
-              addressToParcelMap.get(normalized).push(parcel)
-            }
-          }
+        // Add job to background tracking
+        addSkipTraceJob({
+          jobId: result.jobId,
+          listId,
+          listName: list.name,
+          parcelsToTrace,
+          status: 'pending'
         })
-        
-        // Match results to parcels
-        const resultsWithParcelIds = []
-        const matchedParcelIds = new Set()
-        
-        results.forEach((contactInfo) => {
-          // Tracerfy returns inputAddress as "street, city, state" (already normalized)
-          // OR we can build it from inputAddressRaw, inputCity, inputState
-          const matchKey = contactInfo.inputAddress || buildAddressKey(
-            contactInfo.inputAddressRaw || '',
-            contactInfo.inputCity || '',
-            contactInfo.inputState || ''
-          )
-          
-          if (matchKey && addressToParcelMap.has(matchKey)) {
-            const matchingParcels = addressToParcelMap.get(matchKey)
-            const matchedParcel = matchingParcels.find(p => !matchedParcelIds.has(p.parcelId))
-            
-            if (matchedParcel) {
-              matchedParcelIds.add(matchedParcel.parcelId)
-              resultsWithParcelIds.push({
-                parcelId: matchedParcel.parcelId,
-                phone: contactInfo.phone || null,
-                email: contactInfo.email || null,
-                phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
-                emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
-                address: contactInfo.address || null,
-                skipTracedAt: new Date().toISOString()
-              })
-            }
-          }
-        })
-        
-        // Log unmatched results for debugging
-        if (results.length !== resultsWithParcelIds.length) {
-          console.warn(`⚠️ Only matched ${resultsWithParcelIds.length} of ${results.length} skip trace results to parcels`)
-        }
-        
-        saveSkipTracedParcels(resultsWithParcelIds)
 
-        // Add list to skip traced list (with all parcels that were skip traced)
-        // Map matched results back to full parcel objects from the original list
-        const matchedParcelIdsSet = new Set(resultsWithParcelIds.map(r => r.parcelId))
-        const skipTracedParcels = list.parcels.filter(p => {
-          const pid = p.id || p.properties?.PROP_ID || p
-          return matchedParcelIdsSet.has(pid)
-        })
-        
-        if (skipTracedParcels.length > 0) {
-          addListToSkipTracedList(listId, list.name, skipTracedParcels)
-        }
-
-        // Show success message with matched count (not total results count)
-        const matchedCount = resultsWithParcelIds.length
-        const totalRequested = parcelsToTrace.length
-        showToast(`Successfully skip traced ${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''}!`, 'success')
-      } finally {
-        // Remove all from in progress
+        showToast(`Skip trace job submitted for ${parcelsToTrace.length} parcels. You'll be notified when it completes.`, 'success', 5000)
+      } catch (error) {
+        console.error('Bulk skip trace submission error:', error)
+        showToast(`Failed to submit skip trace job: ${error.message}`, 'error')
+        // Remove from in progress on error
         setSkipTracingInProgress(prev => {
           const next = new Set(prev)
           parcelsToTrace.forEach(p => next.delete(p.parcelId))
@@ -993,12 +1410,18 @@ function App() {
       console.error('Bulk skip trace error:', error)
       showToast(`Bulk skip trace failed: ${error.message}`, 'error')
     }
-  }, [publicLists, skipTracingInProgress])
+  }, [lists, skipTracingInProgress])
 
   // Handle skip tracing a single parcel (from popup or list)
   const handleSkipTraceParcel = useCallback(async (parcelData) => {
     if (!parcelData) {
       showToast('No parcel selected', 'error')
+      return
+    }
+
+    // Wait for auth to finish loading before checking
+    if (authLoading) {
+      console.log('⏳ Auth still loading, waiting...')
       return
     }
 
@@ -1037,15 +1460,24 @@ function App() {
         throw new Error('No job ID returned')
       }
 
-      showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
-      
-      // Poll for results (with timeout)
-      // Use longer timeout on mobile to account for slower networks and background throttling
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      const maxRetries = isMobile ? 60 : 30 // Double retries on mobile
-      const interval = isMobile ? 6000 : 5000 // Slightly longer interval on mobile
-      
-      const results = await pollSkipTraceJobUntilComplete(result.jobId, maxRetries, interval)
+      // For synchronous jobs (jobId === 'sync'), results are returned immediately
+      let results = []
+      if (result.jobId === 'sync' && result.async === false && result.results) {
+        // Results are already in the response, no need to poll
+        console.log('✅ Synchronous skip trace - results returned immediately')
+        results = result.results || []
+      } else {
+        // Asynchronous job - poll for results
+        showToast('Skip trace submitted. Waiting for results...', 'info', 5000)
+        
+        // Poll for results (with timeout)
+        // Use longer timeout on mobile to account for slower networks and background throttling
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        const maxRetries = isMobile ? 60 : 30 // Double retries on mobile
+        const interval = isMobile ? 6000 : 5000 // Slightly longer interval on mobile
+        
+        results = await pollSkipTraceJobUntilComplete(result.jobId, maxRetries, interval)
+      }
       
       // Note: Empty results array is valid - it means no contact info was found
       // Only throw error if we actually got an error, not if results are empty
@@ -1058,15 +1490,46 @@ function App() {
 
       const contactInfo = results[0]
       
+      console.log('💾 Saving skip trace results for parcel:', parcelId)
+      console.log('📞 Contact info from API:', {
+        phone: contactInfo.phone,
+        phoneNumbers: contactInfo.phoneNumbers,
+        phoneNumbersLength: contactInfo.phoneNumbers?.length || 0,
+        email: contactInfo.email,
+        emails: contactInfo.emails,
+        emailsLength: contactInfo.emails?.length || 0,
+        address: contactInfo.address,
+        fullContactInfo: contactInfo
+      })
+      
+      // Ensure phoneNumbers is an array
+      const phoneNumbers = Array.isArray(contactInfo.phoneNumbers) 
+        ? contactInfo.phoneNumbers 
+        : (contactInfo.phone ? [contactInfo.phone] : [])
+      
+      // Ensure emails is an array
+      const emails = Array.isArray(contactInfo.emails)
+        ? contactInfo.emails
+        : (contactInfo.email ? [contactInfo.email] : [])
+      
       // Save to global list
-      saveSkipTracedParcel(parcelId, {
-        phone: contactInfo.phone || null,
-        email: contactInfo.email || null,
-        phoneNumbers: contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []),
-        emails: contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []),
+      const dataToSave = {
+        phone: contactInfo.phone || phoneNumbers[0] || null,
+        email: contactInfo.email || emails[0] || null,
+        phoneNumbers: phoneNumbers,
+        emails: emails,
         address: contactInfo.address || null,
         skipTracedAt: new Date().toISOString()
-      })
+      }
+      
+      console.log('💾 Data being saved:', dataToSave)
+      
+      saveSkipTracedParcel(parcelId, dataToSave)
+      
+      // Verify it was saved
+      const saved = getSkipTracedParcel(parcelId)
+      console.log('✅ Verified saved skip trace data:', saved)
+      console.log('📞 Saved phone:', saved?.phone, 'phoneNumbers:', saved?.phoneNumbers)
 
       // Add to skip traced list
       addParcelToSkipTracedList(parcelData)
@@ -1101,12 +1564,18 @@ function App() {
         const age = yearBuilt ? currentYear - yearBuilt : null
         
         const hasSkipTraced = isParcelSkipTraced(parcelIdForPopup)
+        const listsWithParcelForPopup = (lists || []).filter(l =>
+          (l.parcels || []).some(p => (p.id || p) === parcelIdForPopup)
+        )
+        const listNamesHtmlForPopup = listsWithParcelForPopup.length > 0
+          ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcelForPopup.map(l => l.name).join(', ')}</p>`
+          : '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'
         
         if (mapInstanceRef.current) {
           // Convert latlng to L.LatLng if it's an array
           const leafletLatLng = Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng
           
-          const popup = L.popup()
+          const popup = L.popup({ className: mapType === 'satellite' ? 'parcel-popup-liquid-glass' : '' })
             .setLatLng(leafletLatLng)
             .setContent(`
               <div style="min-width: 200px;" id="parcel-popup-${parcelIdForPopup}">
@@ -1114,25 +1583,26 @@ function App() {
                 <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
                 ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
                 ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
-                ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 4px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px;">
+                ${listNamesHtmlForPopup || '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'}
+                ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.5); display: flex; flex-direction: column; gap: 8px;">
                   <button 
                   id="more-details-btn-${parcelIdForPopup}"
-                  style="width: 100%; padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.openParcelDetails()"
                 >
                   More Details
                 </button>
                 ${!hasSkipTraced ? `<button 
                   id="get-contact-btn-${parcelIdForPopup}"
-                  style="width: 100%; padding: 8px 12px; background: #16a34a; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.skipTraceParcel()"
                 >
                   Get Contact
                 </button>` : ''}
                 <button 
                   id="add-to-list-btn-${parcelIdForPopup}"
-                    style="width: 100%; padding: 8px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                    style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                     onclick="window.addParcelToList('${parcelId}')"
                   >
                     Add to List
@@ -1154,7 +1624,7 @@ function App() {
         return next
       })
     }
-  }, [clickedParcelData, clickedParcelId, skipTracingInProgress])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, mapType])
 
   // Expose function to window for popup button
   useEffect(() => {
@@ -1175,20 +1645,42 @@ function App() {
     }
   }, [handleOpenParcelDetails, handleSkipTraceParcel, clickedParcelData])
 
+  // Sync map type to body for CSS (zoom controls, parcel popup use liquid glass only on satellite)
+  useEffect(() => {
+    document.body.dataset.mapType = mapType
+    return () => { delete document.body.dataset.mapType }
+  }, [mapType])
+
   return (
+    <MapTypeProvider mapType={mapType}>
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
-      <MapContainer
+      {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+        <MapContainer
         center={userLocation || [32.7767, -96.7970]}
         zoom={17}
         minZoom={1}
-        maxZoom={24}
+        maxZoom={20}
         style={{ height: '100vh', width: '100%' }}
         zoomControl={false}
+        rotate={true}
+        rotateControl={false}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
+        {mapType === 'street' ? (
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxNativeZoom={19}
+            maxZoom={22}
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+        ) : (
+          <TileLayer
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxNativeZoom={19}
+            maxZoom={22}
+            attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+          />
+        )}
         <ZoomControl position="topleft" />
         <MapController 
           userLocation={userLocation}
@@ -1199,9 +1691,13 @@ function App() {
           onRecenterMap={setRecenterMap}
           onCountyChange={handleCountyChange}
         />
+        <CompassOrientation isActive={isCompassActive} />
         {userLocation && (
           <LocationMarker 
             position={userLocation}
+            heading={heading}
+            isCompassActive={isCompassActive}
+            mapType={mapType}
           />
         )}
         {pmtilesUrl && (
@@ -1210,14 +1706,15 @@ function App() {
             onParcelClick={handleParcelClick}
             clickedParcelId={clickedParcelId}
             selectedParcels={selectedParcels}
-            selectedListId={selectedListId}
-            publicLists={publicLists}
+            selectedListIds={selectedListIds}
+            lists={lists}
             onLayerReady={(layerFunctions) => {
               parcelLayerRef.current = layerFunctions
             }}
           />
         )}
       </MapContainer>
+      </div>
 
       <AddressSearch
         onLocationFound={(location) => {
@@ -1253,11 +1750,47 @@ function App() {
 
       <MapControls
         onRecenter={handleRecenter}
+        onToggleCompass={handleToggleCompass}
+        isCompassActive={isCompassActive}
         onToggleMultiSelect={handleToggleMultiSelect}
         isMultiSelectActive={isMultiSelectActive}
-        onOpenListPanel={() => setIsListPanelOpen(true)}
-        selectedListId={selectedListId}
-        onOpenSkipTracedListPanel={() => setIsSkipTracedListPanelOpen(true)}
+        mapType={mapType}
+        onMapTypeToggle={() => setMapType((t) => (t === 'street' ? 'satellite' : 'street'))}
+        onOpenListPanel={() => {
+          // Wait for auth to finish loading before checking
+          if (authLoading) {
+            console.log('⏳ Auth still loading, waiting...')
+            return
+          }
+          
+          if (!currentUser || !currentUser.uid) {
+            console.log('❌ No current user, showing login prompt for list panel')
+            setIsLoginOpen(true)
+            return
+          }
+          console.log('✅ User authenticated, opening list panel:', currentUser.email)
+          setIsListPanelOpen(true)
+        }}
+        selectedListIds={selectedListIds}
+        onOpenSkipTracedListPanel={() => {
+          // Wait for auth to finish loading before checking
+          if (authLoading) {
+            console.log('⏳ Auth still loading, waiting...')
+            return
+          }
+          
+          if (!currentUser || !currentUser.uid) {
+            console.log('❌ No current user, showing login prompt for skip traced list')
+            setIsLoginOpen(true)
+            return
+          }
+          console.log('✅ User authenticated, opening skip traced list:', currentUser.email)
+          setIsSkipTracedListPanelOpen(true)
+        }}
+        onOpenEmailTemplates={handleOpenEmailTemplates}
+        currentUser={currentUser}
+        onLogin={() => setIsLoginOpen(true)}
+        onLogout={logout}
       />
 
       <ListPanel
@@ -1267,27 +1800,37 @@ function App() {
           setShowListSelector(false)
           setClickedParcelData(null)
         }}
-        selectedListId={selectedListId}
-        onSelectList={(listId) => {
-          // Toggle selection: if already selected, deselect; otherwise select
-          if (selectedListId === listId) {
-            setSelectedListId(null)
-          } else {
-            setSelectedListId(listId)
-          }
+        selectedListIds={selectedListIds}
+        onToggleListHighlight={(listId) => {
+          setSelectedListIds(prev => {
+            if (prev.includes(listId)) return prev.filter(id => id !== listId)
+            if (prev.length >= 5) return prev
+            return [...prev, listId]
+          })
         }}
-        onDeselectList={() => setSelectedListId(null)}
-        onAddParcelsToList={showListSelector && clickedParcelData ? handleAddSingleParcelToList : handleAddParcelsToList}
+        onAddParcelsToList={showListSelector && clickedParcelData 
+          ? handleAddSingleParcelToList 
+          : (showListSelector && selectedEmailTemplate 
+            ? handleBulkEmailListSelected
+            : handleAddParcelsToList)}
         selectedParcelsCount={showListSelector && clickedParcelData ? 1 : selectedParcels.size}
-        publicLists={publicLists}
-        onPublicListsChange={handlePublicListsChange}
-        onDeletePublicList={handleDeletePublicList}
+        lists={lists}
+        onListsChange={refreshLists}
+        onDeleteList={handleDeleteList}
+        onShareList={handleShareList}
+        onCreateList={async (name) => {
+          await createList(getToken, name, [])
+          await refreshLists()
+        }}
         onViewListContents={(listId) => {
           setViewingListId(listId)
           setIsParcelListPanelOpen(true)
         }}
         onBulkSkipTrace={handleBulkSkipTraceList}
+        onBulkEmail={handleBulkEmailFromList}
+        onExportList={handleExportList}
         isAddingSingleParcel={showListSelector && !!clickedParcelData}
+        isBulkEmailMode={showListSelector && !!selectedEmailTemplate}
       />
 
       <ParcelListPanel
@@ -1297,7 +1840,7 @@ function App() {
           setViewingListId(null)
         }}
         selectedListId={viewingListId}
-        publicLists={publicLists}
+        lists={lists}
         onCenterParcel={(location) => {
           if (mapRef.current) {
             mapRef.current.setView([location.lat, location.lng], 17, {
@@ -1314,14 +1857,20 @@ function App() {
         onOpenParcelDetails={handleOpenParcelDetails}
         onSkipTraceParcel={handleSkipTraceParcel}
         onBulkSkipTrace={handleBulkSkipTraceList}
+        onExportList={handleExportList}
         skipTracingInProgress={skipTracingInProgress}
       />
 
-      <ParcelDetails
-        isOpen={isParcelDetailsOpen}
-        onClose={() => setIsParcelDetailsOpen(false)}
-        parcelData={clickedParcelData}
-      />
+      {createPortal(
+        <ParcelDetails
+          isOpen={isParcelDetailsOpen}
+          onClose={handleParcelDetailsClose}
+          parcelData={clickedParcelData}
+          onEmailClick={handleEmailClick}
+          lists={lists}
+        />,
+        document.body
+      )}
 
       <SkipTracedListPanel
         isOpen={isSkipTracedListPanelOpen}
@@ -1329,9 +1878,87 @@ function App() {
         onOpenParcelDetails={handleOpenParcelDetails}
       />
 
+      <EmailTemplatesPanel
+        isOpen={isEmailTemplatesPanelOpen}
+        onClose={() => {
+          setIsEmailTemplatesPanelOpen(false)
+          setSelectedEmailTemplate(null)
+          setIsBulkEmailMode(false)
+        }}
+        onSelectTemplate={handleTemplateSelect}
+        isBulkMode={isBulkEmailMode}
+      />
+
+      <EmailComposer
+        isOpen={isEmailComposerOpen}
+        onClose={() => {
+          setIsEmailComposerOpen(false)
+          setSelectedEmailTemplate(null)
+          setEmailComposerParcelData(null)
+          setEmailComposerRecipient({ email: '', name: '' })
+        }}
+        template={selectedEmailTemplate}
+        parcelData={emailComposerParcelData}
+        recipientEmail={emailComposerRecipient.email}
+        recipientName={emailComposerRecipient.name}
+        onSend={(emailData) => {
+          console.log('Email sent:', emailData)
+          showToast('Email opened in your email client', 'success')
+        }}
+      />
+
+      <BulkEmailPreview
+        isOpen={isBulkEmailPreviewOpen}
+        onClose={() => {
+          setIsBulkEmailPreviewOpen(false)
+          setBulkEmailList(null)
+          setBulkEmailListId(null)
+        }}
+        template={selectedEmailTemplate}
+        list={bulkEmailList}
+        listId={bulkEmailListId}
+        onConfirm={handleBulkEmailConfirm}
+        onCancel={() => {
+          setIsBulkEmailPreviewOpen(false)
+          setBulkEmailList(null)
+          setBulkEmailListId(null)
+        }}
+      />
+
+      {/* Authentication Dialogs */}
+      <Login
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+        onSwitchToSignUp={() => {
+          setIsLoginOpen(false)
+          setIsSignUpOpen(true)
+        }}
+        onSwitchToForgotPassword={() => {
+          setIsLoginOpen(false)
+          setIsForgotPasswordOpen(true)
+        }}
+      />
+      <SignUp
+        isOpen={isSignUpOpen}
+        onClose={() => setIsSignUpOpen(false)}
+        onSwitchToLogin={() => {
+          setIsSignUpOpen(false)
+          setIsLoginOpen(true)
+        }}
+      />
+      <ForgotPassword
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+        onSwitchToLogin={() => {
+          setIsForgotPasswordOpen(false)
+          setIsLoginOpen(true)
+        }}
+      />
+
       <ToastContainer />
       <ConfirmDialog />
     </div>
+    </MapTypeProvider>
   )
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './dialog'
 import { Button } from './button'
 
 let confirmQueue = []
@@ -76,12 +76,15 @@ export const ConfirmDialog = () => {
         handleCancel()
       }
     }}>
-      <DialogContent className="max-w-md" showCloseButton={false}>
+      <DialogContent className="map-panel max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-600" />
             {currentConfirm.title}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {currentConfirm.message}
+          </DialogDescription>
         </DialogHeader>
         <p className="text-sm text-gray-700 py-4">{currentConfirm.message}</p>
         <DialogFooter>

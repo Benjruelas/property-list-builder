@@ -30,7 +30,7 @@ tippecanoe \
   --force \
   --layer=parcels \
   --minimum-zoom=10 \
-  --maximum-zoom=14 \
+  --maximum-zoom=16 \
   --drop-densest-as-needed \
   --extend-zooms-if-still-dropping \
   --no-feature-limit \

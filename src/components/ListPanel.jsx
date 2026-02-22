@@ -1,226 +1,137 @@
 import { useState, useEffect } from 'react'
-import { X, RefreshCw, Plus, Eye, Trash2, Lock, Globe, Check, Phone } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { X, RefreshCw, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
-import { showConfirm } from './ui/confirm-dialog'
-import { createPublicList, fetchPublicLists } from '../utils/publicLists'
+import { Input } from './ui/input'
 
-const STORAGE_KEY = 'property_lists'
+const LIST_HIGHLIGHT_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626']
 
 export function ListPanel({ 
   isOpen, 
   onClose, 
-  selectedListId,
-  onSelectList,
-  onDeselectList,
+  selectedListIds = [],
+  onToggleListHighlight,
   onAddParcelsToList,
   selectedParcelsCount,
-  publicLists: publicListsProp,
-  onPublicListsChange,
-  onDeletePublicList,
+  lists = [],
+  onListsChange,
+  onDeleteList,
+  onShareList,
+  onCreateList,
   onViewListContents,
   onBulkSkipTrace,
-  isAddingSingleParcel = false
+  onBulkEmail,
+  onExportList,
+  isAddingSingleParcel = false,
+  isBulkEmailMode = false
 }) {
-  const [privateLists, setPrivateLists] = useState([])
   const [newListName, setNewListName] = useState('')
-  const [newListIsPublic, setNewListIsPublic] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  // Local optimistic state for public lists (includes newly created lists before refresh)
-  const [optimisticPublicLists, setOptimisticPublicLists] = useState([])
-  
-  // Merge prop-based public lists with optimistic ones
-  const publicLists = [...(publicListsProp || []), ...optimisticPublicLists].filter((list, index, self) => 
-    index === self.findIndex(l => l.id === list.id)
-  )
-
-  // Load private lists from localStorage
-  const loadPrivateLists = () => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        // Filter to only include private lists (those without isPublic flag or isPublic=false)
-        setPrivateLists(parsed.filter(list => !list.isPublic))
-      } catch (error) {
-        console.error('Error loading private lists:', error)
-        setPrivateLists([])
-      }
-    } else {
-      setPrivateLists([])
-    }
-  }
+  const [openDropdownListId, setOpenDropdownListId] = useState(null)
+  const [dropdownAnchor, setDropdownAnchor] = useState(null) // { bottom, right } for portal positioning
+  const [shareListId, setShareListId] = useState(null)
+  const [shareEmail, setShareEmail] = useState('')
 
   useEffect(() => {
-    loadPrivateLists()
-    // Refresh lists when panel opens
-    if (isOpen) {
-      loadPrivateLists()
-      // Refresh public lists when panel opens
-      if (onPublicListsChange) {
-        onPublicListsChange()
-      }
-      // Clear optimistic lists when panel closes/opens (they should be in props by now)
-      setOptimisticPublicLists([])
-    }
-  }, [isOpen, onPublicListsChange])
-
-  // Listen for storage events (for private lists updated in other tabs/components)
-  // Also reload private lists when publicLists prop changes (indicates lists may have been updated)
-  // This ensures parcel counts update after parcels are added to lists
-  useEffect(() => {
-    if (!isOpen) return
-
-    const handleStorageChange = (e) => {
-      if (e.key === STORAGE_KEY) {
-        loadPrivateLists()
-      }
-    }
-
-    // Listen for storage events (fires when localStorage is updated in another tab/context)
-    window.addEventListener('storage', handleStorageChange)
-
-    // Also reload when publicLists prop changes (public lists updated)
-    loadPrivateLists()
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
-    }
-  }, [publicListsProp, isOpen])
-
-  // Poll for localStorage changes when panel is open (since storage event only fires across tabs)
-  // This ensures parcel counts update when parcels are added to private lists
-  useEffect(() => {
-    if (!isOpen) return
-
-    const intervalId = setInterval(() => {
-      loadPrivateLists()
-    }, 1000) // Check every 1 second when panel is open
-
-    return () => {
-      clearInterval(intervalId)
+    if (!isOpen) {
+      setOpenDropdownListId(null)
+      setDropdownAnchor(null)
+      setShareListId(null)
+      setShareEmail('')
     }
   }, [isOpen])
 
-
-  // Debug: Log when publicLists prop changes
-  useEffect(() => {
-    console.log('ListPanel: publicLists prop changed:', publicLists?.length || 0, 'lists')
-  }, [publicLists])
-
-  // Save private lists to localStorage
-  const savePrivateLists = (updatedLists) => {
-    setPrivateLists(updatedLists)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLists))
+  const MENU_WIDTH = 180
+  const MENU_PADDING = 8
+  const openDropdown = (listId, event) => {
+    event.stopPropagation()
+    const el = event.currentTarget
+    const rect = el.getBoundingClientRect()
+    let top = rect.bottom + 4
+    let left = rect.right - MENU_WIDTH
+    if (left < MENU_PADDING) left = MENU_PADDING
+    if (left + MENU_WIDTH > window.innerWidth - MENU_PADDING) left = window.innerWidth - MENU_WIDTH - MENU_PADDING
+    const menuHeight = 320
+    if (top + menuHeight > window.innerHeight - MENU_PADDING) top = Math.max(MENU_PADDING, rect.top - menuHeight - 4)
+    setDropdownAnchor({ top, left })
+    setOpenDropdownListId(listId)
   }
+
+  const closeDropdown = () => {
+    setOpenDropdownListId(null)
+    setDropdownAnchor(null)
+  }
+
+  useEffect(() => {
+    if (isOpen && onListsChange) onListsChange()
+  }, [isOpen, onListsChange])
 
   const handleCreateList = async () => {
     if (!newListName.trim()) {
       showToast('Please enter a list name', 'error')
       return
     }
-
     setIsCreating(true)
-
     try {
-      if (newListIsPublic) {
-        // Create public list via API
-        console.log('Creating public list:', newListName.trim())
-        const newList = await createPublicList(newListName.trim(), [])
-        console.log('Public list created:', newList)
-        
-        // Optimistically add the list to local state so it appears immediately
-        setOptimisticPublicLists(prev => [...prev, newList])
-        
-        // Clear form
-        setNewListName('')
-        setNewListIsPublic(false)
-        setShowCreateForm(false)
-        
-        // Refresh from server after a delay to sync with server state
-        // This handles the case where the list was created successfully
-        if (onPublicListsChange) {
-          console.log('Scheduling refresh of public lists...')
-          setTimeout(async () => {
-            await onPublicListsChange()
-            // Clear optimistic state after refresh (the list should now be in props)
-            setOptimisticPublicLists(prev => prev.filter(l => l.id !== newList.id))
-            console.log('Public lists refreshed from server')
-          }, 1000)
-        }
-        
-        console.log('List creation completed, showing optimistically')
-      } else {
-        // Create private list in localStorage
-        const newList = {
-          id: `private_${Date.now()}`,
-          name: newListName.trim(),
-          parcels: [],
-          isPublic: false,
-          createdAt: new Date().toISOString()
-        }
-
-        const updatedLists = [...privateLists, newList]
-        savePrivateLists(updatedLists)
-            setNewListName('')
-            setNewListIsPublic(false)
-            setShowCreateForm(false)
-            
-            showToast(`Private list "${newList.name}" created successfully!`, 'success')
-          }
-        } catch (error) {
-          console.error('Error creating list:', error)
-          showToast(`Failed to create list: ${error.message}`, 'error')
-        } finally {
-          setIsCreating(false)
-        }
-      }
-
-  const handleDeleteList = async (listId, isPublic) => {
-    if (isPublic) {
-      // Delete public list via callback
-      if (onDeletePublicList) {
-        await onDeletePublicList(listId)
-      }
-    } else {
-      // Delete private list
-      const confirmed = await showConfirm(
-        'Are you sure you want to delete this list?',
-        'Delete List'
-      )
-      if (!confirmed) return
-      
-      const updatedLists = privateLists.filter(list => list.id !== listId)
-      savePrivateLists(updatedLists)
-      if (selectedListId === listId) {
-        onDeselectList()
-      }
-      showToast('List deleted successfully', 'success')
+      if (onCreateList) await onCreateList(newListName.trim())
+      setNewListName('')
+      setShowCreateForm(false)
+      showToast('List created', 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to create list', 'error')
+    } finally {
+      setIsCreating(false)
     }
   }
 
-  // Combine private and public lists for display
-  // Use the publicLists prop directly - it should be updated by parent
-  const allLists = [...privateLists, ...(publicLists || [])]
+  const handleDeleteListClick = (listId) => {
+    if (onDeleteList) onDeleteList(listId)
+  }
+
+  const handleShareSave = () => {
+    if (!shareListId || !onShareList) return
+    const email = shareEmail.trim()
+    if (!email) {
+      showToast('Please enter an email', 'error')
+      return
+    }
+    onShareList(shareListId, [email])
+    setShareListId(null)
+    setShareEmail('')
+  }
+
+  const allLists = lists || []
   
-  const handleSelectList = (listId) => {
-    if (selectedListId === listId) {
-      onDeselectList()
+  const handleToggleHighlight = (listId) => {
+    if (!onToggleListHighlight) return
+    if (selectedListIds.includes(listId)) {
+      onToggleListHighlight(listId)
+    } else if (selectedListIds.length >= 5) {
+      showToast('Maximum 5 lists can be highlighted. Remove one to add another.', 'warning')
     } else {
-      onSelectList(listId)
+      onToggleListHighlight(listId)
     }
   }
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) {
         onClose()
       }
     }}>
-      <DialogContent className="max-w-md max-h-[80vh] p-0" showCloseButton={false}>
+      <DialogContent
+        className="map-panel max-w-md max-h-[80vh] p-0"
+        showCloseButton={false}
+        hideOverlay
+        onInteractOutside={(e) => {
+          if (e.target.closest?.('[data-list-panel-dropdown]')) e.preventDefault()
+        }}
+      >
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold">Property Lists</DialogTitle>
@@ -228,12 +139,7 @@ export function ListPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => {
-                  loadPrivateLists()
-                  if (onPublicListsChange) {
-                    onPublicListsChange()
-                  }
-                }}
+                onClick={() => onListsChange?.()}
                 title="Refresh lists"
               >
                 <RefreshCw className="h-4 w-4" />
@@ -251,6 +157,11 @@ export function ListPanel({
           {!isAddingSingleParcel && selectedParcelsCount > 0 && (
             <div className="mb-4 p-3 bg-blue-50 text-blue-900 rounded-lg text-sm font-medium text-center">
               {selectedParcelsCount} parcel{selectedParcelsCount !== 1 ? 's' : ''} selected
+            </div>
+          )}
+          {!isAddingSingleParcel && selectedParcelsCount === 0 && isBulkEmailMode && (
+            <div className="mb-4 p-3 bg-green-50 text-green-900 rounded-lg text-sm font-medium text-center">
+              Select a list to send emails to
             </div>
           )}
           {!showCreateForm ? (
@@ -273,32 +184,6 @@ export function ListPanel({
                 disabled={isCreating}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <div className="flex gap-3">
-                <label className="flex-1 flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="listType"
-                    checked={!newListIsPublic}
-                    onChange={() => setNewListIsPublic(false)}
-                    disabled={isCreating}
-                    className="w-4 h-4"
-                  />
-                  <Lock className="h-4 w-4" />
-                  <span className="text-sm">Private</span>
-                </label>
-                <label className="flex-1 flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="listType"
-                    checked={newListIsPublic}
-                    onChange={() => setNewListIsPublic(true)}
-                    disabled={isCreating}
-                    className="w-4 h-4"
-                  />
-                  <Globe className="h-4 w-4" />
-                  <span className="text-sm">Public</span>
-                </label>
-              </div>
               <div className="flex gap-2">
                 <Button 
                   onClick={handleCreateList}
@@ -311,11 +196,10 @@ export function ListPanel({
                   onClick={() => {
                     setShowCreateForm(false)
                     setNewListName('')
-                    setNewListIsPublic(false)
                   }}
                   disabled={isCreating}
-                  variant="outline"
-                  className="flex-1"
+                  variant="ghost"
+                  className="flex-1 border border-white hover:bg-white/20"
                 >
                   Cancel
                 </Button>
@@ -327,245 +211,172 @@ export function ListPanel({
             {allLists.length === 0 ? (
               <p className="text-center text-gray-500 py-8 text-sm">No lists yet. Create one to get started!</p>
             ) : (
-              <>
-                {privateLists.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2 pb-2 border-b">
-                      <Lock className="h-4 w-4" />
-                      Private Lists
-                    </h3>
-                    {privateLists.map(list => (
+              <div className="space-y-2">
+                {allLists.map(list => (
                       <div 
                         key={list.id} 
                         className={cn(
                           "flex items-center justify-between p-3 border-2 rounded-lg transition-all cursor-pointer",
-                          selectedListId === list.id 
+                          selectedListIds.includes(list.id) 
                             ? "border-blue-500 bg-blue-50 shadow-md" 
                             : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                         )}
-                        onClick={() => {
+                        onClick={(e) => {
                           if (isAddingSingleParcel) {
-                            // In single parcel mode, clicking the list adds the parcel
-                            onAddParcelsToList(list.id, false)
+                            onAddParcelsToList(list.id)
+                          } else if (isBulkEmailMode) {
+                            e.stopPropagation()
+                            onAddParcelsToList(list.id)
                           } else {
-                            // Normal mode: open list contents
-                            if (onViewListContents) {
-                              onViewListContents(list.id)
-                            }
+                            if (onViewListContents) onViewListContents(list.id)
                           }
                         }}
                         title={
                           isAddingSingleParcel 
                             ? "Click to add parcel to this list" 
+                            : isBulkEmailMode
+                            ? "Click to send emails to this list"
                             : "Click to view list contents"
                         }
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            {selectedListId === list.id && !isAddingSingleParcel && (
-                              <Check className="h-4 w-4 text-blue-600" />
+                            {selectedListIds.includes(list.id) && !isAddingSingleParcel && (
+                              <span 
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                                style={{ backgroundColor: LIST_HIGHLIGHT_COLORS[selectedListIds.indexOf(list.id)] }}
+                                title={`Color ${selectedListIds.indexOf(list.id) + 1}`}
+                              />
                             )}
                             <span className={cn(
                               "font-medium text-sm truncate",
-                              selectedListId === list.id && !isAddingSingleParcel && "text-blue-900"
+                              selectedListIds.includes(list.id) && !isAddingSingleParcel && "text-blue-900"
                             )}>
                               {list.name}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-500">{list.parcels.length} parcels</span>
+                          <span className="text-xs text-gray-500">{list.parcels?.length ?? 0} parcels</span>
                         </div>
-                        <div className="flex items-center gap-1 ml-2">
+                        <div className="relative ml-2 flex items-center gap-1">
                           {!isAddingSingleParcel && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={cn(
-                                "h-8 w-8",
-                                selectedListId === list.id && "text-blue-600 bg-blue-50"
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                // Eye button: highlight parcels on map
-                                if (selectedListId === list.id) {
-                                  onDeselectList()
-                                } else {
-                                  onSelectList(list.id)
-                                }
-                              }}
-                              title={selectedListId === list.id ? "Click to deselect and remove highlighting" : "Click to highlight parcels on map"}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {!isAddingSingleParcel && selectedParcelsCount > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onAddParcelsToList(list.id, false)
-                              }}
-                              title="Add selected parcels to this list"
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {!isAddingSingleParcel && onBulkSkipTrace && list.parcels && list.parcels.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-100"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onBulkSkipTrace(list.id, false)
-                              }}
-                              title="Skip trace all parcels in this list"
-                            >
-                              <Phone className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {!isAddingSingleParcel && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteList(list.id, false)
-                              }}
-                              title="Delete list"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "h-8 w-8",
+                                  selectedListIds.includes(list.id) && "bg-blue-100 text-blue-700"
+                                )}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleToggleHighlight(list.id)
+                                }}
+                                title={selectedListIds.includes(list.id) ? "Remove highlight" : "Highlight on map"}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "h-8 w-8",
+                                  openDropdownListId === list.id && "bg-gray-100"
+                                )}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openDropdownListId === list.id ? closeDropdown() : openDropdown(list.id, e)
+                                }}
+                                title="List options"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-                {(publicLists && publicLists.length > 0) && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2 pb-2 border-b">
-                      <Globe className="h-4 w-4" />
-                      Public Lists ({publicLists.length})
-                    </h3>
-                    {publicLists.map(list => (
-                      <div 
-                        key={list.id} 
-                        className={cn(
-                          "flex items-center justify-between p-3 border-2 rounded-lg transition-all cursor-pointer",
-                          selectedListId === list.id 
-                            ? "border-blue-500 bg-blue-50 shadow-md" 
-                            : "border-green-200 bg-green-50/50 hover:border-green-300 hover:bg-green-50"
-                        )}
-                        onClick={() => {
-                          if (isAddingSingleParcel) {
-                            // In single parcel mode, clicking the list adds the parcel
-                            onAddParcelsToList(list.id, true)
-                          } else {
-                            // Normal mode: open list contents
-                            if (onViewListContents) {
-                              onViewListContents(list.id)
-                            }
-                          }
-                        }}
-                        title={
-                          isAddingSingleParcel 
-                            ? "Click to add parcel to this list" 
-                            : "Click to view list contents"
-                        }
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            {selectedListId === list.id && !isAddingSingleParcel && (
-                              <Check className="h-4 w-4 text-blue-600" />
-                            )}
-                            <span className={cn(
-                              "font-medium text-sm truncate",
-                              selectedListId === list.id && !isAddingSingleParcel && "text-blue-900"
-                            )}>
-                              {list.name}
-                            </span>
-                          </div>
-                          <span className="text-xs text-gray-500">{list.parcels.length} parcels</span>
-                        </div>
-                        <div className="flex items-center gap-1 ml-2">
-                          {!isAddingSingleParcel && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={cn(
-                                "h-8 w-8",
-                                selectedListId === list.id && "text-blue-600 bg-blue-50"
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                // Eye button: highlight parcels on map
-                                if (selectedListId === list.id) {
-                                  onDeselectList()
-                                } else {
-                                  onSelectList(list.id)
-                                }
-                              }}
-                              title={selectedListId === list.id ? "Click to deselect and remove highlighting" : "Click to highlight parcels on map"}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {!isAddingSingleParcel && selectedParcelsCount > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onAddParcelsToList(list.id, true)
-                              }}
-                              title="Add selected parcels to this list"
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {!isAddingSingleParcel && onBulkSkipTrace && list.parcels && list.parcels.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-100"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onBulkSkipTrace(list.id, true)
-                              }}
-                              title="Skip trace all parcels in this list"
-                            >
-                              <Phone className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {!isAddingSingleParcel && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteList(list.id, true)
-                              }}
-                              title="Delete public list"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+              </div>
         </div>
       </DialogContent>
     </Dialog>
+
+    {shareListId && (
+      <Dialog open={!!shareListId} onOpenChange={(open) => { if (!open) { setShareListId(null); setShareEmail('') } }}>
+        <DialogContent className="map-panel max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Share list</DialogTitle>
+          </DialogHeader>
+          <Input
+            type="email"
+            placeholder="Email"
+            value={shareEmail}
+            onChange={(e) => setShareEmail(e.target.value)}
+            className="mb-4"
+          />
+          <div className="flex gap-2">
+            <Button onClick={handleShareSave} className="flex-1">Save</Button>
+            <Button variant="outline" onClick={() => { setShareListId(null); setShareEmail('') }}>Cancel</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
+
+    {openDropdownListId && dropdownAnchor && typeof document !== 'undefined' && createPortal(
+      (() => {
+        const list = allLists.find(l => l.id === openDropdownListId)
+        if (!list) return null
+        return (
+          <div data-list-panel-dropdown className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10000 }}>
+            <div className="fixed inset-0 z-[10001]" onClick={closeDropdown} aria-hidden />
+            <div
+              className="map-panel fixed z-[10002] rounded-xl min-w-[180px] py-1"
+              style={{ top: dropdownAnchor.top, left: dropdownAnchor.left }}
+              role="menu"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {selectedParcelsCount > 0 && (
+                <button type="button" onClick={() => { closeDropdown(); onAddParcelsToList(list.id) }} className="w-full px-3 py-2 text-left text-sm text-green-700 hover:bg-green-50/50 flex items-center gap-2 transition-colors">
+                  <Plus className="h-4 w-4 flex-shrink-0" />
+                  Add selected parcels
+                </button>
+              )}
+              {onBulkEmail && list.parcels?.length > 0 && (
+                <button type="button" onClick={() => { closeDropdown(); onBulkEmail(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-2 transition-colors">
+                  <Mail className="h-4 w-4 flex-shrink-0" />
+                  Email list
+                </button>
+              )}
+              {onBulkSkipTrace && list.parcels?.length > 0 && (
+                <button type="button" onClick={() => { closeDropdown(); onBulkSkipTrace(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-2 transition-colors">
+                  <Phone className="h-4 w-4 flex-shrink-0" />
+                  Skip trace list
+                </button>
+              )}
+              {onExportList && (
+                <button type="button" onClick={() => { closeDropdown(); onExportList(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-2 transition-colors">
+                  <FileDown className="h-4 w-4 flex-shrink-0" />
+                  Export list
+                </button>
+              )}
+              {onShareList && (
+                <button type="button" onClick={() => { closeDropdown(); setShareListId(list.id); setShareEmail((list.sharedWith || [])[0] || '') }} className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-2 transition-colors">
+                  <Share2 className="h-4 w-4 flex-shrink-0" />
+                  Share list
+                </button>
+              )}
+              <button type="button" onClick={() => { closeDropdown(); handleDeleteListClick(list.id) }} className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
+                <Trash2 className="h-4 w-4 flex-shrink-0" />
+                Delete list
+              </button>
+            </div>
+          </div>
+        )
+      })(),
+      document.getElementById('modal-root') || document.body
+    )}
+    </>
   )
 }
 

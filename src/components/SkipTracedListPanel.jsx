@@ -45,7 +45,7 @@ export function SkipTracedListPanel({
         onClose()
       }
     }}>
-      <DialogContent className="max-w-md max-h-[80vh] p-0" showCloseButton={false}>
+      <DialogContent className="map-panel max-w-md max-h-[80vh] p-0" showCloseButton={false}>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold">Skiptraced Parcels</DialogTitle>

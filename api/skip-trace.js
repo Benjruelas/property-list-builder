@@ -1,6 +1,8 @@
 /**
  * Vercel Serverless Function
- * Handles skip tracing via Tracerfy API
+ * Handles skip tracing via Tracerfy API (DISABLED by default)
+ * 
+ * To enable Tracerfy, set USE_TRACERFY=true in environment variables
  * 
  * POST: Skip trace one or more parcels
  * Body: { parcels: [{ parcelId, address, ownerName }] }
@@ -10,6 +12,14 @@
  */
 
 export default async function handler(req, res) {
+  // Disable Tracerfy by default
+  const USE_TRACERFY = process.env.USE_TRACERFY === 'true'
+  if (!USE_TRACERFY) {
+    return res.status(503).json({ 
+      error: 'Tracerfy API is disabled.',
+      message: 'Set USE_TRACERFY=true to enable Tracerfy'
+    })
+  }
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')

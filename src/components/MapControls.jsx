@@ -1,29 +1,83 @@
-import React from 'react'
-import { Navigation, CheckSquare, Square, List, Circle, Phone } from 'lucide-react'
+import React, { useState } from 'react'
+import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, User, LogOut, Menu, ChevronDown, Map, Satellite, Compass } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
+import { useMapType } from '@/contexts/MapTypeContext'
 
-export function MapControls({ onRecenter, onToggleMultiSelect, isMultiSelectActive, onOpenListPanel, selectedListId, onOpenSkipTracedListPanel }) {
+export function MapControls({ 
+  onRecenter, 
+  onToggleCompass,
+  isCompassActive,
+  onToggleMultiSelect, 
+  isMultiSelectActive, 
+  mapType,
+  onMapTypeToggle,
+  onOpenListPanel, 
+  selectedListIds = [], 
+  onOpenSkipTracedListPanel, 
+  onOpenEmailTemplates,
+  currentUser,
+  onLogin,
+  onLogout
+}) {
+  const [showMenu, setShowMenu] = useState(false)
+  const mapTypeFromContext = useMapType()
+  const isSatellite = mapTypeFromContext === 'satellite'
+
   return (
-    <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2">
+    <div className="map-controls-stack absolute top-3 right-3 z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2">
       <Button
         onClick={onRecenter}
         size="icon"
-        variant="default"
+        variant={isSatellite ? "glass" : "default"}
         className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
         title="Recenter map"
       >
         <Navigation className="h-6 w-6 sm:h-5 sm:w-5" />
       </Button>
       <Button
-        onClick={onToggleMultiSelect}
+        onClick={onToggleCompass}
         size="icon"
-        variant={isMultiSelectActive ? "default" : "outline"}
+        variant={isSatellite ? (isCompassActive ? "glass" : "glass-outline") : (isCompassActive ? "default" : "outline")}
         className={cn(
           "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
-          isMultiSelectActive && "bg-green-600 hover:bg-green-700"
+          isCompassActive && "bg-amber-500/80 hover:bg-amber-600/90 border-amber-400/50 text-white"
         )}
-        title={isMultiSelectActive ? "Multi-select ON - Click to turn off" : "Multi-select OFF - Click to turn on"}
+        title={isCompassActive ? "Disable compass (map faces your direction)" : "Enable compass (orient map to face your direction)"}
+      >
+        <Compass className="h-6 w-6 sm:h-5 sm:w-5" />
+      </Button>
+      <Button
+        onClick={onMapTypeToggle}
+        size="icon"
+        variant={isSatellite ? (mapType === 'satellite' ? 'glass' : 'glass-outline') : (mapType === 'satellite' ? 'default' : 'outline')}
+        className={cn(
+          "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
+          mapType === 'satellite' && "bg-slate-600/80 hover:bg-slate-700/90 text-white"
+        )}
+        title={mapType === 'street' ? 'Switch to satellite view' : 'Switch to street map'}
+      >
+        {mapType === 'street' ? (
+          <Satellite className="h-6 w-6 sm:h-5 sm:w-5" />
+        ) : (
+          <Map className="h-6 w-6 sm:h-5 sm:w-5" />
+        )}
+      </Button>
+      <Button
+        onClick={onToggleMultiSelect}
+        size="icon"
+        variant={isSatellite ? (isMultiSelectActive ? "glass" : "glass-outline") : (isMultiSelectActive ? "default" : "outline")}
+        className={cn(
+          "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
+          isMultiSelectActive && "bg-green-600/80 hover:bg-green-700/90 border-green-400/50 text-white",
+          !currentUser && "opacity-50 cursor-not-allowed"
+        )}
+        disabled={!currentUser}
+        title={!currentUser 
+          ? "Sign in to use multi-select" 
+          : isMultiSelectActive 
+            ? "Multi-select ON - Click to turn off" 
+            : "Multi-select OFF - Click to turn on"}
       >
         {isMultiSelectActive ? (
           <CheckSquare className="h-6 w-6 sm:h-5 sm:w-5" />
@@ -31,30 +85,113 @@ export function MapControls({ onRecenter, onToggleMultiSelect, isMultiSelectActi
           <Square className="h-6 w-6 sm:h-5 sm:w-5" />
         )}
       </Button>
-      <Button
-        onClick={onOpenListPanel}
-        size="icon"
-        variant={selectedListId ? "default" : "outline"}
-        className={cn(
-          "h-12 w-12 sm:h-10 sm:w-10 shadow-lg relative touch-manipulation",
-          selectedListId && "bg-blue-600 hover:bg-blue-700"
+      
+      {/* Menu Dropdown */}
+      <div className="relative">
+        <Button
+          onClick={() => setShowMenu(!showMenu)}
+          size="icon"
+          variant={isSatellite ? "glass-outline" : "outline"}
+          className={cn(
+            "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
+            showMenu && "bg-white/20 border-white/40"
+          )}
+          title="Menu"
+        >
+          <Menu className="h-6 w-6 sm:h-5 sm:w-5" />
+        </Button>
+        {showMenu && (
+          <>
+            <div 
+              className="fixed inset-0 z-[999]" 
+              onClick={() => setShowMenu(false)}
+            />
+            <div className="map-panel absolute right-0 top-14 rounded-xl min-w-[200px] z-[1000] py-2">
+              {/* Lists Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenListPanel()
+                }}
+                className={cn(
+                  "w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors",
+                  selectedListIds.length > 0 && "bg-blue-50/50"
+                )}
+              >
+                <List className="h-4 w-4 flex-shrink-0" />
+                <span className="flex-1">Lists</span>
+                {selectedListIds.length > 0 && (
+                  <Circle className="h-2 w-2 fill-amber-400 text-amber-400 flex-shrink-0" />
+                )}
+              </button>
+
+              {/* Skip Traced Parcels Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenSkipTracedListPanel()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors"
+              >
+                <Phone className="h-4 w-4 flex-shrink-0" />
+                <span>Skip Traced Parcels</span>
+              </button>
+
+              {/* Email Templates Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenEmailTemplates()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors"
+              >
+                <Mail className="h-4 w-4 flex-shrink-0" />
+                <span>Email Templates</span>
+              </button>
+
+              {/* Divider */}
+              <div className="my-1 border-t border-gray-200" />
+
+              {/* User Section */}
+              {currentUser ? (
+                <>
+                  <div className="px-4 py-2 border-b border-gray-200">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {currentUser.displayName || 'User'}
+                    </p>
+                    <p className="text-xs text-gray-600 truncate">
+                      {currentUser.email}
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setShowMenu(false)
+                      if (onLogout) {
+                        await onLogout()
+                      }
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4 flex-shrink-0" />
+                    <span>Sign Out</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowMenu(false)
+                    onLogin()
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors"
+                >
+                  <User className="h-4 w-4 flex-shrink-0" />
+                  <span>Sign In</span>
+                </button>
+              )}
+            </div>
+          </>
         )}
-        title="View lists"
-      >
-        <List className="h-6 w-6 sm:h-5 sm:w-5" />
-        {selectedListId && (
-          <Circle className="absolute -top-1 -right-1 h-3 w-3 sm:h-2.5 sm:w-2.5 fill-yellow-400 text-yellow-400" />
-        )}
-      </Button>
-      <Button
-        onClick={onOpenSkipTracedListPanel}
-        size="icon"
-        variant="outline"
-        className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
-        title="Skip Traced Parcels"
-      >
-        <Phone className="h-6 w-6 sm:h-5 sm:w-5" />
-      </Button>
+      </div>
     </div>
   )
 }

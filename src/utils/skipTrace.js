@@ -1,9 +1,16 @@
 /**
- * Utility functions for skip tracing parcels via Tracerfy API
+ * Utility functions for skip tracing parcels via BatchData API (or SkipSherpa/Tracerfy if enabled)
  * 
  * Note: This is a client-side utility. The actual API call should be made
  * via a serverless function to keep the API key secure.
+ * 
+ * To use BatchData (default), set BATCHDATA_CLIENT_ID and BATCHDATA_CLIENT_SECRET (OAuth 2.0) or BATCHDATA_API_KEY
+ * To use SkipSherpa (disabled), set SKIPSHERPA_API_KEY and enable USE_SKIPSHERPA=true
+ * To use Tracerfy (disabled), set TRACERFY_API_KEY and enable USE_TRACERFY=true
  */
+
+// Configuration: Set to 'batchdata', 'sherpa', or 'tracerfy' (default: 'batchdata')
+const SKIP_TRACE_PROVIDER = import.meta.env.VITE_SKIP_TRACE_PROVIDER || 'batchdata'
 
 const getApiBaseUrl = () => {
   if (import.meta.env.DEV) {
@@ -24,7 +31,17 @@ const API_BASE_URL = getApiBaseUrl()
  */
 export const skipTraceParcels = async (parcels) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/skip-trace`, {
+    // Use BatchData by default, or SkipSherpa/Tracerfy if enabled
+    let endpoint
+    if (SKIP_TRACE_PROVIDER === 'tracerfy') {
+      endpoint = `${API_BASE_URL}/skip-trace`
+    } else if (SKIP_TRACE_PROVIDER === 'sherpa') {
+      endpoint = `${API_BASE_URL}/skip-trace-sherpa`
+    } else {
+      endpoint = `${API_BASE_URL}/skip-trace-batchdata`
+    }
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -52,7 +69,17 @@ export const skipTraceParcels = async (parcels) => {
  */
 export const pollSkipTraceJob = async (jobId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/skip-trace-status?jobId=${encodeURIComponent(jobId)}`, {
+    // Use BatchData by default, or SkipSherpa/Tracerfy if enabled
+    let endpoint
+    if (SKIP_TRACE_PROVIDER === 'tracerfy') {
+      endpoint = `${API_BASE_URL}/skip-trace-status`
+    } else if (SKIP_TRACE_PROVIDER === 'sherpa') {
+      endpoint = `${API_BASE_URL}/skip-trace-status-sherpa`
+    } else {
+      endpoint = `${API_BASE_URL}/skip-trace-status-batchdata`
+    }
+    
+    const response = await fetch(`${endpoint}?jobId=${encodeURIComponent(jobId)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -80,6 +107,12 @@ export const pollSkipTraceJob = async (jobId) => {
  * @returns {Promise} Results when complete
  */
 export const pollSkipTraceJobUntilComplete = async (jobId, maxRetries = 30, interval = 5000) => {
+  // For synchronous jobs (jobId === 'sync'), don't poll - results are already returned
+  if (jobId === 'sync') {
+    console.log(`✅ Synchronous job (jobId: ${jobId}) - results already returned, skipping poll`)
+    return []
+  }
+  
   console.log(`🔄 Starting polling for job ${jobId} (max ${maxRetries} attempts, ${interval}ms interval)`)
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {

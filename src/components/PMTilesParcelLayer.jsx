@@ -8,66 +8,39 @@ import L from 'leaflet'
 /**
  * Component to render parcel boundaries from PMTiles
  */
+const LIST_HIGHLIGHT_COLORS = [
+  { color: '#2563eb', weight: 3, fillColor: '#3b82f6', fillOpacity: 0.3 },
+  { color: '#16a34a', weight: 3, fillColor: '#22c55e', fillOpacity: 0.3 },
+  { color: '#ea580c', weight: 3, fillColor: '#f97316', fillOpacity: 0.3 },
+  { color: '#9333ea', weight: 3, fillColor: '#a855f7', fillOpacity: 0.3 },
+  { color: '#dc2626', weight: 3, fillColor: '#ef4444', fillOpacity: 0.3 },
+]
+
 export function PMTilesParcelLayer({ 
   pmtilesUrl, 
   onParcelClick,
   clickedParcelId,
   selectedParcels,
-  selectedListId,
-  publicLists,
-  onLayerReady // Callback to expose layer functions
+  selectedListIds = [],
+  lists = [],
+  onLayerReady
 }) {
   const map = useMap()
+  const [parcelIdToColorIndex, setParcelIdToColorIndex] = useState(new Map()) // parcelId -> 0-4
 
-  // Load list data for highlighting (supports both public and private lists)
-  const [listParcelIds, setListParcelIds] = useState(new Set())
-  
   useEffect(() => {
-    if (selectedListId) {
-      console.log('📋 List selected:', selectedListId)
-      // Check if it's a public list (starts with 'public_')
-      if (selectedListId.startsWith('public_')) {
-        // Public list - find in publicLists prop
-        const list = publicLists?.find(l => l.id === selectedListId)
-        if (list) {
-          const parcelIds = new Set(list.parcels.map(p => p.id || p))
-          console.log('📋 Public list found:', list.name, 'with', parcelIds.size, 'parcels')
-          console.log('📋 Parcel IDs:', Array.from(parcelIds).slice(0, 5))
-          setListParcelIds(parcelIds)
-        } else {
-          console.log('📋 Public list not found in publicLists')
-          setListParcelIds(new Set())
-        }
-      } else {
-        // Private list - load from localStorage
-        const stored = localStorage.getItem('property_lists')
-        if (stored) {
-          try {
-            const lists = JSON.parse(stored)
-            const list = lists.find(l => l.id === selectedListId)
-            if (list) {
-              const parcelIds = new Set(list.parcels.map(p => p.id || p))
-              console.log('📋 Private list found:', list.name, 'with', parcelIds.size, 'parcels')
-              console.log('📋 Parcel IDs:', Array.from(parcelIds).slice(0, 5))
-              setListParcelIds(parcelIds)
-            } else {
-              console.log('📋 Private list not found in localStorage')
-              setListParcelIds(new Set())
-            }
-          } catch (error) {
-            console.error('Error loading list:', error)
-            setListParcelIds(new Set())
-          }
-        } else {
-          console.log('📋 No property_lists in localStorage')
-          setListParcelIds(new Set())
-        }
+    const next = new Map()
+    selectedListIds.slice(0, 5).forEach((listId, colorIndex) => {
+      const list = lists?.find(l => l.id === listId)
+      if (list?.parcels) {
+        list.parcels.forEach(p => {
+          const pid = p.id || p
+          if (!next.has(pid)) next.set(pid, colorIndex)
+        })
       }
-    } else {
-      console.log('📋 No list selected, clearing highlights')
-      setListParcelIds(new Set())
-    }
-  }, [selectedListId, publicLists])
+    })
+    setParcelIdToColorIndex(next)
+  }, [selectedListIds, lists])
 
   // Style definitions (shared across effects)
   const defaultStyle = {
@@ -100,12 +73,7 @@ export function PMTilesParcelLayer({
     fillOpacity: 0.4
   }
 
-  const listHighlightStyle = {
-    color: '#f59e0b',
-    weight: 3,
-    fillColor: '#fbbf24',
-    fillOpacity: 0.5
-  }
+  const getListHighlightStyle = (colorIndex) => LIST_HIGHLIGHT_COLORS[colorIndex] ?? LIST_HIGHLIGHT_COLORS[0]
 
   // Store layer group reference outside useEffect so it persists
   const layerGroupRef = useRef(null)
@@ -114,11 +82,19 @@ export function PMTilesParcelLayer({
   const isInitializedRef = useRef(false)
   const pmtilesHeaderRef = useRef(null)
   const currentPmtilesUrlRef = useRef(null) // Track current PMTiles URL
+  const zoomTooFarRef = useRef(false) // When true, do not load tiles until zoom back in range
+  const shouldFadeInRef = useRef(true) // Fade in on first show or when zooming back in range
+  const wipeTimeoutRef = useRef(null) // Pending wipe after fade-out; cleared if user zooms back in
+  const PARCEL_PANE_NAME = 'parcelPane'
+  const FADE_MS = 1000
+  // Map zoom range for parcels: 15–20. Below 15 = fade out, clear, no new loads until back in range.
+  const PARCEL_MIN_ZOOM = 15
+  const PARCEL_MAX_ZOOM = 20
   
   // Store current state in refs so event handlers always see latest values
   const selectedParcelsRef = useRef(selectedParcels)
   const clickedParcelIdRef = useRef(clickedParcelId)
-  const listParcelIdsRef = useRef(listParcelIds)
+  const parcelIdToColorIndexRef = useRef(parcelIdToColorIndex)
   
   // Update refs when state changes
   useEffect(() => {
@@ -130,8 +106,8 @@ export function PMTilesParcelLayer({
   }, [clickedParcelId])
   
   useEffect(() => {
-    listParcelIdsRef.current = listParcelIds
-  }, [listParcelIds])
+    parcelIdToColorIndexRef.current = parcelIdToColorIndex
+  }, [parcelIdToColorIndex])
 
   // Simple point-in-polygon algorithm (ray casting)
   const isPointInPolygon = (point, polygon) => {
@@ -277,12 +253,24 @@ export function PMTilesParcelLayer({
   useEffect(() => {
     if (!pmtilesUrl) return
 
+    // Create parcel pane once - put in rotatePane so parcels rotate with map (leaflet-rotate)
+    if (!map.getPane(PARCEL_PANE_NAME)) {
+      const rotatePane = map.getPane('rotatePane')
+      const container = rotatePane || undefined
+      const pane = map.createPane(PARCEL_PANE_NAME, container)
+      if (pane) {
+        pane.style.pointerEvents = 'auto'
+        pane.style.zIndex = '450'
+        pane.classList.add('parcel-pane')
+      }
+    }
+
     if (!layerGroupRef.current) {
-      layerGroupRef.current = L.layerGroup()
-      // Add to map immediately so it's available
+      layerGroupRef.current = L.layerGroup({ pane: PARCEL_PANE_NAME })
       layerGroupRef.current.addTo(map)
     }
     const parcelLayerGroup = layerGroupRef.current
+    const parcelPane = map.getPane(PARCEL_PANE_NAME)
     const tileCache = tileCacheRef.current
     let pmtiles = pmtilesRef.current
     let isInitialized = isInitializedRef.current
@@ -359,6 +347,37 @@ export function PMTilesParcelLayer({
 
     initPMTiles()
 
+    // Fade out parcels over FADE_MS, then wipe (clear layers, remove group, hide pane)
+    const wipeParcelLayer = () => {
+      if (wipeTimeoutRef.current) {
+        clearTimeout(wipeTimeoutRef.current)
+        wipeTimeoutRef.current = null
+      }
+      zoomTooFarRef.current = true
+      const pane = map.getPane(PARCEL_PANE_NAME)
+      if (pane) {
+        pane.classList.remove('parcel-pane-visible')
+        pane.style.transition = `opacity ${FADE_MS}ms ease-out`
+        pane.style.opacity = '0'
+      }
+      wipeTimeoutRef.current = setTimeout(() => {
+        wipeTimeoutRef.current = null
+        const group = layerGroupRef.current
+        if (group) {
+          group.clearLayers()
+          if (map.hasLayer(group)) {
+            map.removeLayer(group)
+          }
+        }
+        tileCacheRef.current.clear()
+        if (pane) {
+          pane.style.visibility = 'hidden'
+          pane.style.display = 'none'
+          pane.style.pointerEvents = 'none'
+        }
+      }, FADE_MS)
+    }
+
     // Function to load and render tiles
     const loadTiles = async () => {
       if (!isInitialized || !pmtiles) {
@@ -385,18 +404,8 @@ export function PMTilesParcelLayer({
         return
       }
 
-      // Prevent loading parcels when zoomed out too far (performance optimization)
-      // At zoom < 12, too many tiles would be loaded, causing freezing
-      const MIN_ZOOM_FOR_PARCELS = 12
-      if (zoom < MIN_ZOOM_FOR_PARCELS) {
-        console.log(`Zoom level ${zoom} is too low for parcel display (minimum: ${MIN_ZOOM_FOR_PARCELS}). Clearing parcels.`)
-        parcelLayerGroup.clearLayers()
-        tileCache.clear()
-        return
-      }
-
       // Get the actual zoom level to request from PMTiles
-      // PMTiles has tiles at 10-14, so use the closest available zoom
+      // Use closest available zoom from PMTiles header (e.g. 10-16)
       if (!pmtilesHeader) {
         console.warn('PMTiles header not available yet')
         return
@@ -407,10 +416,49 @@ export function PMTilesParcelLayer({
       
       const minAvailableZoom = pmtilesHeader.minZoom || 10
       const maxAvailableZoom = pmtilesHeader.maxZoom || 14
-      const requestedZoom = Math.max(minAvailableZoom, Math.min(zoom, maxAvailableZoom))
-      
-      console.log(`Map zoom: ${zoom}, requesting PMTiles zoom: ${requestedZoom}`)
 
+      console.log('Map zoom level:', zoom)
+
+      // Outside parcel zoom range (15–20): completely wipe parcel layer
+      if (zoom < PARCEL_MIN_ZOOM) {
+        wipeParcelLayer()
+        return
+      }
+
+      // Back in viable zoom range (15–20) - cancel pending wipe, restore pane and layer group
+      if (zoomTooFarRef.current) {
+        if (wipeTimeoutRef.current) {
+          clearTimeout(wipeTimeoutRef.current)
+          wipeTimeoutRef.current = null
+        }
+        shouldFadeInRef.current = true
+        const pane = map.getPane(PARCEL_PANE_NAME)
+        if (pane) {
+          pane.style.display = ''
+          pane.style.opacity = ''
+          pane.style.visibility = ''
+          pane.style.pointerEvents = 'auto'
+        }
+        const group = layerGroupRef.current
+        if (group && !map.hasLayer(group)) {
+          group.addTo(map)
+        }
+      }
+      zoomTooFarRef.current = false
+      
+      // Clamp zoom to available range, but prefer exact match if available
+      let requestedZoom
+      if (zoom < minAvailableZoom) {
+        requestedZoom = minAvailableZoom
+      } else if (zoom > maxAvailableZoom) {
+        requestedZoom = maxAvailableZoom
+      } else {
+        // Use exact zoom if available, otherwise floor to nearest available
+        requestedZoom = Math.floor(zoom)
+        // Ensure it's within bounds
+        requestedZoom = Math.max(minAvailableZoom, Math.min(requestedZoom, maxAvailableZoom))
+      }
+      
       // Calculate tile range
       const nw = map.getBounds().getNorthWest()
       const se = map.getBounds().getSouthEast()
@@ -424,12 +472,6 @@ export function PMTilesParcelLayer({
       const ySouth = Math.ceil((1 - Math.log(Math.tan(se.lat * Math.PI / 180) + 1 / Math.cos(se.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, requestedZoom))
       const minY = Math.min(yNorth, ySouth)
       const maxY = Math.max(yNorth, ySouth)
-
-      console.log(`Loading tiles for zoom ${requestedZoom}, bounds:`, {
-        minX, maxX, minY, maxY,
-        nw: [nw.lat, nw.lng],
-        se: [se.lat, se.lng]
-      })
 
       // Track which tiles should be visible in current viewport
       const tilesInViewport = new Set()
@@ -453,6 +495,17 @@ export function PMTilesParcelLayer({
           // Tile should be visible - ensure it's on the map
           if (!parcelLayerGroup.hasLayer(tileGroup)) {
             parcelLayerGroup.addLayer(tileGroup)
+            // Fade in when re-adding cached tile so it doesn't snap appear
+            const runFadeIn = (el) => {
+              if (!el) return
+              el.style.opacity = '0'
+              el.style.transition = `opacity ${FADE_MS}ms ease-out`
+              void el.offsetHeight
+              requestAnimationFrame(() => { el.style.opacity = '1' })
+            }
+            const container = tileGroup._container
+            if (container) runFadeIn(container)
+            else setTimeout(() => runFadeIn(tileGroup._container), 0)
           }
           cachedTilesAdded++
         } else {
@@ -488,7 +541,6 @@ export function PMTilesParcelLayer({
 
           // Check if we've hit the limit for new tiles
           if (newTilesLoaded >= MAX_TILES_TO_LOAD) {
-            console.log(`Reached limit of ${MAX_TILES_TO_LOAD} new tiles, skipping remaining tiles`)
             break
           }
 
@@ -497,11 +549,8 @@ export function PMTilesParcelLayer({
             const tileResponse = await pmtiles.getZxy(requestedZoom, x, y)
             
             if (!tileResponse || !tileResponse.data) {
-              console.log(`Tile ${tileKey}: No data`)
               continue
             }
-
-            console.log(`Tile ${tileKey}: Loaded ${tileResponse.data.byteLength} bytes`)
 
             // Parse vector tile
             const tile = new VectorTile(new Protobuf(tileResponse.data))
@@ -509,19 +558,14 @@ export function PMTilesParcelLayer({
             // Log all available layers
             const availableLayers = Object.keys(tile.layers)
             if (availableLayers.length === 0) {
-              console.log(`Tile ${tileKey}: No layers found in tile.`)
-              continue
-            }
-            console.log(`Tile ${tileKey}: Available layers:`, availableLayers)
-            
-            // Get parcels layer (try different possible layer names)
-            const parcelsLayer = tile.layers.parcels || tile.layers.landparcels || tile.layers.parcel || tile.layers[availableLayers[0]]
-            if (!parcelsLayer) {
-              console.log(`Tile ${tileKey}: No parcels layer found. Tried: parcels, landparcels, parcel, ${availableLayers[0]}`)
               continue
             }
 
-            console.log(`Tile ${tileKey}: Found ${parcelsLayer.length} features in layer "${parcelsLayer.name || 'unknown'}"`)
+            // Get parcels layer (try different possible layer names)
+            const parcelsLayer = tile.layers.parcels || tile.layers.landparcels || tile.layers.parcel || tile.layers[availableLayers[0]]
+            if (!parcelsLayer) {
+              continue
+            }
             newTilesLoaded++
 
             // Create a temporary layer group for this tile's features
@@ -570,17 +614,19 @@ export function PMTilesParcelLayer({
 
               // Determine style based on current state (use refs to get current values)
               let style = defaultStyle
-              if (listParcelIdsRef.current.has(parcelId)) {
-                style = listHighlightStyle
+              const colorIdx = parcelIdToColorIndexRef.current.get(parcelId)
+              if (colorIdx !== undefined) {
+                style = getListHighlightStyle(colorIdx)
               } else if (selectedParcelsRef.current.has(parcelId)) {
                 style = selectedStyle
               } else if (clickedParcelIdRef.current === parcelId) {
                 style = clickedStyle
               }
 
-              // Create polygon with parcel ID stored
+              // Create polygon with parcel ID stored (pane: so all parcels are in our pane and can be wiped when zoomed out)
               const polygon = L.polygon(latlngs, {
                 ...style,
+                pane: PARCEL_PANE_NAME,
                 interactive: true // Ensure clickable
               })
               polygon._parcelId = parcelId // Store ID for later reference
@@ -615,7 +661,7 @@ export function PMTilesParcelLayer({
                 // Check current state using refs (always up-to-date)
                 if (clickedParcelIdRef.current !== pid && 
                     !selectedParcelsRef.current.has(pid) && 
-                    !listParcelIdsRef.current.has(pid)) {
+                    parcelIdToColorIndexRef.current.get(pid) === undefined) {
                   this.setStyle(hoverStyle)
                 }
                 this.bringToFront()
@@ -623,31 +669,16 @@ export function PMTilesParcelLayer({
 
               polygon.on('mouseout', function() {
                 const pid = this._parcelId
-                // Check current state using refs (always up-to-date)
-                if (clickedParcelIdRef.current !== pid && 
-                    !selectedParcelsRef.current.has(pid) && 
-                    !listParcelIdsRef.current.has(pid)) {
-                  this.setStyle(defaultStyle)
-                } else if (listParcelIdsRef.current.has(pid)) {
-                  this.setStyle(listHighlightStyle)
+                const idx = parcelIdToColorIndexRef.current.get(pid)
+                if (idx !== undefined) {
+                  this.setStyle(getListHighlightStyle(idx))
                 } else if (selectedParcelsRef.current.has(pid)) {
                   this.setStyle(selectedStyle)
                 } else if (clickedParcelIdRef.current === pid) {
                   this.setStyle(clickedStyle)
+                } else {
+                  this.setStyle(defaultStyle)
                 }
-              })
-
-              // Add tooltip with address
-              const address = properties.SITUS_ADDR || 
-                            properties.SITE_ADDR || 
-                            properties.ADDRESS || 
-                            'No address available'
-              
-              polygon.bindTooltip(address, {
-                permanent: false,
-                direction: 'top',
-                offset: [0, -10],
-                className: 'parcel-tooltip'
               })
 
               tileFeatureGroup.addLayer(polygon)
@@ -656,7 +687,24 @@ export function PMTilesParcelLayer({
 
             parcelLayerGroup.addLayer(tileFeatureGroup)
             tileCache.set(tileKey, tileFeatureGroup) // Store the feature group for the tile
-            console.log(`Tile ${tileKey}: Added ${parcelsLayer.length} parcels`)
+
+            // Fade in this tile's parcels so they don't snap appear
+            const runFadeIn = (el) => {
+              if (!el) return
+              el.style.opacity = '0'
+              el.style.transition = `opacity ${FADE_MS}ms ease-out`
+              void el.offsetHeight // Force reflow so opacity 0 is painted before we animate
+              requestAnimationFrame(() => {
+                el.style.opacity = '1'
+              })
+            }
+            const container = tileFeatureGroup._container
+            if (container) {
+              runFadeIn(container)
+            } else {
+              // Container may not exist until after addLayer; try on next tick
+              setTimeout(() => runFadeIn(tileFeatureGroup._container), 0)
+            }
 
           } catch (error) {
             console.error(`Error loading tile ${tileKey}:`, error)
@@ -668,12 +716,18 @@ export function PMTilesParcelLayer({
       if (!map.hasLayer(parcelLayerGroup)) {
         parcelLayerGroup.addTo(map)
       }
-      
+
       const totalLayers = parcelLayerGroup.getLayers().length
       if (totalLayers > 0) {
-        console.log(`✅ Map updated: ${totalLayers} parcels visible (${cachedTilesAdded} cached tiles reused, ${newTilesLoaded} new tiles loaded, ${featuresFound} new features)`)
-      } else {
-        console.log(`⚠️ No parcels in viewport (${cachedTilesAdded} cached, ${newTilesLoaded} new tiles loaded)`)
+        // Fade in parcels only when first showing or after zooming back in range (CSS .parcel-pane.parcel-pane-visible)
+        if (parcelPane && shouldFadeInRef.current) {
+          shouldFadeInRef.current = false
+          parcelPane.classList.remove('parcel-pane-visible')
+          void parcelPane.offsetHeight // Force reflow so we start from opacity 0
+          requestAnimationFrame(() => {
+            parcelPane.classList.add('parcel-pane-visible')
+          })
+        }
       }
     }
 
@@ -686,21 +740,30 @@ export function PMTilesParcelLayer({
       }, 150) // Wait 150ms after last movement
     }
 
+    // Wipe on zoom out past 15 (same handler ref for cleanup)
+    const onZoomEndWipeIfOutOfRange = () => {
+      const z = map.getZoom()
+      if (typeof z === 'number' && !isNaN(z) && z < PARCEL_MIN_ZOOM) {
+        wipeParcelLayer()
+      }
+    }
     // Load tiles when map moves (debounced to avoid excessive calls)
-    // Only add listeners if map is ready
     if (map && map.on) {
       map.on('moveend', debouncedLoadTiles)
       map.on('zoomend', debouncedLoadTiles)
+      map.on('zoomend', onZoomEndWipeIfOutOfRange)
     }
 
     // Function to update existing polygon styles (called when selection changes)
     const updatePolygonStyles = () => {
       if (!parcelLayerGroup) return
+      const colorMap = parcelIdToColorIndexRef.current
       parcelLayerGroup.eachLayer((layer) => {
         if (layer._parcelId) {
           const pid = layer._parcelId
-          if (listParcelIds.has(pid)) {
-            layer.setStyle(listHighlightStyle)
+          const idx = colorMap.get(pid)
+          if (idx !== undefined) {
+            layer.setStyle(getListHighlightStyle(idx))
           } else if (selectedParcels.has(pid)) {
             layer.setStyle(selectedStyle)
           } else if (clickedParcelId === pid) {
@@ -718,10 +781,14 @@ export function PMTilesParcelLayer({
     // Cleanup on unmount only
     return () => {
       if (loadTilesTimeout) clearTimeout(loadTilesTimeout)
+      if (wipeTimeoutRef.current) {
+        clearTimeout(wipeTimeoutRef.current)
+        wipeTimeoutRef.current = null
+      }
       if (map && map.off) {
-        // Remove event listeners using the same function reference
         map.off('moveend', debouncedLoadTiles)
         map.off('zoomend', debouncedLoadTiles)
+        map.off('zoomend', onZoomEndWipeIfOutOfRange)
       }
       if (layerGroupRef.current && map && map.removeLayer) {
         try {
@@ -741,43 +808,27 @@ export function PMTilesParcelLayer({
   }, [map, pmtilesUrl, onParcelClick]) // Only re-run when these change
 
   // Separate effect to update styles when selection changes
-  // Convert Set to string for dependency tracking (React doesn't track Set changes well)
   const selectedParcelsKey = Array.from(selectedParcels).sort().join(',')
-  const listParcelIdsKey = Array.from(listParcelIds).sort().join(',')
+  const parcelIdToColorKey = JSON.stringify(Array.from(parcelIdToColorIndex.entries()).sort())
   
   useEffect(() => {
-    if (!layerGroupRef.current) {
-      console.log('🔄 No layer group available for style update')
-      return
-    }
-    
-    console.log('🔄 Updating polygon styles:', {
-      selectedCount: selectedParcels.size,
-      clickedId: clickedParcelId,
-      listCount: listParcelIds.size,
-      listParcelIds: Array.from(listParcelIds).slice(0, 5)
-    })
-    
+    if (!layerGroupRef.current) return
     let updatedCount = 0
-    let selectedCount = 0
     let highlightedCount = 0
-    
-    // Iterate through all layers in the layer group
+    const colorMap = parcelIdToColorIndexRef.current
     layerGroupRef.current.eachLayer((layer) => {
-      // Check if it's a feature group (tile feature group)
       if (layer.eachLayer) {
-        // It's a feature group, iterate through its layers
         layer.eachLayer((subLayer) => {
           if (subLayer._parcelId) {
             const pid = subLayer._parcelId
-            if (listParcelIds.has(pid)) {
-              subLayer.setStyle(listHighlightStyle)
+            const idx = colorMap.get(pid)
+            if (idx !== undefined) {
+              subLayer.setStyle(getListHighlightStyle(idx))
               updatedCount++
               highlightedCount++
             } else if (selectedParcels.has(pid)) {
               subLayer.setStyle(selectedStyle)
               updatedCount++
-              selectedCount++
             } else if (clickedParcelId === pid) {
               subLayer.setStyle(clickedStyle)
               updatedCount++
@@ -787,16 +838,15 @@ export function PMTilesParcelLayer({
           }
         })
       } else if (layer._parcelId) {
-        // Direct polygon layer
         const pid = layer._parcelId
-        if (listParcelIds.has(pid)) {
-          layer.setStyle(listHighlightStyle)
+        const idx = colorMap.get(pid)
+        if (idx !== undefined) {
+          layer.setStyle(getListHighlightStyle(idx))
           updatedCount++
           highlightedCount++
         } else if (selectedParcels.has(pid)) {
           layer.setStyle(selectedStyle)
           updatedCount++
-          selectedCount++
         } else if (clickedParcelId === pid) {
           layer.setStyle(clickedStyle)
           updatedCount++
@@ -805,19 +855,7 @@ export function PMTilesParcelLayer({
         }
       }
     })
-    
-    if (highlightedCount > 0) {
-      console.log(`✅ Updated ${highlightedCount} list parcels to orange/yellow highlight`)
-    }
-    if (selectedCount > 0) {
-      console.log(`✅ Updated ${selectedCount} selected parcels to green`)
-    }
-    if (updatedCount > 0) {
-      console.log(`✅ Total: Updated ${updatedCount} polygon styles`)
-    } else {
-      console.log('⚠️ No parcels found to update styles')
-    }
-  }, [clickedParcelId, selectedParcelsKey, listParcelIdsKey, selectedParcels, listParcelIds, listHighlightStyle, selectedStyle, clickedStyle, defaultStyle])
+  }, [clickedParcelId, selectedParcelsKey, parcelIdToColorKey, selectedParcels, parcelIdToColorIndex, selectedStyle, clickedStyle, defaultStyle])
 
   return null
 }

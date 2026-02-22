@@ -3,6 +3,7 @@ import { Search, X, Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
+import { useMapType } from '@/contexts/MapTypeContext'
 import { getCountyFromCoords } from '@/utils/geoUtils'
 
 /**
@@ -18,6 +19,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
   const searchTimeoutRef = useRef(null)
+  const mapType = useMapType()
 
   // Get Mapbox access token from environment variable
   const getMapboxToken = () => {
@@ -229,11 +231,11 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
   }
 
   return (
-    <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2">
+    <div className="map-search-stack absolute top-3 left-3 z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2">
       <Button
         onClick={handleToggle}
         size="icon"
-        variant={isOpen ? "default" : "outline"}
+        variant={mapType === 'satellite' ? (isOpen ? "glass" : "glass-outline") : (isOpen ? "default" : "outline")}
         className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
         title="Search address"
       >
@@ -241,7 +243,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       </Button>
 
       {isOpen && (
-        <div className="absolute top-[calc(48px+8px)] sm:top-[calc(40px+8px)] left-0 w-80 sm:w-72 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50">
+        <div className="map-panel absolute top-[calc(48px+8px)] sm:top-[calc(40px+8px)] left-0 w-80 sm:w-72 rounded-xl overflow-hidden z-50">
           <div className="p-3 border-b border-gray-200 flex items-center gap-2">
             <div className="relative flex-1">
               <Input
@@ -253,19 +255,19 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
                 className="pr-8"
               />
               {isSearching && (
-                <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-500" />
               )}
             </div>
             <Button
               size="icon"
               variant="ghost"
+              className="h-8 w-8"
               onClick={() => {
                 setIsOpen(false)
                 setQuery('')
                 setResults([])
                 setError(null)
               }}
-              className="h-8 w-8"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -277,7 +279,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
             </div>
           )}
 
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-64 overflow-y-auto parcel-details-scroll">
             {results.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {results.map((result) => {
@@ -291,7 +293,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
                       key={result.id || result._mapboxFeature?.id}
                       onClick={() => handleSelectResult(result)}
                       className={cn(
-                        "p-3 hover:bg-blue-50 cursor-pointer transition-colors",
+                        "p-3 hover:bg-gray-50 cursor-pointer transition-colors",
                         !isSupported && "opacity-60"
                       )}
                     >
@@ -318,14 +320,14 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
                 })}
               </ul>
             ) : query.length >= 2 && !isSearching && !error ? (
-              <div className="p-3 text-sm text-gray-500 text-center">
+              <div className="p-3 text-sm text-gray-600 text-center">
                 <div>No results found for "{query}"</div>
-                <div className="text-xs mt-2 text-gray-400">
+                <div className="text-xs mt-2 text-gray-500">
                   Try: street address, city name, zip code, or coordinates (lat, lng)
                 </div>
               </div>
             ) : query.length > 0 && query.length < 2 ? (
-              <div className="p-3 text-sm text-gray-500 text-center">
+              <div className="p-3 text-sm text-gray-600 text-center">
                 Type at least 2 characters to search
               </div>
             ) : null}

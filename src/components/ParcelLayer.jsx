@@ -41,20 +41,6 @@ export function ParcelLayer({ features, onParcelClick }) {
     const geoJsonLayer = L.geoJSON(features, {
       style: defaultStyle,
       onEachFeature: (feature, layer) => {
-        // Extract address from properties for tooltip
-        const address = feature.properties?.SITUS_ADDR || 
-                       feature.properties?.SITE_ADDR || 
-                       feature.properties?.ADDRESS || 
-                       'No address available'
-        
-        // Create tooltip with address
-        layer.bindTooltip(address, {
-          permanent: false,
-          direction: 'top',
-          offset: [0, -10],
-          className: 'parcel-tooltip'
-        })
-
         // Add click handler
         if (onParcelClick) {
           layer.on('click', (e) => {
@@ -67,23 +53,13 @@ export function ParcelLayer({ features, onParcelClick }) {
         }
 
         // Enhanced hover effects
-        layer.on('mouseover', function(e) {
+        layer.on('mouseover', function() {
           this.setStyle(hoverStyle)
           this.bringToFront()
-          
-          // Show tooltip on hover
-          if (!this.isTooltipOpen()) {
-            this.openTooltip()
-          }
         })
 
         layer.on('mouseout', function() {
           this.setStyle(defaultStyle)
-          
-          // Hide tooltip on mouseout
-          if (this.isTooltipOpen()) {
-            this.closeTooltip()
-          }
         })
       }
     })

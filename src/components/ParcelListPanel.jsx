@@ -1,21 +1,23 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info, Phone, CheckCircle2, Loader2 } from 'lucide-react'
+import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info, Phone, CheckCircle2, Loader2, FileDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { isParcelSkipTraced, getSkipTracedParcel } from '@/utils/skipTrace'
+import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
 
 export function ParcelListPanel({ 
   isOpen, 
   onClose, 
   selectedListId,
-  publicLists,
+  lists = [],
   onCenterParcel,
   onBack,
   onRemoveParcel,
   onOpenParcelDetails,
   onSkipTraceParcel,
   onBulkSkipTrace,
+  onExportList,
   skipTracingInProgress = new Set()
 }) {
   const [expandedParcels, setExpandedParcels] = useState(new Set())
@@ -31,23 +33,7 @@ export function ParcelListPanel({
       return
     }
 
-    let list = null
-
-    // Check if it's a public list
-    if (selectedListId.startsWith('public_')) {
-      list = publicLists?.find(l => l.id === selectedListId)
-    } else {
-      // Private list - load from localStorage
-      const stored = localStorage.getItem('property_lists')
-      if (stored) {
-        try {
-          const lists = JSON.parse(stored)
-          list = lists.find(l => l.id === selectedListId)
-        } catch (error) {
-          console.error('Error loading list:', error)
-        }
-      }
-    }
+    const list = lists?.find(l => l.id === selectedListId) ?? null
 
     if (list) {
       setListName(list.name)
@@ -57,12 +43,12 @@ export function ParcelListPanel({
       setParcels([])
       setListName('')
     }
-  }, [selectedListId, isOpen, publicLists, refreshTrigger])
+  }, [selectedListId, isOpen, lists, refreshTrigger])
 
   // Reload parcels after removal
-  const handleRemoveParcel = async (listId, parcelId, isPublic) => {
+  const handleRemoveParcel = async (listId, parcelId) => {
     if (onRemoveParcel) {
-      await onRemoveParcel(listId, parcelId, isPublic)
+      await onRemoveParcel(listId, parcelId)
       // Force refresh by updating trigger - this will cause useEffect to re-run
       // Small delay to ensure state updates have propagated
       setTimeout(() => {
@@ -122,7 +108,7 @@ export function ParcelListPanel({
         }
       }
     }}>
-      <DialogContent className="max-w-2xl max-h-[80vh] p-0" showCloseButton={false}>
+      <DialogContent className="map-panel max-w-2xl max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center gap-3">
             <Button
@@ -141,13 +127,21 @@ export function ParcelListPanel({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-100"
-                onClick={() => {
-                  const isPublic = selectedListId?.startsWith('public_')
-                  onBulkSkipTrace(selectedListId, isPublic)
-                }}
+                onClick={() => onBulkSkipTrace(selectedListId)}
                 title="Skip trace all parcels in this list"
               >
                 <Phone className="h-4 w-4" />
+              </Button>
+            )}
+            {onExportList && parcels.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                onClick={() => onExportList(selectedListId)}
+                title="Export list as CSV and email to you"
+              >
+                <FileDown className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -194,7 +188,7 @@ export function ParcelListPanel({
                     </div>
                     
                     {isExpanded && (
-                      <div className="px-3 pb-3 space-y-2 border-t bg-gray-50 relative">
+                      <div className="parcel-expanded-glass px-3 pb-3 space-y-2 border-t relative">
                         {onRemoveParcel && (
                           <Button
                             variant="ghost"
@@ -202,8 +196,7 @@ export function ParcelListPanel({
                             className="absolute top-2 right-2 h-8 w-8 text-gray-500 hover:text-red-600 hover:bg-red-50"
                             onClick={(e) => {
                               e.stopPropagation()
-                              const isPublic = selectedListId?.startsWith('public_')
-                              handleRemoveParcel(selectedListId, parcelId, isPublic)
+                              handleRemoveParcel(selectedListId, parcelId)
                             }}
                             title="Remove from List"
                           >
@@ -323,12 +316,26 @@ export function ParcelListPanel({
                             </div>
                           )
                         })()}
+                        {/* Notes Section */}
+                        {(() => {
+                          const parcelNote = getParcelNote(parcelId)
+                          if (!parcelNote) return null
+                          
+                          return (
+                            <div className="pt-2 border-t border-gray-200 mt-2">
+                              <div className="text-sm font-semibold text-gray-700 mb-1">Notes:</div>
+                              <div className="text-sm text-gray-900 whitespace-pre-wrap parcel-expanded-glass p-2 rounded border border-gray-200/60">
+                                {parcelNote}
+                              </div>
+                            </div>
+                          )
+                        })()}
                         <div className="flex flex-wrap gap-2 mt-2">
                           {onOpenParcelDetails && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 min-w-[120px]"
+                              className="parcel-dropdown-btn flex-1 min-w-[120px]"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 // Prepare parcel data in the format expected by ParcelDetails
@@ -354,8 +361,8 @@ export function ParcelListPanel({
                               if (hasSkipTraced || isInProgress) {
                                 return (
                                   <div className={cn(
-                                    "flex items-center gap-2 px-3 py-2 rounded-md border text-sm",
-                                    hasSkipTraced ? "bg-green-50 text-green-700 border-green-200" : "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                    "parcel-dropdown-btn flex items-center gap-2 px-3 py-2 rounded-md border text-sm",
+                                    hasSkipTraced ? "parcel-dropdown-status-success text-green-700" : "parcel-dropdown-status-pending text-yellow-700"
                                   )}>
                                     {hasSkipTraced ? (
                                       <>
@@ -376,7 +383,7 @@ export function ParcelListPanel({
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="flex-1 min-w-[120px]"
+                                  className="parcel-dropdown-btn flex-1 min-w-[120px]"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     // Prepare parcel data
@@ -402,7 +409,7 @@ export function ParcelListPanel({
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 min-w-[120px]"
+                              className="parcel-dropdown-btn flex-1 min-w-[120px]"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleCenterParcel(parcel)
