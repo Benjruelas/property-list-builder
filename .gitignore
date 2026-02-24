@@ -30,3 +30,4 @@ dist-ssr
 *.geojson
 pmtiles_output/
 parcel_data/
+production-backup/

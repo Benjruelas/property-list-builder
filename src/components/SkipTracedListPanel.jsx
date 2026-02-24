@@ -63,7 +63,7 @@ export function SkipTracedListPanel({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto max-h-[calc(80vh-200px)]">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-200px)]">
           {(!skipTracedList || (skipTracedList.parcels.length === 0 && skipTracedList.listItems.length === 0)) ? (
             <p className="text-center text-gray-500 py-8 text-sm">No skip traced parcels yet.</p>
           ) : (

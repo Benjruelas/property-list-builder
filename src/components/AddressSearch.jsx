@@ -3,7 +3,6 @@ import { Search, X, Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
-import { useMapType } from '@/contexts/MapTypeContext'
 import { getCountyFromCoords } from '@/utils/geoUtils'
 
 /**
@@ -19,7 +18,6 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
   const searchTimeoutRef = useRef(null)
-  const mapType = useMapType()
 
   // Get Mapbox access token from environment variable
   const getMapboxToken = () => {
@@ -235,7 +233,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       <Button
         onClick={handleToggle}
         size="icon"
-        variant={mapType === 'satellite' ? (isOpen ? "glass" : "glass-outline") : (isOpen ? "default" : "outline")}
+        variant={isOpen ? "glass" : "glass-outline"}
         className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
         title="Search address"
       >

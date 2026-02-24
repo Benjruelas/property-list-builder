@@ -154,7 +154,7 @@ export function BulkEmailPreview({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(90vh-200px)] space-y-4">
           {/* List Info */}
           <div className="bg-blue-50 p-4 rounded-lg">
             <div className="flex items-center justify-between">

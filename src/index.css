@@ -39,9 +39,21 @@
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
+  html {
     margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    @apply text-foreground;
+    background: #111;
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    min-height: 100dvh;
+    height: 100%;
+    overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
       sans-serif;
@@ -49,9 +61,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
   #root {
-    position: relative;
+    position: fixed;
+    inset: 0;
     width: 100%;
-    height: 100vh;
+    height: 100%;
+    min-height: 100dvh;
     z-index: 0;
   }
 }
@@ -182,15 +196,8 @@
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Map panels - always present, styles switch via body[data-map-type]
-   Street: solid. Satellite: liquid glass. Updates immediately when map type toggles. */
+/* Map panels - satellite liquid glass styling (only display mode) */
 .map-panel {
-  background: white;
-  border: 1px solid rgb(226 232 240);
-  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-}
-
-body[data-map-type="satellite"] .map-panel {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -204,76 +211,83 @@ body[data-map-type="satellite"] .map-panel {
   color: rgba(255, 255, 255, 0.95);
 }
 
-/* Satellite: faint hover backgrounds - avoid white/light colors washing out light text */
-body[data-map-type="satellite"] .map-panel [class*="hover:bg-gray"]:hover,
-body[data-map-type="satellite"] .map-panel [class*="hover:bg-white"]:hover,
-body[data-map-type="satellite"] .map-panel [class*="hover:bg-green"]:hover,
-body[data-map-type="satellite"] .map-panel [class*="hover:bg-red"]:hover,
-body[data-map-type="satellite"] .map-panel [class*="hover:bg-blue"]:hover,
-body[data-map-type="satellite"] .map-panel [class*="hover:bg-amber"]:hover,
-body[data-map-type="satellite"] .map-controls-stack [class*="hover:bg-white"]:hover,
-body[data-map-type="satellite"] .map-controls-stack [class*="hover:bg-gray"]:hover,
-body[data-map-type="satellite"] .map-controls-stack [class*="hover:bg-red"]:hover,
-body[data-map-type="satellite"] .map-search-stack [class*="hover:bg-white"]:hover,
-body[data-map-type="satellite"] .map-search-stack [class*="hover:bg-gray"]:hover {
+.map-panel [class*="hover:bg-gray"]:hover,
+.map-panel [class*="hover:bg-white"]:hover,
+.map-panel [class*="hover:bg-green"]:hover,
+.map-panel [class*="hover:bg-red"]:hover,
+.map-panel [class*="hover:bg-blue"]:hover,
+.map-panel [class*="hover:bg-amber"]:hover,
+.map-panel [class*="hover:bg-accent"]:hover,
+.map-controls-stack [class*="hover:bg-white"]:hover,
+.map-controls-stack [class*="hover:bg-gray"]:hover,
+.map-controls-stack [class*="hover:bg-red"]:hover,
+.map-controls-stack [class*="hover:bg-accent"]:hover,
+.map-search-stack [class*="hover:bg-white"]:hover,
+.map-search-stack [class*="hover:bg-gray"]:hover {
   background-color: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* Satellite: light text for readability on glass-over-dark imagery */
-body[data-map-type="satellite"] .map-panel * {
+.map-panel * {
   color: rgba(255, 255, 255, 0.9);
 }
 
-body[data-map-type="satellite"] .map-panel h1,
-body[data-map-type="satellite"] .map-panel h2,
-body[data-map-type="satellite"] .map-panel h3,
-body[data-map-type="satellite"] .map-panel h4,
-body[data-map-type="satellite"] .map-panel [class*="font-semibold"],
-body[data-map-type="satellite"] .map-panel [class*="font-bold"] {
+.map-panel h1,
+.map-panel h2,
+.map-panel h3,
+.map-panel h4,
+.map-panel [class*="font-semibold"],
+.map-panel [class*="font-bold"] {
   color: rgba(255, 255, 255, 0.98) !important;
 }
 
-body[data-map-type="satellite"] .map-panel [class*="text-blue"] {
+.map-panel [class*="text-blue"] {
   color: rgba(147, 197, 253, 1) !important;
 }
 
-body[data-map-type="satellite"] .map-panel [class*="text-green"] {
+.map-panel [class*="text-green"] {
   color: rgba(134, 239, 172, 1) !important;
 }
 
-body[data-map-type="satellite"] .map-panel [class*="text-red"] {
+.map-panel [class*="text-red"] {
   color: rgba(252, 165, 165, 1) !important;
 }
 
-body[data-map-type="satellite"] .map-panel [class*="text-amber"],
-body[data-map-type="satellite"] .map-panel [class*="text-yellow"] {
+.map-panel [class*="text-amber"],
+.map-panel [class*="text-yellow"] {
   color: rgba(253, 230, 138, 1) !important;
 }
 
-body[data-map-type="satellite"] .map-panel svg {
+.map-panel svg {
   color: inherit;
 }
 
-body[data-map-type="satellite"] .map-panel input,
-body[data-map-type="satellite"] .map-panel textarea {
+.map-panel input,
+.map-panel textarea {
   background: rgba(255,255,255,0.06) !important;
   border-color: rgba(255,255,255,0.2) !important;
   color: rgba(255, 255, 255, 0.95) !important;
 }
 
-body[data-map-type="satellite"] .map-panel input::placeholder,
-body[data-map-type="satellite"] .map-panel textarea::placeholder {
+.map-panel input::placeholder,
+.map-panel textarea::placeholder {
   color: rgba(255, 255, 255, 0.6) !important;
 }
 
-/* Parcel expanded dropdown (inside list) - liquid glass look */
-.parcel-expanded-glass {
-  background: rgba(248, 250, 252, 0.92);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border-color: rgba(226, 232, 240, 0.8);
+/* Add task - lead autocomplete dropdown - liquid glass, readable */
+.add-task-lead-dropdown {
+  background: rgba(30, 35, 50, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
 }
-body[data-map-type="satellite"] .map-panel .parcel-expanded-glass {
+.add-task-lead-dropdown li {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Parcel expanded dropdown (inside list) - liquid glass look */
+.map-panel .parcel-expanded-glass {
   background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -281,57 +295,186 @@ body[data-map-type="satellite"] .map-panel .parcel-expanded-glass {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
-/* Parcel dropdown buttons - liquid glass look */
-.parcel-expanded-glass .parcel-dropdown-btn {
-  background: rgba(255, 255, 255, 0.4) !important;
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-.parcel-expanded-glass .parcel-dropdown-btn:hover {
-  background: rgba(255, 255, 255, 0.55) !important;
-  border-color: rgba(255, 255, 255, 0.7) !important;
-}
-body[data-map-type="satellite"] .map-panel .parcel-expanded-glass .parcel-dropdown-btn {
+.map-panel .parcel-expanded-glass .parcel-dropdown-btn {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
   color: rgba(255, 255, 255, 0.95) !important;
 }
-body[data-map-type="satellite"] .map-panel .parcel-expanded-glass .parcel-dropdown-btn:hover {
+.map-panel .parcel-expanded-glass .parcel-dropdown-btn:hover {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
-body[data-map-type="satellite"] .map-panel .parcel-expanded-glass .parcel-dropdown-btn.text-green-700 {
+.map-panel .parcel-expanded-glass .parcel-dropdown-btn.text-green-700 {
   color: rgba(134, 239, 172, 1) !important;
 }
-body[data-map-type="satellite"] .map-panel .parcel-expanded-glass .parcel-dropdown-btn.text-yellow-700 {
+.map-panel .parcel-expanded-glass .parcel-dropdown-btn.text-yellow-700 {
   color: rgba(253, 230, 138, 1) !important;
 }
-.parcel-expanded-glass .parcel-dropdown-status-success {
-  background: rgba(134, 239, 172, 0.15) !important;
-  border-color: rgba(134, 239, 172, 0.35) !important;
-}
-.parcel-expanded-glass .parcel-dropdown-status-pending {
-  background: rgba(253, 230, 138, 0.15) !important;
-  border-color: rgba(253, 230, 138, 0.35) !important;
-}
-body[data-map-type="satellite"] .map-panel .parcel-expanded-glass .parcel-dropdown-status-success {
+.map-panel .parcel-expanded-glass .parcel-dropdown-status-success {
   background: rgba(134, 239, 172, 0.12) !important;
   border-color: rgba(134, 239, 172, 0.3) !important;
 }
-body[data-map-type="satellite"] .map-panel .parcel-expanded-glass .parcel-dropdown-status-pending {
+.map-panel .parcel-expanded-glass .parcel-dropdown-status-pending {
   background: rgba(253, 230, 138, 0.12) !important;
   border-color: rgba(253, 230, 138, 0.3) !important;
 }
 
-/* Add Note + button - ensure visibility on glass (satellite) and solid (street) */
-body[data-map-type="satellite"] .map-panel .add-note-btn {
+.map-panel.lead-details-panel {
+  background: rgba(0, 0, 0, 0.35) !important;
+}
+
+.map-panel.new-task-panel {
+  background: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* LeadDetails - no fills on any fields or buttons */
+.map-panel.lead-details-panel button,
+.map-panel.lead-details-panel [role="button"],
+.map-panel.lead-details-panel input {
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+}
+.map-panel.lead-details-panel button:hover:not(:disabled),
+.map-panel.lead-details-panel [role="button"]:hover:not(:disabled) {
+  background: none !important;
+}
+.map-panel.lead-details-panel input {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 0 !important;
+}
+.map-panel.lead-details-panel input:focus {
+  outline: none;
+  border-bottom-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.map-panel .deal-pipeline-settings-btn.deal-pipeline-edit-active {
+  background: none !important;
+  color: rgba(147, 197, 253, 1) !important;
+}
+
+/* Pipeline icon-only buttons - no fill, just icons */
+.map-panel .pipeline-icon-btn {
+  background: none !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .pipeline-icon-btn:hover:not(:disabled) {
+  background: none !important;
+  border: none !important;
+}
+
+/* Map panel buttons - liquid glass, no solid white fill */
+.map-panel button,
+.map-panel [role="button"] {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+.map-panel button:hover:not(:disabled),
+.map-panel [role="button"]:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+.map-panel button:disabled,
+.map-panel [role="button"]:disabled {
+  opacity: 0.5;
+}
+
+/* Hamburger menu - transparent background buttons (override map-panel) */
+.hamburger-menu button,
+.hamburger-menu .hamburger-menu-btn {
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.hamburger-menu button:hover,
+.hamburger-menu .hamburger-menu-btn:hover {
+  background: transparent !important;
+}
+
+/* Parcel list panel (list contents view) - no fills on buttons */
+.parcel-list-panel button,
+.parcel-list-panel [role="button"],
+.parcel-list-panel .parcel-dropdown-btn {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.parcel-list-panel button:hover:not(:disabled),
+.parcel-list-panel [role="button"]:hover:not(:disabled),
+.parcel-list-panel .parcel-dropdown-btn:hover {
+  background: transparent !important;
+}
+.parcel-list-panel .parcel-dropdown-status-success,
+.parcel-list-panel .parcel-dropdown-status-pending {
+  background: transparent !important;
+}
+
+/* List panel - no fills on buttons */
+.list-panel button,
+.list-panel [role="button"] {
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.list-panel button:hover:not(:disabled),
+.list-panel [role="button"]:hover:not(:disabled) {
+  background: transparent !important;
+}
+
+/* Destructive/red buttons - keep accent, use glass base */
+.map-panel button.text-red-600,
+.map-panel button.text-red-700,
+.map-panel button[class*="bg-destructive"] {
+  background: rgba(248, 113, 113, 0.25) !important;
+  border-color: rgba(248, 113, 113, 0.5) !important;
+  color: rgba(254, 226, 226, 1) !important;
+}
+.map-panel button.text-red-600:hover:not(:disabled),
+.map-panel button.text-red-700:hover:not(:disabled),
+.map-panel button[class*="bg-destructive"]:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.35) !important;
+}
+
+/* Confirm dialog - restore solid red for Confirm/primary action */
+.confirm-dialog button[class*="bg-destructive"] {
+  background: hsl(var(--destructive)) !important;
+  border-color: hsl(var(--destructive)) !important;
+  color: hsl(var(--destructive-foreground)) !important;
+}
+.confirm-dialog button[class*="bg-destructive"]:hover:not(:disabled) {
+  background: hsl(var(--destructive) / 0.9) !important;
+  border-color: hsl(var(--destructive)) !important;
+}
+
+.map-panel .deal-pipeline-lead-card {
+  background: rgba(0, 0, 0, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+.map-panel .deal-pipeline-lead-card .text-gray-600 {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+.map-panel .deal-pipeline-lead-card select {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.map-panel .add-note-btn {
   border-color: rgba(255, 255, 255, 0.6) !important;
   background: rgba(255, 255, 255, 0.12) !important;
   color: rgba(255, 255, 255, 1) !important;
 }
-body[data-map-type="satellite"] .map-panel .add-note-btn:hover {
+.map-panel .add-note-btn:hover {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.65) !important;
 }
@@ -370,12 +513,13 @@ body[data-map-type="satellite"] .map-panel .add-note-btn:hover {
   -webkit-backdrop-filter: blur(16px) saturate(180%);
 }
 
-/* Hide scrollbars while keeping scroll - Parcel Details panel */
+/* Hide scrollbars while keeping scroll */
+.scrollbar-hide,
 .parcel-details-scroll {
-  overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+.scrollbar-hide::-webkit-scrollbar,
 .parcel-details-scroll::-webkit-scrollbar {
   display: none;
 }
@@ -434,21 +578,19 @@ body[data-map-type="satellite"] .map-panel .add-note-btn:hover {
   border-color: rgba(0,0,0,0.08) !important;
 }
 
-/* Map control buttons & search - light text on satellite */
-body[data-map-type="satellite"] .map-controls-stack button,
-body[data-map-type="satellite"] .map-search-stack button,
-body[data-map-type="satellite"] .map-controls-stack [role="button"],
-body[data-map-type="satellite"] .map-search-stack [role="button"] {
+.map-controls-stack button,
+.map-search-stack button,
+.map-controls-stack [role="button"],
+.map-search-stack [role="button"] {
   color: rgba(255, 255, 255, 0.95) !important;
 }
 
-body[data-map-type="satellite"] .map-controls-stack button svg,
-body[data-map-type="satellite"] .map-search-stack button svg {
+.map-controls-stack button svg,
+.map-search-stack button svg {
   color: inherit;
 }
 
-/* Zoom controls - liquid glass only on satellite map */
-body[data-map-type="satellite"] .leaflet-control-zoom a {
+.leaflet-control-zoom a {
   background: rgba(255, 255, 255, 0.08) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
@@ -456,8 +598,14 @@ body[data-map-type="satellite"] .leaflet-control-zoom a {
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
 
-body[data-map-type="satellite"] .leaflet-control-zoom a:hover {
+.leaflet-control-zoom a:hover {
   background: rgba(255, 255, 255, 0.18) !important;
   border-color: rgba(255, 255, 255, 0.5) !important;
   color: rgba(255, 255, 255, 1) !important;
 }
+
+/* Satellite labels overlay - boost contrast for readability */
+.satellite-labels-layer.leaflet-layer img {
+  filter: contrast(1.2);
+}
+

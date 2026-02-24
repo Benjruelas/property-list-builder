@@ -45,7 +45,7 @@ Create a `.env.local` file in your project root (if it doesn't exist) and add yo
 
 ```bash
 VITE_FIREBASE_API_KEY=your_api_key_here
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_AUTH_DOMAIN=localhost:3000
 VITE_FIREBASE_PROJECT_ID=your-project-id
 VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
@@ -53,14 +53,19 @@ VITE_FIREBASE_APP_ID=1:123456789:web:abcdef
 ```
 
 **Important**: 
-- Never commit `.env.local` to git (it should already be in `.gitignore`)
-- For production (Vercel), add these same variables in your Vercel project settings under "Environment Variables"
+- Use `VITE_FIREBASE_AUTH_DOMAIN=localhost:3000` for local dev (fixes init.json 404)
+- For production (Vercel), set `VITE_FIREBASE_AUTH_DOMAIN` to your production domain (e.g. `property-list-builder.vercel.app`)
+- Add both domains to Firebase Console → Authentication → Authorized domains
+- In Google Cloud Console OAuth client, add redirect URIs: `https://your-domain.com/__/auth/handler` and `http://localhost:3000/__/auth/handler`
 
 ## Step 5: Configure Authorized Domains (for Google Sign-In)
 
 1. In Firebase Console, go to **Authentication** → **Settings** → **Authorized domains**
-2. Add your production domain (e.g., `your-app.vercel.app`)
-3. Local development domains (`localhost`) are added by default
+2. Add your production domain (e.g., `property-list-builder.vercel.app`)
+3. Add `localhost` if not present (for local dev)
+4. In **Google Cloud Console** → APIs & Services → Credentials → your OAuth 2.0 Client ID → add to **Authorized redirect URIs**:
+   - `http://localhost:3000/__/auth/handler` (local dev)
+   - `https://your-production-domain.com/__/auth/handler` (production)
 
 ## Step 6: Test the Setup
 

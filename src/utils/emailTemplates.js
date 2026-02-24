@@ -115,10 +115,10 @@ export const replaceTemplateTags = (text, parcelData) => {
   // Map of tag names to property paths
   const tagMap = {
     'Owner Name': properties.OWNER_NAME || parcelData.ownerName || '',
-    'Address': parcelData.address || properties.SITUS_ADDR || properties.SITE_ADDR || properties.ADDRESS || '',
-    'City': properties.CITY || properties.MAIL_CITY || '',
-    'State': properties.STATE || properties.MAIL_STATE || 'TX',
-    'Zip': properties.ZIP || properties.MAIL_ZIP || properties.ZIP_CODE || '',
+    'Address': parcelData.address || properties.SITUS_ADDR || properties.SITE_ADDR || '',
+    'City': properties.scity || properties.PROP_CITY || properties.SITUS_CITY || properties.CITY || '',
+    'State': properties.state2 || properties.PROP_STATE || properties.SITUS_STATE || properties.STATE || 'TX',
+    'Zip': (properties.szip || properties.szip5 || properties.PROP_ZIP || properties.SITUS_ZIP || properties.ZIP || properties.ZIP_CODE || '').toString().trim() || '',
     'Property ID': parcelData.id || properties.PROP_ID || '',
     'Year Built': properties.YEAR_BUILT || '',
     'Property Value': properties.TOTAL_VALUE || properties.ASSESSED_VALUE || ''

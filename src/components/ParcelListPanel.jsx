@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info, Phone, CheckCircle2, Loader2, FileDown } from 'lucide-react'
+import { ArrowLeft, X, MapPin, ChevronRight, ChevronDown, Trash2, Info, Phone, CheckCircle2, Loader2, FileDown, LayoutList, Mail, CheckCircle, XCircle, HelpCircle, Star } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { isParcelSkipTraced, getSkipTracedParcel } from '@/utils/skipTrace'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
+import { isParcelALead } from '@/utils/dealPipeline'
 
 export function ParcelListPanel({ 
   isOpen, 
@@ -16,6 +17,7 @@ export function ParcelListPanel({
   onRemoveParcel,
   onOpenParcelDetails,
   onSkipTraceParcel,
+  onConvertToLead,
   onBulkSkipTrace,
   onExportList,
   skipTracingInProgress = new Set()
@@ -108,7 +110,7 @@ export function ParcelListPanel({
         }
       }
     }}>
-      <DialogContent className="map-panel max-w-2xl max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
+      <DialogContent className="map-panel parcel-list-panel max-w-2xl max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center gap-3">
             <Button
@@ -126,7 +128,7 @@ export function ParcelListPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-100"
+                className="h-8 w-8 text-green-700 hover:text-green-800"
                 onClick={() => onBulkSkipTrace(selectedListId)}
                 title="Skip trace all parcels in this list"
               >
@@ -137,7 +139,7 @@ export function ParcelListPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                className="h-8 w-8 text-blue-600 hover:text-blue-700"
                 onClick={() => onExportList(selectedListId)}
                 title="Export list as CSV and email to you"
               >
@@ -150,7 +152,7 @@ export function ParcelListPanel({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto max-h-[calc(80vh-200px)]">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-200px)]">
           {sortedParcels.length === 0 ? (
             <p className="text-center text-gray-500 py-8 text-sm">No parcels in this list yet.</p>
           ) : (
@@ -193,7 +195,7 @@ export function ParcelListPanel({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="absolute top-2 right-2 h-8 w-8 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                            className="absolute top-2 right-2 h-8 w-8 text-gray-500 hover:text-red-600"
                             onClick={(e) => {
                               e.stopPropagation()
                               handleRemoveParcel(selectedListId, parcelId)
@@ -267,40 +269,39 @@ export function ParcelListPanel({
                         {(() => {
                           const skipTracedInfo = getSkipTracedParcel(parcelId)
                           if (!skipTracedInfo) return null
-                          
+                          const phoneDetails = skipTracedInfo.phoneDetails || (skipTracedInfo.phoneNumbers || (skipTracedInfo.phone ? [skipTracedInfo.phone] : [])).map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 }))
+                          const emailDetails = skipTracedInfo.emailDetails || (skipTracedInfo.emails || (skipTracedInfo.email ? [skipTracedInfo.email] : [])).map((v, i) => ({ value: v, verified: null, primary: i === 0 }))
+                          const hasContact = phoneDetails.length > 0 || emailDetails.length > 0 || skipTracedInfo.address || skipTracedInfo.skipTracedAt
+                          if (!hasContact) return null
+
+                          const VerifiedBadge = ({ verified }) => {
+                            if (verified === 'good') return <CheckCircle className="h-3.5 w-3.5 text-green-600 inline-block ml-0.5" title="Verified good" />
+                            if (verified === 'bad') return <XCircle className="h-3.5 w-3.5 text-red-600 inline-block ml-0.5" title="Verified bad" />
+                            return <HelpCircle className="h-3.5 w-3.5 text-gray-400 inline-block ml-0.5" title="Unverified" />
+                          }
+
                           return (
                             <div className="pt-2 border-t border-gray-200 mt-2">
                               <div className="text-sm font-semibold text-gray-700 mb-2">Contact Information:</div>
-                              {skipTracedInfo.phone && (
-                                <div className="text-sm">
-                                  <span className="font-semibold text-gray-700">Phone:</span>{' '}
-                                  <a 
-                                    href={`tel:${skipTracedInfo.phone.replace(/[^\d+]/g, '')}`}
-                                    className="text-blue-600 hover:text-blue-800 hover:underline"
-                                  >
-                                    {skipTracedInfo.phone}
+                              {phoneDetails.map((p, idx) => (
+                                <div key={idx} className="text-sm flex items-center gap-1">
+                                  {p.primary && <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500 flex-shrink-0" title="Primary" />}
+                                  <span className="font-semibold text-gray-700">{phoneDetails.length > 1 ? `Phone ${idx + 1}:` : 'Phone:'}</span>
+                                  <VerifiedBadge verified={p.verified} />
+                                  <a href={`tel:${(p.value || '').replace(/[^\d+]/g, '')}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                                    {p.value}
                                   </a>
+                                  {p.callerId && <span className="text-gray-500 text-xs">({p.callerId})</span>}
                                 </div>
-                              )}
-                              {skipTracedInfo.phoneNumbers && skipTracedInfo.phoneNumbers.length > 1 && (
-                                skipTracedInfo.phoneNumbers.slice(1).map((phone, idx) => (
-                                  <div key={idx} className="text-sm">
-                                    <span className="font-semibold text-gray-700">Phone {idx + 2}:</span>{' '}
-                                    <a 
-                                      href={`tel:${phone.replace(/[^\d+]/g, '')}`}
-                                      className="text-blue-600 hover:text-blue-800 hover:underline"
-                                    >
-                                      {phone}
-                                    </a>
-                                  </div>
-                                ))
-                              )}
-                              {skipTracedInfo.email && (
-                                <div className="text-sm">
-                                  <span className="font-semibold text-gray-700">Email:</span>{' '}
-                                  <span className="text-gray-900">{skipTracedInfo.email}</span>
+                              ))}
+                              {emailDetails.map((e, idx) => (
+                                <div key={idx} className="text-sm flex items-center gap-1">
+                                  {e.primary && <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500 flex-shrink-0" title="Primary" />}
+                                  <span className="font-semibold text-gray-700">{emailDetails.length > 1 ? `Email ${idx + 1}:` : 'Email:'}</span>
+                                  <VerifiedBadge verified={e.verified} />
+                                  <span className="text-gray-900">{e.value}</span>
                                 </div>
-                              )}
+                              ))}
                               {skipTracedInfo.address && (
                                 <div className="text-sm">
                                   <span className="font-semibold text-gray-700">Mailing Address:</span>{' '}
@@ -418,6 +419,40 @@ export function ParcelListPanel({
                               <MapPin className="h-4 w-4 mr-2" />
                               Center on Map
                             </Button>
+                          )}
+                          {onConvertToLead && (
+                            (() => {
+                              const alreadyALead = isParcelALead(parcelId)
+                              if (alreadyALead) {
+                                return (
+                                  <div className="parcel-dropdown-btn flex items-center gap-2 px-3 py-2 rounded-md border text-sm parcel-dropdown-status-success text-violet-700">
+                                    <LayoutList className="h-4 w-4" />
+                                    <span>Already a Lead</span>
+                                  </div>
+                                )
+                              }
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="parcel-dropdown-btn flex-1 min-w-[120px]"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    const parcelData = {
+                                      id: parcelId,
+                                      properties: props,
+                                      address: address,
+                                      lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
+                                      lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
+                                    }
+                                    onConvertToLead(parcelData)
+                                  }}
+                                >
+                                  <LayoutList className="h-4 w-4 mr-2" />
+                                  Convert to Lead
+                                </Button>
+                              )
+                            })()
                           )}
                         </div>
                       </div>

@@ -1,20 +1,31 @@
 import React, { useEffect, useState } from 'react'
-import { X, MapPin, Home, DollarSign, Info, Phone, Mail, FileText, Plus } from 'lucide-react'
+import { X, MapPin, Home, DollarSign, Info, Phone, Mail, FileText, Plus, CheckCircle, XCircle, HelpCircle, User, Pencil, Star, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
-import { getSkipTracedParcel } from '@/utils/skipTrace'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Input } from './ui/input'
+import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
+import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
 /**
  * ParcelDetails component - Displays all available parcel data in a nice format
  */
 export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, lists = [] }) {
+  const { scheduleSync } = useUserDataSync()
   // Hooks must be called before any early returns
   // Use state to track skip trace info and refresh when dialog opens or parcelData changes
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
   const [note, setNote] = useState('')
   const [isEditingNote, setIsEditingNote] = useState(false)
-  
+  const [callerIdDraft, setCallerIdDraft] = useState({}) // { "phoneValue": "draft" }
+  const [editContacts, setEditContacts] = useState(false)
+  const [newPhone, setNewPhone] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+
+  const refreshSkipTrace = () => {
+    if (parcelId) setSkipTracedInfo(getSkipTracedParcel(parcelId))
+  }
+
   // Get skip traced contact info
   // Try multiple ID formats to ensure we find the skip trace data
   const parcelId = parcelData?.id || parcelData?.properties?.PROP_ID
@@ -45,6 +56,7 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, lists
     if (parcelId) {
       saveParcelNote(parcelId, note)
       setIsEditingNote(false)
+      scheduleSync()
     }
   }
 
@@ -85,36 +97,9 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, lists
     { label: 'In lists', value: listsWithParcel.length > 0 ? listsWithParcel.map(l => l.name).join(', ') : 'None' },
   ]
 
-  // Contact information (from skip tracing)
-  const contactInfo = skipTracedInfo ? [
-    // Primary phone
-    ...(skipTracedInfo.phone ? [{ label: 'Phone', value: skipTracedInfo.phone, icon: <Phone className="h-4 w-4" />, isPhone: true }] : []),
-    // All phone numbers (if more than just primary)
-    ...(skipTracedInfo.phoneNumbers && skipTracedInfo.phoneNumbers.length > 1 
-      ? skipTracedInfo.phoneNumbers.slice(1).map((phone, idx) => ({ 
-          label: `Phone ${idx + 2}`, 
-          value: phone, 
-          icon: <Phone className="h-4 w-4" />,
-          isPhone: true
-        }))
-      : []),
-    // Primary email
-    ...(skipTracedInfo.email ? [{ label: 'Email', value: skipTracedInfo.email, icon: <Mail className="h-4 w-4" />, isPhone: false, isEmail: true }] : []),
-    // All emails (if more than just primary)
-    ...(skipTracedInfo.emails && skipTracedInfo.emails.length > 1 
-      ? skipTracedInfo.emails.slice(1).map((email, idx) => ({ 
-          label: `Email ${idx + 2}`, 
-          value: email, 
-          icon: <Mail className="h-4 w-4" />,
-          isPhone: false,
-          isEmail: true
-        })) 
-      : []),
-    // Mailing address
-    ...(skipTracedInfo.address ? [{ label: 'Mailing Address', value: skipTracedInfo.address, isPhone: false }] : []),
-    // Skip traced date
-    ...(skipTracedInfo.skipTracedAt ? [{ label: 'Skip Traced On', value: new Date(skipTracedInfo.skipTracedAt).toLocaleDateString(), isPhone: false }] : []),
-  ] : []
+  // Contact information (from skip tracing) - use phoneDetails/emailDetails when available
+  const phoneDetails = skipTracedInfo?.phoneDetails || (skipTracedInfo?.phoneNumbers?.length ? skipTracedInfo.phoneNumbers.map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 })) : [])
+  const emailDetails = skipTracedInfo?.emailDetails || (skipTracedInfo?.emails?.length ? skipTracedInfo.emails.map((v, i) => ({ value: v, verified: null, primary: i === 0 })) : [])
 
   const propertyDetails = [
     { label: 'Year Built', value: properties.YEAR_BUILT },
@@ -165,46 +150,28 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, lists
     )
   }
 
-  // Helper to normalize phone number for tel: links (remove formatting, keep digits and +)
-  const normalizePhoneNumber = (phone) => {
-    if (!phone) return ''
-    // Remove all non-digit characters except +
-    return phone.replace(/[^\d+]/g, '')
+// Helper to normalize phone number for tel: links
+  const normalizePhoneNumber = (phone) => (phone || '').replace(/[^\d+]/g, '')
+
+  const cycleVerified = (current) => (current === 'good' ? 'bad' : current === 'bad' ? null : 'good')
+
+  const handleSetVerified = (type, value, next) => {
+    if (!parcelId) return
+    updateContactMeta(parcelId, type, value, { verified: next }); scheduleSync()
+    setSkipTracedInfo(getSkipTracedParcel(parcelId))
   }
 
-  // Helper to render contact info row (with icon support)
-  const renderContactRow = (item) => {
-    if (!item.value) return null
-    
-    const isPhone = item.isPhone === true
-    const isEmail = item.isEmail === true
-    const phoneLink = isPhone ? `tel:${normalizePhoneNumber(item.value)}` : null
-    
-    return (
-      <div key={item.label} className="flex justify-between items-center py-2 border-b border-white/30 last:border-0">
-        <div className="flex items-center gap-2">
-          {item.icon && <span className="text-gray-500">{item.icon}</span>}
-          <span className="font-semibold text-gray-700">{item.label}:</span>
-        </div>
-        {isPhone && phoneLink ? (
-          <a 
-            href={phoneLink}
-            className="text-blue-600 hover:text-blue-700 hover:underline text-right flex-1 ml-4"
-          >
-            {item.value}
-          </a>
-        ) : isEmail && onEmailClick ? (
-          <button
-            onClick={() => onEmailClick(item.value, parcelData)}
-            className="text-sky-300 hover:text-sky-200 hover:underline text-right flex-1 ml-4 cursor-pointer"
-          >
-            {item.value}
-          </button>
-        ) : (
-          <span className="text-gray-900 text-right flex-1 ml-4">{item.value}</span>
-        )}
-      </div>
-    )
+  const handleCallerIdBlur = (value, callerId) => {
+    if (!parcelId) return
+    updateContactMeta(parcelId, 'phone', value, { callerId: (callerId || '').trim() }); scheduleSync()
+    setSkipTracedInfo(getSkipTracedParcel(parcelId))
+    setCallerIdDraft(prev => { const next = { ...prev }; delete next[value]; return next })
+  }
+
+  const VerifiedIcon = ({ verified, onClick, title }) => {
+    if (verified === 'good') return <CheckCircle className="h-4 w-4 text-green-600 cursor-pointer hover:opacity-80" onClick={onClick} title={title || 'Verified good - click to change'} />
+    if (verified === 'bad') return <XCircle className="h-4 w-4 text-red-600 cursor-pointer hover:opacity-80" onClick={onClick} title={title || 'Verified bad - click to change'} />
+    return <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer hover:text-gray-600" onClick={onClick} title={title || 'Unverified - click to mark'} />
   }
 
   const handleClose = (reopenPopup) => {
@@ -225,6 +192,7 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, lists
         }}
       >
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200">
+          <DialogDescription className="sr-only">View and edit parcel details, contact information, and notes</DialogDescription>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
               <MapPin className="h-5 w-5 text-gray-600" />
@@ -241,14 +209,163 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, lists
                 {renderSection('Basic Information', <Info className="h-5 w-5" />, basicInfo)}
 
                 {/* Contact Information (from skip tracing) */}
-                {contactInfo.length > 0 && (
+                {(phoneDetails.length > 0 || emailDetails.length > 0 || skipTracedInfo?.address || skipTracedInfo?.skipTracedAt) && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
                       <Phone className="h-5 w-5" />
                       <span>Contact Information</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 ml-auto"
+                        onClick={() => { setEditContacts((e) => !e); setNewPhone(''); setNewEmail('') }}
+                        title={editContacts ? 'Done editing' : 'Edit contacts'}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                     <div className="space-y-0">
-                      {contactInfo.map(renderContactRow)}
+                      {phoneDetails.map((p, idx) => (
+                        <div key={`phone-${idx}`} className="py-2 border-b border-white/30 last:border-0 space-y-1">
+                          <div className="flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {editContacts ? (
+                                <button
+                                  type="button"
+                                  onClick={() => { updateContactMeta(parcelId, 'phone', p.value, { primary: !p.primary }); refreshSkipTrace(); scheduleSync() }}
+                                  title={p.primary ? 'Remove from primary' : 'Set as primary'}
+                                  className="text-amber-500 hover:text-amber-600 flex-shrink-0"
+                                >
+                                  {p.primary ? <Star className="h-4 w-4 fill-current" /> : <Star className="h-4 w-4" />}
+                                </button>
+                              ) : (
+                                p.primary && <Star className="h-4 w-4 text-amber-500 fill-amber-500 flex-shrink-0" title="Primary" />
+                              )}
+                              <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              <span className="font-semibold text-gray-700">{phoneDetails.length > 1 ? `Phone ${idx + 1}:` : 'Phone:'}</span>
+                              <VerifiedIcon verified={p.verified} onClick={() => handleSetVerified('phone', p.value, cycleVerified(p.verified))} />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <a href={`tel:${normalizePhoneNumber(p.value)}`} className="text-blue-600 hover:text-blue-700 hover:underline truncate">
+                                {p.value}
+                              </a>
+                              {editContacts && (
+                                <button
+                                  type="button"
+                                  onClick={() => { updateSkipTracedContacts(parcelId, 'phone', phoneDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
+                                  className="text-red-500 hover:text-red-600 p-0.5 flex-shrink-0"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 pl-6">
+                            <User className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                            <Input
+                              placeholder="Caller ID"
+                              value={callerIdDraft[p.value] !== undefined ? callerIdDraft[p.value] : (p.callerId || '')}
+                              onChange={(e) => setCallerIdDraft(prev => ({ ...prev, [p.value]: e.target.value }))}
+                              onBlur={(e) => handleCallerIdBlur(p.value, e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                              className="h-8 text-sm flex-1 max-w-[200px]"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      {editContacts && (
+                        <div className="flex items-center gap-2 py-2">
+                          <input
+                            type="tel"
+                            placeholder="Add phone"
+                            value={newPhone}
+                            onChange={(e) => setNewPhone(e.target.value)}
+                            className="border rounded px-2 py-1 text-sm flex-1"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { updateSkipTracedContacts(parcelId, 'phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7"
+                            onClick={() => { if (newPhone.trim()) { updateSkipTracedContacts(parcelId, 'phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                      {emailDetails.map((e, idx) => (
+                        <div key={`email-${idx}`} className="flex justify-between items-center py-2 border-b border-white/30 last:border-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {editContacts ? (
+                              <button
+                                type="button"
+                                onClick={() => { updateContactMeta(parcelId, 'email', e.value, { primary: !e.primary }); refreshSkipTrace(); scheduleSync() }}
+                                title={e.primary ? 'Remove from primary' : 'Set as primary'}
+                                className="text-amber-500 hover:text-amber-600 flex-shrink-0"
+                              >
+                                {e.primary ? <Star className="h-4 w-4 fill-current" /> : <Star className="h-4 w-4" />}
+                              </button>
+                            ) : (
+                              e.primary && <Star className="h-4 w-4 text-amber-500 fill-amber-500 flex-shrink-0" title="Primary" />
+                            )}
+                            <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                            <span className="font-semibold text-gray-700">{emailDetails.length > 1 ? `Email ${idx + 1}:` : 'Email:'}</span>
+                            <VerifiedIcon verified={e.verified} onClick={() => handleSetVerified('email', e.value, cycleVerified(e.verified))} />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {onEmailClick ? (
+                              <button onClick={() => onEmailClick(e.value, parcelData)} className="text-sky-300 hover:text-sky-200 hover:underline truncate">
+                                {e.value}
+                              </button>
+                            ) : (
+                              <span className="text-gray-900 truncate">{e.value}</span>
+                            )}
+                            {editContacts && (
+                              <button
+                                type="button"
+                                onClick={() => { updateSkipTracedContacts(parcelId, 'email', emailDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
+                                className="text-red-500 hover:text-red-600 p-0.5 flex-shrink-0"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {editContacts && (
+                        <div className="flex items-center gap-2 py-2">
+                          <input
+                            type="email"
+                            placeholder="Add email"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                            className="border rounded px-2 py-1 text-sm flex-1"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { updateSkipTracedContacts(parcelId, 'email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7"
+                            onClick={() => { if (newEmail.trim()) { updateSkipTracedContacts(parcelId, 'email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                      {skipTracedInfo?.address && (
+                        <div className="flex justify-between py-2 border-b border-white/30 last:border-0">
+                          <span className="font-semibold text-gray-700">Mailing Address:</span>
+                          <span className="text-gray-900 text-right flex-1 ml-4">{skipTracedInfo.address}</span>
+                        </div>
+                      )}
+                      {skipTracedInfo?.skipTracedAt && (
+                        <div className="flex justify-between py-2 border-b border-white/30 last:border-0">
+                          <span className="font-semibold text-gray-700">Skip Traced On:</span>
+                          <span className="text-gray-900 text-right flex-1 ml-4">{new Date(skipTracedInfo.skipTracedAt).toLocaleDateString()}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

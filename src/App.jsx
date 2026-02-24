@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css'
 if (typeof window !== 'undefined') window.L = L
 import 'leaflet-rotate'
 import { CompassOrientation } from './components/CompassOrientation'
+import { NorthIndicator } from './components/NorthIndicator'
 import { MapOverlayPane } from './components/MapOverlayPane'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
@@ -24,13 +25,16 @@ import { ForgotPassword } from './components/ForgotPassword'
 import { ToastContainer, showToast } from './components/ui/toast'
 import { ConfirmDialog, showConfirm } from './components/ui/confirm-dialog'
 import { useAuth } from './contexts/AuthContext'
-import { MapTypeProvider } from './contexts/MapTypeContext'
+import { UserDataSyncProvider } from './contexts/UserDataSyncContext'
+import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
 import { fetchLists, createList, updateList, deleteList } from './utils/lists'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
+import { DealPipeline } from './components/DealPipeline'
+import { addLead, loadColumns, loadLeads, isParcelALead } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
@@ -139,7 +143,7 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
 // Navigation icon SVG (matches lucide-react Navigation) - arrow; base rotation -45° so tip points north
 const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>`
 
-function LocationMarker({ position, heading, isCompassActive, mapType }) {
+function LocationMarker({ position, heading, isCompassActive }) {
   const markerRef = useRef(null)
 
   // Rotation: when compass on, map rotates so "up" = user's direction (marker points up).
@@ -149,12 +153,12 @@ function LocationMarker({ position, heading, isCompassActive, mapType }) {
 
   const icon = useMemo(() => {
     return L.divIcon({
-      html: `<div class="user-location-marker" style="transform: rotate(${rotation}deg); color: ${mapType === 'satellite' ? '#ffffff' : '#000000'};">${NAVIGATION_ICON_SVG}</div>`,
+      html: `<div class="user-location-marker" style="transform: rotate(${rotation}deg); color: #ffffff;">${NAVIGATION_ICON_SVG}</div>`,
       className: '',
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     })
-  }, [rotation, mapType])
+  }, [rotation])
 
   useEffect(() => {
     if (markerRef.current && position) {
@@ -178,7 +182,7 @@ function LocationMarker({ position, heading, isCompassActive, mapType }) {
 }
 
 function App() {
-  const { currentUser, logout, loading: authLoading } = useAuth()
+  const { currentUser, getToken, logout, loading: authLoading } = useAuth()
   
   // Debug: Log current user state
   useEffect(() => {
@@ -232,18 +236,18 @@ function App() {
   const [bulkEmailListId, setBulkEmailListId] = useState(null)
   const [isSendingBulkEmails, setIsSendingBulkEmails] = useState(false)
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
-  const [mapType, setMapType] = useState('satellite') // 'street' | 'satellite'
   const [isCompassActive, setIsCompassActive] = useState(false)
   const heading = useDeviceHeading() // Compass heading in degrees (0-360), null until DeviceOrientation fires
-  const [selectedListIds, setSelectedListIds] = useState([]) // Max 5 lists highlighted with different colors
+  const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
   const [clickedParcelId, setClickedParcelId] = useState(null)
   const [clickedParcelData, setClickedParcelData] = useState(null) // Store full parcel data for popup
   const [lists, setLists] = useState([])
-  const getToken = useCallback(() => auth.currentUser?.getIdToken?.() ?? Promise.resolve(null), [])
   const [showListSelector, setShowListSelector] = useState(false) // Show list selector in popup
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
+  const [isDealPipelineOpen, setIsDealPipelineOpen] = useState(false)
+  const [dealPipelineLeads, setDealPipelineLeads] = useState([])
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null) // Reference to parcel layer functions
@@ -356,6 +360,14 @@ function App() {
     }
   }, [])
 
+  // Load user data (deal pipeline, leads, tasks, notes, skip traced, etc.) when signed in
+  useEffect(() => {
+    if (!currentUser?.uid || !getToken) return
+    loadUserData(getToken).then(() => {
+      setDealPipelineLeads(loadLeads())
+    })
+  }, [currentUser?.uid, getToken])
+
   // Load user lists when signed in
   const refreshLists = useCallback(async () => {
     if (!currentUser) return
@@ -372,10 +384,42 @@ function App() {
     else setLists([])
   }, [currentUser, refreshLists])
 
+  // Load deal pipeline leads when panel opens
+  useEffect(() => {
+    if (isDealPipelineOpen) setDealPipelineLeads(loadLeads())
+  }, [isDealPipelineOpen])
+
+  const handleConvertToLead = useCallback((parcelData) => {
+    if (!currentUser || !currentUser.uid) {
+      setIsLoginOpen(true)
+      showToast('Please sign in to use the Deal Pipeline', 'info')
+      return
+    }
+    if (!parcelData?.id) {
+      showToast('Invalid parcel data', 'error')
+      return
+    }
+    if (isParcelALead(parcelData.id)) {
+      showToast('Parcel is already a lead', 'warning')
+      return
+    }
+    const columns = loadColumns()
+    const lead = addLead(parcelData, columns)
+    if (lead) {
+      setDealPipelineLeads(loadLeads())
+      scheduleUserDataSync(getToken)
+      setIsDealPipelineOpen(true)
+      showToast('Parcel added to Deal Pipeline', 'success')
+    } else {
+      showToast('Could not add lead', 'error')
+    }
+  }, [currentUser, getToken])
+
   // Background polling for skip trace jobs
   useEffect(() => {
     // Clean up old jobs on mount
     cleanupOldJobs()
+    scheduleUserDataSync(getToken)
 
     const processSkipTraceJob = async (job) => {
       try {
@@ -383,6 +427,7 @@ function App() {
         
         // Update job status to processing
         updateSkipTraceJob(job.jobId, { status: 'processing' })
+        scheduleUserDataSync(getToken)
 
         // Poll for results
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
@@ -399,6 +444,7 @@ function App() {
             results: [],
             completedAt: new Date().toISOString()
           })
+          scheduleUserDataSync(getToken)
           
           // Remove from in progress
           setSkipTracingInProgress(prev => {
@@ -508,6 +554,7 @@ function App() {
         
         // Save results
         saveSkipTracedParcels(resultsWithParcelIds)
+        scheduleUserDataSync(getToken)
 
         // Get list to add to skip traced list
         let list = null
@@ -522,6 +569,7 @@ function App() {
           
           if (skipTracedParcels.length > 0) {
             addListToSkipTracedList(job.listId, job.listName, skipTracedParcels)
+            scheduleUserDataSync(getToken)
           }
         }
 
@@ -531,6 +579,7 @@ function App() {
           results: resultsWithParcelIds,
           completedAt: new Date().toISOString()
         })
+        scheduleUserDataSync(getToken)
 
         // Remove from in progress
         setSkipTracingInProgress(prev => {
@@ -551,6 +600,7 @@ function App() {
           error: error.message,
           completedAt: new Date().toISOString()
         })
+        scheduleUserDataSync(getToken)
         
         // Remove from in progress
         setSkipTracingInProgress(prev => {
@@ -583,7 +633,7 @@ function App() {
     return () => {
       clearInterval(pollInterval)
     }
-  }, [lists])
+  }, [lists, getToken])
 
   // Load PMTiles URL based on viewport county (detected by MapController)
   const handleCountyChange = useCallback((county) => {
@@ -741,7 +791,7 @@ function App() {
         : ''
       
       if (mapInstanceRef.current) {
-        const popup = L.popup({ className: mapType === 'satellite' ? 'parcel-popup-liquid-glass' : '' })
+        const popup = L.popup({ className: 'parcel-popup-liquid-glass' })
           .setLatLng(latlng)
           .setContent(`
             <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
@@ -774,6 +824,13 @@ function App() {
                 >
                   Add to List
                 </button>
+                <button 
+                  id="convert-to-lead-btn-${parcelId}"
+                  style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.convertToLead()"
+                >
+                  Convert to Lead
+                </button>
               </div>
             </div>
           `)
@@ -800,7 +857,7 @@ function App() {
       parcelId,
       isMultiSelectActive
     })
-  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, mapType])
+  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast])
   
   // Add single parcel to list (called from popup button)
   const handleAddSingleParcelToList = useCallback(async (listId) => {
@@ -1018,7 +1075,7 @@ function App() {
     const listNamesHtml = listsWithParcel.length > 0
       ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcel.map(l => l.name).join(', ')}</p>`
       : ''
-    const popup = L.popup({ className: mapType === 'satellite' ? 'parcel-popup-liquid-glass' : '' })
+    const popup = L.popup({ className: 'parcel-popup-liquid-glass' })
       .setLatLng(latlng)
       .setContent(`
         <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
@@ -1033,6 +1090,7 @@ function App() {
             <button id="more-details-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.openParcelDetails()">More Details</button>
             ${!hasSkipTraced && !isSkipTracingInProgress ? `<button id="get-contact-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.skipTraceParcel()">Get Contact</button>` : ''}
             <button id="add-to-list-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.addParcelToList('${parcelId}')">Add to List</button>
+            <button id="convert-to-lead-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.convertToLead()">Convert to Lead</button>
           </div>
         </div>
       `)
@@ -1044,7 +1102,7 @@ function App() {
         setClickedParcelId(null)
       }
     })
-  }, [lists, skipTracingInProgress, mapType])
+  }, [lists, skipTracingInProgress])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
     setIsParcelDetailsOpen(false)
@@ -1393,6 +1451,7 @@ function App() {
           parcelsToTrace,
           status: 'pending'
         })
+        scheduleUserDataSync(getToken)
 
         showToast(`Skip trace job submitted for ${parcelsToTrace.length} parcels. You'll be notified when it completes.`, 'success', 5000)
       } catch (error) {
@@ -1525,7 +1584,8 @@ function App() {
       console.log('💾 Data being saved:', dataToSave)
       
       saveSkipTracedParcel(parcelId, dataToSave)
-      
+      scheduleUserDataSync(getToken)
+
       // Verify it was saved
       const saved = getSkipTracedParcel(parcelId)
       console.log('✅ Verified saved skip trace data:', saved)
@@ -1533,6 +1593,7 @@ function App() {
 
       // Add to skip traced list
       addParcelToSkipTracedList(parcelData)
+      scheduleUserDataSync(getToken)
 
       showToast('Skip trace completed successfully!', 'success')
       
@@ -1575,7 +1636,7 @@ function App() {
           // Convert latlng to L.LatLng if it's an array
           const leafletLatLng = Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng
           
-          const popup = L.popup({ className: mapType === 'satellite' ? 'parcel-popup-liquid-glass' : '' })
+          const popup = L.popup({ className: 'parcel-popup-liquid-glass' })
             .setLatLng(leafletLatLng)
             .setContent(`
               <div style="min-width: 200px;" id="parcel-popup-${parcelIdForPopup}">
@@ -1607,6 +1668,13 @@ function App() {
                   >
                     Add to List
                   </button>
+                <button 
+                  id="convert-to-lead-btn-${parcelIdForPopup}"
+                  style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.convertToLead()"
+                >
+                  Convert to Lead
+                </button>
                 </div>
               </div>
             `)
@@ -1624,7 +1692,7 @@ function App() {
         return next
       })
     }
-  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, mapType])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists])
 
   // Expose function to window for popup button
   useEffect(() => {
@@ -1638,22 +1706,22 @@ function App() {
         handleSkipTraceParcel(clickedParcelData)
       }
     }
+    window.convertToLead = () => {
+      if (clickedParcelData) {
+        handleConvertToLead(clickedParcelData)
+      }
+    }
     return () => {
       delete window.openParcelDetails
       delete window.addParcelToList
       delete window.skipTraceParcel
+      delete window.convertToLead
     }
-  }, [handleOpenParcelDetails, handleSkipTraceParcel, clickedParcelData])
-
-  // Sync map type to body for CSS (zoom controls, parcel popup use liquid glass only on satellite)
-  useEffect(() => {
-    document.body.dataset.mapType = mapType
-    return () => { delete document.body.dataset.mapType }
-  }, [mapType])
+  }, [handleOpenParcelDetails, handleSkipTraceParcel, handleConvertToLead, clickedParcelData])
 
   return (
-    <MapTypeProvider mapType={mapType}>
-    <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
+    <UserDataSyncProvider getToken={getToken}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '100dvh' }}>
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         <MapContainer
@@ -1661,26 +1729,29 @@ function App() {
         zoom={17}
         minZoom={1}
         maxZoom={20}
-        style={{ height: '100vh', width: '100%' }}
+        style={{ height: '100%', minHeight: '100dvh', width: '100%' }}
         zoomControl={false}
         rotate={true}
         rotateControl={false}
+        touchRotate={true}
       >
-        {mapType === 'street' ? (
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxNativeZoom={19}
-            maxZoom={22}
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          />
-        ) : (
+        <>
           <TileLayer
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             maxNativeZoom={19}
             maxZoom={22}
             attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
           />
-        )}
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
+            subdomains="abcd"
+            maxZoom={20}
+            maxNativeZoom={19}
+            opacity={1}
+            className="satellite-labels-layer"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
+          />
+        </>
         <ZoomControl position="topleft" />
         <MapController 
           userLocation={userLocation}
@@ -1692,12 +1763,12 @@ function App() {
           onCountyChange={handleCountyChange}
         />
         <CompassOrientation isActive={isCompassActive} />
+        <NorthIndicator />
         {userLocation && (
           <LocationMarker 
             position={userLocation}
             heading={heading}
             isCompassActive={isCompassActive}
-            mapType={mapType}
           />
         )}
         {pmtilesUrl && (
@@ -1754,8 +1825,6 @@ function App() {
         isCompassActive={isCompassActive}
         onToggleMultiSelect={handleToggleMultiSelect}
         isMultiSelectActive={isMultiSelectActive}
-        mapType={mapType}
-        onMapTypeToggle={() => setMapType((t) => (t === 'street' ? 'satellite' : 'street'))}
         onOpenListPanel={() => {
           // Wait for auth to finish loading before checking
           if (authLoading) {
@@ -1788,6 +1857,14 @@ function App() {
           setIsSkipTracedListPanelOpen(true)
         }}
         onOpenEmailTemplates={handleOpenEmailTemplates}
+        onOpenDealPipeline={() => {
+          if (authLoading) return
+          if (!currentUser || !currentUser.uid) {
+            setIsLoginOpen(true)
+            return
+          }
+          setIsDealPipelineOpen(true)
+        }}
         currentUser={currentUser}
         onLogin={() => setIsLoginOpen(true)}
         onLogout={logout}
@@ -1804,7 +1881,7 @@ function App() {
         onToggleListHighlight={(listId) => {
           setSelectedListIds(prev => {
             if (prev.includes(listId)) return prev.filter(id => id !== listId)
-            if (prev.length >= 5) return prev
+            if (prev.length >= 20) return prev
             return [...prev, listId]
           })
         }}
@@ -1856,6 +1933,7 @@ function App() {
         onRemoveParcel={handleRemoveParcelFromList}
         onOpenParcelDetails={handleOpenParcelDetails}
         onSkipTraceParcel={handleSkipTraceParcel}
+        onConvertToLead={handleConvertToLead}
         onBulkSkipTrace={handleBulkSkipTraceList}
         onExportList={handleExportList}
         skipTracingInProgress={skipTracingInProgress}
@@ -1876,6 +1954,25 @@ function App() {
         isOpen={isSkipTracedListPanelOpen}
         onClose={() => setIsSkipTracedListPanelOpen(false)}
         onOpenParcelDetails={handleOpenParcelDetails}
+      />
+
+      <DealPipeline
+        isOpen={isDealPipelineOpen}
+        onClose={() => setIsDealPipelineOpen(false)}
+        leads={dealPipelineLeads}
+        onLeadsChange={setDealPipelineLeads}
+        onOpenParcelDetails={handleOpenParcelDetails}
+        onEmailClick={handleEmailClick}
+        onSkipTraceParcel={handleSkipTraceParcel}
+        skipTracingInProgress={skipTracingInProgress}
+        onCenterParcel={(location) => {
+          if (mapRef.current) {
+            mapRef.current.setView([location.lat, location.lng], 17, {
+              animate: true,
+              duration: 0.5
+            })
+          }
+        }}
       />
 
       <EmailTemplatesPanel
@@ -1958,7 +2055,7 @@ function App() {
       <ToastContainer />
       <ConfirmDialog />
     </div>
-    </MapTypeProvider>
+    </UserDataSyncProvider>
   )
 }
 

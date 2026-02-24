@@ -52,16 +52,19 @@ function parseAddress(addressStr) {
 }
 
 /**
- * Get parsed address from parcel props, preferring separate fields when available.
+ * Get parsed SITUS (property) address only. Never uses mailing address fields.
  */
 function getPropertyAddress(props, parcel) {
-  const fullAddr = parcel.address || props.SITUS_ADDR || props.SITE_ADDR || props.ADDRESS || ''
-  if (props.CITY || props.STATE || props.ZIP || props.ZIP_CODE) {
+  const fullAddr = parcel.address || props.SITUS_ADDR || props.SITE_ADDR || ''
+  const city = props.scity || props.PROP_CITY || props.SITUS_CITY || props.CITY || ''
+  const state = props.state2 || props.PROP_STATE || props.SITUS_STATE || props.STATE || ''
+  const zip = (props.szip || props.szip5 || props.PROP_ZIP || props.SITUS_ZIP || props.ZIP || props.ZIP_CODE || '').toString().trim()
+  if (city || state || zip) {
     return {
-      street: fullAddr || props.STREET || props.ADDR_LINE1 || '',
-      city: props.CITY || '',
-      state: props.STATE || '',
-      zip: props.ZIP || props.ZIP_CODE || ''
+      street: fullAddr || props.STREET || props.ADDR_LINE1 || props.saddstr || '',
+      city,
+      state,
+      zip
     }
   }
   const parsed = parseAddress(fullAddr)

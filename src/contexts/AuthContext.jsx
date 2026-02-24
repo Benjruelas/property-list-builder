@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -22,9 +23,12 @@ export const useAuth = () => {
   return context
 }
 
+const DEV_USER = { uid: 'dev-local', email: 'dev@localhost', displayName: 'Dev User' }
+const isDev = import.meta.env.DEV
+
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState(isDev ? DEV_USER : null)
+  const [loading, setLoading] = useState(!isDev)
 
   // Sign up with email and password
   const signup = async (email, password, displayName) => {
@@ -93,27 +97,44 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Sign in with Google
+  // Sign in with Google (use redirect to avoid COOP blocking window.close in popup)
   const signInWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider()
-      const userCredential = await signInWithPopup(auth, provider)
-      console.log('✅ Google login successful, user:', userCredential.user?.email, 'uid:', userCredential.user?.uid)
-      // onAuthStateChanged will automatically update currentUser
-      // Don't set it manually here to avoid race conditions - let onAuthStateChanged handle it
-      showToast('Signed in with Google successfully!', 'success')
-      return userCredential
+      await signInWithRedirect(auth, provider)
+      showToast('Redirecting to Google...', 'info')
     } catch (error) {
-      let errorMessage = 'Failed to sign in with Google'
-      if (error.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'Sign-in popup was closed'
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        errorMessage = 'Sign-in was cancelled'
-      }
-      showToast(errorMessage, 'error')
+      showToast(error.message || 'Failed to sign in with Google', 'error')
       throw error
     }
   }
+
+  // Dev bypass: skip Firebase auth entirely
+  useEffect(() => {
+    if (isDev) {
+      setCurrentUser(DEV_USER)
+      setLoading(false)
+      return
+    }
+  }, [])
+
+  // Handle redirect result when returning from Google OAuth
+  useEffect(() => {
+    if (isDev) return
+    getRedirectResult(auth)
+      .then((userCredential) => {
+        if (userCredential?.user) {
+          console.log('✅ Google redirect sign-in successful, user:', userCredential.user?.email)
+          showToast('Signed in with Google successfully!', 'success')
+        }
+      })
+      .catch((error) => {
+        const code = error?.code || ''
+        if (code && code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+          showToast(error.message || 'Sign-in failed', 'error')
+        }
+      })
+  }, [])
 
   // Sign out
   const logout = async () => {
@@ -154,8 +175,9 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Listen for auth state changes
+  // Listen for auth state changes (skip in dev)
   useEffect(() => {
+    if (isDev) return
     console.log('🔧 Setting up auth state listener...')
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log('🔄 Auth state changed, user:', user?.email || 'null', 'uid:', user?.uid || 'null', 'loading:', loading)
@@ -174,8 +196,12 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  const getToken = () =>
+    isDev ? Promise.resolve('dev-bypass') : (auth.currentUser?.getIdToken?.() ?? Promise.resolve(null))
+
   const value = {
     currentUser,
+    getToken,
     signup,
     login,
     signInWithGoogle,

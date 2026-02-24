@@ -10,9 +10,9 @@ const processQueue = () => {
   confirmListeners.forEach(listener => listener())
 }
 
-export const showConfirm = (message, title = 'Confirm') => {
+export const showConfirm = (message, title = 'Confirm', options = {}) => {
   return new Promise((resolve) => {
-    confirmQueue.push({ message, title, resolve })
+    confirmQueue.push({ message, title, resolve, ...options })
     processQueue()
   })
 }
@@ -76,7 +76,7 @@ export const ConfirmDialog = () => {
         handleCancel()
       }
     }}>
-      <DialogContent className="map-panel max-w-md" showCloseButton={false}>
+      <DialogContent className="map-panel confirm-dialog max-w-md" showCloseButton={false} focusOverlay>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-600" />
@@ -86,7 +86,12 @@ export const ConfirmDialog = () => {
             {currentConfirm.message}
           </DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-gray-700 py-4">{currentConfirm.message}</p>
+        <p className="text-sm text-gray-700 py-2">{currentConfirm.message}</p>
+        {currentConfirm.detail && (
+          <div className="mt-3 rounded-lg border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white/95">
+            {currentConfirm.detail}
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={handleCancel}>
             Cancel

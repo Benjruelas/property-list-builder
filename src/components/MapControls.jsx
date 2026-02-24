@@ -1,35 +1,30 @@
 import React, { useState } from 'react'
-import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, User, LogOut, Menu, ChevronDown, Map, Satellite, Compass } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, User, LogOut, Menu, Compass, LayoutList } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
-import { useMapType } from '@/contexts/MapTypeContext'
-
 export function MapControls({ 
   onRecenter, 
   onToggleCompass,
   isCompassActive,
   onToggleMultiSelect, 
   isMultiSelectActive, 
-  mapType,
-  onMapTypeToggle,
   onOpenListPanel, 
   selectedListIds = [], 
   onOpenSkipTracedListPanel, 
   onOpenEmailTemplates,
+  onOpenDealPipeline,
   currentUser,
   onLogin,
   onLogout
 }) {
   const [showMenu, setShowMenu] = useState(false)
-  const mapTypeFromContext = useMapType()
-  const isSatellite = mapTypeFromContext === 'satellite'
 
   return (
     <div className="map-controls-stack absolute top-3 right-3 z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2">
       <Button
         onClick={onRecenter}
         size="icon"
-        variant={isSatellite ? "glass" : "default"}
+        variant="glass"
         className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
         title="Recenter map"
       >
@@ -38,7 +33,7 @@ export function MapControls({
       <Button
         onClick={onToggleCompass}
         size="icon"
-        variant={isSatellite ? (isCompassActive ? "glass" : "glass-outline") : (isCompassActive ? "default" : "outline")}
+        variant={isCompassActive ? "glass" : "glass-outline"}
         className={cn(
           "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
           isCompassActive && "bg-amber-500/80 hover:bg-amber-600/90 border-amber-400/50 text-white"
@@ -48,25 +43,9 @@ export function MapControls({
         <Compass className="h-6 w-6 sm:h-5 sm:w-5" />
       </Button>
       <Button
-        onClick={onMapTypeToggle}
-        size="icon"
-        variant={isSatellite ? (mapType === 'satellite' ? 'glass' : 'glass-outline') : (mapType === 'satellite' ? 'default' : 'outline')}
-        className={cn(
-          "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
-          mapType === 'satellite' && "bg-slate-600/80 hover:bg-slate-700/90 text-white"
-        )}
-        title={mapType === 'street' ? 'Switch to satellite view' : 'Switch to street map'}
-      >
-        {mapType === 'street' ? (
-          <Satellite className="h-6 w-6 sm:h-5 sm:w-5" />
-        ) : (
-          <Map className="h-6 w-6 sm:h-5 sm:w-5" />
-        )}
-      </Button>
-      <Button
         onClick={onToggleMultiSelect}
         size="icon"
-        variant={isSatellite ? (isMultiSelectActive ? "glass" : "glass-outline") : (isMultiSelectActive ? "default" : "outline")}
+        variant={isMultiSelectActive ? "glass" : "glass-outline"}
         className={cn(
           "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
           isMultiSelectActive && "bg-green-600/80 hover:bg-green-700/90 border-green-400/50 text-white",
@@ -91,7 +70,7 @@ export function MapControls({
         <Button
           onClick={() => setShowMenu(!showMenu)}
           size="icon"
-          variant={isSatellite ? "glass-outline" : "outline"}
+          variant="glass-outline"
           className={cn(
             "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
             showMenu && "bg-white/20 border-white/40"
@@ -106,17 +85,14 @@ export function MapControls({
               className="fixed inset-0 z-[999]" 
               onClick={() => setShowMenu(false)}
             />
-            <div className="map-panel absolute right-0 top-14 rounded-xl min-w-[200px] z-[1000] py-2">
+            <div className="map-panel hamburger-menu absolute right-0 top-14 rounded-xl min-w-[200px] z-[1000] py-2">
               {/* Lists Button */}
               <button
                 onClick={() => {
                   setShowMenu(false)
                   onOpenListPanel()
                 }}
-                className={cn(
-                  "w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors",
-                  selectedListIds.length > 0 && "bg-blue-50/50"
-                )}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
                 <List className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">Lists</span>
@@ -131,7 +107,7 @@ export function MapControls({
                   setShowMenu(false)
                   onOpenSkipTracedListPanel()
                 }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors"
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
                 <Phone className="h-4 w-4 flex-shrink-0" />
                 <span>Skip Traced Parcels</span>
@@ -143,10 +119,22 @@ export function MapControls({
                   setShowMenu(false)
                   onOpenEmailTemplates()
                 }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors"
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
                 <Mail className="h-4 w-4 flex-shrink-0" />
                 <span>Email Templates</span>
+              </button>
+
+              {/* Deal Pipeline Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenDealPipeline?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <LayoutList className="h-4 w-4 flex-shrink-0" />
+                <span>Deal Pipeline</span>
               </button>
 
               {/* Divider */}
@@ -170,7 +158,7 @@ export function MapControls({
                         await onLogout()
                       }
                     }}
-                    className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
                   >
                     <LogOut className="h-4 w-4 flex-shrink-0" />
                     <span>Sign Out</span>
@@ -182,7 +170,7 @@ export function MapControls({
                     setShowMenu(false)
                     onLogin()
                   }}
-                  className="w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-white/20 flex items-center gap-3 transition-colors"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
                 >
                   <User className="h-4 w-4 flex-shrink-0" />
                   <span>Sign In</span>

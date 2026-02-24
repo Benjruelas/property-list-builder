@@ -192,19 +192,16 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
           </Button>
         </form>
 
-        <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or continue with</span>
-          </div>
+        <div className="flex items-center gap-3 my-4">
+          <div className="flex-1 border-t border-gray-300" />
+          <span className="text-sm text-gray-500 shrink-0">Or continue with</span>
+          <div className="flex-1 border-t border-gray-300" />
         </div>
 
         <Button
           type="button"
-          variant="outline"
-          className="w-full"
+          variant="ghost"
+          className="w-full border border-white hover:bg-white/20"
           onClick={handleGoogleSignIn}
           disabled={isLoading}
         >

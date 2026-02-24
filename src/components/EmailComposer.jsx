@@ -108,7 +108,7 @@ export function EmailComposer({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(90vh-200px)] space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               To

@@ -7,8 +7,10 @@ import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { getEmailTemplates, addEmailTemplate, updateEmailTemplate, deleteEmailTemplate, AVAILABLE_TAGS } from '../utils/emailTemplates'
+import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
 export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkMode = false }) {
+  const { scheduleSync } = useUserDataSync()
   const [templates, setTemplates] = useState([])
   const [editingTemplate, setEditingTemplate] = useState(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -40,7 +42,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
       subject: templateSubject,
       body: templateBody
     })
-
+    scheduleSync()
     loadTemplates()
     setTemplateName('')
     setTemplateSubject('')
@@ -68,7 +70,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
       subject: templateSubject,
       body: templateBody
     })
-
+    scheduleSync()
     loadTemplates()
     setEditingTemplate(null)
     setTemplateName('')
@@ -86,6 +88,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
     if (!confirmed) return
 
     deleteEmailTemplate(templateId)
+    scheduleSync()
     loadTemplates()
     showToast('Template deleted successfully', 'success')
   }
@@ -148,7 +151,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-200px)]">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(90vh-200px)]">
           {!showCreateForm ? (
             <>
               <div className="mb-4">

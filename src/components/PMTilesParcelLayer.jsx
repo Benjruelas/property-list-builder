@@ -14,6 +14,21 @@ const LIST_HIGHLIGHT_COLORS = [
   { color: '#ea580c', weight: 3, fillColor: '#f97316', fillOpacity: 0.3 },
   { color: '#9333ea', weight: 3, fillColor: '#a855f7', fillOpacity: 0.3 },
   { color: '#dc2626', weight: 3, fillColor: '#ef4444', fillOpacity: 0.3 },
+  { color: '#0d9488', weight: 3, fillColor: '#14b8a6', fillOpacity: 0.3 },
+  { color: '#db2777', weight: 3, fillColor: '#ec4899', fillOpacity: 0.3 },
+  { color: '#4f46e5', weight: 3, fillColor: '#6366f1', fillOpacity: 0.3 },
+  { color: '#d97706', weight: 3, fillColor: '#f59e0b', fillOpacity: 0.3 },
+  { color: '#65a30d', weight: 3, fillColor: '#84cc16', fillOpacity: 0.3 },
+  { color: '#0891b2', weight: 3, fillColor: '#06b6d4', fillOpacity: 0.3 },
+  { color: '#e11d48', weight: 3, fillColor: '#f43f5e', fillOpacity: 0.3 },
+  { color: '#7c3aed', weight: 3, fillColor: '#8b5cf6', fillOpacity: 0.3 },
+  { color: '#059669', weight: 3, fillColor: '#10b981', fillOpacity: 0.3 },
+  { color: '#0284c7', weight: 3, fillColor: '#0ea5e9', fillOpacity: 0.3 },
+  { color: '#c026d3', weight: 3, fillColor: '#d946ef', fillOpacity: 0.3 },
+  { color: '#b45309', weight: 3, fillColor: '#ea580c', fillOpacity: 0.3 },
+  { color: '#1d4ed8', weight: 3, fillColor: '#2563eb', fillOpacity: 0.3 },
+  { color: '#15803d', weight: 3, fillColor: '#16a34a', fillOpacity: 0.3 },
+  { color: '#be185d', weight: 3, fillColor: '#db2777', fillOpacity: 0.3 },
 ]
 
 export function PMTilesParcelLayer({ 
@@ -26,11 +41,11 @@ export function PMTilesParcelLayer({
   onLayerReady
 }) {
   const map = useMap()
-  const [parcelIdToColorIndex, setParcelIdToColorIndex] = useState(new Map()) // parcelId -> 0-4
+  const [parcelIdToColorIndex, setParcelIdToColorIndex] = useState(new Map()) // parcelId -> 0-19
 
   useEffect(() => {
     const next = new Map()
-    selectedListIds.slice(0, 5).forEach((listId, colorIndex) => {
+    selectedListIds.slice(0, 20).forEach((listId, colorIndex) => {
       const list = lists?.find(l => l.id === listId)
       if (list?.parcels) {
         list.parcels.forEach(p => {
@@ -87,8 +102,8 @@ export function PMTilesParcelLayer({
   const wipeTimeoutRef = useRef(null) // Pending wipe after fade-out; cleared if user zooms back in
   const PARCEL_PANE_NAME = 'parcelPane'
   const FADE_MS = 1000
-  // Map zoom range for parcels: 15–20. Below 15 = fade out, clear, no new loads until back in range.
-  const PARCEL_MIN_ZOOM = 15
+  // Map zoom range for parcels: 17–20. Zoom 16 or less = hide boundaries.
+  const PARCEL_MIN_ZOOM = 17
   const PARCEL_MAX_ZOOM = 20
   
   // Store current state in refs so event handlers always see latest values
