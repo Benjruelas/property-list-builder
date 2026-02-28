@@ -28,10 +28,15 @@ export default async function handler(req, res) {
     })
 
     res.status(fetchRes.status)
-    fetchRes.headers.forEach((v, k) => {
-      if (k.toLowerCase() !== 'transfer-encoding') res.setHeader(k, v)
-    })
     const body = await fetchRes.text()
+    // Don't forward encoding/length: fetch().text() decompresses the body,
+    // so forwarding Content-Encoding causes ERR_CONTENT_DECODING_FAILED
+    fetchRes.headers.forEach((v, k) => {
+      const lower = k.toLowerCase()
+      if (!['transfer-encoding', 'content-encoding', 'content-length'].includes(lower)) {
+        res.setHeader(k, v)
+      }
+    })
     res.send(body)
   } catch (err) {
     console.error('Firebase auth proxy error:', err)
