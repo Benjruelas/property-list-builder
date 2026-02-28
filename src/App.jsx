@@ -58,6 +58,19 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     }
   }, [map, onMapReady])
 
+  // Fix iOS Safari: when URL bar shows/hides, resize event doesn't fire — use visualViewport
+  useEffect(() => {
+    const handler = () => {
+      map.invalidateSize()
+    }
+    window.visualViewport?.addEventListener('resize', handler)
+    window.visualViewport?.addEventListener('scroll', handler)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handler)
+      window.visualViewport?.removeEventListener('scroll', handler)
+    }
+  }, [map])
+
   // Center map on user location when it's available (only initially)
   useEffect(() => {
     if (userLocation) {
@@ -1721,7 +1734,7 @@ function App() {
 
   return (
     <UserDataSyncProvider getToken={getToken}>
-    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '100dvh' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         <MapContainer
@@ -1729,7 +1742,7 @@ function App() {
         zoom={17}
         minZoom={1}
         maxZoom={20}
-        style={{ height: '100%', minHeight: '100dvh', width: '100%' }}
+        style={{ height: '100%', minHeight: 'var(--vw-height, 100vh)', width: '100%' }}
         zoomControl={false}
         rotate={true}
         rotateControl={false}

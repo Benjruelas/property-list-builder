@@ -31,7 +31,7 @@ export function NorthIndicator() {
   const indicator = (
     <div
       className={cn(
-        'fixed bottom-3 left-3 z-[900] flex items-center justify-center rounded-full shadow-lg pointer-events-none',
+        'fixed north-indicator z-[900] flex items-center justify-center rounded-full shadow-lg pointer-events-none',
         'bg-white/10 backdrop-blur-md border border-white/30'
       )}
       style={{

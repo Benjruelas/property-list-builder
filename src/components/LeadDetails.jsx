@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar } from 'lucide-react'
+import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
 import { getStreetAddress, getFullAddress, updateLead } from '@/utils/dealPipeline'
-import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, updateLeadTaskSchedule, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, toDatetimeLocal, fromDatetimeLocal } from '@/utils/leadTasks'
+import { SchedulePicker } from './SchedulePicker'
+import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, updateLeadTaskSchedule, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
 /**
@@ -344,38 +345,30 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
                             {task.title}
                           </span>
                           <div className="text-[11px] text-gray-500 mt-0.5 space-y-1">
-                            <div>
-                              {task.completed
-                                ? `Completed ${formatTaskCompletedDate(task.completedAt)}`
-                                : task.scheduledAt
-                                  ? `Scheduled: ${formatTaskScheduledDate(task.scheduledAt)}`
-                                  : `Created ${formatTaskTimeAgo(task.createdAt)}`}
-                            </div>
                             <div className="flex items-center gap-1.5">
-                              <label className="cursor-pointer" htmlFor={`task-schedule-${task.id}`} onClick={(e) => e.stopPropagation()}>
-                                <Calendar className="h-3.5 w-3.5 text-white opacity-90 hover:opacity-100" />
-                              </label>
-                              <input
-                                id={`task-schedule-${task.id}`}
-                                type="datetime-local"
-                                className="sr-only absolute w-0 h-0 opacity-0"
-                                value={task.scheduledAt ? toDatetimeLocal(task.scheduledAt) : ''}
-                                min={toDatetimeLocal(Date.now())}
-                                onChange={(e) => {
-                                  const v = fromDatetimeLocal(e.target.value)
-                                  updateLeadTaskSchedule(parcelId, task.id, v)
+                              <span>
+                                {task.completed
+                                  ? `Completed ${formatTaskCompletedDate(task.completedAt)}`
+                                  : task.scheduledAt
+                                    ? `Scheduled: ${formatTaskScheduledDate(task.scheduledAt)}`
+                                    : `Created ${formatTaskTimeAgo(task.createdAt)}`}
+                              </span>
+                              {!task.completed && (
+                                <SchedulePicker
+                                value={task.scheduledAt}
+                                onChange={(ts) => {
+                                  updateLeadTaskSchedule(parcelId, task.id, ts)
                                   refreshTasks()
                                   scheduleSync()
                                 }}
+                                minDate={Date.now()}
+                                triggerClassName="cursor-pointer p-0 bg-transparent border-none text-white opacity-90 hover:opacity-100"
+                                title="Schedule or reschedule"
+                                size="sm"
+                                taskTitle={task.title || '(untitled)'}
+                                leadName={displayName || undefined}
+                                leadAddress={address !== 'No address available' ? address : undefined}
                               />
-                              {task.scheduledAt && (
-                                <button
-                                  type="button"
-                                  className="text-red-400 hover:text-red-300 text-[10px]"
-                                  onClick={(e) => { e.stopPropagation(); updateLeadTaskSchedule(parcelId, task.id, null); refreshTasks(); scheduleSync() }}
-                                >
-                                  Clear
-                                </button>
                               )}
                             </div>
                           </div>

@@ -130,7 +130,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
         cancelEdit()
       }
     }}>
-      <DialogContent className="map-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false}>
+      <DialogContent className="map-panel email-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false}>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
@@ -156,6 +156,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
             <>
               <div className="mb-4">
                 <Button
+                  variant="ghost"
                   onClick={() => {
                     setShowCreateForm(true)
                     setEditingTemplate(null)
@@ -219,7 +220,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="h-8 w-8 text-red-500 hover:text-red-400 [&_svg]:text-current"
                             onClick={() => handleDeleteTemplate(template.id)}
                             title="Delete template"
                           >
@@ -258,7 +259,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
                         <Button
                           key={tag}
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onMouseDown={(e) => {
                             // Prevent input from losing focus when clicking tag
@@ -304,7 +305,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
                         <Button
                           key={tag}
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onMouseDown={(e) => {
                             // Prevent textarea from losing focus when clicking tag
@@ -341,14 +342,15 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
 
               <div className="flex gap-2">
                 <Button
+                  variant="ghost"
                   onClick={editingTemplate ? handleUpdateTemplate : handleCreateTemplate}
                   className="flex-1"
                 >
                   {editingTemplate ? 'Update Template' : 'Create Template'}
                 </Button>
                 <Button
+                  variant="ghost"
                   onClick={cancelEdit}
-                  variant="outline"
                   className="flex-1"
                 >
                   Cancel

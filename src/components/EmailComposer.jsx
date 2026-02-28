@@ -87,7 +87,7 @@ export function EmailComposer({
         onClose()
       }
     }}>
-      <DialogContent className="map-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false}>
+      <DialogContent className="map-panel email-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false}>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
@@ -158,13 +158,14 @@ export function EmailComposer({
 
         <div className="px-6 py-4 border-t flex justify-end gap-2">
           <Button
+            variant="ghost"
             onClick={onClose}
-            variant="outline"
             disabled={isSending}
           >
             Cancel
           </Button>
           <Button
+            variant="ghost"
             onClick={handleSend}
             disabled={isSending}
             className="flex items-center gap-2"

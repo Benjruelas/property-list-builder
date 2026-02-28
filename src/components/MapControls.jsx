@@ -20,7 +20,7 @@ export function MapControls({
   const [showMenu, setShowMenu] = useState(false)
 
   return (
-    <div className="map-controls-stack absolute top-3 right-3 z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2">
+    <div className="map-controls-stack absolute z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))', right: 'calc(12px + env(safe-area-inset-right, 0px))' }}>
       <Button
         onClick={onRecenter}
         size="icon"

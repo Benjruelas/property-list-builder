@@ -33,6 +33,7 @@
   z-index: 0 !important;
   isolation: isolate;
   transform: translateZ(-1px); /* Force map behind fixed overlays */
+  background: #111 !important; /* Match body so no grey bars on iOS Safari viewport gaps */
 }
 
 @layer base {
@@ -43,6 +44,8 @@
     margin: 0;
     padding: 0;
     height: 100%;
+    min-height: 100vh;
+    min-height: var(--vw-height, 100vh);
     overflow: hidden;
   }
   body {
@@ -51,7 +54,8 @@
     margin: 0;
     padding: 0;
     min-height: 100%;
-    min-height: 100dvh;
+    min-height: 100vh;
+    min-height: var(--vw-height, 100vh);
     height: 100%;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -65,8 +69,22 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    min-height: 100dvh;
+    min-height: 100vh;
+    min-height: var(--vw-height, 100vh);
     z-index: 0;
+  }
+}
+
+/* North indicator - in left column below zoom out. Center-aligned with 48px/40px buttons. */
+/* Mobile: 72+48+8+48+8=184 + safe-area. Desktop: 64+40+8+40+8=160 + safe-area */
+.north-indicator {
+  top: calc(184px + env(safe-area-inset-top, 0px));
+  left: calc(16px + env(safe-area-inset-left, 0px));
+}
+@media (min-width: 640px) {
+  .north-indicator {
+    top: calc(160px + env(safe-area-inset-top, 0px));
+    left: calc(12px + env(safe-area-inset-left, 0px));
   }
 }
 
@@ -117,12 +135,11 @@
 }
 
 
-/* Align zoom controls below search button on the left */
-/* Match spacing exactly: top-3 (12px) + button height (48px mobile/40px desktop) + gap-2 (8px) = 68px mobile / 60px desktop */
-/* This matches the spacing of buttons on the right side (12px top + 48px button + 8px gap = 68px) */
+/* Align zoom controls below search button on the left. Match search safe-area so zoom stays below it. */
+/* 12px + 48px + 12px gap = 72px mobile (extra gap for overlap). Desktop: 12 + 40 + 12 = 64px */
 .leaflet-top.leaflet-left {
-  top: 68px !important; /* 12px (top-3) + 48px (h-12 button) + 8px (gap-2) = 68px */
-  left: 12px !important; /* Match left-3 (12px) from search button container */
+  top: calc(72px + env(safe-area-inset-top, 0px)) !important;
+  left: calc(12px + env(safe-area-inset-left, 0px)) !important;
   right: auto !important;
   bottom: auto !important;
   margin: 0 !important;
@@ -130,7 +147,8 @@
 
 @media (min-width: 640px) {
   .leaflet-top.leaflet-left {
-    top: 60px !important; /* 12px (top-3) + 40px (h-10 button) + 8px (gap-2) = 60px */
+    top: calc(64px + env(safe-area-inset-top, 0px)) !important;
+    left: calc(12px + env(safe-area-inset-left, 0px)) !important;
   }
 }
 
@@ -327,6 +345,20 @@
   background: rgba(0, 0, 0, 0.5) !important;
 }
 
+/* Schedule picker - liquid glass to match app */
+.schedule-picker-panel {
+  pointer-events: auto !important; /* Receives clicks despite modal-root having pointer-events: none */
+  background: rgba(30, 35, 50, 0.95);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 1px 0 0 rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.95);
+}
+
 /* LeadDetails - no fills on any fields or buttons */
 .map-panel.lead-details-panel button,
 .map-panel.lead-details-panel [role="button"],
@@ -352,6 +384,49 @@
 .map-panel .deal-pipeline-settings-btn.deal-pipeline-edit-active {
   background: none !important;
   color: rgba(147, 197, 253, 1) !important;
+}
+
+/* Deal Pipeline panel - no outline/border */
+.deal-pipeline-panel {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Deal Pipeline panel - mobile: fit to screen, safe-area aware */
+@media (max-width: 767px) {
+  .deal-pipeline-panel {
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: var(--vw-height, 100vh) !important;
+    transform: none !important;
+    border-radius: 0 !important;
+    padding-top: env(safe-area-inset-top) !important;
+    padding-right: env(safe-area-inset-right) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    padding-left: env(safe-area-inset-left) !important;
+    box-sizing: border-box !important;
+  }
+  /* Header: minimal padding — panel safe-area already places us at browser chrome line */
+  .deal-pipeline-header {
+    padding-top: 0.75rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  /* Columns: ensure content doesn't sit under home indicator */
+  .deal-pipeline-columns {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  /* Task list: bottom padding for home indicator */
+  .deal-pipeline-tasks .overflow-y-auto {
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
 }
 
 /* Pipeline icon-only buttons - no fill, just icons */
@@ -428,6 +503,37 @@
 .list-panel button:hover:not(:disabled),
 .list-panel [role="button"]:hover:not(:disabled) {
   background: transparent !important;
+}
+
+/* List panel - create new list button and create form buttons get outlines */
+.list-panel button.create-new-list-btn,
+.list-panel .create-list-form button.create-list-btn {
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+.list-panel button.create-new-list-btn:hover:not(:disabled),
+.list-panel .create-list-form button.create-list-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Email templates / composer / bulk preview - no fills on buttons */
+.email-panel button,
+.email-panel [role="button"] {
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+}
+.email-panel button:hover:not(:disabled),
+.email-panel [role="button"]:hover:not(:disabled) {
+  background: none !important;
+}
+.email-panel button.text-red-600,
+.email-panel button.text-red-700 {
+  background: none !important;
+}
+.email-panel button.text-red-600:hover:not(:disabled),
+.email-panel button.text-red-700:hover:not(:disabled) {
+  background: none !important;
 }
 
 /* Destructive/red buttons - keep accent, use glass base */

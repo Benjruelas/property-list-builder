@@ -180,14 +180,15 @@ export function ListPanel({
           )}
           {!showCreateForm ? (
             <Button 
+              variant="outline"
               onClick={() => setShowCreateForm(true)}
-              className="w-full mb-4"
+              className="w-full mb-4 create-new-list-btn"
             >
               <Plus className="h-4 w-4 mr-2" />
               Create New List
             </Button>
           ) : (
-            <div className="mb-4 space-y-3">
+            <div className="mb-4 space-y-3 create-list-form">
               <input
                 type="text"
                 placeholder="List name"
@@ -200,20 +201,21 @@ export function ListPanel({
               />
               <div className="flex gap-2">
                 <Button 
+                  variant="outline"
                   onClick={handleCreateList}
                   disabled={isCreating}
-                  className="flex-1"
+                  className="flex-1 create-list-btn"
                 >
                   {isCreating ? 'Creating...' : 'Create'}
                 </Button>
                 <Button 
+                  variant="outline"
                   onClick={() => {
                     setShowCreateForm(false)
                     setNewListName('')
                   }}
                   disabled={isCreating}
-                  variant="ghost"
-                  className="flex-1"
+                  className="flex-1 create-list-btn"
                 >
                   Cancel
                 </Button>

@@ -3,9 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Map</title>
   </head>
   <body>
+    <script>
+      (function() {
+        var ruler = document.createElement('div');
+        ruler.style.cssText = 'position:fixed;width:1px;height:100vh;top:0;pointer-events:none;visibility:hidden;';
+        document.body.appendChild(ruler);
+        function setViewportHeight() {
+          var h = ruler.offsetHeight || window.innerHeight;
+          document.documentElement.style.setProperty('--vw-height', h + 'px');
+        }
+        setViewportHeight();
+        requestAnimationFrame(setViewportHeight);
+        window.visualViewport?.addEventListener('resize', setViewportHeight);
+        window.visualViewport?.addEventListener('scroll', setViewportHeight);
+        window.addEventListener('resize', setViewportHeight);
+        window.addEventListener('load', setViewportHeight);
+      })();
+    </script>
     <div id="root"></div>
     <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate;"></div>
     <script type="module" src="/src/main.jsx"></script>

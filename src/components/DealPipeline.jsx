@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, Calendar, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
 import { loadColumns, saveColumns, loadLeads, saveLeads, loadTitle, saveTitle, formatTimeInState, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
-import { getAllTasks, addLeadTask, toggleLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, toDatetimeLocal, fromDatetimeLocal } from '@/utils/leadTasks'
+import { getAllTasks, addLeadTask, toggleLeadTask, updateLeadTaskSchedule, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { LeadDetails } from './LeadDetails'
+import { SchedulePicker } from './SchedulePicker'
 
 const MAX_COLUMNS = 10
 
@@ -34,7 +35,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   const [addTaskSuggestionsOpen, setAddTaskSuggestionsOpen] = useState(false)
   const [addTaskHighlightIndex, setAddTaskHighlightIndex] = useState(-1)
   const [addTaskTitle, setAddTaskTitle] = useState('')
-  const [addTaskScheduledAt, setAddTaskScheduledAt] = useState('')
+  const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
   const [addTaskFromLead, setAddTaskFromLead] = useState(false)
   const [tasksCollapsed, setTasksCollapsed] = useState(false)
   const justDraggedRef = useRef(false)
@@ -268,11 +269,11 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); onClose?.() } }}>
       <DialogContent
-        className="map-panel w-[98vw] max-w-[98vw] h-[95vh] max-h-[95vh] p-0 flex flex-col"
+        className="map-panel deal-pipeline-panel w-[98vw] max-w-[98vw] h-[95vh] max-h-[95vh] md:h-[95vh] md:max-h-[95vh] p-0 flex flex-col"
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className="px-4 pt-4 pb-3 border-b flex-shrink-0">
+        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0">
           <DialogDescription className="sr-only">Manage leads in your deal pipeline</DialogDescription>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -303,13 +304,13 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
             </Button>
           </div>
         </DialogHeader>
-        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-4 pt-0 pb-3 min-w-0 min-h-0">
-          <div className="flex flex-col md:flex-row gap-2 h-full min-w-0">
+        <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden deal-pipeline-content">
+          <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-4 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns">
+          <div className="flex flex-col lg:flex-row gap-2 h-full min-w-0">
             {columns.map((col) => (
               <div
                 key={col.id}
-                className="flex-none md:flex-1 min-w-0 md:min-w-[90px] rounded-lg border-2 border-gray-200 bg-gray-50/50 dark:bg-white/5 flex flex-col min-h-[100px] md:min-h-[200px]"
+                className="flex-none lg:flex-1 min-w-0 lg:min-w-[90px] rounded-lg border-2 border-gray-200 bg-gray-50/50 dark:bg-white/5 flex flex-col min-h-[100px] lg:min-h-[200px]"
               >
                 <div className="px-2 py-2 border-b flex items-center gap-1 flex-shrink-0">
                   {editingColumnId === col.id ? (
@@ -390,7 +391,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
               </div>
             ))}
             {isEditMode && columns.length < MAX_COLUMNS && (
-              <div className="flex-shrink-0 w-full md:w-[70px] min-h-[70px] md:min-h-0 flex items-center">
+              <div className="flex-shrink-0 w-full lg:w-[70px] min-h-[70px] lg:min-h-0 flex items-center">
                 {showAddColumn ? (
                   <div className="h-full rounded-lg border-2 border-dashed border-gray-300 p-2 flex flex-col gap-2">
                     <Input
@@ -421,8 +422,8 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
           </div>
 
           {/* Task List - all tasks across leads, collapsible (collapses to right edge on desktop, expands pipeline) */}
-          <div className={`w-full md:flex-shrink-0 border-t md:border-t-0 md:border-l flex flex-col border-white/20 transition-[width] duration-200 ${tasksCollapsed ? 'md:w-12' : 'md:w-80'}`}>
-            <div className={`px-3 py-2 border-b flex items-center gap-2 flex-shrink-0 ${tasksCollapsed ? 'md:flex-col md:px-2 md:py-3 md:justify-center md:gap-1' : 'justify-between'}`}>
+          <div className={`w-full md:flex-shrink-0 border-t md:border-t-0 md:border-l flex flex-col border-white/20 transition-[width] duration-200 deal-pipeline-tasks ${tasksCollapsed ? 'md:w-12' : 'md:w-80'}`}>
+            <div className={`deal-pipeline-tasks-header px-3 py-2 border-b flex items-center gap-2 flex-shrink-0 ${tasksCollapsed ? 'md:flex-col md:px-2 md:py-3 md:justify-center md:gap-1' : 'justify-between'}`}>
               <button
                 type="button"
                 className="flex items-center gap-2 min-w-0 flex-1 md:flex-none pipeline-icon-btn"
@@ -492,12 +493,31 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                       <div className="flex-1 min-w-0">
                         <div className={task.completed ? 'line-through text-gray-500' : 'font-medium'}>{task.title || '(untitled)'}</div>
                         <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={getLeadLabel(task.parcelId)}>Lead: {getLeadLabel(task.parcelId)}</div>
-                        <div className="text-[10px] text-gray-500">
-                          {task.completed
-                            ? `Completed ${formatTaskCompletedDate(task.completedAt)}`
-                            : task.scheduledAt
-                              ? formatTaskScheduledDate(task.scheduledAt)
-                              : `Created ${formatTaskTimeAgo(task.createdAt)}`}
+                        <div className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                          <span className="flex-1 min-w-0">
+                            {task.completed
+                              ? `Completed ${formatTaskCompletedDate(task.completedAt)}`
+                              : task.scheduledAt
+                                ? formatTaskScheduledDate(task.scheduledAt)
+                                : `Created ${formatTaskTimeAgo(task.createdAt)}`}
+                          </span>
+                          {!task.completed && (
+                            <SchedulePicker
+                              value={task.scheduledAt}
+                              onChange={(ts) => {
+                                updateLeadTaskSchedule(task.parcelId, task.id, ts)
+                                refreshAllTasks()
+                                scheduleSync()
+                              }}
+                              minDate={Date.now()}
+                              triggerClassName="flex-shrink-0 text-white/70 hover:text-white p-0.5"
+                              title="Schedule or reschedule"
+                              size="sm"
+                              taskTitle={task.title || '(untitled)'}
+                              leadName={displayLeads.find((l) => l.parcelId === task.parcelId)?.owner}
+                              leadAddress={getFullAddress(displayLeads.find((l) => l.parcelId === task.parcelId)) || undefined}
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -549,9 +569,9 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
           if (lead) {
             setAddTaskLeadId(lead.parcelId)
             setAddTaskLeadSearch(getLeadLabel(lead.parcelId))
-            setAddTaskTitle('')
-            setAddTaskScheduledAt('')
-            setAddTaskFromLead(true)
+setAddTaskTitle('')
+                  setAddTaskScheduledAt(null)
+                  setAddTaskFromLead(true)
             setShowAddTaskDialog(true)
           }
         }}
@@ -651,8 +671,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                   if (e.key === 'Enter') {
                     const t = addTaskTitle.trim()
                     if (t && addTaskLeadId) {
-                      const scheduledAt = fromDatetimeLocal(addTaskScheduledAt)
-                      addLeadTask(addTaskLeadId, t, scheduledAt)
+                      addLeadTask(addTaskLeadId, t, addTaskScheduledAt)
                       refreshAllTasks()
                       scheduleSync()
                       showToast('Task added', 'success')
@@ -665,16 +684,15 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="cursor-pointer" htmlFor="add-task-schedule">
-                <Calendar className="h-4 w-4 text-white opacity-90 hover:opacity-100" />
-              </label>
-              <input
-                id="add-task-schedule"
-                type="datetime-local"
+              <SchedulePicker
                 value={addTaskScheduledAt}
-                onChange={(e) => setAddTaskScheduledAt(e.target.value)}
-                min={toDatetimeLocal(Date.now())}
-                className="sr-only absolute w-0 h-0 opacity-0"
+                onChange={setAddTaskScheduledAt}
+                minDate={Date.now()}
+                triggerClassName="cursor-pointer p-0 bg-transparent border-none text-white opacity-90 hover:opacity-100"
+                title="Schedule task"
+                taskTitle={addTaskTitle.trim() || undefined}
+                leadName={displayLeads.find((l) => l.parcelId === addTaskLeadId)?.owner}
+                leadAddress={getFullAddress(displayLeads.find((l) => l.parcelId === addTaskLeadId)) || undefined}
               />
             </div>
             <div className="flex gap-2 pt-1">
@@ -683,8 +701,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                 onClick={() => {
                   const t = addTaskTitle.trim()
                   if (t && addTaskLeadId) {
-                    const scheduledAt = fromDatetimeLocal(addTaskScheduledAt)
-                    addLeadTask(addTaskLeadId, t, scheduledAt)
+                    addLeadTask(addTaskLeadId, t, addTaskScheduledAt)
                     refreshAllTasks()
                     scheduleSync()
                     showToast('Task added', 'success')

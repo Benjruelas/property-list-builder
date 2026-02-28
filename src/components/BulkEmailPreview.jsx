@@ -131,7 +131,7 @@ export function BulkEmailPreview({
         onClose()
       }
     }}>
-      <DialogContent className="map-panel max-w-3xl max-h-[90vh] p-0" showCloseButton={false}>
+      <DialogContent className="map-panel email-panel max-w-3xl max-h-[90vh] p-0" showCloseButton={false}>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
@@ -171,7 +171,7 @@ export function BulkEmailPreview({
           {!isEditing && !isSending && (
             <div className="flex justify-end">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => setIsEditing(true)}
               >
@@ -196,7 +196,7 @@ export function BulkEmailPreview({
                         <Button
                           key={tag}
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onMouseDown={(e) => {
                             e.preventDefault()
@@ -239,7 +239,7 @@ export function BulkEmailPreview({
                         <Button
                           key={tag}
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onMouseDown={(e) => {
                             e.preventDefault()
@@ -273,18 +273,19 @@ export function BulkEmailPreview({
 
               <div className="flex gap-2">
                 <Button
+                  variant="ghost"
                   onClick={handleSaveTemplate}
                   className="flex-1"
                 >
                   Save Changes
                 </Button>
                 <Button
+                  variant="ghost"
                   onClick={() => {
                     setIsEditing(false)
                     setSubject(template.subject || '')
                     setBody(template.body || '')
                   }}
-                  variant="outline"
                   className="flex-1"
                 >
                   Cancel
@@ -332,12 +333,13 @@ export function BulkEmailPreview({
         {!isSending && (
           <div className="px-6 py-4 border-t flex justify-end gap-2">
             <Button
+              variant="ghost"
               onClick={onCancel || onClose}
-              variant="outline"
             >
               Cancel
             </Button>
             <Button
+              variant="ghost"
               onClick={handleConfirm}
               className="flex items-center gap-2"
             >
