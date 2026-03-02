@@ -66,7 +66,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
         onClose()
       }
     }}>
-      <DialogContent className="map-panel max-w-md" showCloseButton={false}>
+      <DialogContent className="map-panel login-panel max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold flex items-center gap-2">
             <LogIn className="h-6 w-6" />
@@ -106,7 +106,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
                 <button
                   type="button"
                   onClick={onSwitchToForgotPassword}
-                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                  className="login-link-btn text-sm text-blue-600 hover:text-blue-800 hover:underline"
                 >
                   Forgot password?
                 </button>
@@ -153,10 +153,11 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
           <div className="flex-1 border-t border-gray-300" />
         </div>
 
+        <div className="login-google-btn-wrapper rounded-md border-2 border-white/90 p-0">
         <Button
           type="button"
           variant="ghost"
-          className="w-full border border-white hover:bg-white/20"
+          className="login-google-btn w-full border-0"
           onClick={handleGoogleSignIn}
           disabled={isLoading}
         >
@@ -180,6 +181,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
           </svg>
           Sign in with Google
         </Button>
+        </div>
 
         {onSwitchToSignUp && (
           <div className="text-center text-sm text-gray-600 mt-4">
@@ -187,7 +189,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
             <button
               type="button"
               onClick={onSwitchToSignUp}
-              className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+              className="login-link-btn text-blue-600 hover:text-blue-800 hover:underline font-medium"
             >
               Sign up
             </button>

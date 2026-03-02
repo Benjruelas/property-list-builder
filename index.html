@@ -6,6 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#111" />
     <title>Map</title>
   </head>
   <body>
@@ -20,8 +21,8 @@
         }
         setViewportHeight();
         requestAnimationFrame(setViewportHeight);
-        window.visualViewport?.addEventListener('resize', setViewportHeight);
-        window.visualViewport?.addEventListener('scroll', setViewportHeight);
+        window.visualViewport && window.visualViewport.addEventListener('resize', setViewportHeight);
+        window.visualViewport && window.visualViewport.addEventListener('scroll', setViewportHeight);
         window.addEventListener('resize', setViewportHeight);
         window.addEventListener('load', setViewportHeight);
       })();

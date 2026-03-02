@@ -1,28 +1,36 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
-
-const MINUTE_OPTIONS = [0, 15, 30, 45]
-
-function roundToNearestMinute(m) {
-  const opts = MINUTE_OPTIONS
-  return opts.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev)
-}
 import { createPortal } from 'react-dom'
 
+const MINUTE_OPTIONS = [0, 15, 30, 45]
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function roundToNearestMinute(m) {
+  return MINUTE_OPTIONS.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev)
+}
 
 function getDaysInMonth(year, month) {
   const first = new Date(year, month, 1)
   const last = new Date(year, month + 1, 0)
   const days = []
-  // Pad start to align first day
   const startPad = first.getDay()
   for (let i = 0; i < startPad; i++) days.push(null)
   for (let d = 1; d <= last.getDate(); d++) days.push(new Date(year, month, d))
   return days
 }
 
-export function SchedulePicker({ value, onChange, minDate = Date.now(), triggerClassName, title = 'Schedule', size = 'default', taskTitle, leadAddress, leadName }) {
+function formatScheduleRange(startTs, endTs) {
+  if (!startTs || !endTs) return ''
+  const start = new Date(startTs)
+  const end = new Date(endTs)
+  const sameDay = start.toDateString() === end.toDateString()
+  const dateStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  const startTime = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const endTime = end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return sameDay ? `${dateStr} • ${startTime} – ${endTime}` : `${dateStr} ${startTime} – ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${endTime}`
+}
+
+export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue = null, onEndChange, triggerClassName, title = 'Schedule', size = 'default', taskTitle, leadAddress, leadName, inline = false }) {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState(null)
   const [hourDropdownOpen, setHourDropdownOpen] = useState(false)
@@ -33,27 +41,43 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), triggerC
   const [viewMonth, setViewMonth] = useState(base.getMonth())
   const [selectedDate, setSelectedDate] = useState(value ? new Date(value) : null)
   const [hour12, setHour12] = useState(() => {
-    const h24 = value ? new Date(value).getHours() : 12
+    const h24 = value ? new Date(value).getHours() : 9
     return h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
   })
   const [minute, setMinute] = useState(() => roundToNearestMinute(value ? new Date(value).getMinutes() : 0))
-  const [isPM, setIsPM] = useState(() => (value ? new Date(value).getHours() : 12) >= 12)
+  const [isPM, setIsPM] = useState(() => (value ? new Date(value).getHours() : 9) >= 12)
+  const [hour12End, setHour12End] = useState(() => {
+    if (!endValue) return 10
+    const h24 = new Date(endValue).getHours()
+    return h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
+  })
+  const [minuteEnd, setMinuteEnd] = useState(() => roundToNearestMinute(endValue ? new Date(endValue).getMinutes() : 0))
+  const [isPMEnd, setIsPMEnd] = useState(() => (endValue ? new Date(endValue).getHours() : 10) >= 12)
+  const [expanded, setExpanded] = useState(true)
 
   const minD = new Date(minDate)
+  const ONE_HOUR_MS = 60 * 60 * 1000
 
-  // Sync state when opening with value
+  // Sync state when opening with value (popup) or when value changes (inline)
+  // Default: 9:00 AM for start, 10:00 AM for end when no value
   useEffect(() => {
-    if (open) {
+    if (open || inline) {
       const b = value ? new Date(value) : new Date(Math.max(minDate, Date.now()))
-      const h24 = value ? new Date(value).getHours() : 12
+      const h24 = value ? new Date(value).getHours() : 9
       setViewYear(b.getFullYear())
       setViewMonth(b.getMonth())
       setSelectedDate(value ? new Date(value) : null)
       setHour12(h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24)
       setMinute(roundToNearestMinute(value ? new Date(value).getMinutes() : 0))
       setIsPM(h24 >= 12)
+      if (inline && onEndChange) {
+        const endH24 = endValue ? new Date(endValue).getHours() : (value ? new Date(value).getHours() : 9) + 1
+        setHour12End(endH24 === 0 ? 12 : endH24 > 12 ? endH24 - 12 : endH24)
+        setMinuteEnd(roundToNearestMinute(endValue ? new Date(endValue).getMinutes() : 0))
+        setIsPMEnd((endValue ? new Date(endValue).getHours() : (value ? new Date(value).getHours() : 9) + 1) >= 12)
+      }
     }
-  }, [open, value, minDate])
+  }, [open, value, endValue, minDate, inline, onEndChange])
 
   useEffect(() => {
     if (!open) {
@@ -62,12 +86,48 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), triggerC
     }
   }, [open])
 
+  const buildTs = useCallback((d, h12, m, pm) => {
+    const date = d || new Date()
+    let h24 = h12
+    if (pm && h12 !== 12) h24 = h12 + 12
+    else if (!pm && h12 === 12) h24 = 0
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h24, m).getTime()
+  }, [])
+
   const handleDayClick = (d) => {
     if (!d) return
     const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())
     if (isPast) return
     setSelectedDate(d)
+    if (inline) {
+      const ts = buildTs(d, hour12, minute, isPM)
+      if (ts >= minDate) {
+        onChange(ts)
+        if (onEndChange) {
+          const endTs = endValue && endValue > ts ? endValue : ts + ONE_HOUR_MS
+          onEndChange(endTs)
+        }
+      }
+    }
   }
+
+  const commitTimeChange = useCallback((h12Val, minuteVal, isPMVal) => {
+    const d = selectedDate || new Date(Math.max(minDate, Date.now()))
+    const ts = buildTs(d, h12Val, minuteVal, isPMVal)
+    if (ts >= minDate) {
+      onChange(ts)
+      if (inline && onEndChange) {
+        const endTs = endValue && endValue > ts ? endValue : ts + ONE_HOUR_MS
+        if (endValue !== endTs) onEndChange(endTs)
+      }
+    }
+  }, [selectedDate, minDate, buildTs, onChange, inline, onEndChange, endValue])
+
+  const commitEndTimeChange = useCallback((h12Val, minuteVal, isPMVal) => {
+    const d = selectedDate || new Date(Math.max(minDate, Date.now()))
+    const ts = buildTs(d, h12Val, minuteVal, isPMVal)
+    if (value && ts > value) onEndChange?.(ts)
+  }, [selectedDate, value, minDate, buildTs, onEndChange])
 
   const handleApply = () => {
     const d = selectedDate || new Date()
@@ -83,13 +143,19 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), triggerC
 
   const handleClear = () => {
     onChange(null)
+    onEndChange?.(null)
     setSelectedDate(null)
-    setOpen(false)
+    if (inline) setExpanded(true)
+    else setOpen(false)
   }
 
   const days = getDaysInMonth(viewYear, viewMonth)
-
   const hasContext = taskTitle || leadAddress || leadName
+  const isComplete = inline && value && (onEndChange ? endValue : true)
+
+  const handleSet = () => {
+    if (isComplete) setExpanded(false)
+  }
 
   const panel = open && anchor && (
     <div
@@ -259,6 +325,202 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), triggerC
       </div>
     </div>
   )
+
+  if (inline) {
+    const summary = onEndChange && value && endValue
+      ? formatScheduleRange(value, endValue)
+      : value
+        ? new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : 'Select date and time'
+    if (isComplete && !expanded) {
+      return (
+        <div className="rounded-lg border border-white/20 p-3 bg-white/5">
+          <label className="text-xs font-medium block opacity-90 mb-1">Date & time</label>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="flex items-center justify-between w-full text-left text-sm py-1.5 px-2 -mx-2 -mb-1 rounded hover:bg-white/10"
+          >
+            <span className="text-white/95 truncate">{summary}</span>
+            <ChevronDown className="h-4 w-4 text-white/70 flex-shrink-0 ml-2" />
+          </button>
+        </div>
+      )
+    }
+    return (
+      <div className="space-y-3 rounded-lg border border-white/20 p-3 bg-white/5">
+        <label className="text-xs font-medium block opacity-90">Date & time</label>
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10"
+            onClick={() => {
+              if (viewMonth === 0) {
+                setViewMonth(11)
+                setViewYear((y) => y - 1)
+              } else setViewMonth((m) => m - 1)
+            }}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium">
+            {new Date(viewYear, viewMonth).toLocaleString('default', { month: 'short' })} {viewYear}
+          </span>
+          <button
+            type="button"
+            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10"
+            onClick={() => {
+              if (viewMonth === 11) {
+                setViewMonth(0)
+                setViewYear((y) => y + 1)
+              } else setViewMonth((m) => m + 1)
+            }}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="calendar-days-grid grid grid-cols-7 text-[10px] border border-white/25 rounded overflow-hidden">
+          {DAYS.map((d) => (
+            <div key={d} className="text-center text-white/60 py-1 px-0.5 border-b border-r border-white/20 bg-white/5">{d}</div>
+          ))}
+          {days.map((d, i) => {
+            if (!d) return <div key={`pad-${i}`} className="min-h-[28px] border-b border-r border-white/20 bg-white/5" />
+            const isSelected = selectedDate && d.toDateString() === selectedDate.toDateString()
+            const isToday = d.toDateString() === new Date().toDateString()
+            const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())
+            return (
+              <button
+                key={d.toISOString()}
+                type="button"
+                disabled={isPast}
+                onClick={() => handleDayClick(d)}
+                className={`calendar-day-btn py-1.5 text-xs transition-colors min-h-[28px] border-b border-r border-white/20 ${
+                  isPast ? 'text-white/30 cursor-not-allowed bg-white/5' :
+                  isSelected ? 'bg-white/25 text-white font-semibold ring-2 ring-white/50 ring-inset' :
+                  isToday ? 'bg-white/15 text-white' : 'text-white/90 hover:bg-white/10 bg-transparent'
+                }`}
+              >
+                {d.getDate()}
+              </button>
+            )
+          })}
+        </div>
+        <div className="space-y-3 pt-3 border-t border-white/20">
+          <div className="grid grid-cols-[2.5rem_1fr_auto_1fr_auto] gap-x-2 gap-y-3 items-center">
+            <span className="text-xs text-white/70">From</span>
+            <select
+              value={hour12}
+              onChange={(e) => {
+                const h = parseInt(e.target.value, 10)
+                setHour12(h)
+                commitTimeChange(h, minute, isPM)
+              }}
+              className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
+                <option key={h} value={h} className="bg-gray-900 text-white">{h}</option>
+              ))}
+            </select>
+            <span className="text-white/60">:</span>
+            <select
+              value={minute}
+              onChange={(e) => {
+                const m = parseInt(e.target.value, 10)
+                setMinute(m)
+                commitTimeChange(hour12, m, isPM)
+              }}
+              className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
+            >
+              {MINUTE_OPTIONS.map((m) => (
+                <option key={m} value={m} className="bg-gray-900 text-white">{String(m).padStart(2, '0')}</option>
+              ))}
+            </select>
+            <div className="flex rounded overflow-hidden border border-white/20">
+              <button
+                type="button"
+                onClick={() => { setIsPM(false); commitTimeChange(hour12, minute, false) }}
+                className={`px-2 py-1 text-xs font-medium transition-colors ${!isPM ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+              >
+                AM
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsPM(true); commitTimeChange(hour12, minute, true) }}
+                className={`px-2 py-1 text-xs font-medium transition-colors ${isPM ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+              >
+                PM
+              </button>
+            </div>
+            {onEndChange && (
+              <>
+                <span className="text-xs text-white/70">To</span>
+                <select
+                  value={hour12End}
+                  onChange={(e) => {
+                    const h = parseInt(e.target.value, 10)
+                    setHour12End(h)
+                    commitEndTimeChange(h, minuteEnd, isPMEnd)
+                  }}
+                  className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
+                    <option key={h} value={h} className="bg-gray-900 text-white">{h}</option>
+                  ))}
+                </select>
+                <span className="text-white/60">:</span>
+                <select
+                  value={minuteEnd}
+                  onChange={(e) => {
+                    const m = parseInt(e.target.value, 10)
+                    setMinuteEnd(m)
+                    commitEndTimeChange(hour12End, m, isPMEnd)
+                  }}
+                  className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
+                >
+                  {MINUTE_OPTIONS.map((m) => (
+                    <option key={m} value={m} className="bg-gray-900 text-white">{String(m).padStart(2, '0')}</option>
+                  ))}
+                </select>
+                <div className="flex rounded overflow-hidden border border-white/20">
+                  <button
+                    type="button"
+                    onClick={() => { setIsPMEnd(false); commitEndTimeChange(hour12End, minuteEnd, false) }}
+                    className={`px-2 py-1 text-xs font-medium transition-colors ${!isPMEnd ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+                  >
+                    AM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsPMEnd(true); commitEndTimeChange(hour12End, minuteEnd, true) }}
+                    className={`px-2 py-1 text-xs font-medium transition-colors ${isPMEnd ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+                  >
+                    PM
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={handleClear}
+              className="py-1 px-2 text-xs text-white/80 hover:text-white"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={handleSet}
+              disabled={!isComplete}
+              className="py-1.5 px-3 text-xs font-medium rounded bg-white/20 hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed text-white"
+            >
+              Set
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

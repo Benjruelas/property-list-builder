@@ -1,6 +1,17 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
+  safelist: [
+    '!bg-red-800',
+    '!text-red-100',
+    'hover:!bg-red-900',
+    'bg-neutral-900',
+    'text-white',
+    'text-white/85',
+    'text-white/90',
+    'text-white/75',
+    'border-white/30'
+  ],
   content: [
     './pages/**/*.{js,jsx}',
     './components/**/*.{js,jsx}',

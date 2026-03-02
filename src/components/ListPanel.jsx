@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, RefreshCw, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2 } from 'lucide-react'
+import { X, RefreshCw, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2, Users } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -16,6 +16,7 @@ const LIST_HIGHLIGHT_COLORS = [
 const MAX_HIGHLIGHTED_LISTS = 20
 
 export function ListPanel({ 
+  currentUser,
   isOpen, 
   onClose, 
   selectedListIds = [],
@@ -26,6 +27,7 @@ export function ListPanel({
   onListsChange,
   onDeleteList,
   onShareList,
+  onValidateShareEmail,
   onCreateList,
   onViewListContents,
   onBulkSkipTrace,
@@ -41,6 +43,10 @@ export function ListPanel({
   const [dropdownAnchor, setDropdownAnchor] = useState(null) // { bottom, right } for portal positioning
   const [shareListId, setShareListId] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
+  const [shareEmailValid, setShareEmailValid] = useState(null)
+  const [shareEmailError, setShareEmailError] = useState('')
+  const [isValidatingShare, setIsValidatingShare] = useState(false)
+  const validateTimeoutRef = useRef(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -48,8 +54,65 @@ export function ListPanel({
       setDropdownAnchor(null)
       setShareListId(null)
       setShareEmail('')
+      setShareEmailValid(null)
+      setShareEmailError('')
+      setIsValidatingShare(false)
+      if (validateTimeoutRef.current) {
+        clearTimeout(validateTimeoutRef.current)
+        validateTimeoutRef.current = null
+      }
     }
   }, [isOpen])
+
+  const runValidation = useCallback(async (email) => {
+    const trimmed = (email || '').trim().toLowerCase()
+    if (!trimmed) {
+      setShareEmailValid(null)
+      setShareEmailError('')
+      return
+    }
+    if (!onValidateShareEmail) {
+      setShareEmailValid(true)
+      setShareEmailError('')
+      return
+    }
+    setIsValidatingShare(true)
+    setShareEmailError('')
+    try {
+      const { valid } = await onValidateShareEmail(trimmed)
+      setShareEmailValid(valid)
+      setShareEmailError(valid ? '' : 'No user found with this email')
+    } catch {
+      setShareEmailValid(false)
+      setShareEmailError('Could not validate email')
+    } finally {
+      setIsValidatingShare(false)
+    }
+  }, [onValidateShareEmail])
+
+  useEffect(() => {
+    if (!shareListId) return
+    const trimmed = (shareEmail || '').trim().toLowerCase()
+    if (!trimmed) {
+      setShareEmailValid(null)
+      setShareEmailError('')
+      if (validateTimeoutRef.current) {
+        clearTimeout(validateTimeoutRef.current)
+        validateTimeoutRef.current = null
+      }
+      return
+    }
+    if (validateTimeoutRef.current) clearTimeout(validateTimeoutRef.current)
+    validateTimeoutRef.current = setTimeout(() => {
+      validateTimeoutRef.current = null
+      runValidation(shareEmail)
+    }, 400)
+    return () => {
+      if (validateTimeoutRef.current) {
+        clearTimeout(validateTimeoutRef.current)
+      }
+    }
+  }, [shareListId, shareEmail, runValidation])
 
   const MENU_WIDTH = 180
   const MENU_PADDING = 8
@@ -94,31 +157,49 @@ export function ListPanel({
     }
   }
 
-  const handleDeleteListClick = (listId) => {
-    if (onDeleteList) onDeleteList(listId)
+  const handleDeleteListClick = (list) => {
+    if (onDeleteList) onDeleteList(list)
   }
 
   const handleShareSave = () => {
     if (!shareListId || !onShareList) return
-    const email = shareEmail.trim()
+    const email = shareEmail.trim().toLowerCase()
     if (!email) {
       showToast('Please enter an email', 'error')
       return
     }
-    onShareList(shareListId, [email])
-    setShareListId(null)
+    if (shareEmailValid === false) {
+      showToast('No user found with this email', 'error')
+      return
+    }
+    if (shareEmailValid !== true && onValidateShareEmail) {
+      showToast('Please wait for email validation', 'error')
+      return
+    }
+    const list = allLists.find((l) => l.id === shareListId)
+    const current = list?.sharedWith || []
+    if (current.some((e) => (e || '').toLowerCase() === email)) {
+      showToast('This email is already in the share list', 'error')
+      return
+    }
+    onShareList(shareListId, [...current, email])
     setShareEmail('')
+    setShareEmailValid(null)
+    setShareEmailError('')
+    showToast('Email added to share list', 'success')
   }
 
-  const handleUnshareList = () => {
+  const handleRemoveSharedEmail = (emailToRemove) => {
     if (!shareListId || !onShareList) return
-    onShareList(shareListId, [])
-    setShareListId(null)
-    setShareEmail('')
+    const list = allLists.find((l) => l.id === shareListId)
+    const current = list?.sharedWith || []
+    const updated = current.filter((e) => (e || '').toLowerCase() !== (emailToRemove || '').toLowerCase())
+    onShareList(shareListId, updated)
   }
 
   const allLists = lists || []
-  
+  const isListOwnedByUser = (list) => list?.ownerId === currentUser?.uid
+
   const handleToggleHighlight = (listId) => {
     if (!onToggleListHighlight) return
     if (selectedListIds.includes(listId)) {
@@ -145,11 +226,20 @@ export function ListPanel({
           if (e.target.closest?.('[data-list-panel-dropdown]')) e.preventDefault()
         }}
       >
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20">
           <DialogDescription className="sr-only">Manage your property lists, add parcels, and share lists</DialogDescription>
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold">Property Lists</DialogTitle>
+            <DialogTitle className="text-xl font-semibold">Lists</DialogTitle>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowCreateForm(true)}
+                className="create-new-list-btn"
+                title="Create new list"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -164,30 +254,21 @@ export function ListPanel({
 
         <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-200px)]">
           {isAddingSingleParcel && (
-            <div className="mb-4 p-3 bg-blue-50 text-blue-900 rounded-lg text-sm font-medium text-center">
+            <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={{ color: 'white', borderColor: '#2563eb' }}>
               Select a list to add this parcel to
             </div>
           )}
           {!isAddingSingleParcel && selectedParcelsCount > 0 && (
-            <div className="mb-4 p-3 bg-blue-50 text-blue-900 rounded-lg text-sm font-medium text-center">
+            <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={{ color: 'white', borderColor: '#2563eb' }}>
               {selectedParcelsCount} parcel{selectedParcelsCount !== 1 ? 's' : ''} selected
             </div>
           )}
           {!isAddingSingleParcel && selectedParcelsCount === 0 && isBulkEmailMode && (
-            <div className="mb-4 p-3 bg-green-50 text-green-900 rounded-lg text-sm font-medium text-center">
+            <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={{ color: 'white', borderColor: '#16a34a' }}>
               Select a list to send emails to
             </div>
           )}
-          {!showCreateForm ? (
-            <Button 
-              variant="outline"
-              onClick={() => setShowCreateForm(true)}
-              className="w-full mb-4 create-new-list-btn"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create New List
-            </Button>
-          ) : (
+          {showCreateForm && (
             <div className="mb-4 space-y-3 create-list-form">
               <input
                 type="text"
@@ -223,6 +304,7 @@ export function ListPanel({
             </div>
           )}
 
+          {!showCreateForm && (
           <div className="space-y-4">
             {allLists.length === 0 ? (
               <p className="text-center text-gray-500 py-8 text-sm">No lists yet. Create one to get started!</p>
@@ -281,9 +363,25 @@ export function ListPanel({
                             <span className="font-medium text-sm truncate">
                               {list.name}
                             </span>
+                            {!isListOwnedByUser(list) && (
+                              <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
+                            )}
                           </div>
                           <span className="text-xs text-gray-500">{list.parcels?.length ?? 0} parcels</span>
                         </div>
+                        {selectedParcelsCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onAddParcelsToList(list.id)
+                            }}
+                            className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full hover:opacity-90 hover:bg-[#2563eb]/20 transition-colors"
+                            title="Add selected parcels to this list"
+                          >
+                            <Plus className="h-5 w-5" strokeWidth={2.5} color="#2563eb" />
+                          </button>
+                        )}
                         <div className="relative ml-2 flex items-center gap-1">
                           {!isAddingSingleParcel && (
                             <>
@@ -323,13 +421,14 @@ export function ListPanel({
                   </div>
                 )}
               </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
 
     {shareListId && (
       <Dialog open={!!shareListId} onOpenChange={(open) => { if (!open) { setShareListId(null); setShareEmail('') } }}>
-        <DialogContent className="map-panel list-panel max-w-sm" focusOverlay>
+        <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay>
           <DialogHeader>
             <DialogTitle>Share list</DialogTitle>
             <DialogDescription className="sr-only">Enter an email address to share this list</DialogDescription>
@@ -341,27 +440,57 @@ export function ListPanel({
             return (
               <>
                 {isShared && (
-                  <p className="text-sm text-gray-600 mb-2">
-                    Currently shared with: {currentShared.join(', ')}
-                  </p>
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
+                    <ul className="space-y-1.5">
+                      {currentShared.map((email) => (
+                        <li
+                          key={email}
+                          className="group flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-md bg-black/10 hover:bg-black/15 transition-colors"
+                        >
+                          <span className="text-sm text-gray-200 truncate">{email}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSharedEmail(email)}
+                            className="opacity-40 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-red-500/30 text-gray-400 hover:text-red-400 transition-opacity"
+                            title="Remove from share list"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
                 <Input
                   type="email"
-                  placeholder="Email to share with"
+                  placeholder="user@example.com"
                   value={shareEmail}
                   onChange={(e) => setShareEmail(e.target.value)}
-                  className="mb-4"
-                />
-                <div className="flex gap-2 flex-wrap">
-                  <Button onClick={handleShareSave} className="flex-1 min-w-0">
-                    {isShared ? 'Update' : 'Save'}
-                  </Button>
-                  {isShared && (
-                    <Button variant="outline" onClick={handleUnshareList} className="text-red-600 hover:text-red-700">
-                      Unshare
-                    </Button>
+                  className={cn(
+                    'mb-1',
+                    shareEmailValid === true && 'border-green-600 ring-green-500/50',
+                    shareEmailValid === false && shareEmail.trim() && 'border-red-500'
                   )}
-                  <Button variant="outline" onClick={() => { setShareListId(null); setShareEmail('') }}>Cancel</Button>
+                />
+                {shareEmailError && (
+                  <p className="text-sm text-red-500 mb-3">{shareEmailError}</p>
+                )}
+                {!shareEmailError && shareEmail.trim() && isValidatingShare && (
+                  <p className="text-sm text-gray-500 mb-3">Checking...</p>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    onClick={handleShareSave}
+                    disabled={!!(shareEmail.trim() && shareEmailValid === false)}
+                    className={cn(
+                      'flex-1 min-w-0 share-dialog-btn',
+                      shareEmailValid === true && 'share-save-valid'
+                    )}
+                  >
+                    {isValidatingShare ? 'Checking...' : 'Share'}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setShareListId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Cancel</Button>
                 </div>
               </>
             )
@@ -378,17 +507,11 @@ export function ListPanel({
           <div data-list-panel-dropdown className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10000 }}>
             <div className="fixed inset-0 z-[10001]" onClick={closeDropdown} aria-hidden />
             <div
-              className="map-panel list-panel fixed z-[10002] rounded-xl min-w-[180px] py-1"
+              className="map-panel list-panel fixed z-[10002] rounded-xl min-w-[180px] pt-1 overflow-hidden"
               style={{ top: dropdownAnchor.top, left: dropdownAnchor.left }}
               role="menu"
               onClick={(e) => e.stopPropagation()}
             >
-              {selectedParcelsCount > 0 && (
-                <button type="button" onClick={() => { closeDropdown(); onAddParcelsToList(list.id) }} className="w-full px-3 py-2 text-left text-sm text-green-700 flex items-center gap-2 transition-colors">
-                  <Plus className="h-4 w-4 flex-shrink-0" />
-                  Add selected parcels
-                </button>
-              )}
               {onBulkEmail && list.parcels?.length > 0 && (
                 <button type="button" onClick={() => { closeDropdown(); onBulkEmail(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
                   <Mail className="h-4 w-4 flex-shrink-0" />
@@ -407,16 +530,24 @@ export function ListPanel({
                   Export list
                 </button>
               )}
-              {onShareList && (
-                <button type="button" onClick={() => { closeDropdown(); setShareListId(list.id); setShareEmail((list.sharedWith || [])[0] || '') }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
+              {onShareList && isListOwnedByUser(list) && (
+                <button type="button" onClick={() => { closeDropdown(); setShareListId(list.id); setShareEmail('') }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
                   <Share2 className="h-4 w-4 flex-shrink-0" />
                   Share list
                 </button>
               )}
-              <button type="button" onClick={() => { closeDropdown(); handleDeleteListClick(list.id) }} className="w-full px-3 py-2 text-left text-sm text-red-600 flex items-center gap-2 transition-colors">
-                <Trash2 className="h-4 w-4 flex-shrink-0" />
-                Delete list
-              </button>
+              {isListOwnedByUser(list) && (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => { closeDropdown(); handleDeleteListClick(list) }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleDeleteListClick(list)}
+                  className="list-panel-delete-btn w-full px-3 py-2 pb-2 rounded-b-xl text-left text-sm flex items-center gap-2 transition-colors text-red-400 hover:bg-red-600/80 cursor-pointer"
+                >
+                  <Trash2 className="h-4 w-4 flex-shrink-0" />
+                  Delete list
+                </div>
+              )}
             </div>
           </div>
         )

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, User, LogOut, Menu, Compass, LayoutList } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Calendar } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 export function MapControls({ 
@@ -12,7 +12,9 @@ export function MapControls({
   selectedListIds = [], 
   onOpenSkipTracedListPanel, 
   onOpenEmailTemplates,
+  onOpenTextTemplates,
   onOpenDealPipeline,
+  onOpenSchedule,
   currentUser,
   onLogin,
   onLogout
@@ -125,6 +127,18 @@ export function MapControls({
                 <span>Email Templates</span>
               </button>
 
+              {/* Text Message Templates Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenTextTemplates?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                <span>Text Templates</span>
+              </button>
+
               {/* Deal Pipeline Button */}
               <button
                 onClick={() => {
@@ -135,6 +149,18 @@ export function MapControls({
               >
                 <LayoutList className="h-4 w-4 flex-shrink-0" />
                 <span>Deal Pipeline</span>
+              </button>
+
+              {/* Schedule Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenSchedule?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <Calendar className="h-4 w-4 flex-shrink-0" />
+                <span>Schedule</span>
               </button>
 
               {/* Divider */}

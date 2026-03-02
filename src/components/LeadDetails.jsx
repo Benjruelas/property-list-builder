@@ -1,18 +1,33 @@
 import { useState, useEffect } from 'react'
-import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2 } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
 import { getStreetAddress, getFullAddress, updateLead } from '@/utils/dealPipeline'
-import { SchedulePicker } from './SchedulePicker'
-import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, updateLeadTaskSchedule, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
+import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
+
+const TASK_MENU_WIDTH = 160
+const TASK_MENU_HEIGHT = 200
+const PADDING = 8
+function positionTaskMenu(rect) {
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 0
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 0
+  let top = rect.bottom + 4
+  // Align menu's right edge with button's right edge so menu opens leftward (matches task list)
+  let left = rect.right - TASK_MENU_WIDTH
+  if (top + TASK_MENU_HEIGHT > vh - PADDING) top = Math.max(PADDING, rect.top - TASK_MENU_HEIGHT - 4)
+  if (left + TASK_MENU_WIDTH > vw - PADDING) left = vw - TASK_MENU_WIDTH - PADDING
+  if (left < PADDING) left = PADDING
+  return { top, left }
+}
 
 /**
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDetails, onEmailClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask }) {
   const { scheduleSync } = useUserDataSync()
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
   const [editContacts, setEditContacts] = useState(false)
@@ -21,6 +36,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
   const [tasks, setTasks] = useState([])
   const [isEditingName, setIsEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
+  const [taskMenu, setTaskMenu] = useState(null)
 
   const parcelId = lead?.parcelId || parcelData?.id
 
@@ -44,6 +60,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
     } else {
       setSkipTracedInfo(null)
       setTasks([])
+      setTaskMenu(null)
     }
   }, [isOpen, parcelId])
 
@@ -99,7 +116,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
           </div>
         </DialogHeader>
 
-        <div className="px-4 py-4 space-y-4 text-left">
+        <div className="px-4 py-4 space-y-4 text-left bg-transparent">
           <div className="space-y-1">
             {isEditingName ? (
               <div className="flex items-center gap-2">
@@ -150,7 +167,17 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
                 <div key={`p-${idx}`} className="flex items-center justify-between gap-2 text-sm group">
                   <div className="flex items-center gap-2 min-w-0">
                     <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                    <a href={`tel:${normalizePhone(p.value)}`} className="text-blue-600 hover:underline truncate">{p.value}</a>
+                    {onPhoneClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onPhoneClick(p.value, dataForParcelDetails)}
+                        className="text-blue-600 hover:underline truncate text-left"
+                      >
+                        {p.value}
+                      </button>
+                    ) : (
+                      <a href={`tel:${normalizePhone(p.value)}`} className="text-blue-600 hover:underline truncate">{p.value}</a>
+                    )}
                     {p.callerId && <span className="text-gray-500 text-xs flex-shrink-0">({p.callerId})</span>}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -344,48 +371,29 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
                           <span className={task.completed ? 'line-through text-gray-500' : 'text-gray-900'}>
                             {task.title}
                           </span>
-                          <div className="text-[11px] text-gray-500 mt-0.5 space-y-1">
-                            <div className="flex items-center gap-1.5">
+                          {(task.completed || task.scheduledAt) && (
+                            <div className="text-[11px] text-gray-500 mt-0.5">
                               <span>
                                 {task.completed
                                   ? `Completed ${formatTaskCompletedDate(task.completedAt)}`
-                                  : task.scheduledAt
-                                    ? `Scheduled: ${formatTaskScheduledDate(task.scheduledAt)}`
-                                    : `Created ${formatTaskTimeAgo(task.createdAt)}`}
+                                  : `Scheduled: ${formatTaskScheduledDate(task.scheduledAt)}`}
                               </span>
-                              {!task.completed && (
-                                <SchedulePicker
-                                value={task.scheduledAt}
-                                onChange={(ts) => {
-                                  updateLeadTaskSchedule(parcelId, task.id, ts)
-                                  refreshTasks()
-                                  scheduleSync()
-                                }}
-                                minDate={Date.now()}
-                                triggerClassName="cursor-pointer p-0 bg-transparent border-none text-white opacity-90 hover:opacity-100"
-                                title="Schedule or reschedule"
-                                size="sm"
-                                taskTitle={task.title || '(untitled)'}
-                                leadName={displayName || undefined}
-                                leadAddress={address !== 'No address available' ? address : undefined}
-                              />
-                              )}
                             </div>
-                          </div>
+                          )}
                         </>
                       )}
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        deleteLeadTask(parcelId, task.id)
-                        refreshTasks()
-                        scheduleSync()
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setTaskMenu({ task, anchor: positionTaskMenu(rect) })
                       }}
-                      className="flex-shrink-0 mt-0.5 text-gray-400 hover:text-red-600 p-0.5 opacity-70 group-hover:opacity-100"
-                      title="Delete task"
+                      className="flex-shrink-0 text-gray-400 hover:text-gray-700 p-0.5 -mt-0.5 -mr-0.5 opacity-70 group-hover:opacity-100"
+                      title="Task options"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <MoreVertical className="h-3.5 w-3.5" />
                     </button>
                   </li>
                 ))}
@@ -395,6 +403,59 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
 
         </div>
       </DialogContent>
+
+      {taskMenu && typeof document !== 'undefined' && createPortal(
+        <div data-task-menu className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
+          <div className="fixed inset-0 z-[10011]" onClick={() => setTaskMenu(null)} aria-hidden />
+          <div
+            className="map-panel list-panel fixed z-[10012] rounded-lg min-w-[160px] py-1 overflow-hidden shadow-xl"
+            style={{ top: taskMenu.anchor.top, left: taskMenu.anchor.left }}
+            role="menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!taskMenu.task.completed && taskMenu.task.scheduledAt && onViewTaskOnSchedule && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTaskMenu(null)
+                  onViewTaskOnSchedule(taskMenu.task)
+                }}
+                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
+              >
+                <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                View on calendar
+              </button>
+            )}
+            {onOpenEditTask && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTaskMenu(null)
+                  onOpenEditTask(taskMenu.task, lead)
+                }}
+                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5 flex-shrink-0" />
+                Edit
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setTaskMenu(null)
+                deleteLeadTask(parcelId, taskMenu.task.id)
+                refreshTasks()
+                scheduleSync()
+              }}
+              className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/20 text-red-400 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
+              Delete
+            </button>
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
     </Dialog>
   )
 }

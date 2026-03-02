@@ -268,7 +268,7 @@ export function PMTilesParcelLayer({
   useEffect(() => {
     if (!pmtilesUrl) return
 
-    // Create parcel pane once - put in rotatePane so parcels rotate with map (leaflet-rotate)
+    // Create parcel pane as child of rotatePane so parcels rotate/scale with map (leaflet-rotate)
     if (!map.getPane(PARCEL_PANE_NAME)) {
       const rotatePane = map.getPane('rotatePane')
       const container = rotatePane || undefined
@@ -369,11 +369,10 @@ export function PMTilesParcelLayer({
         wipeTimeoutRef.current = null
       }
       zoomTooFarRef.current = true
-      const pane = map.getPane(PARCEL_PANE_NAME)
-      if (pane) {
-        pane.classList.remove('parcel-pane-visible')
-        pane.style.transition = `opacity ${FADE_MS}ms ease-out`
-        pane.style.opacity = '0'
+      if (parcelPane) {
+        parcelPane.classList.remove('parcel-pane-visible')
+        parcelPane.style.transition = `opacity ${FADE_MS}ms ease-out`
+        parcelPane.style.opacity = '0'
       }
       wipeTimeoutRef.current = setTimeout(() => {
         wipeTimeoutRef.current = null
@@ -385,10 +384,10 @@ export function PMTilesParcelLayer({
           }
         }
         tileCacheRef.current.clear()
-        if (pane) {
-          pane.style.visibility = 'hidden'
-          pane.style.display = 'none'
-          pane.style.pointerEvents = 'none'
+        if (parcelPane) {
+          parcelPane.style.visibility = 'hidden'
+          parcelPane.style.display = 'none'
+          parcelPane.style.pointerEvents = 'none'
         }
       }, FADE_MS)
     }
@@ -447,12 +446,12 @@ export function PMTilesParcelLayer({
           wipeTimeoutRef.current = null
         }
         shouldFadeInRef.current = true
-        const pane = map.getPane(PARCEL_PANE_NAME)
-        if (pane) {
-          pane.style.display = ''
-          pane.style.opacity = ''
-          pane.style.visibility = ''
-          pane.style.pointerEvents = 'auto'
+        if (parcelPane) {
+          parcelPane.style.display = ''
+          parcelPane.style.opacity = ''
+          parcelPane.style.visibility = ''
+          parcelPane.style.pointerEvents = 'auto'
+          parcelPane.classList.remove('parcel-pane-gesture-hiding')
         }
         const group = layerGroupRef.current
         if (group && !map.hasLayer(group)) {
@@ -560,7 +559,6 @@ export function PMTilesParcelLayer({
           }
 
           try {
-            // Get tile from PMTiles at the requested zoom level
             const tileResponse = await pmtiles.getZxy(requestedZoom, x, y)
             
             if (!tileResponse || !tileResponse.data) {
@@ -734,11 +732,10 @@ export function PMTilesParcelLayer({
 
       const totalLayers = parcelLayerGroup.getLayers().length
       if (totalLayers > 0) {
-        // Fade in parcels only when first showing or after zooming back in range (CSS .parcel-pane.parcel-pane-visible)
         if (parcelPane && shouldFadeInRef.current) {
           shouldFadeInRef.current = false
           parcelPane.classList.remove('parcel-pane-visible')
-          void parcelPane.offsetHeight // Force reflow so we start from opacity 0
+          void parcelPane.offsetHeight
           requestAnimationFrame(() => {
             parcelPane.classList.add('parcel-pane-visible')
           })
@@ -762,11 +759,40 @@ export function PMTilesParcelLayer({
         wipeParcelLayer()
       }
     }
-    // Load tiles when map moves (debounced to avoid excessive calls)
+
+    // Fade out parcels when pinch/zoom/pan starts, fade back in when it stops
+    let gestureFadeInTimeout = null
+    const onGestureStart = () => {
+      if (gestureFadeInTimeout) {
+        clearTimeout(gestureFadeInTimeout)
+        gestureFadeInTimeout = null
+      }
+      if (parcelPane && !zoomTooFarRef.current) {
+        parcelPane.classList.add('parcel-pane-gesture-hiding')
+      }
+    }
+    const onGestureEnd = () => {
+      if (gestureFadeInTimeout) clearTimeout(gestureFadeInTimeout)
+      gestureFadeInTimeout = setTimeout(() => {
+        gestureFadeInTimeout = null
+        if (parcelPane && !zoomTooFarRef.current) {
+          parcelPane.classList.remove('parcel-pane-gesture-hiding')
+        }
+      }, 100)
+    }
+
+    // Load tiles when map moves, zooms, or rotates (debounced)
     if (map && map.on) {
+      map.on('zoomstart', onGestureStart)
+      map.on('movestart', onGestureStart)
+      map.on('zoomend', onGestureEnd)
+      map.on('moveend', onGestureEnd)
       map.on('moveend', debouncedLoadTiles)
       map.on('zoomend', debouncedLoadTiles)
       map.on('zoomend', onZoomEndWipeIfOutOfRange)
+      if (map._rotate) {
+        map.on('rotate', debouncedLoadTiles)
+      }
     }
 
     // Function to update existing polygon styles (called when selection changes)
@@ -796,14 +822,22 @@ export function PMTilesParcelLayer({
     // Cleanup on unmount only
     return () => {
       if (loadTilesTimeout) clearTimeout(loadTilesTimeout)
+      if (gestureFadeInTimeout) clearTimeout(gestureFadeInTimeout)
       if (wipeTimeoutRef.current) {
         clearTimeout(wipeTimeoutRef.current)
         wipeTimeoutRef.current = null
       }
       if (map && map.off) {
+        map.off('zoomstart', onGestureStart)
+        map.off('movestart', onGestureStart)
+        map.off('zoomend', onGestureEnd)
+        map.off('moveend', onGestureEnd)
         map.off('moveend', debouncedLoadTiles)
         map.off('zoomend', debouncedLoadTiles)
         map.off('zoomend', onZoomEndWipeIfOutOfRange)
+        if (map._rotate) {
+          map.off('rotate', debouncedLoadTiles)
+        }
       }
       if (layerGroupRef.current && map && map.removeLayer) {
         try {

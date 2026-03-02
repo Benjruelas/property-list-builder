@@ -85,6 +85,14 @@ But note that API calls will fail since serverless functions won't have environm
 
 ## Troubleshooting
 
+### "Bearer token" / "Unauthorized" when creating lists
+- **Use `vercel dev`** not `npm run dev` – the API serverless functions only run under vercel dev
+- If using `vercel dev` and still getting 401, add to `.env.local`:
+  ```
+  ENABLE_DEV_BYPASS=true
+  ```
+  This forces the dev-bypass token to be accepted regardless of host
+
 ### "Skip tracing service not configured"
 - Make sure you're using `vercel dev` not `npm run dev`
 - Check that `SKIPSHERPA_API_KEY` is in your `.env.local`

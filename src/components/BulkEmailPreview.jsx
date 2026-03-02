@@ -72,6 +72,10 @@ export function BulkEmailPreview({
     }
   }
 
+  const hasTemplateChanges = template
+    ? subject !== (template.subject ?? '') || body !== (template.body ?? '')
+    : false
+
   const handleSaveTemplate = () => {
     if (template) {
       updateEmailTemplate(template.id, {
@@ -275,6 +279,7 @@ export function BulkEmailPreview({
                 <Button
                   variant="ghost"
                   onClick={handleSaveTemplate}
+                  disabled={!hasTemplateChanges}
                   className="flex-1"
                 >
                   Save Changes

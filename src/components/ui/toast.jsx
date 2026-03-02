@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -34,8 +35,8 @@ export const ToastContainer = () => {
     setToasts(prev => prev.filter(t => t.id !== id))
   }
 
-  return (
-    <div className="fixed top-4 right-4 z-[3000] flex flex-col gap-2">
+  const content = (
+    <div className="fixed left-1/2 top-4 -translate-x-1/2 z-[99999] flex flex-col gap-2 items-center pointer-events-none [&>*]:pointer-events-auto">
       {toasts.map(toast => (
         <div
           key={toast.id}
@@ -61,5 +62,9 @@ export const ToastContainer = () => {
       ))}
     </div>
   )
+
+  return typeof document !== 'undefined'
+    ? createPortal(content, document.getElementById('modal-root') || document.body)
+    : content
 }
 

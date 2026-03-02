@@ -301,9 +301,6 @@ export const updateContactMeta = (parcelId, type, value, meta) => {
     updated.forEach((u, i) => { updated[i] = { ...u, primary: i === idx } })
   } else if (meta.primary === false) {
     updated[idx] = { ...updated[idx], primary: false }
-    if (!updated.some(u => u.primary) && updated.length > 0) {
-      updated[0] = { ...updated[0], primary: true }
-    }
   }
 
   saveSkipTracedParcel(parcelId, {

@@ -56,6 +56,22 @@ export async function updateList(getToken, listId, { parcels, removeParcels, sha
   return data.list
 }
 
+export async function validateShareEmail(getToken, email) {
+  const trimmed = (email || '').trim().toLowerCase()
+  if (!trimmed) return { valid: false }
+  const token = await getToken()
+  if (!token) return { valid: false }
+  const base = getApiBase()
+  const url = `${base}/validate-share-email?email=${encodeURIComponent(trimmed)}`
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  })
+  if (!res.ok) return { valid: false }
+  const data = await res.json().catch(() => ({}))
+  return { valid: !!data.valid }
+}
+
 export async function deleteList(getToken, listId) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to delete lists')

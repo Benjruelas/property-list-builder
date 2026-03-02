@@ -18,6 +18,7 @@ const LS_TO_BLOB = {
   parcel_notes: 'parcelNotes',
   skip_traced_parcels: 'skipTracedParcels',
   email_templates: 'emailTemplates',
+  text_templates: 'textTemplates',
   skip_trace_jobs: 'skipTraceJobs',
   skip_traced_list: 'skipTracedList'
 }

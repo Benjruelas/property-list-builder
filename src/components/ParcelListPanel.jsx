@@ -16,8 +16,10 @@ export function ParcelListPanel({
   onBack,
   onRemoveParcel,
   onOpenParcelDetails,
+  onPhoneClick,
   onSkipTraceParcel,
   onConvertToLead,
+  isParcelALead: isParcelALeadProp,
   onBulkSkipTrace,
   onExportList,
   skipTracingInProgress = new Set()
@@ -288,9 +290,29 @@ export function ParcelListPanel({
                                   {p.primary && <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500 flex-shrink-0" title="Primary" />}
                                   <span className="font-semibold text-gray-700">{phoneDetails.length > 1 ? `Phone ${idx + 1}:` : 'Phone:'}</span>
                                   <VerifiedBadge verified={p.verified} />
-                                  <a href={`tel:${(p.value || '').replace(/[^\d+]/g, '')}`} className="text-blue-600 hover:text-blue-800 hover:underline">
-                                    {p.value}
-                                  </a>
+                                  {onPhoneClick ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const parcelData = {
+                                          id: parcelId,
+                                          properties: props,
+                                          address,
+                                          lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
+                                          lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
+                                        }
+                                        onPhoneClick(p.value, parcelData)
+                                      }}
+                                      className="text-blue-600 hover:text-blue-800 hover:underline text-left"
+                                    >
+                                      {p.value}
+                                    </button>
+                                  ) : (
+                                    <a href={`tel:${(p.value || '').replace(/[^\d+]/g, '')}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                                      {p.value}
+                                    </a>
+                                  )}
                                   {p.callerId && <span className="text-gray-500 text-xs">({p.callerId})</span>}
                                 </div>
                               ))}
@@ -420,39 +442,26 @@ export function ParcelListPanel({
                               Center on Map
                             </Button>
                           )}
-                          {onConvertToLead && (
-                            (() => {
-                              const alreadyALead = isParcelALead(parcelId)
-                              if (alreadyALead) {
-                                return (
-                                  <div className="parcel-dropdown-btn flex items-center gap-2 px-3 py-2 rounded-md border text-sm parcel-dropdown-status-success text-violet-700">
-                                    <LayoutList className="h-4 w-4" />
-                                    <span>Already a Lead</span>
-                                  </div>
-                                )
-                              }
-                              return (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="parcel-dropdown-btn flex-1 min-w-[120px]"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    const parcelData = {
-                                      id: parcelId,
-                                      properties: props,
-                                      address: address,
-                                      lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
-                                      lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
-                                    }
-                                    onConvertToLead(parcelData)
-                                  }}
-                                >
-                                  <LayoutList className="h-4 w-4 mr-2" />
-                                  Convert to Lead
-                                </Button>
-                              )
-                            })()
+                          {onConvertToLead && !((isParcelALeadProp ?? isParcelALead)(parcelId)) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="parcel-dropdown-btn flex-1 min-w-[120px]"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const parcelData = {
+                                  id: parcelId,
+                                  properties: props,
+                                  address: address,
+                                  lat: parcel.lat || props.LATITUDE ? parseFloat(parcel.lat || props.LATITUDE) : null,
+                                  lng: parcel.lng || props.LONGITUDE ? parseFloat(parcel.lng || props.LONGITUDE) : null
+                                }
+                                onConvertToLead(parcelData)
+                              }}
+                            >
+                              <LayoutList className="h-4 w-4 mr-2" />
+                              Convert to Lead
+                            </Button>
                           )}
                         </div>
                       </div>

@@ -16,7 +16,9 @@ import { ListPanel } from './components/ListPanel'
 import { SkipTracedListPanel } from './components/SkipTracedListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
 import { ParcelDetails } from './components/ParcelDetails'
+import { PhoneActionPanel } from './components/PhoneActionPanel'
 import { EmailTemplatesPanel } from './components/EmailTemplatesPanel'
+import { TextTemplatesPanel } from './components/TextTemplatesPanel'
 import { EmailComposer } from './components/EmailComposer'
 import { BulkEmailPreview } from './components/BulkEmailPreview'
 import { Login } from './components/Login'
@@ -29,12 +31,14 @@ import { UserDataSyncProvider } from './contexts/UserDataSyncContext'
 import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
-import { fetchLists, createList, updateList, deleteList } from './utils/lists'
+import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
+import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { DealPipeline } from './components/DealPipeline'
-import { addLead, loadColumns, loadLeads, isParcelALead } from './utils/dealPipeline'
+import { SchedulePanel } from './components/SchedulePanel'
+import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
@@ -212,6 +216,8 @@ function App() {
       setIsParcelListPanelOpen(false)
       setIsParcelDetailsOpen(false)
       setIsEmailTemplatesPanelOpen(false)
+      setIsTextTemplatesPanelOpen(false)
+      setPhoneActionPanel(null)
       setIsEmailComposerOpen(false)
       setIsBulkEmailPreviewOpen(false)
       setIsMultiSelectActive(false)
@@ -240,6 +246,7 @@ function App() {
   const [viewingListId, setViewingListId] = useState(null) // List ID being viewed in ParcelListPanel
   const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false) // Parcel details panel
   const [isEmailTemplatesPanelOpen, setIsEmailTemplatesPanelOpen] = useState(false)
+  const [isTextTemplatesPanelOpen, setIsTextTemplatesPanelOpen] = useState(false)
   const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false)
   const [isBulkEmailPreviewOpen, setIsBulkEmailPreviewOpen] = useState(false)
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
@@ -261,6 +268,11 @@ function App() {
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const [isDealPipelineOpen, setIsDealPipelineOpen] = useState(false)
   const [dealPipelineLeads, setDealPipelineLeads] = useState([])
+  const [pipelines, setPipelines] = useState([])
+  const [activePipelineId, setActivePipelineId] = useState(null)
+  const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
+  const [scheduleInitialDate, setScheduleInitialDate] = useState(null)
+  const [phoneActionPanel, setPhoneActionPanel] = useState(null) // { phone, parcelData } | null
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null) // Reference to parcel layer functions
@@ -397,12 +409,72 @@ function App() {
     else setLists([])
   }, [currentUser, refreshLists])
 
-  // Load deal pipeline leads when panel opens
-  useEffect(() => {
-    if (isDealPipelineOpen) setDealPipelineLeads(loadLeads())
-  }, [isDealPipelineOpen])
+  const refreshPipelines = useCallback(async () => {
+    if (!currentUser) return
+    try {
+      const next = await fetchPipelines(getToken)
+      if (next.length > 0) {
+        setPipelines(next)
+        setActivePipelineId((prev) => {
+          if (prev && next.some((p) => p.id === prev)) return prev
+          const first = next.find((p) => p.ownerId === currentUser.uid) || next[0]
+          return first?.id ?? null
+        })
+      } else {
+        const cols = loadColumns()
+        const leads = loadLeads()
+        const title = (() => {
+          try { return localStorage.getItem('deal_pipeline_title') || 'Deal Pipeline' } catch { return 'Deal Pipeline' }
+        })()
+        if (leads.length > 0 || cols.some((c) => (c?.name || '').trim())) {
+          try {
+            const created = await createPipeline(getToken, { title, columns: cols, leads })
+            setPipelines([created])
+            setActivePipelineId(created.id)
+            setDealPipelineLeads(created.leads || [])
+          } catch (e) {
+            console.warn('Pipeline migration failed:', e.message)
+            setPipelines([])
+            setActivePipelineId(null)
+          }
+        } else {
+          setPipelines([])
+          setActivePipelineId(null)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading pipelines:', error)
+      setPipelines([])
+      setActivePipelineId(null)
+    }
+  }, [currentUser, getToken])
 
-  const handleConvertToLead = useCallback((parcelData) => {
+  useEffect(() => {
+    if (currentUser) refreshPipelines()
+    else {
+      setPipelines([])
+      setActivePipelineId(null)
+    }
+  }, [currentUser, refreshPipelines])
+
+  // Load deal pipeline leads when panel opens (localStorage mode only; API mode uses pipelines)
+  useEffect(() => {
+    if (isDealPipelineOpen && pipelines.length === 0) setDealPipelineLeads(loadLeads())
+  }, [isDealPipelineOpen, pipelines.length])
+
+  // Refresh leads when schedule panel opens (localStorage mode only)
+  useEffect(() => {
+    if (isSchedulePanelOpen && pipelines.length === 0) setDealPipelineLeads(loadLeads())
+  }, [isSchedulePanelOpen, pipelines.length])
+
+  const isParcelALeadCheck = useCallback((parcelId) => {
+    if (pipelines.length > 0) {
+      return pipelines.some((p) => (p.leads || []).some((l) => l.parcelId === parcelId))
+    }
+    return isParcelALead(parcelId)
+  }, [pipelines])
+
+  const handleConvertToLead = useCallback(async (parcelData) => {
     if (!currentUser || !currentUser.uid) {
       setIsLoginOpen(true)
       showToast('Please sign in to use the Deal Pipeline', 'info')
@@ -412,21 +484,52 @@ function App() {
       showToast('Invalid parcel data', 'error')
       return
     }
-    if (isParcelALead(parcelData.id)) {
+    if (isParcelALeadCheck(parcelData.id)) {
       showToast('Parcel is already a lead', 'warning')
       return
     }
-    const columns = loadColumns()
-    const lead = addLead(parcelData, columns)
-    if (lead) {
-      setDealPipelineLeads(loadLeads())
-      scheduleUserDataSync(getToken)
-      setIsDealPipelineOpen(true)
-      showToast('Parcel added to Deal Pipeline', 'success')
+    if (pipelines.length > 0 && activePipelineId) {
+      const pipe = pipelines.find((p) => p.id === activePipelineId)
+      if (pipe?.ownerId !== currentUser.uid) {
+        showToast('Switch to your pipeline to add leads', 'warning')
+        return
+      }
+      const firstColId = pipe.columns?.[0]?.id || 'col-0'
+      const now = Date.now()
+      const lead = {
+        id: `lead-${now}-${parcelData.id}`,
+        parcelId: parcelData.id,
+        address: getStreetAddress(parcelData),
+        owner: parcelData.properties?.OWNER_NAME || null,
+        lat: parcelData.lat ?? (parcelData.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
+        lng: parcelData.lng ?? (parcelData.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
+        status: firstColId,
+        createdAt: now,
+        statusEnteredAt: now,
+        cumulativeTimeByStatus: {},
+        properties: parcelData.properties || null
+      }
+      try {
+        await updatePipeline(getToken, activePipelineId, { leads: [...(pipe.leads || []), lead] })
+        await refreshPipelines()
+        setIsDealPipelineOpen(true)
+        showToast('Parcel added to Deal Pipeline', 'success')
+      } catch (e) {
+        showToast(e.message || 'Could not add lead', 'error')
+      }
     } else {
-      showToast('Could not add lead', 'error')
+      const columns = loadColumns()
+      const lead = addLead(parcelData, columns)
+      if (lead) {
+        setDealPipelineLeads(loadLeads())
+        scheduleUserDataSync(getToken)
+        setIsDealPipelineOpen(true)
+        showToast('Parcel added to Deal Pipeline', 'success')
+      } else {
+        showToast('Could not add lead', 'error')
+      }
     }
-  }, [currentUser, getToken])
+  }, [currentUser, getToken, pipelines, activePipelineId, isParcelALeadCheck, refreshPipelines])
 
   // Background polling for skip trace jobs
   useEffect(() => {
@@ -683,6 +786,16 @@ function App() {
       })
   }, [currentCounty, pmtilesUrl])
 
+  const handleSharePipeline = useCallback(async (pipelineId, sharedWith) => {
+    try {
+      await updatePipeline(getToken, pipelineId, { sharedWith })
+      await refreshPipelines()
+      showToast('Pipeline sharing updated', 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to update sharing', 'error')
+    }
+  }, [getToken, refreshPipelines])
+
   const handleShareList = useCallback(async (listId, sharedWith) => {
     try {
       await updateList(getToken, listId, { sharedWith })
@@ -694,11 +807,17 @@ function App() {
   }, [getToken, refreshLists])
 
   // Delete a list (owner only)
-  const handleDeleteList = useCallback(async (listId) => {
+  const handleDeleteList = useCallback(async (list) => {
+    const listId = list?.id || list
+    const listName = typeof list === 'object' ? list?.name : 'this list'
+    const parcelCount = typeof list === 'object' ? (list?.parcels?.length ?? 0) : 0
+    const parcelText = parcelCount === 1 ? '1 parcel' : `${parcelCount} parcels`
+    setIsListPanelOpen(false)
     const confirmed = await showConfirm(
-      'Are you sure you want to delete this list? This cannot be undone.',
+      `Are you sure you want to delete "${listName}" (${parcelText})? This cannot be undone.`,
       'Delete List'
     )
+    setIsListPanelOpen(true)
     if (!confirmed) return
     try {
       await deleteList(getToken, listId)
@@ -804,11 +923,14 @@ function App() {
         : ''
       
       if (mapInstanceRef.current) {
-        const popup = L.popup({ className: 'parcel-popup-liquid-glass' })
+        const popup = L.popup({ className: 'parcel-popup-liquid-glass', closeOnClick: false, closeButton: false })
           .setLatLng(latlng)
           .setContent(`
             <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
-              <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+                <button type="button" onclick="window.closeParcelPopup()" class="parcel-popup-close-btn" title="Close" aria-label="Close" style="background: none; border: none; padding: 4px; cursor: pointer; color: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;">&times;</button>
+              </div>
               <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
               ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
               ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
@@ -837,13 +959,13 @@ function App() {
                 >
                   Add to List
                 </button>
-                <button 
+                ${!isParcelALeadCheck(parcelId) ? `<button 
                   id="convert-to-lead-btn-${parcelId}"
                   style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.convertToLead()"
                 >
                   Convert to Lead
-                </button>
+                </button>` : ''}
               </div>
             </div>
           `)
@@ -870,7 +992,7 @@ function App() {
       parcelId,
       isMultiSelectActive
     })
-  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast])
+  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, isParcelALeadCheck])
   
   // Add single parcel to list (called from popup button)
   const handleAddSingleParcelToList = useCallback(async (listId) => {
@@ -1072,6 +1194,10 @@ function App() {
     setIsParcelDetailsOpen(true)
   }, [currentUser, authLoading])
 
+  const handlePhoneClick = useCallback((phone, parcelData) => {
+    setPhoneActionPanel({ phone, parcelData: parcelData || null })
+  }, [])
+
   // Reopen parcel popup (used when More Details is closed via X)
   const openParcelPopup = useCallback((data) => {
     if (!mapInstanceRef.current || !data) return
@@ -1088,11 +1214,14 @@ function App() {
     const listNamesHtml = listsWithParcel.length > 0
       ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcel.map(l => l.name).join(', ')}</p>`
       : ''
-    const popup = L.popup({ className: 'parcel-popup-liquid-glass' })
+    const popup = L.popup({ className: 'parcel-popup-liquid-glass', closeOnClick: false, closeButton: false })
       .setLatLng(latlng)
       .setContent(`
         <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
-          <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+            <button type="button" onclick="window.closeParcelPopup()" class="parcel-popup-close-btn" title="Close" aria-label="Close" style="background: none; border: none; padding: 4px; cursor: pointer; color: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;">&times;</button>
+          </div>
           <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
           ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
           ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
@@ -1103,7 +1232,7 @@ function App() {
             <button id="more-details-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.openParcelDetails()">More Details</button>
             ${!hasSkipTraced && !isSkipTracingInProgress ? `<button id="get-contact-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.skipTraceParcel()">Get Contact</button>` : ''}
             <button id="add-to-list-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.addParcelToList('${parcelId}')">Add to List</button>
-            <button id="convert-to-lead-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.convertToLead()">Convert to Lead</button>
+            ${!isParcelALeadCheck(parcelId) ? `<button id="convert-to-lead-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.convertToLead()">Convert to Lead</button>` : ''}
           </div>
         </div>
       `)
@@ -1115,7 +1244,16 @@ function App() {
         setClickedParcelId(null)
       }
     })
-  }, [lists, skipTracingInProgress])
+  }, [lists, skipTracingInProgress, isParcelALeadCheck])
+
+  const handleCloseParcelPopup = useCallback(() => {
+    if (mapInstanceRef.current && currentPopupRef.current) {
+      mapInstanceRef.current.closePopup(currentPopupRef.current)
+    }
+    currentPopupRef.current = null
+    setClickedParcelId(null)
+    setClickedParcelData(null)
+  }, [])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
     setIsParcelDetailsOpen(false)
@@ -1176,6 +1314,15 @@ function App() {
     setBulkEmailList(null)
     setBulkEmailListId(null)
     setIsEmailTemplatesPanelOpen(true)
+  }, [currentUser, authLoading])
+
+  const handleOpenTextTemplates = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) {
+      setIsLoginOpen(true)
+      return
+    }
+    setIsTextTemplatesPanelOpen(true)
   }, [currentUser, authLoading])
 
   // Handle email button click from list (opens template selection, then preview)
@@ -1649,11 +1796,14 @@ function App() {
           // Convert latlng to L.LatLng if it's an array
           const leafletLatLng = Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng
           
-          const popup = L.popup({ className: 'parcel-popup-liquid-glass' })
+          const popup = L.popup({ className: 'parcel-popup-liquid-glass', closeOnClick: false, closeButton: false })
             .setLatLng(leafletLatLng)
             .setContent(`
               <div style="min-width: 200px;" id="parcel-popup-${parcelIdForPopup}">
-                <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
+                  <button type="button" onclick="window.closeParcelPopup()" class="parcel-popup-close-btn" title="Close" aria-label="Close" style="background: none; border: none; padding: 4px; cursor: pointer; color: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;">&times;</button>
+                </div>
                 <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
                 ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
                 ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
@@ -1681,13 +1831,13 @@ function App() {
                   >
                     Add to List
                   </button>
-                <button 
+                ${!isParcelALeadCheck(parcelIdForPopup) ? `<button 
                   id="convert-to-lead-btn-${parcelIdForPopup}"
                   style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
                   onclick="window.convertToLead()"
                 >
                   Convert to Lead
-                </button>
+                </button>` : ''}
                 </div>
               </div>
             `)
@@ -1705,11 +1855,12 @@ function App() {
         return next
       })
     }
-  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck])
 
   // Expose function to window for popup button
   useEffect(() => {
     window.openParcelDetails = handleOpenParcelDetails
+    window.closeParcelPopup = handleCloseParcelPopup
     window.addParcelToList = () => {
       setShowListSelector(true)
       setIsListPanelOpen(true)
@@ -1726,11 +1877,12 @@ function App() {
     }
     return () => {
       delete window.openParcelDetails
+      delete window.closeParcelPopup
       delete window.addParcelToList
       delete window.skipTraceParcel
       delete window.convertToLead
     }
-  }, [handleOpenParcelDetails, handleSkipTraceParcel, handleConvertToLead, clickedParcelData])
+  }, [handleOpenParcelDetails, handleCloseParcelPopup, handleSkipTraceParcel, handleConvertToLead, clickedParcelData])
 
   return (
     <UserDataSyncProvider getToken={getToken}>
@@ -1870,6 +2022,7 @@ function App() {
           setIsSkipTracedListPanelOpen(true)
         }}
         onOpenEmailTemplates={handleOpenEmailTemplates}
+        onOpenTextTemplates={handleOpenTextTemplates}
         onOpenDealPipeline={() => {
           if (authLoading) return
           if (!currentUser || !currentUser.uid) {
@@ -1878,12 +2031,21 @@ function App() {
           }
           setIsDealPipelineOpen(true)
         }}
+        onOpenSchedule={() => {
+          if (authLoading) return
+          if (!currentUser || !currentUser.uid) {
+            setIsLoginOpen(true)
+            return
+          }
+          setIsSchedulePanelOpen(true)
+        }}
         currentUser={currentUser}
         onLogin={() => setIsLoginOpen(true)}
         onLogout={logout}
       />
 
       <ListPanel
+        currentUser={currentUser}
         isOpen={isListPanelOpen && !isParcelListPanelOpen}
         onClose={() => {
           setIsListPanelOpen(false)
@@ -1908,6 +2070,7 @@ function App() {
         onListsChange={refreshLists}
         onDeleteList={handleDeleteList}
         onShareList={handleShareList}
+        onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
         onCreateList={async (name) => {
           await createList(getToken, name, [])
           await refreshLists()
@@ -1945,8 +2108,10 @@ function App() {
         }}
         onRemoveParcel={handleRemoveParcelFromList}
         onOpenParcelDetails={handleOpenParcelDetails}
+        onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         onConvertToLead={handleConvertToLead}
+        isParcelALead={isParcelALeadCheck}
         onBulkSkipTrace={handleBulkSkipTraceList}
         onExportList={handleExportList}
         skipTracingInProgress={skipTracingInProgress}
@@ -1958,7 +2123,9 @@ function App() {
           onClose={handleParcelDetailsClose}
           parcelData={clickedParcelData}
           onEmailClick={handleEmailClick}
+          onPhoneClick={handlePhoneClick}
           lists={lists}
+          enableAutoClose={false}
         />,
         document.body
       )}
@@ -1972,12 +2139,44 @@ function App() {
       <DealPipeline
         isOpen={isDealPipelineOpen}
         onClose={() => setIsDealPipelineOpen(false)}
-        leads={dealPipelineLeads}
-        onLeadsChange={setDealPipelineLeads}
+        pipelines={pipelines}
+        activePipelineId={activePipelineId}
+        onPipelinesChange={refreshPipelines}
+        onActivePipelineChange={setActivePipelineId}
+        onSharePipeline={handleSharePipeline}
+        onValidateShareEmail={(email) => validatePipelineShareEmail(getToken, email)}
+        currentUser={currentUser}
+        getToken={getToken}
+        leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
+        onLeadsChange={pipelines.length > 0 ? async (newLeads) => {
+          if (!activePipelineId) return
+          try {
+            await updatePipeline(getToken, activePipelineId, { leads: newLeads })
+            await refreshPipelines()
+          } catch (e) { showToast(e.message || 'Failed to update', 'error') }
+        } : setDealPipelineLeads}
+        onColumnsChange={pipelines.length > 0 && activePipelineId ? async (cols) => {
+          try {
+            await updatePipeline(getToken, activePipelineId, { columns: cols })
+            await refreshPipelines()
+          } catch (e) { showToast(e.message || 'Failed to update', 'error') }
+        } : undefined}
+        onTitleChange={pipelines.length > 0 && activePipelineId ? async (title) => {
+          try {
+            await updatePipeline(getToken, activePipelineId, { title })
+            await refreshPipelines()
+          } catch (e) { showToast(e.message || 'Failed to update', 'error') }
+        } : undefined}
         onOpenParcelDetails={handleOpenParcelDetails}
         onEmailClick={handleEmailClick}
+        onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
+        onOpenScheduleAtDate={(ts) => {
+          setIsDealPipelineOpen(false)
+          setScheduleInitialDate(ts)
+          setIsSchedulePanelOpen(true)
+        }}
         onCenterParcel={(location) => {
           if (mapRef.current) {
             mapRef.current.setView([location.lat, location.lng], 17, {
@@ -1986,6 +2185,32 @@ function App() {
             })
           }
         }}
+      />
+
+      <SchedulePanel
+        isOpen={isSchedulePanelOpen}
+        onClose={() => { setIsSchedulePanelOpen(false); setScheduleInitialDate(null) }}
+        initialDate={scheduleInitialDate}
+        onInitialDateConsumed={() => setScheduleInitialDate(null)}
+        leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
+        onLeadsChange={pipelines.length > 0 ? () => refreshPipelines() : setDealPipelineLeads}
+        onOpenParcelDetails={handleOpenParcelDetails}
+        onEmailClick={handleEmailClick}
+        onPhoneClick={handlePhoneClick}
+        onSkipTraceParcel={handleSkipTraceParcel}
+        skipTracingInProgress={skipTracingInProgress}
+      />
+
+      <PhoneActionPanel
+        isOpen={!!phoneActionPanel}
+        onClose={() => setPhoneActionPanel(null)}
+        phone={phoneActionPanel?.phone}
+        parcelData={phoneActionPanel?.parcelData}
+      />
+
+      <TextTemplatesPanel
+        isOpen={isTextTemplatesPanelOpen}
+        onClose={() => setIsTextTemplatesPanelOpen(false)}
       />
 
       <EmailTemplatesPanel

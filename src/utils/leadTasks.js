@@ -1,6 +1,6 @@
 /**
  * Utility for lead tasks - stored in localStorage keyed by parcelId
- * Tasks: { id, title, completed, createdAt, completedAt?, scheduledAt? }
+ * Tasks: { id, title, completed, createdAt, completedAt?, scheduledAt?, scheduledEndAt? }
  */
 
 const STORAGE_KEY = 'lead_tasks'
@@ -39,7 +39,7 @@ export const getAllTasks = () => {
         createdAt = Number.isFinite(parsed) ? parsed : Date.now()
       }
       if (createdAt == null) createdAt = Date.now()
-      result.push({ ...t, createdAt, completedAt: t.completedAt ?? null, scheduledAt: t.scheduledAt ?? null, parcelId })
+      result.push({ ...t, createdAt, completedAt: t.completedAt ?? null, scheduledAt: t.scheduledAt ?? null, scheduledEndAt: t.scheduledEndAt ?? null, parcelId })
     }
   }
   return result.sort((a, b) => {
@@ -67,21 +67,24 @@ export const getLeadTasks = (parcelId) => {
       createdAt = Number.isFinite(parsed) ? parsed : Date.now()
     }
     if (createdAt == null) createdAt = Date.now()
-    return { ...t, createdAt, completedAt: t.completedAt ?? null, scheduledAt: t.scheduledAt ?? null }
+    return { ...t, createdAt, completedAt: t.completedAt ?? null, scheduledAt: t.scheduledAt ?? null, scheduledEndAt: t.scheduledEndAt ?? null }
   })
 }
 
+const UNASSIGNED_KEY = '__unassigned__'
+
 /**
  * Add a task (title can be empty for new inline-edit flow)
- * @param {string} parcelId - Parcel/lead ID
+ * @param {string|null} parcelId - Parcel/lead ID, or null/empty for unassigned task
  * @param {string} [title] - Task title (optional)
- * @param {number} [scheduledAt] - Optional scheduled timestamp (ms)
+ * @param {number} [scheduledAt] - Optional scheduled start timestamp (ms)
+ * @param {number} [scheduledEndAt] - Optional scheduled end timestamp (ms)
  * @returns {Object} The created task
  */
-export const addLeadTask = (parcelId, title = '', scheduledAt = null) => {
-  if (!parcelId) return null
+export const addLeadTask = (parcelId, title = '', scheduledAt = null, scheduledEndAt = null) => {
+  const key = parcelId && String(parcelId).trim() ? parcelId : UNASSIGNED_KEY
   const all = getAll()
-  const tasks = all[parcelId] || []
+  const tasks = all[key] || []
   const now = Date.now()
   const task = {
     id: `task-${now}-${Math.random().toString(36).slice(2, 9)}`,
@@ -89,9 +92,10 @@ export const addLeadTask = (parcelId, title = '', scheduledAt = null) => {
     completed: false,
     createdAt: now,
     completedAt: null,
-    scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null
+    scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null,
+    scheduledEndAt: scheduledEndAt && Number.isFinite(scheduledEndAt) ? scheduledEndAt : null
   }
-  all[parcelId] = [...tasks, task]
+  all[key] = [...tasks, task]
   saveAll(all)
   return task
 }
@@ -118,13 +122,16 @@ export const updateLeadTaskTitle = (parcelId, taskId, title) => {
  * @param {string} taskId - Task ID
  * @param {number|null} scheduledAt - Timestamp (ms) or null to unschedule
  */
-export const updateLeadTaskSchedule = (parcelId, taskId, scheduledAt) => {
+export const updateLeadTaskSchedule = (parcelId, taskId, scheduledAt, scheduledEndAt = null) => {
   if (!parcelId || !taskId) return
   const all = getAll()
   const tasks = all[parcelId] || []
-  all[parcelId] = tasks.map((t) =>
-    t.id === taskId ? { ...t, scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null } : t
-  )
+  all[parcelId] = tasks.map((t) => {
+    if (t.id !== taskId) return t
+    const updates = { scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null }
+    if (scheduledEndAt !== undefined) updates.scheduledEndAt = scheduledEndAt && Number.isFinite(scheduledEndAt) ? scheduledEndAt : null
+    return { ...t, ...updates }
+  })
   saveAll(all)
 }
 

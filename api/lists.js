@@ -105,8 +105,11 @@ export default async function handler(req, res) {
 
   const authHeader = req.headers.authorization
   const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const isLocalhost = /localhost|127\.0\.0\.1/.test(req.headers.host || '') || /localhost|127\.0\.0\.1/.test(req.headers.origin || '')
-  let user = isLocalhost && idToken === 'dev-bypass' ? { uid: 'dev-local', email: 'dev@localhost' } : await verifyFirebaseToken(idToken)
+  const host = req.headers.host || req.headers['x-forwarded-host'] || ''
+  const origin = req.headers.origin || ''
+  const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
+  const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
+  let user = allowDevBypass && idToken === 'dev-bypass' ? { uid: 'dev-local', email: 'dev@localhost' } : await verifyFirebaseToken(idToken)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
@@ -159,12 +162,29 @@ export default async function handler(req, res) {
 
       if (sharedWith !== undefined) {
         const arr = Array.isArray(sharedWith) ? sharedWith : []
-        if (arr.length > 2) {
-          return res.status(400).json({ error: 'You can share with at most 2 users' })
-        }
         const emails = arr.map((e) => (e && String(e).trim()).toLowerCase()).filter(Boolean)
-        if (emails.length > 2) return res.status(400).json({ error: 'Maximum 2 share emails allowed' })
-        list.sharedWith = emails
+        const uniqueEmails = [...new Set(emails)]
+        if (uniqueEmails.length > 50) return res.status(400).json({ error: 'Maximum 50 share emails allowed' })
+        if (uniqueEmails.length > 0) {
+          const knownEmails = new Set()
+          all.forEach((l) => {
+            const o = (l.ownerEmail || '').toLowerCase().trim()
+            if (o) knownEmails.add(o)
+            ;(l.sharedWith || []).forEach((s) => {
+              const t = (s || '').toLowerCase().trim()
+              if (t) knownEmails.add(t)
+            })
+          })
+          if (allowDevBypass && idToken === 'dev-bypass') {
+            // skip validation in dev
+          } else {
+            const unknown = uniqueEmails.filter((e) => !knownEmails.has(e))
+            if (unknown.length > 0) {
+              return res.status(400).json({ error: `No user found with email: ${unknown[0]}` })
+            }
+          }
+        }
+        list.sharedWith = uniqueEmails
       }
 
       if (removeParcels && Array.isArray(removeParcels)) {

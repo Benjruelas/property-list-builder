@@ -47,6 +47,8 @@
     min-height: 100vh;
     min-height: var(--vw-height, 100vh);
     overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    background: #111;
   }
   body {
     @apply text-foreground;
@@ -125,6 +127,11 @@
 }
 .parcel-pane.parcel-pane-visible {
   opacity: 1;
+}
+/* Hide parcels during pinch/zoom gestures; 200ms fade */
+.parcel-pane.parcel-pane-gesture-hiding {
+  opacity: 0 !important;
+  transition: opacity 200ms ease-out !important;
 }
 
 /* Mobile-friendly Leaflet zoom controls - match right side button styling */
@@ -343,10 +350,10 @@
 .map-panel.lead-details-panel {
   background: rgba(0, 0, 0, 0.35) !important;
 }
-
-.map-panel.new-task-panel {
-  background: rgba(0, 0, 0, 0.5) !important;
+.map-panel.lead-details-panel > * {
+  background: transparent !important;
 }
+
 
 /* Schedule picker - liquid glass to match app */
 .schedule-picker-panel {
@@ -362,18 +369,22 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
-/* LeadDetails - no fills on any fields or buttons */
+/* LeadDetails - no fills on any fields, buttons, or links */
 .map-panel.lead-details-panel button,
 .map-panel.lead-details-panel [role="button"],
-.map-panel.lead-details-panel input {
+.map-panel.lead-details-panel input,
+.map-panel.lead-details-panel a {
   background: none !important;
+  background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: none !important;
 }
 .map-panel.lead-details-panel button:hover:not(:disabled),
-.map-panel.lead-details-panel [role="button"]:hover:not(:disabled) {
+.map-panel.lead-details-panel [role="button"]:hover:not(:disabled),
+.map-panel.lead-details-panel a:hover {
   background: none !important;
+  background-color: transparent !important;
 }
 .map-panel.lead-details-panel input {
   border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
@@ -389,8 +400,9 @@
   color: rgba(147, 197, 253, 1) !important;
 }
 
-/* Deal Pipeline panel - no outline/border */
-.deal-pipeline-panel {
+/* Deal Pipeline & Schedule panels - no outline/border */
+.deal-pipeline-panel,
+.schedule-panel {
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
@@ -430,6 +442,10 @@
   .deal-pipeline-tasks .overflow-y-auto {
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   }
+  /* Schedule panel: bottom padding for home indicator */
+  .schedule-panel-content {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
 }
 
 /* Pipeline icon-only buttons - no fill, just icons */
@@ -444,17 +460,31 @@
   border: none !important;
 }
 
-/* Map panel buttons - liquid glass, no solid white fill */
-.map-panel button,
-.map-panel [role="button"] {
+/* Deal pipeline panel - no fills on buttons (transparent, like list panel) */
+.deal-pipeline-panel button,
+.deal-pipeline-panel [role="button"] {
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.deal-pipeline-panel button:hover:not(:disabled),
+.deal-pipeline-panel [role="button"]:hover:not(:disabled) {
+  background: transparent !important;
+}
+
+/* Map panel buttons - liquid glass, no solid white fill (except list delete) */
+/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn - those use transparent/no fill */
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel button:hover:not(:disabled),
-.map-panel [role="button"]:hover:not(:disabled) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
@@ -463,17 +493,20 @@
   opacity: 0.5;
 }
 
-/* Hamburger menu - transparent background buttons (override map-panel) */
+/* Hamburger menu - no fills on options, match user section (transparent) */
 .hamburger-menu button,
 .hamburger-menu .hamburger-menu-btn {
-  background: transparent !important;
+  background: none !important;
+  background-color: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 .hamburger-menu button:hover,
 .hamburger-menu .hamburger-menu-btn:hover {
-  background: transparent !important;
+  background: none !important;
+  background-color: transparent !important;
+  border: none !important;
 }
 
 /* Parcel list panel (list contents view) - no fills on buttons */
@@ -495,48 +528,158 @@
   background: transparent !important;
 }
 
-/* List panel - no fills on buttons */
-.list-panel button,
-.list-panel [role="button"] {
+/* List panel - no fills on buttons (except delete, create new list, create form) */
+/* Exclude calendar-day-btn - needs borders for grid lines */
+.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:hover:not(:disabled),
-.list-panel [role="button"]:hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):hover:not(:disabled) {
   background: transparent !important;
 }
 
-/* List panel - create new list button and create form buttons get outlines */
+/* Calendar day buttons - need grid lines, keep transparent fill */
+.list-panel button.calendar-day-btn {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+.list-panel button.calendar-day-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+/* Last column - no right border (grid edge) */
+.list-panel .calendar-days-grid > *:nth-child(7n) {
+  border-right: none !important;
+}
+
+/* List panel - create new list button and create form buttons: fill + outline */
 .list-panel button.create-new-list-btn,
 .list-panel .create-list-form button.create-list-btn {
+  background: rgba(255, 255, 255, 0.15) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
 .list-panel button.create-new-list-btn:hover:not(:disabled),
 .list-panel .create-list-form button.create-list-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22) !important;
   border-color: rgba(255, 255, 255, 0.6) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
 }
 
-/* Email templates / composer / bulk preview - no fills on buttons */
+/* Login panel - Forgot password and Sign up: no fill, no border */
+.login-panel button.login-link-btn {
+  background: none !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.login-panel button.login-link-btn:hover {
+  background: none !important;
+  border: none !important;
+}
+/* Login panel - Sign in with Google: wrapper provides outline; button has no fill */
+.login-panel .login-google-btn-wrapper {
+  border: 2px solid rgba(255, 255, 255, 0.9) !important;
+}
+.login-panel .login-google-btn-wrapper:hover {
+  border-color: rgba(255, 255, 255, 1) !important;
+}
+.login-panel button.login-google-btn {
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.login-panel button.login-google-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Share list / share pipeline dialog - Share and Cancel buttons need visible outlines */
+.share-list-dialog .share-dialog-btn {
+  border: 1.5px solid rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+.share-list-dialog .share-dialog-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+/* When email is verified - Share button turns green */
+.share-list-dialog .share-dialog-btn.share-save-valid {
+  background: rgb(22 163 74) !important;
+  border: 1.5px solid rgb(22 163 74) !important;
+  color: white !important;
+}
+.share-list-dialog .share-dialog-btn.share-save-valid:hover:not(:disabled) {
+  background: rgb(21 128 61) !important;
+  border-color: rgb(21 128 61) !important;
+  color: white !important;
+}
+
+/* Email templates / text templates / composer / bulk preview - no fills on buttons */
 .email-panel button,
-.email-panel [role="button"] {
+.email-panel [role="button"],
+.text-templates-panel button,
+.text-templates-panel [role="button"] {
   background: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: none !important;
 }
 .email-panel button:hover:not(:disabled),
-.email-panel [role="button"]:hover:not(:disabled) {
+.email-panel [role="button"]:hover:not(:disabled),
+.text-templates-panel button:hover:not(:disabled),
+.text-templates-panel [role="button"]:hover:not(:disabled) {
+  background: none !important;
+}
+
+/* Phone action panel - no fill on X and Back buttons */
+.phone-action-panel .phone-action-nav-btn,
+.phone-action-panel button.phone-action-nav-btn {
+  background: none !important;
+  backdrop-filter: none !important;
+  border: none !important;
+}
+.phone-action-panel .phone-action-nav-btn:hover:not(:disabled),
+.phone-action-panel button.phone-action-nav-btn:hover:not(:disabled) {
   background: none !important;
 }
 .email-panel button.text-red-600,
-.email-panel button.text-red-700 {
+.email-panel button.text-red-700,
+.text-templates-panel button.text-red-600,
+.text-templates-panel button.text-red-700 {
   background: none !important;
 }
 .email-panel button.text-red-600:hover:not(:disabled),
-.email-panel button.text-red-700:hover:not(:disabled) {
+.email-panel button.text-red-700:hover:not(:disabled),
+.text-templates-panel button.text-red-600:hover:not(:disabled),
+.text-templates-panel button.text-red-700:hover:not(:disabled) {
   background: none !important;
+}
+
+/* Tag and action buttons - visible outlines */
+.email-panel button.border,
+.text-templates-panel button.border {
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Template view delete button - red with subtle hover, no dark accent */
+.list-panel .list-panel-delete-btn,
+.email-panel .list-panel-delete-btn,
+.text-templates-panel .list-panel-delete-btn {
+  color: rgba(252, 165, 165, 1) !important;
+}
+.list-panel .list-panel-delete-btn:hover:not(:disabled),
+.email-panel .list-panel-delete-btn:hover:not(:disabled),
+.text-templates-panel .list-panel-delete-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.2) !important;
+  color: rgba(254, 226, 226, 1) !important;
 }
 
 /* Destructive/red buttons - keep accent, use glass base */
@@ -564,18 +707,27 @@
   border-color: hsl(var(--destructive)) !important;
 }
 
+/* Deal pipeline lead cards - dark fill for readability on map background */
+.deal-pipeline-lead-card,
+.deal-pipeline-panel .deal-pipeline-lead-card,
 .map-panel .deal-pipeline-lead-card {
-  background: rgba(0, 0, 0, 0.45) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  color: rgba(255, 255, 255, 0.95) !important;
-}
-.map-panel .deal-pipeline-lead-card .text-gray-600 {
-  color: rgba(255, 255, 255, 0.75) !important;
-}
-.map-panel .deal-pipeline-lead-card select {
-  background: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(0, 0, 0, 0.75) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
-  color: rgba(255, 255, 255, 0.95) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+}
+.deal-pipeline-lead-card:hover,
+.deal-pipeline-panel .deal-pipeline-lead-card:hover {
+  background: rgba(0, 0, 0, 0.85) !important;
+}
+.deal-pipeline-lead-card .text-gray-600,
+.deal-pipeline-lead-card .text-gray-500,
+.deal-pipeline-lead-card [class*="text-gray"] {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.deal-pipeline-lead-card select {
+  background: rgba(0, 0, 0, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
 }
 
 .map-panel .add-note-btn {
@@ -586,6 +738,25 @@
 .map-panel .add-note-btn:hover {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* Parcel Details panel - no fills on X close, + add note, edit contacts, contact links, and Add caller ID */
+.parcel-details-panel .parcel-details-close-btn,
+.parcel-details-panel .add-note-btn,
+.parcel-details-panel .parcel-details-edit-btn,
+.parcel-details-panel .parcel-details-link-btn {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.parcel-details-panel .parcel-details-close-btn:hover:not(:disabled),
+.parcel-details-panel .add-note-btn:hover:not(:disabled),
+.parcel-details-panel .parcel-details-edit-btn:hover:not(:disabled),
+.parcel-details-panel .parcel-details-link-btn:hover:not(:disabled) {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* Liquid Glass aesthetic - light frosted glass, no added darkness
@@ -666,6 +837,16 @@
   color: rgba(255, 255, 255, 0.95) !important;
 }
 
+/* Parcel map popup - close button: white, aligned with title */
+.parcel-popup-liquid-glass .parcel-popup-close-btn {
+  color: rgba(255, 255, 255, 0.95) !important;
+  opacity: 0.9;
+}
+.parcel-popup-liquid-glass .parcel-popup-close-btn:hover {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1;
+}
+
 /* Liquid glass for Parcel Details Dialog */
 .parcel-details-dialog {
   background: rgba(255, 255, 255, 0.05) !important;
@@ -692,6 +873,21 @@
 .map-controls-stack [role="button"],
 .map-search-stack [role="button"] {
   color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Icon-only buttons: no fills or outlines (except map buttons) */
+button.icon-only-btn:not(.map-controls-stack *):not(.map-search-stack *),
+button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *) {
+  background: none !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+button.icon-only-btn:hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *),
+button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *) {
+  background: none !important;
+  border: none !important;
 }
 
 .map-controls-stack button svg,
