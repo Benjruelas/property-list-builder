@@ -115,6 +115,12 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
   }
 
+  // Keep email->uid mapping for push notifications
+  try {
+    const { setEmailUidMapping } = await import('./lib/sendPush.js')
+    await setEmailUidMapping(user.email, user.uid)
+  } catch (_) {}
+
   const { method, body = {} } = req
 
   try {
@@ -184,7 +190,28 @@ export default async function handler(req, res) {
             }
           }
         }
+        const previousShared = new Set((list.sharedWith || []).map((e) => (e || '').toLowerCase()))
         list.sharedWith = uniqueEmails
+        // Notify newly added recipients
+        const newRecipients = uniqueEmails.filter((e) => !previousShared.has(e))
+        if (newRecipients.length > 0) {
+          try {
+            const { sendPushToEmail } = await import('./lib/sendPush.js')
+            const sharerName = (list.ownerEmail || user.email || 'Someone').split('@')[0]
+            for (const email of newRecipients) {
+              const sent = await sendPushToEmail(email, {
+                title: 'List shared with you',
+                body: `${sharerName} shared "${list.name}" with you.`,
+                type: 'share'
+              })
+              if (!sent) {
+                console.warn(`push not sent for ${email} (missing uid/fcmToken or preferences off)`)
+              }
+            }
+          } catch (e) {
+            console.warn('list share push failed:', e?.message || e)
+          }
+        }
       }
 
       if (removeParcels && Array.isArray(removeParcels)) {

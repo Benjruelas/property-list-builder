@@ -27,6 +27,13 @@
   }
 }
 
+/* Prevent iOS Safari zoom on input focus - iOS zooms when font-size < 16px */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* Force Leaflet map behind overlays - create stacking context at back */
 .leaflet-container {
   position: relative !important;
@@ -34,6 +41,15 @@
   isolation: isolate;
   transform: translateZ(-1px); /* Force map behind fixed overlays */
   background: #111 !important; /* Match body so no grey bars on iOS Safari viewport gaps */
+}
+
+/* Prevent iOS Safari zoom on input focus - font-size 16px+ avoids auto-zoom when keyboard opens */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 @layer base {
@@ -77,6 +93,31 @@
     min-height: 100vh;
     min-height: var(--vw-height, 100vh);
     z-index: 0;
+  }
+}
+
+/* Prevent iOS Safari zoom on input focus - font-size 16px+ avoids auto-zoom; zoom not resetting when keyboard closes */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Prevent iOS Safari zoom on input focus - font-size 16px+ avoids auto-zoom when keyboard opens */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Prevent iOS Safari zoom on input focus - font-size 16px+ avoids auto-zoom; zoom doesn't reset when keyboard closes */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
   }
 }
 
@@ -434,6 +475,31 @@
     padding-left: 1rem !important;
     padding-right: 1rem !important;
   }
+  /* Pipeline options button - visible fill on mobile so users can find it */
+  .deal-pipeline-header .pipeline-options-btn {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-radius: 8px !important;
+  }
+  /* Pipeline options button - visible on mobile (44px touch target, subtle bg) */
+  .deal-pipeline-header .pipeline-options-btn {
+    background: rgba(255, 255, 255, 0.15) !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    opacity: 1 !important;
+  }
+  /* Pipeline options button - visible on mobile (44px touch target, subtle bg) */
+  .deal-pipeline-header .pipeline-options-btn {
+    background: rgba(255, 255, 255, 0.15) !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 1 !important;
+  }
+  .deal-pipeline-header .pipeline-options-btn:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+  }
   /* Columns: ensure content doesn't sit under home indicator */
   .deal-pipeline-columns {
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
@@ -460,22 +526,67 @@
   border: none !important;
 }
 
+/* Shared pipeline indicator (Users icon) - ensure visible (map-panel svg color:inherit can hide it) */
+.deal-pipeline-panel .pipeline-title-btn [title="Shared with you"] {
+  color: rgba(255, 255, 255, 0.85) !important;
+  opacity: 1 !important;
+}
+
 /* Deal pipeline panel - no fills on buttons (transparent, like list panel) */
-.deal-pipeline-panel button,
-.deal-pipeline-panel [role="button"] {
+/* Exclude pipeline-title-btn - those match map overlay button styling (glass) */
+/* Exclude deal-pipeline-lead-card - those have their own dark fill for readability */
+.deal-pipeline-panel button:not(.pipeline-title-btn):not(.deal-pipeline-lead-card),
+.deal-pipeline-panel [role="button"]:not(.pipeline-title-btn):not(.deal-pipeline-lead-card) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.deal-pipeline-panel button:hover:not(:disabled),
-.deal-pipeline-panel [role="button"]:hover:not(:disabled) {
+.deal-pipeline-panel button:not(.pipeline-title-btn):not(.deal-pipeline-lead-card):hover:not(:disabled),
+.deal-pipeline-panel [role="button"]:not(.pipeline-title-btn):not(.deal-pipeline-lead-card):hover:not(:disabled) {
   background: transparent !important;
 }
 
+/* Schedule panel - restore grid lines for days/hours (deal-pipeline-panel removes them) */
+/* Pad cells (empty/non-numbered) stay darker with no lines */
+.schedule-panel .grid button:not(.schedule-pad-cell),
+.schedule-panel .grid > div:not(.schedule-pad-cell) {
+  border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+.schedule-panel .schedule-pad-cell {
+  border: none !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+}
+/* Month view: 7 columns - remove right border on last column of each row */
+.schedule-panel .grid.grid-cols-7 > *:nth-child(7n) {
+  border-right: none !important;
+}
+/* Week view: 8 columns (hour + 7 days) - remove right border on last column */
+.schedule-panel .schedule-week-grid > *:nth-child(8n) {
+  border-right: none !important;
+}
+
+/* Calendar day buttons (SchedulePicker) - grid lines in any panel including LeadDetails */
+.map-panel button.calendar-day-btn,
+.map-panel.lead-details-panel button.calendar-day-btn,
+.lead-details-panel button.calendar-day-btn {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+.map-panel .calendar-days-grid > *:nth-child(7n),
+.map-panel.lead-details-panel .calendar-days-grid > *:nth-child(7n) {
+  border-right: none !important;
+}
+/* Calendar pad cells (empty/non-numbered) - darker, no lines */
+.calendar-pad-cell {
+  border: none !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+}
+
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
-/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn),
+/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, settings-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn - those use transparent/no fill */
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.settings-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn),
 .map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
@@ -483,10 +594,20 @@
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.settings-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):hover:not(:disabled),
 .map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Settings panel close button - no fill */
+.map-panel .settings-close-btn,
+.map-panel .settings-close-btn:hover:not(:disabled) {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 .map-panel button:disabled,
 .map-panel [role="button"]:disabled {
@@ -707,12 +828,14 @@
   border-color: hsl(var(--destructive)) !important;
 }
 
-/* Deal pipeline lead cards - dark fill for readability on map background */
-.deal-pipeline-lead-card,
+/* Deal pipeline lead cards - dark fill for readability (override panel transparent rule) */
+.deal-pipeline-panel div.deal-pipeline-lead-card,
 .deal-pipeline-panel .deal-pipeline-lead-card,
+.deal-pipeline-lead-card,
 .map-panel .deal-pipeline-lead-card {
   background: rgba(0, 0, 0, 0.75) !important;
-  border-color: rgba(255, 255, 255, 0.25) !important;
+  background-color: rgba(0, 0, 0, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
   color: rgba(255, 255, 255, 0.98) !important;
 }
 .deal-pipeline-lead-card:hover,

@@ -101,6 +101,7 @@ export const AuthProvider = ({ children }) => {
   const signInWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider()
+      provider.setCustomParameters({ prompt: 'select_account' }) // Always show account picker
       await signInWithRedirect(auth, provider)
       showToast('Redirecting to Google...', 'info')
     } catch (error) {

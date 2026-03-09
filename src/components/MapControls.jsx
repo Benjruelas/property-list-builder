@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Calendar } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Calendar, Settings } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 export function MapControls({ 
@@ -15,6 +15,7 @@ export function MapControls({
   onOpenTextTemplates,
   onOpenDealPipeline,
   onOpenSchedule,
+  onOpenSettings,
   currentUser,
   onLogin,
   onLogout
@@ -139,7 +140,7 @@ export function MapControls({
                 <span>Text Templates</span>
               </button>
 
-              {/* Deal Pipeline Button */}
+              {/* Pipelines Button */}
               <button
                 onClick={() => {
                   setShowMenu(false)
@@ -148,7 +149,7 @@ export function MapControls({
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
                 <LayoutList className="h-4 w-4 flex-shrink-0" />
-                <span>Deal Pipeline</span>
+                <span>Pipelines</span>
               </button>
 
               {/* Schedule Button */}
@@ -177,6 +178,18 @@ export function MapControls({
                       {currentUser.email}
                     </p>
                   </div>
+                  {onOpenSettings && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false)
+                        onOpenSettings()
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+                    >
+                      <Settings className="h-4 w-4 flex-shrink-0" />
+                      <span>Settings</span>
+                    </button>
+                  )}
                   <button
                     onClick={async () => {
                       setShowMenu(false)

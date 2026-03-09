@@ -116,7 +116,7 @@ function InlineTimeSelect({ ts, date, onChange }) {
   )
 }
 
-export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], onLeadsChange, initialDate = null, onInitialDateConsumed }) {
+export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], onLeadsChange, initialDate = null, onInitialDateConsumed }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = onLeadsChange ? leads : loadLeads()
   const [allTasks, setAllTasks] = useState([])
@@ -135,6 +135,13 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
   const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
   const [addTaskFromHourCell, setAddTaskFromHourCell] = useState(false)
+
+  const getPipelinesForLead = useCallback((parcelId) => {
+    if (!parcelId || !pipelines.length) return []
+    return pipelines
+      .filter((p) => (p.leads || []).some((l) => (l.parcelId ?? l.id) === parcelId))
+      .map((p) => p.title || 'Pipeline')
+  }, [pipelines])
 
   const refreshTasks = useCallback(() => {
     setAllTasks(getAllTasks())
@@ -405,7 +412,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
               <div className="grid grid-cols-7 grid-rows-6 flex-1 min-h-0">
                 {paddedDays.map((d, i) => {
                   if (!d) {
-                    return <div key={`pad-${i}`} className="min-h-0 border-r border-b border-white/10" />
+                    return <div key={`pad-${i}`} className="min-h-0 schedule-pad-cell" />
                   }
                   const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
                   const dayTasks = tasksByDay[key] || []
@@ -416,7 +423,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                       type="button"
                       onClick={() => handleDayClick(d)}
                       className={`min-h-0 p-2 text-left border-r border-b border-white/10 last:border-r-0 hover:bg-white/10 flex flex-col overflow-hidden ${
-                        isToday ? 'bg-white/10' : ''
+                        isToday ? 'bg-blue-500/25 ring-2 ring-inset ring-blue-400/60 schedule-day-today' : ''
                       }`}
                     >
                       <span className={`text-sm font-medium shrink-0 ${isToday ? 'text-white' : 'text-white/90'}`}>
@@ -461,7 +468,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                       <div
                         key={dayIdx}
                         className={`flex flex-col items-center justify-center py-1.5 border-r border-white/10 last:border-r-0 ${
-                          isToday ? 'bg-white/10' : ''
+                          isToday ? 'bg-blue-500/25 ring-2 ring-inset ring-blue-400/60 schedule-day-today' : ''
                         }`}
                       >
                         <span className="text-[10px] font-medium text-white/70">{DAY_INITIALS[dayIdx]}</span>
@@ -476,7 +483,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
                   <div className="relative" style={{ minHeight: 24 * 36 }}>
                     <div
-                      className="grid"
+                      className="grid schedule-week-grid"
                       style={{
                         gridTemplateColumns: '48px repeat(7, minmax(0, 1fr))',
                         gridAutoRows: 'minmax(36px, auto)',
@@ -498,7 +505,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                               type="button"
                               onClick={() => handleHourCellClick(d, hour)}
                               className={`min-h-[36px] p-0.5 text-left border-r border-b border-white/10 last:border-r-0 hover:bg-white/10 ${
-                                isToday ? 'bg-white/5' : ''
+                                isToday ? 'bg-blue-500/15 schedule-day-today' : ''
                               }`}
                             />
                           )
@@ -673,6 +680,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
           onClose={() => setSelectedLead(null)}
           lead={selectedLead}
           parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
+          pipelineNames={selectedLead ? getPipelinesForLead(selectedLead.parcelId ?? selectedLead.id) : []}
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}

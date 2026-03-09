@@ -136,6 +136,20 @@ export const updateLeadTaskSchedule = (parcelId, taskId, scheduledAt, scheduledE
 }
 
 /**
+ * Clear all tasks for the given parcel IDs (e.g. when resetting a pipeline)
+ * @param {string[]} parcelIds - Parcel/lead IDs to clear tasks for
+ */
+export const clearTasksForParcelIds = (parcelIds) => {
+  if (!Array.isArray(parcelIds) || parcelIds.length === 0) return
+  const all = getAll()
+  for (const pid of parcelIds) {
+    const key = pid && String(pid).trim() ? pid : UNASSIGNED_KEY
+    if (key in all) delete all[key]
+  }
+  saveAll(all)
+}
+
+/**
  * Delete a task
  * @param {string} parcelId - Parcel/lead ID
  * @param {string} taskId - Task ID

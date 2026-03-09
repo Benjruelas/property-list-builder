@@ -27,7 +27,7 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineNames = [], onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask }) {
   const { scheduleSync } = useUserDataSync()
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
   const [editContacts, setEditContacts] = useState(false)
@@ -144,6 +144,12 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
             )}
           </div>
 
+          {pipelineNames?.length > 0 && (
+            <div className="space-y-1 pt-3 border-t border-gray-200">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pipeline</div>
+              <p className="text-gray-900">{pipelineNames.join(', ')}</p>
+            </div>
+          )}
           <div className="space-y-1 pt-3 border-t border-gray-200">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
             <p className="text-gray-900">{address}</p>

@@ -62,6 +62,16 @@ export default async function handler(req, res) {
       })
     }
 
+    // Send push notification if user has it enabled
+    try {
+      const { sendPushToEmail } = await import('./lib/sendPush.js')
+      await sendPushToEmail(userEmail, {
+        title: 'Export ready',
+        body: `Your list "${listName}" has been sent to your email.`,
+        type: 'export'
+      })
+    } catch (_) {}
+
     return res.status(200).json({
       success: true,
       message: `Export sent to ${userEmail}`,

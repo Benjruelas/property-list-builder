@@ -123,6 +123,11 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
   }
 
+  try {
+    const { setEmailUidMapping } = await import('./lib/sendPush.js')
+    await setEmailUidMapping(user.email, user.uid)
+  } catch (_) {}
+
   const { method, body = {} } = req
 
   try {
@@ -135,12 +140,12 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
-      const { title = 'Deal Pipeline', columns, leads } = body
+      const { title = 'Pipeline 1', columns, leads } = body
       const cols = normalizeColumns(columns)
       const leadsArr = Array.isArray(leads) ? leads : []
       const newPipeline = {
         id: `pipe_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-        title: (title || 'Deal Pipeline').trim() || 'Deal Pipeline',
+        title: (title || 'Pipeline 1').trim() || 'Pipeline 1',
         columns: cols,
         leads: leadsArr,
         ownerId: user.uid,
@@ -169,7 +174,7 @@ export default async function handler(req, res) {
       }
 
       if (title !== undefined) {
-        pipeline.title = (title || 'Deal Pipeline').trim() || 'Deal Pipeline'
+        pipeline.title = (title || 'Pipeline 1').trim() || 'Pipeline 1'
       }
       if (columns !== undefined) {
         pipeline.columns = normalizeColumns(columns)
@@ -210,7 +215,22 @@ export default async function handler(req, res) {
             }
           }
         }
+        const previousShared = new Set((pipeline.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean))
         pipeline.sharedWith = uniqueEmails
+        const newRecipients = uniqueEmails.filter((e) => !previousShared.has(e))
+        if (newRecipients.length > 0) {
+          try {
+            const { sendPushToEmail } = await import('./lib/sendPush.js')
+            const sharerName = (pipeline.ownerEmail || user.email || 'Someone').split('@')[0]
+            for (const email of newRecipients) {
+              await sendPushToEmail(email, {
+                title: 'Pipeline shared with you',
+                body: `${sharerName} shared "${pipeline.title}" with you.`,
+                type: 'pipelineShare'
+              })
+            }
+          } catch (_) {}
+        }
       }
 
       pipeline.updatedAt = new Date().toISOString()

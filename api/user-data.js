@@ -100,6 +100,12 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
   }
 
+  // Keep email->uid mapping for push notifications (list share, export)
+  try {
+    const { setEmailUidMapping } = await import('./lib/sendPush.js')
+    await setEmailUidMapping(user.email, user.uid)
+  } catch (_) {}
+
   try {
     if (req.method === 'GET') {
       const data = await getUserData(user.uid)
@@ -113,7 +119,9 @@ export default async function handler(req, res) {
       const allowedKeys = [
         'dealPipelineColumns', 'dealPipelineLeads', 'dealPipelineTitle',
         'leadTasks', 'parcelNotes', 'skipTracedParcels', 'emailTemplates', 'textTemplates',
-        'skipTraceJobs', 'skipTracedList'
+        'skipTraceJobs', 'skipTracedList', 'fcmToken',
+        'pushNotificationsEnabled', 'pushExportReady', 'pushListShared',
+        'pushPipelineShared', 'pushTaskReminders'
       ]
       for (const key of allowedKeys) {
         if (key in body && body[key] !== undefined) {
@@ -121,6 +129,22 @@ export default async function handler(req, res) {
         }
       }
       await saveUserData(user.uid, merged)
+      if ('pushTaskReminders' in body) {
+        try {
+          const registryRaw = await kv.get('task_reminder_uids')
+          let registry = []
+          if (Array.isArray(registryRaw)) registry = registryRaw
+          else if (registryRaw) registry = typeof registryRaw === 'string' ? JSON.parse(registryRaw) : []
+          const uid = user.uid
+          const wantsReminders = merged.pushTaskReminders === true && !!merged.fcmToken
+          const hasUid = registry.includes(uid)
+          if (wantsReminders && !hasUid) {
+            await kv.set('task_reminder_uids', JSON.stringify([...new Set([...registry, uid])]))
+          } else if (!wantsReminders && hasUid) {
+            await kv.set('task_reminder_uids', JSON.stringify(registry.filter((id) => id !== uid)))
+          }
+        } catch (_) {}
+      }
       return res.status(200).json({ data: merged })
     }
 

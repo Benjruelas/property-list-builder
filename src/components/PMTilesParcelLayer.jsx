@@ -743,13 +743,24 @@ export function PMTilesParcelLayer({
       }
     }
 
-    // Debounce tile loading to avoid excessive calls during panning
+    // Debounce tile loading to avoid excessive calls during panning/zooming
     let loadTilesTimeout = null
     const debouncedLoadTiles = () => {
       if (loadTilesTimeout) clearTimeout(loadTilesTimeout)
       loadTilesTimeout = setTimeout(() => {
         loadTiles()
       }, 150) // Wait 150ms after last movement
+    }
+
+    // Throttle for rotate: compass/device-orientation fires continuously (~100ms), so debounce
+    // would never run. Use throttle so tiles load periodically during rotation.
+    const ROTATE_THROTTLE_MS = 400
+    let lastRotateLoad = 0
+    const throttledRotateLoadTiles = () => {
+      const now = Date.now()
+      if (now - lastRotateLoad < ROTATE_THROTTLE_MS) return
+      lastRotateLoad = now
+      loadTiles()
     }
 
     // Wipe on zoom out past 15 (same handler ref for cleanup)
@@ -791,7 +802,7 @@ export function PMTilesParcelLayer({
       map.on('zoomend', debouncedLoadTiles)
       map.on('zoomend', onZoomEndWipeIfOutOfRange)
       if (map._rotate) {
-        map.on('rotate', debouncedLoadTiles)
+        map.on('rotate', throttledRotateLoadTiles)
       }
     }
 
@@ -836,7 +847,7 @@ export function PMTilesParcelLayer({
         map.off('zoomend', debouncedLoadTiles)
         map.off('zoomend', onZoomEndWipeIfOutOfRange)
         if (map._rotate) {
-          map.off('rotate', debouncedLoadTiles)
+          map.off('rotate', throttledRotateLoadTiles)
         }
       }
       if (layerGroupRef.current && map && map.removeLayer) {

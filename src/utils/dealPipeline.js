@@ -5,7 +5,7 @@
 const COLUMNS_KEY = 'deal_pipeline_columns'
 const LEADS_KEY = 'deal_pipeline_leads'
 const TITLE_KEY = 'deal_pipeline_title'
-const DEFAULT_TITLE = 'Deal Pipeline'
+const DEFAULT_TITLE = 'Pipeline 1'
 
 const DEFAULT_COLUMNS = [
   'Make Contact',

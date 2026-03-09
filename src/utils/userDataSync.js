@@ -3,7 +3,9 @@
  * Syncs to API (Vercel KV) when signed in. Reads from localStorage; merges server data on sign-in.
  */
 
-const getApiBase = () => {
+import { getSettings, saveSettings } from './settings'
+
+export const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
   if (typeof window !== 'undefined') return `${window.location.origin}/api`
   return import.meta.env.VITE_API_URL || ''
@@ -83,6 +85,13 @@ export async function loadUserData(getToken) {
     const { data } = await res.json()
     if (data && typeof data === 'object') {
       mergeBlobToLocal(data)
+      const pushKeys = ['pushNotificationsEnabled', 'pushExportReady', 'pushListShared', 'pushPipelineShared', 'pushTaskReminders']
+      if (pushKeys.some((k) => data[k] !== undefined)) {
+        const current = getSettings()
+        const updates = {}
+        pushKeys.forEach((k) => { if (data[k] !== undefined) updates[k] = data[k] })
+        saveSettings({ ...current, ...updates })
+      }
       return data
     }
     return {}
@@ -132,4 +141,33 @@ export function scheduleUserDataSync(getToken) {
     const blob = readLocalBlob()
     saveUserData(getToken, blob)
   }, DEBOUNCE_MS)
+}
+
+/**
+ * Sync push notification preferences to user-data (for server-side filtering).
+ * Call when user changes pushExportReady or pushListShared in Settings.
+ */
+export async function syncPushPreferences(getToken) {
+  const token = await getToken()
+  if (!token) return
+  const settings = getSettings()
+  try {
+    const res = await fetch(`${getApiBase()}/user-data`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        pushNotificationsEnabled: settings.pushNotificationsEnabled ?? false,
+        pushExportReady: settings.pushExportReady ?? true,
+        pushListShared: settings.pushListShared ?? true,
+        pushPipelineShared: settings.pushPipelineShared ?? true,
+        pushTaskReminders: settings.pushTaskReminders ?? true
+      })
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  } catch (e) {
+    console.warn('syncPushPreferences failed:', e.message)
+  }
 }

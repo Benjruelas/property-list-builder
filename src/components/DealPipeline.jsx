@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2 } from 'lucide-react'
+import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Users } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -17,6 +17,8 @@ const MAX_COLUMNS = 10
 const TASK_MENU_WIDTH = 160
 const TASK_MENU_HEIGHT = 200
 const PADDING = 8
+const TOUCH_LONG_PRESS_MS = 400
+const TOUCH_MOVE_THRESHOLD_PX = 10
 
 function positionTaskMenu(rect) {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 0
@@ -30,7 +32,7 @@ function positionTaskMenu(rect) {
   return { top, left }
 }
 
-export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], onLeadsChange, onOpenScheduleAtDate, pipelines = [], activePipelineId, onPipelinesChange, onActivePipelineChange, onSharePipeline, onValidateShareEmail, currentUser, getToken, onColumnsChange, onTitleChange }) {
+export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], onLeadsChange, onOpenScheduleAtDate, pipelines = [], activePipelineId, onPipelinesChange, onActivePipelineChange, onCreatePipeline, onDeletePipeline, onSharePipeline, onValidateShareEmail, currentUser, getToken, onColumnsChange, onTitleChange }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0]
@@ -68,6 +70,9 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   const [taskMenu, setTaskMenu] = useState(null) // { task, anchor: { top, left } }
   const [pipelineDropdownOpen, setPipelineDropdownOpen] = useState(false)
   const [pipelineDropdownAnchor, setPipelineDropdownAnchor] = useState(null)
+  const [pipelineSwitcherOpen, setPipelineSwitcherOpen] = useState(false)
+  const [pipelineSwitcherAnchor, setPipelineSwitcherAnchor] = useState(null)
+  const [isCreatingPipeline, setIsCreatingPipeline] = useState(false)
   const [sharePipelineId, setSharePipelineId] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
   const [shareEmailValid, setShareEmailValid] = useState(null)
@@ -75,6 +80,9 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   const [isValidatingShare, setIsValidatingShare] = useState(false)
   const validateShareTimeoutRef = useRef(null)
   const justDraggedRef = useRef(false)
+  const touchLongPressTimerRef = useRef(null)
+  const touchStartRef = useRef(null)
+  const [touchDragPreview, setTouchDragPreview] = useState(null) // { leadId, lead, x, y } | null
 
   const isPipelineOwnedByUser = (p) => p?.ownerId === currentUser?.uid
 
@@ -288,6 +296,83 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
     setDragOverColId(null)
   }
 
+  const cancelTouchDrag = useCallback(() => {
+    if (touchLongPressTimerRef.current) {
+      clearTimeout(touchLongPressTimerRef.current)
+      touchLongPressTimerRef.current = null
+    }
+    touchStartRef.current = null
+    setTouchDragPreview(null)
+    setDraggedLeadId(null)
+    setDragOverColId(null)
+  }, [])
+
+  const handleTouchStart = useCallback((e, lead) => {
+    if (e.touches.length !== 1) return
+    const t = e.touches[0]
+    touchStartRef.current = { x: t.clientX, y: t.clientY, leadId: lead.id, lead }
+    touchLongPressTimerRef.current = setTimeout(() => {
+      touchLongPressTimerRef.current = null
+      setDraggedLeadId(lead.id)
+      setTouchDragPreview({ leadId: lead.id, lead, x: t.clientX, y: t.clientY })
+    }, TOUCH_LONG_PRESS_MS)
+  }, [])
+
+  const handleTouchMove = useCallback((e) => {
+    if (!touchDragPreview) return
+    e.preventDefault()
+    const t = e.touches[0]
+    setTouchDragPreview((prev) => prev ? { ...prev, x: t.clientX, y: t.clientY } : null)
+    const el = document.elementFromPoint(t.clientX, t.clientY)
+    const dropZone = el?.closest?.('[data-col-id]')
+    const colId = dropZone?.getAttribute?.('data-col-id')
+    setDragOverColId(colId || null)
+  }, [touchDragPreview])
+
+  const handleTouchEnd = useCallback((e) => {
+    if (touchLongPressTimerRef.current) {
+      clearTimeout(touchLongPressTimerRef.current)
+      touchLongPressTimerRef.current = null
+      touchStartRef.current = null
+      return
+    }
+    if (!touchDragPreview) return
+    e.preventDefault()
+    const colId = dragOverColId
+    if (colId && touchDragPreview.leadId) handleMoveLead(touchDragPreview.leadId, colId)
+    justDraggedRef.current = true
+    setTimeout(() => { justDraggedRef.current = false }, 0)
+    cancelTouchDrag()
+  }, [touchDragPreview, dragOverColId, cancelTouchDrag])
+
+  useEffect(() => {
+    if (!touchDragPreview) return
+    const onMove = (e) => handleTouchMove(e)
+    const onEnd = (e) => handleTouchEnd(e)
+    document.addEventListener('touchmove', onMove, { passive: false })
+    document.addEventListener('touchend', onEnd, { passive: false })
+    document.addEventListener('touchcancel', onEnd, { passive: false })
+    return () => {
+      document.removeEventListener('touchmove', onMove)
+      document.removeEventListener('touchend', onEnd)
+      document.removeEventListener('touchcancel', onEnd)
+    }
+  }, [touchDragPreview, handleTouchMove, handleTouchEnd])
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!touchStartRef.current || touchLongPressTimerRef.current) return
+      const t = e.touches[0]
+      const dx = t.clientX - touchStartRef.current.x
+      const dy = t.clientY - touchStartRef.current.y
+      if (Math.abs(dx) > TOUCH_MOVE_THRESHOLD_PX || Math.abs(dy) > TOUCH_MOVE_THRESHOLD_PX) {
+        cancelTouchDrag()
+      }
+    }
+    document.addEventListener('touchmove', onMove, { passive: true })
+    return () => document.removeEventListener('touchmove', onMove)
+  }, [cancelTouchDrag])
+
   const getLeadsForColumn = (colId) => displayLeads.filter(l => l.status === colId)
 
   const leadToParcelData = (lead) => ({
@@ -386,7 +471,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
         showCloseButton={false}
         hideOverlay
         onInteractOutside={(e) => {
-          if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-share-pipeline-dialog]')) e.preventDefault()
+          if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-pipeline-switcher]') || e.target?.closest?.('[data-share-pipeline-dialog]')) e.preventDefault()
         }}
       >
         <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0">
@@ -404,6 +489,47 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                 />
               ) : (
                 <DialogTitle className="text-xl font-semibold truncate">{pipelineTitle}</DialogTitle>
+              )}
+              {onCreatePipeline && pipelines.length <= 1 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 pipeline-icon-btn shrink-0"
+                  disabled={isCreatingPipeline}
+                  onClick={async () => {
+                    if (isCreatingPipeline) return
+                    setIsCreatingPipeline(true)
+                    const n = pipelines.length + 1
+                    const title = `Pipeline ${n}`
+                    try {
+                      const created = await onCreatePipeline(title)
+                      if (created?.id && onActivePipelineChange) onActivePipelineChange(created.id)
+                      showToast('Pipeline created', 'success')
+                    } catch (e) {
+                      showToast(e?.message || 'Failed to create pipeline', 'error')
+                    } finally {
+                      setIsCreatingPipeline(false)
+                    }
+                  }}
+                  title="Create new pipeline"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              )}
+              {onCreatePipeline && pipelines.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 pipeline-icon-btn shrink-0"
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    setPipelineSwitcherAnchor({ top: rect.bottom + 4, left: rect.left })
+                    setPipelineSwitcherOpen(true)
+                  }}
+                  title="Switch pipeline"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
               )}
               {apiMode && onSharePipeline && isPipelineOwnedByUser(activePipeline) ? (
                 <Button
@@ -475,6 +601,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                   )}
                 </div>
                 <div
+                  data-col-id={col.id}
                   className={`flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-1.5 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
                   onDragOver={(e) => handleDragOver(e, col.id)}
                   onDragLeave={handleDragLeave}
@@ -486,11 +613,12 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                       draggable
                       onDragStart={(e) => handleDragStart(e, lead.id)}
                       onDragEnd={handleDragEnd}
+                      onTouchStart={(e) => handleTouchStart(e, lead)}
                       onClick={() => handleLeadClick(lead)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && handleLeadClick(lead)}
-                      className={`deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs group cursor-grab active:cursor-grabbing flex items-center gap-1 transition-colors ${draggedLeadId === lead.id ? 'opacity-50' : ''}`}
+                      className={`deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs group cursor-grab active:cursor-grabbing flex items-center gap-1 transition-colors ${draggedLeadId === lead.id ? 'scale-[0.8]' : ''}`}
                       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
                     >
                       <div className="flex-1 min-w-0">
@@ -742,6 +870,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
         onClose={() => setSelectedLead(null)}
         lead={selectedLead}
         parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
+        pipelineNames={selectedLead ? [apiMode ? (activePipeline?.title || pipelineTitle) : pipelineTitle] : []}
         onOpenParcelDetails={onOpenParcelDetails}
         onEmailClick={onEmailClick}
         onPhoneClick={onPhoneClick}
@@ -1102,6 +1231,146 @@ setAddTaskTitle('')
         </Dialog>
       )}
 
+      {touchDragPreview && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[10020] pointer-events-none"
+          style={{
+            left: touchDragPreview.x,
+            top: touchDragPreview.y,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div
+            className="deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs flex items-center gap-1 shadow-xl"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)', minWidth: 140 }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate text-white">{getStreetAddress(touchDragPreview.lead) || touchDragPreview.lead.address}</div>
+              {touchDragPreview.lead.owner && <div className="text-[11px] truncate text-white/85">{touchDragPreview.lead.owner}</div>}
+            </div>
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
+
+      {touchDragPreview && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[10020] pointer-events-none"
+          style={{
+            left: touchDragPreview.x,
+            top: touchDragPreview.y,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div
+            className="deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs flex items-center gap-1 shadow-xl"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)', minWidth: 140 }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate text-white">{getStreetAddress(touchDragPreview.lead) || touchDragPreview.lead.address}</div>
+              {touchDragPreview.lead.owner && <div className="text-[11px] truncate text-white/85">{touchDragPreview.lead.owner}</div>}
+            </div>
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
+
+      {touchDragPreview && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[10020] pointer-events-none"
+          style={{
+            left: touchDragPreview.x,
+            top: touchDragPreview.y,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div className="deal-pipeline-lead-card bg-black/90 px-2 py-1.5 rounded-md border border-white/40 text-white text-xs flex items-center gap-1 shadow-xl min-w-[120px]">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate text-white">{getStreetAddress(touchDragPreview.lead) || touchDragPreview.lead.address}</div>
+              {touchDragPreview.lead.owner && <div className="text-[11px] truncate text-white/85">{touchDragPreview.lead.owner}</div>}
+            </div>
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
+
+      {touchDragPreview && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[10020] pointer-events-none"
+          style={{
+            left: touchDragPreview.x,
+            top: touchDragPreview.y,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div
+            className="deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs flex items-center gap-1 shadow-xl"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)' }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate text-white">{getStreetAddress(touchDragPreview.lead) || touchDragPreview.lead.address}</div>
+              {touchDragPreview.lead.owner && <div className="text-[11px] truncate text-white/85">{touchDragPreview.lead.owner}</div>}
+            </div>
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
+
+      {pipelineSwitcherOpen && pipelineSwitcherAnchor && pipelines.length > 1 && onCreatePipeline && typeof document !== 'undefined' && createPortal(
+        <div data-pipeline-switcher className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
+          <div className="fixed inset-0 z-[10011]" onClick={() => setPipelineSwitcherOpen(false)} aria-hidden />
+          <div
+            className="map-panel list-panel fixed z-[10012] rounded-xl min-w-[200px] max-h-[60vh] overflow-y-auto py-1"
+            style={{ top: pipelineSwitcherAnchor.top, left: pipelineSwitcherAnchor.left }}
+            role="menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {pipelines.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setPipelineSwitcherOpen(false)
+                  if (onActivePipelineChange) onActivePipelineChange(p.id)
+                }}
+                className={cn(
+                  'w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors',
+                  p.id === activePipelineId ? 'bg-blue-100 text-blue-900 font-medium' : 'text-gray-900 hover:bg-gray-100'
+                )}
+              >
+                <span className="truncate flex-1">{p.title || 'Pipeline'}</span>
+                {p.ownerId !== currentUser?.uid && <Users className="h-3.5 w-3.5 flex-shrink-0 text-gray-500" title="Shared with you" aria-hidden />}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={isCreatingPipeline}
+              onClick={async () => {
+                if (isCreatingPipeline) return
+                setIsCreatingPipeline(true)
+                setPipelineSwitcherOpen(false)
+                const n = pipelines.length + 1
+                const title = `Pipeline ${n}`
+                try {
+                  const created = await onCreatePipeline(title)
+                  if (created?.id && onActivePipelineChange) onActivePipelineChange(created.id)
+                  showToast('Pipeline created', 'success')
+                } catch (e) {
+                  showToast(e?.message || 'Failed to create pipeline', 'error')
+                } finally {
+                  setIsCreatingPipeline(false)
+                }
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 hover:bg-gray-100 border-t border-gray-200 mt-1 pt-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              <Plus className="h-4 w-4 flex-shrink-0" />
+              Create new pipeline
+            </button>
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
+
       {pipelineDropdownOpen && pipelineDropdownAnchor && apiMode && activePipeline && isPipelineOwnedByUser(activePipeline) && typeof document !== 'undefined' && createPortal(
         <div data-pipeline-dropdown className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
           <div className="fixed inset-0 z-[10011]" onClick={() => setPipelineDropdownOpen(false)} aria-hidden />
@@ -1133,6 +1402,33 @@ setAddTaskTitle('')
               <Share2 className="h-4 w-4 flex-shrink-0" />
               Share pipeline
             </button>
+            {onDeletePipeline && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setPipelineDropdownOpen(false)
+                  const label = pipelines.length === 1 ? 'Reset pipeline' : 'Delete pipeline'
+                  const message = pipelines.length === 1
+                    ? 'Reset this pipeline? All leads and tasks will be removed and columns reset to default (Open, Pending, Accepted, In Progress, Completed).'
+                    : 'Delete this pipeline? This cannot be undone.'
+                  const confirmed = await showConfirm(message, label, { variant: 'danger' })
+                  if (!confirmed) return
+                  try {
+                    await onDeletePipeline(activePipeline.id, { pipelines, pipelineToDelete: activePipeline })
+                    if (pipelines.length === 1) {
+                      scheduleSync()
+                      refreshAllTasks()
+                    }
+                  } catch (e) {
+                    showToast(e?.message || 'Failed', 'error')
+                  }
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-red-600 flex items-center gap-2 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="h-4 w-4 flex-shrink-0" />
+                {pipelines.length === 1 ? 'Reset pipeline' : 'Delete pipeline'}
+              </button>
+            )}
           </div>
         </div>,
         document.getElementById('modal-root') || document.body

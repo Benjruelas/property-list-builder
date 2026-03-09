@@ -384,7 +384,7 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
             <div key={d} className="text-center text-white/60 py-1 px-0.5 border-b border-r border-white/20 bg-white/5">{d}</div>
           ))}
           {days.map((d, i) => {
-            if (!d) return <div key={`pad-${i}`} className="min-h-[28px] border-b border-r border-white/20 bg-white/5" />
+            if (!d) return <div key={`pad-${i}`} className="min-h-[28px] calendar-pad-cell" />
             const isSelected = selectedDate && d.toDateString() === selectedDate.toDateString()
             const isToday = d.toDateString() === new Date().toDateString()
             const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())

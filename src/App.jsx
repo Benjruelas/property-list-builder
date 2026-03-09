@@ -32,13 +32,17 @@ import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
 import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
-import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail } from './utils/pipelines'
+import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validateShareEmail as validatePipelineShareEmail } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { DealPipeline } from './components/DealPipeline'
 import { SchedulePanel } from './components/SchedulePanel'
+import { SettingsPanel } from './components/SettingsPanel'
+import { getSettings } from './utils/settings'
+import { promptAndRegisterPushOnFirstLoad } from './hooks/usePushNotifications'
 import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from './utils/dealPipeline'
+import { clearTasksForParcelIds } from './utils/leadTasks'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
@@ -217,6 +221,7 @@ function App() {
       setIsParcelDetailsOpen(false)
       setIsEmailTemplatesPanelOpen(false)
       setIsTextTemplatesPanelOpen(false)
+      setIsSettingsPanelOpen(false)
       setPhoneActionPanel(null)
       setIsEmailComposerOpen(false)
       setIsBulkEmailPreviewOpen(false)
@@ -256,7 +261,7 @@ function App() {
   const [bulkEmailListId, setBulkEmailListId] = useState(null)
   const [isSendingBulkEmails, setIsSendingBulkEmails] = useState(false)
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
-  const [isCompassActive, setIsCompassActive] = useState(false)
+  const [isCompassActive, setIsCompassActive] = useState(() => getSettings().compassOnByDefault)
   const heading = useDeviceHeading() // Compass heading in degrees (0-360), null until DeviceOrientation fires
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
@@ -272,6 +277,7 @@ function App() {
   const [activePipelineId, setActivePipelineId] = useState(null)
   const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
   const [scheduleInitialDate, setScheduleInitialDate] = useState(null)
+  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false)
   const [phoneActionPanel, setPhoneActionPanel] = useState(null) // { phone, parcelData } | null
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
@@ -393,6 +399,15 @@ function App() {
     })
   }, [currentUser?.uid, getToken])
 
+  // First-time push prompt: ask to enable notifications when app opens with signed-in user
+  useEffect(() => {
+    if (!currentUser?.uid || !getToken) return
+    const t = setTimeout(() => {
+      promptAndRegisterPushOnFirstLoad({ getAuthToken: getToken, currentUser })
+    }, 2000)
+    return () => clearTimeout(t)
+  }, [currentUser?.uid, getToken])
+
   // Load user lists when signed in
   const refreshLists = useCallback(async () => {
     if (!currentUser) return
@@ -424,7 +439,7 @@ function App() {
         const cols = loadColumns()
         const leads = loadLeads()
         const title = (() => {
-          try { return localStorage.getItem('deal_pipeline_title') || 'Deal Pipeline' } catch { return 'Deal Pipeline' }
+          try { return localStorage.getItem('deal_pipeline_title') || 'Pipeline 1' } catch { return 'Pipeline 1' }
         })()
         if (leads.length > 0 || cols.some((c) => (c?.name || '').trim())) {
           try {
@@ -477,7 +492,7 @@ function App() {
   const handleConvertToLead = useCallback(async (parcelData) => {
     if (!currentUser || !currentUser.uid) {
       setIsLoginOpen(true)
-      showToast('Please sign in to use the Deal Pipeline', 'info')
+      showToast('Please sign in to use Pipelines', 'info')
       return
     }
     if (!parcelData?.id) {
@@ -513,7 +528,7 @@ function App() {
         await updatePipeline(getToken, activePipelineId, { leads: [...(pipe.leads || []), lead] })
         await refreshPipelines()
         setIsDealPipelineOpen(true)
-        showToast('Parcel added to Deal Pipeline', 'success')
+        showToast('Parcel added to pipeline', 'success')
       } catch (e) {
         showToast(e.message || 'Could not add lead', 'error')
       }
@@ -524,7 +539,7 @@ function App() {
         setDealPipelineLeads(loadLeads())
         scheduleUserDataSync(getToken)
         setIsDealPipelineOpen(true)
-        showToast('Parcel added to Deal Pipeline', 'success')
+        showToast('Parcel added to pipeline', 'success')
       } else {
         showToast('Could not add lead', 'error')
       }
@@ -794,6 +809,61 @@ function App() {
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
     }
+  }, [getToken, refreshPipelines])
+
+  const DEFAULT_PIPELINE_COLUMNS = [
+    { id: 'col-0', name: 'Open' },
+    { id: 'col-1', name: 'Pending' },
+    { id: 'col-2', name: 'Accepted' },
+    { id: 'col-3', name: 'In Progress' },
+    { id: 'col-4', name: 'Completed' }
+  ]
+
+  const handleCreatePipeline = useCallback(async (title = 'Pipeline 1') => {
+    const pipeline = await createPipeline(getToken, {
+      title: (title || 'Pipeline 1').trim() || 'Pipeline 1',
+      columns: DEFAULT_PIPELINE_COLUMNS,
+      leads: []
+    })
+    await refreshPipelines()
+    return pipeline
+  }, [getToken, refreshPipelines])
+
+  const handleDeletePipeline = useCallback(async (pipelineId, { pipelines: pipelineList, pipelineToDelete } = {}) => {
+    const list = pipelineList ?? pipelines
+    const pipe = pipelineToDelete ?? list.find((p) => p.id === pipelineId)
+    if (!pipe) return
+    const isOwner = pipe.ownerId === currentUser?.uid
+    if (!isOwner) {
+      showToast('Only the owner can delete this pipeline', 'error')
+      return
+    }
+    if (list.length === 1) {
+      try {
+        const parcelIds = (pipe.leads || []).map((l) => l.parcelId ?? l.id).filter(Boolean)
+        clearTasksForParcelIds(parcelIds)
+        await updatePipeline(getToken, pipelineId, { leads: [], columns: DEFAULT_PIPELINE_COLUMNS })
+        await refreshPipelines()
+        showToast('Pipeline reset to default', 'success')
+      } catch (e) {
+        showToast(e?.message || 'Failed to reset pipeline', 'error')
+      }
+    } else {
+      try {
+        await deletePipeline(getToken, pipelineId)
+        await refreshPipelines()
+        const nextActive = list.find((p) => p.id !== pipelineId)
+        if (nextActive && activePipelineId === pipelineId) setActivePipelineId(nextActive.id)
+        showToast('Pipeline deleted', 'success')
+      } catch (e) {
+        showToast(e?.message || 'Failed to delete pipeline', 'error')
+      }
+    }
+  }, [getToken, refreshPipelines, pipelines, currentUser?.uid, activePipelineId])
+
+  const handleRenamePipeline = useCallback(async (pipelineId, title) => {
+    await updatePipeline(getToken, pipelineId, { title })
+    await refreshPipelines()
   }, [getToken, refreshPipelines])
 
   const handleShareList = useCallback(async (listId, sharedWith) => {
@@ -1271,6 +1341,26 @@ function App() {
     }
   }, [clickedParcelData, openParcelPopup])
 
+  // Center map on parcel after 3 seconds if parcel details snapshot (map popup) stays open
+  useEffect(() => {
+    if (isParcelDetailsOpen || !clickedParcelId || !clickedParcelData) return
+    const lat = clickedParcelData.lat ?? clickedParcelData.properties?.LATITUDE ?? clickedParcelData.latlng?.lat ?? clickedParcelData.latlng?.[0]
+    const lng = clickedParcelData.lng ?? clickedParcelData.properties?.LONGITUDE ?? clickedParcelData.latlng?.lng ?? clickedParcelData.latlng?.[1]
+    const numLat = lat != null ? parseFloat(lat) : NaN
+    const numLng = lng != null ? parseFloat(lng) : NaN
+    if (Number.isNaN(numLat) || Number.isNaN(numLng)) return
+
+    const t = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.setView([numLat, numLng], 17, {
+          animate: true,
+          duration: 0.5
+        })
+      }
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [isParcelDetailsOpen, clickedParcelId, clickedParcelData])
+
   // Handle email click from parcel details
   const handleEmailClick = useCallback((email, parcelData) => {
     // Wait for auth to finish loading before checking
@@ -1518,8 +1608,9 @@ function App() {
       return
     }
 
-    // Testing: all emails (including CSV export) go to this address
+    // Only dev@localhost uses test email; all other users receive at their actual email
     const TEST_EMAIL = 'benjruelas@gmail.com'
+    const recipientEmail = currentUser.email === 'dev@localhost' ? TEST_EMAIL : currentUser.email
 
     try {
       const csvContent = listToCsv(list)
@@ -1529,7 +1620,7 @@ function App() {
         body: JSON.stringify({
           listName: list.name,
           csvContent,
-          userEmail: TEST_EMAIL
+          userEmail: recipientEmail
         })
       })
 
@@ -1538,7 +1629,7 @@ function App() {
         throw new Error(data.message || data.error || `Export failed (${res.status})`)
       }
 
-      showToast(`Export sent to ${TEST_EMAIL}`, 'success')
+      showToast(`Export sent to ${recipientEmail}`, 'success')
     } catch (err) {
       console.error('Export list error:', err)
       showToast(err.message || 'Failed to export list', 'error')
@@ -1896,6 +1987,7 @@ function App() {
         maxZoom={20}
         style={{ height: '100%', minHeight: 'var(--vw-height, 100vh)', width: '100%' }}
         zoomControl={false}
+        attributionControl={false}
         rotate={true}
         rotateControl={false}
         touchRotate={true}
@@ -2039,6 +2131,7 @@ function App() {
           }
           setIsSchedulePanelOpen(true)
         }}
+        onOpenSettings={() => setIsSettingsPanelOpen(true)}
         currentUser={currentUser}
         onLogin={() => setIsLoginOpen(true)}
         onLogout={logout}
@@ -2139,10 +2232,14 @@ function App() {
       <DealPipeline
         isOpen={isDealPipelineOpen}
         onClose={() => setIsDealPipelineOpen(false)}
+        initialShowCompletedTasks={getSettings().showCompletedTasksByDefault}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
         onPipelinesChange={refreshPipelines}
         onActivePipelineChange={setActivePipelineId}
+        onCreatePipeline={handleCreatePipeline}
+        onDeletePipeline={handleDeletePipeline}
+        onRenamePipeline={handleRenamePipeline}
         onSharePipeline={handleSharePipeline}
         onValidateShareEmail={(email) => validatePipelineShareEmail(getToken, email)}
         currentUser={currentUser}
@@ -2192,7 +2289,16 @@ function App() {
         onClose={() => { setIsSchedulePanelOpen(false); setScheduleInitialDate(null) }}
         initialDate={scheduleInitialDate}
         onInitialDateConsumed={() => setScheduleInitialDate(null)}
-        leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
+        leads={pipelines.length > 0 ? (() => {
+          const seen = new Set()
+          return pipelines.flatMap((p) => (p.leads || []).filter((l) => {
+            const pid = l.parcelId ?? l.id
+            if (!pid || seen.has(pid)) return false
+            seen.add(pid)
+            return true
+          }))
+        })() : dealPipelineLeads}
+        pipelines={pipelines}
         onLeadsChange={pipelines.length > 0 ? () => refreshPipelines() : setDealPipelineLeads}
         onOpenParcelDetails={handleOpenParcelDetails}
         onEmailClick={handleEmailClick}
@@ -2222,6 +2328,15 @@ function App() {
         }}
         onSelectTemplate={handleTemplateSelect}
         isBulkMode={isBulkEmailMode}
+      />
+
+      <SettingsPanel
+        isOpen={isSettingsPanelOpen}
+        onClose={() => setIsSettingsPanelOpen(false)}
+        onCompassDefaultChange={(checked) => setIsCompassActive(checked)}
+        onShowCompletedTasksDefaultChange={() => {}}
+        currentUser={currentUser}
+        getAuthToken={getToken}
       />
 
       <EmailComposer
