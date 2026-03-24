@@ -760,9 +760,10 @@ export function PMTilesParcelLayer({
       }
     }
 
-    // Fade out parcels when pinch/zoom/pan starts, fade back in when it stops
+    // Fade out parcels only during user-initiated pinch/zoom (not programmatic follow pans).
+    // We only hide on zoomstart because panning keeps parcels visible and stable.
     let gestureFadeInTimeout = null
-    const onGestureStart = () => {
+    const onZoomGestureStart = () => {
       if (gestureFadeInTimeout) {
         clearTimeout(gestureFadeInTimeout)
         gestureFadeInTimeout = null
@@ -771,7 +772,7 @@ export function PMTilesParcelLayer({
         parcelPane.classList.add('parcel-pane-gesture-hiding')
       }
     }
-    const onGestureEnd = () => {
+    const onZoomGestureEnd = () => {
       if (gestureFadeInTimeout) clearTimeout(gestureFadeInTimeout)
       gestureFadeInTimeout = setTimeout(() => {
         gestureFadeInTimeout = null
@@ -783,10 +784,8 @@ export function PMTilesParcelLayer({
 
     // Load tiles when map moves, zooms, or rotates (debounced)
     if (map && map.on) {
-      map.on('zoomstart', onGestureStart)
-      map.on('movestart', onGestureStart)
-      map.on('zoomend', onGestureEnd)
-      map.on('moveend', onGestureEnd)
+      map.on('zoomstart', onZoomGestureStart)
+      map.on('zoomend', onZoomGestureEnd)
       map.on('moveend', debouncedLoadTiles)
       map.on('zoomend', debouncedLoadTiles)
       map.on('zoomend', onZoomEndWipeIfOutOfRange)
@@ -828,10 +827,8 @@ export function PMTilesParcelLayer({
         wipeTimeoutRef.current = null
       }
       if (map && map.off) {
-        map.off('zoomstart', onGestureStart)
-        map.off('movestart', onGestureStart)
-        map.off('zoomend', onGestureEnd)
-        map.off('moveend', onGestureEnd)
+        map.off('zoomstart', onZoomGestureStart)
+        map.off('zoomend', onZoomGestureEnd)
         map.off('moveend', debouncedLoadTiles)
         map.off('zoomend', debouncedLoadTiles)
         map.off('zoomend', onZoomEndWipeIfOutOfRange)

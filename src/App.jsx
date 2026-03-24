@@ -63,6 +63,7 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
   const map = useMap()
   const initialSetDoneRef = useRef(false)
   const lastInteractionRef = useRef(0)
+  const programmaticMoveRef = useRef(false)
 
   useEffect(() => {
     if (onMapReady) {
@@ -89,21 +90,33 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     }
   }, [userLocation, map])
 
-  // Smooth follow-mode panning
+  // Smooth follow-mode panning -- only when user has moved enough to matter.
+  // ~3 px on screen at current zoom = not worth panning.
   useEffect(() => {
     if (!userLocation || !initialSetDoneRef.current || !isFollowing) return
-    map.panTo([userLocation.lat, userLocation.lng], {
-      animate: true,
-      duration: 1.0,
-      easeLinearity: 0.25
-    })
+    const center = map.getCenter()
+    const target = L.latLng(userLocation.lat, userLocation.lng)
+    const pixelDist = map.latLngToContainerPoint(center).distanceTo(map.latLngToContainerPoint(target))
+    if (pixelDist < 4) return
+    programmaticMoveRef.current = true
+    map.panTo(target, { animate: true, duration: 1.0, easeLinearity: 0.25 })
   }, [userLocation, isFollowing, map])
+
+  // Clear programmatic flag after panTo finishes
+  useEffect(() => {
+    const onEnd = () => {
+      if (programmaticMoveRef.current) programmaticMoveRef.current = false
+    }
+    map.on('moveend', onEnd)
+    return () => { map.off('moveend', onEnd) }
+  }, [map])
 
   // Expose recenter function
   useEffect(() => {
     if (onRecenterMap) {
       onRecenterMap(() => {
         if (userLocation) {
+          programmaticMoveRef.current = true
           map.setView([userLocation.lat, userLocation.lng], 17, {
             animate: true,
             duration: 0.5
@@ -113,17 +126,23 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     }
   }, [map, userLocation, onRecenterMap])
 
-  // Detect user interaction -> pause follow-mode
+  // Detect user interaction -> pause follow-mode (ignore programmatic pans)
   useEffect(() => {
-    const pause = () => {
+    const pauseDrag = () => {
+      if (programmaticMoveRef.current) return
       lastInteractionRef.current = Date.now()
       if (onFollowingChange) onFollowingChange(false)
     }
-    map.on('dragstart', pause)
-    map.on('zoomstart', pause)
+    const pauseZoom = () => {
+      if (programmaticMoveRef.current) return
+      lastInteractionRef.current = Date.now()
+      if (onFollowingChange) onFollowingChange(false)
+    }
+    map.on('dragstart', pauseDrag)
+    map.on('zoomstart', pauseZoom)
     return () => {
-      map.off('dragstart', pause)
-      map.off('zoomstart', pause)
+      map.off('dragstart', pauseDrag)
+      map.off('zoomstart', pauseZoom)
     }
   }, [map, onFollowingChange])
 
@@ -298,7 +317,7 @@ function App() {
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(() => getSettings().compassDefault)
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
-  const heading = useDeviceHeading()
+  const { heading, permissionState, requestPermission: requestOrientationPermission } = useDeviceHeading()
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
@@ -444,6 +463,14 @@ function App() {
       }
     }
   }, [])
+
+  // Request device orientation permission on load when compass defaults to on.
+  // iOS requires a user gesture, so we prompt once and let the browser show its dialog.
+  useEffect(() => {
+    if (isCompassActive && permissionState === 'unknown') {
+      requestOrientationPermission()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load user data (deal pipeline, leads, tasks, notes, skip traced, etc.) when signed in
   useEffect(() => {
@@ -1190,24 +1217,13 @@ function App() {
       setIsCompassActive(false)
       return
     }
-    // When turning ON: iOS requires permission from user gesture
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      try {
-        const permission = await DeviceOrientationEvent.requestPermission()
-        if (permission === 'granted') {
-          setIsCompassActive(true)
-        } else {
-          showToast('Compass access denied. Enable in Settings to orient the map.', 'error')
-        }
-      } catch (err) {
-        console.warn('DeviceOrientation permission:', err)
-        showToast('Could not enable compass. Try again or check device settings.', 'error')
-      }
-    } else {
-      // Non-iOS or permission not required
+    const result = await requestOrientationPermission()
+    if (result === 'granted' || result === 'not-needed') {
       setIsCompassActive(true)
+    } else {
+      showToast('Compass access denied. Enable in Settings to orient the map.', 'error')
     }
-  }, [isCompassActive])
+  }, [isCompassActive, requestOrientationPermission])
 
   // Toggle multi-select mode
   const handleToggleMultiSelect = useCallback(() => {
