@@ -56,6 +56,7 @@ export const addSkipTraceJob = (job) => {
   jobs.push(newJob)
   saveSkipTraceJobs(jobs)
   console.log('📋 Added skip trace job:', jobId, 'for list:', job.listName)
+  window.dispatchEvent(new CustomEvent('skipTraceJobAdded'))
   return jobId
 }
 

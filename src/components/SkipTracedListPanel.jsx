@@ -24,18 +24,18 @@ export function SkipTracedListPanel({
     }
   }, [isOpen])
 
-  // Poll for localStorage changes when panel is open (since storage event only fires across tabs)
-  // This ensures the list updates when parcels/lists are skip traced
+  // Listen for same-tab updates dispatched by saveSkipTracedList
   useEffect(() => {
     if (!isOpen) return
 
-    const intervalId = setInterval(() => {
-      const skipTraced = getSkipTracedList()
-      setSkipTracedList(skipTraced)
-    }, 1000) // Check every 1 second when panel is open
+    const handleUpdate = () => setSkipTracedList(getSkipTracedList())
+    window.addEventListener('skipTracedListUpdated', handleUpdate)
+    // Also catch cross-tab changes via the native storage event
+    window.addEventListener('storage', handleUpdate)
 
     return () => {
-      clearInterval(intervalId)
+      window.removeEventListener('skipTracedListUpdated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
     }
   }, [isOpen])
 

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { X, ChevronLeft, ChevronRight, Calendar, CalendarDays } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, memo } from 'react'
+import { X, ChevronLeft, ChevronRight, Calendar, CalendarDays, Clock } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -116,14 +116,15 @@ function InlineTimeSelect({ ts, date, onChange }) {
   )
 }
 
-export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], onLeadsChange, initialDate = null, onInitialDateConsumed }) {
+export const SchedulePanel = memo(function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], onLeadsChange, initialDate = null, onInitialDateConsumed }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = onLeadsChange ? leads : loadLeads()
   const [allTasks, setAllTasks] = useState([])
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth())
-  const [viewMode, setViewMode] = useState('month') // 'month' | 'week'
-  const [weekStart, setWeekStart] = useState(null) // Sunday of displayed week (for week view)
+  const [viewMode, setViewMode] = useState('month') // 'month' | 'week' | 'day'
+  const [weekStart, setWeekStart] = useState(null)
+  const [dayDate, setDayDate] = useState(() => new Date())
   const [selectedLead, setSelectedLead] = useState(null)
   const [showAddTask, setShowAddTask] = useState(false)
   const [addTaskDate, setAddTaskDate] = useState(null)
@@ -305,8 +306,35 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
     return result
   }, [allTasks, viewMode, effectiveWeekStart, weekDays.length])
 
+  const daySpanningTasks = useMemo(() => {
+    if (viewMode !== 'day' || !dayDate) return []
+    const target = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate()).getTime()
+    const ROW_HEIGHT = 48
+    const result = []
+    for (const t of allTasks) {
+      if (!t.scheduledAt || t.completed) continue
+      const start = new Date(t.scheduledAt)
+      const taskDay = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime()
+      if (taskDay !== target) continue
+      const endTs = t.scheduledEndAt && t.scheduledEndAt > t.scheduledAt ? t.scheduledEndAt : t.scheduledAt + 60 * 60 * 1000
+      const end = new Date(endTs)
+      const startTop = (start.getHours() + start.getMinutes() / 60) * ROW_HEIGHT
+      const endBottom = (end.getHours() + end.getMinutes() / 60) * ROW_HEIGHT
+      let height = endBottom - startTop
+      if (height < ROW_HEIGHT) height = ROW_HEIGHT
+      result.push({ task: t, top: startTop, height })
+    }
+    return result
+  }, [allTasks, viewMode, dayDate])
+
   const prevPeriod = () => {
-    if (viewMode === 'week' && effectiveWeekStart) {
+    if (viewMode === 'day' && dayDate) {
+      const prev = new Date(dayDate)
+      prev.setDate(prev.getDate() - 1)
+      setDayDate(prev)
+      setViewYear(prev.getFullYear())
+      setViewMonth(prev.getMonth())
+    } else if (viewMode === 'week' && effectiveWeekStart) {
       const prev = new Date(effectiveWeekStart)
       prev.setDate(prev.getDate() - 7)
       setWeekStart(prev)
@@ -320,7 +348,13 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
     }
   }
   const nextPeriod = () => {
-    if (viewMode === 'week' && effectiveWeekStart) {
+    if (viewMode === 'day' && dayDate) {
+      const next = new Date(dayDate)
+      next.setDate(next.getDate() + 1)
+      setDayDate(next)
+      setViewYear(next.getFullYear())
+      setViewMonth(next.getMonth())
+    } else if (viewMode === 'week' && effectiveWeekStart) {
       const next = new Date(effectiveWeekStart)
       next.setDate(next.getDate() + 7)
       setWeekStart(next)
@@ -351,23 +385,31 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                 if (viewMode === 'month') {
                   setViewMode('week')
                   setWeekStart(getSundayOfWeek(new Date(viewYear, viewMonth, 1)))
+                } else if (viewMode === 'week') {
+                  setViewMode('day')
+                  setDayDate(new Date())
                 } else {
                   setViewMode('month')
                 }
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/30 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)] text-sm font-medium text-white hover:bg-black/40 transition-colors shrink-0"
-              aria-label={viewMode === 'month' ? 'Switch to week view' : 'Switch to month view'}
-              title={viewMode === 'month' ? 'Switch to week view' : 'Switch to month view'}
+              aria-label={`Switch to ${viewMode === 'month' ? 'week' : viewMode === 'week' ? 'day' : 'month'} view`}
+              title={`Switch to ${viewMode === 'month' ? 'week' : viewMode === 'week' ? 'day' : 'month'} view`}
             >
               {viewMode === 'month' ? (
                 <>
                   <CalendarDays className="w-4 h-4" aria-hidden />
                   Month
                 </>
-              ) : (
+              ) : viewMode === 'week' ? (
                 <>
                   <Calendar className="w-4 h-4" aria-hidden />
                   Week
+                </>
+              ) : (
+                <>
+                  <Clock className="w-4 h-4" aria-hidden />
+                  Day
                 </>
               )}
             </button>
@@ -387,7 +429,11 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
               <ChevronLeft className="h-5 w-5" />
             </button>
             <span className="text-lg font-semibold">
-              {viewMode === 'week' ? weekLabel : `${new Date(viewYear, viewMonth).toLocaleString('default', { month: 'long' })} ${viewYear}`}
+              {viewMode === 'day' && dayDate
+                ? dayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+                : viewMode === 'week'
+                  ? weekLabel
+                  : `${new Date(viewYear, viewMonth).toLocaleString('default', { month: 'long' })} ${viewYear}`}
             </span>
             <button
               type="button"
@@ -454,7 +500,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                   )
                 })}
               </div>
-            ) : (
+            ) : viewMode === 'week' ? (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 {/* Day headers - same columns as hourly grid */}
                 <div
@@ -535,6 +581,68 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                           >
                             <div className="text-[10px] px-1.5 py-0.5 truncate leading-tight">
                               {task.title || 'Task'}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
+                  <div className="relative" style={{ minHeight: 24 * 48 }}>
+                    <div
+                      className="grid schedule-day-grid"
+                      style={{
+                        gridTemplateColumns: '60px 1fr',
+                        gridAutoRows: 'minmax(48px, auto)',
+                        minHeight: 24 * 48
+                      }}
+                    >
+                      {HOURS.flatMap((hour) => [
+                        <div
+                          key={`${hour}-label`}
+                          className="py-1 pr-2 text-xs text-white/60 text-right border-r border-b border-white/10 flex items-start justify-end"
+                        >
+                          {formatHour(hour)}
+                        </div>,
+                        <button
+                          key={`${hour}-cell`}
+                          type="button"
+                          onClick={() => dayDate && handleHourCellClick(dayDate, hour)}
+                          className={`min-h-[48px] p-1 text-left border-b border-white/10 hover:bg-white/10 ${
+                            dayDate && dayDate.toDateString() === new Date().toDateString() ? 'bg-blue-500/10' : ''
+                          }`}
+                        />
+                      ])}
+                    </div>
+                    <div className="absolute top-0 left-0 right-0 pointer-events-none" style={{ height: 24 * 48 }}>
+                      {daySpanningTasks.map(({ task, top, height }) => {
+                        const lead = displayLeads.find((l) => l.parcelId === task.parcelId)
+                        const startTime = task.scheduledAt ? new Date(task.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''
+                        return (
+                          <div
+                            key={task.id}
+                            className="absolute rounded pointer-events-auto cursor-pointer bg-white/20 hover:bg-white/30 border border-white/20 overflow-hidden"
+                            style={{
+                              left: '64px',
+                              right: '8px',
+                              top,
+                              height: Math.max(28, height - 2),
+                              minHeight: 28
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (lead) setSelectedLead(lead)
+                            }}
+                            title={`${task.title || 'Task'} – ${getLeadLabel(lead, task.parcelId)}`}
+                          >
+                            <div className="flex items-center gap-2 px-2 py-1 h-full">
+                              <span className="text-xs font-medium truncate">{task.title || 'Task'}</span>
+                              <span className="text-[10px] text-white/50 shrink-0">{startTime}</span>
+                              <span className="text-[10px] text-white/60 truncate">{getLeadLabel(lead, task.parcelId)}</span>
                             </div>
                           </div>
                         )
@@ -705,4 +813,4 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
       </DialogContent>
     </Dialog>
   )
-}
+})

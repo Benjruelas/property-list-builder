@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, memo } from 'react'
 import { useMap } from 'react-leaflet'
 import { PMTiles } from 'pmtiles'
 import { VectorTile } from '@mapbox/vector-tile'
@@ -31,8 +31,8 @@ const LIST_HIGHLIGHT_COLORS = [
   { color: '#be185d', weight: 3, fillColor: '#db2777', fillOpacity: 0.3 },
 ]
 
-export function PMTilesParcelLayer({ 
-  pmtilesUrl, 
+export const PMTilesParcelLayer = memo(function PMTilesParcelLayer({
+  pmtilesUrl,
   onParcelClick,
   clickedParcelId,
   selectedParcels,
@@ -918,4 +918,4 @@ export function PMTilesParcelLayer({
   }, [clickedParcelId, selectedParcelsKey, parcelIdToColorKey, selectedParcels, parcelIdToColorIndex, selectedStyle, clickedStyle, defaultStyle])
 
   return null
-}
+})

@@ -39,6 +39,7 @@ export const getSkipTracedList = () => {
 const saveSkipTracedList = (list) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+    window.dispatchEvent(new CustomEvent('skipTracedListUpdated'))
   } catch (error) {
     console.error('Error saving skip traced list:', error)
   }

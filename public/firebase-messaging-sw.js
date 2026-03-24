@@ -4,12 +4,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: "AIzaSyCgnhxS0_Q6GtDcpm81fUKYIod-tuPplPQ",
-  authDomain: "roofscout-885c6.firebaseapp.com",
-  projectId: "roofscout-885c6",
-  storageBucket: "roofscout-885c6.firebasestorage.app",
-  messagingSenderId: "495820121012",
-  appId: "1:495820121012:web:d803eae264085f3e0908e1"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "localhost",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: "YOUR_APP_ID"
 });
 
 const messaging = firebase.messaging();

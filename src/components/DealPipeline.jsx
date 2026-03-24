@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Users } from 'lucide-react'
 import { Button } from './ui/button'
@@ -32,7 +32,7 @@ function positionTaskMenu(rect) {
   return { top, left }
 }
 
-export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], onLeadsChange, onOpenScheduleAtDate, pipelines = [], activePipelineId, onPipelinesChange, onActivePipelineChange, onCreatePipeline, onDeletePipeline, onSharePipeline, onValidateShareEmail, currentUser, getToken, onColumnsChange, onTitleChange }) {
+export const DealPipeline = memo(function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], onLeadsChange, onOpenScheduleAtDate, pipelines = [], activePipelineId, onPipelinesChange, onActivePipelineChange, onCreatePipeline, onDeletePipeline, onSharePipeline, onValidateShareEmail, currentUser, getToken, onColumnsChange, onTitleChange }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0]
@@ -417,9 +417,16 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
     }
   }
 
-  const displayTasks = apiMode
-    ? allTasks.filter((t) => t.parcelId === '__unassigned__' || displayLeads.some((l) => l.parcelId === t.parcelId))
-    : allTasks
+  const leadParcelIdSet = useMemo(
+    () => new Set(displayLeads.map((l) => l.parcelId)),
+    [displayLeads]
+  )
+  const displayTasks = useMemo(
+    () => apiMode
+      ? allTasks.filter((t) => t.parcelId === '__unassigned__' || leadParcelIdSet.has(t.parcelId))
+      : allTasks,
+    [apiMode, allTasks, leadParcelIdSet]
+  )
 
   const getLeadLabel = (parcelId) => {
     if (!parcelId || parcelId === '__unassigned__') return 'Unassigned'
@@ -428,7 +435,8 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
     return parcelId
   }
 
-  const addTaskLeadSuggestions = (() => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const addTaskLeadSuggestions = useMemo(() => {
     const q = (addTaskLeadSearch || '').trim().toLowerCase()
     if (!q) return []
     const tokens = q.split(/\s+/).filter(Boolean)
@@ -462,7 +470,15 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
       results.push({ lead, matchLabel, displayValue })
     }
     return results
-  })()
+  // getLeadLabel closes over displayLeads, so displayLeads covers both deps
+  }, [addTaskLeadSearch, displayLeads])
+
+  const filteredTasks = useMemo(
+    () => showCompletedTasks ? displayTasks : displayTasks.filter((t) => !t.completed),
+    [showCompletedTasks, displayTasks]
+  )
+  const scheduledTasks = useMemo(() => filteredTasks.filter((t) => t.scheduledAt), [filteredTasks])
+  const unscheduledTasks = useMemo(() => filteredTasks.filter((t) => !t.scheduledAt), [filteredTasks])
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setTaskMenu(null); onClose?.() } }}>
@@ -755,9 +771,6 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
               ) : (
                 <>
                   {(() => {
-                    const filtered = showCompletedTasks ? displayTasks : displayTasks.filter((t) => !t.completed)
-                    const scheduled = filtered.filter((t) => t.scheduledAt)
-                    const unscheduled = filtered.filter((t) => !t.scheduledAt)
                     const TaskItem = ({ task }) => (
                   <div
                     className={`text-xs rounded-md p-2 max-md:p-1.5 border cursor-pointer transition-colors ${task.completed ? 'opacity-60 bg-gray-100/70 dark:bg-white/[0.03] border-gray-200/80 dark:border-white/10 hover:opacity-80' : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
@@ -813,7 +826,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                     )
                     return (
                       <>
-                        {scheduled.length > 0 && (
+                        {scheduledTasks.length > 0 && (
                           <div>
                             <button
                               type="button"
@@ -829,12 +842,12 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                             </button>
                             {!scheduledSectionCollapsed && (
                               <div className="space-y-1.5">
-                                {scheduled.map((task) => <TaskItem key={task.id} task={task} />)}
+                                {scheduledTasks.map((task) => <TaskItem key={task.id} task={task} />)}
                               </div>
                             )}
                           </div>
                         )}
-                        {unscheduled.length > 0 && (
+                        {unscheduledTasks.length > 0 && (
                           <div>
                             <button
                               type="button"
@@ -850,7 +863,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                             </button>
                             {!unscheduledSectionCollapsed && (
                               <div className="space-y-1.5">
-                                {unscheduled.map((task) => <TaskItem key={task.id} task={task} />)}
+                                {unscheduledTasks.map((task) => <TaskItem key={task.id} task={task} />)}
                               </div>
                             )}
                           </div>
@@ -1501,4 +1514,4 @@ setAddTaskTitle('')
       )}
     </Dialog>
   )
-}
+})

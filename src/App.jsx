@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { MapContainer, TileLayer, useMapEvents, Marker, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
@@ -36,9 +36,9 @@ import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validat
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
-import { DealPipeline } from './components/DealPipeline'
-import { SchedulePanel } from './components/SchedulePanel'
-import { SettingsPanel } from './components/SettingsPanel'
+const DealPipeline = lazy(() => import('./components/DealPipeline').then(m => ({ default: m.DealPipeline })))
+const SchedulePanel = lazy(() => import('./components/SchedulePanel').then(m => ({ default: m.SchedulePanel })))
+const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })))
 import { getSettings } from './utils/settings'
 import { promptAndRegisterPushOnFirstLoad } from './hooks/usePushNotifications'
 import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from './utils/dealPipeline'
@@ -744,25 +744,34 @@ function App() {
       }
     }
 
-    // Poll for pending jobs every 10 seconds
-    const pollInterval = setInterval(() => {
+    // Poll for pending jobs — backs off to no-op once the queue is empty
+    let pollInterval = null
+    const tick = () => {
       const pendingJobs = getPendingSkipTraceJobs()
-      
-      if (pendingJobs.length > 0) {
-        console.log(`📋 Found ${pendingJobs.length} pending skip trace job(s)`)
-        
-        // Process jobs one at a time (don't process if one is already running)
-        pendingJobs.forEach(job => {
-          // Only process if status is pending (not already processing)
-          if (job.status === 'pending') {
-            processSkipTraceJob(job)
-          }
-        })
+      if (pendingJobs.length === 0) {
+        // Nothing pending; stop polling until a new job is queued
+        clearInterval(pollInterval)
+        pollInterval = null
+        return
       }
-    }, 10000) // Check every 10 seconds
+      console.log(`📋 Found ${pendingJobs.length} pending skip trace job(s)`)
+      pendingJobs.forEach(job => {
+        if (job.status === 'pending') processSkipTraceJob(job)
+      })
+    }
+    // Start an interval only if there are already-pending jobs; new jobs will
+    // restart the interval via the 'skipTraceJobAdded' custom event below.
+    const startPolling = () => {
+      if (pollInterval) return
+      pollInterval = setInterval(tick, 10000)
+    }
+    const initialJobs = getPendingSkipTraceJobs()
+    if (initialJobs.length > 0) startPolling()
+    window.addEventListener('skipTraceJobAdded', startPolling)
 
     return () => {
       clearInterval(pollInterval)
+      window.removeEventListener('skipTraceJobAdded', startPolling)
     }
   }, [lists, getToken])
 
@@ -1352,7 +1361,7 @@ function App() {
 
     const t = setTimeout(() => {
       if (mapRef.current) {
-        mapRef.current.setView([numLat, numLng], 17, {
+        mapRef.current.panTo([numLat, numLng], {
           animate: true,
           duration: 0.5
         })
@@ -2229,6 +2238,7 @@ function App() {
         onOpenParcelDetails={handleOpenParcelDetails}
       />
 
+      <Suspense fallback={null}>
       <DealPipeline
         isOpen={isDealPipelineOpen}
         onClose={() => setIsDealPipelineOpen(false)}
@@ -2283,7 +2293,9 @@ function App() {
           }
         }}
       />
+      </Suspense>
 
+      <Suspense fallback={null}>
       <SchedulePanel
         isOpen={isSchedulePanelOpen}
         onClose={() => { setIsSchedulePanelOpen(false); setScheduleInitialDate(null) }}
@@ -2306,6 +2318,7 @@ function App() {
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
       />
+      </Suspense>
 
       <PhoneActionPanel
         isOpen={!!phoneActionPanel}
@@ -2330,6 +2343,7 @@ function App() {
         isBulkMode={isBulkEmailMode}
       />
 
+      <Suspense fallback={null}>
       <SettingsPanel
         isOpen={isSettingsPanelOpen}
         onClose={() => setIsSettingsPanelOpen(false)}
@@ -2338,6 +2352,7 @@ function App() {
         currentUser={currentUser}
         getAuthToken={getToken}
       />
+      </Suspense>
 
       <EmailComposer
         isOpen={isEmailComposerOpen}
