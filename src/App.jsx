@@ -44,6 +44,7 @@ import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as dele
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
 import { LeadsPanel } from './components/LeadsPanel'
+import { PermissionPrompt } from './components/PermissionPrompt'
 import { getSettings, updateSettings } from './utils/settings'
 import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
@@ -214,20 +215,34 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
 const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>`
 
 function LocationMarker({ position, heading, isCompassActive }) {
+  const map = useMap()
   const markerRef = useRef(null)
+  const arrowRef = useRef(null)
 
-  // Rotation: when compass on, map rotates so "up" = user's direction (marker points up).
-  // When compass off, rotate by heading so arrow points in direction user faces on north-up map.
   // Base -45° because Lucide Navigation tip is upper-right; we want tip-up = north.
+  // When compass on, map rotates so "up" = user's direction, arrow points up.
+  // When compass off, rotate arrow by heading on a north-up map.
   const rotation = -45 + (isCompassActive ? 0 : (heading ?? 0))
 
   const icon = useMemo(() => {
     return L.divIcon({
-      html: `<div class="user-location-marker" style="transform: rotate(${rotation}deg); color: #ffffff;">${NAVIGATION_ICON_SVG}</div>`,
-      className: '',
+      html: `<div class="user-location-arrow" style="color: #ffffff;">${NAVIGATION_ICON_SVG}</div>`,
+      className: 'user-location-marker-wrapper',
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     })
+  }, [])
+
+  // Update arrow rotation via DOM ref (avoids recreating icon/marker on every heading change)
+  useEffect(() => {
+    if (!markerRef.current) return
+    const el = markerRef.current.getElement()
+    if (!el) return
+    const arrow = el.querySelector('.user-location-arrow')
+    if (arrow) {
+      arrowRef.current = arrow
+      arrow.style.transform = `rotate(${rotation}deg)`
+    }
   }, [rotation])
 
   useEffect(() => {
@@ -236,7 +251,6 @@ function LocationMarker({ position, heading, isCompassActive }) {
     }
   }, [position])
 
-  // Only render if we have a valid position
   if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number') {
     return null
   }
@@ -295,6 +309,7 @@ function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false)
   const [isSignUpOpen, setIsSignUpOpen] = useState(false)
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
+  const [permissionsReady, setPermissionsReady] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [currentCounty, setCurrentCounty] = useState(null)
@@ -317,7 +332,7 @@ function App() {
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(() => getSettings().compassDefault)
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
-  const { heading, permissionState, requestPermission: requestOrientationPermission } = useDeviceHeading()
+  const heading = useDeviceHeading(permissionsReady)
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
@@ -364,14 +379,14 @@ function App() {
     recenterMapRef.current = func
   }, [])
 
-  // Track user's current location in real-time
+  // Track user's current location in real-time (only after permissions granted)
   useEffect(() => {
+    if (!permissionsReady) return
     let watchId = null
     let lastUpdateTime = 0
-    const UPDATE_THROTTLE_MS = 1000 // Update at most once per second to avoid excessive renders
+    const UPDATE_THROTTLE_MS = 1000
 
     if (navigator.geolocation) {
-      // First, try to get current position quickly
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const location = {
@@ -381,12 +396,9 @@ function App() {
           }
           setUserLocation(location)
           lastUpdateTime = Date.now()
-          console.log('📍 Initial location obtained:', location)
         },
         (error) => {
-          // Silently fail and use default location - no alerts on mobile
           console.error('Error getting initial location:', error)
-          // Default to Dallas, TX if geolocation fails
           setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
         },
         {
@@ -396,7 +408,6 @@ function App() {
         }
       )
 
-      // Then, watch for position updates continuously
       watchId = navigator.geolocation.watchPosition(
         (position) => {
           const now = Date.now()
@@ -449,28 +460,16 @@ function App() {
         }
       )
 
-      console.log('📍 Started watching location (watchId:', watchId, ')')
     } else {
-      // Default to Dallas, TX if geolocation not available
       setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
     }
 
-    // Cleanup: stop watching when component unmounts
     return () => {
       if (watchId !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchId)
-        console.log('📍 Stopped watching location (watchId:', watchId, ')')
       }
     }
-  }, [])
-
-  // Request device orientation permission on load when compass defaults to on.
-  // iOS requires a user gesture, so we prompt once and let the browser show its dialog.
-  useEffect(() => {
-    if (isCompassActive && permissionState === 'unknown') {
-      requestOrientationPermission()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [permissionsReady])
 
   // Load user data (deal pipeline, leads, tasks, notes, skip traced, etc.) when signed in
   useEffect(() => {
@@ -1211,19 +1210,9 @@ function App() {
     }
   }, [])
 
-  // Toggle compass mode (map orients to face user's direction)
-  const handleToggleCompass = useCallback(async () => {
-    if (isCompassActive) {
-      setIsCompassActive(false)
-      return
-    }
-    const result = await requestOrientationPermission()
-    if (result === 'granted' || result === 'not-needed') {
-      setIsCompassActive(true)
-    } else {
-      showToast('Compass access denied. Enable in Settings to orient the map.', 'error')
-    }
-  }, [isCompassActive, requestOrientationPermission])
+  const handleToggleCompass = useCallback(() => {
+    setIsCompassActive(prev => !prev)
+  }, [])
 
   // Toggle multi-select mode
   const handleToggleMultiSelect = useCallback(() => {
@@ -2044,6 +2033,9 @@ function App() {
   return (
     <UserDataSyncProvider getToken={getToken}>
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
+      {!permissionsReady && (
+        <PermissionPrompt onComplete={() => setPermissionsReady(true)} />
+      )}
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         <MapContainer

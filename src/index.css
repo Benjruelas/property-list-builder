@@ -93,12 +93,18 @@
   }
 }
 
-/* User location marker - Navigation icon matching recenter button */
-.user-location-marker {
+/* User location marker wrapper - no transitions on the Leaflet positioning transform */
+.user-location-marker-wrapper {
+  /* Override the global marker transition so Leaflet translate3d stays instant */
+  transition: none !important;
+}
+/* Arrow inside the marker - rotates smoothly to show heading */
+.user-location-arrow {
   display: flex;
   align-items: center;
   justify-content: center;
   transform-origin: center center;
+  transition: transform 0.3s ease-out;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
@@ -914,12 +920,84 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   filter: contrast(1.2);
 }
 
-/* Smooth marker movement between GPS updates */
-.leaflet-marker-pane .leaflet-marker-icon {
-  transition: transform 1s ease-out !important;
+/* Marker positioning -- keep Leaflet translate3d instant (no transition)
+   so markers don't lag/slide during map rotation or panning. */
+
+/* Permission prompt overlay */
+.permission-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 1.5rem;
+  padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
 }
-.user-location-marker {
-  transition: transform 0.3s ease-out;
+.permission-prompt-card {
+  max-width: 340px;
+  width: 100%;
+  background: rgba(30, 30, 30, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 1.25rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: #fff;
+}
+.permission-prompt-icons {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.permission-prompt-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+}
+.permission-prompt-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+.permission-prompt-desc {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  opacity: 0.65;
+  margin-bottom: 1.5rem;
+}
+.permission-prompt-step {
+  font-size: 0.8rem;
+  opacity: 0.5;
+  margin-bottom: 0.75rem;
+}
+.permission-prompt-btn {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 0.75rem;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.permission-prompt-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+.permission-prompt-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Settings panel — use box-shadow for borders (border-color gets overridden) */
