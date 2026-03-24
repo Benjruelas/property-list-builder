@@ -38,6 +38,13 @@ import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, 
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { DealPipeline } from './components/DealPipeline'
 import { SchedulePanel } from './components/SchedulePanel'
+import PathTracker from './components/PathTracker'
+import { PathsPanel } from './components/PathsPanel'
+import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi } from './utils/paths'
+import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
+import { SettingsPanel } from './components/SettingsPanel'
+import { LeadsPanel } from './components/LeadsPanel'
+import { getSettings, updateSettings } from './utils/settings'
 import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
@@ -52,21 +59,20 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange }) {
+function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange, isFollowing, anyPanelOpen, hasPopup, onFollowingChange, followResumeDelay }) {
   const map = useMap()
+  const initialSetDoneRef = useRef(false)
+  const lastInteractionRef = useRef(0)
 
-  // Store map instance reference
   useEffect(() => {
     if (onMapReady) {
       onMapReady(map)
     }
   }, [map, onMapReady])
 
-  // Fix iOS Safari: when URL bar shows/hides, resize event doesn't fire — use visualViewport
+  // Fix iOS Safari: when URL bar shows/hides, resize event doesn't fire
   useEffect(() => {
-    const handler = () => {
-      map.invalidateSize()
-    }
+    const handler = () => { map.invalidateSize() }
     window.visualViewport?.addEventListener('resize', handler)
     window.visualViewport?.addEventListener('scroll', handler)
     return () => {
@@ -75,16 +81,25 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     }
   }, [map])
 
-  // Center map on user location when it's available (only initially)
+  // Initial center (once)
   useEffect(() => {
-    if (userLocation) {
-      map.setView([userLocation.lat, userLocation.lng], 17, {
-        animate: false  // Don't animate initially - faster load
-      })
+    if (userLocation && !initialSetDoneRef.current) {
+      initialSetDoneRef.current = true
+      map.setView([userLocation.lat, userLocation.lng], 17, { animate: false })
     }
   }, [userLocation, map])
 
-  // Expose recenter function to parent
+  // Smooth follow-mode panning
+  useEffect(() => {
+    if (!userLocation || !initialSetDoneRef.current || !isFollowing) return
+    map.panTo([userLocation.lat, userLocation.lng], {
+      animate: true,
+      duration: 1.0,
+      easeLinearity: 0.25
+    })
+  }, [userLocation, isFollowing, map])
+
+  // Expose recenter function
   useEffect(() => {
     if (onRecenterMap) {
       onRecenterMap(() => {
@@ -98,6 +113,33 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     }
   }, [map, userLocation, onRecenterMap])
 
+  // Detect user interaction -> pause follow-mode
+  useEffect(() => {
+    const pause = () => {
+      lastInteractionRef.current = Date.now()
+      if (onFollowingChange) onFollowingChange(false)
+    }
+    map.on('dragstart', pause)
+    map.on('zoomstart', pause)
+    return () => {
+      map.off('dragstart', pause)
+      map.off('zoomstart', pause)
+    }
+  }, [map, onFollowingChange])
+
+  // Inactivity auto-resume (0 = never)
+  useEffect(() => {
+    if (!followResumeDelay) return
+    const interval = setInterval(() => {
+      if (isFollowing) return
+      if (anyPanelOpen || hasPopup) return
+      if (Date.now() - lastInteractionRef.current >= followResumeDelay) {
+        if (onFollowingChange) onFollowingChange(true)
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isFollowing, anyPanelOpen, hasPopup, onFollowingChange, followResumeDelay])
+
   // Monitor map viewport changes to detect county
   useEffect(() => {
     if (!onCountyChange) return
@@ -105,19 +147,14 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     const detectCounty = () => {
       try {
         const center = map.getCenter()
-        if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') {
-          console.warn('Map center not available yet', center)
-          return
-        }
+        if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') return
         const county = getCountyFromCoords(center.lat, center.lng)
-        console.log('📍 Detected county:', county, 'from center:', center.lat, center.lng)
         onCountyChange(county)
       } catch (error) {
         console.error('Error detecting county:', error)
       }
     }
 
-    // Wait for map to be ready and initialized before detecting county
     const checkAndDetect = () => {
       try {
         const center = map.getCenter?.()
@@ -127,21 +164,18 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
           setTimeout(checkAndDetect, 100)
         }
       } catch {
-        // Map/leaflet-rotate may not be fully initialized (e.g. _leaflet_pos)
         setTimeout(checkAndDetect, 100)
       }
     }
 
-    // Initial detection - wait for map to be ready
     map.whenReady(() => {
       setTimeout(checkAndDetect, 300)
     })
 
-    // Listen to map move events (pan, zoom) - use debounce to avoid excessive calls
     let timeoutId = null
     const handleMapChange = () => {
       if (timeoutId) clearTimeout(timeoutId)
-      timeoutId = setTimeout(detectCounty, 300) // Debounce 300ms
+      timeoutId = setTimeout(detectCounty, 300)
     }
 
     map.on('moveend', handleMapChange)
@@ -221,6 +255,12 @@ function App() {
       setIsEmailComposerOpen(false)
       setIsBulkEmailPreviewOpen(false)
       setIsMultiSelectActive(false)
+      setIsPathTrackingActive(false)
+      setIsPathsPanelOpen(false)
+      setIsSettingsPanelOpen(false)
+      setIsLeadsPanelOpen(false)
+      setPaths([])
+      setVisiblePathIds([])
       setSelectedParcels(new Set())
       setSelectedParcelsData(new Map())
       setClickedParcelId(null)
@@ -256,8 +296,9 @@ function App() {
   const [bulkEmailListId, setBulkEmailListId] = useState(null)
   const [isSendingBulkEmails, setIsSendingBulkEmails] = useState(false)
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
-  const [isCompassActive, setIsCompassActive] = useState(false)
-  const heading = useDeviceHeading() // Compass heading in degrees (0-360), null until DeviceOrientation fires
+  const [isCompassActive, setIsCompassActive] = useState(() => getSettings().compassDefault)
+  const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
+  const heading = useDeviceHeading()
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
@@ -273,11 +314,30 @@ function App() {
   const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
   const [scheduleInitialDate, setScheduleInitialDate] = useState(null)
   const [phoneActionPanel, setPhoneActionPanel] = useState(null) // { phone, parcelData } | null
+  const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
+  const [isPathsPanelOpen, setIsPathsPanelOpen] = useState(false)
+  const [paths, setPaths] = useState([])
+  const [visiblePathIds, setVisiblePathIds] = useState([])
+  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false)
+  const [isLeadsPanelOpen, setIsLeadsPanelOpen] = useState(false)
+  const [settings, setSettings] = useState(() => getSettings())
+  const pathTrackerRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null) // Reference to parcel layer functions
   const currentPopupRef = useRef(null) // Reference to current Leaflet popup
   const parcelDetailsSourceRef = useRef('map') // 'map' = opened from map popup, 'list' = opened from list panel
+
+  const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
+    isSkipTracedListPanelOpen || isEmailTemplatesPanelOpen || isTextTemplatesPanelOpen ||
+    isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
+    isSchedulePanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen
+  const hasPopup = clickedParcelId != null
+
+  const handleSettingsChange = useCallback((partial) => {
+    const next = updateSettings(partial, getToken)
+    setSettings(next)
+  }, [getToken])
 
   // Recenter map function passed to MapController
   const recenterMapRef = useRef(null)
@@ -408,6 +468,89 @@ function App() {
     if (currentUser) refreshLists()
     else setLists([])
   }, [currentUser, refreshLists])
+
+  // Load user paths when signed in
+  const refreshPaths = useCallback(async () => {
+    if (!currentUser) return
+    try {
+      const next = await fetchPaths(getToken)
+      setPaths(next)
+    } catch (error) {
+      console.error('Error loading paths:', error)
+    }
+  }, [currentUser, getToken])
+
+  useEffect(() => {
+    if (currentUser) refreshPaths()
+    else { setPaths([]); setVisiblePathIds([]) }
+  }, [currentUser, refreshPaths])
+
+  const handleTogglePathTracking = useCallback(async () => {
+    if (isPathTrackingActive) {
+      const tracker = pathTrackerRef.current
+      if (!tracker) {
+        setIsPathTrackingActive(false)
+        return
+      }
+      const rawPoints = tracker.getRawPoints()
+      if (rawPoints.length < 2) {
+        showToast('Path too short to save', 'warning')
+        tracker.reset()
+        setIsPathTrackingActive(false)
+        return
+      }
+      try {
+        const distance = totalDistanceMiles(rawPoints)
+        const name = 'Path - ' + new Date().toLocaleString(undefined, {
+          month: 'short', day: 'numeric', year: 'numeric',
+          hour: 'numeric', minute: '2-digit'
+        })
+        await createPath(getToken, name, rawPoints, distance)
+        const displayDist = settings.distanceUnit === 'km'
+          ? `${Math.round(distance * 1.60934 * 100) / 100} km`
+          : `${distance} mi`
+        showToast(`Path saved (${displayDist})`, 'success')
+        await refreshPaths()
+      } catch (e) {
+        console.error('Error saving path:', e)
+        showToast(e.message || 'Failed to save path', 'error')
+      }
+      tracker.reset()
+      setIsPathTrackingActive(false)
+    } else {
+      setIsPathTrackingActive(true)
+      showToast('Recording path...', 'info')
+    }
+  }, [isPathTrackingActive, getToken, refreshPaths, settings.distanceUnit])
+
+  const handleDeletePath = useCallback(async (path) => {
+    const confirmed = await showConfirm({
+      title: 'Delete path',
+      message: `Delete "${path.name}"? This cannot be undone.`,
+      confirmText: 'Delete',
+      variant: 'danger'
+    })
+    if (!confirmed) return
+    try {
+      await deletePathApi(getToken, path.id)
+      setVisiblePathIds(prev => prev.filter(id => id !== path.id))
+      await refreshPaths()
+      showToast('Path deleted', 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to delete path', 'error')
+    }
+  }, [getToken, refreshPaths])
+
+  const handleRenamePath = useCallback(async (pathId, name) => {
+    await renamePathApi(getToken, pathId, name)
+    await refreshPaths()
+  }, [getToken, refreshPaths])
+
+  const handleTogglePathVisibility = useCallback((pathId) => {
+    setVisiblePathIds(prev =>
+      prev.includes(pathId) ? prev.filter(id => id !== pathId) : [...prev, pathId]
+    )
+  }, [])
 
   const refreshPipelines = useCallback(async () => {
     if (!currentUser) return
@@ -1033,8 +1176,9 @@ function App() {
     }
   }, [clickedParcelData, lists, getToken, refreshLists])
 
-  // Recenter map on user location
+  // Recenter map on user location and resume follow-mode
   const handleRecenter = useCallback(() => {
+    setIsFollowing(true)
     if (recenterMapRef.current) {
       recenterMapRef.current()
     }
@@ -1424,14 +1568,13 @@ function App() {
       showToast('No template selected', 'error')
       return
     }
-    const TEST_EMAIL = 'benjruelas@gmail.com'
+    const testMode = settings.emailTestMode && settings.defaultEmail
     const list = lists.find(l => l.id === listId)
     if (!list || !list.parcels || list.parcels.length === 0) {
       showToast('List is empty', 'warning')
       return
     }
 
-    // Get skip traced data for all parcels
     const { getSkipTracedParcel } = await import('./utils/skipTrace')
     const { replaceTemplateTags } = await import('./utils/emailTemplates')
 
@@ -1454,14 +1597,12 @@ function App() {
       return
     }
 
-    const confirmed = await showConfirm(
-      `Send email to ${parcelsWithEmails.length} parcel${parcelsWithEmails.length > 1 ? 's' : ''} in "${list.name}"? ${TEST_EMAIL !== parcelsWithEmails[0].email ? `(Testing - all emails will go to ${TEST_EMAIL})` : ''}`,
-      'Bulk Email'
-    )
+    const confirmMsg = testMode
+      ? `Send email to ${parcelsWithEmails.length} parcel${parcelsWithEmails.length > 1 ? 's' : ''} in "${list.name}"? (Test mode - all emails will go to ${settings.defaultEmail})`
+      : `Send email to ${parcelsWithEmails.length} parcel${parcelsWithEmails.length > 1 ? 's' : ''} in "${list.name}"?`
+    const confirmed = await showConfirm(confirmMsg, 'Bulk Email')
     if (!confirmed) return
 
-    // Send emails one by one (open mailto links)
-    // Use test email for all emails during testing
     let sentCount = 0
     for (const { parcel, email, skipTracedInfo } of parcelsWithEmails) {
       const parcelData = {
@@ -1474,20 +1615,21 @@ function App() {
       const subject = replaceTemplateTags(template.subject || '', parcelData)
       const body = replaceTemplateTags(template.body || '', parcelData)
 
-      // Use test email instead of actual recipient email
-      const mailtoLink = `mailto:${TEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      const recipient = testMode ? settings.defaultEmail : email
+      const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
       
-      // Open in new window/tab to avoid blocking
       window.open(mailtoLink, '_blank')
       sentCount++
 
-      // Small delay between emails to avoid overwhelming the browser
       if (sentCount < parcelsWithEmails.length) {
         await new Promise(resolve => setTimeout(resolve, 500))
       }
     }
 
-    showToast(`✅ Successfully sent ${sentCount} email${sentCount > 1 ? 's' : ''} to ${TEST_EMAIL}!`, 'success', 8000)
+    const toastMsg = testMode
+      ? `Successfully sent ${sentCount} email${sentCount > 1 ? 's' : ''} to ${settings.defaultEmail}!`
+      : `Successfully sent ${sentCount} email${sentCount > 1 ? 's' : ''}!`
+    showToast(toastMsg, 'success', 8000)
     
     // Reset state
     setSelectedEmailTemplate(null)
@@ -1498,7 +1640,7 @@ function App() {
     setBulkEmailList(null)
     setBulkEmailListId(null)
     setIsSendingBulkEmails(false)
-  }, [lists])
+  }, [lists, settings.emailTestMode, settings.defaultEmail])
 
   // Handle export list as CSV and email to user
   const handleExportList = useCallback(async (listId) => {
@@ -1518,8 +1660,7 @@ function App() {
       return
     }
 
-    // Testing: all emails (including CSV export) go to this address
-    const TEST_EMAIL = 'benjruelas@gmail.com'
+    const exportEmail = (settings.defaultEmail && settings.emailTestMode) ? settings.defaultEmail : currentUser.email
 
     try {
       const csvContent = listToCsv(list)
@@ -1529,7 +1670,7 @@ function App() {
         body: JSON.stringify({
           listName: list.name,
           csvContent,
-          userEmail: TEST_EMAIL
+          userEmail: exportEmail
         })
       })
 
@@ -1538,12 +1679,12 @@ function App() {
         throw new Error(data.message || data.error || `Export failed (${res.status})`)
       }
 
-      showToast(`Export sent to ${TEST_EMAIL}`, 'success')
+      showToast(`Export sent to ${exportEmail}`, 'success')
     } catch (err) {
       console.error('Export list error:', err)
       showToast(err.message || 'Failed to export list', 'error')
     }
-  }, [lists, currentUser])
+  }, [lists, currentUser, settings.emailTestMode, settings.defaultEmail])
 
   const handleBulkEmailList = useCallback(async (listId) => {
     await handleBulkEmailListSelected(listId)
@@ -1891,7 +2032,7 @@ function App() {
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         <MapContainer
         center={userLocation || [32.7767, -96.7970]}
-        zoom={17}
+        zoom={settings.defaultZoom}
         minZoom={1}
         maxZoom={20}
         style={{ height: '100%', minHeight: 'var(--vw-height, 100vh)', width: '100%' }}
@@ -1901,21 +2042,39 @@ function App() {
         touchRotate={true}
       >
         <>
-          <TileLayer
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            maxNativeZoom={19}
-            maxZoom={22}
-            attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
-          />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
-            maxZoom={20}
-            maxNativeZoom={19}
-            opacity={1}
-            className="satellite-labels-layer"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
-          />
+          {settings.mapStyle === 'street' ? (
+            <TileLayer
+              key="street"
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+              subdomains="abcd"
+              maxZoom={20}
+              maxNativeZoom={19}
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+            />
+          ) : (
+            <>
+              <TileLayer
+                key="satellite"
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                maxNativeZoom={19}
+                maxZoom={22}
+                attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+              />
+              <TileLayer
+                key="labels"
+                url={settings.mapStyle === 'hybrid'
+                  ? "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+                  : "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
+                }
+                subdomains="abcd"
+                maxZoom={20}
+                maxNativeZoom={19}
+                opacity={1}
+                className="satellite-labels-layer"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+              />
+            </>
+          )}
         </>
         <ZoomControl position="topleft" />
         <MapController 
@@ -1926,8 +2085,13 @@ function App() {
           }}
           onRecenterMap={setRecenterMap}
           onCountyChange={handleCountyChange}
+          isFollowing={isFollowing}
+          anyPanelOpen={anyPanelOpen}
+          hasPopup={hasPopup}
+          onFollowingChange={setIsFollowing}
+          followResumeDelay={settings.followResumeDelay}
         />
-        <CompassOrientation isActive={isCompassActive} />
+        <CompassOrientation isActive={isCompassActive} heading={heading} isFollowing={isFollowing} />
         <NorthIndicator />
         {userLocation && (
           <LocationMarker 
@@ -1949,6 +2113,13 @@ function App() {
             }}
           />
         )}
+        <PathTracker
+          ref={pathTrackerRef}
+          isTracking={isPathTrackingActive}
+          userLocation={userLocation}
+          savedPathsToShow={paths.filter(p => visiblePathIds.includes(p.id))}
+          smoothingLevel={settings.pathSmoothing}
+        />
       </MapContainer>
       </div>
 
@@ -2039,6 +2210,25 @@ function App() {
           }
           setIsSchedulePanelOpen(true)
         }}
+        onTogglePathTracking={() => {
+          if (authLoading) return
+          if (!currentUser || !currentUser.uid) {
+            setIsLoginOpen(true)
+            return
+          }
+          handleTogglePathTracking()
+        }}
+        isPathTrackingActive={isPathTrackingActive}
+        onOpenPathsPanel={() => {
+          if (authLoading) return
+          if (!currentUser || !currentUser.uid) {
+            setIsLoginOpen(true)
+            return
+          }
+          setIsPathsPanelOpen(true)
+        }}
+        onOpenSettings={() => setIsSettingsPanelOpen(true)}
+        onOpenLeads={() => setIsLeadsPanelOpen(true)}
         currentUser={currentUser}
         onLogin={() => setIsLoginOpen(true)}
         onLogout={logout}
@@ -2240,6 +2430,8 @@ function App() {
           console.log('Email sent:', emailData)
           showToast('Email opened in your email client', 'success')
         }}
+        emailTestMode={settings.emailTestMode}
+        testEmail={settings.defaultEmail}
       />
 
       <BulkEmailPreview
@@ -2257,6 +2449,37 @@ function App() {
           setIsBulkEmailPreviewOpen(false)
           setBulkEmailList(null)
           setBulkEmailListId(null)
+        }}
+      />
+
+      <PathsPanel
+        isOpen={isPathsPanelOpen}
+        onClose={() => setIsPathsPanelOpen(false)}
+        paths={paths}
+        onPathsChange={refreshPaths}
+        onDeletePath={handleDeletePath}
+        onRenamePath={handleRenamePath}
+        visiblePathIds={visiblePathIds}
+        onTogglePathVisibility={handleTogglePathVisibility}
+        distanceUnit={settings.distanceUnit}
+      />
+
+      <SettingsPanel
+        isOpen={isSettingsPanelOpen}
+        onClose={() => setIsSettingsPanelOpen(false)}
+        settings={settings}
+        onSettingsChange={handleSettingsChange}
+        getToken={getToken}
+      />
+
+      <LeadsPanel
+        isOpen={isLeadsPanelOpen}
+        onClose={() => setIsLeadsPanelOpen(false)}
+        pipelines={pipelines}
+        dealPipelineLeads={dealPipelineLeads}
+        onOpenDealPipeline={() => {
+          setIsLeadsPanelOpen(false)
+          setIsDealPipelineOpen(true)
         }}
       />
 

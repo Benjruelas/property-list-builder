@@ -1,34 +1,69 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 /**
- * Listens to DeviceOrientation and returns compass heading in degrees (0-360, 0 = North).
+ * Listens to DeviceOrientation and returns a smoothed compass heading (0-360, 0 = North).
+ * Uses a low-pass filter to eliminate jitter from noisy sensor data.
  * On iOS, events only fire after DeviceOrientationEvent.requestPermission() is granted.
- * On non-iOS, usually works without permission.
  */
 export function useDeviceHeading() {
   const [heading, setHeading] = useState(null)
+  const smoothedRef = useRef(null)
+  const lastEmittedRef = useRef(null)
+  const rafPendingRef = useRef(false)
 
   useEffect(() => {
+    const ALPHA = 0.15
+    const MIN_DELTA = 1
+
     const eventName = 'ondeviceorientationabsolute' in window
       ? 'deviceorientationabsolute'
       : 'deviceorientation'
 
     const handleOrientation = (e) => {
       let angle = e.webkitCompassHeading ?? e.alpha
-
       if (angle == null) return
 
-      // Safari iOS: webkitCompassHeading is clockwise from north
       if (!e.absolute && e.webkitCompassHeading != null) {
         angle = 360 - angle
       }
-
-      // Older browsers: adjust for device orientation
       if (!e.absolute && typeof window.orientation === 'number') {
         angle = (angle - window.orientation + 360) % 360
       }
 
-      setHeading(((angle % 360) + 360) % 360)
+      const raw = ((angle % 360) + 360) % 360
+
+      if (smoothedRef.current === null) {
+        smoothedRef.current = raw
+        lastEmittedRef.current = raw
+        setHeading(raw)
+        return
+      }
+
+      let delta = raw - smoothedRef.current
+      if (delta > 180) delta -= 360
+      if (delta < -180) delta += 360
+
+      smoothedRef.current = ((smoothedRef.current + ALPHA * delta) % 360 + 360) % 360
+
+      if (rafPendingRef.current) return
+      rafPendingRef.current = true
+
+      requestAnimationFrame(() => {
+        rafPendingRef.current = false
+        const current = smoothedRef.current
+        if (lastEmittedRef.current === null) {
+          lastEmittedRef.current = current
+          setHeading(current)
+          return
+        }
+        let emitDelta = current - lastEmittedRef.current
+        if (emitDelta > 180) emitDelta -= 360
+        if (emitDelta < -180) emitDelta += 360
+        if (Math.abs(emitDelta) >= MIN_DELTA) {
+          lastEmittedRef.current = current
+          setHeading(current)
+        }
+      })
     }
 
     window.addEventListener(eventName, handleOrientation, { passive: true })

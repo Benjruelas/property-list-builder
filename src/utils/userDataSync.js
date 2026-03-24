@@ -20,7 +20,8 @@ const LS_TO_BLOB = {
   email_templates: 'emailTemplates',
   text_templates: 'textTemplates',
   skip_trace_jobs: 'skipTraceJobs',
-  skip_traced_list: 'skipTracedList'
+  skip_traced_list: 'skipTracedList',
+  app_settings: 'appSettings'
 }
 
 const BLOB_TO_LS = Object.fromEntries(
@@ -28,7 +29,7 @@ const BLOB_TO_LS = Object.fromEntries(
 )
 
 /** Read current localStorage into blob format */
-function readLocalBlob() {
+export function readLocalBlob() {
   const blob = {}
   for (const [lsKey, blobKey] of Object.entries(LS_TO_BLOB)) {
     try {

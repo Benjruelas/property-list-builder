@@ -6,9 +6,6 @@ import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { replaceTemplateTags } from '../utils/emailTemplates'
 
-// Test email for development - all emails will be sent to this address
-const TEST_EMAIL = 'benjruelas@gmail.com'
-
 export function EmailComposer({
   isOpen,
   onClose,
@@ -16,14 +13,15 @@ export function EmailComposer({
   parcelData,
   recipientEmail,
   recipientName,
-  onSend
+  onSend,
+  emailTestMode = false,
+  testEmail = ''
 }) {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [isSending, setIsSending] = useState(false)
   
-  // Use test email for all emails during testing
-  const actualRecipientEmail = TEST_EMAIL
+  const actualRecipientEmail = (emailTestMode && testEmail) ? testEmail : recipientEmail
 
   useEffect(() => {
     if (isOpen && template && parcelData) {

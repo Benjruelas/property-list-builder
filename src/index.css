@@ -914,3 +914,149 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   filter: contrast(1.2);
 }
 
+/* Smooth marker movement between GPS updates */
+.leaflet-marker-pane .leaflet-marker-icon {
+  transition: transform 1s ease-out !important;
+}
+.user-location-marker {
+  transition: transform 0.3s ease-out;
+}
+
+/* Settings panel — use box-shadow for borders (border-color gets overridden) */
+.map-panel .settings-toggle,
+.map-panel .settings-toggle:hover {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.55) !important;
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .settings-toggle[aria-checked="true"],
+.map-panel .settings-toggle[aria-checked="true"]:hover {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85) !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+.map-panel .settings-toggle .toggle-knob-off {
+  background: rgba(255, 255, 255, 0.35) !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .settings-toggle .toggle-knob-on {
+  background: #fff !important;
+  border: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.map-panel .settings-segmented,
+.map-panel .settings-segmented:hover {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .settings-segmented button,
+.map-panel .settings-segmented button:hover {
+  color: rgba(255, 255, 255, 0.4) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .settings-segmented button:hover:not(.seg-active) {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+.map-panel .settings-segmented button.seg-active,
+.map-panel .settings-segmented button.seg-active:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.75) !important;
+  color: #fff !important;
+}
+
+.map-panel .settings-zoom-slider button,
+.map-panel .settings-zoom-slider button:hover {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.35) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .settings-zoom-slider button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+.map-panel .settings-zoom-slider button:disabled {
+  opacity: 0.3 !important;
+}
+
+.map-panel .settings-section button {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.map-panel .settings-data-btn,
+.map-panel .settings-data-btn:hover {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .settings-data-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+.map-panel .settings-data-btn-danger,
+.map-panel .settings-data-btn-danger:hover {
+  box-shadow: inset 0 0 0 1px rgba(255, 120, 120, 0.45) !important;
+  background: rgba(255, 80, 80, 0.08) !important;
+  border: none !important;
+  color: rgba(255, 160, 160, 0.95) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .settings-data-btn-danger:hover {
+  background: rgba(255, 80, 80, 0.18) !important;
+}
+
+/* Leads panel cards */
+.map-panel .leads-card {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: background 0.15s;
+}
+.map-panel .leads-card:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+.map-panel .leads-stage-badge {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* GPS path tracking animations */
+@keyframes pathGlowPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+@keyframes pathLinePulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+.path-glow-pulse {
+  animation: pathGlowPulse 2s ease-in-out infinite;
+}
+.path-line-pulse {
+  animation: pathLinePulse 2s ease-in-out infinite;
+}
+

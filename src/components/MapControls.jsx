@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Calendar } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Calendar, Route, Settings, Users } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 export function MapControls({ 
@@ -15,6 +15,11 @@ export function MapControls({
   onOpenTextTemplates,
   onOpenDealPipeline,
   onOpenSchedule,
+  onTogglePathTracking,
+  isPathTrackingActive,
+  onOpenPathsPanel,
+  onOpenSettings,
+  onOpenLeads,
   currentUser,
   onLogin,
   onLogout
@@ -66,6 +71,24 @@ export function MapControls({
           <Square className="h-6 w-6 sm:h-5 sm:w-5" />
         )}
       </Button>
+      <Button
+        onClick={onTogglePathTracking}
+        size="icon"
+        variant={isPathTrackingActive ? "glass" : "glass-outline"}
+        className={cn(
+          "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
+          isPathTrackingActive && "bg-red-600/80 hover:bg-red-700/90 border-red-400/50 text-white",
+          !currentUser && "opacity-50 cursor-not-allowed"
+        )}
+        disabled={!currentUser}
+        title={!currentUser
+          ? "Sign in to record paths"
+          : isPathTrackingActive
+            ? "Recording path - tap to stop & save"
+            : "Start recording path"}
+      >
+        <Route className="h-6 w-6 sm:h-5 sm:w-5" />
+      </Button>
       
       {/* Menu Dropdown */}
       <div className="relative">
@@ -87,7 +110,7 @@ export function MapControls({
               className="fixed inset-0 z-[999]" 
               onClick={() => setShowMenu(false)}
             />
-            <div className="map-panel hamburger-menu absolute right-0 top-14 rounded-xl min-w-[200px] z-[1000] py-2">
+            <div className="map-panel hamburger-menu absolute right-full top-0 mr-2 rounded-xl min-w-[200px] z-[1000] py-2">
               {/* Lists Button */}
               <button
                 onClick={() => {
@@ -100,6 +123,21 @@ export function MapControls({
                 <span className="flex-1">Lists</span>
                 {selectedListIds.length > 0 && (
                   <Circle className="h-2 w-2 fill-amber-400 text-amber-400 flex-shrink-0" />
+                )}
+              </button>
+
+              {/* Paths Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenPathsPanel?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <Route className="h-4 w-4 flex-shrink-0" />
+                <span className="flex-1">Paths</span>
+                {isPathTrackingActive && (
+                  <Circle className="h-2 w-2 fill-red-500 text-red-500 flex-shrink-0" />
                 )}
               </button>
 
@@ -151,6 +189,18 @@ export function MapControls({
                 <span>Deal Pipeline</span>
               </button>
 
+              {/* Leads Button */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenLeads?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <Users className="h-4 w-4 flex-shrink-0" />
+                <span>Leads</span>
+              </button>
+
               {/* Schedule Button */}
               <button
                 onClick={() => {
@@ -177,6 +227,16 @@ export function MapControls({
                       {currentUser.email}
                     </p>
                   </div>
+                  <button
+                    onClick={() => {
+                      setShowMenu(false)
+                      onOpenSettings?.()
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+                  >
+                    <Settings className="h-4 w-4 flex-shrink-0" />
+                    <span>Settings</span>
+                  </button>
                   <button
                     onClick={async () => {
                       setShowMenu(false)
