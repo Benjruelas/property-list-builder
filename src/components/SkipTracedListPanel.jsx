@@ -45,8 +45,8 @@ export function SkipTracedListPanel({
         onClose()
       }
     }}>
-      <DialogContent className="map-panel list-panel max-w-md max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
+      <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay>
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold">Skiptraced Parcels</DialogTitle>
             <Button
@@ -63,7 +63,7 @@ export function SkipTracedListPanel({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-200px)]">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           {(!skipTracedList || (skipTracedList.parcels.length === 0 && skipTracedList.listItems.length === 0)) ? (
             <p className="text-center py-8 text-sm opacity-80">No skip traced parcels yet.</p>
           ) : (

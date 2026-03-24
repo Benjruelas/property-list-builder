@@ -382,14 +382,14 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setTaskMenu(null); onClose?.() } }}>
       <DialogContent
-        className="map-panel deal-pipeline-panel w-[98vw] max-w-[98vw] h-[95vh] max-h-[95vh] md:h-[95vh] md:max-h-[95vh] p-0 flex flex-col"
+        className="map-panel deal-pipeline-panel fullscreen-panel flex flex-col"
         showCloseButton={false}
         hideOverlay
         onInteractOutside={(e) => {
           if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-share-pipeline-dialog]')) e.preventDefault()
         }}
       >
-        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0">
+        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Manage leads in your deal pipeline</DialogDescription>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0 flex-1">

@@ -109,14 +109,14 @@ export function PathsPanel({
     <>
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
         <DialogContent
-          className="map-panel list-panel max-w-md max-h-[80vh] p-0"
+          className="map-panel list-panel fullscreen-panel"
           showCloseButton={false}
           hideOverlay
           onInteractOutside={(e) => {
             if (e.target.closest?.('[data-paths-panel-dropdown]')) e.preventDefault()
           }}
         >
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
             <DialogDescription className="sr-only">View and manage your recorded GPS paths</DialogDescription>
             <div className="flex items-center justify-between">
               <DialogTitle className="text-xl font-semibold">Paths</DialogTitle>
@@ -133,7 +133,7 @@ export function PathsPanel({
             </div>
           </DialogHeader>
 
-          <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-200px)]">
+          <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
             <div className="space-y-4">
               {allPaths.length === 0 ? (
                 <div className="text-center py-8">

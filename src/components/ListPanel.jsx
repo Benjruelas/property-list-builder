@@ -219,14 +219,14 @@ export function ListPanel({
       }
     }}>
       <DialogContent
-        className="map-panel list-panel max-w-md max-h-[80vh] p-0"
+        className="map-panel list-panel fullscreen-panel"
         showCloseButton={false}
         hideOverlay
         onInteractOutside={(e) => {
           if (e.target.closest?.('[data-list-panel-dropdown]')) e.preventDefault()
         }}
       >
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Manage your property lists, add parcels, and share lists</DialogDescription>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold">Lists</DialogTitle>
@@ -252,7 +252,7 @@ export function ListPanel({
           </div>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-200px)]">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           {isAddingSingleParcel && (
             <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={{ color: 'white', borderColor: '#2563eb' }}>
               Select a list to add this parcel to

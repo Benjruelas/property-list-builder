@@ -135,8 +135,8 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
         setViewingTemplate(null)
       }
     }}>
-      <DialogContent className="map-panel list-panel email-panel max-w-md max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
-        <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
+      <DialogContent className="map-panel list-panel email-panel fullscreen-panel" showCloseButton={false} hideOverlay>
+        <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
               <Mail className="h-5 w-5" />
@@ -156,7 +156,7 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 pt-2 pb-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-200px)]">
+        <div className="px-6 pt-2 pb-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           {showCreateForm ? (
             <div className="space-y-3 create-list-form">
               <Button

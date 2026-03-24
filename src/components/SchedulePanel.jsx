@@ -330,11 +330,11 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setShowAddTask(false); onClose?.() } }}>
       <DialogContent
-        className="map-panel deal-pipeline-panel schedule-panel w-[98vw] max-w-[98vw] h-[95vh] max-h-[95vh] md:h-[95vh] md:max-h-[95vh] p-0 flex flex-col"
+        className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex flex-col"
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0">
+        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">View and manage scheduled tasks</DialogDescription>
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-xl font-semibold truncate">Schedule</DialogTitle>

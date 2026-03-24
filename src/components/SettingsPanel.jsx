@@ -208,7 +208,7 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
-        className="map-panel list-panel !w-full !max-w-none !h-full !max-h-none !rounded-none !translate-x-0 !translate-y-0 !top-0 !left-0 p-0"
+        className="map-panel list-panel fullscreen-panel"
         showCloseButton={false}
         hideOverlay
       >
