@@ -93,16 +93,18 @@
   }
 }
 
-/* User location marker wrapper - no transitions on the Leaflet positioning transform */
-.user-location-marker-wrapper {
-  /* Override the global marker transition so Leaflet translate3d stays instant */
-  transition: none !important;
+/* User location marker - absolutely positioned overlay outside Leaflet panes */
+.user-location-overlay {
+  width: 28px;
+  height: 28px;
+  will-change: transform;
 }
-/* Arrow inside the marker - rotates smoothly to show heading */
 .user-location-arrow {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
   transform-origin: center center;
   transition: transform 0.3s ease-out;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));

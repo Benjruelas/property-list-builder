@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { MapContainer, TileLayer, useMapEvents, Marker, useMap, ZoomControl } from 'react-leaflet'
+import { MapContainer, TileLayer, useMapEvents, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 // leaflet-rotate expects L globally; must load after leaflet
@@ -211,57 +211,74 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
   return null
 }
 
-// Navigation icon SVG (matches lucide-react Navigation) - arrow; base rotation -45° so tip points north
+// Navigation icon SVG - arrow; base rotation -45° so tip points north
 const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>`
 
-function LocationMarker({ position, heading, isCompassActive }) {
-  const map = useMap()
-  const markerRef = useRef(null)
-  const arrowRef = useRef(null)
+/**
+ * User location marker rendered as a plain HTML overlay on top of the map container.
+ * Completely outside Leaflet's pane/layer system so it is immune to map rotation.
+ * Position is updated by converting LatLng -> container pixel coords on every frame
+ * the map moves, zooms, or rotates.
+ */
+function LocationMarker({ position, heading, isCompassActive, mapRef }) {
+  const elRef = useRef(null)
+  const rafRef = useRef(null)
 
-  // Base -45° because Lucide Navigation tip is upper-right; we want tip-up = north.
-  // When compass on, map rotates so "up" = user's direction, arrow points up.
-  // When compass off, rotate arrow by heading on a north-up map.
   const rotation = -45 + (isCompassActive ? 0 : (heading ?? 0))
 
-  const icon = useMemo(() => {
-    return L.divIcon({
-      html: `<div class="user-location-arrow" style="color: #ffffff;">${NAVIGATION_ICON_SVG}</div>`,
-      className: 'user-location-marker-wrapper',
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-    })
-  }, [])
-
-  // Update arrow rotation via DOM ref (avoids recreating icon/marker on every heading change)
+  // Reposition the overlay whenever the map moves/rotates or position/heading changes
   useEffect(() => {
-    if (!markerRef.current) return
-    const el = markerRef.current.getElement()
-    if (!el) return
-    const arrow = el.querySelector('.user-location-arrow')
-    if (arrow) {
-      arrowRef.current = arrow
-      arrow.style.transform = `rotate(${rotation}deg)`
-    }
-  }, [rotation])
+    const map = mapRef?.current
+    if (!map || !position) return
 
-  useEffect(() => {
-    if (markerRef.current && position) {
-      markerRef.current.setLatLng([position.lat, position.lng])
+    const update = () => {
+      const el = elRef.current
+      if (!el) return
+      try {
+        const pt = map.latLngToContainerPoint([position.lat, position.lng])
+        el.style.transform = `translate(${pt.x - 14}px, ${pt.y - 14}px)`
+      } catch { /* map not ready */ }
     }
-  }, [position])
+
+    update()
+
+    const onMove = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(update)
+    }
+
+    map.on('move', onMove)
+    map.on('zoom', onMove)
+    map.on('rotate', onMove)
+    map.on('moveend', update)
+    map.on('zoomend', update)
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      map.off('move', onMove)
+      map.off('zoom', onMove)
+      map.off('rotate', onMove)
+      map.off('moveend', update)
+      map.off('zoomend', update)
+    }
+  }, [mapRef, position])
 
   if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number') {
     return null
   }
 
   return (
-    <Marker
-      ref={markerRef}
-      position={[position.lat, position.lng]}
-      icon={icon}
-      pane="markerPane"
-    />
+    <div
+      ref={elRef}
+      className="user-location-overlay"
+      style={{ position: 'absolute', top: 0, left: 0, zIndex: 600, pointerEvents: 'none' }}
+    >
+      <div
+        className="user-location-arrow"
+        style={{ transform: `rotate(${rotation}deg)`, color: '#ffffff' }}
+        dangerouslySetInnerHTML={{ __html: NAVIGATION_ICON_SVG }}
+      />
+    </div>
   )
 }
 
@@ -2101,13 +2118,6 @@ function App() {
         />
         <CompassOrientation isActive={isCompassActive} heading={heading} isFollowing={isFollowing} />
         <NorthIndicator />
-        {userLocation && (
-          <LocationMarker 
-            position={userLocation}
-            heading={heading}
-            isCompassActive={isCompassActive}
-          />
-        )}
         {pmtilesUrl && (
           <PMTilesParcelLayer 
             pmtilesUrl={pmtilesUrl}
@@ -2129,6 +2139,14 @@ function App() {
           smoothingLevel={settings.pathSmoothing}
         />
       </MapContainer>
+        {userLocation && (
+          <LocationMarker
+            position={userLocation}
+            heading={heading}
+            isCompassActive={isCompassActive}
+            mapRef={mapRef}
+          />
+        )}
       </div>
 
       <AddressSearch
