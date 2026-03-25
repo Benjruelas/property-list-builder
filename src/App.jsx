@@ -65,6 +65,7 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
   const initialSetDoneRef = useRef(false)
   const lastInteractionRef = useRef(0)
   const programmaticMoveRef = useRef(false)
+  const prevFollowingRef = useRef(isFollowing)
 
   useEffect(() => {
     if (onMapReady) {
@@ -91,10 +92,34 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     }
   }, [userLocation, map])
 
-  // Smooth follow-mode panning -- only when user has moved enough to matter.
-  // ~3 px on screen at current zoom = not worth panning.
+  // Follow-mode panning.
+  // When follow-mode just resumed (was off → on), delay one frame so
+  // CompassOrientation's setBearing settles first, then use setView to
+  // snap the center. For ongoing following (small GPS updates), gently
+  // pan only if the user has drifted > 3 px on screen.
   useEffect(() => {
-    if (!userLocation || !initialSetDoneRef.current || !isFollowing) return
+    if (!userLocation || !initialSetDoneRef.current || !isFollowing) {
+      prevFollowingRef.current = isFollowing
+      return
+    }
+
+    const justResumed = !prevFollowingRef.current && isFollowing
+    prevFollowingRef.current = isFollowing
+
+    if (justResumed) {
+      // Delay so setBearing (from CompassOrientation) applies first,
+      // then center on user in the post-rotation coordinate space.
+      const raf = requestAnimationFrame(() => {
+        programmaticMoveRef.current = true
+        map.setView([userLocation.lat, userLocation.lng], map.getZoom(), {
+          animate: true,
+          duration: 0.5,
+        })
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+
+    // Ongoing follow: only pan if user moved enough on screen
     const center = map.getCenter()
     const target = L.latLng(userLocation.lat, userLocation.lng)
     const pixelDist = map.latLngToContainerPoint(center).distanceTo(map.latLngToContainerPoint(target))
@@ -118,7 +143,7 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
       onRecenterMap(() => {
         if (userLocation) {
           programmaticMoveRef.current = true
-          map.setView([userLocation.lat, userLocation.lng], 17, {
+          map.setView([userLocation.lat, userLocation.lng], map.getZoom(), {
             animate: true,
             duration: 0.5
           })
@@ -129,21 +154,16 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
 
   // Detect user interaction -> pause follow-mode (ignore programmatic pans)
   useEffect(() => {
-    const pauseDrag = () => {
+    const pauseFollow = () => {
       if (programmaticMoveRef.current) return
       lastInteractionRef.current = Date.now()
       if (onFollowingChange) onFollowingChange(false)
     }
-    const pauseZoom = () => {
-      if (programmaticMoveRef.current) return
-      lastInteractionRef.current = Date.now()
-      if (onFollowingChange) onFollowingChange(false)
-    }
-    map.on('dragstart', pauseDrag)
-    map.on('zoomstart', pauseZoom)
+    map.on('dragstart', pauseFollow)
+    map.on('zoomstart', pauseFollow)
     return () => {
-      map.off('dragstart', pauseDrag)
-      map.off('zoomstart', pauseZoom)
+      map.off('dragstart', pauseFollow)
+      map.off('zoomstart', pauseFollow)
     }
   }, [map, onFollowingChange])
 
@@ -212,74 +232,79 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
 }
 
 // Navigation icon SVG - arrow; base rotation -45° so tip points north
-const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>`
+const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>`
 
 /**
- * User location marker rendered as a plain HTML overlay on top of the map container.
- * Completely outside Leaflet's pane/layer system so it is immune to map rotation.
- * Position is updated by converting LatLng -> container pixel coords on every frame
- * the map moves, zooms, or rotates.
+ * User location marker using a native Leaflet DivIcon in the markerPane.
+ * leaflet-rotate places markerPane inside norotatePane, so the icon
+ * stays at the correct geographic position without rotating with the map.
+ * Arrow direction is updated imperatively on heading changes and map
+ * rotation events so it always points in the user's heading relative to north.
  */
-function LocationMarker({ position, heading, isCompassActive, mapRef }) {
-  const elRef = useRef(null)
-  const rafRef = useRef(null)
+function LocationMarker({ position, heading }) {
+  const map = useMap()
+  const markerRef = useRef(null)
+  const arrowElRef = useRef(null)
+  const headingRef = useRef(heading)
+  headingRef.current = heading
 
-  const rotation = -45 + (isCompassActive ? 0 : (heading ?? 0))
-
-  // Reposition the overlay whenever the map moves/rotates or position/heading changes
   useEffect(() => {
-    const map = mapRef?.current
-    if (!map || !position) return
+    if (!map) return
 
-    const update = () => {
-      const el = elRef.current
-      if (!el) return
-      try {
-        const pt = map.latLngToContainerPoint([position.lat, position.lng])
-        el.style.transform = `translate(${pt.x - 14}px, ${pt.y - 14}px)`
-      } catch { /* map not ready */ }
+    const icon = L.divIcon({
+      className: 'user-location-icon',
+      html: `<div class="user-location-arrow-el">${NAVIGATION_ICON_SVG}</div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    })
+
+    const marker = L.marker([0, 0], { icon, interactive: false, keyboard: false })
+    marker.addTo(map)
+    markerRef.current = marker
+
+    const el = marker.getElement()
+    if (el) {
+      el.style.transition = 'none'
+      arrowElRef.current = el.querySelector('.user-location-arrow-el')
     }
-
-    update()
-
-    const onMove = () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      rafRef.current = requestAnimationFrame(update)
-    }
-
-    map.on('move', onMove)
-    map.on('zoom', onMove)
-    map.on('rotate', onMove)
-    map.on('moveend', update)
-    map.on('zoomend', update)
 
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      map.off('move', onMove)
-      map.off('zoom', onMove)
-      map.off('rotate', onMove)
-      map.off('moveend', update)
-      map.off('zoomend', update)
+      marker.remove()
+      markerRef.current = null
+      arrowElRef.current = null
     }
-  }, [mapRef, position])
+  }, [map])
 
-  if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number') {
-    return null
-  }
+  // Update position when it changes
+  useEffect(() => {
+    if (markerRef.current && position) {
+      markerRef.current.setLatLng([position.lat, position.lng])
+    }
+  }, [position])
 
-  return (
-    <div
-      ref={elRef}
-      className="user-location-overlay"
-      style={{ position: 'absolute', top: 0, left: 0, zIndex: 600, pointerEvents: 'none' }}
-    >
-      <div
-        className="user-location-arrow"
-        style={{ transform: `rotate(${rotation}deg)`, color: '#ffffff' }}
-        dangerouslySetInnerHTML={{ __html: NAVIGATION_ICON_SVG }}
-      />
-    </div>
-  )
+  // Update arrow rotation on heading changes and map rotation
+  useEffect(() => {
+    if (!map) return
+
+    const updateArrow = () => {
+      const arrow = arrowElRef.current
+      if (!arrow) return
+      const bearing = (typeof map.getBearing === 'function') ? (map.getBearing() || 0) : 0
+      const h = headingRef.current ?? 0
+      arrow.style.transform = `rotate(${-45 + h + bearing}deg)`
+    }
+
+    updateArrow()
+    map.on('rotate', updateArrow)
+    map.on('rotateend', updateArrow)
+
+    return () => {
+      map.off('rotate', updateArrow)
+      map.off('rotateend', updateArrow)
+    }
+  }, [map, heading])
+
+  return null
 }
 
 function App() {
@@ -2138,15 +2163,13 @@ function App() {
           savedPathsToShow={paths.filter(p => visiblePathIds.includes(p.id))}
           smoothingLevel={settings.pathSmoothing}
         />
-      </MapContainer>
         {userLocation && (
           <LocationMarker
             position={userLocation}
             heading={heading}
-            isCompassActive={isCompassActive}
-            mapRef={mapRef}
           />
         )}
+      </MapContainer>
       </div>
 
       <AddressSearch
@@ -2506,6 +2529,23 @@ function App() {
         onOpenDealPipeline={() => {
           setIsLeadsPanelOpen(false)
           setIsDealPipelineOpen(true)
+        }}
+        onOpenParcelDetails={handleOpenParcelDetails}
+        onEmailClick={handleEmailClick}
+        onPhoneClick={handlePhoneClick}
+        onSkipTraceParcel={handleSkipTraceParcel}
+        skipTracingInProgress={skipTracingInProgress}
+        onLeadsChange={pipelines.length > 0 ? async (newLeads) => {
+          if (!activePipelineId) return
+          try {
+            await updatePipeline(getToken, activePipelineId, { leads: newLeads })
+            await refreshPipelines()
+          } catch (e) { showToast(e.message || 'Failed to update', 'error') }
+        } : setDealPipelineLeads}
+        onOpenScheduleAtDate={(ts) => {
+          setIsLeadsPanelOpen(false)
+          setScheduleInitialDate(ts)
+          setIsSchedulePanelOpen(true)
         }}
       />
 

@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { X, Search, ChevronDown, ChevronRight, Users, MapPin, Clock, ArrowUpDown, Filter, SlidersHorizontal } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
-import { formatTimeInState, getStreetAddress } from '../utils/dealPipeline'
+import { formatTimeInState, getStreetAddress, loadLeads, saveLeads } from '../utils/dealPipeline'
+import { LeadDetails } from './LeadDetails'
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest First' },
@@ -39,11 +40,17 @@ function sortLeads(leads, sortBy, columns) {
   }
 }
 
-function LeadCard({ lead, columns, pipelineTitle }) {
+function LeadCard({ lead, columns, pipelineTitle, onClick }) {
   const stageName = getColumnName(lead.status, columns)
   const timeStr = formatTimeInState(lead)
   return (
-    <div className="leads-card flex flex-col gap-1 px-3.5 py-3 rounded-lg">
+    <div
+      className="leads-card flex flex-col gap-1 px-3.5 py-3 rounded-lg cursor-pointer active:scale-[0.98] transition-transform"
+      onClick={() => onClick?.(lead)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick?.(lead)}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="text-sm font-medium truncate flex-1">{lead.address || 'Unknown'}</div>
       </div>
@@ -74,6 +81,13 @@ export function LeadsPanel({
   pipelines = [],
   dealPipelineLeads = [],
   onOpenDealPipeline,
+  onOpenParcelDetails,
+  onEmailClick,
+  onPhoneClick,
+  onSkipTraceParcel,
+  skipTracingInProgress,
+  onLeadsChange,
+  onOpenScheduleAtDate,
 }) {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
@@ -81,6 +95,7 @@ export function LeadsPanel({
   const [filterPipeline, setFilterPipeline] = useState('all')
   const [showSortFilter, setShowSortFilter] = useState(false)
   const [collapsedPipelines, setCollapsedPipelines] = useState({})
+  const [selectedLead, setSelectedLead] = useState(null)
 
   const allPipelineData = useMemo(() => {
     if (pipelines.length > 0) {
@@ -139,8 +154,28 @@ export function LeadsPanel({
     setCollapsedPipelines(prev => ({ ...prev, [pid]: !prev[pid] }))
   }
 
+  const leadToParcelData = (lead) => ({
+    id: lead.parcelId,
+    address: lead.address,
+    properties: lead.properties || { OWNER_NAME: lead.owner, SITUS_ADDR: lead.address, LATITUDE: lead.lat, LONGITUDE: lead.lng },
+    lat: lead.lat,
+    lng: lead.lng,
+  })
+
+  const allLeads = useMemo(() => allPipelineData.flatMap(p => p.leads), [allPipelineData])
+
+  const handleLeadUpdate = useCallback((updated) => {
+    setSelectedLead(updated)
+    if (onLeadsChange) {
+      onLeadsChange(allLeads.map(l => l.id === updated.id ? updated : l))
+    } else {
+      const stored = loadLeads()
+      saveLeads(stored.map(l => l.id === updated.id ? updated : l))
+    }
+  }, [allLeads, onLeadsChange])
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); onClose() } }}>
       <DialogContent
         className="map-panel list-panel fullscreen-panel"
         showCloseButton={false}
@@ -322,6 +357,7 @@ export function LeadsPanel({
                           lead={lead}
                           columns={pipeline.columns}
                           pipelineTitle={showHeader ? null : pipeline.title}
+                          onClick={setSelectedLead}
                         />
                       ))}
                     </div>
@@ -332,6 +368,27 @@ export function LeadsPanel({
           )}
         </div>
       </DialogContent>
+
+      <LeadDetails
+        isOpen={!!selectedLead}
+        onClose={() => setSelectedLead(null)}
+        lead={selectedLead}
+        parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
+        onOpenParcelDetails={onOpenParcelDetails}
+        onEmailClick={onEmailClick}
+        onPhoneClick={onPhoneClick}
+        onSkipTraceParcel={onSkipTraceParcel}
+        isSkipTracingInProgress={selectedLead && skipTracingInProgress?.has?.(selectedLead.parcelId)}
+        onLeadUpdate={handleLeadUpdate}
+        onTasksChange={() => {}}
+        onViewTaskOnSchedule={onOpenScheduleAtDate ? (task) => {
+          if (task?.scheduledAt) {
+            setSelectedLead(null)
+            onClose()
+            onOpenScheduleAtDate(task.scheduledAt)
+          }
+        } : undefined}
+      />
     </Dialog>
   )
 }

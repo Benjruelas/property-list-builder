@@ -93,21 +93,22 @@
   }
 }
 
-/* User location marker - absolutely positioned overlay outside Leaflet panes */
-.user-location-overlay {
-  width: 28px;
-  height: 28px;
-  will-change: transform;
+/* User location marker - Leaflet DivIcon in norotatePane/markerPane */
+.user-location-icon {
+  background: none !important;
+  border: none !important;
+  /* Override any Leaflet transition on the marker wrapper */
+  transition: none !important;
 }
-.user-location-arrow {
+.user-location-arrow-el {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
   transform-origin: center center;
-  transition: transform 0.3s ease-out;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  /* No transition - arrow rotation must update instantly with map bearing */
 }
 
 /* Parcel tooltip styling */
