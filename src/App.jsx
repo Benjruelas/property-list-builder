@@ -2535,10 +2535,11 @@ function App() {
         onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
-        onLeadsChange={pipelines.length > 0 ? async (newLeads) => {
-          if (!activePipelineId) return
+        onLeadsChange={pipelines.length > 0 ? async (newLeads, pipelineId) => {
+          const pid = pipelineId || activePipelineId
+          if (!pid) return
           try {
-            await updatePipeline(getToken, activePipelineId, { leads: newLeads })
+            await updatePipeline(getToken, pid, { leads: newLeads })
             await refreshPipelines()
           } catch (e) { showToast(e.message || 'Failed to update', 'error') }
         } : setDealPipelineLeads}

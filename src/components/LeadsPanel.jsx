@@ -167,12 +167,15 @@ export function LeadsPanel({
   const handleLeadUpdate = useCallback((updated) => {
     setSelectedLead(updated)
     if (onLeadsChange) {
-      onLeadsChange(allLeads.map(l => l.id === updated.id ? updated : l))
+      const pipeline = allPipelineData.find(p => p.leads.some(l => l.id === updated.id))
+      if (pipeline) {
+        onLeadsChange(pipeline.leads.map(l => l.id === updated.id ? updated : l), pipeline.id)
+      }
     } else {
       const stored = loadLeads()
       saveLeads(stored.map(l => l.id === updated.id ? updated : l))
     }
-  }, [allLeads, onLeadsChange])
+  }, [allPipelineData, onLeadsChange])
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); onClose() } }}>

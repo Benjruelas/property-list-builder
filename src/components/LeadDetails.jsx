@@ -4,7 +4,7 @@ import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, 
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
-import { getStreetAddress, getFullAddress, updateLead } from '@/utils/dealPipeline'
+import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
@@ -83,8 +83,8 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
 
   const handleSaveName = () => {
     const trimmed = nameDraft.trim()
-    if (lead?.id && trimmed) {
-      const updated = updateLead(lead.id, { owner: trimmed })
+    if (lead && trimmed) {
+      const updated = { ...lead, owner: trimmed }
       onLeadUpdate?.(updated)
       scheduleSync()
     }

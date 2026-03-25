@@ -36,8 +36,8 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0]
   const [columns, setColumns] = useState([])
   const [localLeads, setLocalLeads] = useState([])
-  const displayLeads = onLeadsChange ? leads : localLeads
-  const setDisplayLeads = onLeadsChange ? onLeadsChange : setLocalLeads
+  const [optimisticLeads, setOptimisticLeads] = useState(null)
+  const displayLeads = optimisticLeads ?? (onLeadsChange ? leads : localLeads)
   const [editingColumnId, setEditingColumnId] = useState(null)
   const [editingColumnName, setEditingColumnName] = useState('')
   const [showAddColumn, setShowAddColumn] = useState(false)
@@ -173,14 +173,15 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   }, [scheduleSync, apiMode, onColumnsChange])
 
   const persistLeads = useCallback((l) => {
-    setDisplayLeads(l)
     if (apiMode && onLeadsChange) {
-      onLeadsChange(l)
+      setOptimisticLeads(l)
+      onLeadsChange(l).then(() => setOptimisticLeads(null)).catch(() => setOptimisticLeads(null))
     } else {
+      setLocalLeads(l)
       saveLeads(l)
       scheduleSync()
     }
-  }, [setDisplayLeads, scheduleSync, apiMode, onLeadsChange])
+  }, [scheduleSync, apiMode, onLeadsChange])
 
   const handleAddColumn = () => {
     if (!newColumnName.trim() || columns.length >= MAX_COLUMNS) return

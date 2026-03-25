@@ -233,21 +233,53 @@
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Full-screen panel override — used on all menu-opened panels */
-.fullscreen-panel {
-  width: 100% !important;
-  max-width: none !important;
-  height: 100% !important;
-  max-height: none !important;
-  border-radius: 0 !important;
-  border: none !important;
-  box-shadow: none !important;
-  transform: none !important;
-  top: 0 !important;
-  left: 0 !important;
-  padding: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
+/* Full-screen panel override — mobile: all menu panels go full screen */
+@media (max-width: 767px) {
+  .fullscreen-panel {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    top: 0 !important;
+    left: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+}
+
+/* Desktop: deal pipeline + schedule stay full screen */
+@media (min-width: 768px) {
+  .deal-pipeline-panel.fullscreen-panel {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    top: 0 !important;
+    left: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Desktop: list-style panels — fit to content, capped at viewport */
+  .list-panel.fullscreen-panel {
+    width: auto !important;
+    min-width: 360px !important;
+    max-width: 90vw !important;
+    height: auto !important;
+    max-height: 85vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
 }
 
 /* Map panels - satellite liquid glass styling (only display mode) */
