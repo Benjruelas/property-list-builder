@@ -536,10 +536,7 @@ function App() {
       watchId = navigator.geolocation.watchPosition(
         (position) => {
           const now = Date.now()
-          // Throttle updates to avoid excessive re-renders
-          if (now - lastUpdateTime < UPDATE_THROTTLE_MS) {
-            return
-          }
+          if (now - lastUpdateTime < UPDATE_THROTTLE_MS) return
 
           const location = {
             lat: position.coords.latitude,
@@ -547,41 +544,30 @@ function App() {
             accuracy: position.coords.accuracy
           }
 
-          // Only update if location has changed significantly (at least 5 meters)
-          // This prevents jittery updates when GPS accuracy is low
           setUserLocation((prevLocation) => {
-            if (!prevLocation) {
-              return location
-            }
+            if (!prevLocation) return location
 
-            // Calculate distance between old and new position (rough approximation)
             const latDiff = Math.abs(location.lat - prevLocation.lat)
             const lngDiff = Math.abs(location.lng - prevLocation.lng)
-            // ~111,000 meters per degree latitude, varies by longitude but close enough
             const distanceMeters = Math.sqrt(
-              Math.pow(latDiff * 111000, 2) + 
+              Math.pow(latDiff * 111000, 2) +
               Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
             )
 
-            // Only update if moved at least 5 meters
-            if (distanceMeters >= 5) {
-              console.log(`📍 Location updated: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)} (moved ${distanceMeters.toFixed(1)}m)`)
+            if (distanceMeters >= 2) {
               lastUpdateTime = now
               return location
             }
-
             return prevLocation
           })
         },
         (error) => {
-          // Log error but don't stop watching
           console.error('Error watching location:', error)
-          // Keep previous location if available
         },
         {
           enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 5000 // Accept cached position up to 5 seconds old
+          timeout: 10000,
+          maximumAge: 0
         }
       )
 

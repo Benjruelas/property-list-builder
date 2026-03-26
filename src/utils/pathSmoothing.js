@@ -14,16 +14,28 @@ export function createKalmanFilter() {
   let lat = null
   let lng = null
   let variance = -1 // negative means uninitialized
+  let lastTime = 0
+
+  // Process noise per second — prevents variance from collapsing to near-zero
+  // which would make the filter ignore new measurements at higher speeds.
+  const Q_PER_SEC = 3
 
   return {
     update(measuredLat, measuredLng, accuracy) {
       const measurementVariance = accuracy * accuracy
+      const now = Date.now()
 
       if (variance < 0) {
         lat = measuredLat
         lng = measuredLng
         variance = measurementVariance
+        lastTime = now
       } else {
+        const dt = Math.max(0, (now - lastTime) / 1000)
+        lastTime = now
+        // Grow variance over time so the filter stays responsive
+        variance += Q_PER_SEC * dt
+
         const k = variance / (variance + measurementVariance)
         lat = lat + k * (measuredLat - lat)
         lng = lng + k * (measuredLng - lng)
@@ -37,6 +49,7 @@ export function createKalmanFilter() {
       lat = null
       lng = null
       variance = -1
+      lastTime = 0
     }
   }
 }
