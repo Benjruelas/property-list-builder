@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Calendar, Route, Settings, Users } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Route, Settings, Users, ListTodo, Calendar } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 export function MapControls({ 
@@ -14,6 +14,7 @@ export function MapControls({
   onOpenEmailTemplates,
   onOpenTextTemplates,
   onOpenDealPipeline,
+  onOpenTasks,
   onOpenSchedule,
   onTogglePathTracking,
   isPathTrackingActive,
@@ -77,7 +78,8 @@ export function MapControls({
         variant={isPathTrackingActive ? "glass" : "glass-outline"}
         className={cn(
           "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
-          isPathTrackingActive && "bg-red-600/80 hover:bg-red-700/90 border-red-400/50 text-white",
+          isPathTrackingActive &&
+            "path-tracking-active bg-red-600/80 hover:bg-red-700/90 border-red-400/50 text-white",
           !currentUser && "opacity-50 cursor-not-allowed"
         )}
         disabled={!currentUser}
@@ -201,7 +203,19 @@ export function MapControls({
                 <span>Leads</span>
               </button>
 
-              {/* Schedule Button */}
+              {/* Tasks — list by pipeline (not calendar) */}
+              <button
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenTasks?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <ListTodo className="h-4 w-4 flex-shrink-0" />
+                <span>Tasks</span>
+              </button>
+
+              {/* Schedule — calendar view */}
               <button
                 onClick={() => {
                   setShowMenu(false)

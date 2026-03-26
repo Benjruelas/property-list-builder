@@ -110,7 +110,12 @@ export function PMTilesParcelLayer({
   const selectedParcelsRef = useRef(selectedParcels)
   const clickedParcelIdRef = useRef(clickedParcelId)
   const parcelIdToColorIndexRef = useRef(parcelIdToColorIndex)
-  
+  const onParcelClickRef = useRef(onParcelClick)
+
+  useEffect(() => {
+    onParcelClickRef.current = onParcelClick
+  }, [onParcelClick])
+
   // Update refs when state changes
   useEffect(() => {
     selectedParcelsRef.current = selectedParcels
@@ -142,7 +147,7 @@ export function PMTilesParcelLayer({
 
   // Function to find parcel at a given location and trigger click
   const findParcelAtLocationRef = useRef((lat, lng) => {
-    if (!layerGroupRef.current || !onParcelClick) {
+    if (!layerGroupRef.current || !onParcelClickRef.current) {
       return false
     }
 
@@ -244,7 +249,7 @@ export function PMTilesParcelLayer({
       
       console.log('📍 Found parcel at location:', parcelId, foundParcel ? '(exact match)' : '(closest, ' + closestDistance.toFixed(1) + 'm away)')
       
-      onParcelClick({
+      onParcelClickRef.current({
         latlng: point,
         properties: properties,
         geometry: null,
@@ -645,28 +650,27 @@ export function PMTilesParcelLayer({
               polygon._parcelId = parcelId // Store ID for later reference
               polygon._properties = properties // Store properties for later reference
               
-              // Add click handler - use the actual click event latlng for better accuracy
-              if (onParcelClick) {
-                polygon.on('click', (e) => {
-                  e.originalEvent.stopPropagation() // Prevent map click
-                  
-                  // Use the click event's latlng for better accuracy
-                  const clickLatlng = e.latlng
-                  
-                  console.log('Parcel polygon clicked:', {
-                    parcelId,
-                    clickLocation: clickLatlng,
-                    properties
-                  })
-                  
-                  onParcelClick({
-                    latlng: clickLatlng,
-                    properties: properties,
-                    geometry: feature.geometry,
-                    parcelId: parcelId
-                  })
+              // Add click handler - use ref so parent can update handler without remounting layer
+              polygon.on('click', (e) => {
+                const cb = onParcelClickRef.current
+                if (!cb) return
+                e.originalEvent.stopPropagation() // Prevent map click
+
+                const clickLatlng = e.latlng
+
+                console.log('Parcel polygon clicked:', {
+                  parcelId,
+                  clickLocation: clickLatlng,
+                  properties
                 })
-              }
+
+                cb({
+                  latlng: clickLatlng,
+                  properties: properties,
+                  geometry: feature.geometry,
+                  parcelId: parcelId
+                })
+              })
 
               // Add hover effects - use refs to always get current state
               polygon.on('mouseover', function() {
@@ -851,7 +855,7 @@ export function PMTilesParcelLayer({
       isInitializedRef.current = false
       pmtilesHeaderRef.current = null
     }
-  }, [map, pmtilesUrl, onParcelClick]) // Only re-run when these change
+  }, [map, pmtilesUrl]) // onParcelClick via ref so pipeline/lead updates do not reload parcels
 
   // Separate effect to update styles when selection changes
   const selectedParcelsKey = Array.from(selectedParcels).sort().join(',')

@@ -27,7 +27,7 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask }) {
   const { scheduleSync } = useUserDataSync()
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
   const [editContacts, setEditContacts] = useState(false)
@@ -41,7 +41,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
   const parcelId = lead?.parcelId || parcelData?.id
 
   const refreshTasks = () => {
-    if (parcelId) setTasks(getLeadTasks(parcelId))
+    if (parcelId) setTasks(getLeadTasks(parcelId, pipelineId))
     onTasksChange?.()
   }
 
@@ -56,13 +56,13 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
     if (isOpen && parcelId) {
       const info = getSkipTracedParcel(parcelId)
       setSkipTracedInfo(info)
-      setTasks(getLeadTasks(parcelId))
+      setTasks(getLeadTasks(parcelId, pipelineId))
     } else {
       setSkipTracedInfo(null)
       setTasks([])
       setTaskMenu(null)
     }
-  }, [isOpen, parcelId])
+  }, [isOpen, parcelId, pipelineId])
 
   if (!lead && !parcelData) return null
 
@@ -106,13 +106,15 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, onOpenParcelDet
       <DialogContent className="map-panel lead-details-panel max-w-md p-0" showCloseButton={false} blurOverlay>
         <DialogHeader className="px-4 pt-4 pb-3 border-b border-gray-200">
           <DialogDescription className="sr-only">Lead details, contact information, and tasks</DialogDescription>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold">
-              <User className="h-5 w-5" />
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-lg font-semibold flex items-center min-w-0">
+              <User className="h-5 w-5 shrink-0" />
             </DialogTitle>
-            <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </DialogHeader>
 

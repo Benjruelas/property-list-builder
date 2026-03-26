@@ -137,19 +137,21 @@ export function EmailTemplatesPanel({ isOpen, onClose, onSelectTemplate, isBulkM
     }}>
       <DialogContent className="map-panel list-panel email-panel fullscreen-panel" showCloseButton={false} hideOverlay>
         <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-              <Mail className="h-5 w-5" />
-              Email Templates
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
+              <Mail className="h-5 w-5 shrink-0" />
+              <span className="truncate">Email Templates</span>
             </DialogTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              title="Close"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <DialogDescription className="sr-only">
             Manage email templates for sending to property owners

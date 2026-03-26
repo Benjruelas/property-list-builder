@@ -287,13 +287,15 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
         <div ref={containerRef} className="contents">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200">
           <DialogDescription className="sr-only">View and edit parcel details, contact information, and notes</DialogDescription>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold">
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold truncate">
               Parcel Details
             </DialogTitle>
-            <Button variant="ghost" size="icon" onClick={() => handleClose(true)} title="Close" className="parcel-details-close-btn">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button variant="ghost" size="icon" onClick={() => handleClose(true)} title="Close" className="parcel-details-close-btn">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </DialogHeader>
 

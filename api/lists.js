@@ -160,6 +160,11 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Only the list owner can update this list' })
       }
 
+      const prevSharedSet = new Set(
+        (list.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
+      )
+      let newlyAddedListShares = []
+
       if (sharedWith !== undefined) {
         const arr = Array.isArray(sharedWith) ? sharedWith : []
         const emails = arr.map((e) => (e && String(e).trim()).toLowerCase()).filter(Boolean)
@@ -184,6 +189,7 @@ export default async function handler(req, res) {
             }
           }
         }
+        newlyAddedListShares = uniqueEmails.filter((e) => !prevSharedSet.has(e))
         list.sharedWith = uniqueEmails
       }
 
@@ -200,6 +206,19 @@ export default async function handler(req, res) {
       list.updatedAt = new Date().toISOString()
       all[idx] = list
       await saveAllLists(all)
+
+      if (sharedWith !== undefined && newlyAddedListShares.length > 0) {
+        try {
+          const { notifyNewListShares } = await import('./push-utils.js')
+          await notifyNewListShares(newlyAddedListShares, {
+            listName: list.name,
+            actorEmail: user.email
+          })
+        } catch (e) {
+          console.warn('list push notify', e.message)
+        }
+      }
+
       return res.status(200).json({ list })
     }
 

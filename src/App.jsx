@@ -32,25 +32,45 @@ import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { getCountyFromCoords } from './utils/geoUtils'
 import { getCountyPMTilesUrl } from './utils/parcelLoader'
 import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
-import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail } from './utils/pipelines'
+import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail, canAddLeadsToPipeline } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { DealPipeline } from './components/DealPipeline'
 import { SchedulePanel } from './components/SchedulePanel'
+import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi } from './utils/paths'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
+import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
 import { LeadsPanel } from './components/LeadsPanel'
-import { PermissionPrompt } from './components/PermissionPrompt'
+import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
+import { NotificationPrompt } from './components/NotificationPrompt'
 import { getSettings, updateSettings } from './utils/settings'
+import { getAllTasks } from './utils/leadTasks'
+import { showLocalNotification } from './utils/pushNotifications'
 import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
 import { CheckCircle2, Loader2, Phone } from 'lucide-react'
+
+function notifySkipTraceComplete(listName, detail) {
+  try {
+    const ns = getSettings().notifications
+    if (!ns?.skipTraceComplete || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return
+    }
+    showLocalNotification('Skip trace complete', {
+      body: `${listName}: ${detail}`,
+      tag: `skip-list-${listName}-${Date.now()}`
+    })
+  } catch {
+    /* ignore */
+  }
+}
 
 // Fix for default marker icons in React-Leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -82,6 +102,24 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
       window.visualViewport?.removeEventListener('resize', handler)
       window.visualViewport?.removeEventListener('scroll', handler)
     }
+  }, [map])
+
+  // After the first rotation the tile grid may not cover rotated corners.
+  // Fire a single tile refresh once after the first bearing change, then stop.
+  useEffect(() => {
+    if (!map) return
+    let done = false
+    const onFirstRotate = () => {
+      if (done) return
+      done = true
+      map.off('rotateend', onFirstRotate)
+      setTimeout(() => {
+        map.invalidateSize({ pan: false })
+        map._resetView(map.getCenter(), map.getZoom(), true)
+      }, 300)
+    }
+    map.on('rotateend', onFirstRotate)
+    return () => { map.off('rotateend', onFirstRotate) }
   }, [map])
 
   // Initial center (once)
@@ -291,7 +329,8 @@ function LocationMarker({ position, heading }) {
       if (!arrow) return
       const bearing = (typeof map.getBearing === 'function') ? (map.getBearing() || 0) : 0
       const h = headingRef.current ?? 0
-      arrow.style.transform = `rotate(${-45 + h + bearing}deg)`
+      // Subtract map bearing so the arrow stays aligned with travel; paired with setBearing(heading) in CompassOrientation.
+      arrow.style.transform = `rotate(${-45 + h - bearing}deg)`
     }
 
     updateArrow()
@@ -334,6 +373,7 @@ function App() {
       setIsPathsPanelOpen(false)
       setIsSettingsPanelOpen(false)
       setIsLeadsPanelOpen(false)
+      setPickPipelineForParcel(null)
       setPaths([])
       setVisiblePathIds([])
       setSelectedParcels(new Set())
@@ -351,7 +391,7 @@ function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false)
   const [isSignUpOpen, setIsSignUpOpen] = useState(false)
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
-  const [permissionsReady, setPermissionsReady] = useState(false)
+  const [permissionsReady, setPermissionsReady] = useState(() => hasGrantedPermissions())
   const [userLocation, setUserLocation] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [currentCounty, setCurrentCounty] = useState(null)
@@ -374,7 +414,7 @@ function App() {
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(() => getSettings().compassDefault)
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
-  const heading = useDeviceHeading(permissionsReady)
+  const { heading, requestOrientation } = useDeviceHeading(permissionsReady)
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
@@ -387,7 +427,12 @@ function App() {
   const [dealPipelineLeads, setDealPipelineLeads] = useState([])
   const [pipelines, setPipelines] = useState([])
   const [activePipelineId, setActivePipelineId] = useState(null)
+  /** When set, user must pick a pipeline (multiple eligible). */
+  const [pickPipelineForParcel, setPickPipelineForParcel] = useState(null)
   const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
+  const [isTasksPanelOpen, setIsTasksPanelOpen] = useState(false)
+  const [dealPipelineLeadFocusKey, setDealPipelineLeadFocusKey] = useState(0)
+  const [dealPipelineFocusParcelId, setDealPipelineFocusParcelId] = useState(null)
   const [scheduleInitialDate, setScheduleInitialDate] = useState(null)
   const [phoneActionPanel, setPhoneActionPanel] = useState(null) // { phone, parcelData } | null
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
@@ -407,13 +452,50 @@ function App() {
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isEmailTemplatesPanelOpen || isTextTemplatesPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen
+    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen
   const hasPopup = clickedParcelId != null
 
   const handleSettingsChange = useCallback((partial) => {
     const next = updateSettings(partial, getToken)
     setSettings(next)
   }, [getToken])
+
+  // Task deadline local notifications (while app runs)
+  useEffect(() => {
+    if (!permissionsReady) return undefined
+    const tick = () => {
+      const g = getSettings()
+      const n = g.notifications || {}
+      if (!n.taskDeadline || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+        return
+      }
+      const leadMs = (n.taskDeadlineLeadMinutes || 60) * 60 * 1000
+      const tasks = getAllTasks()
+      const now = Date.now()
+      for (const t of tasks) {
+        if (t.completed || !t.scheduledAt) continue
+        const at =
+          typeof t.scheduledAt === 'number' ? t.scheduledAt : new Date(t.scheduledAt).getTime()
+        if (Number.isNaN(at)) continue
+        if (now < at - leadMs || now >= at) continue
+        const dayKey = new Date(at).toISOString().slice(0, 10)
+        const lsKey = `taskDeadline:${t.id}:${dayKey}`
+        try {
+          if (localStorage.getItem(lsKey)) continue
+          localStorage.setItem(lsKey, '1')
+        } catch {
+          continue
+        }
+        showLocalNotification('Task due soon', {
+          body: `${(t.title || 'Task').toString().slice(0, 80)} — ${new Date(at).toLocaleString()}`,
+          tag: `task-${t.id}-${dayKey}`
+        })
+      }
+    }
+    const id = setInterval(tick, 60000)
+    tick()
+    return () => clearInterval(id)
+  }, [permissionsReady])
 
   // Recenter map function passed to MapController
   const recenterMapRef = useRef(null)
@@ -673,10 +755,10 @@ function App() {
     if (isDealPipelineOpen && pipelines.length === 0) setDealPipelineLeads(loadLeads())
   }, [isDealPipelineOpen, pipelines.length])
 
-  // Refresh leads when schedule panel opens (localStorage mode only)
+  // Refresh leads when schedule or tasks panel opens (localStorage mode only)
   useEffect(() => {
-    if (isSchedulePanelOpen && pipelines.length === 0) setDealPipelineLeads(loadLeads())
-  }, [isSchedulePanelOpen, pipelines.length])
+    if ((isSchedulePanelOpen || isTasksPanelOpen) && pipelines.length === 0) setDealPipelineLeads(loadLeads())
+  }, [isSchedulePanelOpen, isTasksPanelOpen, pipelines.length])
 
   const isParcelALeadCheck = useCallback((parcelId) => {
     if (pipelines.length > 0) {
@@ -684,6 +766,38 @@ function App() {
     }
     return isParcelALead(parcelId)
   }, [pipelines])
+
+  const handleAddLeadToPipeline = useCallback(async (parcelData, pipelineId) => {
+    const pipe = pipelines.find((p) => p.id === pipelineId)
+    if (!pipe || !canAddLeadsToPipeline(currentUser, pipe)) {
+      showToast('You cannot add leads to this pipeline', 'error')
+      return
+    }
+    const firstColId = pipe.columns?.[0]?.id || 'col-0'
+    const now = Date.now()
+    const lead = {
+      id: `lead-${now}-${parcelData.id}`,
+      parcelId: parcelData.id,
+      address: getStreetAddress(parcelData),
+      owner: parcelData.properties?.OWNER_NAME || null,
+      lat: parcelData.lat ?? (parcelData.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
+      lng: parcelData.lng ?? (parcelData.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
+      status: firstColId,
+      createdAt: now,
+      statusEnteredAt: now,
+      cumulativeTimeByStatus: {},
+      properties: parcelData.properties || null
+    }
+    try {
+      await updatePipeline(getToken, pipelineId, { leads: [...(pipe.leads || []), lead] })
+      await refreshPipelines()
+      setActivePipelineId(pipelineId)
+      setIsDealPipelineOpen(true)
+      showToast('Parcel added to Deal Pipeline', 'success')
+    } catch (e) {
+      showToast(e.message || 'Could not add lead', 'error')
+    }
+  }, [currentUser, getToken, pipelines, refreshPipelines])
 
   const handleConvertToLead = useCallback(async (parcelData) => {
     if (!currentUser || !currentUser.uid) {
@@ -699,48 +813,30 @@ function App() {
       showToast('Parcel is already a lead', 'warning')
       return
     }
-    if (pipelines.length > 0 && activePipelineId) {
-      const pipe = pipelines.find((p) => p.id === activePipelineId)
-      if (pipe?.ownerId !== currentUser.uid) {
-        showToast('Switch to your pipeline to add leads', 'warning')
+    if (pipelines.length > 0) {
+      const eligible = pipelines.filter((p) => canAddLeadsToPipeline(currentUser, p))
+      if (eligible.length === 0) {
+        showToast('You need a pipeline you own or can edit to add leads.', 'warning')
         return
       }
-      const firstColId = pipe.columns?.[0]?.id || 'col-0'
-      const now = Date.now()
-      const lead = {
-        id: `lead-${now}-${parcelData.id}`,
-        parcelId: parcelData.id,
-        address: getStreetAddress(parcelData),
-        owner: parcelData.properties?.OWNER_NAME || null,
-        lat: parcelData.lat ?? (parcelData.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
-        lng: parcelData.lng ?? (parcelData.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
-        status: firstColId,
-        createdAt: now,
-        statusEnteredAt: now,
-        cumulativeTimeByStatus: {},
-        properties: parcelData.properties || null
+      if (eligible.length === 1) {
+        await handleAddLeadToPipeline(parcelData, eligible[0].id)
+        return
       }
-      try {
-        await updatePipeline(getToken, activePipelineId, { leads: [...(pipe.leads || []), lead] })
-        await refreshPipelines()
-        setIsDealPipelineOpen(true)
-        showToast('Parcel added to Deal Pipeline', 'success')
-      } catch (e) {
-        showToast(e.message || 'Could not add lead', 'error')
-      }
-    } else {
-      const columns = loadColumns()
-      const lead = addLead(parcelData, columns)
-      if (lead) {
-        setDealPipelineLeads(loadLeads())
-        scheduleUserDataSync(getToken)
-        setIsDealPipelineOpen(true)
-        showToast('Parcel added to Deal Pipeline', 'success')
-      } else {
-        showToast('Could not add lead', 'error')
-      }
+      setPickPipelineForParcel({ parcelData, eligiblePipelines: eligible })
+      return
     }
-  }, [currentUser, getToken, pipelines, activePipelineId, isParcelALeadCheck, refreshPipelines])
+    const columns = loadColumns()
+    const lead = addLead(parcelData, columns)
+    if (lead) {
+      setDealPipelineLeads(loadLeads())
+      scheduleUserDataSync(getToken)
+      setIsDealPipelineOpen(true)
+      showToast('Parcel added to Deal Pipeline', 'success')
+    } else {
+      showToast('Could not add lead', 'error')
+    }
+  }, [currentUser, getToken, pipelines, isParcelALeadCheck, handleAddLeadToPipeline, scheduleUserDataSync])
 
   // Background polling for skip trace jobs
   useEffect(() => {
@@ -781,6 +877,7 @@ function App() {
           })
           
           showToast(`Skip trace completed for "${job.listName}", but no contact information was found.`, 'warning')
+          notifySkipTraceComplete(job.listName, 'no contact information was found')
           return
         }
 
@@ -919,7 +1016,8 @@ function App() {
         const matchedCount = resultsWithParcelIds.length
         const totalRequested = job.parcelsToTrace.length
         showToast(`✅ Skip trace completed for "${job.listName}": ${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found!`, 'success', 8000)
-        
+        notifySkipTraceComplete(job.listName, `${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found`)
+
       } catch (error) {
         console.error(`❌ Error processing skip trace job ${job.jobId}:`, error)
         updateSkipTraceJob(job.jobId, {
@@ -1184,9 +1282,17 @@ function App() {
         // Store popup reference and open it
         currentPopupRef.current = popup
         popup.openOn(mapInstanceRef.current)
+
+        // Smoothly center the map on the tapped parcel after a short delay
+        const centerTimer = setTimeout(() => {
+          if (mapInstanceRef.current && currentPopupRef.current === popup) {
+            mapInstanceRef.current.panTo(latlng, { animate: true, duration: 0.5 })
+          }
+        }, 1500)
         
         // Clear popup reference and clicked parcel ID when popup is closed
         popup.on('remove', () => {
+          clearTimeout(centerTimer)
           if (currentPopupRef.current === popup) {
             currentPopupRef.current = null
             // Clear clicked parcel ID when popup is manually closed by user
@@ -1384,6 +1490,20 @@ function App() {
     }
     setIsParcelDetailsOpen(true)
   }, [currentUser, authLoading])
+
+  const handleDealPipelineFocusHandled = useCallback(() => {
+    setDealPipelineFocusParcelId(null)
+  }, [])
+
+  const handleOpenTaskInDealPipeline = useCallback(({ pipelineId, parcelId, mode }) => {
+    setIsTasksPanelOpen(false)
+    setDealPipelineFocusParcelId(parcelId ?? null)
+    if (mode === 'api' && pipelineId) {
+      setActivePipelineId(pipelineId)
+    }
+    setDealPipelineLeadFocusKey((k) => k + 1)
+    setIsDealPipelineOpen(true)
+  }, [])
 
   const handlePhoneClick = useCallback((phone, parcelData) => {
     setPhoneActionPanel({ phone, parcelData: parcelData || null })
@@ -2074,9 +2194,15 @@ function App() {
 
   return (
     <UserDataSyncProvider getToken={getToken}>
-    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
+    <div
+      style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}
+      onClickCapture={requestOrientation}
+    >
       {!permissionsReady && (
         <PermissionPrompt onComplete={() => setPermissionsReady(true)} />
+      )}
+      {permissionsReady && (
+        <NotificationPrompt getToken={getToken} />
       )}
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
@@ -2087,6 +2213,7 @@ function App() {
         maxZoom={20}
         style={{ height: '100%', minHeight: 'var(--vw-height, 100vh)', width: '100%' }}
         zoomControl={false}
+        attributionControl={false}
         rotate={true}
         rotateControl={false}
         touchRotate={true}
@@ -2099,6 +2226,7 @@ function App() {
               subdomains="abcd"
               maxZoom={20}
               maxNativeZoom={19}
+              keepBuffer={6}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
             />
           ) : (
@@ -2108,6 +2236,7 @@ function App() {
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 maxNativeZoom={19}
                 maxZoom={22}
+                keepBuffer={6}
                 attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
               />
               <TileLayer
@@ -2119,6 +2248,7 @@ function App() {
                 subdomains="abcd"
                 maxZoom={20}
                 maxNativeZoom={19}
+                keepBuffer={6}
                 opacity={1}
                 className="satellite-labels-layer"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
@@ -2251,6 +2381,14 @@ function App() {
           }
           setIsDealPipelineOpen(true)
         }}
+        onOpenTasks={() => {
+          if (authLoading) return
+          if (!currentUser || !currentUser.uid) {
+            setIsLoginOpen(true)
+            return
+          }
+          setIsTasksPanelOpen(true)
+        }}
         onOpenSchedule={() => {
           if (authLoading) return
           if (!currentUser || !currentUser.uid) {
@@ -2380,6 +2518,9 @@ function App() {
         onClose={() => setIsDealPipelineOpen(false)}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
+        focusLeadRequestKey={dealPipelineLeadFocusKey}
+        focusParcelId={dealPipelineFocusParcelId}
+        onFocusLeadHandled={handleDealPipelineFocusHandled}
         onPipelinesChange={refreshPipelines}
         onActivePipelineChange={setActivePipelineId}
         onSharePipeline={handleSharePipeline}
@@ -2432,12 +2573,24 @@ function App() {
         initialDate={scheduleInitialDate}
         onInitialDateConsumed={() => setScheduleInitialDate(null)}
         leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
+        pipelines={pipelines}
+        activePipelineId={activePipelineId}
         onLeadsChange={pipelines.length > 0 ? () => refreshPipelines() : setDealPipelineLeads}
         onOpenParcelDetails={handleOpenParcelDetails}
         onEmailClick={handleEmailClick}
         onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
+      />
+
+      <TasksPanel
+        isOpen={isTasksPanelOpen}
+        onClose={() => setIsTasksPanelOpen(false)}
+        pipelines={pipelines}
+        activePipelineId={activePipelineId}
+        leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
+        onLeadsChange={pipelines.length > 0 ? () => refreshPipelines() : setDealPipelineLeads}
+        onOpenTaskInDealPipeline={handleOpenTaskInDealPipeline}
       />
 
       <PhoneActionPanel
@@ -2577,6 +2730,18 @@ function App() {
         onSwitchToLogin={() => {
           setIsForgotPasswordOpen(false)
           setIsLoginOpen(true)
+        }}
+      />
+
+      <ConvertToLeadPipelineDialog
+        open={!!pickPipelineForParcel}
+        onOpenChange={(o) => { if (!o) setPickPipelineForParcel(null) }}
+        pipelines={pickPipelineForParcel?.eligiblePipelines ?? []}
+        currentUser={currentUser}
+        onSelect={(pipelineId) => {
+          const ctx = pickPipelineForParcel
+          setPickPipelineForParcel(null)
+          if (ctx?.parcelData) handleAddLeadToPipeline(ctx.parcelData, pipelineId)
         }}
       />
 

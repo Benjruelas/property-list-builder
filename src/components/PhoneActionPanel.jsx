@@ -51,14 +51,16 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData }) {
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent className="map-panel phone-action-panel min-w-[280px] max-w-md w-full p-0" showCloseButton={false} blurOverlay>
         <DialogHeader className="px-4 pt-4 pb-3 border-b">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-              <Phone className="h-5 w-5" />
-              {phone}
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-lg font-semibold flex items-center gap-2 min-w-0 truncate">
+              <Phone className="h-5 w-5 shrink-0" />
+              <span className="truncate">{phone}</span>
             </DialogTitle>
-            <Button variant="ghost" size="icon" className="phone-action-nav-btn" onClick={onClose} title="Close">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button variant="ghost" size="icon" className="phone-action-nav-btn" onClick={onClose} title="Close">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <DialogDescription className="sr-only">
             Choose to text or call this number

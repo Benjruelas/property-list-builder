@@ -114,40 +114,45 @@ export function ParcelListPanel({
     }}>
       <DialogContent className="map-panel parcel-list-panel max-w-2xl max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onBack || onClose}
-              title="Back to lists"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <DialogTitle className="flex-1 text-xl font-semibold">
-              {listName || 'Parcels'}
-            </DialogTitle>
-            {onBulkSkipTrace && parcels.length > 0 && (
+          <div className="map-panel-header-toolbar gap-3">
+            <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-green-700 hover:text-green-800"
-                onClick={() => onBulkSkipTrace(selectedListId)}
-                title="Skip trace all parcels in this list"
+                className="shrink-0"
+                onClick={onBack || onClose}
+                title="Back to lists"
               >
-                <Phone className="h-4 w-4" />
+                <ArrowLeft className="h-4 w-4" />
               </Button>
-            )}
-            {onExportList && parcels.length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-blue-600 hover:text-blue-700"
-                onClick={() => onExportList(selectedListId)}
-                title="Export list as CSV and email to you"
-              >
-                <FileDown className="h-4 w-4" />
-              </Button>
-            )}
+              <DialogTitle className="min-w-0 flex-1 truncate text-xl font-semibold">
+                {listName || 'Parcels'}
+              </DialogTitle>
+            </div>
+            <div className="map-panel-header-actions gap-1">
+              {onBulkSkipTrace && parcels.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-green-700 hover:text-green-800"
+                  onClick={() => onBulkSkipTrace(selectedListId)}
+                  title="Skip trace all parcels in this list"
+                >
+                  <Phone className="h-4 w-4" />
+                </Button>
+              )}
+              {onExportList && parcels.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-blue-600 hover:text-blue-700"
+                  onClick={() => onExportList(selectedListId)}
+                  title="Export list as CSV and email to you"
+                >
+                  <FileDown className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
           <DialogDescription className="sr-only">
             List of parcels in {listName || 'this list'}. Click on a parcel to view details.

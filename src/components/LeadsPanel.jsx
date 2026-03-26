@@ -96,6 +96,7 @@ export function LeadsPanel({
   const [showSortFilter, setShowSortFilter] = useState(false)
   const [collapsedPipelines, setCollapsedPipelines] = useState({})
   const [selectedLead, setSelectedLead] = useState(null)
+  const [selectedLeadPipelineId, setSelectedLeadPipelineId] = useState(null)
 
   const allPipelineData = useMemo(() => {
     if (pipelines.length > 0) {
@@ -178,7 +179,7 @@ export function LeadsPanel({
   }, [allPipelineData, onLeadsChange])
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); onClose() } }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); setSelectedLeadPipelineId(null); onClose() } }}>
       <DialogContent
         className="map-panel list-panel fullscreen-panel"
         showCloseButton={false}
@@ -186,15 +187,15 @@ export function LeadsPanel({
       >
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">All leads across your deal pipelines</DialogDescription>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Leads
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
+              <Users className="h-5 w-5 shrink-0" />
+              <span className="truncate">Leads</span>
               {totalAll > 0 && (
-                <span className="text-sm font-normal opacity-50 ml-1">{totalAll}</span>
+                <span className="text-sm font-normal opacity-50 ml-1 shrink-0">{totalAll}</span>
               )}
             </DialogTitle>
-            <div className="flex items-center gap-1">
+            <div className="map-panel-header-actions gap-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -360,7 +361,7 @@ export function LeadsPanel({
                           lead={lead}
                           columns={pipeline.columns}
                           pipelineTitle={showHeader ? null : pipeline.title}
-                          onClick={setSelectedLead}
+                          onClick={() => { setSelectedLead(lead); setSelectedLeadPipelineId(pipeline.id) }}
                         />
                       ))}
                     </div>
@@ -374,8 +375,9 @@ export function LeadsPanel({
 
       <LeadDetails
         isOpen={!!selectedLead}
-        onClose={() => setSelectedLead(null)}
+        onClose={() => { setSelectedLead(null); setSelectedLeadPipelineId(null) }}
         lead={selectedLead}
+        pipelineId={pipelines.length > 0 ? selectedLeadPipelineId : null}
         parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
         onOpenParcelDetails={onOpenParcelDetails}
         onEmailClick={onEmailClick}

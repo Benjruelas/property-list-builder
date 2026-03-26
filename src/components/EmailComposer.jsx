@@ -87,19 +87,21 @@ export function EmailComposer({
     }}>
       <DialogContent className="map-panel email-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false}>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-              <Mail className="h-5 w-5" />
-              Compose Email
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
+              <Mail className="h-5 w-5 shrink-0" />
+              <span className="truncate">Compose Email</span>
             </DialogTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              title="Close"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <DialogDescription className="sr-only">
             Review and send email to property owner

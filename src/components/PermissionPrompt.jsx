@@ -1,5 +1,20 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { MapPin, Compass } from 'lucide-react'
+
+const LS_KEY = 'permissions_granted'
+
+/**
+ * Check whether the user has already dismissed the permission prompt.
+ * Used by App to skip the overlay on subsequent loads.
+ */
+export function hasGrantedPermissions() {
+  try {
+    return localStorage.getItem(LS_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 /**
  * Full-screen overlay that requests Location and Device Orientation permissions
@@ -9,7 +24,7 @@ import { MapPin, Compass } from 'lucide-react'
  * Flow on tap:
  * 1. Request orientation FIRST (needs gesture context on iOS)
  * 2. Then request location (doesn't need gesture context)
- * 3. Dismiss regardless of grant/deny
+ * 3. Persist flag + dismiss regardless of grant/deny
  */
 export function PermissionPrompt({ onComplete }) {
   const [requesting, setRequesting] = useState(false)
@@ -19,7 +34,6 @@ export function PermissionPrompt({ onComplete }) {
     setRequesting(true)
 
     // Orientation MUST be requested first and synchronously from the gesture.
-    // Any await before this call will break the iOS gesture requirement.
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
@@ -42,10 +56,11 @@ export function PermissionPrompt({ onComplete }) {
       // denied or timeout
     }
 
+    try { localStorage.setItem(LS_KEY, '1') } catch { /* ignore */ }
     onComplete()
   }
 
-  return (
+  const ui = (
     <div className="permission-prompt-overlay">
       <div className="permission-prompt-card">
         <div className="permission-prompt-icons">
@@ -56,7 +71,7 @@ export function PermissionPrompt({ onComplete }) {
             <Compass className="h-8 w-8" />
           </div>
         </div>
-        <h2 className="permission-prompt-title">Enable Location & Orientation</h2>
+        <h2 className="permission-prompt-title">Enable Location &amp; Orientation</h2>
         <p className="permission-prompt-desc">
           This app needs your location to show where you are on the map, and device orientation to rotate the map as you move.
         </p>
@@ -71,4 +86,6 @@ export function PermissionPrompt({ onComplete }) {
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(ui, document.body) : null
 }

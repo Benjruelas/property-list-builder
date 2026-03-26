@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
-import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { DEFAULT_SETTINGS } from '../utils/settings'
 import { saveUserData, readLocalBlob } from '../utils/userDataSync'
+import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotifications'
 import { cn } from '@/lib/utils'
 
 const MAP_STYLES = [
@@ -31,6 +32,12 @@ const SMOOTHING_OPTIONS = [
 const UNIT_OPTIONS = [
   { value: 'miles', label: 'Miles' },
   { value: 'km', label: 'Km' },
+]
+
+const DEADLINE_LEAD_OPTIONS = [
+  { value: 15, label: '15m' },
+  { value: 60, label: '1h' },
+  { value: 1440, label: '1d' },
 ]
 
 function Section({ icon: Icon, title, children, defaultOpen = true }) {
@@ -74,14 +81,18 @@ function SettingRow({ label, description, children, stacked }) {
   )
 }
 
-function Toggle({ checked, onChange }) {
+function Toggle({ checked, onChange, disabled }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="settings-toggle relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-200"
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className={cn(
+        'settings-toggle relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-200',
+        disabled && 'opacity-40 cursor-not-allowed'
+      )}
     >
       <span
         className={cn(
@@ -175,6 +186,32 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
   }, [onSettingsChange])
 
   const s = settings || DEFAULT_SETTINGS
+  const n = { ...DEFAULT_SETTINGS.notifications, ...(s.notifications || {}) }
+
+  const handlePushMasterToggle = useCallback(async (on) => {
+    const base = { ...DEFAULT_SETTINGS.notifications, ...(settings?.notifications || {}) }
+    if (on) {
+      if (typeof Notification === 'undefined') {
+        showToast('Notifications are not supported in this browser', 'error')
+        return
+      }
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') {
+        showToast('Notification permission denied', 'error')
+        return
+      }
+      update({ notifications: { ...base, pushEnabled: true } })
+      if (getToken) {
+        const ok = await subscribeToWebPush(getToken)
+        if (!ok) {
+          showToast('Could not enable server push. Sign in and ensure VAPID keys are set.', 'warning')
+        }
+      }
+    } else {
+      if (getToken) await unsubscribeWebPush(getToken)
+      update({ notifications: { ...base, pushEnabled: false } })
+    }
+  }, [getToken, settings?.notifications, update])
 
   const handleClearData = useCallback(async () => {
     const confirmed = await showConfirm(
@@ -214,14 +251,16 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
       >
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Application settings</DialogDescription>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Settings
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
+              <Settings className="h-5 w-5 shrink-0" />
+              <span className="truncate">Settings</span>
             </DialogTitle>
-            <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </DialogHeader>
 
@@ -271,6 +310,58 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
                 className="w-full text-sm rounded-lg px-3 py-2"
               />
             </div>
+          </Section>
+
+          {/* ---- Notifications ---- */}
+          <Section icon={Bell} title="Notifications" defaultOpen>
+            <p className="text-xs opacity-50 -mt-1 mb-2">
+              Server alerts require signing in. Skip trace and task reminders use this device when the app is open or in the background.
+            </p>
+            <SettingRow label="Enable notifications" description="Browser permission + web push when signed in">
+              <Toggle checked={n.pushEnabled} onChange={handlePushMasterToggle} />
+            </SettingRow>
+            <SettingRow label="List shared with you" description="When someone adds you to a list">
+              <Toggle
+                checked={n.listShared}
+                onChange={(v) => update({ notifications: { ...n, listShared: v } })}
+                disabled={!getToken}
+              />
+            </SettingRow>
+            <SettingRow label="Pipeline shared with you" description="When someone adds you to a pipeline">
+              <Toggle
+                checked={n.pipelineShared}
+                onChange={(v) => update({ notifications: { ...n, pipelineShared: v } })}
+                disabled={!getToken}
+              />
+            </SettingRow>
+            <SettingRow label="Lead stage changes" description="When a lead moves columns in a shared pipeline">
+              <Toggle
+                checked={n.pipelineLeadStage}
+                onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })}
+                disabled={!getToken}
+              />
+            </SettingRow>
+            <SettingRow label="Skip trace finished" description="When bulk skip trace completes for a list">
+              <Toggle
+                checked={n.skipTraceComplete}
+                onChange={(v) => update({ notifications: { ...n, skipTraceComplete: v } })}
+              />
+            </SettingRow>
+            <SettingRow label="Task deadline reminders" description="Before a scheduled task time" stacked>
+              <div className="space-y-2">
+                <div className="flex justify-end">
+                  <Toggle
+                    checked={n.taskDeadline}
+                    onChange={(v) => update({ notifications: { ...n, taskDeadline: v } })}
+                  />
+                </div>
+                <SegmentedControl
+                  value={n.taskDeadlineLeadMinutes}
+                  onChange={(v) => update({ notifications: { ...n, taskDeadlineLeadMinutes: Number(v) } })}
+                  options={DEADLINE_LEAD_OPTIONS}
+                />
+              </div>
+            </SettingRow>
           </Section>
 
           {/* ---- Data Management ---- */}

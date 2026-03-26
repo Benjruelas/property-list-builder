@@ -33,7 +33,9 @@ export function CompassOrientation({ isActive, heading, isFollowing }) {
     }
 
     if (isFollowing && heading != null) {
-      const target = -heading
+      // Match leaflet-rotate bearing sign to compass heading (clockwise from north).
+      // Using -heading inverts turns (device left → map right).
+      const target = heading
       if (lastBearingRef.current != null) {
         let delta = target - lastBearingRef.current
         if (delta > 180) delta -= 360

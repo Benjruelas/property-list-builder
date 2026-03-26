@@ -8,6 +8,26 @@ const getApiBase = () => {
   return import.meta.env.VITE_API_URL || ''
 }
 
+/**
+ * Owner or collaborator (email in sharedWith). Same rule for adding/moving leads and
+ * for collaborative work in the UI; server PATCH allows collaborators to send `leads` only.
+ * @param {{ uid?: string, email?: string } | null} user
+ * @param {{ ownerId?: string, sharedWith?: string[] } | null} pipeline
+ */
+export function canAddLeadsToPipeline(user, pipeline) {
+  if (!user?.uid || !pipeline) return false
+  if (pipeline.ownerId === user.uid) return true
+  const email = (user.email || '').toLowerCase().trim()
+  if (!email) return false
+  const shared = Array.isArray(pipeline.sharedWith) ? pipeline.sharedWith : []
+  return shared.some((e) => (e || '').toLowerCase().trim() === email)
+}
+
+/** Alias: anyone with access may update leads (and use tasks) on that pipeline; only the owner may change structure/sharing. */
+export function canCollaborateOnPipeline(user, pipeline) {
+  return canAddLeadsToPipeline(user, pipeline)
+}
+
 export async function fetchPipelines(getToken) {
   const token = await getToken()
   if (!token) return []

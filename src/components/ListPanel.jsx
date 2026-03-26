@@ -228,9 +228,9 @@ export function ListPanel({
       >
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Manage your property lists, add parcels, and share lists</DialogDescription>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold">Lists</DialogTitle>
-            <div className="flex items-center gap-2">
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold truncate">Lists</DialogTitle>
+            <div className="map-panel-header-actions gap-2">
               <Button
                 variant="outline"
                 size="icon"

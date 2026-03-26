@@ -3,7 +3,7 @@
  * User-scoped deal pipelines. Requires Firebase Auth (Bearer token).
  * - GET: Pipelines owned by user or shared with user's email
  * - POST: Create pipeline (owner = current user)
- * - PATCH: Update pipeline (title, columns, leads, sharedWith). Owner only. sharedWith max 50 emails.
+ * - PATCH: Update pipeline. Owner: any field. Collaborators (sharedWith email match): `leads` only (add/move/remove leads). sharedWith max 50 emails.
  * - DELETE: Delete pipeline (owner only)
  *
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
@@ -104,6 +104,44 @@ function normalizeColumns(cols) {
   })).filter(c => c.name)
 }
 
+async function runPipelinePushNotifications({
+  sharedWith,
+  leads,
+  isOwner,
+  pipeline,
+  prevLeadsSnapshot,
+  newlyAddedPipelineShares,
+  user
+}) {
+  try {
+    const {
+      notifyNewPipelineShares,
+      notifyPipelineLeadStatusChanges,
+      diffLeadStatusChanges
+    } = await import('./push-utils.js')
+    if (sharedWith !== undefined && isOwner && newlyAddedPipelineShares.length > 0) {
+      await notifyNewPipelineShares(newlyAddedPipelineShares, {
+        pipelineTitle: pipeline.title,
+        actorEmail: user.email
+      })
+    }
+    if (leads !== undefined && Array.isArray(leads)) {
+      const changes = diffLeadStatusChanges(prevLeadsSnapshot, pipeline.leads)
+      if (changes.length > 0) {
+        await notifyPipelineLeadStatusChanges(changes, {
+          pipelineTitle: pipeline.title,
+          columns: pipeline.columns || [],
+          ownerEmail: pipeline.ownerEmail,
+          sharedWith: pipeline.sharedWith || [],
+          actorEmail: user.email
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('pipeline push notify', e.message)
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
@@ -128,8 +166,13 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const all = await getAllPipelines()
+      const userEmail = (user.email || '').toLowerCase().trim()
       const pipelines = all.filter(
-        (p) => p.ownerId === user.uid || (Array.isArray(p.sharedWith) && p.sharedWith.map((e) => e.toLowerCase()).includes(user.email))
+        (p) =>
+          p.ownerId === user.uid ||
+          (Array.isArray(p.sharedWith) &&
+            userEmail &&
+            p.sharedWith.map((e) => (e || '').toLowerCase().trim()).includes(userEmail))
       )
       return res.status(200).json({ pipelines })
     }
@@ -164,8 +207,28 @@ export default async function handler(req, res) {
       if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
 
       const pipeline = all[idx]
-      if (pipeline.ownerId !== user.uid) {
-        return res.status(403).json({ error: 'Only the pipeline owner can update this pipeline' })
+      const prevLeadsSnapshot = JSON.parse(JSON.stringify(pipeline.leads || []))
+      const prevSharedSet = new Set(
+        (pipeline.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
+      )
+      let newlyAddedPipelineShares = []
+      const isOwner = pipeline.ownerId === user.uid
+      const userEmail = (user.email || '').toLowerCase().trim()
+      const isCollaborator =
+        Array.isArray(pipeline.sharedWith) &&
+        pipeline.sharedWith.map((e) => (e || '').toLowerCase().trim()).includes(userEmail)
+
+      if (!isOwner && !isCollaborator) {
+        return res.status(403).json({ error: 'Only the pipeline owner or collaborators can update this pipeline' })
+      }
+
+      if (!isOwner) {
+        if (title !== undefined || columns !== undefined || sharedWith !== undefined) {
+          return res.status(403).json({ error: 'Only the pipeline owner can change title, columns, or sharing' })
+        }
+        if (leads === undefined) {
+          return res.status(400).json({ error: 'No permitted updates' })
+        }
       }
 
       if (title !== undefined) {
@@ -210,12 +273,24 @@ export default async function handler(req, res) {
             }
           }
         }
+        newlyAddedPipelineShares = uniqueEmails.filter((e) => !prevSharedSet.has(e))
         pipeline.sharedWith = uniqueEmails
       }
 
       pipeline.updatedAt = new Date().toISOString()
       all[idx] = pipeline
       await saveAllPipelines(all)
+
+      await runPipelinePushNotifications({
+        sharedWith,
+        leads,
+        isOwner,
+        pipeline,
+        prevLeadsSnapshot,
+        newlyAddedPipelineShares,
+        user
+      })
+
       return res.status(200).json({ pipeline })
     }
 

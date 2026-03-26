@@ -1,48 +1,80 @@
 /**
- * Utility for lead tasks - stored in localStorage keyed by parcelId
- * Tasks: { id, title, completed, createdAt, completedAt?, scheduledAt?, scheduledEndAt? }
+ * Lead tasks — stored in localStorage as a versioned flat list.
+ * Each task: pipelineId (null = not scoped to a pipeline), parcelId (null = not tied to a lead).
+ * Standalone: both null. Lead task: both set (when using API pipelines).
  */
+
+import { loadTitle } from './dealPipeline'
 
 const STORAGE_KEY = 'lead_tasks'
 
-function getAll() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return {}
-    return JSON.parse(stored)
-  } catch {
-    return {}
+const LEGACY_UNASSIGNED = '__unassigned__'
+
+function normalizeTask(t) {
+  let createdAt = t.createdAt
+  if (createdAt == null && t.id) {
+    const parsed = parseInt(String(t.id).split('-')[1], 10)
+    createdAt = Number.isFinite(parsed) ? parsed : Date.now()
+  }
+  if (createdAt == null) createdAt = Date.now()
+  return {
+    ...t,
+    createdAt,
+    completedAt: t.completedAt ?? null,
+    scheduledAt: t.scheduledAt ?? null,
+    scheduledEndAt: t.scheduledEndAt ?? null,
+    pipelineId: t.pipelineId != null && t.pipelineId !== '' ? t.pipelineId : null,
+    parcelId: t.parcelId != null && t.parcelId !== '' && t.parcelId !== LEGACY_UNASSIGNED ? t.parcelId : null
   }
 }
 
-function saveAll(data) {
+function migrateLegacyKeyed(old) {
+  const tasks = []
+  for (const [key, taskList] of Object.entries(old)) {
+    if (key === LEGACY_UNASSIGNED) {
+      for (const t of taskList || []) {
+        if (!(t.title ?? '').toString().trim() && !t.id) continue
+        tasks.push(normalizeTask({ ...t, pipelineId: null, parcelId: null }))
+      }
+    } else {
+      for (const t of taskList || []) {
+        if (!(t.title ?? '').toString().trim() && !t.id) continue
+        tasks.push(normalizeTask({ ...t, pipelineId: null, parcelId: key }))
+      }
+    }
+  }
+  return { v: 2, tasks }
+}
+
+function loadStore() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return { v: 2, tasks: [] }
+    const parsed = JSON.parse(raw)
+    if (parsed && parsed.v === 2 && Array.isArray(parsed.tasks)) {
+      return { v: 2, tasks: parsed.tasks.map((t) => normalizeTask(t)) }
+    }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && !parsed.v) {
+      const migrated = migrateLegacyKeyed(parsed)
+      saveStore(migrated)
+      return migrated
+    }
+  } catch (e) {
+    console.warn('leadTasks load failed', e)
+  }
+  return { v: 2, tasks: [] }
+}
+
+function saveStore(store) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
   } catch (e) {
     console.error('Error saving lead tasks:', e)
   }
 }
 
-/**
- * Get all tasks across all leads, with parcelId for each
- * @returns {Array<{id:string, title:string, completed:boolean, createdAt:number, completedAt?:number, parcelId:string}>}
- */
-export const getAllTasks = () => {
-  const all = getAll()
-  const result = []
-  for (const [parcelId, tasks] of Object.entries(all)) {
-    for (const t of tasks || []) {
-      if (!(t.title ?? '').toString().trim()) continue // only show tasks that have been created (non-empty title)
-      let createdAt = t.createdAt
-      if (createdAt == null && t.id) {
-        const parsed = parseInt(t.id.split('-')[1], 10)
-        createdAt = Number.isFinite(parsed) ? parsed : Date.now()
-      }
-      if (createdAt == null) createdAt = Date.now()
-      result.push({ ...t, createdAt, completedAt: t.completedAt ?? null, scheduledAt: t.scheduledAt ?? null, scheduledEndAt: t.scheduledEndAt ?? null, parcelId })
-    }
-  }
-  return result.sort((a, b) => {
+function sortTasksFlat(arr) {
+  return [...arr].sort((a, b) => {
     const aSched = a.scheduledAt ?? 0
     const bSched = b.scheduledAt ?? 0
     if (aSched && bSched) return aSched - bSched
@@ -53,127 +85,255 @@ export const getAllTasks = () => {
 }
 
 /**
- * Get tasks for a lead (by parcelId)
- * @param {string} parcelId - Parcel/lead ID
- * @returns {Array<{id:string, title:string, completed:boolean, createdAt:number, completedAt?:number}>}
+ * Whether a task belongs to the active pipeline (for API mode).
+ * Legacy tasks (pipelineId null, parcelId set) match if a lead in that pipeline has the parcel.
  */
-export const getLeadTasks = (parcelId) => {
-  if (!parcelId) return []
-  const raw = getAll()[parcelId] || []
-  return raw.map((t) => {
-    let createdAt = t.createdAt
-    if (createdAt == null && t.id) {
-      const parsed = parseInt(t.id.split('-')[1], 10)
-      createdAt = Number.isFinite(parsed) ? parsed : Date.now()
-    }
-    if (createdAt == null) createdAt = Date.now()
-    return { ...t, createdAt, completedAt: t.completedAt ?? null, scheduledAt: t.scheduledAt ?? null, scheduledEndAt: t.scheduledEndAt ?? null }
-  })
+export function taskBelongsToPipeline(task, activePipelineId, pipelines) {
+  if (!activePipelineId) return false
+  const standalone = task.pipelineId == null && task.parcelId == null
+  if (standalone) return false
+
+  if (task.pipelineId != null) {
+    return task.pipelineId === activePipelineId
+  }
+  if (task.parcelId) {
+    const pipe = pipelines.find((p) => p.id === activePipelineId)
+    return pipe?.leads?.some((l) => l.parcelId === task.parcelId)
+  }
+  return false
 }
 
-const UNASSIGNED_KEY = '__unassigned__'
+/** Local single-pipeline mode: tasks tied to a lead in the list, or legacy parcel-only tasks. */
+export function taskBelongsToLocalLeads(task, displayLeads) {
+  const standalone = task.pipelineId == null && task.parcelId == null
+  if (standalone) return false
+  if (task.parcelId && displayLeads.some((l) => l.parcelId === task.parcelId)) return true
+  return false
+}
+
+function firstPipelineForTask(task, pipelines) {
+  if (task.pipelineId != null) {
+    return pipelines.find((p) => p.id === task.pipelineId) ?? null
+  }
+  if (task.parcelId) {
+    return pipelines.find((p) => p.leads?.some((l) => l.parcelId === task.parcelId)) ?? null
+  }
+  return null
+}
+
+/** Resolved deal pipeline for a task, or null if none (API pipelines only). */
+export function getPipelineForTask(task, pipelines) {
+  if (!pipelines?.length) return null
+  return firstPipelineForTask(task, pipelines)
+}
 
 /**
- * Add a task (title can be empty for new inline-edit flow)
- * @param {string|null} parcelId - Parcel/lead ID, or null/empty for unassigned task
- * @param {string} [title] - Task title (optional)
- * @param {number} [scheduledAt] - Optional scheduled start timestamp (ms)
- * @param {number} [scheduledEndAt] - Optional scheduled end timestamp (ms)
- * @returns {Object} The created task
+ * Update a task by id (title, schedule, pipeline/lead assignment).
  */
-export const addLeadTask = (parcelId, title = '', scheduledAt = null, scheduledEndAt = null) => {
-  const key = parcelId && String(parcelId).trim() ? parcelId : UNASSIGNED_KEY
-  const all = getAll()
-  const tasks = all[key] || []
+export function updateTaskById(taskId, updates = {}) {
+  if (!taskId) return
+  const store = loadStore()
+  const idx = store.tasks.findIndex((t) => t.id === taskId)
+  if (idx === -1) return
+  const prev = store.tasks[idx]
+  let t = { ...prev }
+  if ('title' in updates && updates.title !== undefined) {
+    t.title = String(updates.title ?? '').trim()
+  }
+  if ('scheduledAt' in updates) {
+    t.scheduledAt = updates.scheduledAt && Number.isFinite(updates.scheduledAt) ? updates.scheduledAt : null
+  }
+  if ('scheduledEndAt' in updates) {
+    t.scheduledEndAt =
+      updates.scheduledEndAt !== undefined
+        ? updates.scheduledEndAt && Number.isFinite(updates.scheduledEndAt)
+          ? updates.scheduledEndAt
+          : null
+        : t.scheduledEndAt
+  }
+  if ('pipelineId' in updates) {
+    t.pipelineId = updates.pipelineId != null && String(updates.pipelineId).trim() ? String(updates.pipelineId).trim() : null
+  }
+  if ('parcelId' in updates) {
+    t.parcelId = updates.parcelId != null && String(updates.parcelId).trim() ? String(updates.parcelId).trim() : null
+  }
+  store.tasks[idx] = normalizeTask(t)
+  saveStore(store)
+}
+
+function groupTasksByPipelineInternal(tasks, pipelines, completedOnly) {
+  const filtered = tasks.filter((t) => {
+    if (!(t.title ?? '').toString().trim()) return false
+    return completedOnly ? !!t.completed : !t.completed
+  })
+  if (!pipelines || pipelines.length === 0) {
+    const standalone = filtered.filter((t) => t.pipelineId == null && t.parcelId == null)
+    const inLocal = filtered.filter((t) => !(t.pipelineId == null && t.parcelId == null))
+    return {
+      unlabeled: sortTasksFlat(standalone),
+      groups: inLocal.length
+        ? [{ pipeline: { id: '__local__', title: loadTitle() }, tasks: sortTasksFlat(inLocal) }]
+        : []
+    }
+  }
+  const unlabeled = []
+  const byPipeId = new Map(pipelines.map((p) => [p.id, []]))
+  for (const t of filtered) {
+    const pipe = firstPipelineForTask(t, pipelines)
+    if (!pipe) {
+      unlabeled.push(t)
+    } else {
+      byPipeId.get(pipe.id).push(t)
+    }
+  }
+  const groups = pipelines
+    .map((p) => ({ pipeline: p, tasks: sortTasksFlat(byPipeId.get(p.id) || []) }))
+    .filter((g) => g.tasks.length > 0)
+  return { unlabeled: sortTasksFlat(unlabeled), groups }
+}
+
+/**
+ * Incomplete tasks for the Tasks panel: unlabeled group first (not in any deal pipeline),
+ * then one group per pipeline in `pipelines` array order.
+ * Local mode (no API pipelines): unlabeled = standalone; one group titled from loadTitle().
+ */
+export function groupOpenTasksByPipeline(tasks, pipelines) {
+  return groupTasksByPipelineInternal(tasks, pipelines, false)
+}
+
+/**
+ * Completed tasks for the Tasks panel — same grouping as {@link groupOpenTasksByPipeline}.
+ */
+export function groupCompletedTasksByPipeline(tasks, pipelines) {
+  return groupTasksByPipelineInternal(tasks, pipelines, true)
+}
+
+/**
+ * Get all tasks (with pipelineId / parcelId). Omits empty placeholder tasks.
+ */
+export const getAllTasks = () => {
+  const { tasks } = loadStore()
+  const result = []
+  for (const t of tasks) {
+    if (!(t.title ?? '').toString().trim()) continue
+    result.push(normalizeTask(t))
+  }
+  return sortTasksFlat(result)
+}
+
+/**
+ * Tasks for a lead (optionally scoped to a pipeline).
+ */
+export const getLeadTasks = (parcelId, pipelineId = null) => {
+  if (!parcelId) return []
+  const { tasks } = loadStore()
+  return sortTasksFlat(
+    tasks
+      .filter((t) => {
+        if (t.parcelId !== parcelId) return false
+        if (pipelineId == null) return true
+        return t.pipelineId === pipelineId || (t.pipelineId == null && pipelineId != null)
+      })
+      .map(normalizeTask)
+  )
+}
+
+function findTaskIndexById(taskId) {
+  const store = loadStore()
+  return store.tasks.findIndex((t) => t.id === taskId)
+}
+
+/**
+ * Add a task (standalone when pipelineId and parcelId are both null).
+ */
+export const addTask = ({
+  pipelineId = null,
+  parcelId = null,
+  title = '',
+  scheduledAt = null,
+  scheduledEndAt = null
+} = {}) => {
+  const store = loadStore()
   const now = Date.now()
-  const task = {
+  const task = normalizeTask({
     id: `task-${now}-${Math.random().toString(36).slice(2, 9)}`,
     title: (title ?? '').toString().trim(),
     completed: false,
     createdAt: now,
     completedAt: null,
     scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null,
-    scheduledEndAt: scheduledEndAt && Number.isFinite(scheduledEndAt) ? scheduledEndAt : null
-  }
-  all[key] = [...tasks, task]
-  saveAll(all)
+    scheduledEndAt: scheduledEndAt && Number.isFinite(scheduledEndAt) ? scheduledEndAt : null,
+    pipelineId: pipelineId && String(pipelineId).trim() ? pipelineId : null,
+    parcelId: parcelId && String(parcelId).trim() ? parcelId : null
+  })
+  store.tasks = [...store.tasks, task]
+  saveStore(store)
   return task
 }
 
 /**
- * Update a task's title
- * @param {string} parcelId - Parcel/lead ID
- * @param {string} taskId - Task ID
- * @param {string} title - New title
+ * Legacy: addLeadTask(parcelId, title, scheduledAt, scheduledEndAt)
+ * Or pass a single options object as first arg: { pipelineId, parcelId, title, ... }
  */
+export const addLeadTask = (parcelId, title = '', scheduledAt = null, scheduledEndAt = null) => {
+  if (parcelId && typeof parcelId === 'object' && !Array.isArray(parcelId)) {
+    return addTask(parcelId)
+  }
+  const pid = parcelId && String(parcelId).trim() ? parcelId : null
+  return addTask({ pipelineId: null, parcelId: pid, title, scheduledAt, scheduledEndAt })
+}
+
 export const updateLeadTaskTitle = (parcelId, taskId, title) => {
-  if (!parcelId || !taskId) return
-  const all = getAll()
-  const tasks = all[parcelId] || []
-  all[parcelId] = tasks.map((t) =>
-    t.id === taskId ? { ...t, title: (title ?? '').toString().trim() } : t
-  )
-  saveAll(all)
+  if (!taskId) return
+  const store = loadStore()
+  const idx = store.tasks.findIndex((t) => t.id === taskId)
+  if (idx === -1) return
+  store.tasks[idx] = { ...store.tasks[idx], title: (title ?? '').toString().trim() }
+  saveStore(store)
 }
 
-/**
- * Update a task's scheduled date/time
- * @param {string} parcelId - Parcel/lead ID
- * @param {string} taskId - Task ID
- * @param {number|null} scheduledAt - Timestamp (ms) or null to unschedule
- */
 export const updateLeadTaskSchedule = (parcelId, taskId, scheduledAt, scheduledEndAt = null) => {
-  if (!parcelId || !taskId) return
-  const all = getAll()
-  const tasks = all[parcelId] || []
-  all[parcelId] = tasks.map((t) => {
-    if (t.id !== taskId) return t
-    const updates = { scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null }
-    if (scheduledEndAt !== undefined) updates.scheduledEndAt = scheduledEndAt && Number.isFinite(scheduledEndAt) ? scheduledEndAt : null
-    return { ...t, ...updates }
-  })
-  saveAll(all)
+  if (!taskId) return
+  const store = loadStore()
+  const idx = store.tasks.findIndex((t) => t.id === taskId)
+  if (idx === -1) return
+  const t = store.tasks[idx]
+  const updates = {
+    scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null,
+    scheduledEndAt:
+      scheduledEndAt !== undefined
+        ? scheduledEndAt && Number.isFinite(scheduledEndAt)
+          ? scheduledEndAt
+          : null
+        : t.scheduledEndAt
+  }
+  store.tasks[idx] = { ...t, ...updates }
+  saveStore(store)
 }
 
-/**
- * Delete a task
- * @param {string} parcelId - Parcel/lead ID
- * @param {string} taskId - Task ID
- */
 export const deleteLeadTask = (parcelId, taskId) => {
-  if (!parcelId || !taskId) return
-  const all = getAll()
-  const tasks = (all[parcelId] || []).filter((t) => t.id !== taskId)
-  all[parcelId] = tasks
-  saveAll(all)
+  if (!taskId) return
+  const store = loadStore()
+  store.tasks = store.tasks.filter((t) => t.id !== taskId)
+  saveStore(store)
 }
 
-/**
- * Toggle task completed state
- * @param {string} parcelId - Parcel/lead ID
- * @param {string} taskId - Task ID
- */
 export const toggleLeadTask = (parcelId, taskId) => {
-  if (!parcelId || !taskId) return
-  const all = getAll()
-  const tasks = all[parcelId] || []
+  if (!taskId) return
+  const store = loadStore()
+  const idx = store.tasks.findIndex((t) => t.id === taskId)
+  if (idx === -1) return
   const now = Date.now()
-  const updated = tasks.map((t) => {
-    if (t.id !== taskId) return t
-    const completed = !t.completed
-    return {
-      ...t,
-      completed,
-      completedAt: completed ? now : null
-    }
-  })
-  all[parcelId] = updated
-  saveAll(all)
+  const t = store.tasks[idx]
+  const completed = !t.completed
+  store.tasks[idx] = {
+    ...t,
+    completed,
+    completedAt: completed ? now : null
+  }
+  saveStore(store)
 }
 
-/**
- * Format relative time (e.g. "5m ago", "2h ago", "3d ago")
- */
 export const formatTaskTimeAgo = (ts) => {
   if (ts == null || !Number.isFinite(ts)) return ''
   const ms = Date.now() - ts
@@ -187,17 +347,11 @@ export const formatTaskTimeAgo = (ts) => {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/**
- * Format completed date
- */
 export const formatTaskCompletedDate = (ts) => {
   if (ts == null || !Number.isFinite(ts)) return ''
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/**
- * Format scheduled date/time for display
- */
 export const formatTaskScheduledDate = (ts) => {
   if (ts == null || !Number.isFinite(ts)) return ''
   return new Date(ts).toLocaleString(undefined, {
@@ -209,7 +363,6 @@ export const formatTaskScheduledDate = (ts) => {
   })
 }
 
-/** Return yyyy-mm-ddThh:mm for datetime-local input */
 export const toDatetimeLocal = (ts) => {
   if (ts == null || !Number.isFinite(ts)) return ''
   const d = new Date(ts)
@@ -217,7 +370,6 @@ export const toDatetimeLocal = (ts) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** Parse datetime-local value to timestamp */
 export const fromDatetimeLocal = (str) => {
   if (!str || typeof str !== 'string') return null
   const ms = new Date(str).getTime()

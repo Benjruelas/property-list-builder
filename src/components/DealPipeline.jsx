@@ -1,19 +1,22 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2 } from 'lucide-react'
+import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Check, Users } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadLeads, saveLeads, loadTitle, saveTitle, formatTimeInState, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
-import { getAllTasks, addLeadTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
+import { getAllTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline, taskBelongsToLocalLeads } from '@/utils/leadTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { LeadDetails } from './LeadDetails'
 import { SchedulePicker } from './SchedulePicker'
+import { createPipeline, canCollaborateOnPipeline } from '@/utils/pipelines'
 
 const MAX_COLUMNS = 10
+const PIPELINE_OPTIONS_MENU_W = 200
+const PIPELINE_SWITCHER_MENU_W = 280
 const TASK_MENU_WIDTH = 160
 const TASK_MENU_HEIGHT = 200
 const PADDING = 8
@@ -30,7 +33,42 @@ function positionTaskMenu(rect) {
   return { top, left }
 }
 
-export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], onLeadsChange, onOpenScheduleAtDate, pipelines = [], activePipelineId, onPipelinesChange, onActivePipelineChange, onSharePipeline, onValidateShareEmail, currentUser, getToken, onColumnsChange, onTitleChange }) {
+/** Left-align dropdown with anchor button; keep menu on-screen horizontally. */
+function anchorMenuLeftAligned(rect, menuWidth) {
+  const pad = 8
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 0
+  let left = rect.left
+  if (left + menuWidth > vw - pad) left = Math.max(pad, vw - menuWidth - pad)
+  if (left < pad) left = pad
+  return { top: rect.bottom + 4, left }
+}
+
+export function DealPipeline({
+  isOpen,
+  onClose,
+  onOpenParcelDetails,
+  onEmailClick,
+  onPhoneClick,
+  onSkipTraceParcel,
+  skipTracingInProgress,
+  leads = [],
+  onLeadsChange,
+  onOpenScheduleAtDate,
+  pipelines = [],
+  activePipelineId,
+  onPipelinesChange,
+  onActivePipelineChange,
+  onSharePipeline,
+  onValidateShareEmail,
+  currentUser,
+  getToken,
+  onColumnsChange,
+  onTitleChange,
+  /** Increment to focus a lead card and open Lead Details (parcel id). */
+  focusLeadRequestKey = 0,
+  focusParcelId = null,
+  onFocusLeadHandled
+}) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0]
@@ -68,6 +106,10 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   const [taskMenu, setTaskMenu] = useState(null) // { task, anchor: { top, left } }
   const [pipelineDropdownOpen, setPipelineDropdownOpen] = useState(false)
   const [pipelineDropdownAnchor, setPipelineDropdownAnchor] = useState(null)
+  const [pipelineSwitcherOpen, setPipelineSwitcherOpen] = useState(false)
+  const [pipelineSwitcherAnchor, setPipelineSwitcherAnchor] = useState(null)
+  const [createPipelineDialogOpen, setCreatePipelineDialogOpen] = useState(false)
+  const [newPipelineTitle, setNewPipelineTitle] = useState('')
   const [sharePipelineId, setSharePipelineId] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
   const [shareEmailValid, setShareEmailValid] = useState(null)
@@ -77,6 +119,13 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   const justDraggedRef = useRef(false)
 
   const isPipelineOwnedByUser = (p) => p?.ownerId === currentUser?.uid
+
+  /** Owner or collaborator: may move leads and use tasks; structure/sharing remains owner-only (API + UI). */
+  const canCollaboratePipeline = useMemo(() => {
+    if (!apiMode) return true
+    if (!activePipeline) return false
+    return canCollaborateOnPipeline(currentUser, activePipeline)
+  }, [apiMode, activePipeline, currentUser])
 
   const runShareValidation = useCallback(async (email) => {
     const trimmed = (email || '').trim().toLowerCase()
@@ -135,6 +184,19 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   }, [selectedLead, refreshAllTasks])
 
   useEffect(() => {
+    if (!isOpen || !focusLeadRequestKey) return
+    if (focusParcelId == null || focusParcelId === '') return
+    const id = window.setTimeout(() => {
+      const lead = displayLeads.find((l) => String(l.parcelId) === String(focusParcelId))
+      if (lead) {
+        setSelectedLead(lead)
+      }
+      onFocusLeadHandled?.()
+    }, 100)
+    return () => clearTimeout(id)
+  }, [isOpen, focusLeadRequestKey, focusParcelId, displayLeads, onFocusLeadHandled])
+
+  useEffect(() => {
     if (isOpen) {
       if (apiMode && activePipeline) {
         setColumns(activePipeline.columns || [])
@@ -172,16 +234,23 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
     }
   }, [scheduleSync, apiMode, onColumnsChange])
 
-  const persistLeads = useCallback((l) => {
-    if (apiMode && onLeadsChange) {
-      setOptimisticLeads(l)
-      onLeadsChange(l).then(() => setOptimisticLeads(null)).catch(() => setOptimisticLeads(null))
-    } else {
-      setLocalLeads(l)
-      saveLeads(l)
-      scheduleSync()
-    }
-  }, [scheduleSync, apiMode, onLeadsChange])
+  const persistLeads = useCallback(
+    (l) => {
+      if (apiMode && !canCollaboratePipeline) {
+        showToast('You cannot update leads on this pipeline', 'error')
+        return
+      }
+      if (apiMode && onLeadsChange) {
+        setOptimisticLeads(l)
+        onLeadsChange(l).then(() => setOptimisticLeads(null)).catch(() => setOptimisticLeads(null))
+      } else {
+        setLocalLeads(l)
+        saveLeads(l)
+        scheduleSync()
+      }
+    },
+    [scheduleSync, apiMode, onLeadsChange, canCollaboratePipeline]
+  )
 
   const handleAddColumn = () => {
     if (!newColumnName.trim() || columns.length >= MAX_COLUMNS) return
@@ -333,12 +402,15 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
     }
   }
 
-  const displayTasks = apiMode
-    ? allTasks.filter((t) => t.parcelId === '__unassigned__' || displayLeads.some((l) => l.parcelId === t.parcelId))
-    : allTasks
+  const displayTasks = useMemo(() => {
+    if (apiMode) {
+      return allTasks.filter((t) => taskBelongsToPipeline(t, activePipelineId, pipelines))
+    }
+    return allTasks.filter((t) => taskBelongsToLocalLeads(t, displayLeads))
+  }, [allTasks, apiMode, activePipelineId, pipelines, displayLeads])
 
   const getLeadLabel = (parcelId) => {
-    if (!parcelId || parcelId === '__unassigned__') return 'Unassigned'
+    if (!parcelId) return 'Pipeline task'
     const lead = displayLeads.find((l) => l.parcelId === parcelId)
     if (lead) return getStreetAddress(lead) || lead.address || lead.owner || parcelId
     return parcelId
@@ -381,40 +453,57 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
   })()
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setTaskMenu(null); onClose?.() } }}>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setTaskMenu(null); setPipelineDropdownOpen(false); setPipelineSwitcherOpen(false); onClose?.() } }}>
       <DialogContent
         className="map-panel deal-pipeline-panel fullscreen-panel flex flex-col"
         showCloseButton={false}
         hideOverlay
         onInteractOutside={(e) => {
-          if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-share-pipeline-dialog]')) e.preventDefault()
+          if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-pipeline-switcher]') || e.target?.closest?.('[data-share-pipeline-dialog]') || e.target?.closest?.('[data-create-pipeline-dialog]')) e.preventDefault()
         }}
       >
         <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Manage leads in your deal pipeline</DialogDescription>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="map-panel-header-toolbar">
+            <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-1.5">
               {isEditMode ? (
                 <Input
                   value={pipelineTitle}
                   onChange={(e) => setPipelineTitle(e.target.value)}
                   onBlur={handleTitleBlur}
                   onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-                  className="text-xl font-semibold h-9 border-gray-300 flex-1 min-w-0"
+                  className="h-9 min-w-0 flex-1 border-gray-300 text-xl font-semibold"
                   placeholder="Pipeline title"
                 />
               ) : (
-                <DialogTitle className="text-xl font-semibold truncate">{pipelineTitle}</DialogTitle>
+                <DialogTitle className="min-w-0 flex-1 truncate text-xl font-semibold">{pipelineTitle}</DialogTitle>
+              )}
+              {apiMode && pipelines.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-8 w-8 shrink-0 pipeline-icon-btn ${pipelineSwitcherOpen ? 'opacity-90' : ''}`}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    setPipelineSwitcherAnchor(anchorMenuLeftAligned(rect, PIPELINE_SWITCHER_MENU_W))
+                    setPipelineSwitcherOpen((o) => !o)
+                    setPipelineDropdownOpen(false)
+                  }}
+                  title="Switch pipeline"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
               )}
               {apiMode && onSharePipeline && isPipelineOwnedByUser(activePipeline) ? (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`h-8 w-8 pipeline-icon-btn ${pipelineDropdownOpen ? 'opacity-90' : ''}`}
+                  className={`h-8 w-8 shrink-0 pipeline-icon-btn ${pipelineDropdownOpen ? 'opacity-90' : ''}`}
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect()
-                    setPipelineDropdownAnchor({ top: rect.bottom + 4, left: rect.right - 180 })
+                    setPipelineDropdownAnchor(anchorMenuLeftAligned(rect, PIPELINE_OPTIONS_MENU_W))
                     setPipelineDropdownOpen(true)
+                    setPipelineSwitcherOpen(false)
                   }}
                   title="Pipeline options"
                 >
@@ -424,7 +513,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`h-8 w-8 pipeline-icon-btn deal-pipeline-settings-btn ${isEditMode ? 'deal-pipeline-edit-active' : ''} ${apiMode && !isPipelineOwnedByUser(activePipeline) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`h-8 w-8 shrink-0 pipeline-icon-btn deal-pipeline-settings-btn ${isEditMode ? 'deal-pipeline-edit-active' : ''} ${apiMode && !isPipelineOwnedByUser(activePipeline) ? 'opacity-50 cursor-not-allowed' : ''}`}
                   onClick={() => !apiMode || isPipelineOwnedByUser(activePipeline) ? toggleEditMode() : null}
                   title={apiMode && !isPipelineOwnedByUser(activePipeline) ? 'Edit mode disabled for shared pipelines' : (isEditMode ? 'Exit edit mode' : 'Edit pipeline')}
                   disabled={apiMode && !isPipelineOwnedByUser(activePipeline)}
@@ -433,9 +522,11 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                 </Button>
               )}
             </div>
-            <Button variant="ghost" size="icon" className="pipeline-icon-btn" onClick={() => { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setPipelineDropdownOpen(false); setSharePipelineId(null); onClose?.() }} title="Close">
-              <X className="h-5 w-5" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button variant="ghost" size="icon" className="pipeline-icon-btn" onClick={() => { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setPipelineDropdownOpen(false); setPipelineSwitcherOpen(false); setSharePipelineId(null); onClose?.() }} title="Close">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         </DialogHeader>
         <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden deal-pipeline-content">
@@ -477,21 +568,21 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                 </div>
                 <div
                   className={`flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-1.5 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
-                  onDragOver={(e) => handleDragOver(e, col.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, col.id)}
+                  onDragOver={canCollaboratePipeline ? (e) => handleDragOver(e, col.id) : undefined}
+                  onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
+                  onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
                 >
                   {getLeadsForColumn(col.id).map((lead) => (
                     <div
                       key={lead.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, lead.id)}
-                      onDragEnd={handleDragEnd}
+                      draggable={canCollaboratePipeline}
+                      onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, lead.id) : undefined}
+                      onDragEnd={canCollaboratePipeline ? handleDragEnd : undefined}
                       onClick={() => handleLeadClick(lead)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && handleLeadClick(lead)}
-                      className={`deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs group cursor-grab active:cursor-grabbing flex items-center gap-1 transition-colors ${draggedLeadId === lead.id ? 'opacity-50' : ''}`}
+                      className={`deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs group flex items-center gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedLeadId === lead.id ? 'opacity-50' : ''}`}
                       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
                     >
                       <div className="flex-1 min-w-0">
@@ -514,7 +605,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                             className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed text-white/90"
                             onClick={(e) => { e.stopPropagation(); handleMoveToNext(lead.id) }}
                             title="Move to next stage"
-                            disabled={columns.findIndex(c => c.id === lead.status) >= columns.length - 1}
+                            disabled={!canCollaboratePipeline || columns.findIndex(c => c.id === lead.status) >= columns.length - 1}
                           >
                             <ArrowRight className="h-3.5 w-3.5" />
                           </button>
@@ -556,14 +647,14 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
           </div>
           </div>
 
-          {/* Task List - all tasks across leads, collapsible (collapses to right edge on desktop, expands pipeline) */}
+          {/* Tasks - all tasks across leads, collapsible (collapses to right edge on desktop, expands pipeline) */}
           <div className={`w-full md:flex-shrink-0 border-t md:border-t-0 md:border-l flex flex-col border-white/20 transition-[width] duration-200 deal-pipeline-tasks ${tasksCollapsed ? 'md:w-16' : 'md:w-80'}`}>
             <div className={`deal-pipeline-tasks-header px-3 py-2 border-b flex items-center gap-2 flex-shrink-0 ${tasksCollapsed ? 'md:flex-row md:px-2 md:py-3 md:justify-between md:min-h-[48px]' : 'justify-between'}`}>
               <button
                 type="button"
                 className={`flex items-center min-w-0 flex-1 md:flex-none pipeline-icon-btn ${tasksCollapsed ? 'md:justify-between md:w-full md:px-1' : 'gap-2'}`}
                 onClick={() => setTasksCollapsed(!tasksCollapsed)}
-                title={tasksCollapsed ? 'Expand Task List' : 'Collapse Task List'}
+                title={tasksCollapsed ? 'Expand tasks' : 'Collapse tasks'}
               >
                 {tasksCollapsed ? (
                   <>
@@ -573,14 +664,14 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                     <span className="hidden md:inline flex-shrink-0 order-last"><ListTodo className="h-4 w-4" /></span>
                     <span className="md:hidden flex items-center gap-2">
                       <ListTodo className="h-4 w-4 flex-shrink-0" />
-                      <span className="font-semibold text-sm truncate">Task List</span>
+                      <span className="font-semibold text-sm truncate">Tasks</span>
                       {tasksCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
                     </span>
                   </>
                 ) : (
                   <>
                     <ListTodo className="h-4 w-4 flex-shrink-0" />
-                    <span className="font-semibold text-sm truncate">Task List</span>
+                    <span className="font-semibold text-sm truncate">Tasks</span>
                     <span className="ml-1 opacity-70">
                       <span className="md:hidden">{tasksCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}</span>
                       <span className="hidden md:inline"><ChevronDown className="h-4 w-4 rotate-[-90deg]" /></span>
@@ -635,13 +726,13 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                   <div
                     className={`text-xs rounded-md p-2 max-md:p-1.5 border cursor-pointer transition-colors ${task.completed ? 'opacity-60 bg-gray-100/70 dark:bg-white/[0.03] border-gray-200/80 dark:border-white/10 hover:opacity-80' : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                     onClick={() => {
-                      if (task.parcelId === '__unassigned__') return
+                      if (!task.parcelId) return
                       const lead = displayLeads.find((l) => l.parcelId === task.parcelId)
                       if (lead) setSelectedLead(lead)
                     }}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && task.parcelId !== '__unassigned__') { const lead = displayLeads.find((l) => l.parcelId === task.parcelId); if (lead) setSelectedLead(lead) } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && task.parcelId) { const lead = displayLeads.find((l) => l.parcelId === task.parcelId); if (lead) setSelectedLead(lead) } }}
                   >
                     <div className="flex items-start gap-2">
                       <button
@@ -658,8 +749,10 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
                       </button>
                       <div className="flex-1 min-w-0">
                         <div className={task.completed ? 'line-through text-gray-500' : 'font-medium'}>{task.title || '(untitled)'}</div>
-                        {task.parcelId && task.parcelId !== '__unassigned__' && (
+                        {task.parcelId ? (
                           <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={getLeadLabel(task.parcelId)}>Lead: {getLeadLabel(task.parcelId)}</div>
+                        ) : (
+                          <div className="text-[10px] text-gray-500 mt-0.5 truncate">Pipeline task</div>
                         )}
                         {(task.completed || task.scheduledAt) && (
                           <div className="text-[10px] text-gray-500 mt-0.5">
@@ -742,6 +835,7 @@ export function DealPipeline({ isOpen, onClose, onOpenParcelDetails, onEmailClic
         isOpen={!!selectedLead}
         onClose={() => setSelectedLead(null)}
         lead={selectedLead}
+        pipelineId={apiMode ? activePipelineId : null}
         parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
         onOpenParcelDetails={onOpenParcelDetails}
         onEmailClick={onEmailClick}
@@ -780,7 +874,7 @@ setAddTaskTitle('')
         }}
       />
 
-      {/* Add task from Task List */}
+      {/* Add task from tasks sidebar */}
       <Dialog open={showAddTaskDialog} onOpenChange={setShowAddTaskDialog}>
         <DialogContent className="map-panel list-panel new-task-panel max-w-md max-h-[80vh] p-0" showCloseButton={false} nestedOverlay>
           <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
@@ -874,7 +968,13 @@ setAddTaskTitle('')
                   if (e.key === 'Enter') {
                     const t = addTaskTitle.trim()
                     if (t) {
-                      addLeadTask(addTaskLeadId || null, t, addTaskScheduledAt, addTaskScheduledEndAt)
+                      addTask({
+                        pipelineId: apiMode && activePipelineId ? activePipelineId : null,
+                        parcelId: addTaskLeadId || null,
+                        title: t,
+                        scheduledAt: addTaskScheduledAt,
+                        scheduledEndAt: addTaskScheduledEndAt
+                      })
                       refreshAllTasks()
                       scheduleSync()
                       showToast('Task added', 'success')
@@ -902,7 +1002,13 @@ setAddTaskTitle('')
                 onClick={() => {
                   const t = addTaskTitle.trim()
                   if (t) {
-                    addLeadTask(addTaskLeadId || null, t, addTaskScheduledAt, addTaskScheduledEndAt)
+                    addTask({
+                      pipelineId: apiMode && activePipelineId ? activePipelineId : null,
+                      parcelId: addTaskLeadId || null,
+                      title: t,
+                      scheduledAt: addTaskScheduledAt,
+                      scheduledEndAt: addTaskScheduledEndAt
+                    })
                     refreshAllTasks()
                     scheduleSync()
                     showToast('Task added', 'success')
@@ -932,7 +1038,7 @@ setAddTaskTitle('')
           </DialogHeader>
           {editTask && (
             <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-140px)] space-y-3 create-list-form">
-              {editTask.task.parcelId && editTask.task.parcelId !== '__unassigned__' && (
+              {editTask.task.parcelId ? (
                 <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95 space-y-1">
                   {(() => {
                     const lead = editTask.lead || displayLeads.find((l) => String(l.parcelId) === String(editTask.task.parcelId)) || loadLeads().find((l) => String(l.parcelId) === String(editTask.task.parcelId))
@@ -952,6 +1058,11 @@ setAddTaskTitle('')
                       </>
                     )
                   })()}
+                </div>
+              ) : (
+                <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95">
+                  <span className="text-[10px] uppercase text-white/70">Scope</span>
+                  <div className="truncate">Pipeline task (no lead)</div>
                 </div>
               )}
               <div>
@@ -1103,11 +1214,108 @@ setAddTaskTitle('')
         </Dialog>
       )}
 
+      {createPipelineDialogOpen && (
+        <Dialog open={createPipelineDialogOpen} onOpenChange={(open) => { if (!open) { setCreatePipelineDialogOpen(false); setNewPipelineTitle('') } }}>
+          <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay data-create-pipeline-dialog>
+            <DialogHeader>
+              <DialogTitle>New pipeline</DialogTitle>
+              <DialogDescription className="sr-only">Name your new deal pipeline</DialogDescription>
+            </DialogHeader>
+            <Input
+              value={newPipelineTitle}
+              onChange={(e) => setNewPipelineTitle(e.target.value)}
+              placeholder="Pipeline name"
+              className="mb-4"
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button
+                className="flex-1 share-dialog-btn"
+                onClick={async () => {
+                  try {
+                    const title = newPipelineTitle.trim() || 'Deal Pipeline'
+                    const created = await createPipeline(getToken, { title })
+                    if (onPipelinesChange) await onPipelinesChange()
+                    onActivePipelineChange?.(created.id)
+                    setCreatePipelineDialogOpen(false)
+                    setNewPipelineTitle('')
+                    showToast('Pipeline created', 'success')
+                  } catch (err) {
+                    showToast(err.message || 'Could not create pipeline', 'error')
+                  }
+                }}
+              >
+                Create
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 share-dialog-btn"
+                onClick={() => { setCreatePipelineDialogOpen(false); setNewPipelineTitle('') }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {pipelineSwitcherOpen && pipelineSwitcherAnchor && apiMode && typeof document !== 'undefined' && createPortal(
+        <div data-pipeline-switcher className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
+          <div className="fixed inset-0 z-[10011]" onClick={() => setPipelineSwitcherOpen(false)} aria-hidden />
+          <div
+            className="map-panel list-panel fixed z-[10012] rounded-xl min-w-[220px] max-w-[min(90vw,320px)] max-h-[min(50vh,280px)] overflow-y-auto py-1 shadow-xl border border-white/15"
+            style={{ top: pipelineSwitcherAnchor.top, left: pipelineSwitcherAnchor.left }}
+            role="menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {pipelines.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  onActivePipelineChange?.(p.id)
+                  setPipelineSwitcherOpen(false)
+                }}
+                className="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors text-white/95"
+              >
+                {p.id === activePipelineId ? (
+                  <Check className="h-4 w-4 flex-shrink-0 text-amber-400" aria-hidden />
+                ) : (
+                  <span className="w-4 flex-shrink-0 inline-block" aria-hidden />
+                )}
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="truncate font-medium text-left">{p.title?.trim() || 'Deal Pipeline'}</span>
+                  {p.ownerId !== currentUser?.uid && (
+                    <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
+                  )}
+                </div>
+              </button>
+            ))}
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setPipelineSwitcherOpen(false)
+                  setNewPipelineTitle('')
+                  setCreatePipelineDialogOpen(true)
+                }}
+                className="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors text-white/95"
+              >
+                <Plus className="h-4 w-4 flex-shrink-0" />
+                Create new pipeline
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
+
       {pipelineDropdownOpen && pipelineDropdownAnchor && apiMode && activePipeline && isPipelineOwnedByUser(activePipeline) && typeof document !== 'undefined' && createPortal(
         <div data-pipeline-dropdown className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
           <div className="fixed inset-0 z-[10011]" onClick={() => setPipelineDropdownOpen(false)} aria-hidden />
           <div
-            className="map-panel list-panel fixed z-[10012] rounded-xl min-w-[180px] pt-1 overflow-hidden"
+            className="map-panel list-panel fixed z-[10012] rounded-xl min-w-[180px] max-w-[min(92vw,220px)] py-1 overflow-hidden shadow-xl border border-white/15"
             style={{ top: pipelineDropdownAnchor.top, left: pipelineDropdownAnchor.left }}
             role="menu"
             onClick={(e) => e.stopPropagation()}
@@ -1115,7 +1323,7 @@ setAddTaskTitle('')
             <button
               type="button"
               onClick={() => { setPipelineDropdownOpen(false); toggleEditMode() }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
+              className="w-full px-3 py-2.5 text-left text-sm text-white/95 flex items-center gap-2 hover:bg-white/10 transition-colors"
             >
               <Settings className="h-4 w-4 flex-shrink-0" />
               {isEditMode ? 'Exit edit mode' : 'Edit pipeline'}
@@ -1129,7 +1337,7 @@ setAddTaskTitle('')
                 setShareEmailValid(null)
                 setShareEmailError('')
               }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
+              className="w-full px-3 py-2.5 text-left text-sm text-white/95 flex items-center gap-2 hover:bg-white/10 transition-colors"
             >
               <Share2 className="h-4 w-4 flex-shrink-0" />
               Share pipeline

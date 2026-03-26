@@ -128,19 +128,21 @@ export function TextTemplatesPanel({ isOpen, onClose, onSelectTemplate }) {
     >
       <DialogContent className="map-panel list-panel text-templates-panel fullscreen-panel" showCloseButton={false} hideOverlay>
         <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Text Message Templates
+          <div className="map-panel-header-toolbar">
+            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
+              <MessageSquare className="h-5 w-5 shrink-0" />
+              <span className="truncate">Text Message Templates</span>
             </DialogTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              title="Close"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="map-panel-header-actions">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <DialogDescription className="sr-only">
             Manage text message templates

@@ -14,6 +14,18 @@ export const DEFAULT_SETTINGS = {
 
   defaultEmail: '',            // blank = use real recipient
   emailTestMode: false,
+
+  /** Push (server) + local notification preferences; synced in appSettings blob */
+  notifications: {
+    pushEnabled: false,
+    listShared: true,
+    pipelineShared: true,
+    pipelineLeadStage: true,
+    skipTraceComplete: true,
+    taskDeadline: true,
+    /** Minutes before scheduled time to fire reminder */
+    taskDeadlineLeadMinutes: 60,
+  },
 }
 
 export function getSettings() {
@@ -21,7 +33,11 @@ export function getSettings() {
     const raw = localStorage.getItem(LS_KEY)
     if (raw) {
       const saved = JSON.parse(raw)
-      return { ...DEFAULT_SETTINGS, ...saved }
+      const merged = { ...DEFAULT_SETTINGS, ...saved }
+      if (saved.notifications && typeof saved.notifications === 'object') {
+        merged.notifications = { ...DEFAULT_SETTINGS.notifications, ...saved.notifications }
+      }
+      return merged
     }
   } catch { /* ignore */ }
   return { ...DEFAULT_SETTINGS }
@@ -29,7 +45,13 @@ export function getSettings() {
 
 export function updateSettings(partial, getToken) {
   const current = getSettings()
-  const next = { ...current, ...partial }
+  let next = { ...current, ...partial }
+  if (partial.notifications && typeof partial.notifications === 'object') {
+    next = {
+      ...next,
+      notifications: { ...current.notifications, ...partial.notifications }
+    }
+  }
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(next))
   } catch { /* ignore */ }
