@@ -157,13 +157,15 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
       return () => cancelAnimationFrame(raf)
     }
 
-    // Ongoing follow: only pan if user moved enough on screen
+    // Ongoing follow: smoothly glide the map to match GPS updates.
+    // Use a duration that slightly overlaps with the GPS update interval
+    // so pans blend together instead of looking like discrete jumps.
     const center = map.getCenter()
     const target = L.latLng(userLocation.lat, userLocation.lng)
     const pixelDist = map.latLngToContainerPoint(center).distanceTo(map.latLngToContainerPoint(target))
-    if (pixelDist < 4) return
+    if (pixelDist < 3) return
     programmaticMoveRef.current = true
-    map.panTo(target, { animate: true, duration: 1.0, easeLinearity: 0.25 })
+    map.panTo(target, { animate: true, duration: 0.9, easeLinearity: 0.4 })
   }, [userLocation, isFollowing, map])
 
   // Clear programmatic flag after panTo finishes
@@ -288,6 +290,15 @@ function LocationMarker({ position, heading, compassActive }) {
   const compassActiveRef = useRef(compassActive)
   compassActiveRef.current = compassActive
 
+  // Smooth interpolation state
+  const animRef = useRef({
+    from: null,     // { lat, lng }
+    to: null,       // { lat, lng }
+    startTime: 0,
+    duration: 900,  // ms — slightly less than GPS update interval for overlap
+    rafId: null,
+  })
+
   useEffect(() => {
     if (!map) return
 
@@ -304,22 +315,63 @@ function LocationMarker({ position, heading, compassActive }) {
 
     const el = marker.getElement()
     if (el) {
-      el.style.transition = 'none'
       arrowElRef.current = el.querySelector('.user-location-arrow-el')
     }
 
     return () => {
+      if (animRef.current.rafId) cancelAnimationFrame(animRef.current.rafId)
       marker.remove()
       markerRef.current = null
       arrowElRef.current = null
     }
   }, [map])
 
-  // Update position when it changes
+  // Smoothly interpolate marker between GPS fixes
   useEffect(() => {
-    if (markerRef.current && position) {
+    if (!markerRef.current || !position) return
+    const a = animRef.current
+    const currentLatLng = a.to || (a.from ? a.from : null)
+
+    if (!currentLatLng) {
+      // First position — snap immediately
       markerRef.current.setLatLng([position.lat, position.lng])
+      a.from = { lat: position.lat, lng: position.lng }
+      a.to = { lat: position.lat, lng: position.lng }
+      return
     }
+
+    // Start a new interpolation from wherever the marker currently is
+    if (a.rafId) cancelAnimationFrame(a.rafId)
+
+    // Compute where the marker is right now mid-animation
+    const now = performance.now()
+    const elapsed = now - a.startTime
+    const t = a.from && a.to && a.startTime
+      ? Math.min(1, elapsed / a.duration)
+      : 1
+    const curLat = a.from.lat + (a.to.lat - a.from.lat) * t
+    const curLng = a.from.lng + (a.to.lng - a.from.lng) * t
+
+    a.from = { lat: curLat, lng: curLng }
+    a.to = { lat: position.lat, lng: position.lng }
+    a.startTime = now
+
+    const animate = (ts) => {
+      const progress = Math.min(1, (ts - a.startTime) / a.duration)
+      // Ease-out cubic for natural deceleration
+      const ease = 1 - Math.pow(1 - progress, 3)
+      const lat = a.from.lat + (a.to.lat - a.from.lat) * ease
+      const lng = a.from.lng + (a.to.lng - a.from.lng) * ease
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng])
+      }
+      if (progress < 1) {
+        a.rafId = requestAnimationFrame(animate)
+      } else {
+        a.rafId = null
+      }
+    }
+    a.rafId = requestAnimationFrame(animate)
   }, [position])
 
   // Update arrow rotation on heading changes and map rotation
