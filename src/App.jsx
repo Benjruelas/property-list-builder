@@ -279,12 +279,14 @@ const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" 
  * Arrow direction is updated imperatively on heading changes and map
  * rotation events so it always points in the user's heading relative to north.
  */
-function LocationMarker({ position, heading }) {
+function LocationMarker({ position, heading, compassActive }) {
   const map = useMap()
   const markerRef = useRef(null)
   const arrowElRef = useRef(null)
   const headingRef = useRef(heading)
   headingRef.current = heading
+  const compassActiveRef = useRef(compassActive)
+  compassActiveRef.current = compassActive
 
   useEffect(() => {
     if (!map) return
@@ -328,8 +330,7 @@ function LocationMarker({ position, heading }) {
       const arrow = arrowElRef.current
       if (!arrow) return
       const bearing = (typeof map.getBearing === 'function') ? (map.getBearing() || 0) : 0
-      const h = headingRef.current ?? 0
-      // Subtract map bearing so the arrow stays aligned with travel; paired with setBearing(heading) in CompassOrientation.
+      const h = compassActiveRef.current ? (headingRef.current ?? 0) : 0
       arrow.style.transform = `rotate(${-45 + h - bearing}deg)`
     }
 
@@ -341,7 +342,7 @@ function LocationMarker({ position, heading }) {
       map.off('rotate', updateArrow)
       map.off('rotateend', updateArrow)
     }
-  }, [map, heading])
+  }, [map, heading, compassActive])
 
   return null
 }
@@ -414,7 +415,7 @@ function App() {
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(() => getSettings().compassDefault)
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
-  const { heading, requestOrientation } = useDeviceHeading(permissionsReady)
+  const { heading, requestOrientation, needsGesture } = useDeviceHeading(permissionsReady)
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
@@ -1358,9 +1359,15 @@ function App() {
     }
   }, [])
 
-  const handleToggleCompass = useCallback(() => {
+  const handleToggleCompass = useCallback(async () => {
+    // On iOS, the first tap must grant orientation permission.
+    // Absorb that tap instead of toggling so the user doesn't see compass flip off.
+    if (needsGesture) {
+      await requestOrientation()
+      return
+    }
     setIsCompassActive(prev => !prev)
-  }, [])
+  }, [needsGesture, requestOrientation])
 
   // Toggle multi-select mode
   const handleToggleMultiSelect = useCallback(() => {
@@ -2194,10 +2201,7 @@ function App() {
 
   return (
     <UserDataSyncProvider getToken={getToken}>
-    <div
-      style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}
-      onClickCapture={requestOrientation}
-    >
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
         <PermissionPrompt onComplete={() => setPermissionsReady(true)} />
       )}
@@ -2297,6 +2301,7 @@ function App() {
           <LocationMarker
             position={userLocation}
             heading={heading}
+            compassActive={isCompassActive}
           />
         )}
       </MapContainer>

@@ -7,12 +7,14 @@ const needsIOSPermission =
 /**
  * Smoothed compass heading (0-360, 0 = North).
  *
- * On iOS, call the returned `requestOrientation()` from a user-gesture handler
- * (e.g. onClick on the root container) so Safari grants DeviceOrientation access.
- * The grant does NOT persist across page loads on iOS.
+ * Returns { heading, requestOrientation, needsGesture }.
+ * On iOS, `needsGesture` is true until the user has tapped and orientation
+ * permission has been granted for this page load.  Call `requestOrientation()`
+ * from a user-gesture handler (onClick) when `needsGesture` is true.
  */
 export function useDeviceHeading(enabled = false) {
   const [heading, setHeading] = useState(null)
+  const [needsGesture, setNeedsGesture] = useState(needsIOSPermission)
   const smoothedRef = useRef(null)
   const lastEmittedRef = useRef(null)
   const rafPendingRef = useRef(false)
@@ -80,6 +82,12 @@ export function useDeviceHeading(enabled = false) {
     window.addEventListener(eventName, handleOrientation, { passive: true })
   }, [eventName, handleOrientation])
 
+  const markGranted = useCallback(() => {
+    grantedRef.current = true
+    setNeedsGesture(false)
+    startListening()
+  }, [startListening])
+
   // Non-iOS: start listening immediately when enabled
   useEffect(() => {
     if (!enabled || needsIOSPermission) return
@@ -91,34 +99,30 @@ export function useDeviceHeading(enabled = false) {
   }, [enabled, eventName, handleOrientation, startListening])
 
   // iOS: try the immediate (no-gesture) requestPermission on mount.
-  // If it works (e.g. same session as the first prompt), start listening.
   useEffect(() => {
     if (!enabled || !needsIOSPermission || grantedRef.current) return
     DeviceOrientationEvent.requestPermission()
       .then((state) => {
-        if (state === 'granted') {
-          grantedRef.current = true
-          startListening()
-        }
+        if (state === 'granted') markGranted()
       })
       .catch(() => {})
-  }, [enabled, startListening])
+  }, [enabled, markGranted])
 
   /**
-   * Call this from a React onClick/onTouchStart handler so iOS Safari
-   * recognises a user gesture and grants orientation permission.
+   * Call from a React onClick handler to satisfy iOS gesture requirement.
+   * Returns a Promise<boolean> indicating whether permission was freshly granted.
    */
-  const requestOrientation = useCallback(() => {
-    if (!needsIOSPermission || grantedRef.current) return
-    DeviceOrientationEvent.requestPermission()
-      .then((state) => {
-        if (state === 'granted') {
-          grantedRef.current = true
-          startListening()
-        }
-      })
-      .catch(() => {})
-  }, [startListening])
+  const requestOrientation = useCallback(async () => {
+    if (!needsIOSPermission || grantedRef.current) return false
+    try {
+      const state = await DeviceOrientationEvent.requestPermission()
+      if (state === 'granted') {
+        markGranted()
+        return true
+      }
+    } catch { /* denied */ }
+    return false
+  }, [markGranted])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -130,5 +134,5 @@ export function useDeviceHeading(enabled = false) {
     }
   }, [eventName, handleOrientation])
 
-  return { heading, requestOrientation }
+  return { heading, requestOrientation, needsGesture }
 }
