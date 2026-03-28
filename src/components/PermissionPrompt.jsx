@@ -4,10 +4,6 @@ import { MapPin, Compass } from 'lucide-react'
 
 const LS_KEY = 'permissions_granted'
 
-/**
- * Check whether the user has already dismissed the permission prompt.
- * Used by App to skip the overlay on subsequent loads.
- */
 export function hasGrantedPermissions() {
   try {
     return localStorage.getItem(LS_KEY) === '1'
@@ -17,14 +13,12 @@ export function hasGrantedPermissions() {
 }
 
 /**
- * Full-screen overlay that requests Location and Device Orientation permissions
- * via a user tap. iOS requires DeviceOrientationEvent.requestPermission() to be
- * called synchronously from a user gesture — no async work before it.
+ * Full-screen overlay requesting Location + Device Orientation.
+ * iOS requires DeviceOrientationEvent.requestPermission() synchronously
+ * from a user gesture — must be called FIRST before any other async work.
  *
- * Flow on tap:
- * 1. Request orientation FIRST (needs gesture context on iOS)
- * 2. Then request location (doesn't need gesture context)
- * 3. Persist flag + dismiss regardless of grant/deny
+ * @param onComplete(orientationGranted: boolean) — called when done;
+ *   `orientationGranted` tells App whether the device orientation API is available.
  */
 export function PermissionPrompt({ onComplete }) {
   const [requesting, setRequesting] = useState(false)
@@ -33,14 +27,20 @@ export function PermissionPrompt({ onComplete }) {
     if (requesting) return
     setRequesting(true)
 
+    let orientationGranted = false
+
     // Orientation MUST be requested first and synchronously from the gesture.
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
-        await DeviceOrientationEvent.requestPermission()
+        const state = await DeviceOrientationEvent.requestPermission()
+        orientationGranted = state === 'granted'
       } catch {
         // denied or unavailable
       }
+    } else {
+      // Non-iOS: orientation events don't need permission
+      orientationGranted = typeof window !== 'undefined' && 'DeviceOrientationEvent' in window
     }
 
     // Location — doesn't require gesture context, safe to call after await
@@ -57,7 +57,7 @@ export function PermissionPrompt({ onComplete }) {
     }
 
     try { localStorage.setItem(LS_KEY, '1') } catch { /* ignore */ }
-    onComplete()
+    onComplete(orientationGranted)
   }
 
   const ui = (

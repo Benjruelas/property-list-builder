@@ -465,9 +465,29 @@ function App() {
   const [bulkEmailListId, setBulkEmailListId] = useState(null)
   const [isSendingBulkEmails, setIsSendingBulkEmails] = useState(false)
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
-  const [isCompassActive, setIsCompassActive] = useState(() => getSettings().compassDefault)
+  // On fresh visits (prompt shown), compass starts from settings default.
+  // On return visits where iOS needs a gesture, start OFF until orientation is confirmed.
+  const [isCompassActive, setIsCompassActive] = useState(() => {
+    const wantCompass = getSettings().compassDefault
+    if (!wantCompass) return false
+    // If we're returning (prompt already dismissed) and iOS needs permission, start off
+    if (hasGrantedPermissions() &&
+        typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      return false
+    }
+    return true
+  })
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
   const { heading, requestOrientation, needsGesture } = useDeviceHeading(permissionsReady)
+
+  // When orientation becomes available (needsGesture flips to false),
+  // auto-enable compass if user's setting wants it.
+  useEffect(() => {
+    if (!needsGesture && getSettings().compassDefault && !isCompassActive) {
+      setIsCompassActive(true)
+    }
+  }, [needsGesture])
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
@@ -1398,10 +1418,11 @@ function App() {
   }, [])
 
   const handleToggleCompass = useCallback(async () => {
-    // On iOS, the first tap must grant orientation permission.
-    // Absorb that tap instead of toggling so the user doesn't see compass flip off.
     if (needsGesture) {
-      await requestOrientation()
+      // iOS: orientation hasn't been granted yet this session.
+      // Request it; if granted turn compass ON, if denied keep OFF.
+      const granted = await requestOrientation()
+      setIsCompassActive(granted)
       return
     }
     setIsCompassActive(prev => !prev)
@@ -2241,7 +2262,14 @@ function App() {
     <UserDataSyncProvider getToken={getToken}>
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
-        <PermissionPrompt onComplete={() => setPermissionsReady(true)} />
+        <PermissionPrompt onComplete={(orientationGranted) => {
+          setPermissionsReady(true)
+          if (orientationGranted && getSettings().compassDefault) {
+            setIsCompassActive(true)
+          } else if (!orientationGranted) {
+            setIsCompassActive(false)
+          }
+        }} />
       )}
       {permissionsReady && (
         <NotificationPrompt getToken={getToken} />
