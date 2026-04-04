@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { X, MapPin, Home, DollarSign, Info, Phone, Mail, FileText, Plus, CheckCircle, XCircle, HelpCircle, User, Pencil, Star, Trash2 } from 'lucide-react'
+import { X, MapPin, Home, DollarSign, Info, Phone, Mail, FileText, Plus, CheckCircle, XCircle, HelpCircle, User, Pencil, Star, Trash2, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -42,6 +42,7 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
   const [editContacts, setEditContacts] = useState(false)
   const [newPhone, setNewPhone] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  const [otherPropsOpen, setOtherPropsOpen] = useState(false)
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
   const inactivityTimeoutRef = useRef(null)
@@ -56,6 +57,7 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
   // Re-read skip trace data when dialog opens or parcelData changes
   useEffect(() => {
     if (isOpen && parcelId) {
+      setOtherPropsOpen(false)
       const info = getSkipTracedParcel(parcelId)
       setSkipTracedInfo(info)
       
@@ -149,20 +151,26 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
 
   // Property key -> human-readable label (comprehensive for parcel/cadastral data)
   const PROPERTY_LABELS = {
-    PROP_ID: 'Property ID', PROPID: 'Property ID', PARCEL_ID: 'Parcel ID', PIN: 'Parcel Number', APN: 'Assessor Parcel Number',
+    PROP_ID: 'Parcel ID', PROPID: 'Property ID', PARCEL_ID: 'Parcel ID', PARCEL_ID_ALT: 'Alternate Parcel ID', PIN: 'Parcel Number', APN: 'Assessor Parcel Number',
     SITUS_ADDR: 'Site Address', SITE_ADDR: 'Street Address', ADDRESS: 'Address', ADDR: 'Address',
     SITUS: 'Situs Address', SITEADRESS: 'Site Address', SITEADDRESS: 'Site Address',
     OWNER_NAME: 'Owner', OWNER: 'Owner', OWNERNME1: 'Owner Name', MAIL_OWNER: 'Mailing Owner',
     LOC_LAND_U: 'Land Use', LAND_USE: 'Land Use', LAND_USE_CODE: 'Land Use Code', LAND_USE_CLASS: 'Land Use Class',
+    USE_CODE: 'Land Use Code', USE_DESC: 'Land Use',
     PROP_CLASS: 'Property Class', PROPCLASS: 'Property Class', PROPERTY_CLASS: 'Property Class',
     YEAR_BUILT: 'Year Built', YEARBLT: 'Year Built',
-    SQFT: 'Square Feet', SQ_FT: 'Square Feet', BLDG_SQFT: 'Building Square Feet', LIVING_SQFT: 'Living Square Feet',
-    ACRES: 'Acres', ACREAGE: 'Acreage', ASSDACRES: 'Assessed Acres',
+    SQFT: 'Square Feet', SQ_FT: 'Square Feet', BLDG_SQFT: 'Building Sq Ft', LIVING_SQFT: 'Living Square Feet',
+    NUM_BLDGS: 'Buildings', NUM_UNITS: 'Units', NUM_FLOORS: 'Floors',
+    ACRES: 'Acres', ACREAGE: 'Acreage', GIS_ACRES: 'Acres', ASSDACRES: 'Assessed Acres',
+    CALC_AREA_SQM: 'Lot Area',
     BEDROOMS: 'Bedrooms', BEDROOM: 'Bedrooms', BEDS: 'Bedrooms',
-    BATHROOMS: 'Bathrooms', BATHROOM: 'Bathrooms', BATHS: 'Bathrooms',
-    TOTAL_VALUE: 'Total Value', ASSESSED_VALUE: 'Assessed Value', MRKT_VAL_TOT: 'Market Value',
-    LAND_VALUE: 'Land Value', LNDVALUE: 'Land Value', MRKT_VAL_LAND: 'Land Market Value',
-    IMPROVEMENT_VALUE: 'Improvement Value', IMPVALUE: 'Improvement Value', MRKT_VAL_BLDG: 'Building Value',
+    BATHROOMS: 'Full Baths', BATHROOM: 'Bathrooms', BATHS: 'Bathrooms', HALF_BATHS: 'Half Baths',
+    MKT_VAL: 'Total Assessed Value', TOTAL_VALUE: 'Total Value', ASSESSED_VALUE: 'Assessed Value', MRKT_VAL_TOT: 'Market Value',
+    LAND_VAL: 'Land Value', LAND_VALUE: 'Land Value', LNDVALUE: 'Land Value', MRKT_VAL_LAND: 'Land Market Value',
+    IMPR_VAL: 'Improvement Value', IMPROVEMENT_VALUE: 'Improvement Value', IMPVALUE: 'Improvement Value', MRKT_VAL_BLDG: 'Building Value',
+    AG_VAL: 'Agriculture Value',
+    SALE_PRICE: 'Last Sale Price', SALE_DATE: 'Last Sale Date',
+    TAX_ACCT: 'Tax Account #', TAX_YEAR: 'Tax Year', TAXROLLYEAR: 'Tax Year', ASMT_LEVYR: 'Assessment Year',
     LATITUDE: 'Latitude', LAT: 'Latitude',
     LONGITUDE: 'Longitude', LNG: 'Longitude', LON: 'Longitude',
     MAIL_ADDR: 'Mailing Address', MAILING_ADDR: 'Mailing Address', PSTLADRESS: 'Mailing Address',
@@ -174,43 +182,69 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
     SUBDIVISION: 'Subdivision', SUBDIV: 'Subdivision',
     LOT: 'Lot', LOT_NUM: 'Lot Number',
     BLOCK: 'Block', BLOCK_NUM: 'Block Number',
+    BOOK: 'Book', PAGE: 'Page',
+    TOWNSHIP: 'Township', SECTION: 'Section', QTR_SECTION: 'Quarter Section', RANGE: 'Range',
     ZONING: 'Zoning', ZONING_CODE: 'Zoning Code',
-    COUNTY: 'County', COUNTY_NAME: 'County', CONAME: 'County',
-    TAX_YEAR: 'Tax Year', TAXROLLYEAR: 'Tax Year', ASMT_LEVYR: 'Assessment Year',
+    COUNTY: 'County', COUNTY_NAME: 'County', CONAME: 'County', COUNTY_FIPS: 'County FIPS',
+    LAST_UPDATED: 'Data Last Updated',
     SCITY: 'City', ADDR_LINE1: 'Address Line 1', STREET: 'Street',
   }
 
   const formatValue = (key, value) => {
     if (value === null || value === undefined || value === '') return null
     const str = String(value).trim()
-    if (!str) return null
+    if (!str || str === '0' && !ZERO_OK_KEYS.has(key)) return null
     const upperKey = (key || '').toUpperCase()
-    if (['TOTAL_VALUE', 'LAND_VALUE', 'IMPROVEMENT_VALUE', 'ASSESSED_VALUE', 'LNDVALUE', 'IMPVALUE', 'MRKT_VAL_TOT', 'MRKT_VAL_LAND', 'MRKT_VAL_BLDG'].includes(upperKey)) {
+    // Currency
+    if (CURRENCY_KEYS.has(upperKey)) {
       const num = parseFloat(String(value).replace(/[$,]/g, ''))
       if (!isNaN(num)) return `$${num.toLocaleString()}`
     }
-    if (['SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT'].includes(upperKey)) {
+    // Square feet
+    if (SQFT_KEYS.has(upperKey)) {
       const num = parseFloat(String(value).replace(/,/g, ''))
-      if (!isNaN(num)) return num.toLocaleString()
+      if (!isNaN(num)) return `${num.toLocaleString()} sq ft`
     }
-    if (['ACRES', 'ACREAGE', 'ASSDACRES'].includes(upperKey)) {
+    // Acres
+    if (ACRE_KEYS.has(upperKey)) {
       const num = parseFloat(value)
-      if (!isNaN(num)) return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+      if (!isNaN(num)) return `${num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })} ac`
+    }
+    // Calculated area (sq meters → sq ft for US)
+    if (upperKey === 'CALC_AREA_SQM') {
+      const num = parseFloat(value)
+      if (!isNaN(num)) {
+        const sqft = num * 10.7639
+        return `${sqft.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`
+      }
+    }
+    // Dates (YYYY-MM-DD or similar)
+    if (DATE_KEYS.has(upperKey)) {
+      try {
+        const d = new Date(value)
+        if (!isNaN(d.getTime())) return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+      } catch { /* fall through */ }
     }
     return str
   }
 
+  const CURRENCY_KEYS = new Set(['MKT_VAL', 'LAND_VAL', 'IMPR_VAL', 'AG_VAL', 'SALE_PRICE', 'TOTAL_VALUE', 'LAND_VALUE', 'IMPROVEMENT_VALUE', 'ASSESSED_VALUE', 'LNDVALUE', 'IMPVALUE', 'MRKT_VAL_TOT', 'MRKT_VAL_LAND', 'MRKT_VAL_BLDG'])
+  const SQFT_KEYS = new Set(['SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT'])
+  const ACRE_KEYS = new Set(['ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES'])
+  const DATE_KEYS = new Set(['SALE_DATE', 'LAST_UPDATED'])
+  const ZERO_OK_KEYS = new Set(['BEDROOMS', 'BATHROOMS', 'HALF_BATHS', 'NUM_BLDGS', 'NUM_UNITS', 'NUM_FLOORS', 'TAX_YEAR', 'YEAR_BUILT'])
+
   const keyToLabel = (key) => PROPERTY_LABELS[key] || PROPERTY_LABELS[key?.toUpperCase()] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
   const CATEGORIES = {
-    identification: { title: 'Identification', icon: Info, keys: ['PROP_ID', 'PROPID', 'PARCEL_ID', 'PIN', 'APN', 'TAXPARCELID', 'ACCOUNT'] },
+    identification: { title: 'Identification', icon: Info, keys: ['PROP_ID', 'PROPID', 'PARCEL_ID', 'PARCEL_ID_ALT', 'PIN', 'APN', 'TAXPARCELID', 'ACCOUNT', 'TAX_ACCT'] },
     address: { title: 'Address', icon: MapPin, keys: ['SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'ADDR', 'SITUS', 'SITEADRESS', 'SITEADDRESS', 'ADDR_LINE1', 'STREET', 'SITUS_CITY', 'PROP_CITY', 'CITY', 'SITUS_STATE', 'PROP_STATE', 'STATE', 'state2', 'SITUS_ZIP', 'PROP_ZIP', 'ZIP', 'ZIP_CODE', 'szip', 'szip5'] },
     ownership: { title: 'Ownership', icon: User, keys: ['OWNER_NAME', 'OWNER', 'OWNERNME1', 'MAIL_OWNER'] },
-    property: { title: 'Property Characteristics', icon: Home, keys: ['LOC_LAND_U', 'LAND_USE', 'LAND_USE_CODE', 'LAND_USE_CLASS', 'PROP_CLASS', 'PROPCLASS', 'PROPERTY_CLASS', 'YEAR_BUILT', 'YEARBLT', 'SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT', 'ACRES', 'ACREAGE', 'ASSDACRES', 'BEDROOMS', 'BEDROOM', 'BEDS', 'BATHROOMS', 'BATHROOM', 'BATHS', 'ZONING', 'ZONING_CODE'] },
-    valuation: { title: 'Valuation', icon: DollarSign, keys: ['TOTAL_VALUE', 'ASSESSED_VALUE', 'MRKT_VAL_TOT', 'LAND_VALUE', 'LNDVALUE', 'MRKT_VAL_LAND', 'IMPROVEMENT_VALUE', 'IMPVALUE', 'MRKT_VAL_BLDG', 'TAX_YEAR', 'TAXROLLYEAR', 'ASMT_LEVYR'] },
-    location: { title: 'Location', icon: MapPin, keys: ['LATITUDE', 'LAT', 'LONGITUDE', 'LNG', 'LON', 'COUNTY', 'COUNTY_NAME', 'CONAME'] },
+    property: { title: 'Property Characteristics', icon: Home, keys: ['USE_CODE', 'USE_DESC', 'LOC_LAND_U', 'LAND_USE', 'LAND_USE_CODE', 'LAND_USE_CLASS', 'PROP_CLASS', 'PROPCLASS', 'PROPERTY_CLASS', 'YEAR_BUILT', 'YEARBLT', 'SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT', 'NUM_BLDGS', 'NUM_UNITS', 'NUM_FLOORS', 'ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES', 'CALC_AREA_SQM', 'BEDROOMS', 'BEDROOM', 'BEDS', 'BATHROOMS', 'BATHROOM', 'BATHS', 'HALF_BATHS', 'ZONING', 'ZONING_CODE'] },
+    valuation: { title: 'Valuation', icon: DollarSign, keys: ['MKT_VAL', 'TOTAL_VALUE', 'ASSESSED_VALUE', 'MRKT_VAL_TOT', 'LAND_VAL', 'LAND_VALUE', 'LNDVALUE', 'MRKT_VAL_LAND', 'IMPR_VAL', 'IMPROVEMENT_VALUE', 'IMPVALUE', 'MRKT_VAL_BLDG', 'AG_VAL', 'SALE_PRICE', 'SALE_DATE', 'TAX_YEAR', 'TAXROLLYEAR', 'ASMT_LEVYR'] },
+    location: { title: 'Location', icon: MapPin, keys: ['LATITUDE', 'LAT', 'LONGITUDE', 'LNG', 'LON', 'COUNTY', 'COUNTY_NAME', 'CONAME', 'COUNTY_FIPS', 'LAST_UPDATED'] },
     mailing: { title: 'Mailing Address', icon: Mail, keys: ['MAIL_ADDR', 'MAILING_ADDR', 'PSTLADRESS', 'MAIL_CITY', 'MAIL_STATE', 'MAIL_ZIP'] },
-    legal: { title: 'Legal & Lot', icon: FileText, keys: ['LEGAL_DESC', 'LEGAL_DESCRIP', 'SUBDIVISION', 'SUBDIV', 'LOT', 'LOT_NUM', 'BLOCK', 'BLOCK_NUM'] },
+    legal: { title: 'Legal & Lot', icon: FileText, keys: ['LEGAL_DESC', 'LEGAL_DESCRIP', 'SUBDIVISION', 'SUBDIV', 'LOT', 'LOT_NUM', 'BLOCK', 'BLOCK_NUM', 'BOOK', 'PAGE', 'TOWNSHIP', 'SECTION', 'QTR_SECTION', 'RANGE'] },
   }
 
   const keyToCategory = {}
@@ -305,20 +339,40 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
                   const items = categorizedProps[catKey]
                   if (!items?.length) return null
                   const { title, icon: Icon } = catKey === 'other' ? { title: 'Other Properties', icon: Info } : CATEGORIES[catKey]
+                  const isOther = catKey === 'other'
                   return (
                     <div key={catKey} className="space-y-2">
-                      <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
-                        <Icon className="h-5 w-5" />
-                        <span>{title}</span>
-                      </div>
-                      <div className="space-y-0">
-                        {items.map(({ key, label, value }) => (
-                          <div key={key} className="flex justify-between py-2 border-b border-gray-100 last:border-0 gap-4">
-                            <span className="font-semibold text-gray-700 shrink-0">{label}:</span>
-                            <span className="text-gray-900 text-right break-words">{value}</span>
-                          </div>
-                        ))}
-                      </div>
+                      {isOther ? (
+                        <button
+                          type="button"
+                          onClick={() => setOtherPropsOpen(o => !o)}
+                          className="parcel-details-other-props-toggle flex w-full items-center gap-2 text-left text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 bg-transparent"
+                          aria-expanded={otherPropsOpen}
+                        >
+                          <ChevronDown
+                            className={`h-5 w-5 shrink-0 text-gray-500 transition-transform ${otherPropsOpen ? '' : '-rotate-90'}`}
+                            aria-hidden
+                          />
+                          <Icon className="h-5 w-5 shrink-0" />
+                          <span className="flex-1">{title}</span>
+                          <span className="text-xs font-normal text-gray-500 tabular-nums">{items.length}</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+                          <Icon className="h-5 w-5" />
+                          <span>{title}</span>
+                        </div>
+                      )}
+                      {(!isOther || otherPropsOpen) && (
+                        <div className="space-y-0">
+                          {items.map(({ key, label, value }) => (
+                            <div key={key} className="flex justify-between py-2 border-b border-gray-100 last:border-0 gap-4">
+                              <span className="font-semibold text-gray-700 shrink-0">{label}:</span>
+                              <span className="text-gray-900 text-right break-words">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

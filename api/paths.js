@@ -104,7 +104,9 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const all = await getAllPaths()
-      const paths = all.filter((p) => p.ownerId === user.uid)
+      const paths = all.filter(
+        (p) => p.ownerId === user.uid || (Array.isArray(p.sharedWith) && p.sharedWith.map(e => e.toLowerCase()).includes(user.email))
+      )
       return res.status(200).json({ paths })
     }
 
@@ -123,6 +125,7 @@ export default async function handler(req, res) {
         distanceMiles: typeof distanceMiles === 'number' ? distanceMiles : 0,
         ownerId: user.uid,
         ownerEmail: user.email,
+        sharedWith: [],
         createdAt: new Date().toISOString()
       }
       const all = await getAllPaths()
@@ -132,7 +135,7 @@ export default async function handler(req, res) {
     }
 
     if (method === 'PATCH') {
-      const { pathId, name } = body
+      const { pathId, name, sharedWith } = body
       if (!pathId) return res.status(400).json({ error: 'pathId is required' })
 
       const all = await getAllPaths()
@@ -146,6 +149,14 @@ export default async function handler(req, res) {
 
       if (name !== undefined && name.trim()) {
         path.name = name.trim()
+      }
+
+      if (sharedWith !== undefined) {
+        const arr = Array.isArray(sharedWith) ? sharedWith : []
+        const emails = arr.map(e => (e && String(e).trim()).toLowerCase()).filter(Boolean)
+        const uniqueEmails = [...new Set(emails)]
+        if (uniqueEmails.length > 50) return res.status(400).json({ error: 'Maximum 50 share emails allowed' })
+        path.sharedWith = uniqueEmails
       }
 
       path.updatedAt = new Date().toISOString()

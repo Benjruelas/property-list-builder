@@ -1,7 +1,24 @@
 {
   "functions": {
-    "api/parcels.js": {
+    "api/tiles.js": {
       "maxDuration": 30
+    },
+    "api/solar-imagery.js": {
+      "maxDuration": 30
+    },
+    "api/sentinel-imagery.js": {
+      "maxDuration": 60
+    },
+    "api/hail-events.js": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "api/roof-analysis.js": {
+      "maxDuration": 60
+    },
+    "api/roof-report.js": {
+      "maxDuration": 120,
+      "memory": 1024
     }
   },
   "rewrites": [

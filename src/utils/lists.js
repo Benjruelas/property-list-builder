@@ -36,13 +36,14 @@ export async function createList(getToken, name, parcels = []) {
   return data.list
 }
 
-export async function updateList(getToken, listId, { parcels, removeParcels, sharedWith }) {
+export async function updateList(getToken, listId, { parcels, removeParcels, sharedWith, name }) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to update lists')
   const body = { listId }
   if (parcels !== undefined) body.parcels = parcels
   if (removeParcels !== undefined) body.removeParcels = removeParcels
   if (sharedWith !== undefined) body.sharedWith = sharedWith
+  if (name !== undefined) body.name = name
   const res = await fetch(`${getApiBase()}/lists`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

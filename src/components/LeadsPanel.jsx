@@ -393,6 +393,12 @@ export function LeadsPanel({
             onOpenScheduleAtDate(task.scheduledAt)
           }
         } : undefined}
+        onGoToPipeline={onOpenDealPipeline ? (pipelineId) => {
+          setSelectedLead(null)
+          setSelectedLeadPipelineId(null)
+          onClose()
+          onOpenDealPipeline(pipelineId)
+        } : undefined}
       />
     </Dialog>
   )

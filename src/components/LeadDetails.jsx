@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical } from 'lucide-react'
+import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRight } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
@@ -27,7 +27,7 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onGoToPipeline }) {
   const { scheduleSync } = useUserDataSync()
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
   const [editContacts, setEditContacts] = useState(false)
@@ -402,6 +402,19 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               </ul>
             )}
           </div>
+
+          {onGoToPipeline && (
+            <div className="pt-3 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => onGoToPipeline(pipelineId)}
+                className="settings-data-btn w-full flex items-center justify-center gap-2 text-sm px-4 py-2.5 rounded-lg transition-colors font-medium"
+              >
+                Go to Pipeline
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
         </div>
       </DialogContent>

@@ -627,17 +627,17 @@
 }
 
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
-/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn) {
+/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle - those use transparent/no fill */
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):hover:not(:disabled),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):hover:not(:disabled) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
@@ -918,21 +918,28 @@
   border-color: rgba(255, 255, 255, 0.65) !important;
 }
 
-/* Parcel Details panel - no fills on X close, + add note, edit contacts, contact links, and Add caller ID */
+/* Parcel Details panel - no fills on X close, + add note, edit contacts, contact links, Add caller ID, Other Properties toggle */
 .parcel-details-panel .parcel-details-close-btn,
 .parcel-details-panel .add-note-btn,
 .parcel-details-panel .parcel-details-edit-btn,
-.parcel-details-panel .parcel-details-link-btn {
+.parcel-details-panel .parcel-details-link-btn,
+.parcel-details-panel .parcel-details-other-props-toggle {
   background: transparent !important;
   background-color: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+.parcel-details-panel .parcel-details-other-props-toggle {
+  border-bottom: 1px solid rgb(229 231 235) !important; /* gray-200, match section headers */
+  border-radius: 0 !important;
 }
 .parcel-details-panel .parcel-details-close-btn:hover:not(:disabled),
 .parcel-details-panel .add-note-btn:hover:not(:disabled),
 .parcel-details-panel .parcel-details-edit-btn:hover:not(:disabled),
-.parcel-details-panel .parcel-details-link-btn:hover:not(:disabled) {
+.parcel-details-panel .parcel-details-link-btn:hover:not(:disabled),
+.parcel-details-panel .parcel-details-other-props-toggle:hover:not(:disabled) {
   background: transparent !important;
   background-color: transparent !important;
 }
@@ -973,12 +980,16 @@
 
 /* Hide scrollbars while keeping scroll */
 .scrollbar-hide,
-.parcel-details-scroll {
+.hide-scrollbar,
+.parcel-details-scroll,
+.roof-inspector-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 .scrollbar-hide::-webkit-scrollbar,
-.parcel-details-scroll::-webkit-scrollbar {
+.hide-scrollbar::-webkit-scrollbar,
+.parcel-details-scroll::-webkit-scrollbar,
+.roof-inspector-scroll::-webkit-scrollbar {
   display: none;
 }
 
@@ -1187,6 +1198,88 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 .permission-prompt-skip-btn:hover {
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* ─── Welcome Tour ─── */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10040;
+}
+.tour-spotlight {
+  position: fixed;
+  z-index: 10041;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.45),
+    0 0 0 9999px rgba(0, 0, 0, 0.65);
+  cursor: pointer;
+}
+.tour-tooltip {
+  position: fixed;
+  z-index: 10042;
+  max-width: 280px;
+  width: max-content;
+  background: rgba(30, 30, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 1rem;
+  padding: 1.25rem 1.25rem 1rem;
+  color: #fff;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+.tour-tooltip-counter {
+  font-size: 0.7rem;
+  opacity: 0.45;
+  margin-bottom: 0.35rem;
+  letter-spacing: 0.04em;
+}
+.tour-tooltip-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.tour-tooltip-desc {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  opacity: 0.65;
+  margin-bottom: 1rem;
+}
+.tour-tooltip-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.tour-tooltip-btn {
+  width: 100%;
+  padding: 0.65rem;
+  border-radius: 0.65rem;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tour-tooltip-btn:hover {
+  background: #1d4ed8;
+}
+.tour-tooltip-skip {
+  width: 100%;
+  padding: 0.4rem;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+  text-align: center;
+}
+.tour-tooltip-skip:hover {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 /* Settings panel — use box-shadow for borders (border-color gets overridden) */

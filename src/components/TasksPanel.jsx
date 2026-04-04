@@ -272,7 +272,7 @@ export function TasksPanel({
         hideOverlay
       >
         <DialogHeader
-          className="px-6 pt-6 pb-4 border-b border-white/20 flex-shrink-0"
+          className="px-6 pt-6 pb-4 border-b border-white/20 flex-shrink-0 text-left"
           style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
         >
           <DialogDescription className="sr-only">Tasks grouped by deal pipeline</DialogDescription>

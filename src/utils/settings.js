@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS = {
   defaultEmail: '',            // blank = use real recipient
   emailTestMode: false,
 
+  tourCompleted: false,
+
   /** Push (server) + local notification preferences; synced in appSettings blob */
   notifications: {
     pushEnabled: false,
@@ -26,6 +28,15 @@ export const DEFAULT_SETTINGS = {
     /** Minutes before scheduled time to fire reminder */
     taskDeadlineLeadMinutes: 60,
   },
+
+  /** Branding fields embedded in generated roof measurement PDFs */
+  reportBranding: {
+    companyName: '',
+    companyPhone: '',
+    companyEmail: '',
+    companyWebsite: '',
+    logoBase64: '',
+  },
 }
 
 export function getSettings() {
@@ -36,6 +47,9 @@ export function getSettings() {
       const merged = { ...DEFAULT_SETTINGS, ...saved }
       if (saved.notifications && typeof saved.notifications === 'object') {
         merged.notifications = { ...DEFAULT_SETTINGS.notifications, ...saved.notifications }
+      }
+      if (saved.reportBranding && typeof saved.reportBranding === 'object') {
+        merged.reportBranding = { ...DEFAULT_SETTINGS.reportBranding, ...saved.reportBranding }
       }
       return merged
     }
@@ -50,6 +64,12 @@ export function updateSettings(partial, getToken) {
     next = {
       ...next,
       notifications: { ...current.notifications, ...partial.notifications }
+    }
+  }
+  if (partial.reportBranding && typeof partial.reportBranding === 'object') {
+    next = {
+      ...next,
+      reportBranding: { ...current.reportBranding, ...partial.reportBranding }
     }
   }
   try {

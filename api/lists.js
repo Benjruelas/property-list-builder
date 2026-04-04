@@ -148,7 +148,7 @@ export default async function handler(req, res) {
     }
 
     if (method === 'PATCH') {
-      const { listId, parcels: newParcels, removeParcels, sharedWith } = body
+      const { listId, parcels: newParcels, removeParcels, sharedWith, name } = body
       if (!listId) return res.status(400).json({ error: 'listId is required' })
 
       const all = await getAllLists()
@@ -191,6 +191,12 @@ export default async function handler(req, res) {
         }
         newlyAddedListShares = uniqueEmails.filter((e) => !prevSharedSet.has(e))
         list.sharedWith = uniqueEmails
+      }
+
+      if (name !== undefined) {
+        const trimmed = (name || '').trim()
+        if (!trimmed) return res.status(400).json({ error: 'List name cannot be empty' })
+        list.name = trimmed
       }
 
       if (removeParcels && Array.isArray(removeParcels)) {

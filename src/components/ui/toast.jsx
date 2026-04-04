@@ -36,7 +36,7 @@ export const ToastContainer = () => {
   }
 
   const content = (
-    <div className="fixed left-1/2 top-4 -translate-x-1/2 z-[99999] flex flex-col gap-2 items-center pointer-events-none [&>*]:pointer-events-auto">
+    <div className="fixed left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 items-center pointer-events-none [&>*]:pointer-events-auto" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))' }}>
       {toasts.map(toast => (
         <div
           key={toast.id}

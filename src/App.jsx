@@ -29,8 +29,6 @@ import { ConfirmDialog, showConfirm } from './components/ui/confirm-dialog'
 import { useAuth } from './contexts/AuthContext'
 import { UserDataSyncProvider } from './contexts/UserDataSyncContext'
 import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
-import { getCountyFromCoords } from './utils/geoUtils'
-import { getCountyPMTilesUrl } from './utils/parcelLoader'
 import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
 import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail, canAddLeadsToPipeline } from './utils/pipelines'
 import { auth } from './config/firebase'
@@ -41,11 +39,12 @@ import { SchedulePanel } from './components/SchedulePanel'
 import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
-import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi } from './utils/paths'
+import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi } from './utils/paths'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
 import { LeadsPanel } from './components/LeadsPanel'
+import { RoofInspectorPanel } from './components/RoofInspectorPanel'
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { getSettings, updateSettings } from './utils/settings'
@@ -55,6 +54,7 @@ import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
+import WelcomeTour from './components/WelcomeTour'
 import { CheckCircle2, Loader2, Phone } from 'lucide-react'
 
 function notifySkipTraceComplete(listName, detail) {
@@ -80,7 +80,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange, isFollowing, anyPanelOpen, hasPopup, onFollowingChange, followResumeDelay }) {
+function MapController({ userLocation, onMapReady, onRecenterMap, isFollowing, anyPanelOpen, hasPopup, onFollowingChange, followResumeDelay }) {
   const map = useMap()
   const initialSetDoneRef = useRef(false)
   const lastInteractionRef = useRef(0)
@@ -177,22 +177,29 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     return () => { map.off('moveend', onEnd) }
   }, [map])
 
-  // Expose recenter function
+  // Expose recenter function.
+  // Use a ref-reading thunk so it always reads the *latest* userLocation
+  // instead of closing over a stale value.
+  const userLocationRef = useRef(userLocation)
+  userLocationRef.current = userLocation
+
   useEffect(() => {
     if (onRecenterMap) {
       onRecenterMap(() => {
-        if (userLocation) {
+        const loc = userLocationRef.current
+        if (loc) {
           programmaticMoveRef.current = true
-          map.setView([userLocation.lat, userLocation.lng], map.getZoom(), {
+          map.setView([loc.lat, loc.lng], map.getZoom(), {
             animate: true,
             duration: 0.5
           })
         }
       })
     }
-  }, [map, userLocation, onRecenterMap])
+  }, [map, onRecenterMap])
 
-  // Detect user interaction -> pause follow-mode (ignore programmatic pans)
+  // Detect user interaction -> pause follow-mode (stop auto-centering).
+  // Compass orientation stays active so the map keeps its heading.
   useEffect(() => {
     const pauseFollow = () => {
       if (programmaticMoveRef.current) return
@@ -207,66 +214,7 @@ function MapController({ userLocation, onMapReady, onRecenterMap, onCountyChange
     }
   }, [map, onFollowingChange])
 
-  // Inactivity auto-resume (0 = never)
-  useEffect(() => {
-    if (!followResumeDelay) return
-    const interval = setInterval(() => {
-      if (isFollowing) return
-      if (anyPanelOpen || hasPopup) return
-      if (Date.now() - lastInteractionRef.current >= followResumeDelay) {
-        if (onFollowingChange) onFollowingChange(true)
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [isFollowing, anyPanelOpen, hasPopup, onFollowingChange, followResumeDelay])
-
-  // Monitor map viewport changes to detect county
-  useEffect(() => {
-    if (!onCountyChange) return
-
-    const detectCounty = () => {
-      try {
-        const center = map.getCenter()
-        if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') return
-        const county = getCountyFromCoords(center.lat, center.lng)
-        onCountyChange(county)
-      } catch (error) {
-        console.error('Error detecting county:', error)
-      }
-    }
-
-    const checkAndDetect = () => {
-      try {
-        const center = map.getCenter?.()
-        if (center && typeof center.lat === 'number' && typeof center.lng === 'number') {
-          detectCounty()
-        } else {
-          setTimeout(checkAndDetect, 100)
-        }
-      } catch {
-        setTimeout(checkAndDetect, 100)
-      }
-    }
-
-    map.whenReady(() => {
-      setTimeout(checkAndDetect, 300)
-    })
-
-    let timeoutId = null
-    const handleMapChange = () => {
-      if (timeoutId) clearTimeout(timeoutId)
-      timeoutId = setTimeout(detectCounty, 300)
-    }
-
-    map.on('moveend', handleMapChange)
-    map.on('zoomend', handleMapChange)
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId)
-      map.off('moveend', handleMapChange)
-      map.off('zoomend', handleMapChange)
-    }
-  }, [map, onCountyChange])
+  // Inactivity auto-resume removed — user must manually recenter via the navigation button
 
   return null
 }
@@ -446,9 +394,7 @@ function App() {
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
   const [permissionsReady, setPermissionsReady] = useState(() => hasGrantedPermissions())
   const [userLocation, setUserLocation] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [currentCounty, setCurrentCounty] = useState(null)
-  const [pmtilesUrl, setPmtilesUrl] = useState(null)
+
   const [isListPanelOpen, setIsListPanelOpen] = useState(false)
   const [isSkipTracedListPanelOpen, setIsSkipTracedListPanelOpen] = useState(false)
   const [isParcelListPanelOpen, setIsParcelListPanelOpen] = useState(false)
@@ -514,7 +460,10 @@ function App() {
   const [visiblePathIds, setVisiblePathIds] = useState([])
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false)
   const [isLeadsPanelOpen, setIsLeadsPanelOpen] = useState(false)
+  const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false)
+  const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
   const [settings, setSettings] = useState(() => getSettings())
+  const [showMenu, setShowMenu] = useState(false)
   const pathTrackerRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
@@ -525,7 +474,7 @@ function App() {
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isEmailTemplatesPanelOpen || isTextTemplatesPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen
+    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
   const hasPopup = clickedParcelId != null
 
   const handleSettingsChange = useCallback((partial) => {
@@ -657,8 +606,19 @@ function App() {
   // Load user data (deal pipeline, leads, tasks, notes, skip traced, etc.) when signed in
   useEffect(() => {
     if (!currentUser?.uid || !getToken) return
-    loadUserData(getToken).then(() => {
+    Promise.all([
+      loadUserData(getToken),
+      fetchLists(getToken).catch(() => []),
+    ]).then(([, serverLists]) => {
       setDealPipelineLeads(loadLeads())
+      const fresh = getSettings()
+      setSettings(fresh)
+      if (serverLists.length > 0) setLists(serverLists)
+      // Existing users who predate the tour: auto-skip so they aren't shown it
+      if (serverLists.length > 0 && !fresh.tourCompleted) {
+        const next = updateSettings({ tourCompleted: true }, getToken)
+        setSettings(next)
+      }
     })
   }, [currentUser?.uid, getToken])
 
@@ -760,6 +720,33 @@ function App() {
       prev.includes(pathId) ? prev.filter(id => id !== pathId) : [...prev, pathId]
     )
   }, [])
+
+  const handleSharePath = useCallback(async (pathId, sharedWith) => {
+    try {
+      await sharePathApi(getToken, pathId, sharedWith)
+      await refreshPaths()
+      showToast('Path sharing updated', 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to update sharing', 'error')
+    }
+  }, [getToken, refreshPaths])
+
+  const handleCenterOnPath = useCallback((pathId) => {
+    const path = paths.find(p => p.id === pathId)
+    if (!path || !path.points || path.points.length === 0) return
+    if (!visiblePathIds.includes(pathId)) {
+      setVisiblePathIds(prev => [...prev, pathId])
+    }
+    if (mapRef.current) {
+      const lats = path.points.map(p => p.lat || p[0])
+      const lngs = path.points.map(p => p.lng || p[1])
+      const bounds = [
+        [Math.min(...lats), Math.min(...lngs)],
+        [Math.max(...lats), Math.max(...lngs)]
+      ]
+      mapRef.current.fitBounds(bounds, { padding: [40, 40], animate: true, duration: 0.5 })
+    }
+  }, [paths, visiblePathIds])
 
   const refreshPipelines = useCallback(async () => {
     if (!currentUser) return
@@ -1119,40 +1106,6 @@ function App() {
     }
   }, [lists, getToken])
 
-  // Load PMTiles URL based on viewport county (detected by MapController)
-  const handleCountyChange = useCallback((county) => {
-    if (!county) {
-      console.warn('handleCountyChange called with no county')
-      return
-    }
-
-    // If county hasn't changed, don't reload
-    if (county === currentCounty && pmtilesUrl) {
-      console.log(`County ${county} already loaded, skipping`)
-      return
-    }
-
-    console.log(`County changed from ${currentCounty || 'none'} to ${county}`)
-    setCurrentCounty(county)
-
-    // Get PMTiles URL for the new county
-    setIsLoading(true)
-    console.log(`Fetching PMTiles URL for ${county} county...`)
-    getCountyPMTilesUrl(county)
-      .then((data) => {
-        if (data && data.pmtilesUrl) {
-          console.log(`✅ Loading PMTiles for ${county} county:`, data.pmtilesUrl)
-          setPmtilesUrl(data.pmtilesUrl)
-        } else {
-          console.error(`❌ No PMTiles URL returned for ${county} county`)
-        }
-        setIsLoading(false)
-      })
-      .catch((error) => {
-        console.error('❌ Error loading PMTiles URL:', error)
-        setIsLoading(false)
-      })
-  }, [currentCounty, pmtilesUrl])
 
   const handleSharePipeline = useCallback(async (pipelineId, sharedWith) => {
     try {
@@ -1171,6 +1124,16 @@ function App() {
       showToast('List sharing updated', 'success')
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
+    }
+  }, [getToken, refreshLists])
+
+  const handleRenameList = useCallback(async (listId, newName) => {
+    try {
+      await updateList(getToken, listId, { name: newName })
+      await refreshLists()
+      showToast('List renamed', 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to rename list', 'error')
     }
   }, [getToken, refreshLists])
 
@@ -1334,6 +1297,12 @@ function App() {
                 >
                   Convert to Lead
                 </button>` : ''}
+                <button 
+                  style="width: 100%; padding: 8px 12px; background: rgba(234,88,12,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.openRoofInspector()"
+                >
+                  Roof Inspector
+                </button>
               </div>
             </div>
           `)
@@ -1419,13 +1388,16 @@ function App() {
 
   const handleToggleCompass = useCallback(async () => {
     if (needsGesture) {
-      // iOS: orientation hasn't been granted yet this session.
-      // Request it; if granted turn compass ON, if denied keep OFF.
       const granted = await requestOrientation()
       setIsCompassActive(granted)
+      if (granted) setIsFollowing(true)
       return
     }
-    setIsCompassActive(prev => !prev)
+    setIsCompassActive(prev => {
+      const next = !prev
+      if (next) setIsFollowing(true)
+      return next
+    })
   }, [needsGesture, requestOrientation])
 
   // Toggle multi-select mode
@@ -1610,6 +1582,7 @@ function App() {
             ${!hasSkipTraced && !isSkipTracingInProgress ? `<button id="get-contact-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.skipTraceParcel()">Get Contact</button>` : ''}
             <button id="add-to-list-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.addParcelToList('${parcelId}')">Add to List</button>
             ${!isParcelALeadCheck(parcelId) ? `<button id="convert-to-lead-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.convertToLead()">Convert to Lead</button>` : ''}
+            <button style="width: 100%; padding: 8px 12px; background: rgba(234,88,12,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.openRoofInspector()">Roof Inspector</button>
           </div>
         </div>
       `)
@@ -2212,6 +2185,12 @@ function App() {
                 >
                   Convert to Lead
                 </button>` : ''}
+                <button 
+                  style="width: 100%; padding: 8px 12px; background: rgba(234,88,12,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
+                  onclick="window.openRoofInspector()"
+                >
+                  Roof Inspector
+                </button>
                 </div>
               </div>
             `)
@@ -2249,12 +2228,19 @@ function App() {
         handleConvertToLead(clickedParcelData)
       }
     }
+    window.openRoofInspector = () => {
+      if (clickedParcelData) {
+        setRoofInspectorParcel(clickedParcelData)
+        setIsRoofInspectorOpen(true)
+      }
+    }
     return () => {
       delete window.openParcelDetails
       delete window.closeParcelPopup
       delete window.addParcelToList
       delete window.skipTraceParcel
       delete window.convertToLead
+      delete window.openRoofInspector
     }
   }, [handleOpenParcelDetails, handleCloseParcelPopup, handleSkipTraceParcel, handleConvertToLead, clickedParcelData])
 
@@ -2273,6 +2259,12 @@ function App() {
       )}
       {permissionsReady && (
         <NotificationPrompt getToken={getToken} />
+      )}
+      {currentUser && permissionsReady && !settings.tourCompleted && (
+        <WelcomeTour
+          onComplete={() => handleSettingsChange({ tourCompleted: true })}
+          setShowMenu={setShowMenu}
+        />
       )}
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
@@ -2334,28 +2326,24 @@ function App() {
             mapRef.current = map
           }}
           onRecenterMap={setRecenterMap}
-          onCountyChange={handleCountyChange}
           isFollowing={isFollowing}
           anyPanelOpen={anyPanelOpen}
           hasPopup={hasPopup}
           onFollowingChange={setIsFollowing}
           followResumeDelay={settings.followResumeDelay}
         />
-        <CompassOrientation isActive={isCompassActive} heading={heading} isFollowing={isFollowing} />
+        <CompassOrientation isActive={isCompassActive} heading={heading} />
         <NorthIndicator />
-        {pmtilesUrl && (
-          <PMTilesParcelLayer 
-            pmtilesUrl={pmtilesUrl}
-            onParcelClick={handleParcelClick}
-            clickedParcelId={clickedParcelId}
-            selectedParcels={selectedParcels}
-            selectedListIds={selectedListIds}
-            lists={lists}
-            onLayerReady={(layerFunctions) => {
-              parcelLayerRef.current = layerFunctions
-            }}
-          />
-        )}
+        <PMTilesParcelLayer 
+          onParcelClick={handleParcelClick}
+          clickedParcelId={clickedParcelId}
+          selectedParcels={selectedParcels}
+          selectedListIds={selectedListIds}
+          lists={lists}
+          onLayerReady={(layerFunctions) => {
+            parcelLayerRef.current = layerFunctions
+          }}
+        />
         <PathTracker
           ref={pathTrackerRef}
           isTracking={isPathTrackingActive}
@@ -2490,6 +2478,8 @@ function App() {
         currentUser={currentUser}
         onLogin={() => setIsLoginOpen(true)}
         onLogout={logout}
+        showMenu={showMenu}
+        setShowMenu={setShowMenu}
       />
 
       <ListPanel
@@ -2517,6 +2507,7 @@ function App() {
         lists={lists}
         onListsChange={refreshLists}
         onDeleteList={handleDeleteList}
+        onRenameList={handleRenameList}
         onShareList={handleShareList}
         onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
         onCreateList={async (name) => {
@@ -2728,10 +2719,14 @@ function App() {
       <PathsPanel
         isOpen={isPathsPanelOpen}
         onClose={() => setIsPathsPanelOpen(false)}
+        currentUser={currentUser}
         paths={paths}
         onPathsChange={refreshPaths}
         onDeletePath={handleDeletePath}
         onRenamePath={handleRenamePath}
+        onSharePath={handleSharePath}
+        onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
+        onCenterOnPath={handleCenterOnPath}
         visiblePathIds={visiblePathIds}
         onTogglePathVisibility={handleTogglePathVisibility}
         distanceUnit={settings.distanceUnit}
@@ -2743,6 +2738,11 @@ function App() {
         settings={settings}
         onSettingsChange={handleSettingsChange}
         getToken={getToken}
+        onRestartTour={() => {
+          setIsSettingsPanelOpen(false)
+          setShowMenu(false)
+          handleSettingsChange({ tourCompleted: false })
+        }}
       />
 
       <LeadsPanel
@@ -2750,8 +2750,9 @@ function App() {
         onClose={() => setIsLeadsPanelOpen(false)}
         pipelines={pipelines}
         dealPipelineLeads={dealPipelineLeads}
-        onOpenDealPipeline={() => {
+        onOpenDealPipeline={(pipelineId) => {
           setIsLeadsPanelOpen(false)
+          if (pipelineId) setActivePipelineId(pipelineId)
           setIsDealPipelineOpen(true)
         }}
         onOpenParcelDetails={handleOpenParcelDetails}
@@ -2772,6 +2773,12 @@ function App() {
           setScheduleInitialDate(ts)
           setIsSchedulePanelOpen(true)
         }}
+      />
+
+      <RoofInspectorPanel
+        isOpen={isRoofInspectorOpen}
+        onClose={() => setIsRoofInspectorOpen(false)}
+        parcelData={roofInspectorParcel}
       />
 
       {/* Authentication Dialogs */}

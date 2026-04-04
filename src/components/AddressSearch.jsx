@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Search, X, Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
-import { cn } from '@/lib/utils'
-import { getCountyFromCoords } from '@/utils/geoUtils'
 
 /**
  * Address search using Mapbox Geocoding API
@@ -55,24 +53,16 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       const coordMatch = isCoordinateQuery(trimmedQuery)
       if (coordMatch) {
         const { lat, lng } = coordMatch
-        const county = getCountyFromCoords(lat, lng)
-        const supportedCounties = ['tarrant', 'dallas', 'ellis', 'johnson', 'parker']
-        const isSupported = supportedCounties.includes(county.toLowerCase())
 
         const coordinateResult = {
           id: `coord-${lat}-${lng}`,
           place_name: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-          center: [lng, lat], // Mapbox format: [lng, lat]
+          center: [lng, lat],
           geometry: {
             type: 'Point',
             coordinates: [lng, lat]
           },
-          context: [
-            { id: 'county', text: county.charAt(0).toUpperCase() + county.slice(1) + ' County' },
-            { id: 'region', text: 'Texas' }
-          ],
           _isCoordinate: true,
-          _isSupported: isSupported
         }
 
         setResults([coordinateResult])
@@ -90,12 +80,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       // Use mapbox.places endpoint for address search with proximity bias to DFW area
       // DFW center approximately: 32.7767, -96.7970
       const encodedQuery = encodeURIComponent(trimmedQuery)
-      const proximity = '-96.7970,32.7767' // [lng, lat] format, bias results toward DFW
-      // Mapbox bbox format: minLon,minLat,maxLon,maxLat (west,south,east,north)
-      const bbox = '-99.5,31.5,-96.0,33.5' // DFW area bounding box
-      
-      // Use autocomplete endpoint for better suggestions
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${accessToken}&proximity=${proximity}&bbox=${bbox}&limit=5&country=us&types=address,poi,place&autocomplete=true`
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${accessToken}&limit=5&country=us&types=address,poi,place&autocomplete=true`
 
       console.log('🔍 Searching Mapbox for:', trimmedQuery)
 
@@ -112,11 +97,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         // Transform Mapbox results to our format
         const transformedResults = data.features.map((feature, index) => {
           const [lng, lat] = feature.center || feature.geometry.coordinates
-          const county = getCountyFromCoords(lat, lng)
-          const supportedCounties = ['tarrant', 'dallas', 'ellis', 'johnson', 'parker']
-          const isSupported = supportedCounties.includes(county.toLowerCase())
 
-          // Extract address components from context
           const context = feature.context || []
           const city = context.find(c => c.id.startsWith('place'))?.text
           const countyName = context.find(c => c.id.startsWith('district'))?.text || 
@@ -133,11 +114,10 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
             lon: lng.toString(),
             address: {
               city: city || '',
-              county: countyName || county.charAt(0).toUpperCase() + county.slice(1) + ' County',
-              state: state || 'Texas',
+              county: countyName || '',
+              state: state || '',
               zip: zip || ''
             },
-            _isSupported: isSupported,
             _mapboxFeature: feature
           }
         })
@@ -280,20 +260,11 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
           <div className="max-h-64 overflow-y-auto parcel-details-scroll">
             {results.length > 0 ? (
               <ul className="divide-y divide-gray-200">
-                {results.map((result) => {
-                  const [lng, lat] = result.center || []
-                  const county = lat && lng ? getCountyFromCoords(lat, lng) : 'unknown'
-                  const supportedCounties = ['tarrant', 'dallas', 'ellis', 'johnson', 'parker']
-                  const isSupported = supportedCounties.includes(county.toLowerCase())
-
-                  return (
+                {results.map((result) => (
                     <li
                       key={result.id || result._mapboxFeature?.id}
                       onClick={() => handleSelectResult(result)}
-                      className={cn(
-                        "p-3 hover:bg-gray-50 cursor-pointer transition-colors",
-                        !isSupported && "opacity-60"
-                      )}
+                      className="p-3 hover:bg-gray-50 cursor-pointer transition-colors"
                     >
                       <div className="text-sm font-medium text-gray-900">
                         {result.place_name}
@@ -308,14 +279,8 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
                           ].filter(Boolean).join(', ')}
                         </div>
                       )}
-                      {!isSupported && (
-                        <div className="text-xs text-orange-600 mt-1 font-medium">
-                          ⚠️ Parcels not available in this area
-                        </div>
-                      )}
                     </li>
-                  )
-                })}
+                ))}
               </ul>
             ) : query.length >= 2 && !isSearching && !error ? (
               <div className="p-3 text-sm text-gray-600 text-center">

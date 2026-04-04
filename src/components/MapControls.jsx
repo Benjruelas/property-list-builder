@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Route, Settings, Users, ListTodo, Calendar } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
@@ -23,13 +23,15 @@ export function MapControls({
   onOpenLeads,
   currentUser,
   onLogin,
-  onLogout
+  onLogout,
+  showMenu,
+  setShowMenu
 }) {
-  const [showMenu, setShowMenu] = useState(false)
 
   return (
     <div className="map-controls-stack absolute z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))', right: 'calc(12px + env(safe-area-inset-right, 0px))' }}>
       <Button
+        data-tour="recenter"
         onClick={onRecenter}
         size="icon"
         variant="glass"
@@ -39,6 +41,7 @@ export function MapControls({
         <Navigation className="h-6 w-6 sm:h-5 sm:w-5" />
       </Button>
       <Button
+        data-tour="compass"
         onClick={onToggleCompass}
         size="icon"
         variant={isCompassActive ? "glass" : "glass-outline"}
@@ -51,6 +54,7 @@ export function MapControls({
         <Compass className="h-6 w-6 sm:h-5 sm:w-5" />
       </Button>
       <Button
+        data-tour="multi-select"
         onClick={onToggleMultiSelect}
         size="icon"
         variant={isMultiSelectActive ? "glass" : "glass-outline"}
@@ -73,6 +77,7 @@ export function MapControls({
         )}
       </Button>
       <Button
+        data-tour="path-recording"
         onClick={onTogglePathTracking}
         size="icon"
         variant={isPathTrackingActive ? "glass" : "glass-outline"}
@@ -95,6 +100,7 @@ export function MapControls({
       {/* Menu Dropdown */}
       <div className="relative">
         <Button
+          data-tour="menu"
           onClick={() => setShowMenu(!showMenu)}
           size="icon"
           variant="glass-outline"
@@ -115,6 +121,7 @@ export function MapControls({
             <div className="map-panel hamburger-menu absolute right-full top-0 mr-2 rounded-xl min-w-[200px] z-[1000] py-2">
               {/* Lists Button */}
               <button
+                data-tour="menu-lists"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenListPanel()
@@ -130,6 +137,7 @@ export function MapControls({
 
               {/* Paths Button */}
               <button
+                data-tour="menu-paths"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenPathsPanel?.()
@@ -145,6 +153,7 @@ export function MapControls({
 
               {/* Skip Traced Parcels Button */}
               <button
+                data-tour="menu-skip-traced"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenSkipTracedListPanel()
@@ -157,6 +166,7 @@ export function MapControls({
 
               {/* Email Templates Button */}
               <button
+                data-tour="menu-email-templates"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenEmailTemplates()
@@ -169,6 +179,7 @@ export function MapControls({
 
               {/* Text Message Templates Button */}
               <button
+                data-tour="menu-text-templates"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenTextTemplates?.()
@@ -181,6 +192,7 @@ export function MapControls({
 
               {/* Deal Pipeline Button */}
               <button
+                data-tour="menu-pipeline"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenDealPipeline?.()
@@ -193,6 +205,7 @@ export function MapControls({
 
               {/* Leads Button */}
               <button
+                data-tour="menu-leads"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenLeads?.()
@@ -205,6 +218,7 @@ export function MapControls({
 
               {/* Tasks — list by pipeline (not calendar) */}
               <button
+                data-tour="menu-tasks"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenTasks?.()
@@ -217,6 +231,7 @@ export function MapControls({
 
               {/* Schedule — calendar view */}
               <button
+                data-tour="menu-schedule"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenSchedule?.()
@@ -242,6 +257,7 @@ export function MapControls({
                     </p>
                   </div>
                   <button
+                    data-tour="menu-settings"
                     onClick={() => {
                       setShowMenu(false)
                       onOpenSettings?.()

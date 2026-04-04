@@ -3,11 +3,12 @@ import { useMap } from 'react-leaflet'
 
 /**
  * Controls compass-based map rotation using a smoothed heading value.
- * Respects follow-mode: only updates bearing when isFollowing is true.
+ * Rotation is independent of follow-mode: the map stays oriented to
+ * the user's heading even while they pan around freely.
  * Skips tiny changes (< 2 degrees) to keep the map calm during idle.
  * Requires map to have rotate: true (leaflet-rotate).
  */
-export function CompassOrientation({ isActive, heading, isFollowing }) {
+export function CompassOrientation({ isActive, heading }) {
   const map = useMap()
   const disabledNativeRef = useRef(false)
   const lastBearingRef = useRef(null)
@@ -32,9 +33,7 @@ export function CompassOrientation({ isActive, heading, isFollowing }) {
       return
     }
 
-    if (isFollowing && heading != null) {
-      // Match leaflet-rotate bearing sign to compass heading (clockwise from north).
-      // Using -heading inverts turns (device left → map right).
+    if (heading != null) {
       const target = heading
       if (lastBearingRef.current != null) {
         let delta = target - lastBearingRef.current
@@ -45,7 +44,7 @@ export function CompassOrientation({ isActive, heading, isFollowing }) {
       map.setBearing(target)
       lastBearingRef.current = target
     }
-  }, [map, isActive, isFollowing, heading])
+  }, [map, isActive, heading])
 
   return null
 }

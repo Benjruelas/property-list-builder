@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, RefreshCw, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2, Users } from 'lucide-react'
+import { X, RefreshCw, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -26,6 +26,7 @@ export function ListPanel({
   lists = [],
   onListsChange,
   onDeleteList,
+  onRenameList,
   onShareList,
   onValidateShareEmail,
   onCreateList,
@@ -40,7 +41,10 @@ export function ListPanel({
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [openDropdownListId, setOpenDropdownListId] = useState(null)
-  const [dropdownAnchor, setDropdownAnchor] = useState(null) // { bottom, right } for portal positioning
+  const [dropdownAnchor, setDropdownAnchor] = useState(null)
+  const [renamingListId, setRenamingListId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameInputRef = useRef(null)
   const [shareListId, setShareListId] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
   const [shareEmailValid, setShareEmailValid] = useState(null)
@@ -52,6 +56,8 @@ export function ListPanel({
     if (!isOpen) {
       setOpenDropdownListId(null)
       setDropdownAnchor(null)
+      setRenamingListId(null)
+      setRenameValue('')
       setShareListId(null)
       setShareEmail('')
       setShareEmailValid(null)
@@ -63,6 +69,13 @@ export function ListPanel({
       }
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (renamingListId && renameInputRef.current) {
+      renameInputRef.current.focus()
+      renameInputRef.current.select()
+    }
+  }, [renamingListId])
 
   const runValidation = useCallback(async (email) => {
     const trimmed = (email || '').trim().toLowerCase()
@@ -155,6 +168,26 @@ export function ListPanel({
     } finally {
       setIsCreating(false)
     }
+  }
+
+  const handleRenameSubmit = async (listId) => {
+    const trimmed = renameValue.trim()
+    if (!trimmed) {
+      setRenamingListId(null)
+      setRenameValue('')
+      return
+    }
+    const list = allLists.find(l => l.id === listId)
+    if (list && trimmed === list.name) {
+      setRenamingListId(null)
+      setRenameValue('')
+      return
+    }
+    if (onRenameList) {
+      await onRenameList(listId, trimmed)
+    }
+    setRenamingListId(null)
+    setRenameValue('')
   }
 
   const handleDeleteListClick = (list) => {
@@ -363,9 +396,25 @@ export function ListPanel({
                                 title={`Color ${selectedListIds.indexOf(list.id) + 1}`}
                               />
                             )}
-                            <span className="font-medium text-sm truncate">
-                              {list.name}
-                            </span>
+                            {renamingListId === list.id ? (
+                              <input
+                                ref={renameInputRef}
+                                type="text"
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleRenameSubmit(list.id)
+                                  if (e.key === 'Escape') { setRenamingListId(null); setRenameValue('') }
+                                }}
+                                onBlur={() => handleRenameSubmit(list.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-medium text-sm bg-transparent border-b border-blue-500 outline-none w-full min-w-0 py-0.5"
+                              />
+                            ) : (
+                              <span className="font-medium text-sm truncate">
+                                {list.name}
+                              </span>
+                            )}
                             {!isListOwnedByUser(list) && (
                               <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                             )}
@@ -537,6 +586,16 @@ export function ListPanel({
                 <button type="button" onClick={() => { closeDropdown(); setShareListId(list.id); setShareEmail('') }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
                   <Share2 className="h-4 w-4 flex-shrink-0" />
                   Share list
+                </button>
+              )}
+              {onRenameList && isListOwnedByUser(list) && (
+                <button type="button" onClick={() => {
+                  closeDropdown()
+                  setRenameValue(list.name)
+                  setRenamingListId(list.id)
+                }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
+                  <Pencil className="h-4 w-4 flex-shrink-0" />
+                  Rename list
                 </button>
               )}
               {isListOwnedByUser(list) && (

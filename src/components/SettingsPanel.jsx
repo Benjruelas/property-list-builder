@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, FileText, Upload } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { showToast } from './ui/toast'
@@ -36,8 +36,8 @@ const UNIT_OPTIONS = [
 
 const DEADLINE_LEAD_OPTIONS = [
   { value: 15, label: '15m' },
+  { value: 30, label: '30m' },
   { value: 60, label: '1h' },
-  { value: 1440, label: '1d' },
 ]
 
 function Section({ icon: Icon, title, children, defaultOpen = true }) {
@@ -178,7 +178,7 @@ const LS_DATA_KEYS = [
   'email_templates', 'text_templates', 'skip_trace_jobs', 'skip_traced_list',
 ]
 
-export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, getToken }) {
+export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, getToken, onRestartTour }) {
   const [syncing, setSyncing] = useState(false)
 
   const update = useCallback((partial) => {
@@ -312,6 +312,98 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
             </div>
           </Section>
 
+          {/* ---- Report Branding ---- */}
+          <Section icon={FileText} title="Report Branding" defaultOpen={false}>
+            <p className="text-xs opacity-50 -mt-1 mb-2">
+              These fields appear on generated roof measurement PDF reports.
+            </p>
+            <div>
+              <label className="block text-sm font-medium mb-1">Company Name</label>
+              <input
+                type="text"
+                value={s.reportBranding?.companyName || ''}
+                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyName: e.target.value } })}
+                placeholder="Acme Roofing"
+                className="w-full text-sm rounded-lg px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Phone</label>
+              <input
+                type="tel"
+                value={s.reportBranding?.companyPhone || ''}
+                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyPhone: e.target.value } })}
+                placeholder="(555) 123-4567"
+                className="w-full text-sm rounded-lg px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
+              <input
+                type="email"
+                value={s.reportBranding?.companyEmail || ''}
+                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyEmail: e.target.value } })}
+                placeholder="info@acmeroofing.com"
+                className="w-full text-sm rounded-lg px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Website</label>
+              <input
+                type="text"
+                value={s.reportBranding?.companyWebsite || ''}
+                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyWebsite: e.target.value } })}
+                placeholder="www.acmeroofing.com"
+                className="w-full text-sm rounded-lg px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Company Logo</label>
+              <p className="text-xs opacity-50 mb-1.5">PNG or JPEG, displayed on the report cover page</p>
+              <div className="flex items-center gap-3">
+                {s.reportBranding?.logoBase64 ? (
+                  <img
+                    src={s.reportBranding.logoBase64}
+                    alt="Logo preview"
+                    className="h-10 w-auto max-w-[80px] rounded border border-white/20 object-contain bg-white/10 p-1"
+                  />
+                ) : null}
+                <label className="settings-data-btn flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" />
+                  {s.reportBranding?.logoBase64 ? 'Change' : 'Upload'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      if (file.size > 2 * 1024 * 1024) {
+                        showToast('Logo must be under 2 MB', 'error')
+                        return
+                      }
+                      const reader = new FileReader()
+                      reader.onload = () => {
+                        update({ reportBranding: { ...(s.reportBranding || {}), logoBase64: reader.result } })
+                      }
+                      reader.readAsDataURL(file)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                {s.reportBranding?.logoBase64 && (
+                  <button
+                    type="button"
+                    onClick={() => update({ reportBranding: { ...(s.reportBranding || {}), logoBase64: '' } })}
+                    className="settings-data-btn-danger flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="h-3 w-3" /> Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          </Section>
+
           {/* ---- Notifications ---- */}
           <Section icon={Bell} title="Notifications" defaultOpen>
             <p className="text-xs opacity-50 -mt-1 mb-2">
@@ -320,48 +412,52 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
             <SettingRow label="Enable notifications" description="Browser permission + web push when signed in">
               <Toggle checked={n.pushEnabled} onChange={handlePushMasterToggle} />
             </SettingRow>
-            <SettingRow label="List shared with you" description="When someone adds you to a list">
-              <Toggle
-                checked={n.listShared}
-                onChange={(v) => update({ notifications: { ...n, listShared: v } })}
-                disabled={!getToken}
-              />
-            </SettingRow>
-            <SettingRow label="Pipeline shared with you" description="When someone adds you to a pipeline">
-              <Toggle
-                checked={n.pipelineShared}
-                onChange={(v) => update({ notifications: { ...n, pipelineShared: v } })}
-                disabled={!getToken}
-              />
-            </SettingRow>
-            <SettingRow label="Lead stage changes" description="When a lead moves columns in a shared pipeline">
-              <Toggle
-                checked={n.pipelineLeadStage}
-                onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })}
-                disabled={!getToken}
-              />
-            </SettingRow>
-            <SettingRow label="Skip trace finished" description="When bulk skip trace completes for a list">
-              <Toggle
-                checked={n.skipTraceComplete}
-                onChange={(v) => update({ notifications: { ...n, skipTraceComplete: v } })}
-              />
-            </SettingRow>
-            <SettingRow label="Task deadline reminders" description="Before a scheduled task time" stacked>
-              <div className="space-y-2">
-                <div className="flex justify-end">
+            {n.pushEnabled && (
+              <>
+                <SettingRow label="List shared with you" description="When someone adds you to a list">
+                  <Toggle
+                    checked={n.listShared}
+                    onChange={(v) => update({ notifications: { ...n, listShared: v } })}
+                    disabled={!getToken}
+                  />
+                </SettingRow>
+                <SettingRow label="Pipeline shared with you" description="When someone adds you to a pipeline">
+                  <Toggle
+                    checked={n.pipelineShared}
+                    onChange={(v) => update({ notifications: { ...n, pipelineShared: v } })}
+                    disabled={!getToken}
+                  />
+                </SettingRow>
+                <SettingRow label="Lead stage changes" description="When a lead moves columns in a shared pipeline">
+                  <Toggle
+                    checked={n.pipelineLeadStage}
+                    onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })}
+                    disabled={!getToken}
+                  />
+                </SettingRow>
+                <SettingRow label="Skip trace finished" description="When bulk skip trace completes for a list">
+                  <Toggle
+                    checked={n.skipTraceComplete}
+                    onChange={(v) => update({ notifications: { ...n, skipTraceComplete: v } })}
+                  />
+                </SettingRow>
+                <SettingRow label="Task deadline reminders" description="Before a scheduled task time">
                   <Toggle
                     checked={n.taskDeadline}
                     onChange={(v) => update({ notifications: { ...n, taskDeadline: v } })}
                   />
-                </div>
-                <SegmentedControl
-                  value={n.taskDeadlineLeadMinutes}
-                  onChange={(v) => update({ notifications: { ...n, taskDeadlineLeadMinutes: Number(v) } })}
-                  options={DEADLINE_LEAD_OPTIONS}
-                />
-              </div>
-            </SettingRow>
+                </SettingRow>
+                {n.taskDeadline && (
+                  <div className="mt-1">
+                    <SegmentedControl
+                      value={n.taskDeadlineLeadMinutes}
+                      onChange={(v) => update({ notifications: { ...n, taskDeadlineLeadMinutes: Number(v) } })}
+                      options={DEADLINE_LEAD_OPTIONS}
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </Section>
 
           {/* ---- Data Management ---- */}
@@ -386,6 +482,18 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
               </button>
             </div>
           </Section>
+
+          {/* ---- Restart Welcome Tour ---- */}
+          {onRestartTour && (
+            <button
+              type="button"
+              onClick={onRestartTour}
+              className="settings-data-btn w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-lg transition-colors"
+            >
+              <HelpCircle className="h-4 w-4 opacity-70" />
+              Restart Welcome Tour
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -52,6 +52,22 @@ export async function renamePath(getToken, pathId, name) {
   return data.path
 }
 
+export async function sharePath(getToken, pathId, sharedWith) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to share paths')
+  const res = await fetch(`${getApiBase()}/paths`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ pathId, sharedWith })
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Failed to share path')
+  }
+  const data = await res.json()
+  return data.path
+}
+
 export async function deletePath(getToken, pathId) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to delete paths')

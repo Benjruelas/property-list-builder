@@ -476,7 +476,7 @@ export function DealPipeline({
                   placeholder="Pipeline title"
                 />
               ) : (
-                <DialogTitle className="min-w-0 flex-1 truncate text-xl font-semibold">{pipelineTitle}</DialogTitle>
+                <DialogTitle className="min-w-0 truncate text-xl font-semibold">{pipelineTitle}</DialogTitle>
               )}
               {apiMode && pipelines.length > 0 && (
                 <Button
