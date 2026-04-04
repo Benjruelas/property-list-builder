@@ -410,7 +410,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 onClick={() => onGoToPipeline(pipelineId)}
                 className="settings-data-btn w-full flex items-center justify-center gap-2 text-sm px-4 py-2.5 rounded-lg transition-colors font-medium"
               >
-                Go to Pipeline
+                Go to Pipes
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>

@@ -83,7 +83,7 @@ export function DealPipeline({
   const [draggedLeadId, setDraggedLeadId] = useState(null)
   const [dragOverColId, setDragOverColId] = useState(null)
   const [isEditMode, setIsEditMode] = useState(false)
-  const [pipelineTitle, setPipelineTitle] = useState('Deal Pipeline')
+  const [pipelineTitle, setPipelineTitle] = useState('Pipes')
   const [selectedLead, setSelectedLead] = useState(null)
   const [allTasks, setAllTasks] = useState([])
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false)
@@ -200,7 +200,7 @@ export function DealPipeline({
     if (isOpen) {
       if (apiMode && activePipeline) {
         setColumns(activePipeline.columns || [])
-        setPipelineTitle(activePipeline.title || 'Deal Pipeline')
+        setPipelineTitle(activePipeline.title || 'Pipes')
       } else {
         setColumns(loadColumns())
         setPipelineTitle(loadTitle())
@@ -379,7 +379,7 @@ export function DealPipeline({
         setEditingColumnId(null)
         setShowAddColumn(false)
         setNewColumnName('')
-        const trimmed = pipelineTitle.trim() || 'Deal Pipeline'
+        const trimmed = pipelineTitle.trim() || 'Pipes'
         if (apiMode && onTitleChange) {
           onTitleChange(trimmed)
         } else {
@@ -392,7 +392,7 @@ export function DealPipeline({
   }
 
   const handleTitleBlur = () => {
-    const trimmed = pipelineTitle.trim() || 'Deal Pipeline'
+    const trimmed = pipelineTitle.trim() || 'Pipes'
     setPipelineTitle(trimmed)
     if (apiMode && onTitleChange) {
       onTitleChange(trimmed)
@@ -463,7 +463,7 @@ export function DealPipeline({
         }}
       >
         <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
-          <DialogDescription className="sr-only">Manage leads in your deal pipeline</DialogDescription>
+          <DialogDescription className="sr-only">Manage leads in your pipe</DialogDescription>
           <div className="map-panel-header-toolbar">
             <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-1.5">
               {isEditMode ? (
@@ -1219,7 +1219,7 @@ setAddTaskTitle('')
           <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay data-create-pipeline-dialog>
             <DialogHeader>
               <DialogTitle>New pipeline</DialogTitle>
-              <DialogDescription className="sr-only">Name your new deal pipeline</DialogDescription>
+              <DialogDescription className="sr-only">Name your new pipe</DialogDescription>
             </DialogHeader>
             <Input
               value={newPipelineTitle}
@@ -1234,7 +1234,7 @@ setAddTaskTitle('')
                 className="flex-1 share-dialog-btn"
                 onClick={async () => {
                   try {
-                    const title = newPipelineTitle.trim() || 'Deal Pipeline'
+                    const title = newPipelineTitle.trim() || 'Pipes'
                     const created = await createPipeline(getToken, { title })
                     if (onPipelinesChange) await onPipelinesChange()
                     onActivePipelineChange?.(created.id)
@@ -1285,7 +1285,7 @@ setAddTaskTitle('')
                   <span className="w-4 flex-shrink-0 inline-block" aria-hidden />
                 )}
                 <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span className="truncate font-medium text-left">{p.title?.trim() || 'Deal Pipeline'}</span>
+                  <span className="truncate font-medium text-left">{p.title?.trim() || 'Pipes'}</span>
                   {p.ownerId !== currentUser?.uid && (
                     <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                   )}

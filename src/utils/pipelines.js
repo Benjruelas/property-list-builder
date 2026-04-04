@@ -40,13 +40,13 @@ export async function fetchPipelines(getToken) {
   return data.pipelines || []
 }
 
-export async function createPipeline(getToken, { title = 'Deal Pipeline', columns, leads = [] } = {}) {
+export async function createPipeline(getToken, { title = 'Pipes', columns, leads = [] } = {}) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to create pipelines')
   const res = await fetch(`${getApiBase()}/pipelines`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ title: title.trim() || 'Deal Pipeline', columns, leads })
+    body: JSON.stringify({ title: title.trim() || 'Pipes', columns, leads })
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

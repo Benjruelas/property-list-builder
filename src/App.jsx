@@ -761,7 +761,7 @@ function App() {
         const cols = loadColumns()
         const leads = loadLeads()
         const title = (() => {
-          try { return localStorage.getItem('deal_pipeline_title') || 'Deal Pipeline' } catch { return 'Deal Pipeline' }
+          try { return localStorage.getItem('deal_pipeline_title') || 'Pipes' } catch { return 'Pipes' }
         })()
         if (leads.length > 0 || cols.some((c) => (c?.name || '').trim())) {
           try {
@@ -837,7 +837,7 @@ function App() {
       await refreshPipelines()
       setActivePipelineId(pipelineId)
       setIsDealPipelineOpen(true)
-      showToast('Parcel added to Deal Pipeline', 'success')
+      showToast('Parcel added to Pipes', 'success')
     } catch (e) {
       showToast(e.message || 'Could not add lead', 'error')
     }
@@ -846,7 +846,7 @@ function App() {
   const handleConvertToLead = useCallback(async (parcelData) => {
     if (!currentUser || !currentUser.uid) {
       setIsLoginOpen(true)
-      showToast('Please sign in to use the Deal Pipeline', 'info')
+      showToast('Please sign in to use Pipes', 'info')
       return
     }
     if (!parcelData?.id) {
@@ -876,7 +876,7 @@ function App() {
       setDealPipelineLeads(loadLeads())
       scheduleUserDataSync(getToken)
       setIsDealPipelineOpen(true)
-      showToast('Parcel added to Deal Pipeline', 'success')
+      showToast('Parcel added to Pipes', 'success')
     } else {
       showToast('Could not add lead', 'error')
     }

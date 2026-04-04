@@ -175,7 +175,6 @@ export function MapControls({
                 <span>Outreach</span>
               </button>
 
-              {/* Deal Pipeline Button */}
               <button
                 data-tour="menu-pipeline"
                 onClick={() => {
@@ -185,7 +184,7 @@ export function MapControls({
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
                 <LayoutList className="h-4 w-4 flex-shrink-0" />
-                <span>Deal Pipeline</span>
+                <span>Pipes</span>
               </button>
 
               {/* Leads Button */}

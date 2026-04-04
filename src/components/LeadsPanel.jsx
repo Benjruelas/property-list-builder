@@ -102,7 +102,7 @@ export function LeadsPanel({
     if (pipelines.length > 0) {
       return pipelines.map(p => ({
         id: p.id,
-        title: p.title || 'Deal Pipeline',
+        title: p.title || 'Pipes',
         columns: p.columns || [],
         leads: p.leads || [],
       }))
@@ -110,7 +110,7 @@ export function LeadsPanel({
     if (dealPipelineLeads.length > 0) {
       return [{
         id: '_local',
-        title: 'Deal Pipeline',
+        title: 'Pipes',
         columns: (() => { try { return JSON.parse(localStorage.getItem('deal_pipeline_columns')) || [] } catch { return [] } })(),
         leads: dealPipelineLeads,
       }]
@@ -186,7 +186,7 @@ export function LeadsPanel({
         hideOverlay
       >
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
-          <DialogDescription className="sr-only">All leads across your deal pipelines</DialogDescription>
+          <DialogDescription className="sr-only">All leads across your pipes</DialogDescription>
           <div className="map-panel-header-toolbar">
             <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
               <Users className="h-5 w-5 shrink-0" />
@@ -322,7 +322,7 @@ export function LeadsPanel({
                   onClick={() => { onClose(); onOpenDealPipeline() }}
                   className="settings-data-btn mt-4 inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-colors"
                 >
-                  Open Deal Pipeline
+                  Open Pipes
                 </button>
               )}
             </div>

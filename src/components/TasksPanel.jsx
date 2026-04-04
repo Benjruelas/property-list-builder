@@ -336,7 +336,7 @@ export function TasksPanel({
           className="px-6 pt-6 pb-4 border-b border-white/20 flex-shrink-0 text-left"
           style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
         >
-          <DialogDescription className="sr-only">Tasks grouped by deal pipeline</DialogDescription>
+          <DialogDescription className="sr-only">Tasks grouped by pipe</DialogDescription>
           <div className="map-panel-header-toolbar gap-2">
             <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold truncate">Tasks</DialogTitle>
             <div className="map-panel-header-actions gap-1">
@@ -368,7 +368,7 @@ export function TasksPanel({
             <p className="text-sm text-white/60 py-8 text-center">No open tasks</p>
           )}
           {unlabeled.length > 0 && (
-            <section className="mb-4" aria-label="Tasks not in a deal pipeline">
+            <section className="mb-4" aria-label="Tasks not in a pipe">
               <ul className="space-y-2">
                 {unlabeled.map((task) => (
                   <li key={task.id}>
@@ -424,7 +424,7 @@ export function TasksPanel({
             <div className="mt-1.5 pt-0">
               <h2 className="text-xs font-semibold text-white/55 uppercase tracking-wide mb-1.5">Closed tasks</h2>
               {closedUnlabeled.length > 0 && (
-                <section className="mb-4" aria-label="Closed tasks not in a deal pipeline">
+                <section className="mb-4" aria-label="Closed tasks not in a pipe">
                   <ul className="space-y-2">
                     {closedUnlabeled.map((task) => (
                       <li key={task.id}>

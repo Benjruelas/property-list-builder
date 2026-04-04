@@ -35,7 +35,7 @@ export function ConvertToLeadPipelineDialog({ open, onOpenChange, pipelines, cur
               onClick={() => onSelect(p.id)}
             >
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <span className="truncate">{p.title?.trim() || 'Deal Pipeline'}</span>
+                <span className="truncate">{p.title?.trim() || 'Pipes'}</span>
                 {p.ownerId && p.ownerId !== currentUser?.uid && (
                   <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                 )}
