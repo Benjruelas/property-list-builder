@@ -17,8 +17,7 @@ import { SkipTracedListPanel } from './components/SkipTracedListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
 import { ParcelDetails } from './components/ParcelDetails'
 import { PhoneActionPanel } from './components/PhoneActionPanel'
-import { EmailTemplatesPanel } from './components/EmailTemplatesPanel'
-import { TextTemplatesPanel } from './components/TextTemplatesPanel'
+import { OutreachPanel } from './components/OutreachPanel'
 import { EmailComposer } from './components/EmailComposer'
 import { BulkEmailPreview } from './components/BulkEmailPreview'
 import { Login } from './components/Login'
@@ -364,8 +363,7 @@ function App() {
       setIsSkipTracedListPanelOpen(false)
       setIsParcelListPanelOpen(false)
       setIsParcelDetailsOpen(false)
-      setIsEmailTemplatesPanelOpen(false)
-      setIsTextTemplatesPanelOpen(false)
+      setIsOutreachPanelOpen(false)
       setPhoneActionPanel(null)
       setIsEmailComposerOpen(false)
       setIsBulkEmailPreviewOpen(false)
@@ -400,8 +398,8 @@ function App() {
   const [isParcelListPanelOpen, setIsParcelListPanelOpen] = useState(false)
   const [viewingListId, setViewingListId] = useState(null) // List ID being viewed in ParcelListPanel
   const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false) // Parcel details panel
-  const [isEmailTemplatesPanelOpen, setIsEmailTemplatesPanelOpen] = useState(false)
-  const [isTextTemplatesPanelOpen, setIsTextTemplatesPanelOpen] = useState(false)
+  const [isOutreachPanelOpen, setIsOutreachPanelOpen] = useState(false)
+  const [outreachInitialTab, setOutreachInitialTab] = useState('email')
   const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false)
   const [isBulkEmailPreviewOpen, setIsBulkEmailPreviewOpen] = useState(false)
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
@@ -472,7 +470,7 @@ function App() {
   const parcelDetailsSourceRef = useRef('map') // 'map' = opened from map popup, 'list' = opened from list panel
 
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
-    isSkipTracedListPanelOpen || isEmailTemplatesPanelOpen || isTextTemplatesPanelOpen ||
+    isSkipTracedListPanelOpen || isOutreachPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
     isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
   const hasPopup = clickedParcelId != null
@@ -1641,38 +1639,23 @@ function App() {
     setIsBulkEmailMode(false)
     setEmailComposerParcelData(parcelData)
     setEmailComposerRecipient({ email, name: parcelData?.properties?.OWNER_NAME || '' })
-    setIsEmailTemplatesPanelOpen(true)
+    setOutreachInitialTab('email')
+    setIsOutreachPanelOpen(true)
   }, [currentUser, authLoading])
 
-  // Handle opening email templates from MapControls button (bulk mode)
-  const handleOpenEmailTemplates = useCallback(() => {
-    // Wait for auth to finish loading before checking
-    if (authLoading) {
-      console.log('⏳ Auth still loading, waiting...')
-      return
-    }
-    
-    if (!currentUser || !currentUser.uid) {
-      console.log('❌ No current user, showing login prompt for email templates')
-      setIsLoginOpen(true)
-      return
-    }
-    console.log('✅ User authenticated, opening email templates:', currentUser.email)
-    setIsBulkEmailMode(true)
-    setEmailComposerParcelData(null)
-    setEmailComposerRecipient({ email: '', name: '' })
-    setBulkEmailList(null)
-    setBulkEmailListId(null)
-    setIsEmailTemplatesPanelOpen(true)
-  }, [currentUser, authLoading])
-
-  const handleOpenTextTemplates = useCallback(() => {
+  const handleOpenOutreach = useCallback(() => {
     if (authLoading) return
     if (!currentUser || !currentUser.uid) {
       setIsLoginOpen(true)
       return
     }
-    setIsTextTemplatesPanelOpen(true)
+    setIsBulkEmailMode(true)
+    setEmailComposerParcelData(null)
+    setEmailComposerRecipient({ email: '', name: '' })
+    setBulkEmailList(null)
+    setBulkEmailListId(null)
+    setOutreachInitialTab('email')
+    setIsOutreachPanelOpen(true)
   }, [currentUser, authLoading])
 
   // Handle email button click from list (opens template selection, then preview)
@@ -1682,7 +1665,8 @@ function App() {
     setIsBulkEmailMode(true)
     setEmailComposerParcelData(null)
     setEmailComposerRecipient({ email: '', name: '' })
-    setIsEmailTemplatesPanelOpen(true)
+    setOutreachInitialTab('email')
+    setIsOutreachPanelOpen(true)
   }, [])
 
   // Track if we're in bulk email mode
@@ -1693,7 +1677,7 @@ function App() {
     if (isBulkEmailMode) {
       if (bulkEmailListId) {
         setSelectedEmailTemplate(template)
-        setIsEmailTemplatesPanelOpen(false)
+        setIsOutreachPanelOpen(false)
         setIsListPanelOpen(false)
         try {
           const list = lists.find(l => l.id === bulkEmailListId)
@@ -1724,14 +1708,14 @@ function App() {
       } else {
         // No list selected yet - prompt for list selection
         setSelectedEmailTemplate(template)
-        setIsEmailTemplatesPanelOpen(false)
+        setIsOutreachPanelOpen(false)
         setIsListPanelOpen(true)
         setShowListSelector(true)
         showToast('Select a list to email', 'info')
       }
     } else {
       setSelectedEmailTemplate(template)
-      setIsEmailTemplatesPanelOpen(false)
+      setIsOutreachPanelOpen(false)
       setIsEmailComposerOpen(true)
     }
   }, [isBulkEmailMode, bulkEmailListId, lists])
@@ -2430,8 +2414,7 @@ function App() {
           console.log('✅ User authenticated, opening skip traced list:', currentUser.email)
           setIsSkipTracedListPanelOpen(true)
         }}
-        onOpenEmailTemplates={handleOpenEmailTemplates}
-        onOpenTextTemplates={handleOpenTextTemplates}
+        onOpenOutreach={handleOpenOutreach}
         onOpenDealPipeline={() => {
           if (authLoading) return
           if (!currentUser || !currentUser.uid) {
@@ -2662,20 +2645,16 @@ function App() {
         parcelData={phoneActionPanel?.parcelData}
       />
 
-      <TextTemplatesPanel
-        isOpen={isTextTemplatesPanelOpen}
-        onClose={() => setIsTextTemplatesPanelOpen(false)}
-      />
-
-      <EmailTemplatesPanel
-        isOpen={isEmailTemplatesPanelOpen}
+      <OutreachPanel
+        isOpen={isOutreachPanelOpen}
         onClose={() => {
-          setIsEmailTemplatesPanelOpen(false)
+          setIsOutreachPanelOpen(false)
           setSelectedEmailTemplate(null)
           setIsBulkEmailMode(false)
         }}
         onSelectTemplate={handleTemplateSelect}
         isBulkMode={isBulkEmailMode}
+        initialTab={outreachInitialTab}
       />
 
       <EmailComposer

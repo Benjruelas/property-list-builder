@@ -280,6 +280,12 @@
     display: flex !important;
     flex-direction: column !important;
   }
+
+  /* Desktop: outreach panel — fixed width so Email/Text tabs don't resize */
+  .outreach-panel.fullscreen-panel {
+    width: 480px !important;
+    min-width: 480px !important;
+  }
 }
 
 /* Map panels - satellite liquid glass styling (only display mode) */
@@ -400,6 +406,28 @@
 }
 .add-task-lead-dropdown li {
   color: rgba(255, 255, 255, 0.95);
+}
+
+/* Pipeline dropdown inside task edit panel */
+.map-panel .pipeline-dropdown-trigger {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .pipeline-dropdown-trigger:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+.pipeline-dropdown-item {
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.pipeline-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Parcel expanded dropdown (inside list) - liquid glass look */
@@ -839,6 +867,51 @@
 .text-templates-panel button.text-red-600:hover:not(:disabled),
 .text-templates-panel button.text-red-700:hover:not(:disabled) {
   background: none !important;
+}
+
+/* Outreach panel — no fills on content buttons */
+.outreach-panel button,
+.outreach-panel [role="button"] {
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+}
+.outreach-panel button:hover:not(:disabled),
+.outreach-panel [role="button"]:hover:not(:disabled) {
+  background: none !important;
+}
+.outreach-panel button.border {
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+.outreach-panel .list-panel-delete-btn {
+  color: rgba(252, 165, 165, 1) !important;
+}
+.outreach-panel .list-panel-delete-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.2) !important;
+  color: rgba(254, 226, 226, 1) !important;
+}
+
+/* Outreach tab switcher — override blanket button resets */
+.outreach-panel .outreach-tabs {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+.outreach-panel button.outreach-tab {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+.outreach-panel button.outreach-tab:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.6) !important;
+  background: transparent !important;
+}
+.outreach-panel button.outreach-tab.outreach-tab-active,
+.outreach-panel button.outreach-tab.outreach-tab-active:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85) !important;
+  color: #fff !important;
 }
 
 /* Tag and action buttons - visible outlines */

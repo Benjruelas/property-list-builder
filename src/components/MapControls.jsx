@@ -1,5 +1,5 @@
 import React from 'react'
-import { Navigation, CheckSquare, Square, List, Circle, Phone, Mail, MessageSquare, User, LogOut, Menu, Compass, LayoutList, Route, Settings, Users, ListTodo, Calendar } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Phone, Send, User, LogOut, Menu, Compass, LayoutList, Route, Settings, Users, ListTodo, Calendar } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 export function MapControls({ 
@@ -11,8 +11,7 @@ export function MapControls({
   onOpenListPanel, 
   selectedListIds = [], 
   onOpenSkipTracedListPanel, 
-  onOpenEmailTemplates,
-  onOpenTextTemplates,
+  onOpenOutreach,
   onOpenDealPipeline,
   onOpenTasks,
   onOpenSchedule,
@@ -164,30 +163,16 @@ export function MapControls({
                 <span>Skip Traced Parcels</span>
               </button>
 
-              {/* Email Templates Button */}
               <button
-                data-tour="menu-email-templates"
+                data-tour="menu-outreach"
                 onClick={() => {
                   setShowMenu(false)
-                  onOpenEmailTemplates()
+                  onOpenOutreach?.()
                 }}
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
-                <Mail className="h-4 w-4 flex-shrink-0" />
-                <span>Email Templates</span>
-              </button>
-
-              {/* Text Message Templates Button */}
-              <button
-                data-tour="menu-text-templates"
-                onClick={() => {
-                  setShowMenu(false)
-                  onOpenTextTemplates?.()
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-              >
-                <MessageSquare className="h-4 w-4 flex-shrink-0" />
-                <span>Text Templates</span>
+                <Send className="h-4 w-4 flex-shrink-0" />
+                <span>Outreach</span>
               </button>
 
               {/* Deal Pipeline Button */}

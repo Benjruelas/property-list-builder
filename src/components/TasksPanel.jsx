@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -23,6 +23,67 @@ import { cn } from '@/lib/utils'
 function getLeadLabel(lead, parcelId) {
   if (!parcelId) return 'Standalone'
   return getStreetAddress(lead) || lead?.address || lead?.owner || parcelId
+}
+
+function PipelineDropdown({ value, onChange, pipelines }) {
+  const [open, setOpen] = useState(false)
+  const selected = pipelines.find((p) => p.id === value)
+  const label = selected ? (selected.title || 'Pipeline') : 'None (unassigned)'
+
+  const options = [{ id: '', title: 'None (unassigned)' }, ...pipelines]
+
+  return (
+    <div>
+      <label className="text-xs font-medium block mb-1 opacity-90">Pipeline</label>
+      <div
+        role="listbox"
+        tabIndex={0}
+        onClick={() => setOpen((p) => !p)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((p) => !p) } }}
+        className="w-full h-10 rounded-md px-3 py-2 text-sm text-left flex items-center justify-between gap-2 cursor-pointer"
+        style={{
+          border: '1px solid rgba(255,255,255,0.2)',
+          background: 'rgba(255,255,255,0.06)',
+          color: 'rgba(255,255,255,0.95)',
+          borderRadius: open ? '0.375rem 0.375rem 0 0' : undefined,
+        }}
+      >
+        <span className="truncate" style={{ color: value ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.5)' }}>
+          {label}
+        </span>
+        <ChevronDown
+          className="h-3.5 w-3.5 shrink-0 opacity-60 transition-transform"
+          style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        />
+      </div>
+      {open && (
+        <div
+          className="rounded-b-md overflow-hidden"
+          style={{ border: '1px solid rgba(255,255,255,0.25)', borderTop: 'none' }}
+        >
+          {options.map((p) => {
+            const optId = p.id || ''
+            const isSelected = value === optId
+            return (
+              <button
+                key={optId}
+                type="button"
+                onClick={() => { onChange(optId); setOpen(false) }}
+                className="w-full px-3 py-2 text-sm text-left flex items-center justify-between gap-2 transition-colors pipeline-dropdown-item"
+                style={{
+                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
+                  background: isSelected ? 'rgba(255,255,255,0.1)' : 'transparent',
+                }}
+              >
+                <span className="truncate">{p.title || 'Pipeline'}</span>
+                {isSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function TasksPanel({
@@ -567,25 +628,15 @@ export function TasksPanel({
               minDate={Date.now()}
             />
             {apiMode && (
-              <div>
-                <label className="text-xs font-medium block mb-1 opacity-90">Pipeline</label>
-                <select
-                  value={assignPipelineId}
-                  onChange={(e) => {
-                    setAssignPipelineId(e.target.value)
-                    setAssignParcelId('')
-                    setAssignLeadSearch('')
-                  }}
-                  className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-white"
-                >
-                  <option value="">None (unassigned)</option>
-                  {pipelines.map((p) => (
-                    <option key={p.id} value={p.id} className="bg-gray-900 text-white">
-                      {p.title || 'Pipeline'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <PipelineDropdown
+                value={assignPipelineId}
+                onChange={(val) => {
+                  setAssignPipelineId(val)
+                  setAssignParcelId('')
+                  setAssignLeadSearch('')
+                }}
+                pipelines={pipelines}
+              />
             )}
             <div className="relative">
               <label className="text-xs font-medium block mb-1 opacity-90">Assign to lead (optional)</label>
