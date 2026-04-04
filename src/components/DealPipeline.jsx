@@ -648,7 +648,7 @@ export function DealPipeline({
           </div>
 
           {/* Tasks - all tasks across leads, collapsible (collapses to right edge on desktop, expands pipeline) */}
-          <div className={`w-full md:flex-shrink-0 border-t md:border-t-0 md:border-l flex flex-col border-white/20 transition-[width] duration-200 deal-pipeline-tasks ${tasksCollapsed ? 'md:w-16' : 'md:w-80'}`}>
+          <div className={`w-full md:flex-shrink-0 border-t md:border-t-0 md:border-l flex flex-col border-white/20 transition-[width] duration-200 deal-pipeline-tasks ${tasksCollapsed ? 'md:w-16' : 'md:w-80'} ${!tasksCollapsed ? 'max-md:h-[50vh] max-md:flex-shrink-0' : 'max-md:h-[10vh] max-md:flex-shrink-0'}`}>
             <div className={`deal-pipeline-tasks-header px-3 py-2 border-b flex items-center gap-2 flex-shrink-0 ${tasksCollapsed ? 'md:flex-row md:px-2 md:py-3 md:justify-between md:min-h-[48px]' : 'justify-between'}`}>
               <button
                 type="button"
@@ -713,7 +713,7 @@ export function DealPipeline({
               </div>
               )}
             </div>
-            <div className={`overflow-y-auto scrollbar-hide p-2 space-y-3 max-md:space-y-1.5 max-md:p-1.5 border-white/10 ${tasksCollapsed ? 'hidden' : 'flex-1'} md:flex-1 max-md:max-h-[28vh]`}>
+            <div className={`overflow-y-auto scrollbar-hide p-2 space-y-3 max-md:space-y-1.5 max-md:p-1.5 border-white/10 ${tasksCollapsed ? 'hidden' : 'flex-1'} md:flex-1`}>
               {displayTasks.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4 px-2">No tasks yet</p>
               ) : (
