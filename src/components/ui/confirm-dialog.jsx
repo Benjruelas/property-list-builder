@@ -10,9 +10,14 @@ const processQueue = () => {
   confirmListeners.forEach(listener => listener())
 }
 
-export const showConfirm = (message, title = 'Confirm', options = {}) => {
+export const showConfirm = (messageOrObj, title = 'Confirm', options = {}) => {
   return new Promise((resolve) => {
-    confirmQueue.push({ message, title, resolve, ...options })
+    if (typeof messageOrObj === 'object' && messageOrObj !== null) {
+      const { message, title: t, onConfirm, ...rest } = messageOrObj
+      confirmQueue.push({ message, title: t || 'Confirm', resolve: onConfirm ? (v) => { if (v) onConfirm(); resolve(v) } : resolve, ...rest })
+    } else {
+      confirmQueue.push({ message: messageOrObj, title, resolve, ...options })
+    }
     processQueue()
   })
 }
@@ -97,7 +102,7 @@ export const ConfirmDialog = () => {
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm}>
-            Confirm
+            {currentConfirm.confirmLabel || currentConfirm.confirmText || 'Confirm'}
           </Button>
         </DialogFooter>
       </DialogContent>
