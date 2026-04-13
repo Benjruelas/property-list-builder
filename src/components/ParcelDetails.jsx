@@ -140,6 +140,12 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
   const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
   const age = yearBuilt ? currentYear - yearBuilt : null
 
+  // Determine owner-occupied by comparing situs address to mailing address
+  const normAddr = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const situsAddr = normAddr(properties.SITUS_ADDR || properties.SITE_ADDR || properties.ADDRESS)
+  const mailAddr = normAddr(properties.MAIL_ADDR || properties.MAILING_ADDR || properties.PSTLADRESS)
+  const ownerOccupied = situsAddr && mailAddr ? (situsAddr === mailAddr ? 'Yes' : 'No') : null
+
   // Group properties by category
   const listsWithParcel = lists.filter(l =>
     (l.parcels || []).some(p => (p.id || p.properties?.PROP_ID || p) === parcelId)
@@ -271,6 +277,7 @@ export function ParcelDetails({ isOpen, onClose, parcelData, onEmailClick, onPho
       addToList('address', 'ADDRESS', address)
     }
     addToList('ownership', 'In lists', listsWithParcel.length > 0 ? listsWithParcel.map(l => l.name).join(', ') : null)
+    if (ownerOccupied) addToList('ownership', 'Owner Occupied', ownerOccupied)
     if (age != null) addToList('property', 'Age', `${age} years`)
     return result
   }

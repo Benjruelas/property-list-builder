@@ -1,29 +1,17 @@
 import { useEffect, useRef } from 'react'
-import { useMap } from 'react-leaflet'
 
 /**
  * Controls compass-based map rotation using a smoothed heading value.
  * Rotation is independent of follow-mode: the map stays oriented to
  * the user's heading even while they pan around freely.
  * Skips tiny changes (< 2 degrees) to keep the map calm during idle.
- * Requires map to have rotate: true (leaflet-rotate).
  */
-export function CompassOrientation({ isActive, heading }) {
-  const map = useMap()
-  const disabledNativeRef = useRef(false)
+export function CompassOrientation({ isActive, heading, mapRef }) {
   const lastBearingRef = useRef(null)
 
   useEffect(() => {
-    if (!map || !map.compassBearing) return
-
-    if (map.compassBearing.enabled && !disabledNativeRef.current) {
-      map.compassBearing.disable()
-      disabledNativeRef.current = true
-    }
-  }, [map])
-
-  useEffect(() => {
-    if (!map || !map.setBearing) return
+    const map = mapRef?.current
+    if (!map || typeof map.setBearing !== 'function') return
 
     if (!isActive) {
       if (lastBearingRef.current !== 0) {
@@ -44,7 +32,7 @@ export function CompassOrientation({ isActive, heading }) {
       map.setBearing(target)
       lastBearingRef.current = target
     }
-  }, [map, isActive, heading])
+  }, [mapRef, isActive, heading])
 
   return null
 }

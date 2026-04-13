@@ -20,13 +20,13 @@ export async function fetchPaths(getToken) {
   return data.paths || []
 }
 
-export async function createPath(getToken, name, points, distanceMiles) {
+export async function createPath(getToken, name, points, distanceMiles, city = '') {
   const token = await getToken()
   if (!token) throw new Error('Sign in to save paths')
   const res = await fetch(`${getApiBase()}/paths`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, points, distanceMiles })
+    body: JSON.stringify({ name, points, distanceMiles, city: city || undefined })
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

@@ -1,14 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { MapContainer, TileLayer, useMapEvents, useMap, ZoomControl } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-// leaflet-rotate expects L globally; must load after leaflet
-if (typeof window !== 'undefined') window.L = L
-import 'leaflet-rotate'
+import MapGL, { Marker as MapMarker, Popup as MapPopup, Source, Layer } from 'react-map-gl/maplibre'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { CompassOrientation } from './components/CompassOrientation'
 import { NorthIndicator } from './components/NorthIndicator'
-import { MapOverlayPane } from './components/MapOverlayPane'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
 import { AddressSearch } from './components/AddressSearch'
@@ -39,6 +34,7 @@ import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi } from './utils/paths'
+import { reverseGeocodeCity } from './utils/reverseGeocode'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
@@ -56,6 +52,15 @@ import { useDeviceHeading } from './hooks/useDeviceHeading'
 import WelcomeTour from './components/WelcomeTour'
 import { CheckCircle2, Loader2, Phone } from 'lucide-react'
 
+function nextDefaultPathName(paths) {
+  let max = 0
+  for (const p of paths || []) {
+    const m = /^Path\s+(\d+)$/i.exec(String(p.name || '').trim())
+    if (m) max = Math.max(max, parseInt(m[1], 10))
+  }
+  return `Path ${max + 1}`
+}
+
 function notifySkipTraceComplete(listName, detail) {
   try {
     const ns = getSettings().notifications
@@ -71,279 +76,111 @@ function notifySkipTraceComplete(listName, detail) {
   }
 }
 
-// Fix for default marker icons in React-Leaflet
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
+function getMapStyle(mapStyleSetting) {
+  const sources = {}
+  const layers = []
+  const mbToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''
 
-function MapController({ userLocation, onMapReady, onRecenterMap, isFollowing, anyPanelOpen, hasPopup, onFollowingChange, followResumeDelay }) {
-  const map = useMap()
-  const initialSetDoneRef = useRef(false)
-  const lastInteractionRef = useRef(0)
-  const programmaticMoveRef = useRef(false)
-  const prevFollowingRef = useRef(isFollowing)
+  sources['terrain-dem'] = {
+    type: 'raster-dem',
+    tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+    tileSize: 256,
+    maxzoom: 15,
+    encoding: 'terrarium',
+  }
 
-  useEffect(() => {
-    if (onMapReady) {
-      onMapReady(map)
+  if (mapStyleSetting === 'street') {
+    sources['carto-street'] = {
+      type: 'raster',
+      tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
     }
-  }, [map, onMapReady])
-
-  // Fix iOS Safari: when URL bar shows/hides, resize event doesn't fire
-  useEffect(() => {
-    const handler = () => { map.invalidateSize() }
-    window.visualViewport?.addEventListener('resize', handler)
-    window.visualViewport?.addEventListener('scroll', handler)
-    return () => {
-      window.visualViewport?.removeEventListener('resize', handler)
-      window.visualViewport?.removeEventListener('scroll', handler)
+    layers.push({ id: 'carto-street-layer', type: 'raster', source: 'carto-street' })
+  } else {
+    if (mbToken) {
+      sources['satellite'] = {
+        type: 'raster',
+        tiles: [`https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token=${mbToken}`],
+        tileSize: 512,
+        maxzoom: 22,
+        attribution: '&copy; Mapbox &copy; Maxar Technologies &copy; Airbus',
+      }
+    } else {
+      sources['satellite'] = {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: '&copy; Esri',
+      }
     }
-  }, [map])
+    layers.push({ id: 'satellite-layer', type: 'raster', source: 'satellite' })
 
-  // After the first rotation the tile grid may not cover rotated corners.
-  // Fire a single tile refresh once after the first bearing change, then stop.
-  useEffect(() => {
-    if (!map) return
-    let done = false
-    const onFirstRotate = () => {
-      if (done) return
-      done = true
-      map.off('rotateend', onFirstRotate)
-      setTimeout(() => {
-        map.invalidateSize({ pan: false })
-        map._resetView(map.getCenter(), map.getZoom(), true)
-      }, 300)
+    const labelUrl = mapStyleSetting === 'hybrid'
+      ? 'https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}@2x.png'
+      : 'https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png'
+    sources['carto-labels'] = {
+      type: 'raster',
+      tiles: [labelUrl],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
     }
-    map.on('rotateend', onFirstRotate)
-    return () => { map.off('rotateend', onFirstRotate) }
-  }, [map])
+    layers.push({ id: 'carto-labels-layer', type: 'raster', source: 'carto-labels' })
+  }
 
-  // Initial center (once)
-  useEffect(() => {
-    if (userLocation && !initialSetDoneRef.current) {
-      initialSetDoneRef.current = true
-      map.setView([userLocation.lat, userLocation.lng], 17, { animate: false })
-    }
-  }, [userLocation, map])
-
-  // Follow-mode panning.
-  // When follow-mode just resumed (was off → on), delay one frame so
-  // CompassOrientation's setBearing settles first, then use setView to
-  // snap the center. For ongoing following (small GPS updates), gently
-  // pan only if the user has drifted > 3 px on screen.
-  useEffect(() => {
-    if (!userLocation || !initialSetDoneRef.current || !isFollowing) {
-      prevFollowingRef.current = isFollowing
-      return
-    }
-
-    const justResumed = !prevFollowingRef.current && isFollowing
-    prevFollowingRef.current = isFollowing
-
-    if (justResumed) {
-      // Delay so setBearing (from CompassOrientation) applies first,
-      // then center on user in the post-rotation coordinate space.
-      const raf = requestAnimationFrame(() => {
-        programmaticMoveRef.current = true
-        map.setView([userLocation.lat, userLocation.lng], map.getZoom(), {
-          animate: true,
-          duration: 0.5,
-        })
-      })
-      return () => cancelAnimationFrame(raf)
-    }
-
-    // Ongoing follow: smoothly glide the map to match GPS updates.
-    // Use a duration that slightly overlaps with the GPS update interval
-    // so pans blend together instead of looking like discrete jumps.
-    const center = map.getCenter()
-    const target = L.latLng(userLocation.lat, userLocation.lng)
-    const pixelDist = map.latLngToContainerPoint(center).distanceTo(map.latLngToContainerPoint(target))
-    if (pixelDist < 3) return
-    programmaticMoveRef.current = true
-    map.panTo(target, { animate: true, duration: 0.9, easeLinearity: 0.4 })
-  }, [userLocation, isFollowing, map])
-
-  // Clear programmatic flag after panTo finishes
-  useEffect(() => {
-    const onEnd = () => {
-      if (programmaticMoveRef.current) programmaticMoveRef.current = false
-    }
-    map.on('moveend', onEnd)
-    return () => { map.off('moveend', onEnd) }
-  }, [map])
-
-  // Expose recenter function.
-  // Use a ref-reading thunk so it always reads the *latest* userLocation
-  // instead of closing over a stale value.
-  const userLocationRef = useRef(userLocation)
-  userLocationRef.current = userLocation
-
-  useEffect(() => {
-    if (onRecenterMap) {
-      onRecenterMap(() => {
-        const loc = userLocationRef.current
-        if (loc) {
-          programmaticMoveRef.current = true
-          map.setView([loc.lat, loc.lng], map.getZoom(), {
-            animate: true,
-            duration: 0.5
-          })
-        }
-      })
-    }
-  }, [map, onRecenterMap])
-
-  // Detect user interaction -> pause follow-mode (stop auto-centering).
-  // Compass orientation stays active so the map keeps its heading.
-  useEffect(() => {
-    const pauseFollow = () => {
-      if (programmaticMoveRef.current) return
-      lastInteractionRef.current = Date.now()
-      if (onFollowingChange) onFollowingChange(false)
-    }
-    map.on('dragstart', pauseFollow)
-    map.on('zoomstart', pauseFollow)
-    return () => {
-      map.off('dragstart', pauseFollow)
-      map.off('zoomstart', pauseFollow)
-    }
-  }, [map, onFollowingChange])
-
-  // Inactivity auto-resume removed — user must manually recenter via the navigation button
-
-  return null
+  return {
+    version: 8,
+    sources,
+    layers,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    terrain: { source: 'terrain-dem', exaggeration: 1.5 },
+  }
 }
 
-// Navigation icon SVG - arrow; base rotation -45° so tip points north
-const NAVIGATION_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>`
 
-/**
- * User location marker using a native Leaflet DivIcon in the markerPane.
- * leaflet-rotate places markerPane inside norotatePane, so the icon
- * stays at the correct geographic position without rotating with the map.
- * Arrow direction is updated imperatively on heading changes and map
- * rotation events so it always points in the user's heading relative to north.
- */
-function LocationMarker({ position, heading, compassActive }) {
-  const map = useMap()
-  const markerRef = useRef(null)
-  const arrowElRef = useRef(null)
-  const headingRef = useRef(heading)
-  headingRef.current = heading
-  const compassActiveRef = useRef(compassActive)
-  compassActiveRef.current = compassActive
-
-  // Smooth interpolation state
-  const animRef = useRef({
-    from: null,     // { lat, lng }
-    to: null,       // { lat, lng }
-    startTime: 0,
-    duration: 900,  // ms — slightly less than GPS update interval for overlap
-    rafId: null,
-  })
+function LocationMarker({ position }) {
+  const [interpPos, setInterpPos] = useState(null)
+  const animRef = useRef({ from: null, to: null, startTime: 0, duration: 900, rafId: null })
 
   useEffect(() => {
-    if (!map) return
-
-    const icon = L.divIcon({
-      className: 'user-location-icon',
-      html: `<div class="user-location-arrow-el">${NAVIGATION_ICON_SVG}</div>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-    })
-
-    const marker = L.marker([0, 0], { icon, interactive: false, keyboard: false })
-    marker.addTo(map)
-    markerRef.current = marker
-
-    const el = marker.getElement()
-    if (el) {
-      arrowElRef.current = el.querySelector('.user-location-arrow-el')
-    }
-
-    return () => {
-      if (animRef.current.rafId) cancelAnimationFrame(animRef.current.rafId)
-      marker.remove()
-      markerRef.current = null
-      arrowElRef.current = null
-    }
-  }, [map])
-
-  // Smoothly interpolate marker between GPS fixes
-  useEffect(() => {
-    if (!markerRef.current || !position) return
+    if (!position) return
     const a = animRef.current
-    const currentLatLng = a.to || (a.from ? a.from : null)
-
-    if (!currentLatLng) {
-      // First position — snap immediately
-      markerRef.current.setLatLng([position.lat, position.lng])
+    if (!a.to) {
+      setInterpPos({ lat: position.lat, lng: position.lng })
       a.from = { lat: position.lat, lng: position.lng }
       a.to = { lat: position.lat, lng: position.lng }
       return
     }
-
-    // Start a new interpolation from wherever the marker currently is
     if (a.rafId) cancelAnimationFrame(a.rafId)
-
-    // Compute where the marker is right now mid-animation
     const now = performance.now()
     const elapsed = now - a.startTime
-    const t = a.from && a.to && a.startTime
-      ? Math.min(1, elapsed / a.duration)
-      : 1
+    const t = a.from && a.startTime ? Math.min(1, elapsed / a.duration) : 1
     const curLat = a.from.lat + (a.to.lat - a.from.lat) * t
     const curLng = a.from.lng + (a.to.lng - a.from.lng) * t
-
     a.from = { lat: curLat, lng: curLng }
     a.to = { lat: position.lat, lng: position.lng }
     a.startTime = now
-
     const animate = (ts) => {
       const progress = Math.min(1, (ts - a.startTime) / a.duration)
-      // Ease-out cubic for natural deceleration
       const ease = 1 - Math.pow(1 - progress, 3)
       const lat = a.from.lat + (a.to.lat - a.from.lat) * ease
       const lng = a.from.lng + (a.to.lng - a.from.lng) * ease
-      if (markerRef.current) {
-        markerRef.current.setLatLng([lat, lng])
-      }
-      if (progress < 1) {
-        a.rafId = requestAnimationFrame(animate)
-      } else {
-        a.rafId = null
-      }
+      setInterpPos({ lat, lng })
+      if (progress < 1) { a.rafId = requestAnimationFrame(animate) } else { a.rafId = null }
     }
     a.rafId = requestAnimationFrame(animate)
+    return () => { if (a.rafId) cancelAnimationFrame(a.rafId) }
   }, [position])
 
-  // Update arrow rotation on heading changes and map rotation
-  useEffect(() => {
-    if (!map) return
-
-    const updateArrow = () => {
-      const arrow = arrowElRef.current
-      if (!arrow) return
-      const bearing = (typeof map.getBearing === 'function') ? (map.getBearing() || 0) : 0
-      const h = compassActiveRef.current ? (headingRef.current ?? 0) : 0
-      arrow.style.transform = `rotate(${-45 + h - bearing}deg)`
-    }
-
-    updateArrow()
-    map.on('rotate', updateArrow)
-    map.on('rotateend', updateArrow)
-
-    return () => {
-      map.off('rotate', updateArrow)
-      map.off('rotateend', updateArrow)
-    }
-  }, [map, heading, compassActive])
-
-  return null
+  if (!interpPos) return null
+  return (
+    <MapMarker longitude={interpPos.lng} latitude={interpPos.lat} anchor="center">
+      <div className="user-location-dot" />
+    </MapMarker>
+  )
 }
 
 function App() {
@@ -465,15 +302,94 @@ function App() {
   const pathTrackerRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
-  const parcelLayerRef = useRef(null) // Reference to parcel layer functions
-  const currentPopupRef = useRef(null) // Reference to current Leaflet popup
-  const parcelDetailsSourceRef = useRef('map') // 'map' = opened from map popup, 'list' = opened from list panel
+  const parcelLayerRef = useRef(null)
+  const currentPopupRef = useRef(null)
+  const parcelDetailsSourceRef = useRef('map')
+  const programmaticMoveRef = useRef(false)
+  const initialSetDoneRef = useRef(false)
+  const prevFollowingRef = useRef(false)
+  const lastAutoZoomRef = useRef(null)
+  const [mapReady, setMapReady] = useState(false)
+  const [popupData, setPopupData] = useState(null)
+  const [viewState, setViewState] = useState({
+    longitude: -96.7970,
+    latitude: 32.7767,
+    zoom: settings.defaultZoom || 15,
+    bearing: 0,
+    pitch: 0,
+  })
+
+  const memoizedMapStyle = useMemo(() => getMapStyle(settings.mapStyle), [settings.mapStyle])
 
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isOutreachPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
     isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
   const hasPopup = clickedParcelId != null
+
+  // iOS Safari resize fix
+  useEffect(() => {
+    const handler = () => { mapInstanceRef.current?.resize() }
+    window.visualViewport?.addEventListener('resize', handler)
+    window.visualViewport?.addEventListener('scroll', handler)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handler)
+      window.visualViewport?.removeEventListener('scroll', handler)
+    }
+  }, [])
+
+  // Initial center on first GPS fix
+  useEffect(() => {
+    if (userLocation && !initialSetDoneRef.current && mapInstanceRef.current) {
+      initialSetDoneRef.current = true
+      const initZoom = 17
+      const map = mapInstanceRef.current
+      map.jumpTo({ center: [userLocation.lng, userLocation.lat], zoom: initZoom, pitch: 0 })
+      map.fire('moveend')
+      setViewState(prev => ({ ...prev, longitude: userLocation.lng, latitude: userLocation.lat, zoom: initZoom, pitch: 0 }))
+    }
+  }, [userLocation])
+
+  // Follow-mode panning
+  useEffect(() => {
+    if (!userLocation || !initialSetDoneRef.current || !isFollowing) {
+      prevFollowingRef.current = isFollowing
+      return
+    }
+    const map = mapInstanceRef.current
+    if (!map) { prevFollowingRef.current = isFollowing; return }
+    const justResumed = !prevFollowingRef.current && isFollowing
+    prevFollowingRef.current = isFollowing
+    if (justResumed) {
+      const raf = requestAnimationFrame(() => {
+        programmaticMoveRef.current = true
+        map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 500 })
+        setTimeout(() => { programmaticMoveRef.current = false }, 600)
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+    const c = map.getCenter()
+    const dx = Math.abs(c.lng - userLocation.lng)
+    const dy = Math.abs(c.lat - userLocation.lat)
+    if (dx < 0.00002 && dy < 0.00002) return
+    programmaticMoveRef.current = true
+    map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 900, easing: (t) => 1 - Math.pow(1 - t, 3) })
+    setTimeout(() => { programmaticMoveRef.current = false }, 1000)
+  }, [userLocation, isFollowing])
+
+  // Recenter map function
+  const recenterMapRef = useRef(null)
+  const setRecenterMap = useCallback((func) => { recenterMapRef.current = func }, [])
+  useEffect(() => {
+    recenterMapRef.current = () => {
+      const map = mapInstanceRef.current
+      if (map && userLocation) {
+        programmaticMoveRef.current = true
+        map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 500 })
+        setTimeout(() => { programmaticMoveRef.current = false }, 600)
+      }
+    }
+  }, [userLocation])
 
   const handleSettingsChange = useCallback((partial) => {
     const next = updateSettings(partial, getToken)
@@ -516,12 +432,6 @@ function App() {
     tick()
     return () => clearInterval(id)
   }, [permissionsReady])
-
-  // Recenter map function passed to MapController
-  const recenterMapRef = useRef(null)
-  const setRecenterMap = useCallback((func) => {
-    recenterMapRef.current = func
-  }, [])
 
   // Track user's current location in real-time (only after permissions granted)
   useEffect(() => {
@@ -668,11 +578,15 @@ function App() {
       }
       try {
         const distance = totalDistanceMiles(rawPoints)
-        const name = 'Path - ' + new Date().toLocaleString(undefined, {
-          month: 'short', day: 'numeric', year: 'numeric',
-          hour: 'numeric', minute: '2-digit'
-        })
-        await createPath(getToken, name, rawPoints, distance)
+        const name = nextDefaultPathName(paths)
+        const sample = rawPoints[Math.floor(rawPoints.length / 2)]
+        const lat = Number(sample?.lat ?? sample?.[0])
+        const lng = Number(sample?.lng ?? sample?.[1])
+        const city =
+          !Number.isNaN(lat) && !Number.isNaN(lng)
+            ? await reverseGeocodeCity(lat, lng)
+            : ''
+        await createPath(getToken, name, rawPoints, distance, city)
         const displayDist = settings.distanceUnit === 'km'
           ? `${Math.round(distance * 1.60934 * 100) / 100} km`
           : `${distance} mi`
@@ -688,7 +602,7 @@ function App() {
       setIsPathTrackingActive(true)
       showToast('Recording path...', 'info')
     }
-  }, [isPathTrackingActive, getToken, refreshPaths, settings.distanceUnit])
+  }, [isPathTrackingActive, getToken, refreshPaths, settings.distanceUnit, paths])
 
   const handleDeletePath = useCallback(async (path) => {
     const confirmed = await showConfirm({
@@ -739,10 +653,10 @@ function App() {
       const lats = path.points.map(p => p.lat || p[0])
       const lngs = path.points.map(p => p.lng || p[1])
       const bounds = [
-        [Math.min(...lats), Math.min(...lngs)],
-        [Math.max(...lats), Math.max(...lngs)]
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)]
       ]
-      mapRef.current.fitBounds(bounds, { padding: [40, 40], animate: true, duration: 0.5 })
+      mapRef.current.fitBounds(bounds, { padding: 40, animate: true, duration: 500 })
     }
   }, [paths, visiblePathIds])
 
@@ -1209,123 +1123,26 @@ function App() {
         return newSet
       })
     } else {
-      // Single click: show popup and highlight
-      // First, close any existing popup
-      if (mapInstanceRef.current) {
-        if (currentPopupRef.current) {
-          mapInstanceRef.current.closePopup(currentPopupRef.current)
-        } else {
-          // Close any open popup (fallback)
-          mapInstanceRef.current.closePopup()
-        }
-        currentPopupRef.current = null
-      }
-      
-      // Update clicked parcel ID (this will trigger style updates via useEffect in PMTilesParcelLayer)
-      // The previous parcel's highlighting will be removed automatically when clickedParcelId changes
       setClickedParcelId(parcelId)
-      
-      // Calculate age (Current Year - Year Built)
       const currentYear = new Date().getFullYear()
       const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
       const age = yearBuilt ? currentYear - yearBuilt : null
-      
-      // Store parcel data for adding to list
-      const parcelData = {
-        id: parcelId,
-        properties: properties,
-        address: address,
-        lat: latlng.lat,
-        lng: latlng.lng
-      }
+      const parcelData = { id: parcelId, properties, address, lat: latlng.lat, lng: latlng.lng }
       setClickedParcelData(parcelData)
-      
-      // Check if parcel has been skip traced or is in progress
       const hasSkipTraced = isParcelSkipTraced(parcelId)
       const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
-      
-      const listsWithParcel = (lists || []).filter(l => 
-        (l.parcels || []).some(p => (p.id || p) === parcelId)
-      )
-      const listNamesHtml = listsWithParcel.length > 0
-        ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcel.map(l => l.name).join(', ')}</p>`
-        : ''
-      
-      if (mapInstanceRef.current) {
-        const popup = L.popup({ className: 'parcel-popup-liquid-glass', closeOnClick: false, closeButton: false })
-          .setLatLng(latlng)
-          .setContent(`
-            <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
-                <button type="button" onclick="window.closeParcelPopup()" class="parcel-popup-close-btn" title="Close" aria-label="Close" style="background: none; border: none; padding: 4px; cursor: pointer; color: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;">&times;</button>
-              </div>
-              <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
-              ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
-              ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
-              ${listNamesHtml || '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'}
-              ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
-              ${isSkipTracingInProgress ? `<div style="margin: 8px 0; padding: 6px 8px; background: #fef3c7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #d97706;"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span style="font-size: 12px; color: #d97706; font-weight: 600;">Skip Tracing...</span></div>` : ''}
-              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.5); display: flex; flex-direction: column; gap: 8px;">
-                <button 
-                  id="more-details-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.openParcelDetails()"
-                >
-                  More Details
-                </button>
-                ${!hasSkipTraced && !isSkipTracingInProgress ? `<button 
-                  id="get-contact-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.skipTraceParcel()"
-                >
-                  Get Contact
-                </button>` : ''}
-                <button 
-                  id="add-to-list-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.addParcelToList('${parcelId}')"
-                >
-                  Add to List
-                </button>
-                ${!isParcelALeadCheck(parcelId) ? `<button 
-                  id="convert-to-lead-btn-${parcelId}"
-                  style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.convertToLead()"
-                >
-                  Convert to Lead
-                </button>` : ''}
-                <button 
-                  style="width: 100%; padding: 8px 12px; background: rgba(234,88,12,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.openRoofInspector()"
-                >
-                  Roof Inspector
-                </button>
-              </div>
-            </div>
-          `)
-        
-        // Store popup reference and open it
-        currentPopupRef.current = popup
-        popup.openOn(mapInstanceRef.current)
-
-        // Smoothly center the map on the tapped parcel after a short delay
-        const centerTimer = setTimeout(() => {
-          if (mapInstanceRef.current && currentPopupRef.current === popup) {
-            mapInstanceRef.current.panTo(latlng, { animate: true, duration: 0.5 })
-          }
-        }, 1500)
-        
-        // Clear popup reference and clicked parcel ID when popup is closed
-        popup.on('remove', () => {
-          clearTimeout(centerTimer)
-          if (currentPopupRef.current === popup) {
-            currentPopupRef.current = null
-            // Clear clicked parcel ID when popup is manually closed by user
-            setClickedParcelId(null)
-          }
-        })
-      }
+      const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
+      setPopupData({
+        parcelId, lat: latlng.lat, lng: latlng.lng, address,
+        ownerName: properties.OWNER_NAME || '', age,
+        listNames: listsWithParcel.map(l => l.name),
+        hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
+      })
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.easeTo({ center: [latlng.lng, latlng.lat], duration: 500 })
+        }
+      }, 300)
     }
     
     console.log('Parcel clicked:', {
@@ -1365,8 +1182,7 @@ function App() {
       await updateList(getToken, listId, { parcels: [...(list.parcels || []), parcelToAdd] })
       await refreshLists()
       showToast(`Added parcel to ${list.name}`, 'success')
-      if (mapInstanceRef.current) mapInstanceRef.current.closePopup()
-      if (currentPopupRef.current) currentPopupRef.current = null
+      setPopupData(null)
       setClickedParcelId(null)
       setClickedParcelData(null)
       setShowListSelector(false)
@@ -1397,6 +1213,7 @@ function App() {
       return next
     })
   }, [needsGesture, requestOrientation])
+
 
   // Toggle multi-select mode
   const handleToggleMultiSelect = useCallback(() => {
@@ -1519,13 +1336,19 @@ function App() {
     if (parcelData) {
       setClickedParcelData(parcelData)
     }
-    // Close parcel popup when opening More Details panel (only exists when opened from map)
-    if (mapInstanceRef.current && currentPopupRef.current) {
-      mapInstanceRef.current.closePopup(currentPopupRef.current)
-      currentPopupRef.current = null
-    }
+    suppressPopupCloseRef.current = true
+    setPopupData(null)
     setIsParcelDetailsOpen(true)
-  }, [currentUser, authLoading])
+
+    const target = parcelData || clickedParcelData
+    if (target && mapInstanceRef.current) {
+      const lng = target.lng ?? target.properties?.longitude
+      const lat = target.lat ?? target.properties?.latitude
+      if (lng != null && lat != null) {
+        mapInstanceRef.current.easeTo({ center: [lng, lat], duration: 500 })
+      }
+    }
+  }, [currentUser, authLoading, clickedParcelData])
 
   const handleDealPipelineFocusHandled = useCallback(() => {
     setDealPipelineFocusParcelId(null)
@@ -1545,77 +1368,50 @@ function App() {
     setPhoneActionPanel({ phone, parcelData: parcelData || null })
   }, [])
 
-  // Reopen parcel popup (used when More Details is closed via X)
   const openParcelPopup = useCallback((data) => {
-    if (!mapInstanceRef.current || !data) return
+    if (!data) return
     const parcelId = data.id || data.properties?.PROP_ID
     const address = data.address || data.properties?.SITUS_ADDR || data.properties?.SITE_ADDR || data.properties?.ADDRESS || 'No address'
     const properties = data.properties || {}
-    const latlng = L.latLng(data.lat ?? data.latlng?.lat, data.lng ?? data.latlng?.lng)
+    const lat = data.lat ?? data.latlng?.lat
+    const lng = data.lng ?? data.latlng?.lng
+    if (lat == null || lng == null) return
     const currentYear = new Date().getFullYear()
     const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
     const age = yearBuilt ? currentYear - yearBuilt : null
     const hasSkipTraced = isParcelSkipTraced(parcelId)
     const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
     const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
-    const listNamesHtml = listsWithParcel.length > 0
-      ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcel.map(l => l.name).join(', ')}</p>`
-      : ''
-    const popup = L.popup({ className: 'parcel-popup-liquid-glass', closeOnClick: false, closeButton: false })
-      .setLatLng(latlng)
-      .setContent(`
-        <div style="min-width: 200px;" id="parcel-popup-${parcelId}">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
-            <button type="button" onclick="window.closeParcelPopup()" class="parcel-popup-close-btn" title="Close" aria-label="Close" style="background: none; border: none; padding: 4px; cursor: pointer; color: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;">&times;</button>
-          </div>
-          <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
-          ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
-          ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
-          ${listNamesHtml || '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'}
-          ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
-          ${isSkipTracingInProgress ? `<div style="margin: 8px 0; padding: 6px 8px; background: #fef3c7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #d97706;"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span style="font-size: 12px; color: #d97706; font-weight: 600;">Skip Tracing...</span></div>` : ''}
-          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.5); display: flex; flex-direction: column; gap: 8px;">
-            <button id="more-details-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.openParcelDetails()">More Details</button>
-            ${!hasSkipTraced && !isSkipTracingInProgress ? `<button id="get-contact-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.skipTraceParcel()">Get Contact</button>` : ''}
-            <button id="add-to-list-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.addParcelToList('${parcelId}')">Add to List</button>
-            ${!isParcelALeadCheck(parcelId) ? `<button id="convert-to-lead-btn-${parcelId}" style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.convertToLead()">Convert to Lead</button>` : ''}
-            <button style="width: 100%; padding: 8px 12px; background: rgba(234,88,12,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="window.openRoofInspector()">Roof Inspector</button>
-          </div>
-        </div>
-      `)
-    currentPopupRef.current = popup
-    popup.openOn(mapInstanceRef.current)
-    popup.on('remove', () => {
-      if (currentPopupRef.current === popup) {
-        currentPopupRef.current = null
-        setClickedParcelId(null)
-      }
+    setClickedParcelId(parcelId)
+    setClickedParcelData(data)
+    setPopupData({
+      parcelId, lat, lng, address,
+      ownerName: properties.OWNER_NAME || '', age,
+      listNames: listsWithParcel.map(l => l.name),
+      hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
     })
-  }, [lists, skipTracingInProgress, isParcelALeadCheck])
+  }, [lists, skipTracingInProgress])
 
+  const suppressPopupCloseRef = useRef(false)
   const handleCloseParcelPopup = useCallback(() => {
-    if (mapInstanceRef.current && currentPopupRef.current) {
-      mapInstanceRef.current.closePopup(currentPopupRef.current)
+    if (suppressPopupCloseRef.current) {
+      suppressPopupCloseRef.current = false
+      return
     }
-    currentPopupRef.current = null
+    setPopupData(null)
     setClickedParcelId(null)
     setClickedParcelData(null)
   }, [])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
     setIsParcelDetailsOpen(false)
-    // Only reopen map popup when ParcelDetails was opened from map (More Details button), not from list
     const openedFromMap = parcelDetailsSourceRef.current === 'map'
-    if (options.reopenPopup && openedFromMap && clickedParcelData && mapInstanceRef.current) {
+    if (options.reopenPopup && openedFromMap && clickedParcelData) {
       openParcelPopup(clickedParcelData)
     } else {
+      setPopupData(null)
       setClickedParcelId(null)
       setClickedParcelData(null)
-      if (currentPopupRef.current && mapInstanceRef.current) {
-        mapInstanceRef.current.closePopup(currentPopupRef.current)
-      }
-      currentPopupRef.current = null
     }
   }, [clickedParcelData, openParcelPopup])
 
@@ -2096,137 +1892,20 @@ function App() {
         })
       }
       
-      // Refresh popup to show status icon
-      if (mapInstanceRef.current && clickedParcelId === parcelId && clickedParcelData) {
-        // Get latlng - could be in latlng property or lat/lng properties
-        const latlng = clickedParcelData.latlng || (clickedParcelData.lat && clickedParcelData.lng ? [clickedParcelData.lat, clickedParcelData.lng] : null)
-        
-        if (!latlng) {
-          console.warn('Cannot refresh popup: missing latlng', clickedParcelData)
-          return
-        }
-        
-        const address = clickedParcelData.address || clickedParcelData.properties?.SITUS_ADDR || clickedParcelData.properties?.SITE_ADDR || clickedParcelData.properties?.ADDRESS || 'No address'
-        const properties = clickedParcelData.properties || {}
-        const parcelIdForPopup = clickedParcelData.id
-        
-        // Calculate age
-        const currentYear = new Date().getFullYear()
-        const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
-        const age = yearBuilt ? currentYear - yearBuilt : null
-        
-        const hasSkipTraced = isParcelSkipTraced(parcelIdForPopup)
-        const listsWithParcelForPopup = (lists || []).filter(l =>
-          (l.parcels || []).some(p => (p.id || p) === parcelIdForPopup)
-        )
-        const listNamesHtmlForPopup = listsWithParcelForPopup.length > 0
-          ? `<p style="margin: 4px 0; font-size: 12px;"><strong>In lists:</strong> ${listsWithParcelForPopup.map(l => l.name).join(', ')}</p>`
-          : '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'
-        
-        if (mapInstanceRef.current) {
-          // Convert latlng to L.LatLng if it's an array
-          const leafletLatLng = Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng
-          
-          const popup = L.popup({ className: 'parcel-popup-liquid-glass', closeOnClick: false, closeButton: false })
-            .setLatLng(leafletLatLng)
-            .setContent(`
-              <div style="min-width: 200px;" id="parcel-popup-${parcelIdForPopup}">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                  <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Parcel Details</h3>
-                  <button type="button" onclick="window.closeParcelPopup()" class="parcel-popup-close-btn" title="Close" aria-label="Close" style="background: none; border: none; padding: 4px; cursor: pointer; color: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;">&times;</button>
-                </div>
-                <p style="margin: 4px 0; font-size: 12px;"><strong>Address:</strong> ${address}</p>
-                ${properties.OWNER_NAME ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Owner:</strong> ${properties.OWNER_NAME}</p>` : ''}
-                ${age !== null ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Age:</strong> ${age} years</p>` : ''}
-                ${listNamesHtmlForPopup || '<p style="margin: 4px 0; font-size: 12px; color: #6b7280;"><strong>In lists:</strong> None</p>'}
-                ${hasSkipTraced ? `<div style="margin: 8px 0; padding: 6px 8px; background: #dcfce7; border-radius: 8px; display: flex; align-items: center; gap: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #16a34a;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span style="font-size: 12px; color: #16a34a; font-weight: 600;">Contact Found</span></div>` : ''}
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.5); display: flex; flex-direction: column; gap: 8px;">
-                  <button 
-                  id="more-details-btn-${parcelIdForPopup}"
-                  style="width: 100%; padding: 8px 12px; background: rgba(107,114,128,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.openParcelDetails()"
-                >
-                  More Details
-                </button>
-                ${!hasSkipTraced ? `<button 
-                  id="get-contact-btn-${parcelIdForPopup}"
-                  style="width: 100%; padding: 8px 12px; background: rgba(22,163,74,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.skipTraceParcel()"
-                >
-                  Get Contact
-                </button>` : ''}
-                <button 
-                  id="add-to-list-btn-${parcelIdForPopup}"
-                    style="width: 100%; padding: 8px 12px; background: rgba(37,99,235,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                    onclick="window.addParcelToList('${parcelId}')"
-                  >
-                    Add to List
-                  </button>
-                ${!isParcelALeadCheck(parcelIdForPopup) ? `<button 
-                  id="convert-to-lead-btn-${parcelIdForPopup}"
-                  style="width: 100%; padding: 8px 12px; background: rgba(124,58,237,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.convertToLead()"
-                >
-                  Convert to Lead
-                </button>` : ''}
-                <button 
-                  style="width: 100%; padding: 8px 12px; background: rgba(234,88,12,0.9); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;"
-                  onclick="window.openRoofInspector()"
-                >
-                  Roof Inspector
-                </button>
-                </div>
-              </div>
-            `)
-            .openOn(mapInstanceRef.current)
-        }
+      if (clickedParcelId === parcelId && clickedParcelData) {
+        openParcelPopup(clickedParcelData)
       }
     } catch (error) {
       console.error('Skip trace error:', error)
       showToast(`Skip trace failed: ${error.message}`, 'error')
     } finally {
-      // Remove from in progress
       setSkipTracingInProgress(prev => {
         const next = new Set(prev)
         next.delete(parcelId)
         return next
       })
     }
-  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck])
-
-  // Expose function to window for popup button
-  useEffect(() => {
-    window.openParcelDetails = handleOpenParcelDetails
-    window.closeParcelPopup = handleCloseParcelPopup
-    window.addParcelToList = () => {
-      setShowListSelector(true)
-      setIsListPanelOpen(true)
-    }
-    window.skipTraceParcel = () => {
-      if (clickedParcelData) {
-        handleSkipTraceParcel(clickedParcelData)
-      }
-    }
-    window.convertToLead = () => {
-      if (clickedParcelData) {
-        handleConvertToLead(clickedParcelData)
-      }
-    }
-    window.openRoofInspector = () => {
-      if (clickedParcelData) {
-        setRoofInspectorParcel(clickedParcelData)
-        setIsRoofInspectorOpen(true)
-      }
-    }
-    return () => {
-      delete window.openParcelDetails
-      delete window.closeParcelPopup
-      delete window.addParcelToList
-      delete window.skipTraceParcel
-      delete window.convertToLead
-      delete window.openRoofInspector
-    }
-  }, [handleOpenParcelDetails, handleCloseParcelPopup, handleSkipTraceParcel, handleConvertToLead, clickedParcelData])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup])
 
   return (
     <UserDataSyncProvider getToken={getToken}>
@@ -2252,97 +1931,125 @@ function App() {
       )}
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-        <MapContainer
-        center={userLocation || [32.7767, -96.7970]}
-        zoom={settings.defaultZoom}
-        minZoom={1}
-        maxZoom={20}
-        style={{ height: '100%', minHeight: 'var(--vw-height, 100vh)', width: '100%' }}
-        zoomControl={false}
-        attributionControl={false}
-        rotate={true}
-        rotateControl={false}
-        touchRotate={true}
-      >
-        <>
-          {settings.mapStyle === 'street' ? (
-            <TileLayer
-              key="street"
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-              maxZoom={20}
-              maxNativeZoom={19}
-              keepBuffer={6}
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-            />
-          ) : (
-            <>
-              <TileLayer
-                key="satellite"
-                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                maxNativeZoom={19}
-                maxZoom={22}
-                keepBuffer={6}
-                attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
-              />
-              <TileLayer
-                key="labels"
-                url={settings.mapStyle === 'hybrid'
-                  ? "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
-                  : "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
-                }
-                subdomains="abcd"
-                maxZoom={20}
-                maxNativeZoom={19}
-                keepBuffer={6}
-                opacity={1}
-                className="satellite-labels-layer"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-              />
-            </>
-          )}
-        </>
-        <ZoomControl position="topleft" />
-        <MapController 
-          userLocation={userLocation}
-          onMapReady={(map) => { 
+        <MapGL
+          {...viewState}
+          onMove={(evt) => {
+            setViewState(evt.viewState)
+          }}
+          onDragStart={() => {
+            if (!programmaticMoveRef.current) setIsFollowing(false)
+          }}
+          onZoomStart={() => {
+            if (!programmaticMoveRef.current) setIsFollowing(false)
+          }}
+          onLoad={(evt) => {
+            const map = evt.target
             mapInstanceRef.current = map
             mapRef.current = map
+            setMapReady(true)
+            if (userLocation && !initialSetDoneRef.current) {
+              initialSetDoneRef.current = true
+              const initZoom = 17
+              map.jumpTo({
+                center: [userLocation.lng, userLocation.lat],
+                zoom: initZoom,
+                pitch: 0,
+              })
+              map.fire('moveend')
+              setViewState(prev => ({
+                ...prev,
+                longitude: userLocation.lng,
+                latitude: userLocation.lat,
+                zoom: initZoom,
+                pitch: 0,
+              }))
+            }
           }}
-          onRecenterMap={setRecenterMap}
-          isFollowing={isFollowing}
-          anyPanelOpen={anyPanelOpen}
-          hasPopup={hasPopup}
-          onFollowingChange={setIsFollowing}
-          followResumeDelay={settings.followResumeDelay}
-        />
-        <CompassOrientation isActive={isCompassActive} heading={heading} />
-        <NorthIndicator />
-        <PMTilesParcelLayer 
-          onParcelClick={handleParcelClick}
-          clickedParcelId={clickedParcelId}
-          selectedParcels={selectedParcels}
-          selectedListIds={selectedListIds}
-          lists={lists}
-          onLayerReady={(layerFunctions) => {
-            parcelLayerRef.current = layerFunctions
-          }}
-        />
-        <PathTracker
-          ref={pathTrackerRef}
-          isTracking={isPathTrackingActive}
-          userLocation={userLocation}
-          savedPathsToShow={paths.filter(p => visiblePathIds.includes(p.id))}
-          smoothingLevel={settings.pathSmoothing}
-        />
-        {userLocation && (
-          <LocationMarker
-            position={userLocation}
-            heading={heading}
-            compassActive={isCompassActive}
+          style={{ width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}
+          mapStyle={memoizedMapStyle}
+          minZoom={1}
+          maxZoom={20.5}
+          maxPitch={0}
+          attributionControl={false}
+          dragRotate={true}
+          touchZoomRotate={true}
+          pitchWithRotate={false}
+          touchPitch={false}
+        >
+          <CompassOrientation isActive={isCompassActive} heading={heading} mapRef={mapInstanceRef} />
+          <NorthIndicator mapRef={mapInstanceRef} />
+          <PMTilesParcelLayer 
+            mapRef={mapInstanceRef}
+            mapReady={mapReady}
+            onParcelClick={handleParcelClick}
+            clickedParcelId={clickedParcelId}
+            selectedParcels={selectedParcels}
+            selectedListIds={selectedListIds}
+            lists={lists}
+            onLayerReady={(layerFunctions) => {
+              parcelLayerRef.current = layerFunctions
+            }}
           />
-        )}
-      </MapContainer>
+          <PathTracker
+            ref={pathTrackerRef}
+            mapRef={mapInstanceRef}
+            isTracking={isPathTrackingActive}
+            userLocation={userLocation}
+            savedPathsToShow={paths.filter(p => visiblePathIds.includes(p.id))}
+            smoothingLevel={settings.pathSmoothing}
+          />
+          {userLocation && (
+            <LocationMarker position={userLocation} />
+          )}
+          {popupData && (
+            <MapPopup
+              longitude={popupData.lng}
+              latitude={popupData.lat}
+              closeOnClick={false}
+              closeButton={false}
+              className="parcel-popup-liquid-glass"
+              maxWidth="320"
+              onClose={handleCloseParcelPopup}
+            >
+              <div style={{ minWidth: 200 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Parcel Details</h3>
+                  <button type="button" onClick={() => { setPopupData(null); setClickedParcelId(null); setClickedParcelData(null) }} className="parcel-popup-close-btn" title="Close" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, lineHeight: 1 }}>&times;</button>
+                </div>
+                <p style={{ margin: '4px 0', fontSize: 12 }}><strong>Address:</strong> {popupData.address}</p>
+                {popupData.ownerName && <p style={{ margin: '4px 0', fontSize: 12 }}><strong>Owner:</strong> {popupData.ownerName}</p>}
+                {popupData.age !== null && <p style={{ margin: '4px 0', fontSize: 12 }}><strong>Age:</strong> {popupData.age} years</p>}
+                {popupData.listNames?.length > 0
+                  ? <p style={{ margin: '4px 0', fontSize: 12 }}><strong>In lists:</strong> {popupData.listNames.join(', ')}</p>
+                  : <p style={{ margin: '4px 0', fontSize: 12, color: '#6b7280' }}><strong>In lists:</strong> None</p>
+                }
+                {popupData.hasSkipTraced && (
+                  <div style={{ margin: '8px 0', padding: '6px 8px', background: '#dcfce7', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <CheckCircle2 size={16} style={{ color: '#16a34a' }} />
+                    <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Contact Found</span>
+                  </div>
+                )}
+                {popupData.isSkipTracing && (
+                  <div style={{ margin: '8px 0', padding: '6px 8px', background: '#fef3c7', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Loader2 size={16} style={{ color: '#d97706' }} className="animate-spin" />
+                    <span style={{ fontSize: 12, color: '#d97706', fontWeight: 600 }}>Skip Tracing...</span>
+                  </div>
+                )}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.5)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button onClick={() => handleOpenParcelDetails()} style={{ width: '100%', padding: '8px 12px', background: 'rgba(107,114,128,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>More Details</button>
+                  {!popupData.hasSkipTraced && !popupData.isSkipTracing && (
+                    <button onClick={() => { if (clickedParcelData) handleSkipTraceParcel(clickedParcelData) }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(22,163,74,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Get Contact</button>
+                  )}
+                  <button onClick={() => { setShowListSelector(true); setIsListPanelOpen(true) }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(37,99,235,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Add to List</button>
+                  {!isParcelALeadCheck(popupData.parcelId) && (
+                    <button onClick={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(124,58,237,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Convert to Lead</button>
+                  )}
+                  <button onClick={() => { if (clickedParcelData) { setRoofInspectorParcel(clickedParcelData); setIsRoofInspectorOpen(true) } }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(234,88,12,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Roof Inspector</button>
+                </div>
+              </div>
+            </MapPopup>
+          )}
+        </MapGL>
       </div>
 
       <AddressSearch
@@ -2518,10 +2225,7 @@ function App() {
         lists={lists}
         onCenterParcel={(location) => {
           if (mapRef.current) {
-            mapRef.current.setView([location.lat, location.lng], 17, {
-              animate: true,
-              duration: 0.5
-            })
+            mapRef.current.flyTo({ center: [location.lng, location.lat], zoom: 17, duration: 500 })
           }
         }}
         onBack={() => {
@@ -2604,10 +2308,7 @@ function App() {
         }}
         onCenterParcel={(location) => {
           if (mapRef.current) {
-            mapRef.current.setView([location.lat, location.lng], 17, {
-              animate: true,
-              duration: 0.5
-            })
+            mapRef.current.flyTo({ center: [location.lng, location.lat], zoom: 17, duration: 500 })
           }
         }}
       />

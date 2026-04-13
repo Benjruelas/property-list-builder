@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useMap } from 'react-leaflet'
 import { cn } from '@/lib/utils'
 
 /**
  * North indicator - shows geographic North direction on the rotating map.
  * Arrow rotates to always point toward North.
  */
-export function NorthIndicator() {
-  const map = useMap()
+export function NorthIndicator({ mapRef }) {
   const [bearing, setBearing] = useState(0)
 
   useEffect(() => {
+    const map = mapRef?.current
     if (!map || typeof map.getBearing !== 'function') return
 
     const updateBearing = () => {
@@ -26,7 +25,7 @@ export function NorthIndicator() {
       map.off('moveend', updateBearing)
       map.off('rotate', updateBearing)
     }
-  }, [map])
+  }, [mapRef])
 
   const indicator = (
     <div

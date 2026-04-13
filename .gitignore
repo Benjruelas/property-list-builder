@@ -23,7 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
-.env*.local
+.env*
+!.env.example
 
 # Large data files (hosted separately)
 *.pmtiles

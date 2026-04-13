@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Search, X, Loader2 } from 'lucide-react'
+import { Search, X, Loader2, Plus, Minus } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 
@@ -174,12 +174,8 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
 
     const map = mapInstanceRef?.current
 
-    if (map && typeof map.setView === 'function') {
-      map.setView([lat, lng], 17, {
-        animate: true,
-        duration: 0.5
-      })
-
+    if (map && typeof map.flyTo === 'function') {
+      map.flyTo({ center: [lng, lat], zoom: 17, duration: 500 })
       setTimeout(() => {
         if (onLocationFound) {
           onLocationFound({ lat, lng, address: displayName })
@@ -218,6 +214,24 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         title="Search address"
       >
         <Search className="h-6 w-6 sm:h-5 sm:w-5" />
+      </Button>
+      <Button
+        onClick={() => mapInstanceRef?.current?.zoomIn()}
+        size="icon"
+        variant="glass-outline"
+        className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+        title="Zoom in"
+      >
+        <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
+      </Button>
+      <Button
+        onClick={() => mapInstanceRef?.current?.zoomOut()}
+        size="icon"
+        variant="glass-outline"
+        className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+        title="Zoom out"
+      >
+        <Minus className="h-6 w-6 sm:h-5 sm:w-5" />
       </Button>
 
       {isOpen && (

@@ -13,9 +13,6 @@
       "maxDuration": 120,
       "memory": 1024
     },
-    "api/roof-analysis.js": {
-      "maxDuration": 60
-    },
     "api/roof-report.js": {
       "maxDuration": 120,
       "memory": 1024

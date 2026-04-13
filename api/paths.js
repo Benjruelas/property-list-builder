@@ -111,18 +111,21 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
-      const { name, points = [], distanceMiles = 0 } = body
+      const { name, points = [], distanceMiles = 0, city: cityRaw } = body
       if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Path name is required' })
       }
       if (!Array.isArray(points) || points.length < 2) {
         return res.status(400).json({ error: 'Path must contain at least 2 points' })
       }
+      const city =
+        typeof cityRaw === 'string' ? cityRaw.trim().slice(0, 160) : ''
       const newPath = {
         id: `path_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
         name: name.trim(),
         points,
         distanceMiles: typeof distanceMiles === 'number' ? distanceMiles : 0,
+        city,
         ownerId: user.uid,
         ownerEmail: user.email,
         sharedWith: [],
