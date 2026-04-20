@@ -32,3 +32,4 @@ dist-ssr
 pmtiles_output/
 parcel_data/
 production-backup/
+.env*.local

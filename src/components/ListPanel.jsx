@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, RefreshCw, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
+import { X, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { Input } from './ui/input'
+import { TeamShareSection, TeamBadge } from './TeamShareSection'
 
 const LIST_HIGHLIGHT_COLORS = [
   '#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626',
@@ -28,6 +29,8 @@ export function ListPanel({
   onDeleteList,
   onRenameList,
   onShareList,
+  onShareListWithTeams,
+  teams = [],
   onValidateShareEmail,
   onCreateList,
   onViewListContents,
@@ -194,7 +197,7 @@ export function ListPanel({
     if (onDeleteList) onDeleteList(list)
   }
 
-  const handleShareSave = () => {
+  const handleShareSave = async () => {
     if (!shareListId || !onShareList) return
     const email = shareEmail.trim().toLowerCase()
     if (!email) {
@@ -215,19 +218,26 @@ export function ListPanel({
       showToast('This email is already in the share list', 'error')
       return
     }
-    onShareList(shareListId, [...current, email])
-    setShareEmail('')
-    setShareEmailValid(null)
-    setShareEmailError('')
-    showToast('Email added to share list', 'success')
+    try {
+      await onShareList(shareListId, [...current, email])
+      setShareEmail('')
+      setShareEmailValid(null)
+      setShareEmailError('')
+    } catch {
+      /* App shows error toast */
+    }
   }
 
-  const handleRemoveSharedEmail = (emailToRemove) => {
+  const handleRemoveSharedEmail = async (emailToRemove) => {
     if (!shareListId || !onShareList) return
     const list = allLists.find((l) => l.id === shareListId)
     const current = list?.sharedWith || []
     const updated = current.filter((e) => (e || '').toLowerCase() !== (emailToRemove || '').toLowerCase())
-    onShareList(shareListId, updated)
+    try {
+      await onShareList(shareListId, updated)
+    } catch {
+      /* App shows error toast */
+    }
   }
 
   const allLists = lists || []
@@ -259,10 +269,10 @@ export function ListPanel({
           if (e.target.closest?.('[data-list-panel-dropdown]')) e.preventDefault()
         }}
       >
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Manage your property lists, add parcels, and share lists</DialogDescription>
           <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold truncate">Lists</DialogTitle>
+            <DialogTitle className="map-panel-header-title-wrap text-left text-xl font-semibold truncate">Lists</DialogTitle>
             <div className="map-panel-header-actions gap-2">
               <Button
                 variant="outline"
@@ -272,14 +282,6 @@ export function ListPanel({
                 title="Create new list"
               >
                 <Plus className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onListsChange?.()}
-                title="Refresh lists"
-              >
-                <RefreshCw className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose} title="Close">
                 <X className="h-4 w-4" />
@@ -418,6 +420,7 @@ export function ListPanel({
                             {!isListOwnedByUser(list) && (
                               <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                             )}
+                            <TeamBadge teamIds={list.teamShares} teams={teams} />
                           </div>
                           <span className="text-xs text-gray-500">{list.parcels?.length ?? 0} parcels</span>
                         </div>
@@ -489,8 +492,27 @@ export function ListPanel({
             const list = allLists.find((l) => l.id === shareListId)
             const currentShared = list?.sharedWith || []
             const isShared = currentShared.length > 0
+            const currentTeamShares = list?.teamShares || []
+            const toggleTeam = async (teamId) => {
+              if (!onShareListWithTeams) return
+              const next = currentTeamShares.includes(teamId)
+                ? currentTeamShares.filter((id) => id !== teamId)
+                : [...currentTeamShares, teamId]
+              try {
+                await onShareListWithTeams(shareListId, next)
+              } catch (e) {
+                showToast(e.message || 'Failed to update team share', 'error')
+              }
+            }
             return (
               <>
+                {onShareListWithTeams && (
+                  <TeamShareSection
+                    teams={teams}
+                    selectedTeamIds={currentTeamShares}
+                    onToggle={toggleTeam}
+                  />
+                )}
                 {isShared && (
                   <div className="mb-4">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>

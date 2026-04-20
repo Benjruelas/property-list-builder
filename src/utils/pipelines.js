@@ -14,13 +14,23 @@ const getApiBase = () => {
  * @param {{ uid?: string, email?: string } | null} user
  * @param {{ ownerId?: string, sharedWith?: string[] } | null} pipeline
  */
-export function canAddLeadsToPipeline(user, pipeline) {
+export function canAddLeadsToPipeline(user, pipeline, teams = []) {
   if (!user?.uid || !pipeline) return false
   if (pipeline.ownerId === user.uid) return true
   const email = (user.email || '').toLowerCase().trim()
-  if (!email) return false
   const shared = Array.isArray(pipeline.sharedWith) ? pipeline.sharedWith : []
-  return shared.some((e) => (e || '').toLowerCase().trim() === email)
+  if (email && shared.some((e) => (e || '').toLowerCase().trim() === email)) return true
+  const teamShares = Array.isArray(pipeline.teamShares) ? pipeline.teamShares : []
+  if (teamShares.length && Array.isArray(teams) && teams.length) {
+    const ids = new Set(teamShares)
+    return teams.some(
+      (t) =>
+        ids.has(t.id) &&
+        (t.ownerId === user.uid ||
+          (Array.isArray(t.members) && t.members.some((m) => m.uid === user.uid)))
+    )
+  }
+  return false
 }
 
 /** Alias: anyone with access may update leads (and use tasks) on that pipeline; only the owner may change structure/sharing. */
@@ -56,7 +66,7 @@ export async function createPipeline(getToken, { title = 'Pipes', columns, leads
   return data.pipeline
 }
 
-export async function updatePipeline(getToken, pipelineId, { title, columns, leads, sharedWith }) {
+export async function updatePipeline(getToken, pipelineId, { title, columns, leads, sharedWith, teamShares }) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to update pipelines')
   const body = { pipelineId }
@@ -64,6 +74,7 @@ export async function updatePipeline(getToken, pipelineId, { title, columns, lea
   if (columns !== undefined) body.columns = columns
   if (leads !== undefined) body.leads = leads
   if (sharedWith !== undefined) body.sharedWith = sharedWith
+  if (teamShares !== undefined) body.teamShares = teamShares
   const res = await fetch(`${getApiBase()}/pipelines`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

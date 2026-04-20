@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import MapGL, { Marker as MapMarker, Popup as MapPopup, Source, Layer } from 'react-map-gl/maplibre'
+import MapGL, { Marker as MapMarker, Source, Layer } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { CompassOrientation } from './components/CompassOrientation'
 import { NorthIndicator } from './components/NorthIndicator'
@@ -10,7 +10,8 @@ import { AddressSearch } from './components/AddressSearch'
 import { ListPanel } from './components/ListPanel'
 import { SkipTracedListPanel } from './components/SkipTracedListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
-import { ParcelDetails } from './components/ParcelDetails'
+import { ParcelDetailsV3 as ParcelDetails } from './components/parcel-details'
+import { ParcelPopupV1 } from './components/parcel-popup'
 import { PhoneActionPanel } from './components/PhoneActionPanel'
 import { OutreachPanel } from './components/OutreachPanel'
 import { EmailComposer } from './components/EmailComposer'
@@ -28,12 +29,15 @@ import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as v
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
+import { computeOwnerOccupied } from './utils/ownerOccupied'
 import { DealPipeline } from './components/DealPipeline'
 import { SchedulePanel } from './components/SchedulePanel'
 import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
-import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi } from './utils/paths'
+import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
+import { TeamsPanel } from './components/TeamsPanel'
+import { fetchTeams } from './utils/teams'
 import { reverseGeocodeCity } from './utils/reverseGeocode'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -50,7 +54,6 @@ import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
 import WelcomeTour from './components/WelcomeTour'
-import { CheckCircle2, Loader2, Phone } from 'lucide-react'
 
 function nextDefaultPathName(paths) {
   let max = 0
@@ -188,12 +191,10 @@ function App() {
   
   // Debug: Log current user state
   useEffect(() => {
-    console.log('🔐 App currentUser state:', currentUser ? currentUser.email : 'null', 'loading:', authLoading)
   }, [currentUser, authLoading])
 
   // Handle logout - close all panels and clear state
   const handleLogout = useCallback(async () => {
-    console.log('🚪 Logging out...')
     try {
       // Close all panels before logout
       setIsListPanelOpen(false)
@@ -207,6 +208,8 @@ function App() {
       setIsMultiSelectActive(false)
       setIsPathTrackingActive(false)
       setIsPathsPanelOpen(false)
+      setIsTeamsPanelOpen(false)
+      setTeams([])
       setIsSettingsPanelOpen(false)
       setIsLeadsPanelOpen(false)
       setPickPipelineForParcel(null)
@@ -219,9 +222,8 @@ function App() {
       
       // Call Firebase logout
       await logout()
-      console.log('✅ Logout successful')
     } catch (error) {
-      console.error('❌ Logout error:', error)
+      console.error('Logout error:', error)
     }
   }, [logout])
   const [isLoginOpen, setIsLoginOpen] = useState(false)
@@ -293,6 +295,8 @@ function App() {
   const [isPathsPanelOpen, setIsPathsPanelOpen] = useState(false)
   const [paths, setPaths] = useState([])
   const [visiblePathIds, setVisiblePathIds] = useState([])
+  const [isTeamsPanelOpen, setIsTeamsPanelOpen] = useState(false)
+  const [teams, setTeams] = useState([])
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false)
   const [isLeadsPanelOpen, setIsLeadsPanelOpen] = useState(false)
   const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false)
@@ -324,7 +328,7 @@ function App() {
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isOutreachPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
+    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
   const hasPopup = clickedParcelId != null
 
   // iOS Safari resize fix
@@ -546,6 +550,30 @@ function App() {
     else setLists([])
   }, [currentUser, refreshLists])
 
+  useEffect(() => {
+    if (!currentUser || !Array.isArray(lists) || lists.length === 0) return
+    const email = (currentUser.email || '').toLowerCase()
+    const hasShared = lists.some((l) => {
+      const ownedByMe = l.ownerId === currentUser.uid
+      const sharedToMe = Array.isArray(l.sharedWith) && l.sharedWith.map((e) => (e || '').toLowerCase()).includes(email)
+      const ownerSharedToOthers = ownedByMe && ((Array.isArray(l.sharedWith) && l.sharedWith.length > 0) || (Array.isArray(l.teamShares) && l.teamShares.length > 0))
+      return sharedToMe || ownerSharedToOthers
+    })
+    if (!hasShared) return
+    const noticeKey = `teams_list_rights_notice_v1_${currentUser.uid}`
+    try {
+      if (localStorage.getItem(noticeKey)) return
+      showToast(
+        'Heads up: list collaborators can now add/remove parcels on shared lists. Only owners can rename, re-share, or delete.',
+        'info',
+        10000
+      )
+      localStorage.setItem(noticeKey, '1')
+    } catch {
+      // ignore storage errors
+    }
+  }, [currentUser, lists])
+
   // Load user paths when signed in
   const refreshPaths = useCallback(async () => {
     if (!currentUser) return
@@ -561,6 +589,21 @@ function App() {
     if (currentUser) refreshPaths()
     else { setPaths([]); setVisiblePathIds([]) }
   }, [currentUser, refreshPaths])
+
+  const refreshTeams = useCallback(async () => {
+    if (!currentUser) return
+    try {
+      const next = await fetchTeams(getToken)
+      setTeams(next)
+    } catch (error) {
+      console.error('Error loading teams:', error)
+    }
+  }, [currentUser, getToken])
+
+  useEffect(() => {
+    if (currentUser) refreshTeams()
+    else setTeams([])
+  }, [currentUser, refreshTeams])
 
   const handleTogglePathTracking = useCallback(async () => {
     if (isPathTrackingActive) {
@@ -640,6 +683,16 @@ function App() {
       showToast('Path sharing updated', 'success')
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
+    }
+  }, [getToken, refreshPaths])
+
+  const handleSharePathWithTeams = useCallback(async (pathId, teamShares) => {
+    try {
+      await sharePathWithTeamsApi(getToken, pathId, teamShares)
+      await refreshPaths()
+      showToast('Team sharing updated', 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to update team sharing', 'error')
     }
   }, [getToken, refreshPaths])
 
@@ -804,7 +857,6 @@ function App() {
 
     const processSkipTraceJob = async (job) => {
       try {
-        console.log(`🔄 Processing skip trace job: ${job.jobId} for list "${job.listName}"`)
         
         // Update job status to processing
         updateSkipTraceJob(job.jobId, { status: 'processing' })
@@ -819,7 +871,7 @@ function App() {
         
         // Process results
         if (results.length === 0) {
-          console.warn(`⚠️ Job ${job.jobId} completed but returned no results`)
+          console.warn(`Job ${job.jobId} completed but returned no results`)
           updateSkipTraceJob(job.jobId, {
             status: 'completed',
             results: [],
@@ -977,7 +1029,7 @@ function App() {
         notifySkipTraceComplete(job.listName, `${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found`)
 
       } catch (error) {
-        console.error(`❌ Error processing skip trace job ${job.jobId}:`, error)
+        console.error(`Error processing skip trace job ${job.jobId}:`, error)
         updateSkipTraceJob(job.jobId, {
           status: 'failed',
           error: error.message,
@@ -1001,7 +1053,6 @@ function App() {
       const pendingJobs = getPendingSkipTraceJobs()
       
       if (pendingJobs.length > 0) {
-        console.log(`📋 Found ${pendingJobs.length} pending skip trace job(s)`)
         
         // Process jobs one at a time (don't process if one is already running)
         pendingJobs.forEach(job => {
@@ -1029,6 +1080,16 @@ function App() {
     }
   }, [getToken, refreshPipelines])
 
+  const handleSharePipelineWithTeams = useCallback(async (pipelineId, teamShares) => {
+    try {
+      await updatePipeline(getToken, pipelineId, { teamShares })
+      await refreshPipelines()
+      showToast('Team sharing updated', 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to update team sharing', 'error')
+    }
+  }, [getToken, refreshPipelines])
+
   const handleShareList = useCallback(async (listId, sharedWith) => {
     try {
       await updateList(getToken, listId, { sharedWith })
@@ -1036,6 +1097,16 @@ function App() {
       showToast('List sharing updated', 'success')
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
+    }
+  }, [getToken, refreshLists])
+
+  const handleShareListWithTeams = useCallback(async (listId, teamShares) => {
+    try {
+      await updateList(getToken, listId, { teamShares })
+      await refreshLists()
+      showToast('Team sharing updated', 'success')
+    } catch (error) {
+      showToast(error.message || 'Failed to update team sharing', 'error')
     }
   }, [getToken, refreshLists])
 
@@ -1076,18 +1147,15 @@ function App() {
   const handleParcelClick = useCallback((event) => {
     // Wait for auth to finish loading before checking
     if (authLoading) {
-      console.log('⏳ Auth still loading, ignoring parcel click')
       return
     }
     
     // Require authentication for parcel interactions
     if (!currentUser || !currentUser.uid) {
-      console.log('❌ No current user, showing login prompt. currentUser:', currentUser, 'authLoading:', authLoading)
       setIsLoginOpen(true)
       showToast('Please sign in to interact with parcels', 'info')
       return
     }
-    console.log('✅ User authenticated, allowing parcel interaction:', currentUser.email)
 
     const { latlng, properties, parcelId: eventParcelId } = event
     // Use parcelId from event if available, otherwise generate from properties or latlng
@@ -1105,7 +1173,6 @@ function App() {
             newMap.delete(parcelId)
             return newMap
           })
-          console.log('Deselected parcel:', parcelId)
         } else {
           newSet.add(parcelId)
           setSelectedParcelsData(prevData => {
@@ -1118,7 +1185,6 @@ function App() {
             })
             return newMap
           })
-          console.log('Selected parcel:', parcelId, 'Total selected:', newSet.size)
         }
         return newSet
       })
@@ -1135,6 +1201,7 @@ function App() {
       setPopupData({
         parcelId, lat: latlng.lat, lng: latlng.lng, address,
         ownerName: properties.OWNER_NAME || '', age,
+        ownerOccupied: computeOwnerOccupied(properties),
         listNames: listsWithParcel.map(l => l.name),
         hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
       })
@@ -1145,13 +1212,6 @@ function App() {
       }, 300)
     }
     
-    console.log('Parcel clicked:', {
-      location: latlng,
-      address,
-      properties,
-      parcelId,
-      isMultiSelectActive
-    })
   }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, isParcelALeadCheck])
   
   // Add single parcel to list (called from popup button)
@@ -1219,22 +1279,21 @@ function App() {
   const handleToggleMultiSelect = useCallback(() => {
     // Wait for auth to finish loading before checking
     if (authLoading) {
-      console.log('⏳ Auth still loading, waiting...')
       return
     }
     
     // Require authentication for multi-select
     if (!currentUser || !currentUser.uid) {
-      console.log('❌ No current user, showing login prompt for multi-select')
       setIsLoginOpen(true)
       showToast('Please sign in to use multi-select', 'info')
       return
     }
-    console.log('✅ User authenticated, toggling multi-select:', currentUser.email)
     setIsMultiSelectActive(prev => !prev)
     setSelectedParcels(new Set()) // Clear selection when toggling mode
     setSelectedParcelsData(new Map()) // Clear parcel data
     setClickedParcelId(null) // Clear single click highlight
+    setClickedParcelData(null) // Prevent stale single-parcel add-to-list flow
+    setPopupData(null) // Close any open parcel popup
   }, [currentUser])
 
   // Add selected parcels to list
@@ -1318,18 +1377,15 @@ function App() {
   const handleOpenParcelDetails = useCallback((parcelData = null) => {
     // Wait for auth to finish loading before checking
     if (authLoading) {
-      console.log('⏳ Auth still loading, waiting...')
       return
     }
     
     // Require authentication to view parcel details
     if (!currentUser || !currentUser.uid) {
-      console.log('❌ No current user, showing login prompt for parcel details')
       setIsLoginOpen(true)
       showToast('Please sign in to view parcel details', 'info')
       return
     }
-    console.log('✅ User authenticated, opening parcel details:', currentUser.email)
     // Track source: from list (parcelData passed) vs map (popup)
     parcelDetailsSourceRef.current = parcelData ? 'list' : 'map'
     // If parcelData is provided (from list), use it; otherwise use clickedParcelData
@@ -1387,6 +1443,7 @@ function App() {
     setPopupData({
       parcelId, lat, lng, address,
       ownerName: properties.OWNER_NAME || '', age,
+      ownerOccupied: computeOwnerOccupied(properties),
       listNames: listsWithParcel.map(l => l.name),
       hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
     })
@@ -1419,18 +1476,15 @@ function App() {
   const handleEmailClick = useCallback((email, parcelData) => {
     // Wait for auth to finish loading before checking
     if (authLoading) {
-      console.log('⏳ Auth still loading, waiting...')
       return
     }
     
     // Require authentication for email features
     if (!currentUser || !currentUser.uid) {
-      console.log('❌ No current user, showing login prompt for email')
       setIsLoginOpen(true)
       showToast('Please sign in to send emails', 'info')
       return
     }
-    console.log('✅ User authenticated, opening email templates:', currentUser.email)
     // Open email templates panel to select a template (single parcel mode)
     setIsBulkEmailMode(false)
     setEmailComposerParcelData(parcelData)
@@ -1767,7 +1821,6 @@ function App() {
 
     // Wait for auth to finish loading before checking
     if (authLoading) {
-      console.log('⏳ Auth still loading, waiting...')
       return
     }
 
@@ -1810,7 +1863,6 @@ function App() {
       let results = []
       if (result.jobId === 'sync' && result.async === false && result.results) {
         // Results are already in the response, no need to poll
-        console.log('✅ Synchronous skip trace - results returned immediately')
         results = result.results || []
       } else {
         // Asynchronous job - poll for results
@@ -1828,7 +1880,7 @@ function App() {
       // Note: Empty results array is valid - it means no contact info was found
       // Only throw error if we actually got an error, not if results are empty
       if (results.length === 0) {
-        console.warn('⚠️ Skip trace completed but returned no results. This may mean no contact information was found for this parcel.')
+        console.warn('Skip trace completed but returned no results. This may mean no contact information was found for this parcel.')
         // Don't throw error - empty results is a valid outcome
         showToast('Skip trace completed, but no contact information was found for this parcel.', 'warning')
         return
@@ -1836,17 +1888,6 @@ function App() {
 
       const contactInfo = results[0]
       
-      console.log('💾 Saving skip trace results for parcel:', parcelId)
-      console.log('📞 Contact info from API:', {
-        phone: contactInfo.phone,
-        phoneNumbers: contactInfo.phoneNumbers,
-        phoneNumbersLength: contactInfo.phoneNumbers?.length || 0,
-        email: contactInfo.email,
-        emails: contactInfo.emails,
-        emailsLength: contactInfo.emails?.length || 0,
-        address: contactInfo.address,
-        fullContactInfo: contactInfo
-      })
       
       // Ensure phoneNumbers is an array
       const phoneNumbers = Array.isArray(contactInfo.phoneNumbers) 
@@ -1868,15 +1909,12 @@ function App() {
         skipTracedAt: new Date().toISOString()
       }
       
-      console.log('💾 Data being saved:', dataToSave)
       
       saveSkipTracedParcel(parcelId, dataToSave)
       scheduleUserDataSync(getToken)
 
       // Verify it was saved
       const saved = getSkipTracedParcel(parcelId)
-      console.log('✅ Verified saved skip trace data:', saved)
-      console.log('📞 Saved phone:', saved?.phone, 'phoneNumbers:', saved?.phoneNumbers)
 
       // Add to skip traced list
       addParcelToSkipTracedList(parcelData)
@@ -2001,60 +2039,22 @@ function App() {
           {userLocation && (
             <LocationMarker position={userLocation} />
           )}
-          {popupData && (
-            <MapPopup
-              longitude={popupData.lng}
-              latitude={popupData.lat}
-              closeOnClick={false}
-              closeButton={false}
-              className="parcel-popup-liquid-glass"
-              maxWidth="320"
-              onClose={handleCloseParcelPopup}
-            >
-              <div style={{ minWidth: 200 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Parcel Details</h3>
-                  <button type="button" onClick={() => { setPopupData(null); setClickedParcelId(null); setClickedParcelData(null) }} className="parcel-popup-close-btn" title="Close" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, lineHeight: 1 }}>&times;</button>
-                </div>
-                <p style={{ margin: '4px 0', fontSize: 12 }}><strong>Address:</strong> {popupData.address}</p>
-                {popupData.ownerName && <p style={{ margin: '4px 0', fontSize: 12 }}><strong>Owner:</strong> {popupData.ownerName}</p>}
-                {popupData.age !== null && <p style={{ margin: '4px 0', fontSize: 12 }}><strong>Age:</strong> {popupData.age} years</p>}
-                {popupData.listNames?.length > 0
-                  ? <p style={{ margin: '4px 0', fontSize: 12 }}><strong>In lists:</strong> {popupData.listNames.join(', ')}</p>
-                  : <p style={{ margin: '4px 0', fontSize: 12, color: '#6b7280' }}><strong>In lists:</strong> None</p>
-                }
-                {popupData.hasSkipTraced && (
-                  <div style={{ margin: '8px 0', padding: '6px 8px', background: '#dcfce7', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <CheckCircle2 size={16} style={{ color: '#16a34a' }} />
-                    <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Contact Found</span>
-                  </div>
-                )}
-                {popupData.isSkipTracing && (
-                  <div style={{ margin: '8px 0', padding: '6px 8px', background: '#fef3c7', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Loader2 size={16} style={{ color: '#d97706' }} className="animate-spin" />
-                    <span style={{ fontSize: 12, color: '#d97706', fontWeight: 600 }}>Skip Tracing...</span>
-                  </div>
-                )}
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.5)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button onClick={() => handleOpenParcelDetails()} style={{ width: '100%', padding: '8px 12px', background: 'rgba(107,114,128,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>More Details</button>
-                  {!popupData.hasSkipTraced && !popupData.isSkipTracing && (
-                    <button onClick={() => { if (clickedParcelData) handleSkipTraceParcel(clickedParcelData) }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(22,163,74,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Get Contact</button>
-                  )}
-                  <button onClick={() => { setShowListSelector(true); setIsListPanelOpen(true) }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(37,99,235,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Add to List</button>
-                  {!isParcelALeadCheck(popupData.parcelId) && (
-                    <button onClick={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(124,58,237,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Convert to Lead</button>
-                  )}
-                  <button onClick={() => { if (clickedParcelData) { setRoofInspectorParcel(clickedParcelData); setIsRoofInspectorOpen(true) } }} style={{ width: '100%', padding: '8px 12px', background: 'rgba(234,88,12,0.9)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Roof Inspector</button>
-                </div>
-              </div>
-            </MapPopup>
-          )}
         </MapGL>
       </div>
 
+      <ParcelPopupV1
+        popupData={popupData}
+        clickedParcelData={clickedParcelData}
+        mapRef={mapInstanceRef}
+        onClose={handleCloseParcelPopup}
+        onOpenDetails={() => handleOpenParcelDetails()}
+        onAddToList={() => { setShowListSelector(true); setIsListPanelOpen(true) }}
+        onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
+        isLead={popupData ? isParcelALeadCheck(popupData.parcelId) : false}
+      />
+
       <AddressSearch
         onLocationFound={(location) => {
-          console.log('Address found:', location)
           showToast(`Navigated to: ${location.address}`, 'success')
           // The map will be centered by AddressSearch component
           // County detection will happen automatically via MapController
@@ -2062,19 +2062,15 @@ function App() {
           // After map centers, wait for parcels to load, then find and highlight the parcel
           setTimeout(() => {
             if (parcelLayerRef.current && parcelLayerRef.current.findParcelAtLocation) {
-              console.log('🔍 Searching for parcel at:', location.lat, location.lng)
               const found = parcelLayerRef.current.findParcelAtLocation(location.lat, location.lng)
               if (!found) {
-                console.log('📍 No parcel found at this location - may need to zoom in or parcels may not be loaded yet')
               }
             } else {
-              console.log('⚠️ Parcel layer not ready yet, retrying...')
               // Retry after a longer delay if layer isn't ready
               setTimeout(() => {
                 if (parcelLayerRef.current && parcelLayerRef.current.findParcelAtLocation) {
                   const found = parcelLayerRef.current.findParcelAtLocation(location.lat, location.lng)
                   if (!found) {
-                    console.log('📍 No parcel found at this location after retry')
                   }
                 }
               }, 2000)
@@ -2082,6 +2078,11 @@ function App() {
           }, 1500) // Wait 1.5 seconds for map to center and parcels to load
         }}
         mapInstanceRef={mapInstanceRef}
+        onCloseParcelPopup={() => {
+          setPopupData(null)
+          setClickedParcelId(null)
+          setClickedParcelData(null)
+        }}
       />
 
       <MapControls
@@ -2090,35 +2091,38 @@ function App() {
         isCompassActive={isCompassActive}
         onToggleMultiSelect={handleToggleMultiSelect}
         isMultiSelectActive={isMultiSelectActive}
+        multiSelectParcelCount={selectedParcels.size}
+        onCancelMultiSelect={() => {
+          setIsMultiSelectActive(false)
+          setSelectedParcels(new Set())
+          setSelectedParcelsData(new Map())
+          setClickedParcelId(null)
+        }}
         onOpenListPanel={() => {
-          // Wait for auth to finish loading before checking
           if (authLoading) {
-            console.log('⏳ Auth still loading, waiting...')
             return
           }
-          
+
           if (!currentUser || !currentUser.uid) {
-            console.log('❌ No current user, showing login prompt for list panel')
             setIsLoginOpen(true)
             return
           }
-          console.log('✅ User authenticated, opening list panel:', currentUser.email)
+          if (isMultiSelectActive && selectedParcels.size > 0) {
+            setShowListSelector(true)
+          }
           setIsListPanelOpen(true)
         }}
         selectedListIds={selectedListIds}
         onOpenSkipTracedListPanel={() => {
           // Wait for auth to finish loading before checking
           if (authLoading) {
-            console.log('⏳ Auth still loading, waiting...')
             return
           }
           
           if (!currentUser || !currentUser.uid) {
-            console.log('❌ No current user, showing login prompt for skip traced list')
             setIsLoginOpen(true)
             return
           }
-          console.log('✅ User authenticated, opening skip traced list:', currentUser.email)
           setIsSkipTracedListPanelOpen(true)
         }}
         onOpenOutreach={handleOpenOutreach}
@@ -2163,6 +2167,14 @@ function App() {
           }
           setIsPathsPanelOpen(true)
         }}
+        onOpenTeamsPanel={() => {
+          if (authLoading) return
+          if (!currentUser || !currentUser.uid) {
+            setIsLoginOpen(true)
+            return
+          }
+          setIsTeamsPanelOpen(true)
+        }}
         onOpenSettings={() => setIsSettingsPanelOpen(true)}
         onOpenLeads={() => setIsLeadsPanelOpen(true)}
         currentUser={currentUser}
@@ -2170,6 +2182,11 @@ function App() {
         onLogout={logout}
         showMenu={showMenu}
         setShowMenu={setShowMenu}
+        onCloseParcelPopup={() => {
+          setPopupData(null)
+          setClickedParcelId(null)
+          setClickedParcelData(null)
+        }}
       />
 
       <ListPanel
@@ -2199,6 +2216,8 @@ function App() {
         onDeleteList={handleDeleteList}
         onRenameList={handleRenameList}
         onShareList={handleShareList}
+        onShareListWithTeams={handleShareListWithTeams}
+        teams={teams}
         onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
         onCreateList={async (name) => {
           await createList(getToken, name, [])
@@ -2252,6 +2271,12 @@ function App() {
           onPhoneClick={handlePhoneClick}
           lists={lists}
           enableAutoClose={false}
+          popupData={popupData}
+          isLead={clickedParcelData ? isParcelALeadCheck(clickedParcelData.id) : false}
+          onSkipTrace={() => { if (clickedParcelData) handleSkipTraceParcel(clickedParcelData) }}
+          onAddToList={() => { setShowListSelector(true); setIsListPanelOpen(true) }}
+          onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
+          onHailData={() => { if (clickedParcelData) { setRoofInspectorParcel(clickedParcelData); setIsRoofInspectorOpen(true) } }}
         />,
         document.body
       )}
@@ -2273,6 +2298,8 @@ function App() {
         onPipelinesChange={refreshPipelines}
         onActivePipelineChange={setActivePipelineId}
         onSharePipeline={handleSharePipeline}
+        onSharePipelineWithTeams={handleSharePipelineWithTeams}
+        teams={teams}
         onValidateShareEmail={(email) => validatePipelineShareEmail(getToken, email)}
         currentUser={currentUser}
         getToken={getToken}
@@ -2371,7 +2398,6 @@ function App() {
         recipientEmail={emailComposerRecipient.email}
         recipientName={emailComposerRecipient.name}
         onSend={(emailData) => {
-          console.log('Email sent:', emailData)
           showToast('Email opened in your email client', 'success')
         }}
         emailTestMode={settings.emailTestMode}
@@ -2405,11 +2431,22 @@ function App() {
         onDeletePath={handleDeletePath}
         onRenamePath={handleRenamePath}
         onSharePath={handleSharePath}
+        onSharePathWithTeams={handleSharePathWithTeams}
+        teams={teams}
         onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
         onCenterOnPath={handleCenterOnPath}
         visiblePathIds={visiblePathIds}
         onTogglePathVisibility={handleTogglePathVisibility}
         distanceUnit={settings.distanceUnit}
+      />
+
+      <TeamsPanel
+        isOpen={isTeamsPanelOpen}
+        onClose={() => setIsTeamsPanelOpen(false)}
+        currentUser={currentUser}
+        getToken={getToken}
+        teams={teams}
+        onTeamsChange={refreshTeams}
       />
 
       <SettingsPanel

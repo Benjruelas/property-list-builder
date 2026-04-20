@@ -23,8 +23,15 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-const preventCloseWhenSchedulePicker = (e, existing) => {
-  if (e.target?.closest?.('.schedule-picker-panel') || e.target?.closest?.('[data-task-menu]')) e.preventDefault()
+/** Prevents Radix Dialog from closing when the user interacts inside portaled UI (schedule picker, lead task/pipe menus). */
+const preventCloseWhenNestedOverlay = (e, existing) => {
+  if (
+    e.target?.closest?.('.schedule-picker-panel') ||
+    e.target?.closest?.('[data-task-menu]') ||
+    e.target?.closest?.('[data-pipe-menu]')
+  ) {
+    e.preventDefault()
+  }
   existing?.(e)
 }
 
@@ -39,8 +46,8 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
             "fixed left-[50%] top-[50%] z-[10001] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
             className
           )}
-          onPointerDownOutside={(e) => preventCloseWhenSchedulePicker(e, onPointerDownOutside)}
-          onInteractOutside={(e) => preventCloseWhenSchedulePicker(e, onInteractOutside)}
+          onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
+          onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
           {...props}
         >
           {children}
@@ -65,8 +72,8 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
             "fixed left-[50%] top-[50%] z-[10001] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
             className
           )}
-          onPointerDownOutside={(e) => preventCloseWhenSchedulePicker(e, onPointerDownOutside)}
-          onInteractOutside={(e) => preventCloseWhenSchedulePicker(e, onInteractOutside)}
+          onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
+          onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
           {...props}
         >
           {children}
@@ -88,8 +95,8 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
           "fixed left-[50%] top-[50%] z-[9999] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
           className
         )}
-        onPointerDownOutside={(e) => preventCloseWhenSchedulePicker(e, onPointerDownOutside)}
-        onInteractOutside={(e) => preventCloseWhenSchedulePicker(e, onInteractOutside)}
+        onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
+        onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
         {...props}
       >
         {children}

@@ -1,17 +1,9 @@
 /**
- * Vercel Serverless Function
- * Polls SkipSherpa API for skip trace job status and results
- * 
- * GET: Check job status and get results
- * Query: ?jobId=xxx
- * Returns: { status: 'completed'|'processing', results: [...] }
- * 
- * Documentation: https://skipsherpa.com/api/docs#/
- * Base URL: https://api.skipsherpa.com/v1/
+ * Poll SkipSherpa API for skip-trace job status. Disabled unless USE_SKIPSHERPA=true.
+ * GET ?jobId=xxx → { status: 'completed'|'processing', results: [...] }
  */
 
 export default async function handler(req, res) {
-  // Disable SkipSherpa by default - uncomment to enable
   const USE_SKIPSHERPA = process.env.USE_SKIPSHERPA === 'true'
   if (!USE_SKIPSHERPA) {
     return res.status(503).json({ 
@@ -44,13 +36,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Skip tracing service not configured' })
     }
 
-    // Poll SkipSherpa API for job status
-    // API Base URL: https://skipsherpa.com
-    // Check the API docs at https://skipsherpa.com/api/docs#/ for the correct endpoint path
     const SKIPSHERPA_API_BASE = process.env.SKIPSHERPA_API_BASE || 'https://skipsherpa.com'
-    
-    // Get job status - adjust endpoint based on actual API
-    // Common patterns: /api/v1/skip-trace/{jobId}, /api/v1/jobs/{jobId}, /api/skip-trace/{jobId}
     const statusEndpoint = process.env.SKIPSHERPA_STATUS_ENDPOINT || `${SKIPSHERPA_API_BASE}/api/v1/skip-trace/${jobId}`
     const statusResponse = await fetch(statusEndpoint, {
       method: 'GET',
@@ -77,17 +63,12 @@ export default async function handler(req, res) {
 
     const data = await statusResponse.json()
     
-    console.log(`📡 SkipSherpa job ${jobId} response:`, {
-      status: statusResponse.status,
-      jobStatus: data.status,
-      hasResults: !!data.results
-    })
     
     // Parse SkipSherpa response format
     // Adjust based on actual API response structure
     if (data.status === 'completed' || data.completed || data.results) {
       // Transform SkipSherpa results to our format
-      const results = (data.results || []).map((row, index) => {
+      const results = (data.results || []).map((row) => {
         // Extract phone numbers - adjust field names based on actual API
         const phones = [
           row.phone,
@@ -141,7 +122,6 @@ export default async function handler(req, res) {
         }
       })
       
-      console.log(`✅ Returning ${results.length} skip trace results for job ${jobId}`)
       
       return res.status(200).json({
         status: 'completed',

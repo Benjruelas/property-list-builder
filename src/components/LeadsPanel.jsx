@@ -1,43 +1,14 @@
 import { useState, useMemo, useCallback } from 'react'
-import { X, Search, ChevronDown, ChevronRight, Users, MapPin, Clock, ArrowUpDown, Filter, SlidersHorizontal } from 'lucide-react'
+import { X, Search, ChevronDown, ChevronRight, Users, Clock } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
-import { formatTimeInState, getStreetAddress, loadLeads, saveLeads } from '../utils/dealPipeline'
+import { formatTimeInState, loadLeads, saveLeads } from '../utils/dealPipeline'
 import { LeadDetails } from './LeadDetails'
-
-const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest First' },
-  { value: 'oldest', label: 'Oldest First' },
-  { value: 'address', label: 'Address A–Z' },
-  { value: 'owner', label: 'Owner A–Z' },
-  { value: 'stage', label: 'Stage Order' },
-]
 
 function getColumnName(colId, columns) {
   const col = columns.find(c => c.id === colId)
   return col?.name || colId
-}
-
-function sortLeads(leads, sortBy, columns) {
-  const sorted = [...leads]
-  switch (sortBy) {
-    case 'newest':
-      return sorted.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    case 'oldest':
-      return sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
-    case 'address':
-      return sorted.sort((a, b) => (a.address || '').localeCompare(b.address || ''))
-    case 'owner':
-      return sorted.sort((a, b) => (a.owner || '').localeCompare(b.owner || ''))
-    case 'stage': {
-      const order = {}
-      columns.forEach((c, i) => { order[c.id] = i })
-      return sorted.sort((a, b) => (order[a.status] ?? 999) - (order[b.status] ?? 999))
-    }
-    default:
-      return sorted
-  }
 }
 
 function LeadCard({ lead, columns, pipelineTitle, onClick }) {
@@ -88,12 +59,14 @@ export function LeadsPanel({
   skipTracingInProgress,
   onLeadsChange,
   onOpenScheduleAtDate,
+  onRequestMoveLead,
+  onRequestRemoveLead,
+  onGoToParcelOnMap,
+  onOpenAddTask,
 }) {
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('newest')
-  const [filterStage, setFilterStage] = useState('all')
-  const [filterPipeline, setFilterPipeline] = useState('all')
-  const [showSortFilter, setShowSortFilter] = useState(false)
+  /** 'leads' = pipeline leads list; 'clients' = reserved for later */
+  const [contactsTab, setContactsTab] = useState('leads')
   const [collapsedPipelines, setCollapsedPipelines] = useState({})
   const [selectedLead, setSelectedLead] = useState(null)
   const [selectedLeadPipelineId, setSelectedLeadPipelineId] = useState(null)
@@ -118,35 +91,19 @@ export function LeadsPanel({
     return []
   }, [pipelines, dealPipelineLeads])
 
-  const allStages = useMemo(() => {
-    const map = new Map()
-    allPipelineData.forEach(p => {
-      p.columns.forEach(c => {
-        if (!map.has(c.id)) map.set(c.id, c.name)
-      })
-    })
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
-  }, [allPipelineData])
-
   const filteredPipelines = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return allPipelineData
-      .filter(p => filterPipeline === 'all' || p.id === filterPipeline)
-      .map(p => {
-        let leads = p.leads
-        if (filterStage !== 'all') {
-          leads = leads.filter(l => l.status === filterStage)
-        }
-        if (q) {
-          leads = leads.filter(l =>
-            (l.address || '').toLowerCase().includes(q) ||
-            (l.owner || '').toLowerCase().includes(q)
-          )
-        }
-        leads = sortLeads(leads, sortBy, p.columns)
-        return { ...p, leads }
-      })
-  }, [allPipelineData, search, sortBy, filterStage, filterPipeline])
+    return allPipelineData.map(p => {
+      let leads = [...p.leads].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      if (q) {
+        leads = leads.filter(l =>
+          (l.address || '').toLowerCase().includes(q) ||
+          (l.owner || '').toLowerCase().includes(q)
+        )
+      }
+      return { ...p, leads }
+    })
+  }, [allPipelineData, search])
 
   const totalLeads = filteredPipelines.reduce((sum, p) => sum + p.leads.length, 0)
   const totalAll = allPipelineData.reduce((sum, p) => sum + p.leads.length, 0)
@@ -162,8 +119,6 @@ export function LeadsPanel({
     lat: lead.lat,
     lng: lead.lng,
   })
-
-  const allLeads = useMemo(() => allPipelineData.flatMap(p => p.leads), [allPipelineData])
 
   const handleLeadUpdate = useCallback((updated) => {
     setSelectedLead(updated)
@@ -185,133 +140,79 @@ export function LeadsPanel({
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
-          <DialogDescription className="sr-only">All leads across your pipes</DialogDescription>
+        <DialogHeader className="px-5 pt-5 pb-0 border-b-0 text-left" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
+          <DialogDescription className="sr-only">Contacts: leads across your pipes, and clients</DialogDescription>
           <div className="map-panel-header-toolbar">
             <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
               <Users className="h-5 w-5 shrink-0" />
-              <span className="truncate">Leads</span>
-              {totalAll > 0 && (
+              <span className="truncate">Contacts</span>
+              {contactsTab === 'leads' && totalAll > 0 && (
                 <span className="text-sm font-normal opacity-50 ml-1 shrink-0">{totalAll}</span>
               )}
             </DialogTitle>
             <div className="map-panel-header-actions gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowSortFilter(v => !v)}
-                title="Sort & Filter"
-                className={cn(showSortFilter && "opacity-100")}
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-              </Button>
               <Button variant="ghost" size="icon" onClick={onClose} title="Close">
                 <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Search */}
+          {/* Search — always visible; filters leads list (Clients will use this when data exists) */}
           <div className="relative mt-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40" />
             <input
-              type="text"
+              type="search"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search leads by address or owner..."
+              placeholder="Search contacts by address or owner..."
               className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+              aria-label="Search contacts"
             />
           </div>
 
-          {/* Sort & Filter bar */}
-          {showSortFilter && (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs opacity-50 flex items-center gap-1"><ArrowUpDown className="h-3 w-3" /> Sort</span>
-                <div className="settings-segmented inline-flex rounded-lg p-0.5 gap-0.5 flex-wrap">
-                  {SORT_OPTIONS.map(o => (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => setSortBy(o.value)}
-                      className={cn(
-                        "px-2 py-0.5 text-[11px] font-medium rounded-md transition-all",
-                        sortBy === o.value && "seg-active"
-                      )}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {allStages.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs opacity-50 flex items-center gap-1"><Filter className="h-3 w-3" /> Stage</span>
-                  <div className="settings-segmented inline-flex rounded-lg p-0.5 gap-0.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setFilterStage('all')}
-                      className={cn(
-                        "px-2 py-0.5 text-[11px] font-medium rounded-md transition-all",
-                        filterStage === 'all' && "seg-active"
-                      )}
-                    >
-                      All
-                    </button>
-                    {allStages.map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setFilterStage(s.id)}
-                        className={cn(
-                          "px-2 py-0.5 text-[11px] font-medium rounded-md transition-all",
-                          filterStage === s.id && "seg-active"
-                        )}
-                      >
-                        {s.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {allPipelineData.length > 1 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs opacity-50 flex items-center gap-1"><Users className="h-3 w-3" /> Pipeline</span>
-                  <div className="settings-segmented inline-flex rounded-lg p-0.5 gap-0.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setFilterPipeline('all')}
-                      className={cn(
-                        "px-2 py-0.5 text-[11px] font-medium rounded-md transition-all",
-                        filterPipeline === 'all' && "seg-active"
-                      )}
-                    >
-                      All
-                    </button>
-                    {allPipelineData.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setFilterPipeline(p.id)}
-                        className={cn(
-                          "px-2 py-0.5 text-[11px] font-medium rounded-md transition-all",
-                          filterPipeline === p.id && "seg-active"
-                        )}
-                      >
-                        {p.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+          {/* Tab bar — same pattern as More Details (ParcelDetailsV3) */}
+          <div className="mt-3 border-b border-white/15">
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide -mb-px" role="tablist" aria-label="Contacts sections">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={contactsTab === 'leads'}
+                onClick={() => setContactsTab('leads')}
+                className={cn(
+                  'px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors',
+                  contactsTab === 'leads'
+                    ? 'border-blue-400 text-blue-400'
+                    : 'border-transparent opacity-50 hover:opacity-80'
+                )}
+              >
+                Leads
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={contactsTab === 'clients'}
+                onClick={() => setContactsTab('clients')}
+                className={cn(
+                  'px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors',
+                  contactsTab === 'clients'
+                    ? 'border-blue-400 text-blue-400'
+                    : 'border-transparent opacity-50 hover:opacity-80'
+                )}
+              >
+                Clients
+              </button>
             </div>
-          )}
+          </div>
+
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-3 space-y-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-          {totalAll === 0 ? (
+          {contactsTab === 'clients' ? (
+            <div className="text-center py-16 px-2">
+              <p className="text-sm opacity-60">Clients coming soon.</p>
+              <p className="text-xs opacity-40 mt-2">We&apos;ll add client records here next.</p>
+            </div>
+          ) : totalAll === 0 ? (
             <div className="text-center py-16">
               <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm opacity-60">No leads yet.</p>
@@ -329,7 +230,7 @@ export function LeadsPanel({
           ) : totalLeads === 0 ? (
             <div className="text-center py-12">
               <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm opacity-60">No leads match your filters.</p>
+              <p className="text-sm opacity-60">No leads match your search.</p>
             </div>
           ) : (
             filteredPipelines.map(pipeline => {
@@ -393,11 +294,23 @@ export function LeadsPanel({
             onOpenScheduleAtDate(task.scheduledAt)
           }
         } : undefined}
-        onGoToPipeline={onOpenDealPipeline ? (pipelineId) => {
+        pipelineName={pipelines.length > 0 ? (pipelines.find(p => p.id === selectedLeadPipelineId)?.title || 'Pipes') : null}
+        onRequestMoveLead={onRequestMoveLead}
+        onRequestRemoveLead={onRequestRemoveLead}
+        onGoToParcelOnMap={onGoToParcelOnMap}
+        onGoToPipeline={onOpenDealPipeline ? (pid) => {
           setSelectedLead(null)
           setSelectedLeadPipelineId(null)
           onClose()
-          onOpenDealPipeline(pipelineId)
+          onOpenDealPipeline(pid)
+        } : undefined}
+        onOpenAddTask={onOpenAddTask ? (lead) => {
+          if (lead) {
+            const pid = selectedLeadPipelineId
+            setSelectedLead(null)
+            setSelectedLeadPipelineId(null)
+            onOpenAddTask(lead, pid)
+          }
         } : undefined}
       />
     </Dialog>

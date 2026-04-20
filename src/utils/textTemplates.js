@@ -86,13 +86,3 @@ export const deleteTextTemplate = (templateId) => {
   const filtered = templates.filter((t) => t.id !== templateId)
   saveTextTemplates(filtered)
 }
-
-/**
- * Get a specific template by ID
- * @param {string} templateId - Template ID
- * @returns {Object|null} Template object or null
- */
-export const getTextTemplate = (templateId) => {
-  const templates = getTextTemplates()
-  return templates.find((t) => t.id === templateId) || null
-}

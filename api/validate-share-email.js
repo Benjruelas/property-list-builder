@@ -1,3 +1,5 @@
+import { resolveDevBypassUser, DEV_BYPASS_KNOWN_EMAILS } from './lib/devBypassUsers.js'
+
 /**
  * Validates that an email belongs to a known user (owner or shared-with in our lists).
  * Without Firebase Admin SDK we can only check against users present in our lists data.
@@ -112,9 +114,8 @@ export default async function handler(req, res) {
   const origin = req.headers.origin || ''
   const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
   const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
-  const user = allowDevBypass && idToken === 'dev-bypass'
-    ? { uid: 'dev-local', email: 'dev@localhost' }
-    : await verifyFirebaseToken(idToken)
+  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
+  if (!user) user = await verifyFirebaseToken(idToken)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' })
@@ -129,6 +130,9 @@ export default async function handler(req, res) {
     const [lists, pipelines] = await Promise.all([getAllLists(), getAllPipelines()])
     const knownEmails = buildKnownEmails(lists, pipelines)
     if (user?.email) knownEmails.add(user.email) // current user is always valid
+    if (allowDevBypass) {
+      for (const e of DEV_BYPASS_KNOWN_EMAILS) knownEmails.add(e)
+    }
     const valid = knownEmails.has(email)
 
     return res.status(200).json({ valid })

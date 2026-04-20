@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, FileText, Upload } from 'lucide-react'
+import { useState, useCallback, useEffect } from 'react'
+import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { showToast } from './ui/toast'
@@ -8,6 +8,8 @@ import { DEFAULT_SETTINGS } from '../utils/settings'
 import { saveUserData, readLocalBlob } from '../utils/userDataSync'
 import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotifications'
 import { cn } from '@/lib/utils'
+import { getSkipTracedList } from '../utils/skipTracedList'
+import { useAuth } from '@/contexts/AuthContext'
 
 const MAP_STYLES = [
   { value: 'satellite', label: 'Satellite' },
@@ -15,11 +17,16 @@ const MAP_STYLES = [
   { value: 'hybrid', label: 'Hybrid' },
 ]
 
-const FOLLOW_DELAY_OPTIONS = [
-  { value: 3000, label: '3s' },
-  { value: 5000, label: '5s' },
-  { value: 10000, label: '10s' },
-  { value: 0, label: 'Never' },
+const BOUNDARY_COLORS = [
+  { value: '#2563eb', label: 'Blue' },
+  { value: '#ffffff', label: 'White' },
+  { value: '#ef4444', label: 'Red' },
+  { value: '#22c55e', label: 'Green' },
+  { value: '#f97316', label: 'Orange' },
+  { value: '#a855f7', label: 'Purple' },
+  { value: '#eab308', label: 'Yellow' },
+  { value: '#06b6d4', label: 'Cyan' },
+  { value: '#ec4899', label: 'Pink' },
 ]
 
 const SMOOTHING_OPTIONS = [
@@ -40,10 +47,10 @@ const DEADLINE_LEAD_OPTIONS = [
   { value: 60, label: '1h' },
 ]
 
-function Section({ icon: Icon, title, children, defaultOpen = true }) {
+function Section({ icon: Icon, title, children, defaultOpen = true, dataTour }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="settings-section border border-white/10 rounded-lg overflow-hidden">
+    <div className="settings-section border border-white/10 rounded-lg overflow-hidden" data-tour={dataTour || undefined}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -172,14 +179,64 @@ function ZoomSlider({ value, min = 14, max = 19, onChange }) {
   )
 }
 
+function OpacitySlider({ value, onChange }) {
+  const pct = value
+  return (
+    <div className="settings-zoom-slider flex items-center gap-3 w-full">
+      <span className="flex-shrink-0 text-[11px] font-medium text-white/50 w-5 text-right">0</span>
+      <div className="relative flex-1 h-7 flex items-center">
+        <div className="absolute inset-x-0 h-1 rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-white/40"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={value}
+          onChange={e => onChange(Number(e.target.value))}
+          className="settings-range-input absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        />
+        <div
+          className="absolute h-4 w-4 rounded-full bg-white border-2 border-white/60 pointer-events-none"
+          style={{ left: `calc(${pct}% - 8px)` }}
+        />
+      </div>
+      <span className="flex-shrink-0 text-[11px] font-medium text-white/50 w-7">100</span>
+    </div>
+  )
+}
+
 const LS_DATA_KEYS = [
   'deal_pipeline_columns', 'deal_pipeline_leads', 'deal_pipeline_title',
   'lead_tasks', 'parcel_notes', 'skip_traced_parcels',
   'email_templates', 'text_templates', 'skip_trace_jobs', 'skip_traced_list',
 ]
 
-export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, getToken, onRestartTour }) {
+export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, parcelBoundaryColor, onBoundaryColorChange, onBoundaryOpacityChange, getToken, onRestartTour, onLogout, onOpenParcelDetails }) {
+  const { devPersona, switchDevPersona, DEV_PERSONA_A, DEV_PERSONA_B, currentUser } = useAuth()
+  const showDevPersonaSwitcher = import.meta.env.DEV && typeof switchDevPersona === 'function'
   const [syncing, setSyncing] = useState(false)
+  const [skipTracedList, setSkipTracedList] = useState(null)
+  const [expandedSkipTracedLists, setExpandedSkipTracedLists] = useState(new Set())
+
+  useEffect(() => {
+    if (isOpen) {
+      setSkipTracedList(getSkipTracedList())
+    } else {
+      setSkipTracedList(null)
+      setExpandedSkipTracedLists(new Set())
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const id = setInterval(() => setSkipTracedList(getSkipTracedList()), 2000)
+    return () => clearInterval(id)
+  }, [isOpen])
 
   const update = useCallback((partial) => {
     if (onSettingsChange) onSettingsChange(partial)
@@ -279,10 +336,60 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
             <SettingRow label="Auto-Follow" description="Pan map to keep your location centered">
               <Toggle checked={s.autoFollow} onChange={v => update({ autoFollow: v })} />
             </SettingRow>
-            <SettingRow label="Follow Resume Delay" description="Resume after inactivity" stacked>
-              <SegmentedControl value={s.followResumeDelay} onChange={v => update({ followResumeDelay: Number(v) })} options={FOLLOW_DELAY_OPTIONS} />
+            <SettingRow label="Parcel Boundary Color" description="Outline color for property parcels" stacked>
+              <div className="flex flex-wrap gap-2">
+                {BOUNDARY_COLORS.map(c => {
+                  const active = (parcelBoundaryColor || '#2563eb') === c.value
+                  return (
+                    <div
+                      key={c.value}
+                      tabIndex={0}
+                      title={c.label}
+                      onClick={() => onBoundaryColorChange(c.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onBoundaryColorChange(c.value) }}
+                      className={cn(
+                        "color-swatch h-8 w-8 rounded-full cursor-pointer transition-transform duration-150 flex-shrink-0",
+                        active ? "scale-110 ring-2 ring-white/40 border-2 border-white" : "border-2 border-white/25 hover:scale-105 hover:border-white/50"
+                      )}
+                      style={{ '--swatch-bg': c.value }}
+                    />
+                  )
+                })}
+              </div>
+            </SettingRow>
+            <SettingRow label="Boundary Opacity" description="Default opacity for parcel outlines" stacked>
+              <OpacitySlider value={s.parcelBoundaryOpacity ?? 80} onChange={v => { update({ parcelBoundaryOpacity: v }); onBoundaryOpacityChange?.(v) }} />
             </SettingRow>
           </Section>
+
+          {showDevPersonaSwitcher && (
+            <Section icon={Users} title="Local dev user" defaultOpen>
+              <p className="text-xs opacity-50 -mt-1">
+                Switch between two synthetic users to test list and pipe sharing. The page reloads; use two browser profiles with different personas for side-by-side testing.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={devPersona === DEV_PERSONA_A ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1 min-w-[8rem]"
+                  onClick={() => switchDevPersona(DEV_PERSONA_A)}
+                >
+                  User A (dev@localhost)
+                </Button>
+                <Button
+                  type="button"
+                  variant={devPersona === DEV_PERSONA_B ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1 min-w-[8rem]"
+                  onClick={() => switchDevPersona(DEV_PERSONA_B)}
+                >
+                  User B (dev2@localhost)
+                </Button>
+              </div>
+              <p className="text-xs opacity-40">Active: {currentUser?.email ?? '—'}</p>
+            </Section>
+          )}
 
           {/* ---- Path Recording ---- */}
           <Section icon={Route} title="Path Recording">
@@ -292,6 +399,102 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
             <SettingRow label="Distance Units" stacked>
               <SegmentedControl value={s.distanceUnit} onChange={v => update({ distanceUnit: v })} options={UNIT_OPTIONS} />
             </SettingRow>
+          </Section>
+
+          {/* ---- Skip Traced Parcels ---- */}
+          <Section icon={Phone} title="Skip Traced Parcels" defaultOpen={false} dataTour="settings-skip-traced-section">
+            {(!skipTracedList || (skipTracedList.parcels.length === 0 && skipTracedList.listItems.length === 0)) ? (
+              <p className="text-xs opacity-50 -mt-1">No skip traced parcels yet.</p>
+            ) : (
+              <div className="space-y-3 -mt-1">
+                {skipTracedList.parcels.length > 0 && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-semibold opacity-60 uppercase tracking-wide">Individual Parcels ({skipTracedList.parcels.length})</h4>
+                    {skipTracedList.parcels.map((parcel, index) => {
+                      const parcelId = parcel.id || parcel.properties?.PROP_ID || `parcel-${index}`
+                      const addr = parcel.properties?.SITUS_ADDR || parcel.properties?.SITE_ADDR || parcel.properties?.ADDRESS || parcel.address || 'No address'
+                      return (
+                        <button
+                          key={parcelId}
+                          type="button"
+                          className="w-full text-left p-2.5 rounded-lg border border-white/15 hover:border-white/30 hover:bg-white/5 transition-colors"
+                          onClick={() => {
+                            if (!onOpenParcelDetails) return
+                            onClose?.()
+                            onOpenParcelDetails({
+                              id: parcelId,
+                              properties: parcel.properties || parcel,
+                              address: addr,
+                              lat: parcel.lat || parcel.properties?.LATITUDE ? parseFloat(parcel.lat || parcel.properties?.LATITUDE) : null,
+                              lng: parcel.lng || parcel.properties?.LONGITUDE ? parseFloat(parcel.lng || parcel.properties?.LONGITUDE) : null,
+                            })
+                          }}
+                        >
+                          <div className="text-sm font-medium truncate">{addr}</div>
+                          {parcel.skipTracedAt && <div className="text-xs opacity-50">{new Date(parcel.skipTracedAt).toLocaleDateString()}</div>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {skipTracedList.listItems.length > 0 && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-semibold opacity-60 uppercase tracking-wide">Skip Traced Lists ({skipTracedList.listItems.length})</h4>
+                    {skipTracedList.listItems.map((listItem) => {
+                      const isExpanded = expandedSkipTracedLists.has(listItem.listId)
+                      return (
+                        <div key={listItem.listId} className="rounded-lg border border-white/15">
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 p-2.5 text-left hover:bg-white/5 transition-colors rounded-lg"
+                            onClick={() => setExpandedSkipTracedLists(prev => {
+                              const next = new Set(prev)
+                              next.has(listItem.listId) ? next.delete(listItem.listId) : next.add(listItem.listId)
+                              return next
+                            })}
+                          >
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 opacity-60 flex-shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 opacity-60 flex-shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{listItem.listName}</div>
+                              <div className="text-xs opacity-50">{listItem.parcels.length} parcel{listItem.parcels.length !== 1 ? 's' : ''}{listItem.skipTracedAt ? ` • ${new Date(listItem.skipTracedAt).toLocaleDateString()}` : ''}</div>
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-2.5 pb-2.5 pt-1 space-y-1 border-t border-white/10">
+                              {listItem.parcels.map((parcel, idx) => {
+                                const pid = parcel.id || parcel.properties?.PROP_ID || `p-${idx}`
+                                const addr = parcel.properties?.SITUS_ADDR || parcel.properties?.SITE_ADDR || parcel.properties?.ADDRESS || parcel.address || 'No address'
+                                return (
+                                  <button
+                                    key={pid}
+                                    type="button"
+                                    className="w-full text-left p-2 rounded border border-white/10 hover:border-white/25 hover:bg-white/5 transition-colors text-sm"
+                                    onClick={() => {
+                                      if (!onOpenParcelDetails) return
+                                      onClose?.()
+                                      onOpenParcelDetails({
+                                        id: pid,
+                                        properties: parcel.properties || parcel,
+                                        address: addr,
+                                        lat: parcel.lat || parcel.properties?.LATITUDE ? parseFloat(parcel.lat || parcel.properties?.LATITUDE) : null,
+                                        lng: parcel.lng || parcel.properties?.LONGITUDE ? parseFloat(parcel.lng || parcel.properties?.LONGITUDE) : null,
+                                      })
+                                    }}
+                                  >
+                                    <div className="font-medium truncate">{addr}</div>
+                                    {parcel.skipTracedAt && <div className="text-xs opacity-50">{new Date(parcel.skipTracedAt).toLocaleDateString()}</div>}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </Section>
 
           {/* ---- Email & Export ---- */}
@@ -310,98 +513,20 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
                 className="w-full text-sm rounded-lg px-3 py-2"
               />
             </div>
-          </Section>
-
-          {/* ---- Report Branding ---- */}
-          <Section icon={FileText} title="Report Branding" defaultOpen={false}>
-            <p className="text-xs opacity-50 -mt-1 mb-2">
-              These fields appear on generated roof measurement PDF reports.
-            </p>
-            <div>
-              <label className="block text-sm font-medium mb-1">Company Name</label>
-              <input
-                type="text"
-                value={s.reportBranding?.companyName || ''}
-                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyName: e.target.value } })}
-                placeholder="Acme Roofing"
-                className="w-full text-sm rounded-lg px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Phone</label>
-              <input
-                type="tel"
-                value={s.reportBranding?.companyPhone || ''}
-                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyPhone: e.target.value } })}
-                placeholder="(555) 123-4567"
-                className="w-full text-sm rounded-lg px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
-              <input
-                type="email"
-                value={s.reportBranding?.companyEmail || ''}
-                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyEmail: e.target.value } })}
-                placeholder="info@acmeroofing.com"
-                className="w-full text-sm rounded-lg px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Website</label>
-              <input
-                type="text"
-                value={s.reportBranding?.companyWebsite || ''}
-                onChange={e => update({ reportBranding: { ...(s.reportBranding || {}), companyWebsite: e.target.value } })}
-                placeholder="www.acmeroofing.com"
-                className="w-full text-sm rounded-lg px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Company Logo</label>
-              <p className="text-xs opacity-50 mb-1.5">PNG or JPEG, displayed on the report cover page</p>
-              <div className="flex items-center gap-3">
-                {s.reportBranding?.logoBase64 ? (
-                  <img
-                    src={s.reportBranding.logoBase64}
-                    alt="Logo preview"
-                    className="h-10 w-auto max-w-[80px] rounded border border-white/20 object-contain bg-white/10 p-1"
-                  />
-                ) : null}
-                <label className="settings-data-btn flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
-                  <Upload className="h-3.5 w-3.5" />
-                  {s.reportBranding?.logoBase64 ? 'Change' : 'Upload'}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      if (file.size > 2 * 1024 * 1024) {
-                        showToast('Logo must be under 2 MB', 'error')
-                        return
-                      }
-                      const reader = new FileReader()
-                      reader.onload = () => {
-                        update({ reportBranding: { ...(s.reportBranding || {}), logoBase64: reader.result } })
-                      }
-                      reader.readAsDataURL(file)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
-                {s.reportBranding?.logoBase64 && (
-                  <button
-                    type="button"
-                    onClick={() => update({ reportBranding: { ...(s.reportBranding || {}), logoBase64: '' } })}
-                    className="settings-data-btn-danger flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="h-3 w-3" /> Remove
-                  </button>
-                )}
+            <SettingRow label="Email Signature" description="Append a signature to the end of all outgoing emails">
+              <Toggle checked={s.emailSignatureEnabled} onChange={v => update({ emailSignatureEnabled: v })} />
+            </SettingRow>
+            {s.emailSignatureEnabled && (
+              <div>
+                <textarea
+                  value={s.emailSignature}
+                  onChange={e => update({ emailSignature: e.target.value })}
+                  placeholder="e.g. Best regards,&#10;John Doe&#10;(555) 123-4567"
+                  className="w-full text-sm rounded-lg px-3 py-2 min-h-[80px] resize-y"
+                  rows={3}
+                />
               </div>
-            </div>
+            )}
           </Section>
 
           {/* ---- Notifications ---- */}
@@ -492,6 +617,20 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, get
             >
               <HelpCircle className="h-4 w-4 opacity-70" />
               Restart Welcome Tour
+            </button>
+          )}
+
+          {onLogout && (
+            <button
+              type="button"
+              onClick={async () => {
+                onClose?.()
+                await onLogout()
+              }}
+              className="settings-data-btn-danger w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-lg transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
             </button>
           )}
         </div>

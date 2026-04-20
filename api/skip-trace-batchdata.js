@@ -1,13 +1,7 @@
 /**
- * Vercel Serverless Function
- * Handles skip tracing via BatchData API
- * 
- * POST: Skip trace one or more parcels
- * Body: { parcels: [{ parcelId, address, ownerName }] }
- * 
- * Documentation: https://developer.batchdata.com/docs/batchdata/
- * API Base URL: https://api.batchdata.com/api/v1 (using v1 instead of v3)
- * Authentication: Uses API token with Bearer format
+ * Skip tracing via BatchData API (v1).
+ * POST body: { parcels: [{ parcelId, address, ownerName }] }
+ * Docs: https://developer.batchdata.com/docs/batchdata/
  */
 
 export default async function handler(req, res) {
@@ -30,27 +24,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Parcels array is required' })
     }
 
-    // BatchData API token - must match example exactly: Authorization: <YOUR_TOKEN>
-    // Use the token from .env.local: Xhelik8Fxu7W8ZDeJmGbxrLYMrQOU4hAueLKWobK
     const apiToken = process.env.BATCHDATA_API_KEY
-    
+
     if (!apiToken) {
-      console.error('❌ BATCHDATA_API_KEY not found in environment variables')
-      console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('BATCH')).join(', ') || 'none')
-      return res.status(500).json({ 
+      console.error('BATCHDATA_API_KEY not found in environment variables')
+      return res.status(500).json({
         error: 'Skip tracing service not configured',
         message: 'BATCHDATA_API_KEY environment variable is missing. For local dev, use "vercel dev" instead of "npm run dev"'
       })
-    }
-    
-    // Log token info for debugging (first 10 chars only for security)
-    console.log(`🔐 API Token loaded: ${apiToken.substring(0, 10)}... (length: ${apiToken.length})`)
-    
-    // Verify we're using the correct token (should start with Xhelik)
-    if (!apiToken.startsWith('Xhelik')) {
-      console.warn(`⚠️ WARNING: API token doesn't start with 'Xhelik'. Current token starts with: ${apiToken.substring(0, 10)}`)
-      console.warn('⚠️ Make sure BATCHDATA_API_KEY in .env.local is set to: Xhelik8Fxu7W8ZDeJmGbxrLYMrQOU4hAueLKWobK')
-      console.warn('⚠️ Restart "vercel dev" after updating .env.local')
     }
 
     // Parse addresses - BatchData requires full address with city, state, and zip
@@ -129,30 +110,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No valid addresses found' })
     }
 
-    // Submit to BatchData API
-    // Using v1 API instead of v3
     const BATCHDATA_API_BASE = process.env.BATCHDATA_API_BASE || 'https://api.batchdata.com/api/v1'
-    
-    // BatchData API v1 endpoints:
-    // - Single parcel (synchronous): /property/skip-trace
-    // - Multiple parcels (asynchronous): /property/skip-trace/async
+    // Single parcel: synchronous endpoint. Multiple parcels: async endpoint (returns job ID).
     const isSingleParcel = requests.length === 1
     const endpoint = isSingleParcel
       ? `${BATCHDATA_API_BASE}/property/skip-trace`
       : `${BATCHDATA_API_BASE}/property/skip-trace/async`
-    
-    console.log(`📡 Calling BatchData API: ${endpoint}`)
-    console.log(`📦 Sending ${requests.length} request${requests.length > 1 ? 's' : ''} (${isSingleParcel ? 'synchronous' : 'asynchronous'})`)
-    console.log(`📦 Request body preview:`, JSON.stringify({ requests: requests }, null, 2).substring(0, 300))
-    
-    // Use API token in Authorization header with Bearer format
-    // Based on testing: Bearer format is recognized (returns 403 instead of 401)
-    // Direct token returns 401 "Invalid token", Bearer returns 403 "No permission"
-    // This indicates Bearer is the correct format, but token needs proper permissions
+
     const authHeader = `Bearer ${apiToken.trim()}`
-    
-    console.log(`🔐 Using API token with Bearer format (first 10 chars): ${apiToken.substring(0, 10)}...`)
-    
+
     let response
     try {
       response = await fetch(endpoint, {
@@ -162,22 +128,15 @@ export default async function handler(req, res) {
           'Accept': 'application/json',
           'Authorization': authHeader
         },
-        body: JSON.stringify({
-          requests: requests
-        }),
-        redirect: 'manual' // Don't follow redirects - we want to see the actual response
+        body: JSON.stringify({ requests }),
+        redirect: 'manual'
       })
-      
-      console.log(`📡 Response status: ${response.status} ${response.statusText}`)
-      const responseHeaders = Object.fromEntries(response.headers.entries())
-      console.log(`📡 Response headers:`, JSON.stringify(responseHeaders, null, 2))
-      
-      // If we got a redirect (3xx), log it
+
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location')
-        console.error(`❌ BatchData API returned redirect (${response.status}) to: ${location}`)
-        console.error('❌ This suggests the endpoint URL might be incorrect')
-        console.error(`❌ Tried endpoint: ${endpoint}`)
+        console.error(`BatchData API returned redirect (${response.status}) to: ${location}`)
+        console.error('This suggests the endpoint URL might be incorrect')
+        console.error(`Tried endpoint: ${endpoint}`)
         return res.status(500).json({
           error: 'API endpoint returned redirect',
           message: `BatchData API redirected to: ${location}`,
@@ -185,96 +144,65 @@ export default async function handler(req, res) {
         })
       }
     } catch (fetchError) {
-      console.error('❌ Fetch error calling BatchData API:', fetchError)
+      console.error('Fetch error calling BatchData API:', fetchError)
       throw new Error(`Failed to connect to BatchData API: ${fetchError.message}`)
     }
 
-    console.log(`📡 BatchData API response status: ${response.status}`)
-    
-    // Get content type to determine how to parse response
     const contentType = response.headers.get('content-type') || ''
     const isJSON = contentType.includes('application/json')
-    
-    // Read response body as text first (can only be read once)
     const responseText = await response.text()
-    console.log(`📄 Response content-type: ${contentType}`)
-    console.log(`📄 Response preview (first 200 chars): ${responseText.substring(0, 200)}`)
 
     if (!response.ok) {
-      console.error('❌ BatchData API error:', response.status, responseText.substring(0, 500))
-      console.error('❌ Request endpoint:', endpoint)
-      console.error('❌ Request headers:', {
+      console.error('BatchData API error:', response.status, responseText.substring(0, 500))
+      console.error('Request endpoint:', endpoint)
+      console.error('Request headers:', {
         'Authorization': authHeader ? `${authHeader.substring(0, 20)}...` : 'MISSING',
         'Content-Type': 'application/json'
       })
       
-      // Try to parse error as JSON for better error messages
       let errorDetails = responseText
       if (isJSON) {
         try {
           const errorJson = JSON.parse(responseText)
           errorDetails = errorJson
-          console.error('❌ BatchData API error details:', JSON.stringify(errorJson, null, 2))
-        } catch (e) {
-          // Not valid JSON despite content-type
+          console.error('BatchData API error details:', JSON.stringify(errorJson, null, 2))
+        } catch {
+          // not valid JSON despite content-type
         }
       }
-      
-      // For 401 Unauthorized, provide more specific error message
+
       if (response.status === 401) {
-        return res.status(401).json({ 
-          error: 'Authentication failed', 
+        return res.status(401).json({
+          error: 'Authentication failed',
           message: 'Invalid API token or authentication method. Please check your BATCHDATA_API_KEY.',
           details: errorDetails
         })
       }
-      
-      // For 429 rate limit errors
+
       if (response.status === 429) {
         return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment and try again.', details: errorDetails })
       }
-      
+
       return res.status(response.status).json({ error: 'Skip tracing failed', details: errorDetails })
     }
 
-    // Parse response based on content type
     let result
     if (isJSON) {
       try {
         result = JSON.parse(responseText)
-        console.log('✅ BatchData API response parsed as JSON')
       } catch (jsonError) {
-        console.error('❌ Failed to parse BatchData API response as JSON:', jsonError)
+        console.error('Failed to parse BatchData API response as JSON:', jsonError)
         console.error('Raw response:', responseText.substring(0, 500))
         throw new Error(`Invalid JSON response from BatchData API: ${jsonError.message}`)
       }
     } else {
-      // Response is not JSON (might be HTML error page)
-      console.error('❌ BatchData API returned non-JSON response (HTML?)')
+      console.error('BatchData API returned non-JSON response (HTML?)')
       console.error('Raw response:', responseText.substring(0, 500))
       throw new Error(`BatchData API returned unexpected content type: ${contentType}. Response appears to be HTML, not JSON.`)
     }
-    
-    // BatchData API v1 response format:
-    // {
-    //   "status": { "code": 200, "text": "OK" },
-    //   "results": {
-    //     "persons": [...]  // Array of person results
-    //   }
-    // }
-    
-    console.log('📦 BatchData v1 response structure:', {
-      hasStatus: !!result.status,
-      statusCode: result.status?.code,
-      hasResults: !!result.results,
-      hasPersons: !!result.results?.persons,
-      personsLength: result.results?.persons?.length || 0,
-      isSingleParcel
-    })
-    
-    // Check for error status
+
     if (result.status && result.status.code !== 200 && result.status.code !== 0) {
-      console.error('❌ BatchData API returned error status:', result.status)
+      console.error('BatchData API returned error status:', result.status)
       return res.status(400).json({
         error: 'BatchData API error',
         message: result.status.message || result.status.text || 'Unknown error',
@@ -283,16 +211,11 @@ export default async function handler(req, res) {
       })
     }
     
-    // Single parcel endpoint returns results directly (synchronous)
+    // Synchronous single-parcel path: response is the full result.
     if (isSingleParcel) {
-      // v1 API returns results in result.results.persons array
-      // The persons array contains the actual person data with phones/emails
       const personsArray = result.results?.persons || []
-      
-      console.log(`📦 Found ${personsArray.length} persons in v1 response`)
-      
+
       if (personsArray.length === 0) {
-        console.warn('⚠️ No persons found in skip trace results')
         return res.status(200).json({
           success: true,
           jobId: 'sync',
@@ -303,52 +226,31 @@ export default async function handler(req, res) {
         })
       }
       
-      // Transform BatchData v1 format to our format
-      // v1 format: result.results.persons is an array of person objects
-      // Each person has: phoneNumbers[], emails[], propertyAddress, etc.
-      // API response structure: person.phoneNumbers[] with { number, carrier, type, tested, reachable, score }
+      // v1 response: result.results.persons[] with { phoneNumbers[], emails[], propertyAddress }
       const transformedResults = personsArray.map((person, personIndex) => {
-        console.log(`📞 Processing person ${personIndex}:`, {
-          hasPhoneNumbers: !!person.phoneNumbers,
-          phoneNumbersType: Array.isArray(person.phoneNumbers) ? 'array' : typeof person.phoneNumbers,
-          phoneNumbersLength: Array.isArray(person.phoneNumbers) ? person.phoneNumbers.length : 0,
-          phoneNumbersSample: Array.isArray(person.phoneNumbers) ? JSON.stringify(person.phoneNumbers[0]) : person.phoneNumbers,
-          hasPhones: !!person.phones, // Legacy check
-          personKeys: Object.keys(person)
-        })
-        
-        // Extract phones from person object
-        // v1 API uses phoneNumbers[] array (not phones[])
         const phones = []
         if (person.phoneNumbers && Array.isArray(person.phoneNumbers)) {
-          // Correct field name: phoneNumbers
           person.phoneNumbers.forEach((phoneObj, idx) => {
-            // Each phone object has: { number, carrier, type, tested, reachable, score }
             const phoneNumber = phoneObj?.number
             if (phoneNumber && typeof phoneNumber === 'string' && phoneNumber.trim()) {
               phones.push(phoneNumber.trim())
             } else {
-              console.warn(`⚠️ Phone ${idx} in person ${personIndex} has unexpected format:`, phoneObj)
+              console.warn(`Phone ${idx} in person ${personIndex} has unexpected format:`, phoneObj)
             }
           })
         } else if (person.phones && Array.isArray(person.phones)) {
-          // Fallback: check for phones[] (legacy format)
           person.phones.forEach((phone, idx) => {
             const phoneNumber = phone?.number || phone?.phone || phone?.phoneNumber || phone
             if (phoneNumber && typeof phoneNumber === 'string' && phoneNumber.trim()) {
               phones.push(phoneNumber.trim())
             } else {
-              console.warn(`⚠️ Phone ${idx} in person ${personIndex} has unexpected format:`, phone)
+              console.warn(`Phone ${idx} in person ${personIndex} has unexpected format:`, phone)
             }
           })
         } else if (person.phone) {
-          // Single phone field (not array)
           phones.push(person.phone)
         }
-        
-        console.log(`📞 Extracted ${phones.length} phone(s) from person ${personIndex}:`, phones)
-        
-        // Extract emails from person object
+
         const emails = []
         if (person.emails && Array.isArray(person.emails)) {
           person.emails.forEach(email => {
@@ -358,32 +260,27 @@ export default async function handler(req, res) {
             }
           })
         } else if (person.email) {
-          // Single email field (not array)
           emails.push(person.email)
         }
-        
-        console.log(`📧 Extracted ${emails.length} email(s) from person ${personIndex}:`, emails)
-        
-        // Extract address from person's propertyAddress or addresses array
+
         const propertyAddr = person.propertyAddress
         const addressObj = propertyAddr || (person.addresses && person.addresses[0]) || null
-        const fullAddress = addressObj?.fullAddress || 
+        const fullAddress = addressObj?.fullAddress ||
           [addressObj?.street, addressObj?.city, addressObj?.state, addressObj?.zip]
             .filter(Boolean).join(', ') || null
-        
-        // Build input address for matching (use propertyAddress from response)
+
         const inputAddr = propertyAddr
         const inputAddressForMatching = [
           inputAddr?.street,
           inputAddr?.city,
           inputAddr?.state
         ].filter(Boolean).join(', ').toLowerCase().trim()
-        
+
         return {
           phone: phones[0] || null,
-          phoneNumbers: phones.filter((v, i, arr) => arr.indexOf(v) === i), // Remove duplicates
+          phoneNumbers: phones.filter((v, i, arr) => arr.indexOf(v) === i),
           email: emails[0] || null,
-          emails: emails.filter((v, i, arr) => arr.indexOf(v) === i), // Remove duplicates
+          emails: emails.filter((v, i, arr) => arr.indexOf(v) === i),
           address: fullAddress,
           inputAddress: inputAddressForMatching,
           inputAddressRaw: inputAddr?.street || '',
@@ -392,9 +289,7 @@ export default async function handler(req, res) {
           inputZip: inputAddr?.zip || ''
         }
       })
-      
-      console.log(`✅ Transformed ${transformedResults.length} skip trace results`)
-      
+
       return res.status(200).json({
         success: true,
         jobId: 'sync',
@@ -405,18 +300,17 @@ export default async function handler(req, res) {
       })
     }
     
-    // Multiple parcels endpoint returns job ID (asynchronous)
-    // Check for requestId in result.result.meta.requestId
-    const jobId = result.result?.meta?.requestId || 
-                  result.meta?.requestId || 
-                  result.jobId || 
-                  result.id || 
-                  result.job_id || 
-                  result.request_id || 
+    // Async multi-parcel path: response is a job ID under a handful of possible keys.
+    const jobId = result.result?.meta?.requestId ||
+                  result.meta?.requestId ||
+                  result.jobId ||
+                  result.id ||
+                  result.job_id ||
+                  result.request_id ||
                   result.batch_id
     
     if (!jobId) {
-      console.error('❌ No job ID found in response')
+      console.error('No job ID found in response')
       console.error('Response structure:', {
         hasResult: !!result.result,
         hasMeta: !!result.result?.meta,
@@ -426,7 +320,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'No job ID returned from skip tracing service', details: result })
     }
 
-    console.log(`✅ BatchData job submitted with ID: ${jobId}`)
 
     return res.status(200).json({
       success: true,
@@ -437,7 +330,7 @@ export default async function handler(req, res) {
     })
 
   } catch (error) {
-    console.error('❌ Skip trace error:', error)
+    console.error('Skip trace error:', error)
     console.error('Error stack:', error.stack)
     return res.status(500).json({ 
       error: 'Internal server error', 

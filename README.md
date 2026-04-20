@@ -469,7 +469,7 @@ Bidirectional sync between `localStorage` and the server:
 
 ## API Endpoints
 
-All endpoints require `Authorization: Bearer <Firebase ID token>` unless noted. Dev bypass available with `dev-bypass` token on localhost.
+All endpoints require `Authorization: Bearer <Firebase ID token>` unless noted. On localhost, dev bypass tokens are accepted: `dev-bypass` (User A, `dev@localhost`) and `dev-bypass-2` (User B, `dev2@localhost`). In the Settings panel (dev builds), **Local dev user** switches persona and reloads the app.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -583,9 +583,9 @@ All endpoints require `Authorization: Bearer <Firebase ID token>` unless noted. 
 
 Provides Firebase authentication state to the entire app.
 
-**Value:** `currentUser`, `getToken`, `login`, `signup`, `signInWithGoogle`, `logout`, `resetPassword`, `loading`
+**Value:** `currentUser`, `getToken`, `login`, `signup`, `signInWithGoogle`, `logout`, `resetPassword`, `loading`, and in dev only: `devPersona`, `switchDevPersona`, `DEV_PERSONA_A`, `DEV_PERSONA_B`.
 
-In dev mode, uses a hardcoded dev user with a `dev-bypass` token that serverless functions accept on localhost.
+In dev mode, skips Firebase and uses a synthetic user from `localStorage` key `property_list_builder_dev_persona` (`1` = User A + `dev-bypass`, `2` = User B + `dev-bypass-2`). Serverless functions on localhost resolve those tokens to distinct `uid`/`email` for testing sharing.
 
 ### `UserDataSyncContext` (`src/contexts/UserDataSyncContext.jsx`)
 
@@ -609,7 +609,7 @@ The app uses a **glassmorphism / "liquid glass"** design language defined in `sr
 - **Scrollbar hiding** -- `.scrollbar-hide` utility for clean mobile UX
 - **Safe area insets** -- `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)` throughout for iPhone notch/home bar support
 
-Map-specific styles handle parcel tooltips, selection states, path tracking animations (`.path-glow-pulse`, `.path-line-pulse`), and Leaflet control overrides.
+Map-specific styles handle selection states and Leaflet control overrides.
 
 ---
 

@@ -51,7 +51,6 @@ export const addEmailTemplate = (template) => {
   
   templates.push(newTemplate)
   saveEmailTemplates(templates)
-  console.log('📧 Added email template:', templateId)
   return templateId
 }
 
@@ -76,7 +75,6 @@ export const updateEmailTemplate = (templateId, updates) => {
   }
   
   saveEmailTemplates(templates)
-  console.log('📧 Updated email template:', templateId)
   return true
 }
 
@@ -88,17 +86,6 @@ export const deleteEmailTemplate = (templateId) => {
   const templates = getEmailTemplates()
   const filtered = templates.filter(t => t.id !== templateId)
   saveEmailTemplates(filtered)
-  console.log('📧 Deleted email template:', templateId)
-}
-
-/**
- * Get a specific template by ID
- * @param {string} templateId - Template ID
- * @returns {Object|null} Template object or null
- */
-export const getEmailTemplate = (templateId) => {
-  const templates = getEmailTemplates()
-  return templates.find(t => t.id === templateId) || null
 }
 
 /**
@@ -109,10 +96,9 @@ export const getEmailTemplate = (templateId) => {
  */
 export const replaceTemplateTags = (text, parcelData) => {
   if (!text || !parcelData) return text || ''
-  
+
   const properties = parcelData.properties || {}
-  
-  // Map of tag names to property paths
+
   const tagMap = {
     'Owner Name': properties.OWNER_NAME || parcelData.ownerName || '',
     'Address': parcelData.address || properties.SITUS_ADDR || properties.SITE_ADDR || '',
@@ -123,15 +109,14 @@ export const replaceTemplateTags = (text, parcelData) => {
     'Year Built': properties.YEAR_BUILT || '',
     'Property Value': properties.TOTAL_VALUE || properties.ASSESSED_VALUE || ''
   }
-  
+
   let result = text
-  
-  // Replace each tag
+
   Object.keys(tagMap).forEach(tag => {
     const regex = new RegExp(`\\{${tag}\\}`, 'gi')
     result = result.replace(regex, tagMap[tag] || '')
   })
-  
+
   return result
 }
 

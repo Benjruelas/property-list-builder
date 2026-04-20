@@ -5,25 +5,25 @@ import { Button } from './ui/button'
 /**
  * @param {{ open: boolean, onOpenChange: (open: boolean) => void, pipelines: Array<{ id: string, title?: string, ownerId?: string }>, currentUser: { uid?: string } | null, onSelect: (pipelineId: string) => void }} props
  */
-export function ConvertToLeadPipelineDialog({ open, onOpenChange, pipelines, currentUser, onSelect }) {
+export function ConvertToLeadPipelineDialog({ open, onOpenChange, pipelines, currentUser, onSelect, title = 'Add to which pipeline?', description = 'Choose a pipeline to convert this parcel into a lead.' }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="map-panel convert-to-lead-pipeline-dialog max-w-md p-0 gap-0 overflow-hidden border border-white/15"
+        className="map-panel convert-to-lead-pipeline-dialog max-w-xs p-0 gap-0 overflow-hidden border border-white/15 rounded-2xl"
         showCloseButton={false}
         blurOverlay
       >
         <div className="map-panel-header-toolbar map-panel-header-toolbar--top gap-2 px-4 pt-4 pb-3 border-b border-white/15">
           <div className="map-panel-header-title-wrap min-w-0">
-            <DialogTitle className="text-lg font-semibold text-white/95">Add to which pipeline?</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-white/95">{title}</DialogTitle>
             <DialogDescription className="text-sm text-white/65 mt-1">
-              Choose a pipeline to convert this parcel into a lead.
+              {description}
             </DialogDescription>
           </div>
           <div className="map-panel-header-actions">
-            <Button variant="ghost" size="icon" className="pipeline-icon-btn flex-shrink-0" onClick={() => onOpenChange(false)} title="Close">
+            <button type="button" className="pipeline-icon-btn flex-shrink-0 p-1 rounded-md text-white/60 hover:text-white/90 transition-colors" onClick={() => onOpenChange(false)} title="Close">
               <X className="h-4 w-4" />
-            </Button>
+            </button>
           </div>
         </div>
         <div className="flex flex-col gap-2 p-4 max-h-[min(60vh,320px)] overflow-y-auto">

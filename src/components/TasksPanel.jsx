@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check } from 'lucide-react'
+import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -7,6 +7,7 @@ import { loadLeads, getStreetAddress, getFullAddress } from '@/utils/dealPipelin
 import {
   getAllTasks,
   toggleLeadTask,
+  deleteLeadTask,
   formatTaskScheduledDate,
   formatTaskCompletedDate,
   groupOpenTasksByPipeline,
@@ -17,6 +18,7 @@ import {
 } from '@/utils/leadTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
+
 import { SchedulePicker } from './SchedulePicker'
 import { cn } from '@/lib/utils'
 
@@ -94,7 +96,8 @@ export function TasksPanel({
   leads = [],
   onLeadsChange,
   activePipelineId = null,
-  onOpenTaskInDealPipeline
+  onOpenTaskInDealPipeline,
+  onOpenScheduleAtDate
 }) {
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
@@ -258,6 +261,19 @@ export function TasksPanel({
     scheduleSync()
   }
 
+  const handleDeleteTask = (task) => {
+    deleteLeadTask(task.parcelId, task.id)
+    refreshTasks()
+    scheduleSync()
+    showToast('Task deleted', 'success')
+  }
+
+  const handleViewOnSchedule = (task) => {
+    if (!task.scheduledAt || !onOpenScheduleAtDate) return
+    onClose?.()
+    onOpenScheduleAtDate(task.scheduledAt)
+  }
+
   const toggleSection = (sectionId) => {
     setCollapsedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }))
   }
@@ -376,7 +392,11 @@ export function TasksPanel({
                       task={task}
                       displayLeads={displayLeads}
                       onToggle={handleToggle}
-                      onActivate={() => handleRowActivate(task, 'unlabeled')}
+                      onActivate={task.parcelId && task.scheduledAt ? null : () => handleRowActivate(task, 'unlabeled')}
+                      onEdit={() => setEditingTask(task)}
+                      onDelete={() => handleDeleteTask(task)}
+                      onViewOnSchedule={task.scheduledAt && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
+                      onOpenLead={task.parcelId ? () => handleRowActivate(task, task.pipelineId || 'unlabeled') : null}
                     />
                   </li>
                 ))}
@@ -411,7 +431,11 @@ export function TasksPanel({
                           task={task}
                           displayLeads={displayLeads}
                           onToggle={handleToggle}
-                          onActivate={() => handleRowActivate(task, sid)}
+                          onActivate={task.parcelId && task.scheduledAt ? null : () => handleRowActivate(task, sid)}
+                          onEdit={() => setEditingTask(task)}
+                          onDelete={() => handleDeleteTask(task)}
+                          onViewOnSchedule={task.scheduledAt && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
+                          onOpenLead={task.parcelId ? () => handleRowActivate(task, sid) : null}
                         />
                       </li>
                     ))}
@@ -433,6 +457,10 @@ export function TasksPanel({
                           displayLeads={displayLeads}
                           onToggle={handleToggle}
                           onActivate={() => handleRowActivate(task, 'unlabeled')}
+                          onEdit={() => setEditingTask(task)}
+                          onDelete={() => handleDeleteTask(task)}
+                          onViewOnSchedule={null}
+                          onOpenLead={task.parcelId ? () => handleRowActivate(task, task.pipelineId || 'unlabeled') : null}
                         />
                       </li>
                     ))}
@@ -468,6 +496,10 @@ export function TasksPanel({
                               displayLeads={displayLeads}
                               onToggle={handleToggle}
                               onActivate={() => handleRowActivate(task, pipeline.id === '__local__' ? '__local__' : pipeline.id)}
+                              onEdit={() => setEditingTask(task)}
+                              onDelete={() => handleDeleteTask(task)}
+                              onViewOnSchedule={null}
+                              onOpenLead={task.parcelId ? () => handleRowActivate(task, pipeline.id === '__local__' ? '__local__' : pipeline.id) : null}
                             />
                           </li>
                         ))}
@@ -483,14 +515,17 @@ export function TasksPanel({
     </Dialog>
 
       <Dialog open={showAddTask} onOpenChange={setShowAddTask}>
-        <DialogContent className="map-panel list-panel new-task-panel max-w-md max-h-[80vh] p-0" showCloseButton={false} nestedOverlay>
-          <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
+        <DialogContent className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} nestedOverlay>
+          <DialogHeader
+            className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
+            style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+          >
             <DialogTitle className="text-xl font-semibold">New task</DialogTitle>
             <DialogDescription className="sr-only">
               Create a task. Title is required. Date, time, and lead assignment are optional.
             </DialogDescription>
           </DialogHeader>
-          <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-140px)] space-y-3 create-list-form">
+          <div className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
             <div>
               <label className="text-xs font-medium block mb-1 opacity-90">
                 Task title{' '}
@@ -604,12 +639,15 @@ export function TasksPanel({
       </Dialog>
 
       <Dialog open={!!editingTask} onOpenChange={(o) => { if (!o) setEditingTask(null) }}>
-        <DialogContent className="map-panel list-panel new-task-panel max-w-md max-h-[85vh] p-0" showCloseButton={false} nestedOverlay>
-          <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
+        <DialogContent className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} nestedOverlay>
+          <DialogHeader
+            className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
+            style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+          >
             <DialogTitle className="text-xl font-semibold">Edit task</DialogTitle>
             <DialogDescription className="sr-only">Edit title, schedule, or assign to a pipeline and lead</DialogDescription>
           </DialogHeader>
-          <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(85vh-140px)] space-y-3 create-list-form">
+          <div className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
             <div>
               <label className="text-xs font-medium block mb-1 opacity-90">Title</label>
               <Input
@@ -707,7 +745,7 @@ export function TasksPanel({
   )
 }
 
-function TaskRow({ task, displayLeads, onToggle, onActivate }) {
+function TaskRow({ task, displayLeads, onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead }) {
   const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
   const leadLine = task.parcelId
     ? `Lead: ${getLeadLabel(lead, task.parcelId)}`
@@ -715,26 +753,38 @@ function TaskRow({ task, displayLeads, onToggle, onActivate }) {
       ? 'Pipeline task'
       : null
   const isDone = task.completed
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', handleOutside)
+    return () => document.removeEventListener('pointerdown', handleOutside)
+  }, [menuOpen])
 
   return (
     <div
       className={cn(
-        'text-xs rounded-lg p-2.5 border transition-colors cursor-pointer',
+        'text-sm rounded-lg p-3 border transition-colors',
+        onActivate ? 'cursor-pointer' : '',
         isDone
           ? 'opacity-80 border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'
           : 'border-white/15 bg-white/[0.06] hover:bg-white/10'
       )}
-      onClick={() => onActivate?.()}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
+      onClick={onActivate ? () => onActivate() : undefined}
+      role={onActivate ? 'button' : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      onKeyDown={onActivate ? (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          onActivate?.()
+          onActivate()
         }
-      }}
+      } : undefined}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2.5">
         <button
           type="button"
           onClick={(e) => onToggle(e, task)}
@@ -745,9 +795,9 @@ function TaskRow({ task, displayLeads, onToggle, onActivate }) {
           title={isDone ? 'Mark incomplete' : 'Mark done'}
         >
           {isDone ? (
-            <CheckSquare className="h-3.5 w-3.5 text-green-600 fill-green-600" />
+            <CheckSquare className="h-[18px] w-[18px] text-green-600 fill-green-600" />
           ) : (
-            <Square className="h-3.5 w-3.5" />
+            <Square className="h-[18px] w-[18px]" />
           )}
         </button>
         <div className="flex-1 min-w-0">
@@ -755,18 +805,71 @@ function TaskRow({ task, displayLeads, onToggle, onActivate }) {
             {task.title || '(untitled)'}
           </div>
           {leadLine && (
-            <div className="text-[10px] text-white/55 mt-0.5 truncate" title={leadLine}>
+            <div className="text-xs text-white/55 mt-0.5 truncate" title={leadLine}>
               {leadLine}
             </div>
           )}
           {isDone && task.completedAt != null && (
-            <div className="text-[10px] text-white/50 mt-0.5 truncate">
+            <div className="text-xs text-white/50 mt-0.5 truncate">
               Completed {formatTaskCompletedDate(task.completedAt)}
             </div>
           )}
           {!isDone && task.scheduledAt && (
-            <div className="text-[10px] text-white/55 mt-0.5 truncate">
+            <div className={cn('text-xs mt-0.5 truncate', task.scheduledAt < Date.now() ? 'text-red-400' : 'text-white/55')}>
               {formatTaskScheduledDate(task.scheduledAt)}
+            </div>
+          )}
+        </div>
+        <div ref={menuRef} className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((p) => !p) }}
+            className="p-1.5 -m-1 rounded-md text-white/50 hover:text-white/80 hover:bg-white/10 transition-colors"
+            title="Options"
+          >
+            <MoreVertical className="h-[18px] w-[18px]" />
+          </button>
+          {menuOpen && (
+            <div
+              className="absolute right-0 top-full mt-1 z-[100] rounded-xl py-1 overflow-hidden shadow-xl border border-white/20 min-w-[160px]"
+              style={{ background: 'rgba(30, 30, 30, 0.92)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+            >
+              {onOpenLead && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onOpenLead() }}
+                  className="w-full px-3 py-2.5 text-left text-sm text-white/90 flex items-center gap-2.5 hover:bg-white/10 transition-colors"
+                >
+                  <User className="h-4 w-4" /> Lead
+                </button>
+              )}
+              {onViewOnSchedule && !isDone && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onViewOnSchedule() }}
+                  className="w-full px-3 py-2.5 text-left text-sm text-white/90 flex items-center gap-2.5 hover:bg-white/10 transition-colors"
+                >
+                  <Calendar className="h-4 w-4" /> View
+                </button>
+              )}
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onEdit() }}
+                  className="w-full px-3 py-2.5 text-left text-sm text-white/90 flex items-center gap-2.5 hover:bg-white/10 transition-colors"
+                >
+                  <Pencil className="h-4 w-4" /> Edit
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete() }}
+                  className="w-full px-3 py-2.5 text-left text-sm text-red-400 flex items-center gap-2.5 hover:bg-white/10 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </button>
+              )}
             </div>
           )}
         </div>

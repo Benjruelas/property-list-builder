@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { X, ChevronLeft, ChevronRight, Calendar, CalendarDays, Clock } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -79,38 +79,87 @@ function hourMinToTs(date, hour12, minute, isPM) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h24, minute).getTime()
 }
 
+const DROP_STYLE = { background: 'rgba(30, 30, 30, 0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
+
 function InlineTimeSelect({ ts, date, onChange }) {
   const { hour12, minute, isPM } = tsToHourMin(ts)
+  const [openDrop, setOpenDrop] = useState(null) // 'hour' | 'min' | null
+  const dropRef = useRef(null)
   const update = (h, m, pm) => {
     onChange(hourMinToTs(date, h ?? hour12, m ?? minute, pm ?? isPM))
   }
+
+  useEffect(() => {
+    if (!openDrop) return
+    const handle = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) setOpenDrop(null)
+    }
+    document.addEventListener('pointerdown', handle)
+    return () => document.removeEventListener('pointerdown', handle)
+  }, [openDrop])
+
   return (
     <div className="flex items-center gap-2">
-      <select
-        value={hour12}
-        onChange={(e) => update(parseInt(e.target.value, 10), null, null)}
-        className="bg-white/10 border border-white/20 rounded px-2 py-1.5 text-sm text-white"
-      >
-        {HOUR_OPTS_12.map((h) => (
-          <option key={h} value={h} className="bg-gray-900 text-white">
-            {h}
-          </option>
-        ))}
-      </select>
+      <div className="relative" ref={openDrop === 'hour' ? dropRef : undefined}>
+        <button
+          type="button"
+          onClick={() => setOpenDrop(openDrop === 'hour' ? null : 'hour')}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3rem] justify-between"
+          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+        >
+          {hour12}
+          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${openDrop === 'hour' ? 'rotate-180' : ''}`} />
+        </button>
+        {openDrop === 'hour' && (
+          <div
+            className="absolute left-0 bottom-full mb-1 z-[200] max-h-48 overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3rem]"
+            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
+          >
+            {HOUR_OPTS_12.map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => { update(h, null, null); setOpenDrop(null) }}
+                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${hour12 === h ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <span className="text-white/60">:</span>
-      <select
-        value={minute}
-        onChange={(e) => update(null, parseInt(e.target.value, 10), null)}
-        className="bg-white/10 border border-white/20 rounded px-2 py-1.5 text-sm text-white"
-      >
-        {MINUTE_OPTS.map((m) => (
-          <option key={m} value={m} className="bg-gray-900 text-white">
-            {String(m).padStart(2, '0')}
-          </option>
-        ))}
-      </select>
+      <div className="relative" ref={openDrop === 'min' ? dropRef : undefined}>
+        <button
+          type="button"
+          onClick={() => setOpenDrop(openDrop === 'min' ? null : 'min')}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3.5rem] justify-between"
+          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+        >
+          {String(minute).padStart(2, '0')}
+          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${openDrop === 'min' ? 'rotate-180' : ''}`} />
+        </button>
+        {openDrop === 'min' && (
+          <div
+            className="absolute left-0 bottom-full mb-1 z-[200] overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3.5rem]"
+            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
+          >
+            {MINUTE_OPTS.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => { update(null, m, null); setOpenDrop(null) }}
+                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${minute === m ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
+              >
+                {String(m).padStart(2, '0')}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div
-        className="schedule-time-meridiem-group flex rounded-md overflow-hidden border border-white/25 bg-white/[0.06]"
+        className="schedule-time-meridiem-group flex rounded-md overflow-hidden bg-white/[0.06] ml-auto"
+        style={{ border: '1px solid rgba(255,255,255,0.4)' }}
         role="group"
         aria-label="AM or PM"
       >
@@ -139,7 +188,32 @@ function InlineTimeSelect({ ts, date, onChange }) {
   )
 }
 
-export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed }) {
+function NowIndicator({ viewMode, weekStart, dayViewDate }) {
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const ROW_HEIGHT = 36
+  const top = (now.getHours() + now.getMinutes() / 60) * ROW_HEIGHT
+
+  if (viewMode === 'week' && weekStart) {
+    const sunday = new Date(weekStart)
+    sunday.setHours(0, 0, 0, 0)
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const diff = Math.round((todayStart - sunday) / (24 * 60 * 60 * 1000))
+    if (diff < 0 || diff >= 7) return null
+    return <div className="schedule-now-line" style={{ top, left: `calc(48px + ${diff} * (100% - 48px) / 7)` }} />
+  }
+  if (viewMode === 'day' && dayViewDate) {
+    if (dayViewDate.toDateString() !== now.toDateString()) return null
+    return <div className="schedule-now-line" style={{ top }} />
+  }
+  return null
+}
+
+export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => {
     if (pipelines.length > 0) {
@@ -230,9 +304,17 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
 
   const handleDayClick = (d) => {
     if (!d) return
-    const dayAt9am = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0).getTime()
-    const now = Date.now()
-    const finalAt = dayAt9am >= now ? dayAt9am : now
+    const now = new Date()
+    const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+    let finalAt
+    if (isToday) {
+      const nextHour = new Date(now)
+      nextHour.setMinutes(0, 0, 0)
+      nextHour.setHours(nextHour.getHours() + 1)
+      finalAt = nextHour.getTime()
+    } else {
+      finalAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0).getTime()
+    }
     const endAt = finalAt + 60 * 60 * 1000
     setAddTaskDate(d)
     setAddTaskScheduledAt(finalAt)
@@ -244,10 +326,8 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   }
 
   const handleHourCellClick = (dayDate, hour) => {
-    const scheduledAt = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), hour, 0).getTime()
-    const now = Date.now()
-    const finalAt = scheduledAt >= now ? scheduledAt : now
-    const endAt = finalAt + 60 * 60 * 1000 // +1 hour default
+    const finalAt = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), hour, 0).getTime()
+    const endAt = finalAt + 60 * 60 * 1000
     setAddTaskDate(dayDate)
     setAddTaskScheduledAt(finalAt)
     setAddTaskScheduledEndAt(endAt)
@@ -419,62 +499,45 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setShowAddTask(false); onClose?.() } }}>
       <DialogContent
-        className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex flex-col"
+        className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))', boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.06)' }}>
           <DialogDescription className="sr-only">View and manage scheduled tasks</DialogDescription>
-          {/* 1fr / auto / 1fr: view toggle stays horizontally centered on the panel */}
           <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
             <DialogTitle className="min-w-0 truncate text-left text-xl font-semibold">Schedule</DialogTitle>
-            <button
-              type="button"
-              onClick={() => {
-                if (viewMode === 'month') {
-                  setViewMode('week')
-                  setWeekStart(getSundayOfWeek(new Date(viewYear, viewMonth, 1)))
-                } else if (viewMode === 'week') {
-                  setViewMode('day')
-                  const base = effectiveWeekStart || new Date(viewYear, viewMonth, 1)
-                  setDayViewDate(new Date(base.getFullYear(), base.getMonth(), base.getDate()))
-                } else {
-                  setViewMode('month')
-                }
-              }}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-black/30 px-3 py-1.5 text-sm font-medium text-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/40"
-              aria-label={
-                viewMode === 'month'
-                  ? 'Switch to week view'
-                  : viewMode === 'week'
-                    ? 'Switch to day view'
-                    : 'Switch to month view'
-              }
-              title={
-                viewMode === 'month'
-                  ? 'Week view'
-                  : viewMode === 'week'
-                    ? 'Day view'
-                    : 'Month view'
-              }
-            >
-              {viewMode === 'month' ? (
-                <>
-                  <CalendarDays className="w-4 h-4" aria-hidden />
-                  Month
-                </>
-              ) : viewMode === 'week' ? (
-                <>
-                  <Calendar className="w-4 h-4" aria-hidden />
-                  Week
-                </>
-              ) : (
-                <>
-                  <Clock className="w-4 h-4" aria-hidden />
-                  Day
-                </>
-              )}
-            </button>
+            <div className="schedule-view-seg" role="tablist">
+              {[
+                { id: 'month', label: 'Month' },
+                { id: 'week', label: 'Week' },
+                { id: 'day', label: 'Day' },
+              ].map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === v.id}
+                  className={viewMode === v.id ? 'schedule-view-seg-active' : ''}
+                  onClick={() => {
+                    // Always snap to today when switching view modes so the
+                    // new view opens on the current day.
+                    const now = new Date()
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                    setViewYear(today.getFullYear())
+                    setViewMonth(today.getMonth())
+                    if (v.id === 'week') {
+                      setWeekStart(getSundayOfWeek(today))
+                    } else if (v.id === 'day') {
+                      setDayViewDate(today)
+                    }
+                    setViewMode(v.id)
+                  }}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
             <div className="flex justify-end">
               <Button variant="ghost" size="icon" className="pipeline-icon-btn shrink-0" onClick={onClose} title="Close">
                 <X className="h-5 w-5" />
@@ -482,37 +545,53 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
             </div>
           </div>
         </DialogHeader>
-        <div className="flex-1 min-h-0 flex flex-col deal-pipeline-content schedule-panel-content p-4 overflow-hidden">
-          {/* Navigation */}
-          <div className="flex items-center justify-between mb-3 flex-shrink-0">
-            <button
-              type="button"
-              className="pipeline-icon-btn p-2 rounded-lg hover:bg-white/10"
-              onClick={prevPeriod}
-            >
-              <ChevronLeft className="h-5 w-5" />
+        <div
+          className={`flex-1 min-h-0 flex flex-col deal-pipeline-content schedule-panel-content overflow-hidden pt-4 px-4 max-md:px-0 max-md:pb-0 pb-4 ${
+            viewMode === 'month' ? 'schedule-panel-content--month-edge' : ''
+          }`}
+        >
+          {/* Navigation — keep side inset on mobile when month grid is full-bleed */}
+          <div
+            className="flex items-center justify-between mb-3 flex-shrink-0 gap-2 max-md:px-4"
+          >
+            <button type="button" className="schedule-nav-btn" onClick={prevPeriod} title="Previous">
+              <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="text-lg font-semibold text-center px-1">
-              {viewMode === 'week'
-                ? weekLabel
-                : viewMode === 'day'
-                  ? dayLabel
-                  : `${new Date(viewYear, viewMonth).toLocaleString('default', { month: 'long' })} ${viewYear}`}
-            </span>
-            <button
-              type="button"
-              className="pipeline-icon-btn p-2 rounded-lg hover:bg-white/10"
-              onClick={nextPeriod}
-            >
-              <ChevronRight className="h-5 w-5" />
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base font-bold text-white/95 text-center truncate">
+                {viewMode === 'week'
+                  ? weekLabel
+                  : viewMode === 'day'
+                    ? dayLabel
+                    : `${new Date(viewYear, viewMonth).toLocaleString('default', { month: 'long' })} ${viewYear}`}
+              </span>
+              <button
+                type="button"
+                className="schedule-today-btn"
+                onClick={() => {
+                  const now = new Date()
+                  setViewYear(now.getFullYear())
+                  setViewMonth(now.getMonth())
+                  setWeekStart(getSundayOfWeek(now))
+                  setDayViewDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+                }}
+              >
+                Today
+              </button>
+            </div>
+            <button type="button" className="schedule-nav-btn" onClick={nextPeriod} title="Next">
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
-          {/* Calendar - fills remaining space */}
-          <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-white/20 bg-white/5 overflow-hidden">
+          {/* Calendar - fills remaining space; month view full width on mobile */}
+          <div
+            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/12 bg-white/[0.03] max-md:rounded-none max-md:border-x-0 max-md:border-b-0"
+            style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}
+          >
             {viewMode === 'month' ? (
               <div className="schedule-calendar-month-grid grid grid-cols-7 grid-rows-[auto_repeat(6,minmax(0,1fr))] flex-1 min-h-0 min-w-0">
                 {DAYS.map((d) => (
-                  <div key={d} className="schedule-calendar-weekday-header text-center text-xs font-medium text-white/70 py-2">
+                  <div key={d} className="schedule-calendar-weekday-header text-center text-[11px] font-semibold text-white/50 py-2 uppercase tracking-wider">
                     {d}
                   </div>
                 ))}
@@ -535,16 +614,18 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                       key={key}
                       type="button"
                       onClick={() => handleDayClick(d)}
-                      className={`schedule-calendar-day-cell min-h-0 w-full h-full p-2 text-left hover:bg-white/10 flex flex-col overflow-hidden ${
+                      className={`schedule-calendar-day-cell min-h-0 w-full h-full p-1.5 text-left flex flex-col overflow-hidden ${
                         edgeLeft ? 'schedule-calendar-day-cell--edge-left' : ''
                       } ${edgeTop ? 'schedule-calendar-day-cell--edge-top' : ''} ${
                         noBottomBorder ? 'schedule-calendar-day-cell--no-bottom' : ''
-                      } ${isToday ? 'bg-white/10' : ''}`}
+                      } ${isToday ? 'schedule-day-today' : ''}`}
                     >
-                      <span className={`text-sm font-medium shrink-0 ${isToday ? 'text-white' : 'text-white/90'}`}>
-                        {d.getDate()}
-                      </span>
-                      <div className="mt-1 min-h-0 shrink overflow-hidden space-y-0.5">
+                      {isToday ? (
+                        <span className="schedule-today-circle shrink-0">{d.getDate()}</span>
+                      ) : (
+                        <span className="text-sm font-semibold shrink-0 text-white/95 w-6 h-6 flex items-center justify-center">{d.getDate()}</span>
+                      )}
+                      <div className="mt-0.5 min-h-0 shrink overflow-hidden space-y-0.5">
                         {dayTasks.slice(0, 5).map((task) => {
                           const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
                           return (
@@ -554,7 +635,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                                 e.stopPropagation()
                                 if (lead) setSelectedLead(lead)
                               }}
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-white/15 truncate cursor-pointer hover:bg-white/25"
+                              className="schedule-task-pill"
                               title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
                             >
                               {task.title || 'Task'}
@@ -562,7 +643,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                           )
                         })}
                         {dayTasks.length > 5 && (
-                          <div className="text-[10px] text-white/60 px-1">+{dayTasks.length - 5} more</div>
+                          <div className="text-[10px] text-white/40 px-1">+{dayTasks.length - 5} more</div>
                         )}
                       </div>
                     </button>
@@ -571,9 +652,8 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
               </div>
             ) : viewMode === 'week' ? (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                {/* Day headers - same columns as hourly grid */}
                 <div
-                  className="grid border-b border-white/25 flex-shrink-0 bg-white/5"
+                  className="grid border-b border-white/12 flex-shrink-0"
                   style={{ gridTemplateColumns: '48px repeat(7, minmax(0, 1fr))' }}
                 >
                   <div className="w-12 shrink-0" aria-hidden />
@@ -583,18 +663,20 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                       <div
                         key={dayIdx}
                         className={`flex flex-col items-center justify-center py-1.5 ${
-                          isToday ? 'bg-white/10' : ''
+                          isToday ? 'schedule-col-header-today' : ''
                         }`}
+                        style={{ borderBottom: isToday ? '2px solid rgba(59,130,246,0.5)' : undefined }}
                       >
-                        <span className="text-[10px] font-medium text-white/70">{DAY_INITIALS[dayIdx]}</span>
-                        <span className={`text-sm font-semibold ${isToday ? 'text-white' : 'text-white/90'}`}>
-                          {d.getDate()}
-                        </span>
+                        <span className="text-[10px] font-semibold text-white/45 uppercase tracking-wider">{DAY_INITIALS[dayIdx]}</span>
+                        {isToday ? (
+                          <span className="schedule-today-circle text-xs" style={{ width: 22, height: 22, fontSize: 11 }}>{d.getDate()}</span>
+                        ) : (
+                          <span className="text-sm font-semibold text-white/80">{d.getDate()}</span>
+                        )}
                       </div>
                     )
                   })}
                 </div>
-                {/* Hourly grid - scrollable, with spanning task overlay */}
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
                   <div className="relative" style={{ minHeight: 24 * 36 }}>
                     <div
@@ -608,7 +690,8 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                       {HOURS.flatMap((hour) => [
                         <div
                           key={`${hour}-label`}
-                          className="schedule-week-time-label py-0.5 pr-1 text-[10px] text-white/60 text-right"
+                          className="schedule-week-time-label py-0.5 pr-2 text-right flex items-start justify-end"
+                          style={{ paddingTop: 2 }}
                         >
                           {formatHour(hour)}
                         </div>,
@@ -619,28 +702,28 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                               key={`${hour}-${dayIdx}`}
                               type="button"
                               onClick={() => handleHourCellClick(d, hour)}
-                              className={`schedule-week-grid-cell min-h-[36px] p-0.5 text-left hover:bg-white/10 ${
-                                isToday ? 'bg-white/5' : ''
+                              className={`schedule-week-grid-cell min-h-[36px] p-0.5 text-left ${
+                                isToday ? 'bg-white/[0.03]' : ''
                               }`}
                             />
                           )
                         })
                       ])}
                     </div>
-                    {/* Spanning task blocks overlay - scrolls with grid */}
+                    <NowIndicator viewMode="week" weekStart={effectiveWeekStart} dayViewDate={null} />
                     <div className="absolute top-0 left-0 right-0 pointer-events-none" style={{ height: 24 * 36 }}>
                       {spanningTasks.map(({ task, dayIndex, top, height }) => {
                         const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
                         return (
                           <div
                             key={task.id}
-                            className="absolute left-0 top-0 mx-0.5 rounded pointer-events-auto cursor-pointer bg-white/20 hover:bg-white/30 border border-white/20 overflow-hidden"
+                            className="schedule-task-block absolute pointer-events-auto"
                             style={{
-                              left: `calc(48px + ${dayIndex} * (100% - 48px) / 7)`,
-                              width: `calc((100% - 48px) / 7 - 4px)`,
-                              top,
-                              height: Math.max(20, height - 2),
-                              minHeight: 20
+                              left: `calc(48px + ${dayIndex} * (100% - 48px) / 7 + 2px)`,
+                              width: `calc((100% - 48px) / 7 - 6px)`,
+                              top: top + 1,
+                              height: Math.max(24, height - 3),
+                              minHeight: 24
                             }}
                             onClick={(e) => {
                               e.stopPropagation()
@@ -648,7 +731,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                             }}
                             title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
                           >
-                            <div className="text-[10px] px-1.5 py-0.5 truncate leading-tight">
+                            <div className="text-[10px] px-2 py-1 truncate leading-tight font-medium">
                               {task.title || 'Task'}
                             </div>
                           </div>
@@ -661,24 +744,28 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
             ) : (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <div
-                  className="grid border-b border-white/25 flex-shrink-0 bg-white/5"
+                  className="grid border-b border-white/12 flex-shrink-0"
                   style={{ gridTemplateColumns: '48px minmax(0, 1fr)' }}
                 >
                   <div className="w-12 shrink-0" aria-hidden />
-                  {dayViewDate && (
-                    <div
-                      className={`flex flex-col items-center justify-center py-1.5 ${
-                        dayViewDate.toDateString() === new Date().toDateString() ? 'bg-white/10' : ''
-                      }`}
-                    >
-                      <span className="text-[10px] font-medium text-white/70">
-                        {dayViewDate.toLocaleDateString(undefined, { weekday: 'short' })}
-                      </span>
-                      <span className={`text-sm font-semibold ${dayViewDate.toDateString() === new Date().toDateString() ? 'text-white' : 'text-white/90'}`}>
-                        {dayViewDate.getDate()}
-                      </span>
-                    </div>
-                  )}
+                  {dayViewDate && (() => {
+                    const isDayToday = dayViewDate.toDateString() === new Date().toDateString()
+                    return (
+                      <div
+                        className={`flex flex-col items-center justify-center py-1.5 ${isDayToday ? 'schedule-col-header-today' : ''}`}
+                        style={{ borderBottom: isDayToday ? '2px solid rgba(59,130,246,0.5)' : undefined }}
+                      >
+                        <span className="text-[10px] font-semibold text-white/45 uppercase tracking-wider">
+                          {dayViewDate.toLocaleDateString(undefined, { weekday: 'short' })}
+                        </span>
+                        {isDayToday ? (
+                          <span className="schedule-today-circle text-xs" style={{ width: 22, height: 22, fontSize: 11 }}>{dayViewDate.getDate()}</span>
+                        ) : (
+                          <span className="text-sm font-semibold text-white/80">{dayViewDate.getDate()}</span>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
                   <div className="relative" style={{ minHeight: 24 * 36 }}>
@@ -693,7 +780,8 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                       {HOURS.flatMap((hour) => [
                         <div
                           key={`day-${hour}-label`}
-                          className="schedule-week-time-label py-0.5 pr-1 text-[10px] text-white/60 text-right"
+                          className="schedule-week-time-label py-0.5 pr-2 text-right flex items-start justify-end"
+                          style={{ paddingTop: 2 }}
                         >
                           {formatHour(hour)}
                         </div>,
@@ -701,25 +789,26 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                           key={`day-${hour}-cell`}
                           type="button"
                           onClick={() => dayViewDate && handleHourCellClick(dayViewDate, hour)}
-                          className={`schedule-week-grid-cell min-h-[36px] p-0.5 text-left hover:bg-white/10 ${
-                            dayViewDate?.toDateString() === new Date().toDateString() ? 'bg-white/5' : ''
+                          className={`schedule-week-grid-cell min-h-[36px] p-0.5 text-left ${
+                            dayViewDate?.toDateString() === new Date().toDateString() ? 'bg-white/[0.03]' : ''
                           }`}
                         />
                       ])}
                     </div>
+                    <NowIndicator viewMode="day" weekStart={null} dayViewDate={dayViewDate} />
                     <div className="absolute top-0 left-0 right-0 pointer-events-none" style={{ height: 24 * 36 }}>
                       {daySpanningTasks.map(({ task, top, height }) => {
                         const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
                         return (
                           <div
                             key={task.id}
-                            className="absolute left-0 top-0 mx-0.5 rounded pointer-events-auto cursor-pointer bg-white/20 hover:bg-white/30 border border-white/20 overflow-hidden"
+                            className="schedule-task-block absolute pointer-events-auto"
                             style={{
                               left: 'calc(48px + 4px)',
                               width: 'calc(100% - 48px - 12px)',
-                              top,
-                              height: Math.max(20, height - 2),
-                              minHeight: 20
+                              top: top + 1,
+                              height: Math.max(24, height - 3),
+                              minHeight: 24
                             }}
                             onClick={(e) => {
                               e.stopPropagation()
@@ -727,7 +816,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                             }}
                             title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
                           >
-                            <div className="text-[10px] px-1.5 py-0.5 truncate leading-tight">
+                            <div className="text-[10px] px-2 py-1 truncate leading-tight font-medium">
                               {task.title || 'Task'}
                             </div>
                           </div>
@@ -887,6 +976,18 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
               setSelectedLead(null)
             }
           }}
+          pipelines={pipelines}
+          pipelineName={pipelines.length > 0 ? (pipelines.find(p => p.id === selectedLeadPipelineId)?.title || 'Pipes') : null}
+          onRequestMoveLead={onRequestMoveLead}
+          onRequestRemoveLead={onRequestRemoveLead}
+          onGoToParcelOnMap={onGoToParcelOnMap}
+          onOpenAddTask={onOpenAddTask ? (lead) => {
+            if (lead) {
+              const pid = selectedLeadPipelineId
+              setSelectedLead(null)
+              onOpenAddTask(lead, pid)
+            }
+          } : undefined}
         />
       </DialogContent>
     </Dialog>

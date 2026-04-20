@@ -27,7 +27,6 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
   // Close dialog when user successfully signs up (auth state updates)
   useEffect(() => {
     if (isOpen && currentUser && !authLoading) {
-      console.log('✅ User signed up, closing signup dialog')
       setIsLoading(false) // Reset loading state
       onClose()
       setName('')

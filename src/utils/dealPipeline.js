@@ -158,26 +158,11 @@ export const isParcelALead = (parcelId) => {
 }
 
 /**
- * Update a lead's fields (e.g. owner/name)
- * @param {string} leadId - Lead ID
- * @param {Object} updates - Fields to merge (e.g. { owner: 'New Name' })
- */
-export const updateLead = (leadId, updates) => {
-  if (!leadId || !updates) return
-  const leads = loadLeads()
-  const idx = leads.findIndex(l => l.id === leadId)
-  if (idx < 0) return
-  leads[idx] = { ...leads[idx], ...updates }
-  saveLeads(leads)
-  return leads[idx]
-}
-
-/**
  * Format a duration in milliseconds to human-readable string.
  * @param {number} ms - Duration in milliseconds
  * @returns {string} e.g. "2d 5h", "45m", "< 1m"
  */
-export const formatDuration = (ms) => {
+const formatDuration = (ms) => {
   if (ms == null || typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return ''
   const sec = Math.floor(ms / 1000)
   const min = Math.floor(sec / 60)

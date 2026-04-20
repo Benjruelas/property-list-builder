@@ -28,6 +28,33 @@ const BLOB_TO_LS = Object.fromEntries(
   Object.entries(LS_TO_BLOB).map(([k, v]) => [v, k])
 )
 
+/** sessionStorage key: last uid whose synced blob was applied (detect account switches). */
+const USER_DATA_BLOB_UID_SESSION_KEY = '__userData_blob_uid'
+
+/** Remove all keys that sync to the server user-data blob (deal pipeline, tasks, notes, etc.). */
+function clearLocalBlobKeys() {
+  for (const lsKey of Object.keys(LS_TO_BLOB)) {
+    try {
+      localStorage.removeItem(lsKey)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Call when a signed-in user's uid is known (e.g. useLayoutEffect on currentUser.uid).
+ * Clears synced localStorage when switching accounts so the previous user's data does not leak.
+ */
+export function syncLocalBlobStorageIfUserChanged(uid) {
+  if (typeof window === 'undefined' || !uid) return
+  const prev = sessionStorage.getItem(USER_DATA_BLOB_UID_SESSION_KEY)
+  if (prev != null && prev !== uid) {
+    clearLocalBlobKeys()
+  }
+  sessionStorage.setItem(USER_DATA_BLOB_UID_SESSION_KEY, uid)
+}
+
 /** Read current localStorage into blob format */
 export function readLocalBlob() {
   const blob = {}
@@ -49,7 +76,7 @@ export function readLocalBlob() {
 }
 
 /** Write blob to localStorage (merge: only overwrite keys present in blob) */
-export function mergeBlobToLocal(blob) {
+function mergeBlobToLocal(blob) {
   if (!blob || typeof blob !== 'object') return
   for (const [blobKey, value] of Object.entries(blob)) {
     const lsKey = BLOB_TO_LS[blobKey]

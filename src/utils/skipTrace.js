@@ -109,34 +109,28 @@ export const pollSkipTraceJob = async (jobId) => {
 export const pollSkipTraceJobUntilComplete = async (jobId, maxRetries = 30, interval = 5000) => {
   // For synchronous jobs (jobId === 'sync'), don't poll - results are already returned
   if (jobId === 'sync') {
-    console.log(`✅ Synchronous job (jobId: ${jobId}) - results already returned, skipping poll`)
     return []
   }
   
-  console.log(`🔄 Starting polling for job ${jobId} (max ${maxRetries} attempts, ${interval}ms interval)`)
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      console.log(`🔄 Poll attempt ${attempt + 1}/${maxRetries} for job ${jobId}`)
       const status = await pollSkipTraceJob(jobId)
       
-      console.log(`📊 Poll response:`, { status: status.status, resultsCount: status.results?.length || 0, hasResults: !!status.results })
       
       if (status.status === 'completed') {
         const results = status.results || []
-        console.log(`✅ Job completed with ${results.length} results`)
         
         // If status is completed but results is empty, this might be a valid case (no contact info found)
         // But we should still return the empty array rather than throwing an error
         if (results.length === 0) {
-          console.warn(`⚠️ Job marked as completed but no results returned. This may mean no contact information was found.`)
+          console.warn(`Job marked as completed but no results returned. This may mean no contact information was found.`)
         }
         
         return results
       }
       
       if (status.status === 'processing' || status.status === 'pending') {
-        console.log(`⏳ Job still ${status.status}, waiting ${interval}ms before next poll...`)
       }
       
       // Wait before next poll
@@ -144,12 +138,11 @@ export const pollSkipTraceJobUntilComplete = async (jobId, maxRetries = 30, inte
         await new Promise(resolve => setTimeout(resolve, interval))
       }
     } catch (error) {
-      console.error(`❌ Poll attempt ${attempt + 1} failed:`, error)
+      console.error(`Poll attempt ${attempt + 1} failed:`, error)
       
       // On mobile, network errors might be more common - retry with exponential backoff
       if (attempt < maxRetries - 1) {
         const backoffDelay = Math.min(interval * Math.pow(1.5, attempt), 30000) // Max 30s backoff
-        console.log(`⏸️ Waiting ${backoffDelay}ms before retry (exponential backoff)`)
         await new Promise(resolve => setTimeout(resolve, backoffDelay))
       } else {
         // Last attempt failed
@@ -238,7 +231,6 @@ export const saveSkipTracedParcel = (parcelId, contactInfo) => {
     }
 
     localStorage.setItem('skip_traced_parcels', JSON.stringify(skipTracedParcels))
-    console.log('💾 Saved skip traced parcel:', parcelId, skipTracedParcels[parcelId])
   } catch (error) {
     console.error('Error saving skip traced parcel:', error)
   }
@@ -338,7 +330,6 @@ export const saveSkipTracedParcels = (results) => {
     })
 
     localStorage.setItem('skip_traced_parcels', JSON.stringify(skipTracedParcels))
-    console.log(`💾 Saved ${results.length} skip traced parcels`)
   } catch (error) {
     console.error('Error saving skip traced parcels:', error)
   }

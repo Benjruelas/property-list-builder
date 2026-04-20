@@ -13,6 +13,7 @@ import { showConfirm } from './ui/confirm-dialog'
 import { LeadDetails } from './LeadDetails'
 import { SchedulePicker } from './SchedulePicker'
 import { createPipeline, canCollaborateOnPipeline } from '@/utils/pipelines'
+import { TeamShareSection, TeamBadge } from './TeamShareSection'
 
 const MAX_COLUMNS = 10
 const PIPELINE_OPTIONS_MENU_W = 200
@@ -59,6 +60,9 @@ export function DealPipeline({
   onPipelinesChange,
   onActivePipelineChange,
   onSharePipeline,
+  onSharePipelineWithTeams,
+  teams = [],
+  onDeletePipeline,
   onValidateShareEmail,
   currentUser,
   getToken,
@@ -67,7 +71,10 @@ export function DealPipeline({
   /** Increment to focus a lead card and open Lead Details (parcel id). */
   focusLeadRequestKey = 0,
   focusParcelId = null,
-  onFocusLeadHandled
+  onFocusLeadHandled,
+  onRequestMoveLead,
+  onRequestRemoveLead,
+  onGoToParcelOnMap,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
@@ -106,6 +113,7 @@ export function DealPipeline({
   const [taskMenu, setTaskMenu] = useState(null) // { task, anchor: { top, left } }
   const [pipelineDropdownOpen, setPipelineDropdownOpen] = useState(false)
   const [pipelineDropdownAnchor, setPipelineDropdownAnchor] = useState(null)
+  const [confirmDeletePipeline, setConfirmDeletePipeline] = useState(false)
   const [pipelineSwitcherOpen, setPipelineSwitcherOpen] = useState(false)
   const [pipelineSwitcherAnchor, setPipelineSwitcherAnchor] = useState(null)
   const [createPipelineDialogOpen, setCreatePipelineDialogOpen] = useState(false)
@@ -182,6 +190,14 @@ export function DealPipeline({
   useEffect(() => {
     if (!selectedLead) refreshAllTasks()
   }, [selectedLead, refreshAllTasks])
+
+  useEffect(() => {
+    if (!selectedLead) return
+    const fresh = displayLeads.find((l) => l.id === selectedLead.id)
+    if (fresh && fresh !== selectedLead) {
+      setSelectedLead(fresh)
+    }
+  }, [displayLeads, selectedLead])
 
   useEffect(() => {
     if (!isOpen || !focusLeadRequestKey) return
@@ -836,6 +852,11 @@ export function DealPipeline({
         onClose={() => setSelectedLead(null)}
         lead={selectedLead}
         pipelineId={apiMode ? activePipelineId : null}
+        pipelineTeamShares={apiMode ? (pipelines.find((p) => p.id === activePipelineId)?.teamShares || []) : []}
+        getToken={getToken}
+        onTeamTasksChange={() => {
+          onPipelinesChange?.()
+        }}
         parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
         onOpenParcelDetails={onOpenParcelDetails}
         onEmailClick={onEmailClick}
@@ -872,6 +893,10 @@ setAddTaskTitle('')
             setEditTaskScheduledEndAt(task.scheduledEndAt ?? null)
           }
         }}
+        pipelineName={apiMode ? (activePipeline?.title || 'Pipes') : null}
+        onRequestMoveLead={onRequestMoveLead}
+        onRequestRemoveLead={onRequestRemoveLead}
+        onGoToParcelOnMap={onGoToParcelOnMap}
       />
 
       {/* Add task from tasks sidebar */}
@@ -1135,8 +1160,27 @@ setAddTaskTitle('')
               const pipe = pipelines.find((p) => p.id === sharePipelineId)
               const currentShared = pipe?.sharedWith || []
               const isShared = currentShared.length > 0
+              const currentTeamShares = pipe?.teamShares || []
+              const toggleTeam = async (teamId) => {
+                if (!onSharePipelineWithTeams) return
+                const next = currentTeamShares.includes(teamId)
+                  ? currentTeamShares.filter((id) => id !== teamId)
+                  : [...currentTeamShares, teamId]
+                try {
+                  await onSharePipelineWithTeams(sharePipelineId, next)
+                } catch (e) {
+                  showToast(e.message || 'Failed to update team share', 'error')
+                }
+              }
               return (
                 <>
+                  {onSharePipelineWithTeams && (
+                    <TeamShareSection
+                      teams={teams}
+                      selectedTeamIds={currentTeamShares}
+                      onToggle={toggleTeam}
+                    />
+                  )}
                   {isShared && (
                     <div className="mb-4">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
@@ -1289,6 +1333,7 @@ setAddTaskTitle('')
                   {p.ownerId !== currentUser?.uid && (
                     <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                   )}
+                  <TeamBadge teamIds={p.teamShares} teams={teams} />
                 </div>
               </button>
             ))}
@@ -1313,7 +1358,7 @@ setAddTaskTitle('')
 
       {pipelineDropdownOpen && pipelineDropdownAnchor && apiMode && activePipeline && isPipelineOwnedByUser(activePipeline) && typeof document !== 'undefined' && createPortal(
         <div data-pipeline-dropdown className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
-          <div className="fixed inset-0 z-[10011]" onClick={() => setPipelineDropdownOpen(false)} aria-hidden />
+          <div className="fixed inset-0 z-[10011]" onClick={() => { setPipelineDropdownOpen(false); setConfirmDeletePipeline(false) }} aria-hidden />
           <div
             className="map-panel list-panel fixed z-[10012] rounded-xl min-w-[180px] max-w-[min(92vw,220px)] py-1 overflow-hidden shadow-xl border border-white/15"
             style={{ top: pipelineDropdownAnchor.top, left: pipelineDropdownAnchor.left }}
@@ -1342,6 +1387,30 @@ setAddTaskTitle('')
               <Share2 className="h-4 w-4 flex-shrink-0" />
               Share pipeline
             </button>
+            <div className="my-1 border-t border-white/10" />
+            {!confirmDeletePipeline ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePipeline(true)}
+                className="w-full px-3 py-2.5 text-left text-sm text-red-400 flex items-center gap-2 hover:bg-red-500/10 transition-colors"
+              >
+                <Trash2 className="h-4 w-4 flex-shrink-0" />
+                Delete pipeline
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setPipelineDropdownOpen(false)
+                  setConfirmDeletePipeline(false)
+                  onDeletePipeline?.(activePipeline.id)
+                }}
+                className="w-full px-3 py-2.5 text-left text-sm text-red-400 font-semibold flex items-center gap-2 hover:bg-red-500/10 transition-colors"
+              >
+                <Trash2 className="h-4 w-4 flex-shrink-0" />
+                Confirm delete
+              </button>
+            )}
           </div>
         </div>,
         document.getElementById('modal-root') || document.body

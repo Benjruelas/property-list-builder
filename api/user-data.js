@@ -9,6 +9,8 @@
  * Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
 
+import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+
 let kv = null
 let kvAvailable = false
 
@@ -94,7 +96,8 @@ export default async function handler(req, res) {
   const origin = req.headers.origin || ''
   const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
   const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
-  let user = allowDevBypass && idToken === 'dev-bypass' ? { uid: 'dev-local', email: 'dev@localhost' } : await verifyFirebaseToken(idToken)
+  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
+  if (!user) user = await verifyFirebaseToken(idToken)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })

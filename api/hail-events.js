@@ -1,7 +1,6 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 
 const CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000
-const RECENT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days for recent data
 const SPC_HAIL_URL = 'https://www.spc.noaa.gov/wcm/data/1955-2024_hail.csv.zip'
 const SPC_COMPILED_MAX_YEAR = 2024
 
@@ -257,7 +256,6 @@ async function getGridCell(lat, lng) {
   }
 
   // Need to build the grid — download SPC dataset
-  console.log('Downloading SPC hail dataset to build grid...')
   const res = await fetch(SPC_HAIL_URL)
   if (!res.ok) throw new Error(`SPC download failed: ${res.status}`)
 
@@ -267,7 +265,6 @@ async function getGridCell(lat, lng) {
 
   // Cache ALL grid cells to R2 (fire-and-forget batched)
   const cellKeys = Object.keys(grid)
-  console.log(`Parsed ${cellKeys.length} grid cells, caching to R2...`)
 
   const batchSize = 20
   for (let i = 0; i < cellKeys.length; i += batchSize) {

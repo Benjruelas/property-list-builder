@@ -40,7 +40,6 @@ export const AuthProvider = ({ children }) => {
         await updateProfile(userCredential.user, { displayName })
       }
       
-      console.log('✅ Signup successful, user:', userCredential.user?.email, 'uid:', userCredential.user?.uid)
       // onAuthStateChanged will automatically update currentUser
       // Don't set it manually here to avoid race conditions - let onAuthStateChanged handle it
       showToast('Account created successfully!', 'success')
@@ -69,7 +68,6 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
-      console.log('✅ Login successful, user:', userCredential.user?.email, 'uid:', userCredential.user?.uid)
       // onAuthStateChanged will automatically update currentUser
       // Don't set it manually here to avoid race conditions - let onAuthStateChanged handle it
       showToast('Signed in successfully!', 'success')
@@ -124,7 +122,6 @@ export const AuthProvider = ({ children }) => {
     getRedirectResult(auth)
       .then((userCredential) => {
         if (userCredential?.user) {
-          console.log('✅ Google redirect sign-in successful, user:', userCredential.user?.email)
           showToast('Signed in with Google successfully!', 'success')
         }
       })
@@ -139,15 +136,13 @@ export const AuthProvider = ({ children }) => {
   // Sign out
   const logout = async () => {
     try {
-      console.log('🚪 Calling Firebase signOut...')
       await signOut(auth)
       // onAuthStateChanged will automatically set currentUser to null
       // But we can also explicitly clear it here for immediate feedback
       setCurrentUser(null)
-      console.log('✅ SignOut successful, currentUser cleared')
       showToast('Signed out successfully', 'success')
     } catch (error) {
-      console.error('❌ SignOut error:', error)
+      console.error('SignOut error:', error)
       showToast('Failed to sign out', 'error')
       throw error
     }
@@ -178,20 +173,16 @@ export const AuthProvider = ({ children }) => {
   // Listen for auth state changes (skip in dev)
   useEffect(() => {
     if (isDev) return
-    console.log('🔧 Setting up auth state listener...')
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('🔄 Auth state changed, user:', user?.email || 'null', 'uid:', user?.uid || 'null', 'loading:', loading)
       setCurrentUser(user)
       setLoading(false)
-      console.log('✅ Auth state updated, loading set to false')
     }, (error) => {
-      console.error('❌ Auth state change error:', error)
+      console.error('Auth state change error:', error)
       setCurrentUser(null)
       setLoading(false)
     })
 
     return () => {
-      console.log('🧹 Cleaning up auth state listener')
       unsubscribe()
     }
   }, [])

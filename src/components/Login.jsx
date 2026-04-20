@@ -23,7 +23,6 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
   // Close dialog when user successfully signs in (auth state updates)
   useEffect(() => {
     if (isOpen && currentUser && !authLoading) {
-      console.log('✅ User signed in, closing login dialog')
       setIsLoading(false) // Reset loading state
       onClose()
       setEmail('')

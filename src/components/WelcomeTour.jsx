@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 const STEPS = [
@@ -15,13 +15,13 @@ const STEPS = [
   // Menu items
   { target: '[data-tour="menu-lists"]',           title: 'Lists',               desc: 'Create and manage property lists', menuRequired: true },
   { target: '[data-tour="menu-paths"]',           title: 'Paths',               desc: 'View and manage your recorded routes', menuRequired: true },
-  { target: '[data-tour="menu-skip-traced"]',     title: 'Skip Traced Parcels', desc: 'View parcels where contact info has been found', menuRequired: true },
   { target: '[data-tour="menu-outreach"]',         title: 'Outreach',            desc: 'Create and manage email & text message templates for outreach', menuRequired: true },
   { target: '[data-tour="menu-pipeline"]',        title: 'Pipes',               desc: 'Track leads through your deal stages', menuRequired: true },
-  { target: '[data-tour="menu-leads"]',           title: 'Leads',               desc: 'See all your leads across pipelines', menuRequired: true },
+  { target: '[data-tour="menu-contacts"]',       title: 'Contacts',            desc: 'See leads and, soon, clients', menuRequired: true },
   { target: '[data-tour="menu-tasks"]',           title: 'Tasks',               desc: 'Manage tasks assigned to leads', menuRequired: true },
   { target: '[data-tour="menu-schedule"]',        title: 'Schedule',            desc: 'Calendar view of your upcoming tasks', menuRequired: true },
   { target: '[data-tour="menu-settings"]',        title: 'Settings',            desc: 'Customize map style, notifications, and more', menuRequired: true },
+  { target: '[data-tour="settings-skip-traced-section"]', title: 'Skip Traced Parcels', desc: 'In Settings, expand this section to open the list of parcels with contact info from skip tracing', menuRequired: false, settingsRequired: true },
 ]
 
 const PADDING = 8
@@ -39,7 +39,7 @@ function getRect(el) {
   }
 }
 
-export default function WelcomeTour({ onComplete, setShowMenu }) {
+export default function WelcomeTour({ onComplete, setShowMenu, setSettingsOpen }) {
   const [step, setStep] = useState(0)
   const [rect, setRect] = useState(null)
   const tooltipRef = useRef(null)
@@ -54,17 +54,21 @@ export default function WelcomeTour({ onComplete, setShowMenu }) {
   }, [current.target])
 
   useEffect(() => {
-    if (current.menuRequired) {
+    if (current.settingsRequired) {
+      setShowMenu(false)
+      setSettingsOpen?.(true)
+    } else if (current.menuRequired) {
       setShowMenu(true)
     } else if (step < STEPS.length && !current.menuRequired) {
       setShowMenu(false)
     }
-  }, [step, current.menuRequired, setShowMenu])
+  }, [step, current.menuRequired, current.settingsRequired, setShowMenu, setSettingsOpen])
 
   useEffect(() => {
-    const timer = setTimeout(measureTarget, 60)
+    const delay = current.settingsRequired ? 280 : 60
+    const timer = setTimeout(measureTarget, delay)
     return () => clearTimeout(timer)
-  }, [measureTarget, step])
+  }, [measureTarget, step, current.settingsRequired])
 
   useEffect(() => {
     const onResize = () => measureTarget()
@@ -112,8 +116,9 @@ export default function WelcomeTour({ onComplete, setShowMenu }) {
 
   const finish = useCallback(() => {
     setShowMenu(false)
+    setSettingsOpen?.(false)
     onComplete()
-  }, [onComplete, setShowMenu])
+  }, [onComplete, setShowMenu, setSettingsOpen])
 
   const handleNext = useCallback(() => {
     if (step >= STEPS.length - 1) {

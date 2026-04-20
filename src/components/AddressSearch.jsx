@@ -1,14 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Search, X, Loader2, Plus, Minus } from 'lucide-react'
 import { Button } from './ui/button'
-import { Input } from './ui/input'
 
 /**
  * Address search using Mapbox Geocoding API
  * Best-in-class geocoding with autocomplete support
  * Free tier: 100,000 requests/month
  */
-export function AddressSearch({ onLocationFound, mapInstanceRef }) {
+export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPopup }) {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -82,7 +81,6 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
       const encodedQuery = encodeURIComponent(trimmedQuery)
       const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${accessToken}&limit=5&country=us&types=address,poi,place&autocomplete=true`
 
-      console.log('🔍 Searching Mapbox for:', trimmedQuery)
 
       const response = await fetch(url)
 
@@ -123,11 +121,10 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         })
 
         if (transformedResults.length > 0) {
-          console.log(`✅ Found ${transformedResults.length} results from Mapbox`)
           setResults(transformedResults)
           setError(null)
         } else {
-          console.warn('❌ No results found')
+          console.warn('No results found')
           setResults([])
           setError(`No addresses found for "${trimmedQuery}". Try a different address or coordinates like "32.7767, -96.7970"`)
         }
@@ -136,7 +133,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         setError(`No results found. Try: "123 Main St, Fort Worth, TX" or coordinates like "32.7767, -96.7970"`)
       }
     } catch (err) {
-      console.error('❌ Mapbox search error:', err)
+      console.error('Mapbox search error:', err)
       setError(err.message || 'Search failed. Please check your Mapbox configuration and try again.')
       setResults([])
     } finally {
@@ -204,19 +201,78 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
     }
   }
 
+  // Width of the expanded search pill:
+  // - Mobile: fill horizontally, leaving the right-side location button (48px) + the
+  //   same gap-2 (8px) spacing we use vertically between buttons.
+  //   Total reserved = 12px (left) + 8px (gap) + 48px (right button) + 12px (right) = 80px
+  // - Desktop (sm+): capped to just fit the placeholder text (~280px).
+  const openPillStyle = {
+    width:
+      'calc(100vw - 80px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))'
+  }
+  const showResultsPanel =
+    isOpen && (query.length > 0 || isSearching || error || results.length > 0)
+
   return (
-    <div className="map-search-stack absolute z-[1000] flex flex-col gap-2 sm:gap-2 md:gap-2" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))', left: 'calc(12px + env(safe-area-inset-left, 0px))' }}>
+    <div
+      className="map-search-stack absolute z-[1000] flex flex-col items-start gap-2 sm:gap-2 md:gap-2"
+      style={{
+        top: 'calc(12px + env(safe-area-inset-top, 0px))',
+        left: 'calc(12px + env(safe-area-inset-left, 0px))'
+      }}
+    >
+      {!isOpen ? (
+        <Button
+          onClick={() => {
+            onCloseParcelPopup?.()
+            handleToggle()
+          }}
+          size="icon"
+          variant="glass-outline"
+          className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+          title="Search address"
+        >
+          <Search className="h-6 w-6 sm:h-5 sm:w-5" />
+        </Button>
+      ) : (
+        <div
+          className="relative flex items-center h-12 sm:h-10 rounded-md shadow-lg touch-manipulation sm:!w-[280px] border border-white/60 bg-white/30 text-gray-900 backdrop-blur-sm"
+          style={openPillStyle}
+        >
+          {/* Fixed slot matching zoom button width so the search icon lines up
+              exactly with the +/- icons below. */}
+          <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 sm:h-10 sm:w-10">
+            <Search className="h-6 w-6 sm:h-5 sm:w-5 text-gray-700" />
+          </div>
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="search"
+            autoComplete="off"
+            placeholder="Search address or coordinates..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="flex-1 min-w-0 h-full bg-transparent outline-none border-none pr-2 text-sm text-gray-900 placeholder:text-gray-600"
+          />
+          {isSearching && (
+            <Loader2 className="mr-1 h-4 w-4 flex-shrink-0 animate-spin text-gray-700" />
+          )}
+          <button
+            type="button"
+            onClick={handleToggle}
+            className="mr-1 flex-shrink-0 rounded-full p-1.5 text-gray-700 hover:bg-white/40 transition-colors"
+            title="Close search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <Button
-        onClick={handleToggle}
-        size="icon"
-        variant={isOpen ? "glass" : "glass-outline"}
-        className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
-        title="Search address"
-      >
-        <Search className="h-6 w-6 sm:h-5 sm:w-5" />
-      </Button>
-      <Button
-        onClick={() => mapInstanceRef?.current?.zoomIn()}
+        onClick={() => {
+          onCloseParcelPopup?.()
+          mapInstanceRef?.current?.zoomIn()
+        }}
         size="icon"
         variant="glass-outline"
         className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
@@ -225,7 +281,10 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
       </Button>
       <Button
-        onClick={() => mapInstanceRef?.current?.zoomOut()}
+        onClick={() => {
+          onCloseParcelPopup?.()
+          mapInstanceRef?.current?.zoomOut()
+        }}
         size="icon"
         variant="glass-outline"
         className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
@@ -234,37 +293,11 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
         <Minus className="h-6 w-6 sm:h-5 sm:w-5" />
       </Button>
 
-      {isOpen && (
-        <div className="map-panel absolute top-[calc(48px+8px)] sm:top-[calc(40px+8px)] left-0 w-80 sm:w-72 rounded-xl overflow-hidden z-50">
-          <div className="p-3 border-b border-gray-200 flex items-center gap-2">
-            <div className="relative flex-1">
-              <Input
-                ref={inputRef}
-                type="text"
-                placeholder="Search address or coordinates..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="pr-8"
-              />
-              {isSearching && (
-                <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-500" />
-              )}
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              onClick={() => {
-                setIsOpen(false)
-                setQuery('')
-                setResults([])
-                setError(null)
-              }}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
+      {showResultsPanel && (
+        <div
+          className="map-panel absolute top-[calc(48px+8px)] sm:top-[calc(40px+8px)] left-0 rounded-xl overflow-hidden z-50 sm:!w-[280px]"
+          style={openPillStyle}
+        >
           {error && (
             <div className="p-3 text-sm text-red-600 bg-red-50 border-b border-red-200">
               {error}
@@ -275,25 +308,27 @@ export function AddressSearch({ onLocationFound, mapInstanceRef }) {
             {results.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {results.map((result) => (
-                    <li
-                      key={result.id || result._mapboxFeature?.id}
-                      onClick={() => handleSelectResult(result)}
-                      className="p-3 hover:bg-gray-50 cursor-pointer transition-colors"
-                    >
-                      <div className="text-sm font-medium text-gray-900">
-                        {result.place_name}
+                  <li
+                    key={result.id || result._mapboxFeature?.id}
+                    onClick={() => handleSelectResult(result)}
+                    className="p-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                  >
+                    <div className="text-sm font-medium text-gray-900">
+                      {result.place_name}
+                    </div>
+                    {result.address && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {[
+                          result.address.city,
+                          result.address.county,
+                          result.address.state,
+                          result.address.zip
+                        ]
+                          .filter(Boolean)
+                          .join(', ')}
                       </div>
-                      {result.address && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {[
-                            result.address.city,
-                            result.address.county,
-                            result.address.state,
-                            result.address.zip
-                          ].filter(Boolean).join(', ')}
-                        </div>
-                      )}
-                    </li>
+                    )}
+                  </li>
                 ))}
               </ul>
             ) : query.length >= 2 && !isSearching && !error ? (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { createPortal } from 'react-dom'
 
@@ -30,11 +30,99 @@ function formatScheduleRange(startTs, endTs) {
   return sameDay ? `${dateStr} • ${startTime} – ${endTime}` : `${dateStr} ${startTime} – ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${endTime}`
 }
 
+const HOURS_12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const DROP_STYLE = { background: 'rgba(30, 30, 30, 0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
+
+function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey, activeDropdown, dropdownRef, onToggleDropdown, onHourChange, onMinuteChange, onAMPMChange }) {
+  const hourOpen = activeDropdown === hourDropdownKey
+  const minOpen = activeDropdown === minuteDropdownKey
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-white/70 w-10 shrink-0">{label}</span>
+      <div className="relative" ref={hourOpen ? dropdownRef : undefined}>
+        <button
+          type="button"
+          onClick={() => onToggleDropdown(hourOpen ? null : hourDropdownKey)}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3rem] justify-between"
+          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+        >
+          {hour}
+          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${hourOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {hourOpen && (
+          <div
+            className="absolute left-0 bottom-full mb-1 z-[200] max-h-48 overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3rem]"
+            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
+          >
+            {HOURS_12.map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => { onHourChange(h); onToggleDropdown(null) }}
+                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${hour === h ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <span className="text-white/60">:</span>
+      <div className="relative" ref={minOpen ? dropdownRef : undefined}>
+        <button
+          type="button"
+          onClick={() => onToggleDropdown(minOpen ? null : minuteDropdownKey)}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3.5rem] justify-between"
+          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+        >
+          {String(minute).padStart(2, '0')}
+          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${minOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {minOpen && (
+          <div
+            className="absolute left-0 bottom-full mb-1 z-[200] overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3.5rem]"
+            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
+          >
+            {MINUTE_OPTIONS.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => { onMinuteChange(m); onToggleDropdown(null) }}
+                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${minute === m ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
+              >
+                {String(m).padStart(2, '0')}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex rounded-md overflow-hidden ml-auto" style={{ border: '1px solid rgba(255,255,255,0.4)' }}>
+        <button
+          type="button"
+          onClick={() => onAMPMChange(false)}
+          className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${!isPM ? 'bg-white/25 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+        >
+          AM
+        </button>
+        <button
+          type="button"
+          onClick={() => onAMPMChange(true)}
+          className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${isPM ? 'bg-white/25 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+        >
+          PM
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue = null, onEndChange, triggerClassName, title = 'Schedule', size = 'default', taskTitle, leadAddress, leadName, inline = false }) {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState(null)
   const [hourDropdownOpen, setHourDropdownOpen] = useState(false)
   const [minuteDropdownOpen, setMinuteDropdownOpen] = useState(false)
+  const [inlineDropdown, setInlineDropdown] = useState(null) // 'fromHour' | 'fromMin' | 'toHour' | 'toMin' | null
+  const inlineDropdownRef = useRef(null)
 
   const base = value ? new Date(value) : new Date(Math.max(minDate, Date.now()))
   const [viewYear, setViewYear] = useState(base.getFullYear())
@@ -85,6 +173,15 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
       setMinuteDropdownOpen(false)
     }
   }, [open])
+
+  useEffect(() => {
+    if (!inlineDropdown) return
+    const handle = (e) => {
+      if (inlineDropdownRef.current && !inlineDropdownRef.current.contains(e.target)) setInlineDropdown(null)
+    }
+    document.addEventListener('pointerdown', handle)
+    return () => document.removeEventListener('pointerdown', handle)
+  }, [inlineDropdown])
 
   const buildTs = useCallback((d, h12, m, pm) => {
     const date = d || new Date()
@@ -406,105 +503,42 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
           })}
         </div>
         <div className="space-y-3 pt-3 border-t border-white/20">
-          <div className="grid grid-cols-[2.5rem_1fr_auto_1fr_auto] gap-x-2 gap-y-3 items-center">
-            <span className="text-xs text-white/70">From</span>
-            <select
-              value={hour12}
-              onChange={(e) => {
-                const h = parseInt(e.target.value, 10)
-                setHour12(h)
-                commitTimeChange(h, minute, isPM)
-              }}
-              className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
-                <option key={h} value={h} className="bg-gray-900 text-white">{h}</option>
-              ))}
-            </select>
-            <span className="text-white/60">:</span>
-            <select
-              value={minute}
-              onChange={(e) => {
-                const m = parseInt(e.target.value, 10)
-                setMinute(m)
-                commitTimeChange(hour12, m, isPM)
-              }}
-              className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
-            >
-              {MINUTE_OPTIONS.map((m) => (
-                <option key={m} value={m} className="bg-gray-900 text-white">{String(m).padStart(2, '0')}</option>
-              ))}
-            </select>
-            <div className="flex rounded overflow-hidden border border-white/20">
-              <button
-                type="button"
-                onClick={() => { setIsPM(false); commitTimeChange(hour12, minute, false) }}
-                className={`px-2 py-1 text-xs font-medium transition-colors ${!isPM ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-              >
-                AM
-              </button>
-              <button
-                type="button"
-                onClick={() => { setIsPM(true); commitTimeChange(hour12, minute, true) }}
-                className={`px-2 py-1 text-xs font-medium transition-colors ${isPM ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-              >
-                PM
-              </button>
-            </div>
-            {onEndChange && (
-              <>
-                <span className="text-xs text-white/70">To</span>
-                <select
-                  value={hour12End}
-                  onChange={(e) => {
-                    const h = parseInt(e.target.value, 10)
-                    setHour12End(h)
-                    commitEndTimeChange(h, minuteEnd, isPMEnd)
-                  }}
-                  className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
-                    <option key={h} value={h} className="bg-gray-900 text-white">{h}</option>
-                  ))}
-                </select>
-                <span className="text-white/60">:</span>
-                <select
-                  value={minuteEnd}
-                  onChange={(e) => {
-                    const m = parseInt(e.target.value, 10)
-                    setMinuteEnd(m)
-                    commitEndTimeChange(hour12End, m, isPMEnd)
-                  }}
-                  className="w-full min-w-0 bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white"
-                >
-                  {MINUTE_OPTIONS.map((m) => (
-                    <option key={m} value={m} className="bg-gray-900 text-white">{String(m).padStart(2, '0')}</option>
-                  ))}
-                </select>
-                <div className="flex rounded overflow-hidden border border-white/20">
-                  <button
-                    type="button"
-                    onClick={() => { setIsPMEnd(false); commitEndTimeChange(hour12End, minuteEnd, false) }}
-                    className={`px-2 py-1 text-xs font-medium transition-colors ${!isPMEnd ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-                  >
-                    AM
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setIsPMEnd(true); commitEndTimeChange(hour12End, minuteEnd, true) }}
-                    className={`px-2 py-1 text-xs font-medium transition-colors ${isPMEnd ? 'bg-white/25 text-white ring-2 ring-white/50 ring-inset' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-                  >
-                    PM
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <TimeRow
+            label="From"
+            hour={hour12}
+            minute={minute}
+            isPM={isPM}
+            hourDropdownKey="fromHour"
+            minuteDropdownKey="fromMin"
+            activeDropdown={inlineDropdown}
+            dropdownRef={inlineDropdownRef}
+            onToggleDropdown={setInlineDropdown}
+            onHourChange={(h) => { setHour12(h); commitTimeChange(h, minute, isPM) }}
+            onMinuteChange={(m) => { setMinute(m); commitTimeChange(hour12, m, isPM) }}
+            onAMPMChange={(pm) => { setIsPM(pm); commitTimeChange(hour12, minute, pm) }}
+          />
+          {onEndChange && (
+            <TimeRow
+              label="To"
+              hour={hour12End}
+              minute={minuteEnd}
+              isPM={isPMEnd}
+              hourDropdownKey="toHour"
+              minuteDropdownKey="toMin"
+              activeDropdown={inlineDropdown}
+              dropdownRef={inlineDropdownRef}
+              onToggleDropdown={setInlineDropdown}
+              onHourChange={(h) => { setHour12End(h); commitEndTimeChange(h, minuteEnd, isPMEnd) }}
+              onMinuteChange={(m) => { setMinuteEnd(m); commitEndTimeChange(hour12End, m, isPMEnd) }}
+              onAMPMChange={(pm) => { setIsPMEnd(pm); commitEndTimeChange(hour12End, minuteEnd, pm) }}
+            />
+          )}
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
               onClick={handleClear}
-              className="py-1 px-2 text-xs text-white/80 hover:text-white"
+              className="py-1.5 px-3 text-xs font-medium rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              style={{ border: '1px solid rgba(255,255,255,0.4)' }}
             >
               Clear
             </button>
@@ -512,7 +546,8 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
               type="button"
               onClick={handleSet}
               disabled={!isComplete}
-              className="py-1.5 px-3 text-xs font-medium rounded bg-white/20 hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed text-white"
+              className="py-1.5 px-3 text-xs font-medium rounded bg-white/20 hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+              style={{ border: '1px solid rgba(255,255,255,0.4)' }}
             >
               Set
             </button>

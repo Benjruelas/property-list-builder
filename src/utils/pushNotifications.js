@@ -76,7 +76,8 @@ export async function showLocalNotification(title, options = {}) {
   try {
     const reg = await navigator.serviceWorker.ready
     await reg.showNotification(title, {
-      icon: '/favicon.ico',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
       ...options
     })
   } catch {

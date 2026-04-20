@@ -104,24 +104,6 @@
     0 0 14px 3px rgba(255, 255, 255, 0.12);
 }
 
-/* Parcel tooltip styling */
-.parcel-tooltip {
-  background-color: rgba(0, 0, 0, 0.85);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  pointer-events: none;
-}
-
-.parcel-tooltip::before {
-  border-top-color: rgba(0, 0, 0, 0.85);
-}
-
 /* Hide any remaining MapLibre built-in controls */
 .maplibregl-ctrl-top-left {
   display: none !important;
@@ -462,6 +444,10 @@
   .schedule-panel-content {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
   }
+  /* Month view: calendar fills to panel bottom (safe-area stays on .deal-pipeline-panel) */
+  .schedule-panel .schedule-panel-content.schedule-panel-content--month-edge {
+    padding-bottom: 0 !important;
+  }
 }
 
 /* Pipeline icon-only buttons - no fill, just icons */
@@ -489,7 +475,76 @@
   background: transparent !important;
 }
 
-/* Schedule panel: month view — one grid shares column tracks; 6 equal fr rows (table row % heights are unreliable) */
+/* ---- Schedule Panel: Liquid Glass Polish ---- */
+
+/* View mode segmented control */
+.schedule-view-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.schedule-view-seg button {
+  padding: 4px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  transition: all 0.2s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.schedule-view-seg button:hover:not(.schedule-view-seg-active) {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+}
+.schedule-view-seg button.schedule-view-seg-active {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Navigation row */
+.schedule-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.schedule-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.95);
+}
+.schedule-today-btn {
+  padding: 3px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.schedule-today-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Month grid: softer grid lines — pad cells (outside month) vs active month days */
 .schedule-panel .schedule-calendar-month-grid > .schedule-calendar-pad-cell {
   width: 100%;
   min-width: 0;
@@ -499,6 +554,8 @@
   min-height: 0;
   border: none !important;
   box-sizing: border-box;
+  /* Muted “inactive” slots — clearly distinct from in-month days */
+  background: rgba(0, 0, 0, 0.26);
 }
 .schedule-panel .schedule-calendar-month-grid > button.schedule-calendar-day-cell {
   width: 100%;
@@ -507,17 +564,28 @@
   justify-self: stretch;
   align-self: stretch;
   min-height: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-top: none !important;
   border-left: none !important;
   box-sizing: border-box;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  /* Active month days: brighter glass surface vs pad cells */
+  background: rgba(255, 255, 255, 0.07) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.schedule-panel .schedule-calendar-month-grid > button.schedule-calendar-day-cell:hover {
+  background: rgba(255, 255, 255, 0.11) !important;
+}
+.schedule-panel .schedule-calendar-month-grid > button.schedule-calendar-day-cell.schedule-day-today {
+  background: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(59, 130, 246, 0.25);
 }
 .schedule-panel .schedule-calendar-month-grid > button.schedule-calendar-day-cell.schedule-calendar-day-cell--edge-left {
-  border-left: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 .schedule-panel .schedule-calendar-month-grid > button.schedule-calendar-day-cell.schedule-calendar-day-cell--edge-top {
-  border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 .schedule-panel .schedule-calendar-month-grid > button.schedule-calendar-day-cell.schedule-calendar-day-cell--no-bottom {
   border-bottom: none !important;
@@ -526,24 +594,68 @@
   border-right: none !important;
 }
 .schedule-panel .schedule-calendar-weekday-header {
-  border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.35) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
   box-sizing: border-box;
 }
 .schedule-panel .schedule-calendar-weekday-header:nth-child(7n) {
   border-right: none !important;
 }
+
+/* Today date number circle */
+.schedule-today-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.7);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Month task pills — glass mini-cards */
+.schedule-task-pill {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgba(59, 130, 246, 0.6);
+  color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schedule-task-pill:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Week/Day grid: softer grid lines */
 .schedule-panel .schedule-week-time-label {
-  border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-sizing: border-box;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
 }
 .schedule-panel button.schedule-week-grid-cell {
-  border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-top: none !important;
   border-left: none !important;
   box-sizing: border-box;
+  transition: background 0.12s ease;
+}
+.schedule-panel button.schedule-week-grid-cell:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 /* Week grid: 8 cols per row (time + 7 days) — drop right border on last day column */
 .schedule-panel .schedule-week-grid-inner > *:nth-child(8n) {
@@ -554,18 +666,74 @@
   border-right: none !important;
 }
 
+/* Week/Day task blocks — frosted glass cards */
+.schedule-task-block {
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-left: 3px solid rgba(59, 130, 246, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  overflow: hidden;
+}
+.schedule-task-block:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Current time indicator */
+.schedule-now-line {
+  position: absolute;
+  left: 48px;
+  right: 0;
+  height: 2px;
+  background: rgba(239, 68, 68, 0.8);
+  z-index: 10;
+  pointer-events: none;
+}
+.schedule-now-line::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.9);
+}
+
+/* Week/day column header — today highlight */
+.schedule-col-header-today {
+  background: rgba(59, 130, 246, 0.08) !important;
+}
+
+/* Fade-in for task blocks */
+@keyframes scheduleBlockIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.schedule-task-block,
+.schedule-task-pill {
+  animation: scheduleBlockIn 0.2s ease both;
+}
+
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
 /* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):hover:not(:disabled),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):hover:not(:disabled) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
@@ -609,17 +777,22 @@
   background: transparent !important;
 }
 
+/* Color-swatch circles in settings – force background from CSS variable */
+.color-swatch {
+  background-color: var(--swatch-bg) !important;
+}
+
 /* List panel - no fills on buttons (except delete, create new list, create form) */
 /* Exclude calendar-day-btn - needs borders for grid lines */
-.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):hover:not(:disabled) {
   background: transparent !important;
 }
 
@@ -1054,6 +1227,16 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   color: inherit;
 }
 
+/* Search bar expand animation */
+.search-bar-expand {
+  animation: searchExpand 0.2s ease-out;
+  transform-origin: left center;
+}
+@keyframes searchExpand {
+  from { opacity: 0; width: 0; padding-left: 0; padding-right: 0; }
+  to   { opacity: 1; }
+}
+
 /* MapLibre attribution hidden for cleaner look */
 .maplibregl-ctrl-attrib {
   display: none !important;
@@ -1356,20 +1539,3 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-
-/* GPS path tracking animations */
-@keyframes pathGlowPulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 0.7; }
-}
-@keyframes pathLinePulse {
-  0%, 100% { opacity: 0.85; }
-  50% { opacity: 1; }
-}
-.path-glow-pulse {
-  animation: pathGlowPulse 2s ease-in-out infinite;
-}
-.path-line-pulse {
-  animation: pathLinePulse 2s ease-in-out infinite;
-}
-

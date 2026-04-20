@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { replaceTemplateTags } from '../utils/emailTemplates'
+import { getSettings } from '../utils/settings'
 
 export function EmailComposer({
   isOpen,
@@ -52,9 +53,11 @@ export function EmailComposer({
 
     setIsSending(true)
     try {
-      // Create mailto link (browser will handle sending)
-      // Use test email for testing
-      const mailtoLink = `mailto:${actualRecipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      const s = getSettings()
+      const finalBody = s.emailSignatureEnabled && s.emailSignature
+        ? `${body}\n\n${s.emailSignature}`
+        : body
+      const mailtoLink = `mailto:${actualRecipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(finalBody)}`
       window.location.href = mailtoLink
 
       // Call onSend callback if provided

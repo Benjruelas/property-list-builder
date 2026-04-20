@@ -16,6 +16,9 @@
     "api/roof-report.js": {
       "maxDuration": 120,
       "memory": 1024
+    },
+    "api/eagleview-imagery.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

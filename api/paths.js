@@ -9,6 +9,9 @@
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
 
+import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+
 let kv = null
 let kvAvailable = false
 
@@ -93,7 +96,8 @@ export default async function handler(req, res) {
   const origin = req.headers.origin || ''
   const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
   const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
-  let user = allowDevBypass && idToken === 'dev-bypass' ? { uid: 'dev-local', email: 'dev@localhost' } : await verifyFirebaseToken(idToken)
+  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
+  if (!user) user = await verifyFirebaseToken(idToken)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
@@ -103,10 +107,9 @@ export default async function handler(req, res) {
 
   try {
     if (method === 'GET') {
-      const all = await getAllPaths()
-      const paths = all.filter(
-        (p) => p.ownerId === user.uid || (Array.isArray(p.sharedWith) && p.sharedWith.map(e => e.toLowerCase()).includes(user.email))
-      )
+      const [all, allTeams] = await Promise.all([getAllPaths(), getAllTeams()])
+      const teamsIndex = fullTeamsIndex(allTeams)
+      const paths = all.filter((p) => resolveAccess(p, user, teamsIndex) !== null)
       return res.status(200).json({ paths })
     }
 
@@ -129,6 +132,7 @@ export default async function handler(req, res) {
         ownerId: user.uid,
         ownerEmail: user.email,
         sharedWith: [],
+        teamShares: [],
         createdAt: new Date().toISOString()
       }
       const all = await getAllPaths()
@@ -138,10 +142,10 @@ export default async function handler(req, res) {
     }
 
     if (method === 'PATCH') {
-      const { pathId, name, sharedWith } = body
+      const { pathId, name, sharedWith, teamShares } = body
       if (!pathId) return res.status(400).json({ error: 'pathId is required' })
 
-      const all = await getAllPaths()
+      const [all, allTeams] = await Promise.all([getAllPaths(), getAllTeams()])
       const idx = all.findIndex((p) => p.id === pathId)
       if (idx === -1) return res.status(404).json({ error: 'Path not found' })
 
@@ -160,6 +164,23 @@ export default async function handler(req, res) {
         const uniqueEmails = [...new Set(emails)]
         if (uniqueEmails.length > 50) return res.status(400).json({ error: 'Maximum 50 share emails allowed' })
         path.sharedWith = uniqueEmails
+      }
+
+      if (teamShares !== undefined) {
+        const teamsIndex = fullTeamsIndex(allTeams)
+        const arr = Array.isArray(teamShares) ? teamShares : []
+        const unique = [...new Set(arr.filter(Boolean))]
+        for (const tid of unique) {
+          const team = teamsIndex[tid]
+          if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
+          const isMember =
+            team.ownerId === user.uid ||
+            (Array.isArray(team.members) && team.members.some((m) => m.uid === user.uid))
+          if (!isMember) {
+            return res.status(403).json({ error: 'You must be a member of each team you share with' })
+          }
+        }
+        path.teamShares = unique
       }
 
       path.updatedAt = new Date().toISOString()

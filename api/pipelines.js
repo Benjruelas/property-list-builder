@@ -1,9 +1,12 @@
+import { resolveDevBypassUser, isDevBypassToken } from './lib/devBypassUsers.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+
 /**
  * Vercel Serverless Function
  * User-scoped deal pipelines. Requires Firebase Auth (Bearer token).
- * - GET: Pipelines owned by user or shared with user's email
+ * - GET: Pipelines owned by user, shared with user's email, or shared with a team the user belongs to.
  * - POST: Create pipeline (owner = current user)
- * - PATCH: Update pipeline. Owner: any field. Collaborators (sharedWith email match): `leads` only (add/move/remove leads). sharedWith max 50 emails.
+ * - PATCH: Owner = any field (title, columns, leads, sharedWith, teamShares). Collaborators (email or team) = leads only.
  * - DELETE: Delete pipeline (owner only)
  *
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
@@ -155,7 +158,8 @@ export default async function handler(req, res) {
   const origin = req.headers.origin || ''
   const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
   const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
-  let user = allowDevBypass && idToken === 'dev-bypass' ? { uid: 'dev-local', email: 'dev@localhost' } : await verifyFirebaseToken(idToken)
+  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
+  if (!user) user = await verifyFirebaseToken(idToken)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
@@ -165,15 +169,9 @@ export default async function handler(req, res) {
 
   try {
     if (method === 'GET') {
-      const all = await getAllPipelines()
-      const userEmail = (user.email || '').toLowerCase().trim()
-      const pipelines = all.filter(
-        (p) =>
-          p.ownerId === user.uid ||
-          (Array.isArray(p.sharedWith) &&
-            userEmail &&
-            p.sharedWith.map((e) => (e || '').toLowerCase().trim()).includes(userEmail))
-      )
+      const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
+      const teamsIndex = fullTeamsIndex(allTeams)
+      const pipelines = all.filter((p) => resolveAccess(p, user, teamsIndex) !== null)
       return res.status(200).json({ pipelines })
     }
 
@@ -189,6 +187,7 @@ export default async function handler(req, res) {
         ownerId: user.uid,
         ownerEmail: user.email,
         sharedWith: [],
+        teamShares: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -199,10 +198,10 @@ export default async function handler(req, res) {
     }
 
     if (method === 'PATCH') {
-      const { pipelineId, title, columns, leads, sharedWith } = body
+      const { pipelineId, title, columns, leads, sharedWith, teamShares } = body
       if (!pipelineId) return res.status(400).json({ error: 'pipelineId is required' })
 
-      const all = await getAllPipelines()
+      const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
       const idx = all.findIndex((p) => p.id === pipelineId)
       if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
 
@@ -212,18 +211,16 @@ export default async function handler(req, res) {
         (pipeline.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
       let newlyAddedPipelineShares = []
-      const isOwner = pipeline.ownerId === user.uid
-      const userEmail = (user.email || '').toLowerCase().trim()
-      const isCollaborator =
-        Array.isArray(pipeline.sharedWith) &&
-        pipeline.sharedWith.map((e) => (e || '').toLowerCase().trim()).includes(userEmail)
+      const teamsIndex = fullTeamsIndex(allTeams)
+      const access = resolveAccess(pipeline, user, teamsIndex)
+      const isOwner = access === 'owner'
 
-      if (!isOwner && !isCollaborator) {
+      if (!access) {
         return res.status(403).json({ error: 'Only the pipeline owner or collaborators can update this pipeline' })
       }
 
       if (!isOwner) {
-        if (title !== undefined || columns !== undefined || sharedWith !== undefined) {
+        if (title !== undefined || columns !== undefined || sharedWith !== undefined || teamShares !== undefined) {
           return res.status(403).json({ error: 'Only the pipeline owner can change title, columns, or sharing' })
         }
         if (leads === undefined) {
@@ -266,7 +263,7 @@ export default async function handler(req, res) {
               ;(l.sharedWith || []).forEach((s) => { const t = (s || '').toLowerCase().trim(); if (t) knownEmails.add(t) })
             })
           } catch {}
-          if (!allowDevBypass || idToken !== 'dev-bypass') {
+          if (!allowDevBypass || !isDevBypassToken(idToken)) {
             const unknown = uniqueEmails.filter((e) => !knownEmails.has(e))
             if (unknown.length > 0) {
               return res.status(400).json({ error: `No user found with email: ${unknown[0]}` })
@@ -275,6 +272,22 @@ export default async function handler(req, res) {
         }
         newlyAddedPipelineShares = uniqueEmails.filter((e) => !prevSharedSet.has(e))
         pipeline.sharedWith = uniqueEmails
+      }
+
+      if (teamShares !== undefined) {
+        const arr = Array.isArray(teamShares) ? teamShares : []
+        const unique = [...new Set(arr.filter(Boolean))]
+        for (const tid of unique) {
+          const team = teamsIndex[tid]
+          if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
+          const isMember =
+            team.ownerId === user.uid ||
+            (Array.isArray(team.members) && team.members.some((m) => m.uid === user.uid))
+          if (!isMember) {
+            return res.status(403).json({ error: 'You must be a member of each team you share with' })
+          }
+        }
+        pipeline.teamShares = unique
       }
 
       pipeline.updatedAt = new Date().toISOString()

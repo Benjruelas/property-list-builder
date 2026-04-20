@@ -22,7 +22,7 @@ export function CompassOrientation({ isActive, heading, mapRef }) {
     }
 
     if (heading != null) {
-      const target = heading
+      const target = -heading
       if (lastBearingRef.current != null) {
         let delta = target - lastBearingRef.current
         if (delta > 180) delta -= 360

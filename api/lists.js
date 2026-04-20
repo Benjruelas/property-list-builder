@@ -1,12 +1,18 @@
+import { resolveDevBypassUser, isDevBypassToken } from './lib/devBypassUsers.js'
+import {
+  getAllTeams,
+  fullTeamsIndex,
+  resolveAccess
+} from './lib/teams.js'
+
 /**
- * Vercel Serverless Function
- * User-scoped property lists. Requires Firebase Auth (Bearer token).
- * - GET: Lists owned by user or shared with user's email
- * - POST: Create list (owner = current user)
- * - PATCH: Update list (parcels, removeParcels, or sharedWith). Owner only. sharedWith max 2 emails.
- * - DELETE: Delete list (owner only)
+ * Vercel Serverless Function - property lists. Firebase Bearer auth.
  *
- * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
+ * - GET: lists owned by user, shared via email, or shared via team (teamShares)
+ * - POST: create list (owner = current user)
+ * - PATCH: owner may mutate any field (name, sharedWith, teamShares, parcels).
+ *         Collaborators (email or team) may add/remove parcels only.
+ * - DELETE: delete list (owner only)
  */
 
 let kv = null
@@ -57,7 +63,6 @@ async function saveAllLists(lists) {
   }
 }
 
-/** Verify Firebase ID token; returns { uid, email } or null */
 async function verifyFirebaseToken(idToken) {
   const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
   if (!apiKey || !idToken) return null
@@ -109,7 +114,8 @@ export default async function handler(req, res) {
   const origin = req.headers.origin || ''
   const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
   const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
-  let user = allowDevBypass && idToken === 'dev-bypass' ? { uid: 'dev-local', email: 'dev@localhost' } : await verifyFirebaseToken(idToken)
+  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
+  if (!user) user = await verifyFirebaseToken(idToken)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
@@ -119,10 +125,9 @@ export default async function handler(req, res) {
 
   try {
     if (method === 'GET') {
-      const all = await getAllLists()
-      const lists = all.filter(
-        (l) => l.ownerId === user.uid || (Array.isArray(l.sharedWith) && l.sharedWith.map((e) => e.toLowerCase()).includes(user.email))
-      )
+      const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
+      const teamsIndex = fullTeamsIndex(allTeams)
+      const lists = all.filter((l) => resolveAccess(l, user, teamsIndex) !== null)
       return res.status(200).json({ lists })
     }
 
@@ -138,6 +143,7 @@ export default async function handler(req, res) {
         ownerId: user.uid,
         ownerEmail: user.email,
         sharedWith: [],
+        teamShares: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -148,16 +154,30 @@ export default async function handler(req, res) {
     }
 
     if (method === 'PATCH') {
-      const { listId, parcels: newParcels, removeParcels, sharedWith, name } = body
+      const { listId, parcels: newParcels, removeParcels, sharedWith, teamShares, name } = body
       if (!listId) return res.status(400).json({ error: 'listId is required' })
 
-      const all = await getAllLists()
+      const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
       const idx = all.findIndex((l) => l.id === listId)
       if (idx === -1) return res.status(404).json({ error: 'List not found' })
 
       const list = all[idx]
-      if (list.ownerId !== user.uid) {
-        return res.status(403).json({ error: 'Only the list owner can update this list' })
+      const teamsIndex = fullTeamsIndex(allTeams)
+      const access = resolveAccess(list, user, teamsIndex)
+      if (!access) {
+        return res.status(403).json({ error: 'You do not have access to this list' })
+      }
+      const isOwner = access === 'owner'
+
+      // Collaborators may only touch parcels (add/remove). Everything else
+      // requires owner - matches the normalized rights table in the plan.
+      if (!isOwner) {
+        if (name !== undefined || sharedWith !== undefined || teamShares !== undefined) {
+          return res.status(403).json({ error: 'Only the list owner can change name or sharing' })
+        }
+        if (newParcels === undefined && removeParcels === undefined) {
+          return res.status(400).json({ error: 'No permitted updates' })
+        }
       }
 
       const prevSharedSet = new Set(
@@ -180,7 +200,7 @@ export default async function handler(req, res) {
               if (t) knownEmails.add(t)
             })
           })
-          if (allowDevBypass && idToken === 'dev-bypass') {
+          if (allowDevBypass && isDevBypassToken(idToken)) {
             // skip validation in dev
           } else {
             const unknown = uniqueEmails.filter((e) => !knownEmails.has(e))
@@ -191,6 +211,24 @@ export default async function handler(req, res) {
         }
         newlyAddedListShares = uniqueEmails.filter((e) => !prevSharedSet.has(e))
         list.sharedWith = uniqueEmails
+      }
+
+      if (teamShares !== undefined) {
+        const arr = Array.isArray(teamShares) ? teamShares : []
+        const unique = [...new Set(arr.filter(Boolean))]
+        // Each id must exist AND the patcher must own or be a member of it
+        // (prevents leaking resources into teams they don't belong to).
+        for (const tid of unique) {
+          const team = teamsIndex[tid]
+          if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
+          const isMember =
+            team.ownerId === user.uid ||
+            (Array.isArray(team.members) && team.members.some((m) => m.uid === user.uid))
+          if (!isMember) {
+            return res.status(403).json({ error: 'You must be a member of each team you share with' })
+          }
+        }
+        list.teamShares = unique
       }
 
       if (name !== undefined) {
@@ -213,7 +251,7 @@ export default async function handler(req, res) {
       all[idx] = list
       await saveAllLists(all)
 
-      if (sharedWith !== undefined && newlyAddedListShares.length > 0) {
+      if (isOwner && sharedWith !== undefined && newlyAddedListShares.length > 0) {
         try {
           const { notifyNewListShares } = await import('./push-utils.js')
           await notifyNewListShares(newlyAddedListShares, {

@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRight } from 'lucide-react'
+import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRightLeft } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { DirectionsPicker } from './DirectionsPicker'
 import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
 import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
+import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
+import { showToast } from './ui/toast'
+import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
 const TASK_MENU_WIDTH = 160
@@ -27,22 +31,68 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onGoToPipeline }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onGoToPipeline }) {
   const { scheduleSync } = useUserDataSync()
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
   const [editContacts, setEditContacts] = useState(false)
   const [newPhone, setNewPhone] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [tasks, setTasks] = useState([])
+  const [showTeamTaskInput, setShowTeamTaskInput] = useState(false)
+  const [teamTaskDraft, setTeamTaskDraft] = useState('')
+  const [teamTaskPending, setTeamTaskPending] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [taskMenu, setTaskMenu] = useState(null)
+  const [pipeMenu, setPipeMenu] = useState(null)
+  const [note, setNote] = useState('')
+  const [isEditingNote, setIsEditingNote] = useState(false)
 
   const parcelId = lead?.parcelId || parcelData?.id
 
   const refreshTasks = () => {
     if (parcelId) setTasks(getLeadTasks(parcelId, pipelineId))
     onTasksChange?.()
+  }
+
+  const hasTeamSharing = Array.isArray(pipelineTeamShares) && pipelineTeamShares.length > 0
+  const teamTasks = Array.isArray(lead?.teamTasks) ? lead.teamTasks : []
+  const canMutateTeamTasks = !!(pipelineId && lead?.id && getToken)
+
+  const handleAddTeamTask = async () => {
+    const title = teamTaskDraft.trim()
+    if (!title || !canMutateTeamTasks) return
+    setTeamTaskPending(true)
+    try {
+      await addTeamTask(getToken, pipelineId, lead.id, { title })
+      setTeamTaskDraft('')
+      setShowTeamTaskInput(false)
+      onTeamTasksChange?.()
+    } catch (e) {
+      showToast(e.message || 'Failed to add team task', 'error')
+    } finally {
+      setTeamTaskPending(false)
+    }
+  }
+
+  const handleToggleTeamTask = async (taskId) => {
+    if (!canMutateTeamTasks) return
+    try {
+      await toggleTeamTask(getToken, pipelineId, lead.id, taskId)
+      onTeamTasksChange?.()
+    } catch (e) {
+      showToast(e.message || 'Failed to update team task', 'error')
+    }
+  }
+
+  const handleRemoveTeamTask = async (taskId) => {
+    if (!canMutateTeamTasks) return
+    try {
+      await removeTeamTask(getToken, pipelineId, lead.id, taskId)
+      onTeamTasksChange?.()
+    } catch (e) {
+      showToast(e.message || 'Failed to remove team task', 'error')
+    }
   }
 
   const refreshSkipTrace = () => {
@@ -57,10 +107,15 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
       const info = getSkipTracedParcel(parcelId)
       setSkipTracedInfo(info)
       setTasks(getLeadTasks(parcelId, pipelineId))
+      setNote(getParcelNote(parcelId) || '')
+      setIsEditingNote(false)
     } else {
       setSkipTracedInfo(null)
       setTasks([])
       setTaskMenu(null)
+      setPipeMenu(null)
+      setNote('')
+      setIsEditingNote(false)
     }
   }, [isOpen, parcelId, pipelineId])
 
@@ -97,20 +152,46 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
     setIsEditingName(true)
   }
 
+  const handleSaveNote = () => {
+    if (!parcelId) return
+    saveParcelNote(parcelId, note)
+    scheduleSync()
+    setIsEditingNote(false)
+  }
+
+  const handleCancelNote = () => {
+    setNote(parcelId ? (getParcelNote(parcelId) || '') : '')
+    setIsEditingNote(false)
+  }
+
   const phoneDetails = skipTracedInfo?.phoneDetails || (skipTracedInfo?.phoneNumbers || (skipTracedInfo?.phone ? [skipTracedInfo.phone] : [])).map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 }))
   const emailDetails = skipTracedInfo?.emailDetails || (skipTracedInfo?.emails || (skipTracedInfo?.email ? [skipTracedInfo.email] : [])).map((v, i) => ({ value: v, verified: null, primary: i === 0 }))
   const hasSkipTraceData = phoneDetails.length > 0 || emailDetails.length > 0 || skipTracedInfo?.address
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose?.() }}>
-      <DialogContent className="map-panel lead-details-panel max-w-md p-0" showCloseButton={false} blurOverlay>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o && !pipeMenu) onClose?.() }}>
+      <DialogContent className="map-panel lead-details-panel max-w-xs p-0 rounded-2xl" showCloseButton={false} blurOverlay onPointerDownOutside={(e) => { if (pipeMenu) e.preventDefault() }} onInteractOutside={(e) => { if (pipeMenu) e.preventDefault() }}>
         <DialogHeader className="px-4 pt-4 pb-3 border-b border-gray-200">
-          <DialogDescription className="sr-only">Lead details, contact information, and tasks</DialogDescription>
+          <DialogDescription className="sr-only">Lead details, notes, contact information, and tasks</DialogDescription>
           <div className="map-panel-header-toolbar">
             <DialogTitle className="map-panel-header-title-wrap text-lg font-semibold flex items-center min-w-0">
               <User className="h-5 w-5 shrink-0" />
             </DialogTitle>
-            <div className="map-panel-header-actions">
+            <div className="map-panel-header-actions gap-1">
+              <DirectionsPicker lat={dataForParcelDetails?.lat} lng={dataForParcelDetails?.lng} />
+              {pipelineId && (onRequestMoveLead || onRequestRemoveLead) && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Lead options"
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    setPipeMenu(prev => prev ? null : { anchor: positionTaskMenu(rect) })
+                  }}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              )}
               <Button variant="ghost" size="icon" onClick={onClose} title="Close">
                 <X className="h-4 w-4" />
               </Button>
@@ -148,8 +229,62 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
 
           <div className="space-y-1 pt-3 border-t border-gray-200">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
-            <p className="text-gray-900">{address}</p>
+            <button
+              type="button"
+              onClick={() => {
+                const data = { ...dataForParcelDetails }
+                onGoToParcelOnMap?.(data)
+                onClose?.()
+              }}
+              className="text-blue-400 hover:text-blue-300 hover:underline text-left transition-colors"
+            >
+              {address}
+            </button>
           </div>
+
+          {/* Notes — same parcel-level notes as More Details / lists */}
+          {parcelId && (
+            <div className="space-y-2 pt-3 border-t border-gray-200">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Notes</div>
+              {isEditingNote ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Add a note..."
+                    className="w-full min-h-[72px] p-2.5 rounded-lg text-sm resize-y border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                    rows={3}
+                    autoFocus
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="ghost" size="sm" type="button" onClick={handleCancelNote}>
+                      Cancel
+                    </Button>
+                    <Button size="sm" type="button" onClick={handleSaveNote}>
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              ) : note ? (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingNote(true)}
+                  className="w-full text-left rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 hover:bg-gray-100 transition-colors whitespace-pre-wrap"
+                  title="Edit note"
+                >
+                  {note}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingNote(true)}
+                  className="w-full text-left rounded-lg border border-dashed border-gray-300 px-3 py-2.5 text-sm text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors"
+                >
+                  + Add a note…
+                </button>
+              )}
+            </div>
+          )}
 
           {hasSkipTraceData ? (
             <div className="space-y-1.5 pt-3 border-t border-gray-200 flex flex-col items-start">
@@ -311,17 +446,110 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
             </div>
           )}
 
+          {/* Team Tasks (visible to all team members with access to this pipeline) */}
+          {hasTeamSharing && canMutateTeamTasks && (
+            <div className="pt-3 border-t border-gray-200 space-y-2">
+              <div className="flex items-center gap-2 justify-between">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Team Tasks</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setShowTeamTaskInput((v) => !v)}
+                  title="Add team task"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {showTeamTaskInput && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={teamTaskDraft}
+                    onChange={(e) => setTeamTaskDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddTeamTask()
+                      else if (e.key === 'Escape') {
+                        setShowTeamTaskInput(false)
+                        setTeamTaskDraft('')
+                      }
+                    }}
+                    placeholder="Team task title..."
+                    autoFocus
+                    disabled={teamTaskPending}
+                    className="border rounded px-2 py-1 text-sm w-full"
+                  />
+                  <Button size="sm" onClick={handleAddTeamTask} disabled={teamTaskPending || !teamTaskDraft.trim()}>
+                    Add
+                  </Button>
+                </div>
+              )}
+              {teamTasks.length > 0 && (
+                <ul className="space-y-1.5">
+                  {teamTasks.map((task) => (
+                    <li key={task.id} className="flex items-start gap-2 text-sm group">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTeamTask(task.id)}
+                        className="flex-shrink-0 mt-0.5 text-gray-600 hover:text-gray-900"
+                        title={task.completedAt ? 'Mark incomplete' : 'Mark done'}
+                      >
+                        {task.completedAt ? (
+                          <CheckSquare className="h-4 w-4 text-green-600 fill-green-600" />
+                        ) : (
+                          <Square className="h-4 w-4" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={task.completedAt ? 'line-through text-gray-500' : 'text-gray-900'}>
+                            {task.title}
+                          </span>
+                          <span
+                            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wide"
+                            title="Shared with pipeline team"
+                          >
+                            Team
+                          </span>
+                        </div>
+                        {(task.completedAt || task.createdByEmail) && (
+                          <div className="text-[11px] text-gray-500 mt-0.5">
+                            {task.completedAt
+                              ? `Completed ${formatTaskCompletedDate(new Date(task.completedAt).getTime())}`
+                              : task.createdByEmail
+                              ? `Added by ${task.createdByEmail}`
+                              : ''}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTeamTask(task.id)}
+                        className="flex-shrink-0 text-gray-400 hover:text-red-500 p-0.5 -mt-0.5 -mr-0.5 opacity-70 group-hover:opacity-100"
+                        title="Delete team task"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           {/* Tasks */}
           <div className="pt-3 border-t border-gray-200 space-y-2">
             <div className="flex items-center gap-2 justify-between">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Tasks</span>
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                {hasTeamSharing ? 'My Tasks' : 'Tasks'}
+              </span>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0 lead-details-add-btn"
                 onClick={() => onOpenAddTask?.(lead)}
                 disabled={!onOpenAddTask}
-                title={onOpenAddTask ? 'Add task' : 'Add task (open from pipeline)'}
+                title="Add task"
               >
                 <Plus className="h-3.5 w-3.5" />
               </Button>
@@ -403,15 +631,14 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
             )}
           </div>
 
-          {onGoToPipeline && (
+          {pipelineName && (
             <div className="pt-3 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => onGoToPipeline(pipelineId)}
-                className="settings-data-btn w-full flex items-center justify-center gap-2 text-sm px-4 py-2.5 rounded-lg transition-colors font-medium"
+                onClick={() => onGoToPipeline?.(pipelineId)}
+                className="leads-stage-badge inline-flex items-center text-[11px] px-2 py-0.5 rounded-full font-medium hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
               >
-                Go to Pipes
-                <ArrowRight className="h-4 w-4" />
+                {pipelineName}
               </button>
             </div>
           )}
@@ -471,6 +698,51 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
         </div>,
         document.getElementById('modal-root') || document.body
       )}
+
+      {pipeMenu && typeof document !== 'undefined' && createPortal(
+        <div data-pipe-menu className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
+          <div className="fixed inset-0 z-[10011]" onClick={() => setPipeMenu(null)} aria-hidden />
+          <div
+            className="map-panel list-panel fixed z-[10012] rounded-lg min-w-[160px] py-1 overflow-hidden shadow-xl"
+            style={{ top: pipeMenu.anchor.top, left: pipeMenu.anchor.left }}
+            role="menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {onRequestMoveLead && (
+              <button
+                type="button"
+                onClick={() => {
+                  const l = lead, pid = pipelineId
+                  setPipeMenu(null)
+                  onClose?.()
+                  onRequestMoveLead(l, pid)
+                }}
+                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5 flex-shrink-0" />
+                Move to Pipe
+              </button>
+            )}
+            {onRequestRemoveLead && (
+              <button
+                type="button"
+                onClick={() => {
+                  const l = lead, pid = pipelineId
+                  setPipeMenu(null)
+                  onClose?.()
+                  onRequestRemoveLead(l, pid)
+                }}
+                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/20 text-red-400 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
+                Remove from Pipe
+              </button>
+            )}
+          </div>
+        </div>,
+        document.getElementById('modal-root') || document.body
+      )}
+
     </Dialog>
   )
 }

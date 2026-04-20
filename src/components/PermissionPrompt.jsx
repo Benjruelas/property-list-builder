@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MapPin, Compass } from 'lucide-react'
+import { getCurrentPositionWithFallback } from '../utils/geolocation'
 
 const LS_KEY = 'permissions_granted'
 
@@ -43,15 +44,9 @@ export function PermissionPrompt({ onComplete }) {
       orientationGranted = typeof window !== 'undefined' && 'DeviceOrientationEvent' in window
     }
 
-    // Location — doesn't require gesture context, safe to call after await
+    // Location — coarse fix first (reliable on desktop / installed PWA), then high accuracy inside helper
     try {
-      await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          () => resolve(),
-          (err) => reject(err),
-          { enableHighAccuracy: true, timeout: 10000 }
-        )
-      })
+      await getCurrentPositionWithFallback()
     } catch {
       // denied or timeout
     }

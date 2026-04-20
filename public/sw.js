@@ -15,7 +15,8 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       tag: data.tag || 'default',
       data: data.data || {},
-      icon: '/favicon.ico',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
     })
   )
 })

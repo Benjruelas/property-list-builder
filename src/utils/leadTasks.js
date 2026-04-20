@@ -318,6 +318,24 @@ export const deleteLeadTask = (parcelId, taskId) => {
   saveStore(store)
 }
 
+export const deleteTasksForPipeline = (pipelineId) => {
+  if (!pipelineId) return
+  const store = loadStore()
+  store.tasks = store.tasks.filter((t) => t.pipelineId !== pipelineId)
+  saveStore(store)
+}
+
+export const deleteAllLeadTasks = (parcelId, pipelineId = null) => {
+  if (!parcelId) return
+  const store = loadStore()
+  store.tasks = store.tasks.filter((t) => {
+    if (t.parcelId !== parcelId) return true
+    if (pipelineId == null) return false
+    return t.pipelineId !== pipelineId && t.pipelineId != null
+  })
+  saveStore(store)
+}
+
 export const toggleLeadTask = (parcelId, taskId) => {
   if (!taskId) return
   const store = loadStore()
@@ -363,15 +381,3 @@ export const formatTaskScheduledDate = (ts) => {
   })
 }
 
-export const toDatetimeLocal = (ts) => {
-  if (ts == null || !Number.isFinite(ts)) return ''
-  const d = new Date(ts)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-export const fromDatetimeLocal = (str) => {
-  if (!str || typeof str !== 'string') return null
-  const ms = new Date(str).getTime()
-  return Number.isFinite(ms) ? ms : null
-}

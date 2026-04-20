@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
+import { TeamShareSection, TeamBadge } from './TeamShareSection'
 
 const PATH_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
@@ -21,6 +22,8 @@ export function PathsPanel({
   onDeletePath,
   onRenamePath,
   onSharePath,
+  onSharePathWithTeams,
+  teams = [],
   onValidateShareEmail,
   onCenterOnPath,
   visiblePathIds = [],
@@ -203,10 +206,10 @@ export function PathsPanel({
             if (e.target.closest?.('[data-paths-panel-dropdown]')) e.preventDefault()
           }}
         >
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
             <DialogDescription className="sr-only">View and manage your recorded GPS paths</DialogDescription>
             <div className="map-panel-header-toolbar">
-              <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold truncate">Paths</DialogTitle>
+              <DialogTitle className="map-panel-header-title-wrap text-left text-xl font-semibold truncate">Paths</DialogTitle>
               <div className="map-panel-header-actions gap-2">
                 <Button
                   variant="ghost"
@@ -294,6 +297,7 @@ export function PathsPanel({
                               {(!isPathOwnedByUser(path) || (path.sharedWith && path.sharedWith.length > 0)) && (
                                 <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title={isPathOwnedByUser(path) ? 'Shared with others' : 'Shared with you'} aria-hidden />
                               )}
+                              <TeamBadge teamIds={path.teamShares} teams={teams} />
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5 leading-snug line-clamp-2">
                               {metaLine}
@@ -399,8 +403,27 @@ export function PathsPanel({
               const path = allPaths.find(p => p.id === sharePathId)
               const currentShared = path?.sharedWith || []
               const isShared = currentShared.length > 0
+              const currentTeamShares = path?.teamShares || []
+              const toggleTeam = async (teamId) => {
+                if (!onSharePathWithTeams) return
+                const next = currentTeamShares.includes(teamId)
+                  ? currentTeamShares.filter((id) => id !== teamId)
+                  : [...currentTeamShares, teamId]
+                try {
+                  await onSharePathWithTeams(sharePathId, next)
+                } catch (e) {
+                  showToast(e.message || 'Failed to update team share', 'error')
+                }
+              }
               return (
                 <>
+                  {onSharePathWithTeams && (
+                    <TeamShareSection
+                      teams={teams}
+                      selectedTeamIds={currentTeamShares}
+                      onToggle={toggleTeam}
+                    />
+                  )}
                   {isShared && (
                     <div className="mb-4">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>

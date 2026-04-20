@@ -1,16 +1,10 @@
 /**
- * Vercel Serverless Function
- * Handles skip tracing via SkipSherpa API
- * 
- * POST: Skip trace one or more parcels
- * Body: { parcels: [{ parcelId, address, ownerName }] }
- * 
- * Documentation: https://skipsherpa.com/api/docs#/
- * Base URL: https://api.skipsherpa.com/v1/
+ * Skip tracing via SkipSherpa API. Disabled unless USE_SKIPSHERPA=true.
+ * POST body: { parcels: [{ parcelId, address, ownerName }] }
+ * Docs: https://skipsherpa.com/api/docs#/
  */
 
 export default async function handler(req, res) {
-  // Disable SkipSherpa by default - uncomment to enable
   const USE_SKIPSHERPA = process.env.USE_SKIPSHERPA === 'true'
   if (!USE_SKIPSHERPA) {
     return res.status(503).json({ 
@@ -40,7 +34,7 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.SKIPSHERPA_API_KEY
     if (!apiKey) {
-      console.error('❌ SKIPSHERPA_API_KEY not found in environment variables')
+      console.error('SKIPSHERPA_API_KEY not found in environment variables')
       console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('SKIP') || k.includes('TRACE')).join(', ') || 'none')
       return res.status(500).json({ 
         error: 'Skip tracing service not configured',
@@ -143,19 +137,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No valid addresses found' })
     }
 
-    // Submit to SkipSherpa API
-    // API Base URL: https://skipsherpa.com
-    // Check the API docs at https://skipsherpa.com/api/docs#/ for the correct endpoint path
     const SKIPSHERPA_API_BASE = process.env.SKIPSHERPA_API_BASE || 'https://skipsherpa.com'
-    
-    // Try different endpoint patterns based on API docs
-    // The endpoint might be: /api/v1/skip-trace, /api/v1/property-lookup, /api/trace, etc.
-    // Based on the 404 error, /api/skip-trace doesn't exist
-    // Common SkipSherpa patterns: /api/v1/property-lookup, /api/v1/trace, /api/property-lookup
-    // Check https://skipsherpa.com/api/docs#/ for the exact endpoint
     const endpoint = process.env.SKIPSHERPA_ENDPOINT || `${SKIPSHERPA_API_BASE}/api/v1/property-lookup`
-    console.log(`📡 Calling SkipSherpa API: ${endpoint}`)
-    console.log(`📦 Sending ${records.length} records`)
     
     let response
     try {
@@ -170,15 +153,14 @@ export default async function handler(req, res) {
         })
       })
     } catch (fetchError) {
-      console.error('❌ Fetch error calling SkipSherpa API:', fetchError)
+      console.error('Fetch error calling SkipSherpa API:', fetchError)
       throw new Error(`Failed to connect to SkipSherpa API: ${fetchError.message}`)
     }
 
-    console.log(`📡 SkipSherpa API response status: ${response.status}`)
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('❌ SkipSherpa API error:', response.status, errorText)
+      console.error('SkipSherpa API error:', response.status, errorText)
       
       // For 429 rate limit errors
       if (response.status === 429) {
@@ -191,9 +173,8 @@ export default async function handler(req, res) {
     let result
     try {
       result = await response.json()
-      console.log('✅ SkipSherpa API response received')
     } catch (jsonError) {
-      console.error('❌ Failed to parse SkipSherpa API response as JSON:', jsonError)
+      console.error('Failed to parse SkipSherpa API response as JSON:', jsonError)
       const textResponse = await response.text()
       console.error('Raw response:', textResponse)
       throw new Error(`Invalid JSON response from SkipSherpa API: ${jsonError.message}`)
@@ -229,7 +210,7 @@ export default async function handler(req, res) {
     })
 
   } catch (error) {
-    console.error('❌ Skip trace error:', error)
+    console.error('Skip trace error:', error)
     console.error('Error stack:', error.stack)
     return res.status(500).json({ 
       error: 'Internal server error', 

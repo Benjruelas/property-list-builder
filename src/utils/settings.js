@@ -5,15 +5,19 @@ const LS_KEY = 'app_settings'
 export const DEFAULT_SETTINGS = {
   mapStyle: 'satellite',       // 'satellite' | 'street' | 'hybrid'
   defaultZoom: 17,             // 14–19
-  compassDefault: true,
+  compassDefault: false,
   autoFollow: true,
-  followResumeDelay: 5000,     // ms, 0 = never
+
+  parcelBoundaryColor: '#2563eb', // hex color for parcel outlines
+  parcelBoundaryOpacity: 80,      // 0–100
 
   pathSmoothing: 'normal',     // 'off' | 'light' | 'normal' | 'heavy'
   distanceUnit: 'miles',       // 'miles' | 'km'
 
   defaultEmail: '',            // blank = use real recipient
   emailTestMode: false,
+  emailSignatureEnabled: false,
+  emailSignature: '',
 
   tourCompleted: false,
 

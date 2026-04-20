@@ -215,11 +215,6 @@ export default async function handler(req, res) {
     // For completed queues, it returns the CSV data
     const contentType = queueResponse.headers.get('content-type') || ''
     
-    console.log(`📡 Queue ${id} response:`, {
-      status: queueResponse.status,
-      contentType,
-      contentLength: queueResponse.headers.get('content-length')
-    })
     
     if (contentType.includes('application/json')) {
       // Check if it's queue metadata or results
@@ -228,7 +223,7 @@ export default async function handler(req, res) {
       // If it's an array, it's the results (completed queue)
       if (Array.isArray(data)) {
         // Transform Tracerfy results to our format
-        const results = data.map((row, index) => {
+        const results = data.map((row) => {
           // Combine all phone numbers (primary_phone, mobile_1-5, landline_1-3)
           const phones = [
             row.primary_phone,
@@ -316,7 +311,6 @@ export default async function handler(req, res) {
           const results = parseCsvResults(csvText)
           
           // Log results for debugging
-          console.log(`✅ Returning ${results.length} skip trace results for queue ${id} (CSV download format)`)
           
           return res.status(200).json({
             status: 'completed',
@@ -338,7 +332,6 @@ export default async function handler(req, res) {
       const results = parseCsvResults(csvText)
       
       // Log results for debugging
-      console.log(`✅ Returning ${results.length} skip trace results for queue ${id} (direct CSV format)`)
       
       return res.status(200).json({
         status: 'completed',
