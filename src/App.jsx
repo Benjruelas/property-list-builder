@@ -2024,6 +2024,8 @@ function App() {
             selectedParcels={selectedParcels}
             selectedListIds={selectedListIds}
             lists={lists}
+            boundaryColor={settings.parcelBoundaryColor}
+            boundaryOpacity={settings.parcelBoundaryOpacity}
             onLayerReady={(layerFunctions) => {
               parcelLayerRef.current = layerFunctions
             }}

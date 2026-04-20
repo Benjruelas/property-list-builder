@@ -15,6 +15,22 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
   const searchTimeoutRef = useRef(null)
+  const containerRef = useRef(null)
+
+  // Close the search (and clear state) when the user taps/clicks outside it.
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false)
+        setQuery('')
+        setResults([])
+        setError(null)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [isOpen])
 
   // Get Mapbox access token from environment variable
   const getMapboxToken = () => {
@@ -215,6 +231,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
 
   return (
     <div
+      ref={containerRef}
       className="map-search-stack absolute z-[1000] flex flex-col items-start gap-2 sm:gap-2 md:gap-2"
       style={{
         top: 'calc(12px + env(safe-area-inset-top, 0px))',

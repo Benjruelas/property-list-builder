@@ -339,14 +339,19 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
             <SettingRow label="Parcel Boundary Color" description="Outline color for property parcels" stacked>
               <div className="flex flex-wrap gap-2">
                 {BOUNDARY_COLORS.map(c => {
-                  const active = (parcelBoundaryColor || '#2563eb') === c.value
+                  const currentColor = s.parcelBoundaryColor || parcelBoundaryColor || '#2563eb'
+                  const active = currentColor === c.value
+                  const applyColor = () => {
+                    update({ parcelBoundaryColor: c.value })
+                    onBoundaryColorChange?.(c.value)
+                  }
                   return (
                     <div
                       key={c.value}
                       tabIndex={0}
                       title={c.label}
-                      onClick={() => onBoundaryColorChange(c.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onBoundaryColorChange(c.value) }}
+                      onClick={applyColor}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') applyColor() }}
                       className={cn(
                         "color-swatch h-8 w-8 rounded-full cursor-pointer transition-transform duration-150 flex-shrink-0",
                         active ? "scale-110 ring-2 ring-white/40 border-2 border-white" : "border-2 border-white/25 hover:scale-105 hover:border-white/50"

@@ -259,6 +259,8 @@ export function PMTilesParcelLayer({
         buildColorExpression(clicked, selected, idxMap, color))
       map.setPaintProperty(LINE_LAYER, 'line-width',
         buildWidthExpression(clicked, selected, idxMap))
+      map.setPaintProperty(LINE_LAYER, 'line-opacity',
+        (opacityRef.current ?? 80) / 100)
       map.triggerRepaint()
     } catch { /* ignore if layers not ready */ }
   }

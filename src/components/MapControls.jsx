@@ -140,7 +140,13 @@ export function MapControls({
       <div className="relative">
         <Button
           data-tour="menu"
-          onClick={runAction(() => setShowMenu(!showMenu))}
+          onClick={runAction(() => {
+            const next = !showMenu
+            if (next && isMultiSelectActive) {
+              onCancelMultiSelect?.()
+            }
+            setShowMenu(next)
+          })}
           size="icon"
           variant="glass-outline"
           className={cn(
