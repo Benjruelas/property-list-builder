@@ -1,16 +1,13 @@
 /**
- * Utility functions for skip tracing parcels via BatchData API (or SkipSherpa/Tracerfy if enabled)
- * 
- * Note: This is a client-side utility. The actual API call should be made
- * via a serverless function to keep the API key secure.
- * 
- * To use BatchData (default), set BATCHDATA_CLIENT_ID and BATCHDATA_CLIENT_SECRET (OAuth 2.0) or BATCHDATA_API_KEY
- * To use SkipSherpa (disabled), set SKIPSHERPA_API_KEY and enable USE_SKIPSHERPA=true
- * To use Tracerfy (disabled), set TRACERFY_API_KEY and enable USE_TRACERFY=true
+ * Skip tracing via Trestle IQ (Reverse Address API).
+ *
+ * The Trestle endpoint is synchronous, so skipTraceParcels() always resolves
+ * with `{ jobId: 'sync', async: false, results: [...] }`. pollSkipTraceJobUntilComplete()
+ * is kept as a no-op for compatibility with existing async-polling call sites.
+ *
+ * The API key lives server-side as TRESTLE_API_KEY and is never exposed to the
+ * browser — all calls go through /api/skip-trace.
  */
-
-// Configuration: Set to 'batchdata', 'sherpa', or 'tracerfy' (default: 'batchdata')
-const SKIP_TRACE_PROVIDER = import.meta.env.VITE_SKIP_TRACE_PROVIDER || 'batchdata'
 
 const getApiBaseUrl = () => {
   if (import.meta.env.DEV) {
@@ -25,27 +22,15 @@ const getApiBaseUrl = () => {
 const API_BASE_URL = getApiBaseUrl()
 
 /**
- * Skip trace a single parcel or multiple parcels
- * @param {Array} parcels - Array of { parcelId, address, ownerName }
- * @returns {Promise} Result with job ID (async)
+ * Skip trace one or more parcels.
+ * @param {Array<{parcelId: string, address: string, ownerName?: string}>} parcels
+ * @returns {Promise<{ success: boolean, jobId: 'sync', async: false, status: 'completed', results: Array }>}
  */
 export const skipTraceParcels = async (parcels) => {
   try {
-    // Use BatchData by default, or SkipSherpa/Tracerfy if enabled
-    let endpoint
-    if (SKIP_TRACE_PROVIDER === 'tracerfy') {
-      endpoint = `${API_BASE_URL}/skip-trace`
-    } else if (SKIP_TRACE_PROVIDER === 'sherpa') {
-      endpoint = `${API_BASE_URL}/skip-trace-sherpa`
-    } else {
-      endpoint = `${API_BASE_URL}/skip-trace-batchdata`
-    }
-    
-    const response = await fetch(endpoint, {
+    const response = await fetch(`${API_BASE_URL}/skip-trace`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parcels })
     })
 
@@ -54,8 +39,7 @@ export const skipTraceParcels = async (parcels) => {
       throw new Error(error.error || `HTTP ${response.status}`)
     }
 
-    const data = await response.json()
-    return data
+    return await response.json()
   } catch (error) {
     console.error('Skip trace error:', error)
     throw error
@@ -63,101 +47,15 @@ export const skipTraceParcels = async (parcels) => {
 }
 
 /**
- * Poll for skip trace job results
- * @param {string} jobId - Job ID from skipTraceParcels
- * @returns {Promise} Job status and results if complete
+ * Compatibility shim — Trestle is synchronous so jobs never need polling.
+ * The existing App.jsx bulk flow handles sync results directly; this exists
+ * so leftover async-polling call sites don't crash.
  */
-export const pollSkipTraceJob = async (jobId) => {
-  try {
-    // Use BatchData by default, or SkipSherpa/Tracerfy if enabled
-    let endpoint
-    if (SKIP_TRACE_PROVIDER === 'tracerfy') {
-      endpoint = `${API_BASE_URL}/skip-trace-status`
-    } else if (SKIP_TRACE_PROVIDER === 'sherpa') {
-      endpoint = `${API_BASE_URL}/skip-trace-status-sherpa`
-    } else {
-      endpoint = `${API_BASE_URL}/skip-trace-status-batchdata`
-    }
-    
-    const response = await fetch(`${endpoint}?jobId=${encodeURIComponent(jobId)}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(error.error || `HTTP ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error('Poll skip trace error:', error)
-    throw error
-  }
-}
-
-/**
- * Poll for results with retries
- * @param {string} jobId - Job ID
- * @param {number} maxRetries - Maximum number of polling attempts (default: 30)
- * @param {number} interval - Polling interval in milliseconds (default: 5000 = 5 seconds)
- * @returns {Promise} Results when complete
- */
-export const pollSkipTraceJobUntilComplete = async (jobId, maxRetries = 30, interval = 5000) => {
-  // For synchronous jobs (jobId === 'sync'), don't poll - results are already returned
-  if (jobId === 'sync') {
-    return []
-  }
-  
-  
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const status = await pollSkipTraceJob(jobId)
-      
-      
-      if (status.status === 'completed') {
-        const results = status.results || []
-        
-        // If status is completed but results is empty, this might be a valid case (no contact info found)
-        // But we should still return the empty array rather than throwing an error
-        if (results.length === 0) {
-          console.warn(`Job marked as completed but no results returned. This may mean no contact information was found.`)
-        }
-        
-        return results
-      }
-      
-      if (status.status === 'processing' || status.status === 'pending') {
-      }
-      
-      // Wait before next poll
-      if (attempt < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, interval))
-      }
-    } catch (error) {
-      console.error(`Poll attempt ${attempt + 1} failed:`, error)
-      
-      // On mobile, network errors might be more common - retry with exponential backoff
-      if (attempt < maxRetries - 1) {
-        const backoffDelay = Math.min(interval * Math.pow(1.5, attempt), 30000) // Max 30s backoff
-        await new Promise(resolve => setTimeout(resolve, backoffDelay))
-      } else {
-        // Last attempt failed
-        throw error
-      }
-    }
-  }
-  
-  throw new Error('Skip trace job timed out')
-}
+export const pollSkipTraceJob = async () => ({ status: 'completed', results: [] })
+export const pollSkipTraceJobUntilComplete = async () => []
 
 /**
  * Get skip traced parcel data from storage (migrates old format to phoneDetails/emailDetails)
- * @param {string} parcelId - Parcel ID
- * @returns {Object|null} Skip traced parcel data or null
  */
 export const getSkipTracedParcel = (parcelId) => {
   try {
@@ -197,14 +95,14 @@ const toEmailDetails = (emails, existing) => {
   const hasPrimary = (existing || []).some(d => d.primary)
   return arr.map((value, i) => {
     const prev = byValue.get(value) || {}
-    return { value, verified: prev.verified ?? null, primary: prev.primary ?? (!hasPrimary && i === 0) }
+    return { value, verified: prev.verified ?? null, callerId: prev.callerId ?? '', primary: prev.primary ?? (!hasPrimary && i === 0) }
   })
 }
 
 /**
- * Save skip traced parcel data to storage (global list)
- * @param {string} parcelId - Parcel ID
- * @param {Object} contactInfo - Contact information { phone, email, phoneNumbers, emails, address, skipTracedAt, phoneDetails, emailDetails }
+ * Save skip traced parcel data to storage (global list).
+ * Accepts phoneDetails/emailDetails with callerId from Trestle; preserves
+ * any existing verified/callerId/primary flags when overwriting.
  */
 export const saveSkipTracedParcel = (parcelId, contactInfo) => {
   try {
@@ -219,6 +117,10 @@ export const saveSkipTracedParcel = (parcelId, contactInfo) => {
     const primaryPhone = phoneDetails.find(p => p.primary) || phoneDetails[0]
     const primaryEmail = emailDetails.find(e => e.primary) || emailDetails[0]
 
+    const preservedSkipTracedAt = 'skipTracedAt' in contactInfo
+      ? contactInfo.skipTracedAt
+      : (existing?.skipTracedAt || new Date().toISOString())
+
     skipTracedParcels[parcelId] = {
       phone: primaryPhone?.value || phoneNumbers[0] || null,
       email: primaryEmail?.value || emails[0] || null,
@@ -226,8 +128,8 @@ export const saveSkipTracedParcel = (parcelId, contactInfo) => {
       emails,
       phoneDetails,
       emailDetails,
-      address: contactInfo.address || null,
-      skipTracedAt: contactInfo.skipTracedAt || new Date().toISOString()
+      address: contactInfo.address ?? existing?.address ?? null,
+      skipTracedAt: preservedSkipTracedAt
     }
 
     localStorage.setItem('skip_traced_parcels', JSON.stringify(skipTracedParcels))
@@ -238,13 +140,21 @@ export const saveSkipTracedParcel = (parcelId, contactInfo) => {
 
 /**
  * Replace full phone or email details (for add/remove). Preserves verified/callerId from existing.
- * @param {string} parcelId - Parcel ID
- * @param {'phone'|'email'} type - Contact type
- * @param {Array<{value:string,verified?,callerId?,primary?}>} newDetails - New details array
+ * If no skip-trace record exists yet, seeds one with skipTracedAt: null so the UI can still
+ * distinguish "only manual contacts" from "was actually skip-traced".
  */
 export const updateSkipTracedContacts = (parcelId, type, newDetails) => {
-  const data = getSkipTracedParcel(parcelId)
-  if (!data) return
+  if (!parcelId) return
+  const data = getSkipTracedParcel(parcelId) || {
+    phone: null,
+    email: null,
+    phoneNumbers: [],
+    emails: [],
+    phoneDetails: [],
+    emailDetails: [],
+    address: null,
+    skipTracedAt: null
+  }
 
   const existing = type === 'phone' ? (data.phoneDetails || toPhoneDetails(data.phoneNumbers || [], null)) : (data.emailDetails || toEmailDetails(data.emails || [], null))
   const byValue = new Map(existing.map(d => [String(d.value).trim().toLowerCase(), d]))
@@ -257,7 +167,7 @@ export const updateSkipTracedContacts = (parcelId, type, newDetails) => {
     return {
       value: String(val).trim(),
       verified: base.verified ?? prev.verified ?? null,
-      callerId: type === 'phone' ? (base.callerId ?? prev.callerId ?? '') : undefined,
+      callerId: base.callerId ?? prev.callerId ?? '',
       primary: base.primary ?? prev.primary ?? (i === 0)
     }
   })
@@ -267,16 +177,13 @@ export const updateSkipTracedContacts = (parcelId, type, newDetails) => {
   saveSkipTracedParcel(parcelId, {
     ...data,
     phoneDetails: type === 'phone' ? merged : (data.phoneDetails || toPhoneDetails(data.phoneNumbers || [], null)),
-    emailDetails: type === 'email' ? merged : (data.emailDetails || toEmailDetails(data.emails || [], null))
+    emailDetails: type === 'email' ? merged : (data.emailDetails || toEmailDetails(data.emails || [], null)),
+    skipTracedAt: data.skipTracedAt ?? null
   })
 }
 
 /**
- * Update contact metadata (verified, callerId, primary) for a single phone or email
- * @param {string} parcelId - Parcel ID
- * @param {'phone'|'email'} type - Contact type
- * @param {string} value - The phone/email value to update
- * @param {{ verified?: 'good'|'bad'|null, callerId?: string, primary?: boolean }} meta - Metadata to set
+ * Update contact metadata (verified, callerId, primary) for a single phone or email.
  */
 export const updateContactMeta = (parcelId, type, value, meta) => {
   const data = getSkipTracedParcel(parcelId)
@@ -288,7 +195,7 @@ export const updateContactMeta = (parcelId, type, value, meta) => {
 
   const updated = details.map(d => ({ ...d, primary: d.primary ?? false }))
   if (meta.verified !== undefined) updated[idx] = { ...updated[idx], verified: meta.verified }
-  if (meta.callerId !== undefined && type === 'phone') updated[idx] = { ...updated[idx], callerId: meta.callerId }
+  if (meta.callerId !== undefined) updated[idx] = { ...updated[idx], callerId: meta.callerId }
   if (meta.primary === true) {
     updated.forEach((u, i) => { updated[i] = { ...u, primary: i === idx } })
   } else if (meta.primary === false) {
@@ -303,8 +210,8 @@ export const updateContactMeta = (parcelId, type, value, meta) => {
 }
 
 /**
- * Save multiple skip traced parcels at once
- * @param {Array} results - Array of { parcelId, phone, email, phoneNumbers, emails, address, skipTracedAt }
+ * Save multiple skip traced parcels at once. Preserves phoneDetails/emailDetails
+ * (including callerId) when the caller supplies them.
  */
 export const saveSkipTracedParcels = (results) => {
   try {
@@ -335,19 +242,26 @@ export const saveSkipTracedParcels = (results) => {
   }
 }
 
-/**
- * Check if a parcel has been skip traced
- * @param {string} parcelId - Parcel ID
- * @returns {boolean} True if parcel has been skip traced
- */
 export const isParcelSkipTraced = (parcelId) => {
   return getSkipTracedParcel(parcelId) !== null
 }
 
-/**
- * Get all skip traced parcels (global list)
- * @returns {Object} Object mapping parcelId to contact info
- */
+/** Remove a single parcel's skip-trace record from localStorage. */
+export const deleteSkipTracedParcel = (parcelId) => {
+  if (!parcelId) return
+  try {
+    const stored = localStorage.getItem('skip_traced_parcels')
+    if (!stored) return
+    const skipTracedParcels = JSON.parse(stored)
+    if (skipTracedParcels[parcelId] != null) {
+      delete skipTracedParcels[parcelId]
+      localStorage.setItem('skip_traced_parcels', JSON.stringify(skipTracedParcels))
+    }
+  } catch (error) {
+    console.error('Error deleting skip traced parcel:', error)
+  }
+}
+
 export const getAllSkipTracedParcels = () => {
   try {
     const stored = localStorage.getItem('skip_traced_parcels')

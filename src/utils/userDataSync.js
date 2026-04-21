@@ -21,7 +21,8 @@ const LS_TO_BLOB = {
   text_templates: 'textTemplates',
   skip_trace_jobs: 'skipTraceJobs',
   skip_traced_list: 'skipTracedList',
-  app_settings: 'appSettings'
+  app_settings: 'appSettings',
+  closed_leads: 'closedLeads'
 }
 
 const BLOB_TO_LS = Object.fromEntries(

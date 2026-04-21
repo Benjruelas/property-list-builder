@@ -282,6 +282,35 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
     showToast('Local data cleared', 'success')
   }, [])
 
+  const handleResetSkipTraces = useCallback(async () => {
+    const confirmed = await showConfirm(
+      'Delete all skip-traced contact info (phones, emails, caller IDs) for every parcel you\'ve traced, on this device AND on the server? This lets you re-run skip trace on those parcels. Your lists, notes, and pipeline are unaffected.',
+      'Reset Skip Traces'
+    )
+    if (!confirmed) return
+
+    for (const key of ['skip_traced_parcels', 'skip_traced_list', 'skip_trace_jobs']) {
+      try { localStorage.removeItem(key) } catch { /* ignore */ }
+    }
+
+    if (getToken) {
+      try {
+        await saveUserData(getToken, {
+          skipTracedParcels: {},
+          skipTracedList: null,
+          skipTraceJobs: []
+        })
+        showToast('Skip traces cleared locally and on the server', 'success')
+      } catch (e) {
+        showToast(`Local cleared, but server wipe failed: ${e.message || 'unknown error'}`, 'warning')
+      }
+    } else {
+      showToast('Skip traces cleared locally (sign in to wipe server copy too)', 'warning')
+    }
+
+    setTimeout(() => window.location.reload(), 500)
+  }, [getToken])
+
   const handleSyncNow = useCallback(async () => {
     if (!getToken) {
       showToast('Sign in to sync data', 'error')
@@ -592,7 +621,7 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
 
           {/* ---- Data Management ---- */}
           <Section icon={Database} title="Data Management" defaultOpen={false}>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleSyncNow}
@@ -601,6 +630,15 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
                 {syncing ? 'Syncing...' : 'Sync Now'}
+              </button>
+              <button
+                type="button"
+                onClick={handleResetSkipTraces}
+                className="settings-data-btn-danger flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors"
+                title="Wipe all skip-traced contact info (local + server) so parcels can be re-traced"
+              >
+                <Phone className="h-3.5 w-3.5" />
+                Reset Skip Traces
               </button>
               <button
                 type="button"

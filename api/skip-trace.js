@@ -1,242 +1,301 @@
 /**
- * Vercel Serverless Function
- * Handles skip tracing via Tracerfy API (DISABLED by default)
- * 
- * To enable Tracerfy, set USE_TRACERFY=true in environment variables
- * 
- * POST: Skip trace one or more parcels
- * Body: { parcels: [{ parcelId, address, ownerName }] }
- * 
- * Documentation: https://tracerfy.com/skip-tracing-api-documentation/
- * Base URL: https://tracerfy.com/v1/api/
+ * Skip tracing via Trestle IQ — Reverse Address API (/3.1/location).
+ *
+ * POST body: { parcels: [{ parcelId, address, ownerName? }] }
+ * Response:  { success, jobId: 'sync', async: false, status: 'completed',
+ *              results: [{ parcelId, phone, phoneNumbers[], email, emails[],
+ *                          phoneDetails[], emailDetails[], address, skipTracedAt }] }
+ *
+ * Trestle Reverse Address is synchronous, so we always return results in the
+ * same response (no polling). Each result's phoneDetails/emailDetails carries
+ * a per-contact `callerId` set to the resident's full name so the UI can show
+ * "5551234567 (Jane Doe)" next to the contact.
+ *
+ * Docs: https://docs.trestleiq.com/api-reference/reverse-address-api
  */
 
-export default async function handler(req, res) {
-  // Disable Tracerfy by default
-  const USE_TRACERFY = process.env.USE_TRACERFY === 'true'
-  if (!USE_TRACERFY) {
-    return res.status(503).json({ 
-      error: 'Tracerfy API is disabled.',
-      message: 'Set USE_TRACERFY=true to enable Tracerfy'
-    })
+const TRESTLE_BASE = process.env.TRESTLE_API_BASE || 'https://api.trestleiq.com/3.1'
+
+/**
+ * Parse a free-form US address ("123 Main St, Fort Worth, TX 76107") into
+ * structured components Trestle expects.
+ */
+function parseAddress(addressStr) {
+  if (!addressStr || !addressStr.trim()) return null
+
+  const parts = addressStr.split(',').map(p => p.trim()).filter(Boolean)
+  let street = parts[0] || addressStr.trim()
+  let city = ''
+  let state = ''
+  let zip = ''
+
+  if (parts.length >= 3) {
+    // "STREET, CITY, STATE ZIP" — take everything between the first and last
+    // comma as the city (handles "STREET, CITY, SUBURB, STATE ZIP").
+    city = parts.slice(1, -1).join(', ')
+    const last = parts[parts.length - 1]
+    const m = last.match(/^([A-Z]{2})\s*(\d{5}(?:-\d{4})?)?$/i)
+    if (m) {
+      state = m[1].toUpperCase()
+      zip = m[2] || ''
+    } else {
+      city = [city, last].filter(Boolean).join(', ')
+    }
+  } else if (parts.length === 2) {
+    // "STREET, CITY" or "STREET, STATE ZIP"
+    const tail = parts[1]
+    const m = tail.match(/^([A-Z]{2})\s*(\d{5}(?:-\d{4})?)?$/i)
+    if (m) {
+      state = m[1].toUpperCase()
+      zip = m[2] || ''
+    } else {
+      city = tail
+    }
   }
+
+  // Strip embedded ZIP from city/state if the comma-split didn't isolate it.
+  const stateZipInCity = city.match(/\b([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\b/i)
+  if (stateZipInCity && !state) {
+    state = stateZipInCity[1].toUpperCase()
+    zip = stateZipInCity[2]
+    city = city.replace(stateZipInCity[0], '').trim().replace(/,$/, '').trim()
+  }
+
+  return {
+    street: street || '',
+    city: city || '',
+    state: state || '',
+    zip: zip || ''
+  }
+}
+
+/**
+ * Normalize a raw Trestle phone_number into the shape the UI expects.
+ * Strips non-digits/+ from the display value while preserving the value to
+ * call.
+ */
+function normalizePhoneValue(raw) {
+  if (!raw) return ''
+  // Trestle returns E.164 or local. Keep the "+" if present.
+  const str = String(raw).trim()
+  if (!str) return ''
+  return str
+}
+
+/**
+ * Convert a single Trestle `current_residents` entry into a flat list of
+ * phoneDetails + emailDetails with `callerId` set to that person's name.
+ */
+function residentToContacts(resident) {
+  const name = (resident?.name || `${resident?.firstname || ''} ${resident?.lastname || ''}`).trim()
+  const phones = Array.isArray(resident?.phones) ? resident.phones : []
+  const emails = Array.isArray(resident?.emails) ? resident.emails : []
+
+  const phoneDetails = phones.map(p => {
+    const value = normalizePhoneValue(p?.phone_number)
+    if (!value) return null
+    return {
+      value,
+      verified: null,
+      callerId: name,
+      lineType: p?.line_type || null,
+      primary: false
+    }
+  }).filter(Boolean)
+
+  const emailDetails = emails.map(e => {
+    const value = typeof e === 'string' ? e.trim() : (e?.email || '').trim()
+    if (!value) return null
+    return {
+      value,
+      verified: null,
+      callerId: name,
+      primary: false
+    }
+  }).filter(Boolean)
+
+  return { phoneDetails, emailDetails }
+}
+
+/**
+ * Dedupe contact detail arrays by value (case-insensitive), keeping the first
+ * occurrence (which owns the callerId).
+ */
+function dedupeDetails(details) {
+  const seen = new Set()
+  const out = []
+  for (const d of details) {
+    const key = String(d.value).toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(d)
+  }
+  return out
+}
+
+async function traceOne(parcel, apiKey) {
+  const parsed = parseAddress(parcel.address || '')
+  if (!parsed || !parsed.street) {
+    return {
+      parcelId: parcel.parcelId,
+      phone: null,
+      phoneNumbers: [],
+      email: null,
+      emails: [],
+      phoneDetails: [],
+      emailDetails: [],
+      address: null,
+      skipTracedAt: new Date().toISOString(),
+      warnings: ['Missing or unparseable address']
+    }
+  }
+
+  const qs = new URLSearchParams()
+  qs.set('address.street_line_1', parsed.street)
+  if (parsed.city) qs.set('address.city', parsed.city)
+  if (parsed.state) qs.set('address.state_code', parsed.state)
+  if (parsed.zip) qs.set('address.postal_code', parsed.zip)
+  qs.set('address.country_code', 'US')
+
+  const url = `${TRESTLE_BASE}/location?${qs.toString()}`
+
+  let response
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+        'Accept': 'application/json'
+      }
+    })
+  } catch (err) {
+    throw new Error(`Trestle request failed: ${err.message}`)
+  }
+
+  const bodyText = await response.text()
+  let data = null
+  try {
+    data = bodyText ? JSON.parse(bodyText) : null
+  } catch {
+    throw new Error(`Trestle returned non-JSON response (status ${response.status})`)
+  }
+
+  if (!response.ok) {
+    const msg = data?.error?.message || data?.message || bodyText.slice(0, 200) || `HTTP ${response.status}`
+    const err = new Error(`Trestle ${response.status}: ${msg}`)
+    err.status = response.status
+    err.details = data
+    throw err
+  }
+
+  const residents = Array.isArray(data?.current_residents) ? data.current_residents : []
+  const allPhoneDetails = []
+  const allEmailDetails = []
+  for (const r of residents) {
+    const { phoneDetails, emailDetails } = residentToContacts(r)
+    allPhoneDetails.push(...phoneDetails)
+    allEmailDetails.push(...emailDetails)
+  }
+
+  const phoneDetails = dedupeDetails(allPhoneDetails)
+  const emailDetails = dedupeDetails(allEmailDetails)
+  if (phoneDetails.length > 0) phoneDetails[0] = { ...phoneDetails[0], primary: true }
+  if (emailDetails.length > 0) emailDetails[0] = { ...emailDetails[0], primary: true }
+
+  const phoneNumbers = phoneDetails.map(p => p.value)
+  const emails = emailDetails.map(e => e.value)
+
+  const normalizedAddress = [
+    data?.street_line_1,
+    data?.city,
+    [data?.state_code, data?.postal_code].filter(Boolean).join(' ')
+  ].filter(Boolean).join(', ') || null
+
+  return {
+    parcelId: parcel.parcelId,
+    phone: phoneNumbers[0] || null,
+    phoneNumbers,
+    email: emails[0] || null,
+    emails,
+    phoneDetails,
+    emailDetails,
+    address: normalizedAddress,
+    skipTracedAt: new Date().toISOString(),
+    warnings: Array.isArray(data?.warnings) ? data.warnings : []
+  }
+}
+
+/**
+ * Run traces for an array of parcels with a small concurrency cap to stay
+ * inside Trestle's rate limit and the Vercel function timeout.
+ */
+async function traceAll(parcels, apiKey, concurrency = 4) {
+  const results = new Array(parcels.length)
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < parcels.length) {
+      const i = cursor++
+      try {
+        results[i] = await traceOne(parcels[i], apiKey)
+      } catch (err) {
+        results[i] = {
+          parcelId: parcels[i].parcelId,
+          phone: null,
+          phoneNumbers: [],
+          email: null,
+          emails: [],
+          phoneDetails: [],
+          emailDetails: [],
+          address: null,
+          skipTracedAt: new Date().toISOString(),
+          error: err.message
+        }
+      }
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, parcels.length) }, worker)
+  await Promise.all(workers)
+  return results
+}
+
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end()
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    const { parcels } = req.body
-
-    if (!parcels || !Array.isArray(parcels) || parcels.length === 0) {
+    const { parcels } = req.body || {}
+    if (!Array.isArray(parcels) || parcels.length === 0) {
       return res.status(400).json({ error: 'Parcels array is required' })
     }
 
-    const apiKey = process.env.TRACERFY_API_KEY
+    const apiKey = process.env.TRESTLE_API_KEY
     if (!apiKey) {
-      return res.status(500).json({ error: 'Skip tracing service not configured' })
+      return res.status(500).json({
+        error: 'Skip tracing service not configured',
+        message: 'TRESTLE_API_KEY environment variable is missing.'
+      })
     }
 
-    // Parse names - split into first and last name
-    const parseName = (nameStr) => {
-      if (!nameStr || !nameStr.trim()) return { first: '', last: '' }
-      const parts = nameStr.trim().split(/\s+/).filter(p => p.length > 0)
-      if (parts.length === 0) return { first: '', last: '' }
-      if (parts.length === 1) return { first: '', last: parts[0] }
-      // Last part is typically last name, rest is first name
-      const last = parts[parts.length - 1]
-      const first = parts.slice(0, -1).join(' ')
-      return { first, last }
-    }
-
-    // Parse addresses - Tracerfy requires city and state (not empty)
-    // Fill in defaults for addresses missing city/state
-    const parseAddress = (addressStr) => {
-      if (!addressStr || !addressStr.trim()) return null
-      
-      const parts = addressStr.split(',').map(p => p.trim()).filter(p => p.length > 0)
-      let street = addressStr
-      let city = ''
-      let state = 'TX' // Default to Texas (all supported counties are in TX)
-      let zip = ''
-      
-      if (parts.length >= 3) {
-        // Format: "123 Main St, City, TX 12345" or "123 Main St, City, TX"
-        street = parts[0]
-        city = parts[1]
-        const lastPart = parts[parts.length - 1]
-        // Try to extract state and zip from last part
-        const stateZipMatch = lastPart.match(/^([A-Z]{2})(\s+(\d{5}(?:-\d{4})?))?$/)
-        if (stateZipMatch) {
-          state = stateZipMatch[1]
-          zip = stateZipMatch[3] || ''
-        } else {
-          // If no match, check if it looks like a state code
-          if (/^[A-Z]{2}$/.test(lastPart.toUpperCase())) {
-            state = lastPart.toUpperCase()
-          }
-        }
-      } else if (parts.length === 2) {
-        // Format: "123 Main St, City" or "123 Main St, TX"
-        street = parts[0]
-        const secondPart = parts[1]
-        // Check if second part is a state (2 letters) or city
-        if (/^[A-Z]{2}$/.test(secondPart.toUpperCase())) {
-          state = secondPart.toUpperCase()
-          city = 'Fort Worth' // Default city (Tarrant County seat, most common)
-        } else {
-          city = secondPart
-          state = 'TX' // Default to Texas
-        }
-      } else {
-        // Just street address - no city/state, use defaults
-        street = parts[0]
-        city = 'Fort Worth' // Default city
-        state = 'TX' // Default state (Texas)
-      }
-      
-      // Ensure we have city and state (should always be true now)
-      if (!city) city = 'Fort Worth' // Fallback default
-      if (!state) state = 'TX' // Fallback default
-      
-      return { street, city, state, zip }
-    }
-
-    // Escape CSV field
-    const escapeCsvField = (field) => {
-      const str = String(field || '').trim()
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`
-      }
-      return str
-    }
-
-    // Build CSV with required columns - fill in defaults for missing city/state
-    const csvRows = parcels.map(p => {
-      const address = (p.address || '').trim()
-      const ownerName = (p.ownerName || '').trim()
-      
-      if (!address) return null // Address is required
-      
-      const addr = parseAddress(address)
-      if (!addr) return null // Skip if address parsing completely failed
-      
-      const name = parseName(ownerName)
-      // Owner name is required - if empty, use placeholder
-      if (!name.last) {
-        name.last = 'Unknown'
-      }
-      
-      // Tracerfy requires these columns (using same address for property and mailing)
-      return [
-        escapeCsvField(addr.street),      // address
-        escapeCsvField(addr.city),        // city (filled with default if missing)
-        escapeCsvField(addr.state),       // state (filled with TX if missing)
-        escapeCsvField(addr.zip),         // zip (optional, can be empty)
-        escapeCsvField(name.first),       // first_name (can be empty)
-        escapeCsvField(name.last),        // last_name (required, uses "Unknown" if missing)
-        escapeCsvField(addr.street),      // mail_address (using same as property)
-        escapeCsvField(addr.city),        // mail_city
-        escapeCsvField(addr.state),       // mail_state
-        escapeCsvField(addr.zip)          // mailing_zip
-      ].join(',')
-    }).filter(Boolean)
-
-    if (csvRows.length === 0) {
-      return res.status(400).json({ error: 'No valid addresses found' })
-    }
-
-    const csvHeader = 'address,city,state,zip,first_name,last_name,mail_address,mail_city,mail_state,mailing_zip'
-    const csvContent = `${csvHeader}\n${csvRows.join('\n')}`
-    
-    // Create multipart/form-data manually for Node.js compatibility
-    const boundary = `----WebKitFormBoundary${Date.now()}${Math.random().toString(36).substring(2, 9)}`
-    const closeDelim = `\r\n--${boundary}--\r\n`
-    
-    // Tracerfy API requires form fields for column names
-    const formFields = [
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="address_column"\r\n\r\naddress\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="city_column"\r\n\r\ncity\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="state_column"\r\n\r\nstate\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="zip_column"\r\n\r\nzip\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="first_name_column"\r\n\r\nfirst_name\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="last_name_column"\r\n\r\nlast_name\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="mail_address_column"\r\n\r\nmail_address\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="mail_city_column"\r\n\r\nmail_city\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="mail_state_column"\r\n\r\nmail_state\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="mailing_zip_column"\r\n\r\nmailing_zip\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="trace_type"\r\n\r\nnormal\r\n`,
-      `--${boundary}\r\n`,
-      `Content-Disposition: form-data; name="csv_file"; filename="parcels.csv"\r\n`,
-      `Content-Type: text/csv\r\n\r\n`,
-      csvContent,
-      closeDelim
-    ]
-    
-    const body = formFields.join('')
-    const bodyBuffer = Buffer.from(body, 'utf-8')
-
-    // Submit to Tracerfy API
-    const TRACERFY_API_BASE = process.env.TRACERFY_API_BASE || 'https://tracerfy.com/v1/api'
-    const response = await fetch(`${TRACERFY_API_BASE}/trace/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': bodyBuffer.length.toString()
-      },
-      body: bodyBuffer
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Tracerfy API error:', response.status, errorText)
-      
-      // For 429 rate limit errors, return a specific error message
-      if (response.status === 429) {
-        return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment and try again.', details: errorText })
-      }
-      
-      return res.status(response.status).json({ error: 'Skip tracing failed', details: errorText })
-    }
-
-    const result = await response.json()
-    
-    // Tracerfy returns queue_id (not job_id)
-    const queueId = result.queue_id || result.id
-    if (!queueId) {
-      return res.status(500).json({ error: 'No queue ID returned from skip tracing service', details: result })
-    }
+    const results = await traceAll(parcels, apiKey)
 
     return res.status(200).json({
       success: true,
-      jobId: queueId, // Keep jobId for backward compatibility
-      queueId: queueId,
-      async: true,
-      message: 'Skip tracing job submitted successfully',
-      status: result.status || 'pending'
+      jobId: 'sync',
+      async: false,
+      status: 'completed',
+      message: 'Skip tracing completed',
+      results
     })
-
   } catch (error) {
-    console.error('Skip trace error:', error)
-    return res.status(500).json({ error: 'Internal server error', message: error.message })
+    console.error('Skip trace (Trestle) error:', error)
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 }

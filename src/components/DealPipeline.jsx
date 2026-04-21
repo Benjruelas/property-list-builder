@@ -74,6 +74,7 @@ export function DealPipeline({
   onFocusLeadHandled,
   onRequestMoveLead,
   onRequestRemoveLead,
+  onRequestCloseLead,
   onGoToParcelOnMap,
 }) {
   const { scheduleSync } = useUserDataSync()
@@ -896,6 +897,7 @@ setAddTaskTitle('')
         pipelineName={apiMode ? (activePipeline?.title || 'Pipes') : null}
         onRequestMoveLead={onRequestMoveLead}
         onRequestRemoveLead={onRequestRemoveLead}
+        onRequestCloseLead={onRequestCloseLead}
         onGoToParcelOnMap={onGoToParcelOnMap}
       />
 

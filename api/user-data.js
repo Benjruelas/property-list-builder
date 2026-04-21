@@ -116,7 +116,7 @@ export default async function handler(req, res) {
       const allowedKeys = [
         'dealPipelineColumns', 'dealPipelineLeads', 'dealPipelineTitle',
         'leadTasks', 'parcelNotes', 'skipTracedParcels', 'emailTemplates', 'textTemplates',
-        'skipTraceJobs', 'skipTracedList', 'appSettings'
+        'skipTraceJobs', 'skipTracedList', 'appSettings', 'closedLeads'
       ]
       for (const key of allowedKeys) {
         if (key in body && body[key] !== undefined) {

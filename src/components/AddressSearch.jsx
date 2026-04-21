@@ -1,187 +1,32 @@
 import { useState, useRef, useEffect } from 'react'
 import { Search, X, Loader2, Plus, Minus } from 'lucide-react'
 import { Button } from './ui/button'
+import { useMapboxGeocode } from '@/hooks/useMapboxGeocode'
 
 /**
- * Address search using Mapbox Geocoding API
- * Best-in-class geocoding with autocomplete support
- * Free tier: 100,000 requests/month
+ * Address search using Mapbox Geocoding API.
+ * Geocoding itself lives in `useMapboxGeocode`; this component is the
+ * map-side UI (closed/open states, zoom buttons, results dropdown, flyTo).
  */
 export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPopup }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
-  const [isSearching, setIsSearching] = useState(false)
-  const [error, setError] = useState(null)
+  const { query, setQuery, results, isSearching, error, clear } = useMapboxGeocode()
   const inputRef = useRef(null)
-  const searchTimeoutRef = useRef(null)
   const containerRef = useRef(null)
 
-  // Close the search (and clear state) when the user taps/clicks outside it.
   useEffect(() => {
     if (!isOpen) return
     const handlePointerDown = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsOpen(false)
-        setQuery('')
-        setResults([])
-        setError(null)
+        clear()
       }
     }
     document.addEventListener('pointerdown', handlePointerDown, true)
     return () => document.removeEventListener('pointerdown', handlePointerDown, true)
-  }, [isOpen])
-
-  // Get Mapbox access token from environment variable
-  const getMapboxToken = () => {
-    return import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''
-  }
-
-  // Check if input is coordinates
-  const isCoordinateQuery = (rawQuery) => {
-    const trimmed = rawQuery.trim()
-    const coordMatch = trimmed.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/)
-    if (coordMatch) {
-      const lat = parseFloat(coordMatch[1])
-      const lng = parseFloat(coordMatch[2])
-      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-        return { lat, lng }
-      }
-    }
-    return null
-  }
-
-  // Perform Mapbox geocoding search
-  const performSearch = async (rawQuery) => {
-    if (!rawQuery.trim() || rawQuery.length < 2) {
-      return
-    }
-
-    setIsSearching(true)
-    setError(null)
-    setResults([])
-
-    try {
-      const trimmedQuery = rawQuery.trim()
-
-      // Handle coordinate input directly
-      const coordMatch = isCoordinateQuery(trimmedQuery)
-      if (coordMatch) {
-        const { lat, lng } = coordMatch
-
-        const coordinateResult = {
-          id: `coord-${lat}-${lng}`,
-          place_name: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-          center: [lng, lat],
-          geometry: {
-            type: 'Point',
-            coordinates: [lng, lat]
-          },
-          _isCoordinate: true,
-        }
-
-        setResults([coordinateResult])
-        setIsSearching(false)
-        return
-      }
-
-      // Get Mapbox token
-      const accessToken = getMapboxToken()
-      if (!accessToken) {
-        throw new Error('Mapbox access token not configured. Please set VITE_MAPBOX_ACCESS_TOKEN environment variable.')
-      }
-
-      // Build Mapbox Geocoding API URL
-      // Use mapbox.places endpoint for address search with proximity bias to DFW area
-      // DFW center approximately: 32.7767, -96.7970
-      const encodedQuery = encodeURIComponent(trimmedQuery)
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${accessToken}&limit=5&country=us&types=address,poi,place&autocomplete=true`
-
-
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
-        throw new Error(errorData.message || `Mapbox API error: ${response.status}`)
-      }
-
-      const data = await response.json()
-
-      if (data && data.features && Array.isArray(data.features)) {
-        // Transform Mapbox results to our format
-        const transformedResults = data.features.map((feature, index) => {
-          const [lng, lat] = feature.center || feature.geometry.coordinates
-
-          const context = feature.context || []
-          const city = context.find(c => c.id.startsWith('place'))?.text
-          const countyName = context.find(c => c.id.startsWith('district'))?.text || 
-                            context.find(c => c.id.startsWith('county'))?.text
-          const state = context.find(c => c.id.startsWith('region'))?.text
-          const zip = context.find(c => c.id.startsWith('postcode'))?.text
-
-          return {
-            id: feature.id || `mapbox-${index}`,
-            place_name: feature.place_name || trimmedQuery,
-            center: [lng, lat],
-            geometry: feature.geometry,
-            lat: lat.toString(),
-            lon: lng.toString(),
-            address: {
-              city: city || '',
-              county: countyName || '',
-              state: state || '',
-              zip: zip || ''
-            },
-            _mapboxFeature: feature
-          }
-        })
-
-        if (transformedResults.length > 0) {
-          setResults(transformedResults)
-          setError(null)
-        } else {
-          console.warn('No results found')
-          setResults([])
-          setError(`No addresses found for "${trimmedQuery}". Try a different address or coordinates like "32.7767, -96.7970"`)
-        }
-      } else {
-        setResults([])
-        setError(`No results found. Try: "123 Main St, Fort Worth, TX" or coordinates like "32.7767, -96.7970"`)
-      }
-    } catch (err) {
-      console.error('Mapbox search error:', err)
-      setError(err.message || 'Search failed. Please check your Mapbox configuration and try again.')
-      setResults([])
-    } finally {
-      setIsSearching(false)
-    }
-  }
-
-  // Debounced search
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
-    }
-
-    if (!query.trim() || query.length < 2) {
-      setResults([])
-      setError(null)
-      return
-    }
-
-    searchTimeoutRef.current = setTimeout(() => {
-      performSearch(query)
-    }, 300) // Faster debounce for better UX with Mapbox
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
-      }
-    }
-  }, [query])
+  }, [isOpen, clear])
 
   const handleSelectResult = (result) => {
-    // Mapbox format: center is [lng, lat]
     const [lng, lat] = result.center || (result.geometry?.coordinates || [])
     const displayName = result.place_name || query
 
@@ -199,16 +44,13 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
     }
 
     setIsOpen(false)
-    setQuery('')
-    setResults([])
+    clear()
   }
 
   const handleToggle = () => {
     if (isOpen) {
       setIsOpen(false)
-      setQuery('')
-      setResults([])
-      setError(null)
+      clear()
     } else {
       setIsOpen(true)
       setTimeout(() => {
@@ -338,7 +180,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
                         {[
                           result.address.city,
                           result.address.county,
-                          result.address.state,
+                          result.address.stateLong || result.address.state,
                           result.address.zip
                         ]
                           .filter(Boolean)

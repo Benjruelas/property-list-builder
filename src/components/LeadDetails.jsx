@@ -1,15 +1,29 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRightLeft } from 'lucide-react'
+import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRightLeft, Archive, RefreshCw } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { DirectionsPicker } from './DirectionsPicker'
-import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
+import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts, skipTraceParcels } from '@/utils/skipTrace'
 import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
 import { showToast } from './ui/toast'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
+import {
+  getClosedLeadNote,
+  saveClosedLeadNote,
+  getClosedLeadTasks,
+  addClosedLeadTask,
+  toggleClosedLeadTask,
+  updateClosedLeadTaskTitle,
+  deleteClosedLeadTask,
+  getClosedLeadContacts,
+  updateClosedLeadContacts,
+  updateClosedLeadContactMeta,
+  saveClosedLeadSkipTraceResult,
+  getClosedLeadById
+} from '@/utils/closedLeads'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
 const TASK_MENU_WIDTH = 160
@@ -31,7 +45,15 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onGoToPipeline }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead }) {
+  const isClosed = !!closedRecord
+  const closedId = closedRecord?.id || null
+  const [closedSnap, setClosedSnap] = useState(closedRecord)
+  useEffect(() => { setClosedSnap(closedRecord) }, [closedRecord])
+  const refreshClosedSnap = () => {
+    if (!closedId) return
+    setClosedSnap(getClosedLeadById(closedId))
+  }
   const { scheduleSync } = useUserDataSync()
   const [skipTracedInfo, setSkipTracedInfo] = useState(null)
   const [editContacts, setEditContacts] = useState(false)
@@ -47,11 +69,31 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   const [pipeMenu, setPipeMenu] = useState(null)
   const [note, setNote] = useState('')
   const [isEditingNote, setIsEditingNote] = useState(false)
+  const [closedSkipTracing, setClosedSkipTracing] = useState(false)
 
   const parcelId = lead?.parcelId || parcelData?.id
 
+  const readNote = () => {
+    if (isClosed) return getClosedLeadNote(closedSnap)
+    return parcelId ? (getParcelNote(parcelId) || '') : ''
+  }
+  const writeNote = (v) => {
+    if (isClosed) {
+      saveClosedLeadNote(closedId, v)
+      refreshClosedSnap()
+      return
+    }
+    if (parcelId) saveParcelNote(parcelId, v)
+  }
+
+  const readTasks = () => {
+    if (isClosed) return getClosedLeadTasks(closedSnap)
+    return parcelId ? getLeadTasks(parcelId, pipelineId) : []
+  }
+
   const refreshTasks = () => {
-    if (parcelId) setTasks(getLeadTasks(parcelId, pipelineId))
+    if (isClosed) { refreshClosedSnap(); setTasks(getClosedLeadTasks(getClosedLeadById(closedId))) }
+    else if (parcelId) setTasks(getLeadTasks(parcelId, pipelineId))
     onTasksChange?.()
   }
 
@@ -96,6 +138,12 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   }
 
   const refreshSkipTrace = () => {
+    if (isClosed) {
+      const rec = getClosedLeadById(closedId)
+      setClosedSnap(rec)
+      setSkipTracedInfo(getClosedLeadContacts(rec))
+      return
+    }
     if (parcelId) setSkipTracedInfo(getSkipTracedParcel(parcelId))
   }
   const fullAddr = (lead || parcelData) ? getFullAddress(lead || parcelData) : ''
@@ -103,7 +151,14 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   const displayName = lead?.owner ?? parcelData?.properties?.OWNER_NAME ?? ''
 
   useEffect(() => {
-    if (isOpen && parcelId) {
+    if (isOpen && isClosed && closedId) {
+      const rec = getClosedLeadById(closedId) || closedRecord
+      setClosedSnap(rec)
+      setSkipTracedInfo(getClosedLeadContacts(rec))
+      setTasks(getClosedLeadTasks(rec))
+      setNote(getClosedLeadNote(rec))
+      setIsEditingNote(false)
+    } else if (isOpen && parcelId) {
       const info = getSkipTracedParcel(parcelId)
       setSkipTracedInfo(info)
       setTasks(getLeadTasks(parcelId, pipelineId))
@@ -117,7 +172,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
       setNote('')
       setIsEditingNote(false)
     }
-  }, [isOpen, parcelId, pipelineId])
+  }, [isOpen, parcelId, pipelineId, isClosed, closedId, closedRecord])
 
   if (!lead && !parcelData) return null
 
@@ -153,20 +208,51 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   }
 
   const handleSaveNote = () => {
-    if (!parcelId) return
-    saveParcelNote(parcelId, note)
+    if (isClosed) {
+      writeNote(note)
+    } else {
+      if (!parcelId) return
+      saveParcelNote(parcelId, note)
+    }
     scheduleSync()
     setIsEditingNote(false)
   }
 
   const handleCancelNote = () => {
-    setNote(parcelId ? (getParcelNote(parcelId) || '') : '')
+    setNote(readNote())
     setIsEditingNote(false)
   }
 
   const phoneDetails = skipTracedInfo?.phoneDetails || (skipTracedInfo?.phoneNumbers || (skipTracedInfo?.phone ? [skipTracedInfo.phone] : [])).map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 }))
-  const emailDetails = skipTracedInfo?.emailDetails || (skipTracedInfo?.emails || (skipTracedInfo?.email ? [skipTracedInfo.email] : [])).map((v, i) => ({ value: v, verified: null, primary: i === 0 }))
-  const hasSkipTraceData = phoneDetails.length > 0 || emailDetails.length > 0 || skipTracedInfo?.address
+  const emailDetails = skipTracedInfo?.emailDetails || (skipTracedInfo?.emails || (skipTracedInfo?.email ? [skipTracedInfo.email] : [])).map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 }))
+  const hasSkipTraced = !!skipTracedInfo?.skipTracedAt
+  const hasAnyContact = phoneDetails.length > 0 || emailDetails.length > 0
+
+  const applyContactMeta = (type, value, meta) => {
+    if (isClosed) updateClosedLeadContactMeta(closedId, type, value, meta)
+    else updateContactMeta(parcelId, type, value, meta)
+  }
+  const applyContactsUpdate = (type, newDetails) => {
+    if (isClosed) updateClosedLeadContacts(closedId, type, newDetails)
+    else updateSkipTracedContacts(parcelId, type, newDetails)
+  }
+
+  const doToggleTask = (taskId) => {
+    if (isClosed) toggleClosedLeadTask(closedId, taskId)
+    else toggleLeadTask(parcelId, taskId)
+  }
+  const doDeleteTask = (taskId) => {
+    if (isClosed) deleteClosedLeadTask(closedId, taskId)
+    else deleteLeadTask(parcelId, taskId)
+  }
+  const doUpdateTaskTitle = (taskId, title) => {
+    if (isClosed) updateClosedLeadTaskTitle(closedId, taskId, title)
+    else updateLeadTaskTitle(parcelId, taskId, title)
+  }
+
+  const closedDate = closedSnap?.closedAt
+    ? new Date(closedSnap.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : ''
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o && !pipeMenu) onClose?.() }}>
@@ -179,7 +265,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
             </DialogTitle>
             <div className="map-panel-header-actions gap-1">
               <DirectionsPicker lat={dataForParcelDetails?.lat} lng={dataForParcelDetails?.lng} />
-              {pipelineId && (onRequestMoveLead || onRequestRemoveLead) && (
+              {(isClosed ? (onRequestReopenLead || onRequestDeleteClosedLead) : (lead && (onRequestCloseLead || (pipelineId && (onRequestMoveLead || onRequestRemoveLead))))) && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -202,13 +288,13 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
         <div className="px-4 py-4 space-y-4 text-left bg-transparent">
           <div className="space-y-1">
             {isEditingName ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <input
                   type="text"
                   value={nameDraft}
                   onChange={(e) => setNameDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setIsEditingName(false); setNameDraft('') } }}
-                  className="border rounded px-2 py-1.5 text-sm font-bold flex-1"
+                  className="border rounded px-2 py-1.5 text-sm font-bold flex-1 min-w-0"
                   autoFocus
                   placeholder="Lead name"
                 />
@@ -286,18 +372,17 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
             </div>
           )}
 
-          {hasSkipTraceData ? (
-            <div className="space-y-1.5 pt-3 border-t border-gray-200 flex flex-col items-start">
+          <div className="space-y-1.5 pt-3 border-t border-gray-200 flex flex-col items-start">
               <div className="flex items-center gap-2 w-full justify-between">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contacts</span>
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Info</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 px-2"
                   onClick={() => { setEditContacts((e) => !e); setNewPhone(''); setNewEmail('') }}
-                  title={editContacts ? 'Done editing' : 'Edit contacts'}
+                  title={editContacts ? 'Done editing' : 'Add phone or email'}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <Plus className="h-3.5 w-3.5" />
                 </Button>
               </div>
               {phoneDetails.map((p, idx) => (
@@ -321,7 +406,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     {editContacts ? (
                       <button
                         type="button"
-                        onClick={() => { updateContactMeta(parcelId, 'phone', p.value, { primary: !p.primary }); refreshSkipTrace(); scheduleSync() }}
+                        onClick={() => { applyContactMeta('phone', p.value, { primary: !p.primary }); refreshSkipTrace(); scheduleSync() }}
                         title={p.primary ? 'Remove from primary' : 'Set as primary'}
                         className="text-amber-500 hover:text-amber-600"
                       >
@@ -333,7 +418,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     {editContacts && (
                       <button
                         type="button"
-                        onClick={() => { updateSkipTracedContacts(parcelId, 'phone', phoneDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
+                        onClick={() => { applyContactsUpdate('phone', phoneDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
                         className="text-red-500 hover:text-red-600 opacity-70 hover:opacity-100 p-0.5"
                         title="Delete"
                       >
@@ -351,13 +436,13 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
                     className="border rounded px-2 py-1 text-sm w-36"
-                    onKeyDown={(e) => { if (e.key === 'Enter') { updateSkipTracedContacts(parcelId, 'phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { applyContactsUpdate('phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
                   />
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-7 lead-details-add-btn"
-                    onClick={() => { if (newPhone.trim()) { updateSkipTracedContacts(parcelId, 'phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
+                    onClick={() => { if (newPhone.trim()) { applyContactsUpdate('phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
@@ -372,12 +457,13 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     ) : (
                       <span className="text-gray-900 truncate">{e.value}</span>
                     )}
+                    {e.callerId && <span className="text-gray-500 text-xs flex-shrink-0">({e.callerId})</span>}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {editContacts ? (
                       <button
                         type="button"
-                        onClick={() => { updateContactMeta(parcelId, 'email', e.value, { primary: !e.primary }); refreshSkipTrace(); scheduleSync() }}
+                        onClick={() => { applyContactMeta('email', e.value, { primary: !e.primary }); refreshSkipTrace(); scheduleSync() }}
                         title={e.primary ? 'Remove from primary' : 'Set as primary'}
                         className="text-amber-500 hover:text-amber-600"
                       >
@@ -389,7 +475,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     {editContacts && (
                       <button
                         type="button"
-                        onClick={() => { updateSkipTracedContacts(parcelId, 'email', emailDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
+                        onClick={() => { applyContactsUpdate('email', emailDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
                         className="text-red-500 hover:text-red-600 opacity-70 hover:opacity-100 p-0.5"
                         title="Delete"
                       >
@@ -407,13 +493,13 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     className="border rounded px-2 py-1 text-sm w-44"
-                    onKeyDown={(e) => { if (e.key === 'Enter') { updateSkipTracedContacts(parcelId, 'email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { applyContactsUpdate('email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
                   />
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-7 lead-details-add-btn"
-                    onClick={() => { if (newEmail.trim()) { updateSkipTracedContacts(parcelId, 'email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
+                    onClick={() => { if (newEmail.trim()) { applyContactsUpdate('email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
@@ -422,32 +508,64 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               {skipTracedInfo?.address && (
                 <p className="text-sm text-gray-900">{skipTracedInfo.address}</p>
               )}
+              {!hasSkipTraced && (onSkipTraceParcel || isClosed) && (
+                <div className={`flex justify-start w-full ${hasAnyContact ? 'pt-1' : ''}`}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-green-400 hover:text-green-300 px-2"
+                    onClick={async () => {
+                      if (isClosed) {
+                        if (closedSkipTracing) return
+                        const addr = dataForParcelDetails?.address || address
+                        if (!addr) { showToast('No address available to skip trace', 'error'); return }
+                        try {
+                          setClosedSkipTracing(true)
+                          const resp = await skipTraceParcels([{ parcelId: parcelId || closedId, address: addr, ownerName: displayName || undefined }])
+                          const info = resp?.results?.[0]?.contactInfo || resp?.results?.[0] || null
+                          if (info && !info.error) {
+                            saveClosedLeadSkipTraceResult(closedId, {
+                              phoneDetails: info.phoneDetails,
+                              emailDetails: info.emailDetails,
+                              phoneNumbers: info.phoneNumbers,
+                              emails: info.emails,
+                              address: info.address,
+                              skipTracedAt: info.skipTracedAt || new Date().toISOString()
+                            })
+                            refreshSkipTrace()
+                            scheduleSync()
+                            const hasAny = (info.phoneDetails?.length || info.emailDetails?.length || info.phoneNumbers?.length || info.emails?.length)
+                            showToast(hasAny ? 'Contact info added' : 'Skip trace completed — no contacts found', hasAny ? 'success' : 'warning')
+                          } else if (info?.error) {
+                            showToast(info.error, 'error')
+                          } else {
+                            showToast('Skip trace returned no data', 'warning')
+                          }
+                        } catch (e) {
+                          showToast(e.message || 'Skip trace failed', 'error')
+                        } finally {
+                          setClosedSkipTracing(false)
+                        }
+                        return
+                      }
+                      await onSkipTraceParcel(dataForParcelDetails)
+                      refreshSkipTrace()
+                    }}
+                    disabled={isClosed ? closedSkipTracing : isSkipTracingInProgress}
+                  >
+                    {(isClosed ? closedSkipTracing : isSkipTracingInProgress) ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4 mr-2" />
+                    )}
+                    {(isClosed ? closedSkipTracing : isSkipTracingInProgress) ? 'Getting contact...' : 'Get Contact Info'}
+                  </Button>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="pt-3 border-t border-gray-200 flex justify-start">
-              <Button
-                variant="ghost"
-                className="text-green-400 hover:text-green-300"
-                onClick={async () => {
-                  if (onSkipTraceParcel) {
-                    await onSkipTraceParcel(dataForParcelDetails)
-                    refreshSkipTrace()
-                  }
-                }}
-                disabled={isSkipTracingInProgress}
-              >
-                {isSkipTracingInProgress ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4 mr-2" />
-                )}
-                {isSkipTracingInProgress ? 'Getting contact...' : 'Get Contact Info'}
-              </Button>
-            </div>
-          )}
 
           {/* Team Tasks (visible to all team members with access to this pipeline) */}
-          {hasTeamSharing && canMutateTeamTasks && (
+          {!isClosed && hasTeamSharing && canMutateTeamTasks && (
             <div className="pt-3 border-t border-gray-200 space-y-2">
               <div className="flex items-center gap-2 justify-between">
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Team Tasks</span>
@@ -547,8 +665,16 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0 lead-details-add-btn"
-                onClick={() => onOpenAddTask?.(lead)}
-                disabled={!onOpenAddTask}
+                onClick={() => {
+                  if (isClosed) {
+                    addClosedLeadTask(closedId, { title: '' })
+                    refreshTasks()
+                    scheduleSync()
+                    return
+                  }
+                  onOpenAddTask?.(lead)
+                }}
+                disabled={isClosed ? false : !onOpenAddTask}
                 title="Add task"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -561,7 +687,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     <button
                       type="button"
                       onClick={() => {
-                        toggleLeadTask(parcelId, task.id)
+                        doToggleTask(task.id)
                         refreshTasks()
                         scheduleSync()
                       }}
@@ -584,10 +710,10 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                           onBlur={(e) => {
                             const v = e.target.value.trim()
                             if (!v) {
-                              deleteLeadTask(parcelId, task.id)
+                              doDeleteTask(task.id)
                               refreshTasks()
                             } else {
-                              updateLeadTaskTitle(parcelId, task.id, v)
+                              doUpdateTaskTitle(task.id, v)
                               refreshTasks()
                             }
                             scheduleSync()
@@ -631,7 +757,18 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
             )}
           </div>
 
-          {pipelineName && (
+          {isClosed && closedSnap && (
+            <div className="pt-3 border-t border-gray-200">
+              <span className="leads-stage-badge inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium">
+                <Archive className="h-3 w-3" />
+                Closed{closedDate ? ` ${closedDate}` : ''}
+              </span>
+              {closedSnap.closedFrom?.title && (
+                <span className="ml-2 text-[11px] opacity-60">from {closedSnap.closedFrom.title}</span>
+              )}
+            </div>
+          )}
+          {!isClosed && pipelineName && (
             <div className="pt-3 border-t border-gray-200">
               <button
                 type="button"
@@ -685,7 +822,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               type="button"
               onClick={() => {
                 setTaskMenu(null)
-                deleteLeadTask(parcelId, taskMenu.task.id)
+                doDeleteTask(taskMenu.task.id)
                 refreshTasks()
                 scheduleSync()
               }}
@@ -708,7 +845,22 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
             role="menu"
             onClick={(e) => e.stopPropagation()}
           >
-            {onRequestMoveLead && (
+            {!isClosed && onRequestCloseLead && (
+              <button
+                type="button"
+                onClick={() => {
+                  const l = lead, pid = pipelineId
+                  setPipeMenu(null)
+                  onClose?.()
+                  onRequestCloseLead(l, pid)
+                }}
+                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
+              >
+                <Archive className="h-3.5 w-3.5 flex-shrink-0" />
+                Close Lead
+              </button>
+            )}
+            {!isClosed && pipelineId && onRequestMoveLead && (
               <button
                 type="button"
                 onClick={() => {
@@ -723,7 +875,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 Move to Pipe
               </button>
             )}
-            {onRequestRemoveLead && (
+            {!isClosed && pipelineId && onRequestRemoveLead && (
               <button
                 type="button"
                 onClick={() => {
@@ -736,6 +888,36 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               >
                 <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
                 Remove from Pipe
+              </button>
+            )}
+            {isClosed && onRequestReopenLead && (
+              <button
+                type="button"
+                onClick={() => {
+                  const rec = closedSnap
+                  setPipeMenu(null)
+                  onClose?.()
+                  onRequestReopenLead(rec)
+                }}
+                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
+              >
+                <RefreshCw className="h-3.5 w-3.5 flex-shrink-0" />
+                Reopen Lead
+              </button>
+            )}
+            {isClosed && onRequestDeleteClosedLead && (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = closedId
+                  setPipeMenu(null)
+                  onClose?.()
+                  onRequestDeleteClosedLead(id)
+                }}
+                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/20 text-red-400 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
+                Delete Archive
               </button>
             )}
           </div>

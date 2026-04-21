@@ -220,9 +220,9 @@ export function MapControls({
                 <span>Pipes</span>
               </button>
 
-              {/* Contacts (leads + clients) */}
+              {/* Leads */}
               <button
-                data-tour="menu-contacts"
+                data-tour="menu-leads"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenLeads?.()
@@ -230,7 +230,7 @@ export function MapControls({
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
                 <Users className="h-4 w-4 flex-shrink-0" />
-                <span>Contacts</span>
+                <span>Leads</span>
               </button>
 
               {/* Tasks — list by pipeline (not calendar) */}

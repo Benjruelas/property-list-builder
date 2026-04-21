@@ -27,7 +27,7 @@ import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
 import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail, canAddLeadsToPipeline } from './utils/pipelines'
 import { auth } from './config/firebase'
-import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced } from './utils/skipTrace'
+import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import { DealPipeline } from './components/DealPipeline'
@@ -47,9 +47,11 @@ import { RoofInspectorPanel } from './components/RoofInspectorPanel'
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { getSettings, updateSettings } from './utils/settings'
-import { getAllTasks } from './utils/leadTasks'
+import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks } from './utils/leadTasks'
+import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
+import { loadClosedLeads, addClosedLead, saveClosedLeads, buildClosedLeadRecord, removeClosedLead } from './utils/closedLeads'
 import { showLocalNotification } from './utils/pushNotifications'
-import { addLead, loadColumns, loadLeads, isParcelALead, getStreetAddress } from './utils/dealPipeline'
+import { addLead, loadColumns, loadLeads, saveLeads, loadTitle, isParcelALead, getStreetAddress } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
@@ -281,6 +283,7 @@ function App() {
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const [isDealPipelineOpen, setIsDealPipelineOpen] = useState(false)
   const [dealPipelineLeads, setDealPipelineLeads] = useState([])
+  const [closedLeads, setClosedLeads] = useState(() => loadClosedLeads())
   const [pipelines, setPipelines] = useState([])
   const [activePipelineId, setActivePipelineId] = useState(null)
   /** When set, user must pick a pipeline (multiple eligible). */
@@ -523,6 +526,7 @@ function App() {
       fetchLists(getToken).catch(() => []),
     ]).then(([, serverLists]) => {
       setDealPipelineLeads(loadLeads())
+      setClosedLeads(loadClosedLeads())
       const fresh = getSettings()
       setSettings(fresh)
       if (serverLists.length > 0) setLists(serverLists)
@@ -848,6 +852,167 @@ function App() {
       showToast('Could not add lead', 'error')
     }
   }, [currentUser, getToken, pipelines, isParcelALeadCheck, handleAddLeadToPipeline, scheduleUserDataSync])
+
+  /**
+   * Close a lead: snapshot all related data (notes, tasks, contacts, pipeline,
+   * stage durations) into the closed-leads archive, then delete the live copies
+   * and remove the lead from its pipeline.
+   */
+  const handleCloseLead = useCallback(async (lead, pipelineId) => {
+    if (!lead) return
+    const confirmed = await showConfirm(
+      'This lead will be archived with all its history and removed from the pipeline.',
+      'Close Lead',
+      {
+        detail: lead.owner || lead.address || 'Lead',
+        detailSubtitle: lead.owner ? (lead.address || '') : '',
+        confirmText: 'Close Lead'
+      }
+    )
+    if (!confirmed) return
+
+    const parcelId = lead.parcelId
+    const apiPipeline = pipelineId ? pipelines.find((p) => p.id === pipelineId) : null
+    const pipelineSnapshot = apiPipeline
+      ? {
+          id: apiPipeline.id,
+          title: apiPipeline.title || 'Pipes',
+          isLocal: false,
+          columns: apiPipeline.columns || []
+        }
+      : {
+          id: '_local',
+          title: loadTitle(),
+          isLocal: true,
+          columns: loadColumns()
+        }
+
+    const parcelNote = parcelId ? getParcelNote(parcelId) : null
+    const leadTasksSnapshot = parcelId ? getLeadTasks(parcelId, apiPipeline ? pipelineId : null) : []
+    const contactsSnapshot = parcelId ? getSkipTracedParcel(parcelId) : null
+
+    const record = buildClosedLeadRecord({
+      lead,
+      pipeline: pipelineSnapshot,
+      parcelNote,
+      tasks: leadTasksSnapshot,
+      contacts: contactsSnapshot
+    })
+
+    addClosedLead(record)
+    setClosedLeads(loadClosedLeads())
+
+    if (parcelId) {
+      saveParcelNote(parcelId, '')
+      deleteAllLeadTasks(parcelId, apiPipeline ? pipelineId : null)
+      deleteSkipTracedParcel(parcelId)
+    }
+
+    try {
+      if (apiPipeline) {
+        const remaining = (apiPipeline.leads || []).filter((l) => l.id !== lead.id)
+        await updatePipeline(getToken, apiPipeline.id, { leads: remaining })
+        await refreshPipelines()
+      } else {
+        const remaining = loadLeads().filter((l) => l.id !== lead.id)
+        saveLeads(remaining)
+        setDealPipelineLeads(remaining)
+      }
+    } catch (e) {
+      showToast(e.message || 'Could not remove lead from pipeline', 'error')
+      return
+    }
+
+    scheduleUserDataSync(getToken)
+    showToast('Lead closed and archived', 'success')
+  }, [pipelines, getToken, refreshPipelines])
+
+  /**
+   * Reopen a closed lead: restore notes/tasks/contacts to live stores and add the
+   * lead back into its original pipeline (falls back to first API pipeline, or
+   * local pipeline, if the original no longer exists). The archive record is
+   * removed on success.
+   */
+  const handleReopenLead = useCallback(async (record) => {
+    if (!record) return
+    const leadName = record.lead?.owner || record.lead?.address || 'Lead'
+    const confirmed = await showConfirm(
+      'This lead will be restored to its pipeline with all notes, tasks, and contacts.',
+      'Reopen Lead',
+      {
+        detail: leadName,
+        detailSubtitle: record.lead?.owner ? (record.lead.address || '') : '',
+        confirmText: 'Reopen'
+      }
+    )
+    if (!confirmed) return
+
+    const closedFrom = record.closedFrom || {}
+    const isOriginalLocal = !!closedFrom.isLocal
+    const apiPipeline = !isOriginalLocal && closedFrom.pipelineId
+      ? pipelines.find((p) => p.id === closedFrom.pipelineId)
+      : null
+    const fallbackApi = !apiPipeline && !isOriginalLocal && pipelines.length > 0 ? pipelines[0] : null
+    const targetApi = apiPipeline || fallbackApi
+    const useLocal = !targetApi
+
+    const columns = useLocal ? loadColumns() : (targetApi.columns || [])
+    const now = Date.now()
+    const originalStatus = record.lead?.status
+    const status = columns.some((c) => c.id === originalStatus)
+      ? originalStatus
+      : (columns[0]?.id || originalStatus || null)
+
+    const leadToRestore = {
+      ...record.lead,
+      status,
+      statusEnteredAt: now,
+      cumulativeTimeByStatus: { ...(record.stageTime || record.lead?.cumulativeTimeByStatus || {}) }
+    }
+
+    const parcelId = record.parcelId || leadToRestore.parcelId || null
+
+    if (parcelId) {
+      if (record.notes) saveParcelNote(parcelId, record.notes)
+      if (record.contacts) {
+        saveSkipTracedParcel(parcelId, {
+          ...record.contacts,
+          skipTracedAt: record.contacts.skipTracedAt ?? null
+        })
+      }
+    }
+    if (Array.isArray(record.tasks) && record.tasks.length > 0 && parcelId) {
+      restoreLeadTasks(record.tasks, {
+        parcelId,
+        pipelineId: useLocal ? null : targetApi.id
+      })
+    }
+
+    try {
+      if (useLocal) {
+        const next = [...loadLeads(), leadToRestore]
+        saveLeads(next)
+        setDealPipelineLeads(next)
+      } else {
+        const nextLeads = [...(targetApi.leads || []), leadToRestore]
+        await updatePipeline(getToken, targetApi.id, { leads: nextLeads })
+        await refreshPipelines()
+      }
+    } catch (e) {
+      showToast(e.message || 'Could not reopen lead into pipeline', 'error')
+      return
+    }
+
+    removeClosedLead(record.id)
+    setClosedLeads(loadClosedLeads())
+    scheduleUserDataSync(getToken)
+    showToast(
+      useLocal && !isOriginalLocal
+        ? 'Lead reopened in local pipeline (original pipeline not found)'
+        : 'Lead reopened',
+      'success'
+    )
+  }, [pipelines, getToken, refreshPipelines])
 
   // Background polling for skip trace jobs
   useEffect(() => {
@@ -1374,6 +1539,24 @@ function App() {
   }, [lists, selectedListIds, getToken, refreshLists])
 
   // Function to open parcel details (can accept parcel data or use clickedParcelData)
+  /**
+   * Close any open lead/pipe/schedule/tasks panel and fly the map to the
+   * parcel's coordinates. Used when the user clicks the Address row inside
+   * LeadDetails — we want to return them to the map centered on the address.
+   */
+  const handleGoToParcelOnMap = useCallback((parcelData) => {
+    const lat = Number(parcelData?.lat ?? parcelData?.properties?.LATITUDE ?? parcelData?.properties?.latitude)
+    const lng = Number(parcelData?.lng ?? parcelData?.properties?.LONGITUDE ?? parcelData?.properties?.longitude)
+    setIsLeadsPanelOpen(false)
+    setIsDealPipelineOpen(false)
+    setIsSchedulePanelOpen(false)
+    setIsTasksPanelOpen(false)
+    setScheduleInitialDate(null)
+    if (Number.isFinite(lat) && Number.isFinite(lng) && mapRef.current) {
+      mapRef.current.flyTo({ center: [lng, lat], zoom: 17, duration: 500 })
+    }
+  }, [])
+
   const handleOpenParcelDetails = useCallback((parcelData = null) => {
     // Wait for auth to finish loading before checking
     if (authLoading) {
@@ -1777,24 +1960,58 @@ function App() {
       showToast(`Starting bulk skip trace for ${parcelsToTrace.length} parcels...`, 'info', 3000)
       
       try {
-        // Submit skip trace job
+        // Submit skip trace job. Trestle is synchronous — results come back in the
+        // same response keyed by parcelId, so no async job tracking or address-
+        // matching is needed.
         const result = await skipTraceParcels(parcelsToTrace)
-        
-        if (!result.jobId) {
-          throw new Error('No job ID returned')
-        }
 
-        // Add job to background tracking
-        addSkipTraceJob({
-          jobId: result.jobId,
-          listId,
-          listName: list.name,
-          parcelsToTrace,
-          status: 'pending'
-        })
+        const syncResults = Array.isArray(result?.results) ? result.results : []
+        const errored = syncResults.filter(r => r.error)
+        const resultsWithParcelIds = syncResults
+          .filter(r => r.parcelId && !r.error && ((r.phoneNumbers?.length || 0) > 0 || (r.emails?.length || 0) > 0))
+          .map(r => ({
+            parcelId: r.parcelId,
+            phone: r.phone || null,
+            email: r.email || null,
+            phoneNumbers: r.phoneNumbers || (r.phone ? [r.phone] : []),
+            emails: r.emails || (r.email ? [r.email] : []),
+            phoneDetails: r.phoneDetails,
+            emailDetails: r.emailDetails,
+            address: r.address || null,
+            skipTracedAt: r.skipTracedAt || new Date().toISOString()
+          }))
+
+        saveSkipTracedParcels(resultsWithParcelIds)
         scheduleUserDataSync(getToken)
 
-        showToast(`Skip trace job submitted for ${parcelsToTrace.length} parcels. You'll be notified when it completes.`, 'success', 5000)
+        const matchedIds = new Set(resultsWithParcelIds.map(r => r.parcelId))
+        const skipTracedParcels = list.parcels.filter(p => {
+          const pid = p.id || p.properties?.PROP_ID || p
+          return matchedIds.has(pid)
+        })
+        if (skipTracedParcels.length > 0) {
+          addListToSkipTracedList(listId, list.name, skipTracedParcels)
+          scheduleUserDataSync(getToken)
+        }
+
+        setSkipTracingInProgress(prev => {
+          const next = new Set(prev)
+          parcelsToTrace.forEach(p => next.delete(p.parcelId))
+          return next
+        })
+
+        const matchedCount = resultsWithParcelIds.length
+        const totalRequested = parcelsToTrace.length
+        const erroredCount = errored.length
+        if (erroredCount > 0 && matchedCount === 0) {
+          const sample = errored[0].error
+          showToast(`Skip trace failed for all ${totalRequested} parcels: ${sample}`, 'error', 10000)
+        } else if (erroredCount > 0) {
+          showToast(`Skip trace: ${matchedCount} of ${totalRequested} found contacts, ${erroredCount} errored.`, 'warning', 8000)
+        } else {
+          showToast(`Skip trace completed: ${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found contacts.`, matchedCount > 0 ? 'success' : 'warning', 6000)
+        }
+        notifySkipTraceComplete(list.name, `${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found${erroredCount > 0 ? `, ${erroredCount} errored` : ''}`)
       } catch (error) {
         console.error('Bulk skip trace submission error:', error)
         showToast(`Failed to submit skip trace job: ${error.message}`, 'error')
@@ -1877,16 +2094,32 @@ function App() {
         results = await pollSkipTraceJobUntilComplete(result.jobId, maxRetries, interval)
       }
       
-      // Note: Empty results array is valid - it means no contact info was found
-      // Only throw error if we actually got an error, not if results are empty
       if (results.length === 0) {
         console.warn('Skip trace completed but returned no results. This may mean no contact information was found for this parcel.')
-        // Don't throw error - empty results is a valid outcome
         showToast('Skip trace completed, but no contact information was found for this parcel.', 'warning')
         return
       }
 
       const contactInfo = results[0]
+
+      // Surface per-parcel errors from the provider (e.g. 403 Forbidden, network
+      // errors) instead of silently saving an empty record and showing "Success!".
+      if (contactInfo.error) {
+        console.error('Skip trace provider error:', contactInfo.error)
+        showToast(`Skip trace failed: ${contactInfo.error}`, 'error', 8000)
+        return
+      }
+
+      // If the provider responded OK but found no contacts, say so explicitly.
+      const hasAnyContact = (contactInfo.phoneNumbers?.length || 0) > 0 ||
+                            (contactInfo.emails?.length || 0) > 0
+      if (!hasAnyContact) {
+        const warnings = Array.isArray(contactInfo.warnings) && contactInfo.warnings.length > 0
+          ? ` (${contactInfo.warnings.join(', ')})`
+          : ''
+        showToast(`No contact info found for this parcel${warnings}.`, 'warning', 6000)
+        return
+      }
       
       
       // Ensure phoneNumbers is an array
@@ -1899,12 +2132,15 @@ function App() {
         ? contactInfo.emails
         : (contactInfo.email ? [contactInfo.email] : [])
       
-      // Save to global list
+      // Save to global list — preserve phoneDetails/emailDetails (with per-contact
+      // callerId from Trestle) when the API returns them.
       const dataToSave = {
         phone: contactInfo.phone || phoneNumbers[0] || null,
         email: contactInfo.email || emails[0] || null,
         phoneNumbers: phoneNumbers,
         emails: emails,
+        phoneDetails: contactInfo.phoneDetails,
+        emailDetails: contactInfo.emailDetails,
         address: contactInfo.address || null,
         skipTracedAt: new Date().toISOString()
       }
@@ -2340,6 +2576,8 @@ function App() {
             mapRef.current.flyTo({ center: [location.lng, location.lat], zoom: 17, duration: 500 })
           }
         }}
+        onGoToParcelOnMap={handleGoToParcelOnMap}
+        onRequestCloseLead={handleCloseLead}
       />
 
       <SchedulePanel
@@ -2356,6 +2594,7 @@ function App() {
         onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
+        onGoToParcelOnMap={handleGoToParcelOnMap}
       />
 
       <TasksPanel
@@ -2469,6 +2708,7 @@ function App() {
         onClose={() => setIsLeadsPanelOpen(false)}
         pipelines={pipelines}
         dealPipelineLeads={dealPipelineLeads}
+        closedLeads={closedLeads}
         onOpenDealPipeline={(pipelineId) => {
           setIsLeadsPanelOpen(false)
           if (pipelineId) setActivePipelineId(pipelineId)
@@ -2492,6 +2732,16 @@ function App() {
           setScheduleInitialDate(ts)
           setIsSchedulePanelOpen(true)
         }}
+        onRequestCloseLead={handleCloseLead}
+        onDeleteClosedLead={(id) => {
+          const next = loadClosedLeads().filter((r) => r.id !== id)
+          saveClosedLeads(next)
+          setClosedLeads(next)
+          scheduleUserDataSync(getToken)
+          showToast('Closed lead deleted', 'success')
+        }}
+        onRequestReopenLead={handleReopenLead}
+        onGoToParcelOnMap={handleGoToParcelOnMap}
       />
 
       <RoofInspectorPanel

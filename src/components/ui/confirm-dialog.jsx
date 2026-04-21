@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './dialog'
 import { Button } from './button'
 
@@ -81,27 +80,35 @@ export const ConfirmDialog = () => {
         handleCancel()
       }
     }}>
-      <DialogContent className="map-panel confirm-dialog max-w-md" showCloseButton={false} focusOverlay>
+      <DialogContent className="map-panel confirm-dialog max-w-[320px] rounded-2xl" showCloseButton={false} focusOverlay>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600" />
-            {currentConfirm.title}
+          <DialogTitle>
+            {currentConfirm.detailSubtitle
+              ? (currentConfirm.detail || currentConfirm.title)
+              : currentConfirm.title}
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            {currentConfirm.message}
-          </DialogDescription>
+          {currentConfirm.detailSubtitle && (
+            <DialogDescription className="text-xs opacity-70 mt-0.5">
+              {currentConfirm.detailSubtitle}
+            </DialogDescription>
+          )}
+          {!currentConfirm.detailSubtitle && (
+            <DialogDescription className="sr-only">
+              {currentConfirm.message}
+            </DialogDescription>
+          )}
         </DialogHeader>
-        <p className="text-sm text-gray-700 py-2">{currentConfirm.message}</p>
-        {currentConfirm.detail && (
+        <p className="text-sm text-gray-700 py-2 text-center">{currentConfirm.message}</p>
+        {currentConfirm.detail && !currentConfirm.detailSubtitle && (
           <div className="mt-3 rounded-lg border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white/95">
             {currentConfirm.detail}
           </div>
         )}
-        <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
+        <DialogFooter className="gap-2 sm:gap-3 pt-2">
+          <Button variant="outline" onClick={handleCancel} className="confirm-dialog-cancel w-full sm:w-auto">
             Cancel
           </Button>
-          <Button variant="destructive" onClick={handleConfirm}>
+          <Button variant="destructive" onClick={handleConfirm} className="confirm-dialog-confirm w-full sm:w-auto">
             {currentConfirm.confirmLabel || currentConfirm.confirmText || 'Confirm'}
           </Button>
         </DialogFooter>

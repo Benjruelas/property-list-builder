@@ -311,6 +311,31 @@ export const updateLeadTaskSchedule = (parcelId, taskId, scheduledAt, scheduledE
   saveStore(store)
 }
 
+/**
+ * Bulk-insert tasks back into the store (used to restore tasks from a closed-lead snapshot).
+ * Rewrites pipelineId/parcelId to the restoration targets. Preserves task ids and
+ * completion state. Skips tasks that already exist in the store.
+ */
+export const restoreLeadTasks = (tasks, { parcelId = null, pipelineId = null } = {}) => {
+  if (!Array.isArray(tasks) || tasks.length === 0) return
+  const store = loadStore()
+  const existingIds = new Set(store.tasks.map((t) => t.id))
+  const now = Date.now()
+  for (const t of tasks) {
+    if (!t || !(t.title ?? '').toString().trim()) continue
+    const id = t.id && !existingIds.has(t.id) ? t.id : `task-${now}-${Math.random().toString(36).slice(2, 9)}`
+    const rebuilt = normalizeTask({
+      ...t,
+      id,
+      parcelId: parcelId && String(parcelId).trim() ? parcelId : null,
+      pipelineId: pipelineId && String(pipelineId).trim() ? pipelineId : null
+    })
+    store.tasks.push(rebuilt)
+    existingIds.add(id)
+  }
+  saveStore(store)
+}
+
 export const deleteLeadTask = (parcelId, taskId) => {
   if (!taskId) return
   const store = loadStore()
