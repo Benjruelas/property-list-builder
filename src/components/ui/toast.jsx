@@ -36,10 +36,15 @@ export const ToastContainer = () => {
   }
 
   const content = (
-    <div className="fixed left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 items-center pointer-events-none [&>*]:pointer-events-auto" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))' }}>
+    <div
+      data-toast-container
+      className="fixed left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 items-center pointer-events-none [&>*]:pointer-events-auto"
+      style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))' }}
+    >
       {toasts.map(toast => (
         <div
           key={toast.id}
+          data-toast-item
           className={cn(
             "map-panel flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg min-w-[300px] max-w-md animate-in slide-in-from-top-5",
             toast.type === 'success' && "border-green-300/50",

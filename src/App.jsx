@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import MapGL, { Marker as MapMarker, Source, Layer } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -36,7 +36,9 @@ import { SchedulePanel } from './components/SchedulePanel'
 import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
+const FormsPanel = lazy(() => import('./components/forms/FormsPanel').then(m => ({ default: m.FormsPanel })))
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
+import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { TeamsPanel } from './components/TeamsPanel'
 import { fetchTeams } from './utils/teams'
 import { reverseGeocodeCity } from './utils/reverseGeocode'
@@ -211,6 +213,7 @@ function App() {
       setIsMultiSelectActive(false)
       setIsPathTrackingActive(false)
       setIsPathsPanelOpen(false)
+      setIsFormsPanelOpen(false)
       setIsTeamsPanelOpen(false)
       setTeams([])
       setIsSettingsPanelOpen(false)
@@ -297,6 +300,7 @@ function App() {
   const [phoneActionPanel, setPhoneActionPanel] = useState(null) // { phone, parcelData } | null
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
   const [isPathsPanelOpen, setIsPathsPanelOpen] = useState(false)
+  const [isFormsPanelOpen, setIsFormsPanelOpen] = useState(false)
   const [paths, setPaths] = useState([])
   const [visiblePathIds, setVisiblePathIds] = useState([])
   const [isTeamsPanelOpen, setIsTeamsPanelOpen] = useState(false)
@@ -332,7 +336,7 @@ function App() {
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isOutreachPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
+    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
   const hasPopup = clickedParcelId != null
 
   // iOS Safari resize fix
@@ -690,6 +694,28 @@ function App() {
       showToast(error.message || 'Failed to update sharing', 'error')
     }
   }, [getToken, refreshPaths])
+
+  const handleShareForm = useCallback(async (templateId, sharedWith) => {
+    try {
+      const updated = await shareTemplateApi(getToken, templateId, sharedWith)
+      showToast('Form sharing updated', 'success')
+      return updated
+    } catch (error) {
+      showToast(error.message || 'Failed to update sharing', 'error')
+      throw error
+    }
+  }, [getToken])
+
+  const handleShareFormWithTeams = useCallback(async (templateId, teamShares) => {
+    try {
+      const updated = await shareTemplateWithTeamsApi(getToken, templateId, teamShares)
+      showToast('Team sharing updated', 'success')
+      return updated
+    } catch (error) {
+      showToast(error.message || 'Failed to update team sharing', 'error')
+      throw error
+    }
+  }, [getToken])
 
   const handleSharePathWithTeams = useCallback(async (pathId, teamShares) => {
     try {
@@ -1776,6 +1802,11 @@ function App() {
     if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
     setIsPathsPanelOpen(true)
   }, [authLoading, currentUser])
+  const openFormsPanel = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    setIsFormsPanelOpen(true)
+  }, [authLoading, currentUser])
   const openTeamsPanel = useCallback(() => {
     if (authLoading) return
     if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
@@ -2470,6 +2501,7 @@ function App() {
         onOpenTeamsPanel={openTeamsPanel}
         onOpenSettings={openSettingsPanel}
         onOpenLeads={openLeadsPanel}
+        onOpenForms={openFormsPanel}
         currentUser={currentUser}
         onLogin={openLogin}
         onLogout={logout}
@@ -2501,6 +2533,7 @@ function App() {
         isPathTrackingActive={isPathTrackingActive}
         onOpenOutreach={handleOpenOutreach}
         onOpenLeads={openLeadsPanel}
+        onOpenForms={openFormsPanel}
         onOpenTeamsPanel={openTeamsPanel}
         onOpenSettings={openSettingsPanel}
         currentUser={currentUser}
@@ -2749,6 +2782,19 @@ function App() {
           setBulkEmailListId(null)
         }}
       />
+
+      {isFormsPanelOpen && (
+        <Suspense fallback={null}>
+          <FormsPanel
+            isOpen={isFormsPanelOpen}
+            onClose={() => setIsFormsPanelOpen(false)}
+            teams={teams}
+            onShareForm={handleShareForm}
+            onShareFormWithTeams={handleShareFormWithTeams}
+            onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
+          />
+        </Suspense>
+      )}
 
       <PathsPanel
         isOpen={isPathsPanelOpen}

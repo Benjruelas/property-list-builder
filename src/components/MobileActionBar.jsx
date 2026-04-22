@@ -1,4 +1,4 @@
-import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2, Settings, User } from 'lucide-react'
+import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2, Settings, User, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -58,6 +58,7 @@ export function MobileActionBar({
   isPathTrackingActive,
   onOpenOutreach,
   onOpenLeads,
+  onOpenForms,
   onOpenTeamsPanel,
   onOpenSettings,
   currentUser,
@@ -144,6 +145,15 @@ export function MobileActionBar({
         >
           <UserSearch className="h-4 w-4 flex-shrink-0" />
           <span>Leads</span>
+        </button>
+
+        <button
+          data-tour="menu-forms"
+          onClick={() => { closeMenu(); onOpenForms?.() }}
+          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+        >
+          <FileText className="h-4 w-4 flex-shrink-0" />
+          <span>Forms</span>
         </button>
 
         <button

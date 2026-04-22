@@ -1,4 +1,4 @@
-import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X, FileText } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 export function MapControls({ 
@@ -19,6 +19,7 @@ export function MapControls({
   onOpenTeamsPanel,
   onOpenSettings,
   onOpenLeads,
+  onOpenForms,
   currentUser,
   onLogin,
   onLogout,
@@ -219,6 +220,19 @@ export function MapControls({
               >
                 <UserSearch className="h-4 w-4 flex-shrink-0" />
                 <span>Leads</span>
+              </button>
+
+              {/* Forms */}
+              <button
+                data-tour="menu-forms"
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenForms?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <FileText className="h-4 w-4 flex-shrink-0" />
+                <span>Forms</span>
               </button>
 
               {/* Teams */}

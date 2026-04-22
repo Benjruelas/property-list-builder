@@ -23,6 +23,7 @@ A mobile-first field canvassing and property intelligence platform built with Re
   - [Compass & Orientation](#compass--orientation)
   - [Notifications](#notifications)
   - [Data Sync](#data-sync)
+  - [Forms (PDF Fill & Send)](#forms-pdf-fill--send)
 - [API Endpoints](#api-endpoints)
 - [Component Reference](#component-reference)
 - [Utilities Reference](#utilities-reference)
@@ -465,6 +466,33 @@ Bidirectional sync between `localStorage` and the server:
 - **Merge strategy:** `mergeBlobToLocal` handles key-by-key merging to avoid overwriting concurrent changes
 - `UserDataSyncProvider` context exposes `scheduleSync()` for any component to trigger a sync after local writes
 
+### Forms (PDF Fill & Send)
+
+**Files:** `src/components/forms/*`, `src/lib/forms/*`, `src/utils/forms.js`, `src/workers/pdfFlatten.worker.js`, `api/forms.js`, `api/forms-upload.js`, `api/forms-send.js`
+
+A lightweight "upload PDF → place fields → fill → email flattened PDF" workflow. Opened from the hamburger menu as a full-screen panel (no router), the Forms panel runs in three views:
+
+1. **List** (`FormsPanel`) — grid of the user's templates with page count, last used, and actions (Open, Fill, Delete).
+2. **Builder** (`FormBuilderView`, lazy) — renders the PDF with `pdfjs-dist`, virtualizes pages via `IntersectionObserver` (only visible pages get a canvas to keep 50-page PDFs responsive), and lets the user drag `Text` / `Date` / `Checkbox` / `Signature` chips from the left palette onto a page. Placed fields are move/resize-able via `FieldOverlay`, and selecting one exposes a label + required flag panel.
+3. **Fill** (`FormFillView`, lazy) — re-renders the PDF and overlays real `<input>` elements on top of each field. Signature fields open `SignaturePadModal` which lazy-imports `signature_pad` (device-pixel-ratio scaled, pointer events for mobile Safari). Send prompts for recipient + subject + message, flattens the PDF in `src/workers/pdfFlatten.worker.js` using `pdf-lib`, and POSTs the base64 result to `/api/forms/send`.
+
+**Storage.** Original PDFs land in Cloudflare R2 at `forms/{uid}/{templateId}/original.pdf` (via `api/forms-upload.js`, owner-scoped read). Template JSON lives in Vercel KV under `user_form_templates`, and `FormSubmission` records in `user_form_submissions` — both follow the same single-array/filter-by-ownerId convention as `api/lists.js`.
+
+**Coordinates.** Field rectangles are stored as fractions of the page (`x, y, width, height ∈ [0, 1]`) in [`src/lib/forms/coords.js`](src/lib/forms/coords.js) so rendering stays resolution-independent. `pctToPx` is used for on-screen overlays; the worker uses `pctToPdfPoints` (bottom-left origin) when drawing onto pdf-lib pages.
+
+**Bundle cost.** Only `FormsPanel` + `src/utils/forms.js` + `src/lib/forms/*` live in the main bundle (~1 KB gz). Everything heavy — `pdfjs-dist`, `pdf-lib`, `signature_pad`, the builder/fill views, and the flatten worker — is dynamically imported and ships in its own chunk, triggered only when the user opens Forms.
+
+**Limits.** Source PDF uploads are capped at ~4 MB (Vercel JSON body limit; enforced at ≤6 MB server-side). The flattened outgoing PDF is capped at 8 MB. `signature_pad` scales the canvas to `devicePixelRatio` and uses pointer events so touch and stylus signatures work on mobile Safari.
+
+**Adding a new field type.** Four places to touch:
+
+1. [`api/forms.js`](api/forms.js) — add the `type` string to `ALLOWED_FIELD_TYPES`.
+2. [`src/components/forms/FormBuilderView.jsx`](src/components/forms/FormBuilderView.jsx) — add a `PALETTE` entry with a `defaultSize` and a lucide icon.
+3. [`src/components/forms/FormFillView.jsx`](src/components/forms/FormFillView.jsx) — extend `FillField` with a branch that renders the right input.
+4. [`src/workers/pdfFlatten.worker.js`](src/workers/pdfFlatten.worker.js) — extend the `for (const field of msg.fields)` loop with a drawer (text, image, line, etc.) using `pctToPdfPoints` for the PDF-space rectangle.
+
+The icon on `FieldOverlay` is looked up from `FIELD_ICON` in [`src/components/forms/FieldOverlay.jsx`](src/components/forms/FieldOverlay.jsx) — add an entry there too for a palette preview.
+
 ---
 
 ## API Endpoints
@@ -498,6 +526,13 @@ All endpoints require `Authorization: Bearer <Firebase ID token>` unless noted. 
 | POST | `/api/skip-trace-sherpa` | Submit SkipSherpa skip trace |
 | GET | `/api/skip-trace-status-sherpa?jobId=` | Poll SkipSherpa job |
 | POST | `/api/export-list` | Email CSV export |
+| GET | `/api/forms` | List the user's form templates |
+| POST | `/api/forms` | Create a form template |
+| PATCH | `/api/forms` | Update template name / fields / PDF key |
+| DELETE | `/api/forms` | Delete a template (owner only, also removes the R2 PDF) |
+| POST | `/api/forms-upload` | Upload a PDF (base64, ≤4 MB) to R2 for a template |
+| GET | `/api/forms-upload?key=` | Owner-scoped PDF download from R2 |
+| POST | `/api/forms-send` | Email the flattened PDF via Resend + record submission |
 | POST | `/api/push-subscribe` | Save push subscription |
 | DELETE | `/api/push-subscribe` | Remove push subscription |
 | GET | `/api/validate-share-email?email=` | Check if email belongs to a user |

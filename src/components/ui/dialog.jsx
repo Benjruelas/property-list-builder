@@ -23,12 +23,14 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-/** Prevents Radix Dialog from closing when the user interacts inside portaled UI (schedule picker, lead task/pipe menus). */
+/** Prevents Radix Dialog from closing when the user interacts inside portaled UI (schedule picker, lead task/pipe menus, toasts). */
 const preventCloseWhenNestedOverlay = (e, existing) => {
   if (
     e.target?.closest?.('.schedule-picker-panel') ||
     e.target?.closest?.('[data-task-menu]') ||
-    e.target?.closest?.('[data-pipe-menu]')
+    e.target?.closest?.('[data-pipe-menu]') ||
+    e.target?.closest?.('[data-toast-container]') ||
+    e.target?.closest?.('[data-toast-item]')
   ) {
     e.preventDefault()
   }

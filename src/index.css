@@ -277,6 +277,130 @@
   color: rgba(255, 255, 255, 0.6) !important;
 }
 
+/* Form fields rendered over a white PDF page need readable dark text,
+   overriding the glass-panel white-text defaults. */
+.map-panel .form-field-input,
+.map-panel input.form-field-input,
+.map-panel textarea.form-field-input {
+  color: #111827 !important;
+  background: rgba(239, 246, 255, 0.55) !important;
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  caret-color: #111827 !important;
+}
+.map-panel .form-field-input::placeholder {
+  color: rgba(17, 24, 39, 0.45) !important;
+}
+
+/* Form field selection toolbar (Move / Delete / Sign).
+   Global `.map-panel … button` rules force white text + glass bg; override
+   with scoped rules so the toolbar icons are actually visible. */
+.map-panel .form-field-toolbar {
+  background: #ffffff !important;
+  border: 1px solid #60a5fa !important;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  color: #000000 !important;
+}
+.map-panel .form-field-toolbar button,
+.map-panel .form-field-toolbar [role="button"] {
+  background: transparent !important;
+  border: none !important;
+  color: #000000 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 0 !important;
+}
+.map-panel .form-field-toolbar button:hover:not(:disabled),
+.map-panel .form-field-toolbar [role="button"]:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border: none !important;
+}
+.map-panel .form-field-toolbar svg {
+  color: #000000 !important;
+  stroke: #000000 !important;
+}
+
+/* Forms palette buttons (Text / Date / Checkbox / Sign).
+   Glass-panel button rules would hide the label on the default
+   `bg-white` state; these rules give a clear unarmed look and a
+   translucent-white "armed" fill matching the rest of the UI. */
+.map-panel .form-palette-btn {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.map-panel .form-palette-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+.map-panel .form-palette-btn.is-armed {
+  background: rgba(255, 255, 255, 0.3) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+}
+.map-panel .form-palette-btn svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
+/* Quick-delete X that appears on hover (non-selected fields). */
+.map-panel .form-field-quick-delete {
+  background: #ef4444 !important;
+  border: none !important;
+  color: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .form-field-quick-delete svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Builder-view field overlay: label chip on top-left with icon + name.
+   Needs dark text to be readable on its own white background. */
+.map-panel .form-field-overlay-label {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: #374151 !important;
+  border: 1px solid #e5e7eb !important;
+}
+/* Force descendants (span with label text + required "*") to inherit the
+   dark text color; otherwise `.map-panel *` paints them white-on-white. */
+.map-panel .form-field-overlay-label *,
+.map-panel .form-field-overlay-label span {
+  color: #374151 !important;
+}
+.map-panel .form-field-overlay-label svg {
+  color: #4b5563 !important;
+  stroke: #4b5563 !important;
+}
+
+/* Builder-view field overlay: red delete button in the top-right corner. */
+.map-panel .form-field-overlay-delete {
+  background: #ef4444 !important;
+  border: none !important;
+  color: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.map-panel .form-field-overlay-delete:hover:not(:disabled) {
+  background: #dc2626 !important;
+  border: none !important;
+}
+.map-panel .form-field-overlay-delete svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Builder-view resize handle (bottom-right corner). */
+.map-panel .form-field-overlay-resize {
+  background: #2563eb !important;
+  border: 1px solid #1d4ed8 !important;
+}
+
 /* Add task - lead autocomplete dropdown - liquid glass, readable */
 .add-task-lead-dropdown {
   background: rgba(30, 35, 50, 0.85);
@@ -1527,6 +1651,174 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   color: rgba(255, 255, 255, 0.75);
 }
 
+/* Step bar wrapper — sits between the panel header and the scroll area.
+   Centers the pill horizontally over the panel. */
+.fill-tour-stepbar-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.6rem 0.75rem 0.55rem;
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 5;
+}
+/* Glass aesthetic — translucent white with blur, matches .map-panel. */
+.fill-tour-stepbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem 0.5rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+  max-width: min(520px, calc(100% - 0.5rem));
+  min-width: 220px;
+}
+.fill-tour-stepbar-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+  max-width: 70vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+.fill-tour-stepbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.fill-tour-stepbar-count {
+  min-width: 3.4rem;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+.fill-tour-stepbar-count-of {
+  font-weight: 500;
+  opacity: 0.55;
+  font-size: 0.78rem;
+  margin: 0 0.15rem;
+}
+.fill-tour-stepbar-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 999px;
+  width: 2.1rem;
+  height: 2.1rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.fill-tour-stepbar-arrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+.fill-tour-stepbar-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.fill-tour-stepbar-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 0.3rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fill-tour-stepbar-action:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+.fill-tour-stepbar-progress {
+  width: 100%;
+  min-width: 180px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.fill-tour-stepbar-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 1));
+  border-radius: 999px;
+  transition: width 0.25s ease;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+/* Send-form dialog — glass aesthetic matching the rest of the app.
+   Override shadcn's light-theme Button defaults so the actions are visible
+   on the glass backdrop. */
+.forms-send-dialog .forms-send-confirm,
+.map-panel .forms-send-dialog .forms-send-confirm {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.55) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+.forms-send-dialog .forms-send-confirm:hover:not(:disabled),
+.map-panel .forms-send-dialog .forms-send-confirm:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.32) !important;
+  border-color: rgba(255, 255, 255, 0.75) !important;
+}
+.forms-send-dialog .forms-send-confirm:disabled,
+.map-panel .forms-send-dialog .forms-send-confirm:disabled {
+  opacity: 0.5 !important;
+}
+.forms-send-dialog .forms-send-cancel,
+.map-panel .forms-send-dialog .forms-send-cancel {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+.forms-send-dialog .forms-send-cancel:hover:not(:disabled),
+.map-panel .forms-send-dialog .forms-send-cancel:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  color: #fff !important;
+}
+/* Message textarea — glass styling. */
+.forms-send-dialog .forms-send-textarea,
+.map-panel .forms-send-dialog .forms-send-textarea {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  caret-color: rgba(255, 255, 255, 0.95) !important;
+  resize: vertical;
+}
+.forms-send-dialog .forms-send-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.45) !important;
+}
+.forms-send-dialog .forms-send-textarea:focus,
+.map-panel .forms-send-dialog .forms-send-textarea:focus {
+  border-color: rgba(255, 255, 255, 0.55) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15) !important;
+}
+
 /* Settings panel — use box-shadow for borders (border-color gets overridden) */
 .map-panel .settings-toggle,
 .map-panel .settings-toggle:hover {
@@ -1728,8 +2020,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 /* Hide on tablets and up. The bar is intended for phone-sized screens. */
 @media (min-width: 768px) {
-  .mobile-action-bar {
-    display: none;
+  .mobile-action-bar,
+  .mobile-action-bar-menu,
+  .mobile-action-bar-menu-backdrop {
+    display: none !important;
   }
 }
 
