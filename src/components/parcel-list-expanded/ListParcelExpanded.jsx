@@ -1,4 +1,4 @@
-import { Trash2, Info, Phone, CheckCircle2, Loader2, MapPin, UserPlus, CheckCircle, XCircle, HelpCircle, Star } from 'lucide-react'
+import { Trash2, Info, Phone, CheckCircle2, Loader2, MapPin, UserPlus, CheckCircle, XCircle, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DirectionsPicker } from '@/components/DirectionsPicker'
 import { cn } from '@/lib/utils'
@@ -91,7 +91,6 @@ function ContactBlock({ parcelId, props, address, parcel, onPhoneClick, shell = 
       <div className={cn('text-[11px] font-semibold uppercase tracking-wider mb-2', lab)}>Contact</div>
       {phoneDetails.map((p, idx) => (
         <div key={idx} className="text-sm flex items-center gap-1 flex-wrap mb-1">
-          {p.primary && <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400 shrink-0" />}
           <span className={cn('font-medium', lab)}>{phoneDetails.length > 1 ? `Phone ${idx + 1}` : 'Phone'}</span>
           <VerifiedBadge verified={p.verified} />
           {onPhoneClick ? (
@@ -101,20 +100,15 @@ function ContactBlock({ parcelId, props, address, parcel, onPhoneClick, shell = 
           ) : (
             <a href={`tel:${(p.value || '').replace(/[^\d+]/g, '')}`} className="text-sky-300 hover:text-sky-200 underline">{p.value}</a>
           )}
-          {p.callerId && <span className="text-white/40 text-xs">({p.callerId})</span>}
         </div>
       ))}
       {emailDetails.map((e, idx) => (
         <div key={idx} className="text-sm flex items-center gap-1 mb-1">
-          {e.primary && <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400 shrink-0" />}
           <span className={cn('font-medium', lab)}>{emailDetails.length > 1 ? `Email ${idx + 1}` : 'Email'}</span>
           <VerifiedBadge verified={e.verified} />
           <span className={val}>{e.value}</span>
         </div>
       ))}
-      {skipTracedInfo.address && (
-        <div className="text-sm mt-1"><span className={lab}>Mailing · </span><span className={val}>{skipTracedInfo.address}</span></div>
-      )}
       {skipTracedInfo.skipTracedAt && (
         <div className="text-xs text-white/40 mt-1">Traced {new Date(skipTracedInfo.skipTracedAt).toLocaleDateString()}</div>
       )}

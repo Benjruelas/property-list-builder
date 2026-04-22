@@ -23,33 +23,6 @@ function OwnerMatchBadge({ confidence }) {
   return <BadgeCheck className={`h-3.5 w-3.5 flex-shrink-0 ${color}`} aria-label={title} title={title} />
 }
 
-/** A-F pill for Trestle Real Contact grades (see LeadDetails.jsx). */
-function GradeBadge({ grade, activityScore, nameMatch, kind }) {
-  if (!grade) return null
-  const palette = {
-    A: 'bg-green-600 text-white border-green-700',
-    B: 'bg-lime-100 text-lime-700 border-lime-300',
-    C: 'bg-amber-100 text-amber-700 border-amber-300',
-    D: 'bg-orange-100 text-orange-700 border-orange-300',
-    F: 'bg-red-100 text-red-700 border-red-300'
-  }
-  const cls = palette[grade] || 'bg-gray-100 text-gray-700 border-gray-300'
-  const parts = [`Grade ${grade}`]
-  if (kind === 'phone' && typeof activityScore === 'number') parts.push(`activity ${activityScore}`)
-  if (nameMatch === true) parts.push('name match')
-  else if (nameMatch === false) parts.push('name mismatch')
-  const title = parts.join(' · ')
-  return (
-    <span
-      className={`inline-flex items-center justify-center flex-shrink-0 text-[10px] font-semibold leading-none px-1.5 py-0.5 rounded border ${cls}`}
-      title={title}
-      aria-label={title}
-    >
-      {grade}
-    </span>
-  )
-}
-
 export function ContactSection({
   data, onPhoneClick, onEmailClick, compact = false,
   onSkipTrace = null, isSkipTracing = false, hasSkipTraced = false,
@@ -160,15 +133,14 @@ export function ContactSection({
           <div key={`phone-${idx}`} className="py-2 border-b border-white/30 last:border-0 space-y-1">
             <div className="flex justify-between items-center gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                {editContacts ? (
+                {editContacts && (
                   <button type="button" onClick={() => togglePrimary('phone', p.value)} className="text-amber-500 hover:text-amber-600 flex-shrink-0">
                     {p.primary ? <Star className="h-4 w-4 fill-current" /> : <Star className="h-4 w-4" />}
                   </button>
-                ) : p.primary && <Star className="h-4 w-4 text-amber-500 fill-amber-500 flex-shrink-0" title="Primary" />}
+                )}
                 <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
                 <span className="font-semibold text-gray-700">{phoneDetails.length > 1 ? `Phone ${idx + 1}:` : 'Phone:'}</span>
                 <VerifiedIcon verified={p.verified} onClick={() => handleSetVerified('phone', p.value, cycleVerified(p.verified))} />
-                <GradeBadge grade={p.grade} activityScore={p.activityScore} nameMatch={p.nameMatch} kind="phone" />
               </div>
               <div className="flex items-center gap-1">
                 {onPhoneClick ? (
@@ -219,15 +191,14 @@ export function ContactSection({
         {emailDetails.map((e, idx) => (
           <div key={`email-${idx}`} className="flex justify-between items-center py-2 border-b border-white/30 last:border-0">
             <div className="flex items-center gap-2 min-w-0">
-              {editContacts ? (
+              {editContacts && (
                 <button type="button" onClick={() => togglePrimary('email', e.value)} className="text-amber-500 hover:text-amber-600 flex-shrink-0">
                   {e.primary ? <Star className="h-4 w-4 fill-current" /> : <Star className="h-4 w-4" />}
                 </button>
-              ) : e.primary && <Star className="h-4 w-4 text-amber-500 fill-amber-500 flex-shrink-0" title="Primary" />}
+              )}
               <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />
               <span className="font-semibold text-gray-700">{emailDetails.length > 1 ? `Email ${idx + 1}:` : 'Email:'}</span>
               <VerifiedIcon verified={e.verified} onClick={() => handleSetVerified('email', e.value, cycleVerified(e.verified))} />
-              <GradeBadge grade={e.grade} nameMatch={e.nameMatch} kind="email" />
             </div>
             <div className="flex items-center gap-1">
               {onEmailClick ? (
@@ -246,12 +217,6 @@ export function ContactSection({
           <div className="flex items-center gap-2 py-2">
             <input type="email" placeholder="Add email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addEmail()} />
             <Button variant="outline" size="sm" className="h-7" onClick={addEmail}><Plus className="h-3.5 w-3.5" /></Button>
-          </div>
-        )}
-        {skipTracedInfo?.address && (
-          <div className="flex justify-between py-2 border-b border-white/30 last:border-0">
-            <span className="font-semibold text-gray-700">Mailing Address:</span>
-            <span className="text-gray-900 text-right flex-1 ml-4">{skipTracedInfo.address}</span>
           </div>
         )}
         {skipTracedInfo?.skipTracedAt && (

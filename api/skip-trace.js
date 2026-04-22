@@ -296,16 +296,18 @@ async function gradeContactLists(phoneDetails, emailDetails, address, apiKey) {
   }
 }
 
+const MAX_CONTACTS_PER_KIND = 5
+
 /**
- * Pick the single highest-graded contact. Ordering:
+ * Sort contacts best-to-worst and return the top N. Ordering:
  *   1. contact_grade   (A > B > C > D > F > null)
  *   2. activity_score  (phones only; higher wins)
  *   3. name_match      (true > false > null)
  *   4. matchConfidence (Phase 1 owner match: high > medium > unknown)
  *   5. original index  (stable)
  */
-function pickBestContact(details, kind) {
-  if (!Array.isArray(details) || details.length === 0) return null
+function sortAndTakeContacts(details, kind, limit = MAX_CONTACTS_PER_KIND) {
+  if (!Array.isArray(details) || details.length === 0) return []
   const scored = details.map((d, idx) => {
     const gradeRank = GRADE_RANK[d.grade] ?? 0
     const activity = typeof d.activityScore === 'number' ? d.activityScore : -1
@@ -320,7 +322,7 @@ function pickBestContact(details, kind) {
     if (b.matchRank !== a.matchRank) return b.matchRank - a.matchRank
     return a.idx - b.idx
   })
-  return scored[0].d
+  return scored.slice(0, limit).map((s) => s.d)
 }
 
 async function traceOne(parcel, apiKey) {
@@ -512,35 +514,33 @@ async function traceOne(parcel, apiKey) {
     }
     try {
       const graded = await gradeContactLists(dedupedPhones, dedupedEmails, addressForGrading, apiKey)
-      const bestPhone = pickBestContact(graded.phoneDetails, 'phone')
-      const bestEmail = pickBestContact(graded.emailDetails, 'email')
-      phoneDetails = bestPhone ? [{ ...bestPhone, primary: true }] : []
-      emailDetails = bestEmail ? [{ ...bestEmail, primary: true }] : []
+      const topPhones = sortAndTakeContacts(graded.phoneDetails, 'phone')
+      const topEmails = sortAndTakeContacts(graded.emailDetails, 'email')
+      phoneDetails = topPhones.map((p, i) => ({ ...p, primary: i === 0 }))
+      emailDetails = topEmails.map((e, i) => ({ ...e, primary: i === 0 }))
 
       if (process.env.NODE_ENV !== 'production') {
         console.log('[skipTrace] grading summary:', {
           parcelId: parcel.parcelId,
           phonesConsidered: graded.phoneDetails.map((p) => ({ value: p.value, grade: p.grade, activity: p.activityScore, nameMatch: p.nameMatch })),
           emailsConsidered: graded.emailDetails.map((e) => ({ value: e.value, grade: e.grade, nameMatch: e.nameMatch })),
-          pickedPhone: bestPhone ? { value: bestPhone.value, grade: bestPhone.grade } : null,
-          pickedEmail: bestEmail ? { value: bestEmail.value, grade: bestEmail.grade } : null
+          keptPhones: phoneDetails.map((p) => ({ value: p.value, grade: p.grade })),
+          keptEmails: emailDetails.map((e) => ({ value: e.value, grade: e.grade }))
         })
       }
 
       const droppedPhones = graded.phoneDetails.length - phoneDetails.length
       const droppedEmails = graded.emailDetails.length - emailDetails.length
       if (droppedPhones > 0 || droppedEmails > 0) {
-        warnings.push(`Showing highest-graded contact only (dropped ${droppedPhones} phone${droppedPhones === 1 ? '' : 's'} / ${droppedEmails} email${droppedEmails === 1 ? '' : 's'}).`)
+        warnings.push(`Showing top ${MAX_CONTACTS_PER_KIND} phone${MAX_CONTACTS_PER_KIND === 1 ? '' : 's'} / ${MAX_CONTACTS_PER_KIND} email${MAX_CONTACTS_PER_KIND === 1 ? '' : 's'} (dropped ${droppedPhones} phone${droppedPhones === 1 ? '' : 's'} / ${droppedEmails} email${droppedEmails === 1 ? '' : 's'}).`)
       }
     } catch (err) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[skipTrace] grading fell back to unfiltered list:', err.message)
       }
-      warnings.push('Contact grading unavailable — showing all owner-matched contacts.')
-      phoneDetails = dedupedPhones
-      emailDetails = dedupedEmails
-      if (phoneDetails.length > 0) phoneDetails[0] = { ...phoneDetails[0], primary: true }
-      if (emailDetails.length > 0) emailDetails[0] = { ...emailDetails[0], primary: true }
+      warnings.push('Contact grading unavailable — showing up to the first 5 owner-matched contacts.')
+      phoneDetails = dedupedPhones.slice(0, MAX_CONTACTS_PER_KIND).map((p, i) => ({ ...p, primary: i === 0 }))
+      emailDetails = dedupedEmails.slice(0, MAX_CONTACTS_PER_KIND).map((e, i) => ({ ...e, primary: i === 0 }))
     }
   }
 
