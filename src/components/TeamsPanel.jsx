@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { X, Plus, RefreshCw, Users, Shield, Trash2 } from 'lucide-react'
+import { X, Plus, RefreshCw, Users2, Shield, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -148,7 +148,7 @@ export function TeamsPanel({
 
             {sortedTeams.length === 0 ? (
               <div className="text-center py-8">
-                <Users className="h-10 w-10 mx-auto mb-3 text-gray-400 opacity-60" />
+                <Users2 className="h-10 w-10 mx-auto mb-3 text-gray-400 opacity-60" />
                 <p className="text-gray-500 text-sm">You're not in any teams yet.</p>
                 <p className="text-gray-400 text-xs mt-1">Create a team to share lists, pipes, and paths with a group.</p>
               </div>
@@ -178,7 +178,7 @@ export function TeamsPanel({
                           {!isOwner && team.ownerEmail ? ` · owned by ${team.ownerEmail}` : ''}
                         </p>
                       </div>
-                      <Users className="h-4 w-4 flex-shrink-0 text-gray-400 mt-1" />
+                      <Users2 className="h-4 w-4 flex-shrink-0 text-gray-400 mt-1" />
                     </button>
                   )
                 })}

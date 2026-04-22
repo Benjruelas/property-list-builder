@@ -43,8 +43,7 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
         <button
           type="button"
           onClick={() => onToggleDropdown(hourOpen ? null : hourDropdownKey)}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3rem] justify-between"
-          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+          className="schedule-picker-btn flex items-center gap-1 px-2.5 py-1.5 text-sm rounded min-w-[3rem] justify-between"
         >
           {hour}
           <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${hourOpen ? 'rotate-180' : ''}`} />
@@ -59,7 +58,7 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
                 key={h}
                 type="button"
                 onClick={() => { onHourChange(h); onToggleDropdown(null) }}
-                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${hour === h ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
+                className={`schedule-picker-menu-item block w-full px-2.5 py-2 text-sm text-left transition-colors ${hour === h ? 'is-selected' : ''}`}
               >
                 {h}
               </button>
@@ -72,8 +71,7 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
         <button
           type="button"
           onClick={() => onToggleDropdown(minOpen ? null : minuteDropdownKey)}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3.5rem] justify-between"
-          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+          className="schedule-picker-btn flex items-center gap-1 px-2.5 py-1.5 text-sm rounded min-w-[3.5rem] justify-between"
         >
           {String(minute).padStart(2, '0')}
           <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${minOpen ? 'rotate-180' : ''}`} />
@@ -88,7 +86,7 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
                 key={m}
                 type="button"
                 onClick={() => { onMinuteChange(m); onToggleDropdown(null) }}
-                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${minute === m ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
+                className={`schedule-picker-menu-item block w-full px-2.5 py-2 text-sm text-left transition-colors ${minute === m ? 'is-selected' : ''}`}
               >
                 {String(m).padStart(2, '0')}
               </button>
@@ -96,18 +94,18 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
           </div>
         )}
       </div>
-      <div className="flex rounded-md overflow-hidden ml-auto" style={{ border: '1px solid rgba(255,255,255,0.4)' }}>
+      <div className="schedule-ampm-group flex items-center ml-auto">
         <button
           type="button"
           onClick={() => onAMPMChange(false)}
-          className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${!isPM ? 'bg-white/25 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+          className={`schedule-ampm-btn px-2.5 py-1.5 text-xs font-medium transition-colors ${!isPM ? 'is-selected' : ''}`}
         >
           AM
         </button>
         <button
           type="button"
           onClick={() => onAMPMChange(true)}
-          className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${isPM ? 'bg-white/25 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+          className={`schedule-ampm-btn px-2.5 py-1.5 text-xs font-medium transition-colors ${isPM ? 'is-selected' : ''}`}
         >
           PM
         </button>
@@ -116,7 +114,7 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
   )
 }
 
-export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue = null, onEndChange, triggerClassName, title = 'Schedule', size = 'default', taskTitle, leadAddress, leadName, inline = false }) {
+export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue = null, onEndChange, triggerClassName, title = 'Schedule', size = 'default', taskTitle, leadAddress, leadName, inline = false, hideLabel = false }) {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState(null)
   const [hourDropdownOpen, setHourDropdownOpen] = useState(false)
@@ -431,8 +429,8 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
         : 'Select date and time'
     if (isComplete && !expanded) {
       return (
-        <div className="rounded-lg border border-white/20 p-3 bg-white/5">
-          <label className="text-xs font-medium block opacity-90 mb-1">Date & time</label>
+        <div className={hideLabel ? '' : 'rounded-lg border border-white/20 p-3 bg-white/5'}>
+          {!hideLabel && <label className="text-xs font-medium block opacity-90 mb-1">Date & time</label>}
           <button
             type="button"
             onClick={() => setExpanded(true)}
@@ -445,8 +443,8 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
       )
     }
     return (
-      <div className="space-y-3 rounded-lg border border-white/20 p-3 bg-white/5">
-        <label className="text-xs font-medium block opacity-90">Date & time</label>
+      <div className={hideLabel ? 'space-y-3' : 'space-y-3 rounded-lg border border-white/20 p-3 bg-white/5'}>
+        {!hideLabel && <label className="text-xs font-medium block opacity-90">Date & time</label>}
         <div className="flex items-center justify-between">
           <button
             type="button"
@@ -537,8 +535,7 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
             <button
               type="button"
               onClick={handleClear}
-              className="py-1.5 px-3 text-xs font-medium rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-              style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+              className="schedule-picker-btn py-1.5 px-3 text-xs font-medium rounded transition-colors"
             >
               Clear
             </button>
@@ -546,8 +543,7 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
               type="button"
               onClick={handleSet}
               disabled={!isComplete}
-              className="py-1.5 px-3 text-xs font-medium rounded bg-white/20 hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
-              style={{ border: '1px solid rgba(255,255,255,0.4)' }}
+              className="schedule-picker-btn schedule-picker-btn--primary py-1.5 px-3 text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Set
             </button>

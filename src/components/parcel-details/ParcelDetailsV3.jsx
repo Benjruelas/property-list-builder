@@ -89,14 +89,31 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
 
           {/* Action Buttons */}
           <div className="px-6 pb-3 flex items-center gap-2">
-            {popupData && !popupData.hasSkipTraced && !popupData.isSkipTracing && onSkipTrace && (
-              <button onClick={() => onSkipTrace()} className="p-3.5 rounded-xl bg-green-600/80 hover:bg-green-600 text-white transition-colors" title="Get Contact"><Phone size={22} /></button>
-            )}
-            {popupData?.hasSkipTraced && (
-              <span className="p-3.5 rounded-xl bg-green-600/20 text-green-400" title="Contact Found"><CheckCircle2 size={22} /></span>
-            )}
-            {popupData?.isSkipTracing && (
-              <span className="p-3.5 rounded-xl bg-amber-600/20 text-amber-400" title="Skip Tracing..."><Loader2 size={22} className="animate-spin" /></span>
+            {onSkipTrace && (
+              <button
+                onClick={() => { if (!popupData?.isSkipTracing) onSkipTrace() }}
+                disabled={popupData?.isSkipTracing}
+                className={`p-3.5 rounded-xl text-white transition-colors ${
+                  popupData?.isSkipTracing
+                    ? 'bg-amber-600/30 text-amber-300 cursor-wait'
+                    : popupData?.hasSkipTraced
+                      ? 'bg-green-600/40 hover:bg-green-600/60 text-green-200'
+                      : 'bg-green-600/80 hover:bg-green-600'
+                }`}
+                title={
+                  popupData?.isSkipTracing
+                    ? 'Skip Tracing...'
+                    : popupData?.hasSkipTraced
+                      ? 'Refresh Contact Info'
+                      : 'Get Contact Info'
+                }
+              >
+                {popupData?.isSkipTracing
+                  ? <Loader2 size={22} className="animate-spin" />
+                  : popupData?.hasSkipTraced
+                    ? <CheckCircle2 size={22} />
+                    : <Phone size={22} />}
+              </button>
             )}
             <DirectionsPicker lat={normalized.lat} lng={normalized.lng} iconSize={22} className="p-3.5 rounded-xl" />
             {onAddToList && <button onClick={() => onAddToList()} className="p-3.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white transition-colors" title="Add to List"><ListPlus size={22} /></button>}
@@ -192,7 +209,16 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
               </div>
             )}
 
-            {activeTab === 'contact' && <ContactSection data={data} onPhoneClick={onPhoneClick} onEmailClick={onEmailClick} />}
+            {activeTab === 'contact' && (
+              <ContactSection
+                data={data}
+                onPhoneClick={onPhoneClick}
+                onEmailClick={onEmailClick}
+                onSkipTrace={onSkipTrace}
+                isSkipTracing={!!popupData?.isSkipTracing}
+                hasSkipTraced={!!popupData?.hasSkipTraced}
+              />
+            )}
           </div>
         </div>
       </DialogContent>

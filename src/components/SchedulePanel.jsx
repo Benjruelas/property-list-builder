@@ -287,18 +287,21 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
 
   const addTaskLeadSuggestions = (() => {
     const q = (addTaskLeadSearch || '').trim().toLowerCase()
-    if (!q) return []
-    const tokens = q.split(/\s+/).filter(Boolean)
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const results = []
     for (const lead of displayLeads) {
-      const label = (getLeadLabel(lead, lead.parcelId) || '').toLowerCase()
-      const fullAddr = (getFullAddress(lead) || '').toLowerCase()
-      const owner = (lead.owner || '').toLowerCase()
-      const address = (lead.address || '').toLowerCase()
-      const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
-      if (!tokens.every((tok) => searchable.includes(tok))) continue
-      results.push({ lead, displayValue: getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId })
+      const displayValue = getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId
+      if (tokens.length) {
+        const label = (getLeadLabel(lead, lead.parcelId) || '').toLowerCase()
+        const fullAddr = (getFullAddress(lead) || '').toLowerCase()
+        const owner = (lead.owner || '').toLowerCase()
+        const address = (lead.address || '').toLowerCase()
+        const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
+        if (!tokens.every((tok) => searchable.includes(tok))) continue
+      }
+      results.push({ lead, displayValue })
     }
+    results.sort((a, b) => (a.displayValue || '').localeCompare(b.displayValue || '', undefined, { sensitivity: 'base' }))
     return results
   })()
 
@@ -832,7 +835,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
 
         {/* Add Task Dialog */}
         <Dialog open={showAddTask} onOpenChange={setShowAddTask}>
-          <DialogContent className="map-panel list-panel new-task-panel max-w-md max-h-[80vh] p-0" showCloseButton={false} nestedOverlay>
+          <DialogContent className="map-panel list-panel new-task-panel w-[min(92vw,22rem)] max-w-sm max-h-[80vh] p-0 rounded-2xl" showCloseButton={false} nestedOverlay>
             <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
               <DialogTitle className="text-xl font-semibold">
                 New Task
@@ -863,9 +866,10 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                   onChange={(e) => {
                     setAddTaskLeadSearch(e.target.value)
                     setAddTaskLeadId('')
-                    setAddTaskSuggestionsOpen(e.target.value.trim().length > 0)
+                    setAddTaskSuggestionsOpen(true)
                     setAddTaskHighlightIndex(-1)
                   }}
+                  onFocus={() => setAddTaskSuggestionsOpen(true)}
                   onBlur={() => setTimeout(() => setAddTaskSuggestionsOpen(false), 150)}
                   placeholder="Type address or name..."
                   className="text-sm"
@@ -890,7 +894,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                     }
                   }}
                 />
-                {addTaskSuggestionsOpen && addTaskLeadSearch.trim() && addTaskLeadSuggestions.length > 0 && (
+                {addTaskSuggestionsOpen && addTaskLeadSuggestions.length > 0 && (
                   <ul className="add-task-lead-dropdown absolute z-50 left-0 right-0 mt-0.5 max-h-40 overflow-y-auto rounded-lg border py-1 text-sm" role="listbox">
                     {addTaskLeadSuggestions.map((item, idx) => (
                       <li

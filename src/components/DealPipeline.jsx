@@ -435,21 +435,22 @@ export function DealPipeline({
 
   const addTaskLeadSuggestions = (() => {
     const q = (addTaskLeadSearch || '').trim().toLowerCase()
-    if (!q) return []
-    const tokens = q.split(/\s+/).filter(Boolean)
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const results = []
     for (const lead of displayLeads) {
       const label = (getLeadLabel(lead.parcelId) || '').toLowerCase()
       const fullAddr = (getFullAddress(lead) || '').toLowerCase()
       const owner = (lead.owner || '').toLowerCase()
       const address = (lead.address || '').toLowerCase()
-      const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
-      if (!tokens.every((tok) => searchable.includes(tok))) continue
+      if (tokens.length) {
+        const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
+        if (!tokens.every((tok) => searchable.includes(tok))) continue
+      }
       const ownerStr = (lead.owner || '').trim()
       const addressStr = (getStreetAddress(lead) || lead.address || '').trim()
       const fullAddrStr = (getFullAddress(lead) || '').trim()
-      const ownerMatched = ownerStr && tokens.every((t) => owner.toLowerCase().includes(t))
-      const addressMatched = (addressStr || fullAddrStr) && tokens.every((t) => (address + ' ' + fullAddr).toLowerCase().includes(t))
+      const ownerMatched = tokens.length && ownerStr && tokens.every((t) => owner.includes(t))
+      const addressMatched = tokens.length && (addressStr || fullAddrStr) && tokens.every((t) => (address + ' ' + fullAddr).includes(t))
       let matchLabel, displayValue
       if (ownerMatched && !addressMatched) {
         matchLabel = 'Owner'
@@ -466,6 +467,7 @@ export function DealPipeline({
       }
       results.push({ lead, matchLabel, displayValue })
     }
+    results.sort((a, b) => (a.displayValue || '').localeCompare(b.displayValue || '', undefined, { sensitivity: 'base' }))
     return results
   })()
 
@@ -873,10 +875,13 @@ export function DealPipeline({
           if (lead) {
             setAddTaskLeadId(lead.parcelId)
             setAddTaskLeadSearch(getLeadLabel(lead.parcelId))
-setAddTaskTitle('')
-                  setAddTaskScheduledAt(null)
-                  setAddTaskScheduledEndAt(null)
-                  setAddTaskFromLead(true)
+            setAddTaskTitle('')
+            const startOfHour = new Date()
+            startOfHour.setMinutes(0, 0, 0)
+            const startTs = startOfHour.getTime()
+            setAddTaskScheduledAt(startTs)
+            setAddTaskScheduledEndAt(startTs + 60 * 60 * 1000)
+            setAddTaskFromLead(true)
             setShowAddTaskDialog(true)
           }
         }}
@@ -903,7 +908,7 @@ setAddTaskTitle('')
 
       {/* Add task from tasks sidebar */}
       <Dialog open={showAddTaskDialog} onOpenChange={setShowAddTaskDialog}>
-        <DialogContent className="map-panel list-panel new-task-panel max-w-md max-h-[80vh] p-0" showCloseButton={false} nestedOverlay>
+        <DialogContent className="map-panel list-panel new-task-panel w-[min(92vw,22rem)] max-w-sm max-h-[80vh] p-0 rounded-2xl" showCloseButton={false} nestedOverlay>
           <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
             <DialogTitle className="text-xl font-semibold">New Task</DialogTitle>
             <DialogDescription className="sr-only">Create a new task and assign it to a lead</DialogDescription>
@@ -917,9 +922,10 @@ setAddTaskTitle('')
                 onChange={(e) => {
                   setAddTaskLeadSearch(e.target.value)
                   setAddTaskLeadId('') // clear selection when typing
-                  setAddTaskSuggestionsOpen(e.target.value.trim().length > 0)
+                  setAddTaskSuggestionsOpen(true)
                   setAddTaskHighlightIndex(-1)
                 }}
+                onFocus={() => setAddTaskSuggestionsOpen(true)}
                 onBlur={() => setTimeout(() => setAddTaskSuggestionsOpen(false), 150)}
                 placeholder="Type address or name..."
                 className="text-sm"
@@ -945,7 +951,7 @@ setAddTaskTitle('')
                   }
                 }}
               />
-              {addTaskSuggestionsOpen && addTaskLeadSearch.trim() && addTaskLeadSuggestions.length > 0 && (
+              {addTaskSuggestionsOpen && addTaskLeadSuggestions.length > 0 && (
                 <ul
                   className="add-task-lead-dropdown absolute z-50 left-0 right-0 mt-0.5 max-h-40 overflow-y-auto rounded-lg border py-1 text-sm"
                   role="listbox"

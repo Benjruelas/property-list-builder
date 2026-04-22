@@ -187,18 +187,21 @@ export function TasksPanel({
 
   const addTaskLeadSuggestions = useMemo(() => {
     const q = (addTaskLeadSearch || '').trim().toLowerCase()
-    if (!q) return []
-    const tokens = q.split(/\s+/).filter(Boolean)
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const results = []
     for (const lead of displayLeads) {
-      const label = (getLeadLabel(lead, lead.parcelId) || '').toLowerCase()
-      const fullAddr = (getFullAddress(lead) || '').toLowerCase()
-      const owner = (lead.owner || '').toLowerCase()
-      const address = (lead.address || '').toLowerCase()
-      const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
-      if (!tokens.every((tok) => searchable.includes(tok))) continue
-      results.push({ lead, displayValue: getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId })
+      const displayValue = getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId
+      if (tokens.length) {
+        const label = (getLeadLabel(lead, lead.parcelId) || '').toLowerCase()
+        const fullAddr = (getFullAddress(lead) || '').toLowerCase()
+        const owner = (lead.owner || '').toLowerCase()
+        const address = (lead.address || '').toLowerCase()
+        const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
+        if (!tokens.every((tok) => searchable.includes(tok))) continue
+      }
+      results.push({ lead, displayValue })
     }
+    results.sort((a, b) => (a.displayValue || '').localeCompare(b.displayValue || '', undefined, { sensitivity: 'base' }))
     return results
   }, [addTaskLeadSearch, displayLeads])
 
@@ -550,9 +553,10 @@ export function TasksPanel({
                 onChange={(e) => {
                   setAddTaskLeadSearch(e.target.value)
                   setAddTaskLeadId('')
-                  setAddTaskSuggestionsOpen(e.target.value.trim().length > 0)
+                  setAddTaskSuggestionsOpen(true)
                   setAddTaskHighlightIndex(-1)
                 }}
+                onFocus={() => setAddTaskSuggestionsOpen(true)}
                 onBlur={() => setTimeout(() => setAddTaskSuggestionsOpen(false), 150)}
                 placeholder="Type address or name..."
                 className="text-sm"
@@ -577,7 +581,7 @@ export function TasksPanel({
                   }
                 }}
               />
-              {addTaskSuggestionsOpen && addTaskLeadSearch.trim() && addTaskLeadSuggestions.length > 0 && (
+              {addTaskSuggestionsOpen && addTaskLeadSuggestions.length > 0 && (
                 <ul className="add-task-lead-dropdown absolute z-50 left-0 right-0 mt-0.5 max-h-40 overflow-y-auto rounded-lg border py-1 text-sm" role="listbox">
                   {addTaskLeadSuggestions.map((item, idx) => (
                     <li
@@ -617,6 +621,7 @@ export function TasksPanel({
                 <div className="border-t border-white/15 px-3 pb-3 pt-2 space-y-1">
                   <SchedulePicker
                     inline
+                    hideLabel
                     value={addTaskScheduledAt}
                     onChange={setAddTaskScheduledAt}
                     endValue={addTaskScheduledEndAt}

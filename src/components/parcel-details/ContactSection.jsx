@@ -1,4 +1,4 @@
-import { Phone, Mail, User, Star, Pencil, Trash2, Plus, CheckCircle, XCircle, HelpCircle } from 'lucide-react'
+import { Phone, Mail, User, Star, Pencil, Trash2, Plus, CheckCircle, XCircle, HelpCircle, BadgeCheck, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 
@@ -8,7 +8,52 @@ function VerifiedIcon({ verified, onClick, title }) {
   return <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer hover:text-gray-600" onClick={onClick} title={title || 'Unverified'} />
 }
 
-export function ContactSection({ data, onPhoneClick, onEmailClick, compact = false }) {
+/**
+ * Owner-match badge. Only rendered when server-side skip-trace filtering
+ * returned a confidence signal on the contact. 'high' = first + last match;
+ * 'medium' = partial (initial/alternate-name) match.
+ */
+function OwnerMatchBadge({ confidence }) {
+  if (confidence !== 'high' && confidence !== 'medium') return null
+  const isHigh = confidence === 'high'
+  const title = isHigh
+    ? 'Verified owner match (first + last name)'
+    : 'Probable owner match (partial name match)'
+  const color = isHigh ? 'text-emerald-500' : 'text-amber-500'
+  return <BadgeCheck className={`h-3.5 w-3.5 flex-shrink-0 ${color}`} aria-label={title} title={title} />
+}
+
+/** A-F pill for Trestle Real Contact grades (see LeadDetails.jsx). */
+function GradeBadge({ grade, activityScore, nameMatch, kind }) {
+  if (!grade) return null
+  const palette = {
+    A: 'bg-green-600 text-white border-green-700',
+    B: 'bg-lime-100 text-lime-700 border-lime-300',
+    C: 'bg-amber-100 text-amber-700 border-amber-300',
+    D: 'bg-orange-100 text-orange-700 border-orange-300',
+    F: 'bg-red-100 text-red-700 border-red-300'
+  }
+  const cls = palette[grade] || 'bg-gray-100 text-gray-700 border-gray-300'
+  const parts = [`Grade ${grade}`]
+  if (kind === 'phone' && typeof activityScore === 'number') parts.push(`activity ${activityScore}`)
+  if (nameMatch === true) parts.push('name match')
+  else if (nameMatch === false) parts.push('name mismatch')
+  const title = parts.join(' · ')
+  return (
+    <span
+      className={`inline-flex items-center justify-center flex-shrink-0 text-[10px] font-semibold leading-none px-1.5 py-0.5 rounded border ${cls}`}
+      title={title}
+      aria-label={title}
+    >
+      {grade}
+    </span>
+  )
+}
+
+export function ContactSection({
+  data, onPhoneClick, onEmailClick, compact = false,
+  onSkipTrace = null, isSkipTracing = false, hasSkipTraced = false,
+}) {
   const {
     phoneDetails, emailDetails, skipTracedInfo, normalized,
     editContacts, setEditContacts, newPhone, setNewPhone, newEmail, setNewEmail,
@@ -18,14 +63,95 @@ export function ContactSection({ data, onPhoneClick, onEmailClick, compact = fal
   } = data
 
   const hasContacts = phoneDetails.length > 0 || emailDetails.length > 0 || skipTracedInfo?.address || skipTracedInfo?.skipTracedAt
-  if (!hasContacts) return null
+
+  // Empty state — rendered in place of the full contact list when a parcel
+  // has never been skip-traced and has no manually added contacts. Keeps the
+  // Contact tab meaningful (button + add fields) instead of a blank panel.
+  if (!hasContacts) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+          <Phone className="h-5 w-5" />
+          <span>{compact ? 'Contact' : 'Contact Information'}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="parcel-details-edit-btn h-7 px-2 ml-auto"
+            onClick={() => { setEditContacts(e => !e); setNewPhone(''); setNewEmail('') }}
+            title={editContacts ? 'Done' : 'Add contact manually'}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        <div className="rounded-lg border border-dashed border-white/20 bg-white/5 px-4 py-6 text-center space-y-3">
+          <div className="flex justify-center">
+            <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
+              <Phone className="h-5 w-5 opacity-70" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-sm font-medium">No contact info yet</div>
+            <div className="text-xs opacity-60">Skip trace this parcel to fetch the owner's best-graded phone and email.</div>
+          </div>
+          {onSkipTrace && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-1"
+              disabled={isSkipTracing}
+              onClick={() => { if (!isSkipTracing) onSkipTrace() }}
+            >
+              {isSkipTracing ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Skip tracing…</>
+              ) : hasSkipTraced ? (
+                <><RefreshCw className="h-4 w-4 mr-2" /> Refresh contact info</>
+              ) : (
+                <><Phone className="h-4 w-4 mr-2" /> Get contact info</>
+              )}
+            </Button>
+          )}
+        </div>
+
+        {editContacts && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input type="tel" placeholder="Add phone" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addPhone()} />
+              <Button variant="outline" size="sm" className="h-7" onClick={addPhone}><Plus className="h-3.5 w-3.5" /></Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="email" placeholder="Add email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addEmail()} />
+              <Button variant="outline" size="sm" className="h-7" onClick={addEmail}><Plus className="h-3.5 w-3.5" /></Button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
         <Phone className="h-5 w-5" />
         <span>{compact ? 'Contact' : 'Contact Information'}</span>
-        <Button variant="ghost" size="sm" className="parcel-details-edit-btn h-7 px-2 ml-auto" onClick={() => { setEditContacts(e => !e); setNewPhone(''); setNewEmail('') }}>
+        {onSkipTrace && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="parcel-details-edit-btn h-7 px-2 ml-auto"
+            disabled={isSkipTracing}
+            onClick={() => { if (!isSkipTracing) onSkipTrace() }}
+            title={isSkipTracing ? 'Skip tracing…' : 'Refresh contact info'}
+          >
+            {isSkipTracing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`parcel-details-edit-btn h-7 px-2 ${onSkipTrace ? '' : 'ml-auto'}`}
+          onClick={() => { setEditContacts(e => !e); setNewPhone(''); setNewEmail('') }}
+        >
           <Pencil className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -42,6 +168,7 @@ export function ContactSection({ data, onPhoneClick, onEmailClick, compact = fal
                 <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
                 <span className="font-semibold text-gray-700">{phoneDetails.length > 1 ? `Phone ${idx + 1}:` : 'Phone:'}</span>
                 <VerifiedIcon verified={p.verified} onClick={() => handleSetVerified('phone', p.value, cycleVerified(p.verified))} />
+                <GradeBadge grade={p.grade} activityScore={p.activityScore} nameMatch={p.nameMatch} kind="phone" />
               </div>
               <div className="flex items-center gap-1">
                 {onPhoneClick ? (
@@ -78,6 +205,7 @@ export function ContactSection({ data, onPhoneClick, onEmailClick, compact = fal
               <div className="flex items-center gap-2 pl-6 py-1">
                 <User className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                 <span className="text-sm text-gray-700">Caller ID: {(p.callerId || '').trim()}</span>
+                <OwnerMatchBadge confidence={p.matchConfidence} />
               </div>
             ) : null}
           </div>
@@ -99,11 +227,13 @@ export function ContactSection({ data, onPhoneClick, onEmailClick, compact = fal
               <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />
               <span className="font-semibold text-gray-700">{emailDetails.length > 1 ? `Email ${idx + 1}:` : 'Email:'}</span>
               <VerifiedIcon verified={e.verified} onClick={() => handleSetVerified('email', e.value, cycleVerified(e.verified))} />
+              <GradeBadge grade={e.grade} nameMatch={e.nameMatch} kind="email" />
             </div>
             <div className="flex items-center gap-1">
               {onEmailClick ? (
                 <button onClick={() => onEmailClick(e.value, normalized)} className="parcel-details-link-btn text-inherit hover:underline truncate">{e.value}</button>
               ) : <span className="truncate">{e.value}</span>}
+              <OwnerMatchBadge confidence={e.matchConfidence} />
               {editContacts && (
                 <button type="button" onClick={() => deleteEmail(idx)} className="text-red-500 hover:text-red-600 p-0.5 flex-shrink-0" title="Delete">
                   <Trash2 className="h-3.5 w-3.5" />

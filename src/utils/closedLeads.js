@@ -251,18 +251,119 @@ export const updateClosedLeadContactMeta = (id, type, value, meta) => {
   })
 }
 
-/** Write a full skip-trace result (from /api/skip-trace) into the closed-lead record. */
-export const saveClosedLeadSkipTraceResult = (id, contactInfo) => {
+/**
+ * Merge incoming skip-trace details into an existing details list, preserving
+ * user-added contacts and user flags (primary, verified) while refreshing the
+ * callerId for contacts that reappear in the new skip-trace results.
+ */
+const normalizePhoneKey = (v) => String(v || '').replace(/\D/g, '')
+const normalizeEmailKey = (v) => String(v || '').trim().toLowerCase()
+const MATCH_CONF_RANK = { high: 3, medium: 2, unknown: 1, null: 0, undefined: 0 }
+const pickBestMatchConfidence = (a, b) => {
+  const ra = MATCH_CONF_RANK[a] ?? 0
+  const rb = MATCH_CONF_RANK[b] ?? 0
+  return rb > ra ? b : a
+}
+const pickFreshMeta = (existingVal, incomingVal) =>
+  incomingVal === undefined || incomingVal === null ? existingVal ?? null : incomingVal
+const mergeClosedDetailsByValue = (existingDetails, incomingDetails, normalize) => {
+  const existing = Array.isArray(existingDetails) ? existingDetails : []
+  const incoming = Array.isArray(incomingDetails) ? incomingDetails : []
+  const incomingByKey = new Map()
+  for (const d of incoming) {
+    const key = normalize(d.value)
+    if (!key) continue
+    if (!incomingByKey.has(key)) incomingByKey.set(key, d)
+  }
+  const merged = []
+  const used = new Set()
+  for (const d of existing) {
+    const key = normalize(d.value)
+    if (!key || used.has(key)) continue
+    used.add(key)
+    const fresh = incomingByKey.get(key)
+    if (fresh) {
+      merged.push({
+        value: d.value,
+        verified: d.verified ?? null,
+        callerId: (fresh.callerId && fresh.callerId.trim()) ? fresh.callerId : (d.callerId || ''),
+        matchConfidence: pickBestMatchConfidence(d.matchConfidence, fresh.matchConfidence),
+        grade: pickFreshMeta(d.grade, fresh.grade),
+        activityScore: pickFreshMeta(d.activityScore, fresh.activityScore),
+        lineType: pickFreshMeta(d.lineType, fresh.lineType),
+        nameMatch: pickFreshMeta(d.nameMatch, fresh.nameMatch),
+        isValid: pickFreshMeta(d.isValid, fresh.isValid),
+        primary: d.primary ?? false
+      })
+    } else {
+      merged.push({
+        value: d.value,
+        verified: d.verified ?? null,
+        callerId: d.callerId || '',
+        matchConfidence: d.matchConfidence ?? null,
+        grade: d.grade ?? null,
+        activityScore: d.activityScore ?? null,
+        lineType: d.lineType ?? null,
+        nameMatch: d.nameMatch ?? null,
+        isValid: d.isValid ?? null,
+        primary: d.primary ?? false
+      })
+    }
+  }
+  for (const d of incoming) {
+    const key = normalize(d.value)
+    if (!key || used.has(key)) continue
+    used.add(key)
+    merged.push({
+      value: String(d.value || '').trim(),
+      verified: d.verified ?? null,
+      callerId: d.callerId || '',
+      matchConfidence: d.matchConfidence ?? null,
+      grade: d.grade ?? null,
+      activityScore: d.activityScore ?? null,
+      lineType: d.lineType ?? null,
+      nameMatch: d.nameMatch ?? null,
+      isValid: d.isValid ?? null,
+      primary: d.primary ?? false
+    })
+  }
+  if (merged.length > 0 && !merged.some((d) => d.primary)) {
+    merged[0] = { ...merged[0], primary: true }
+  }
+  return merged
+}
+
+/**
+ * Write a full skip-trace result (from /api/skip-trace) into the closed-lead record.
+ * When `options.merge` is true (used for re-running skip-trace), incoming results
+ * are merged with the existing stored contacts so user-added or user-edited
+ * contact info is preserved.
+ */
+export const saveClosedLeadSkipTraceResult = (id, contactInfo, options = {}) => {
+  const { merge = false } = options
   updateClosedLead(id, (r) => {
     const existing = r.contacts || emptyContacts()
-    const phoneDetails =
-      contactInfo.phoneDetails ??
-      existing.phoneDetails ??
-      normalizeDetailsList(contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []), existing.phoneDetails)
-    const emailDetails =
-      contactInfo.emailDetails ??
-      existing.emailDetails ??
-      normalizeDetailsList(contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []), existing.emailDetails)
+    let phoneDetails
+    let emailDetails
+    if (merge && (existing.phoneDetails?.length || existing.emailDetails?.length || existing.skipTracedAt)) {
+      const incomingPhones =
+        contactInfo.phoneDetails ??
+        normalizeDetailsList(contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []), null)
+      const incomingEmails =
+        contactInfo.emailDetails ??
+        normalizeDetailsList(contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []), null)
+      phoneDetails = mergeClosedDetailsByValue(existing.phoneDetails || [], incomingPhones, normalizePhoneKey)
+      emailDetails = mergeClosedDetailsByValue(existing.emailDetails || [], incomingEmails, normalizeEmailKey)
+    } else {
+      phoneDetails =
+        contactInfo.phoneDetails ??
+        existing.phoneDetails ??
+        normalizeDetailsList(contactInfo.phoneNumbers || (contactInfo.phone ? [contactInfo.phone] : []), existing.phoneDetails)
+      emailDetails =
+        contactInfo.emailDetails ??
+        existing.emailDetails ??
+        normalizeDetailsList(contactInfo.emails || (contactInfo.email ? [contactInfo.email] : []), existing.emailDetails)
+    }
     const phoneNumbers = phoneDetails.map((p) => p.value)
     const emails = emailDetails.map((e) => e.value)
     const primaryPhone = phoneDetails.find((p) => p.primary) || phoneDetails[0]

@@ -313,7 +313,7 @@ export function OutreachPanel({ isOpen, onClose, onSelectTemplate, isBulkMode = 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="map-panel list-panel outreach-panel fullscreen-panel" showCloseButton={false} hideOverlay>
+      <DialogContent className="map-panel list-panel outreach-panel fullscreen-panel" showCloseButton={false} hideOverlay topLayer>
         <DialogHeader className="px-6 pt-6 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <div className="map-panel-header-toolbar">
             <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">

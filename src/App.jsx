@@ -6,6 +6,7 @@ import { CompassOrientation } from './components/CompassOrientation'
 import { NorthIndicator } from './components/NorthIndicator'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
+import { MobileActionBar } from './components/MobileActionBar'
 import { AddressSearch } from './components/AddressSearch'
 import { ListPanel } from './components/ListPanel'
 import { SkipTracedListPanel } from './components/SkipTracedListPanel'
@@ -27,7 +28,7 @@ import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
 import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail, canAddLeadsToPipeline } from './utils/pipelines'
 import { auth } from './config/firebase'
-import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel } from './utils/skipTrace'
+import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import { DealPipeline } from './components/DealPipeline'
@@ -858,19 +859,8 @@ function App() {
    * stage durations) into the closed-leads archive, then delete the live copies
    * and remove the lead from its pipeline.
    */
-  const handleCloseLead = useCallback(async (lead, pipelineId) => {
-    if (!lead) return
-    const confirmed = await showConfirm(
-      'This lead will be archived with all its history and removed from the pipeline.',
-      'Close Lead',
-      {
-        detail: lead.owner || lead.address || 'Lead',
-        detailSubtitle: lead.owner ? (lead.address || '') : '',
-        confirmText: 'Close Lead'
-      }
-    )
-    if (!confirmed) return
-
+  const archiveAndRemoveLead = useCallback(async (lead, pipelineId) => {
+    if (!lead) return false
     const parcelId = lead.parcelId
     const apiPipeline = pipelineId ? pipelines.find((p) => p.id === pipelineId) : null
     const pipelineSnapshot = apiPipeline
@@ -920,11 +910,80 @@ function App() {
       }
     } catch (e) {
       showToast(e.message || 'Could not remove lead from pipeline', 'error')
+      return false
+    }
+
+    scheduleUserDataSync(getToken)
+    return true
+  }, [pipelines, getToken, refreshPipelines])
+
+  const handleCloseLead = useCallback(async (lead, pipelineId) => {
+    if (!lead) return
+    const confirmed = await showConfirm(
+      'This lead will be archived with all its history and removed from the pipeline.',
+      'Close Lead',
+      {
+        detail: lead.owner || lead.address || 'Lead',
+        detailSubtitle: lead.owner ? (lead.address || '') : '',
+        confirmText: 'Close Lead'
+      }
+    )
+    if (!confirmed) return
+    const ok = await archiveAndRemoveLead(lead, pipelineId)
+    if (ok) showToast('Lead closed and archived', 'success')
+  }, [archiveAndRemoveLead])
+
+  const handleDeleteLead = useCallback(async (lead /* , pipelineId */) => {
+    if (!lead) return
+    const confirmed = await showConfirm(
+      'This lead, its tasks, notes, and contacts will be permanently deleted and removed from all pipelines. This cannot be undone.',
+      'Delete Lead',
+      {
+        detail: lead.owner || lead.address || 'Lead',
+        detailSubtitle: lead.owner ? (lead.address || '') : '',
+        confirmText: 'Delete'
+      }
+    )
+    if (!confirmed) return
+
+    const parcelId = lead.parcelId
+
+    if (parcelId) {
+      saveParcelNote(parcelId, '')
+      deleteAllLeadTasks(parcelId, null)
+      deleteSkipTracedParcel(parcelId)
+    }
+
+    try {
+      const matchesLead = (l) => {
+        if (!l) return false
+        if (lead.id != null && l.id === lead.id) return true
+        if (parcelId && l.parcelId === parcelId) return true
+        return false
+      }
+
+      const affectedApiPipelines = (pipelines || []).filter((p) => (p.leads || []).some(matchesLead))
+      for (const p of affectedApiPipelines) {
+        const remaining = (p.leads || []).filter((l) => !matchesLead(l))
+        await updatePipeline(getToken, p.id, { leads: remaining })
+      }
+      if (affectedApiPipelines.length > 0) {
+        await refreshPipelines()
+      }
+
+      const localLeads = loadLeads()
+      const remainingLocal = localLeads.filter((l) => !matchesLead(l))
+      if (remainingLocal.length !== localLeads.length) {
+        saveLeads(remainingLocal)
+        setDealPipelineLeads(remainingLocal)
+      }
+    } catch (e) {
+      showToast(e.message || 'Could not delete lead from pipelines', 'error')
       return
     }
 
     scheduleUserDataSync(getToken)
-    showToast('Lead closed and archived', 'success')
+    showToast('Lead deleted', 'success')
   }, [pipelines, getToken, refreshPipelines])
 
   /**
@@ -1691,6 +1750,41 @@ function App() {
     setIsOutreachPanelOpen(true)
   }, [currentUser, authLoading])
 
+  const openDealPipeline = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    setIsDealPipelineOpen(true)
+  }, [authLoading, currentUser])
+  const openTasks = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    setIsTasksPanelOpen(true)
+  }, [authLoading, currentUser])
+  const openSchedule = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    setIsSchedulePanelOpen(true)
+  }, [authLoading, currentUser])
+  const openListPanel = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    if (isMultiSelectActive && selectedParcels.size > 0) setShowListSelector(true)
+    setIsListPanelOpen(true)
+  }, [authLoading, currentUser, isMultiSelectActive, selectedParcels])
+  const openPathsPanel = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    setIsPathsPanelOpen(true)
+  }, [authLoading, currentUser])
+  const openTeamsPanel = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    setIsTeamsPanelOpen(true)
+  }, [authLoading, currentUser])
+  const openLeadsPanel = useCallback(() => setIsLeadsPanelOpen(true), [])
+  const openSettingsPanel = useCallback(() => setIsSettingsPanelOpen(true), [])
+  const openLogin = useCallback(() => setIsLoginOpen(true), [])
+
   // Handle email button click from list (opens template selection, then preview)
   const handleBulkEmailFromList = useCallback((listId) => {
     setBulkEmailListId(listId)
@@ -1930,12 +2024,11 @@ function App() {
         .map(parcel => {
           const parcelId = parcel.id || parcel
           const props = parcel.properties || parcel
-          // Use MAIL_ADDR for skip tracing (has full address with city, state, zip)
-          const address = props.MAIL_ADDR || props.MAILING_ADDR || parcel.address || props.SITUS_ADDR || props.SITE_ADDR || props.ADDRESS || ''
-          const ownerName = props.OWNER_NAME || ''
-          return { parcelId, address, ownerName }
+          const parcelData = { id: parcelId, address: parcel.address, properties: props }
+          const { payload } = buildSkipTraceRequest(parcelData)
+          return payload
         })
-        .filter(p => p.address) // Only include parcels with addresses
+        .filter(Boolean) // drop parcels without a usable address
 
       if (parcelsToTrace.length === 0) {
         showToast('No parcels to skip trace (all already traced or missing addresses)', 'info')
@@ -2042,18 +2135,13 @@ function App() {
     }
 
     const parcelId = parcelData.id
-    // Use MAIL_ADDR for skip tracing (has full address with city, state, zip)
-    const address = parcelData.properties?.MAIL_ADDR || parcelData.properties?.MAILING_ADDR || parcelData.address || parcelData.properties?.SITUS_ADDR || parcelData.properties?.SITE_ADDR || parcelData.properties?.ADDRESS || ''
-    const ownerName = parcelData.properties?.OWNER_NAME || ''
+    const previousFullAddress = getSkipTracedParcel(parcelId)?.address || ''
 
-    if (!address) {
-      showToast('Parcel mailing address is required for skip tracing', 'error')
-      return
-    }
-
-    // Check if already skip traced
-    if (isParcelSkipTraced(parcelId)) {
-      showToast('This parcel has already been skip traced', 'info')
+    const { payload: requestParcel, error: addressError } = buildSkipTraceRequest(parcelData, {
+      previousFullAddress
+    })
+    if (addressError) {
+      showToast(addressError, 'error', 5000)
       return
     }
 
@@ -2063,14 +2151,18 @@ function App() {
       return
     }
 
+    // Re-running on an already-traced parcel is allowed; we merge new results
+    // into the existing record so user-added contacts and user-set flags
+    // (primary, verified, callerId edits) are preserved.
+    const isRefresh = isParcelSkipTraced(parcelId)
+
     try {
       // Mark as in progress
       setSkipTracingInProgress(prev => new Set(prev).add(parcelId))
-      
-      showToast('Starting skip trace...', 'info', 2000)
-      
-      // Submit skip trace job
-      const result = await skipTraceParcels([{ parcelId, address, ownerName }])
+
+      showToast(isRefresh ? 'Refreshing contact info...' : 'Starting skip trace...', 'info', 2000)
+
+      const result = await skipTraceParcels([requestParcel])
       
       if (!result.jobId) {
         throw new Error('No job ID returned')
@@ -2114,10 +2206,24 @@ function App() {
       const hasAnyContact = (contactInfo.phoneNumbers?.length || 0) > 0 ||
                             (contactInfo.emails?.length || 0) > 0
       if (!hasAnyContact) {
-        const warnings = Array.isArray(contactInfo.warnings) && contactInfo.warnings.length > 0
-          ? ` (${contactInfo.warnings.join(', ')})`
-          : ''
-        showToast(`No contact info found for this parcel${warnings}.`, 'warning', 6000)
+        const warnings = Array.isArray(contactInfo.warnings) ? contactInfo.warnings : []
+        const hasInvalidAddress = warnings.some((w) => /invalid address/i.test(w))
+        const hasMissingInput = warnings.some((w) => /missing input/i.test(w))
+        let message
+        if (hasInvalidAddress) {
+          message = 'Trestle could not validate this mailing address. Double-check the street number, street name, city, state, and zip for this parcel.'
+        } else if (hasMissingInput) {
+          message = 'Skip trace request was missing required address fields (need street, city, state, zip).'
+        } else {
+          const warn = warnings.length ? ` (${warnings.join(', ')})` : ''
+          message = `No contact info found for this parcel${warn}.`
+        }
+        console.warn(
+          `[skipTrace] no contacts returned. warnings=[${warnings.join(' | ')}] | request sent: street="${requestParcel.street}" city="${requestParcel.city}" state="${requestParcel.state}" zip="${requestParcel.zip}" | address="${requestParcel.address}" | trestle.address="${contactInfo.address || ''}"`
+        )
+        console.warn('[skipTrace] parcel props keys:', Object.keys(parcelData?.properties || {}))
+        console.warn('[skipTrace] full contactInfo:', JSON.stringify(contactInfo, null, 2))
+        showToast(message, 'warning', 7000)
         return
       }
       
@@ -2146,7 +2252,7 @@ function App() {
       }
       
       
-      saveSkipTracedParcel(parcelId, dataToSave)
+      saveSkipTracedParcel(parcelId, dataToSave, { merge: isRefresh })
       scheduleUserDataSync(getToken)
 
       // Verify it was saved
@@ -2156,7 +2262,7 @@ function App() {
       addParcelToSkipTracedList(parcelData)
       scheduleUserDataSync(getToken)
 
-      showToast('Skip trace completed successfully!', 'success')
+      showToast(isRefresh ? 'Contact info refreshed!' : 'Skip trace completed successfully!', 'success')
       
       // Update clicked parcel data if it's the current parcel (for both map popup and list)
       if (clickedParcelData && clickedParcelData.id === parcelId) {
@@ -2336,20 +2442,7 @@ function App() {
           setSelectedParcelsData(new Map())
           setClickedParcelId(null)
         }}
-        onOpenListPanel={() => {
-          if (authLoading) {
-            return
-          }
-
-          if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
-            return
-          }
-          if (isMultiSelectActive && selectedParcels.size > 0) {
-            setShowListSelector(true)
-          }
-          setIsListPanelOpen(true)
-        }}
+        onOpenListPanel={openListPanel}
         selectedListIds={selectedListIds}
         onOpenSkipTracedListPanel={() => {
           // Wait for auth to finish loading before checking
@@ -2364,30 +2457,6 @@ function App() {
           setIsSkipTracedListPanelOpen(true)
         }}
         onOpenOutreach={handleOpenOutreach}
-        onOpenDealPipeline={() => {
-          if (authLoading) return
-          if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
-            return
-          }
-          setIsDealPipelineOpen(true)
-        }}
-        onOpenTasks={() => {
-          if (authLoading) return
-          if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
-            return
-          }
-          setIsTasksPanelOpen(true)
-        }}
-        onOpenSchedule={() => {
-          if (authLoading) return
-          if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
-            return
-          }
-          setIsSchedulePanelOpen(true)
-        }}
         onTogglePathTracking={() => {
           if (authLoading) return
           if (!currentUser || !currentUser.uid) {
@@ -2397,34 +2466,46 @@ function App() {
           handleTogglePathTracking()
         }}
         isPathTrackingActive={isPathTrackingActive}
-        onOpenPathsPanel={() => {
-          if (authLoading) return
-          if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
-            return
-          }
-          setIsPathsPanelOpen(true)
-        }}
-        onOpenTeamsPanel={() => {
-          if (authLoading) return
-          if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
-            return
-          }
-          setIsTeamsPanelOpen(true)
-        }}
-        onOpenSettings={() => setIsSettingsPanelOpen(true)}
-        onOpenLeads={() => setIsLeadsPanelOpen(true)}
+        onOpenPathsPanel={openPathsPanel}
+        onOpenTeamsPanel={openTeamsPanel}
+        onOpenSettings={openSettingsPanel}
+        onOpenLeads={openLeadsPanel}
         currentUser={currentUser}
-        onLogin={() => setIsLoginOpen(true)}
+        onLogin={openLogin}
         onLogout={logout}
         showMenu={showMenu}
         setShowMenu={setShowMenu}
+        hideMenuOnMobile={(settings.mobileActionBar || 'classic') !== 'off'}
         onCloseParcelPopup={() => {
           setPopupData(null)
           setClickedParcelId(null)
           setClickedParcelData(null)
         }}
+      />
+
+      <MobileActionBar
+        variant={settings.mobileActionBar || 'classic'}
+        activeId={
+          isDealPipelineOpen ? 'pipes'
+          : isTasksPanelOpen ? 'tasks'
+          : isSchedulePanelOpen ? 'schedule'
+          : null
+        }
+        onOpenPipes={openDealPipeline}
+        onOpenTasks={openTasks}
+        onOpenSchedule={openSchedule}
+        showMenu={showMenu}
+        setShowMenu={setShowMenu}
+        onOpenListPanel={openListPanel}
+        selectedListIds={selectedListIds}
+        onOpenPathsPanel={openPathsPanel}
+        isPathTrackingActive={isPathTrackingActive}
+        onOpenOutreach={handleOpenOutreach}
+        onOpenLeads={openLeadsPanel}
+        onOpenTeamsPanel={openTeamsPanel}
+        onOpenSettings={openSettingsPanel}
+        currentUser={currentUser}
+        onLogin={openLogin}
       />
 
       <ListPanel
@@ -2509,7 +2590,12 @@ function App() {
           onPhoneClick={handlePhoneClick}
           lists={lists}
           enableAutoClose={false}
-          popupData={popupData}
+          popupData={clickedParcelData ? {
+            ...(popupData || {}),
+            parcelId: clickedParcelData.id,
+            isSkipTracing: skipTracingInProgress.has(clickedParcelData.id),
+            hasSkipTraced: isParcelSkipTraced(clickedParcelData.id),
+          } : popupData}
           isLead={clickedParcelData ? isParcelALeadCheck(clickedParcelData.id) : false}
           onSkipTrace={() => { if (clickedParcelData) handleSkipTraceParcel(clickedParcelData) }}
           onAddToList={() => { setShowListSelector(true); setIsListPanelOpen(true) }}
@@ -2578,6 +2664,7 @@ function App() {
         }}
         onGoToParcelOnMap={handleGoToParcelOnMap}
         onRequestCloseLead={handleCloseLead}
+        onRequestRemoveLead={handleDeleteLead}
       />
 
       <SchedulePanel
@@ -2595,6 +2682,7 @@ function App() {
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
         onGoToParcelOnMap={handleGoToParcelOnMap}
+        onRequestRemoveLead={handleDeleteLead}
       />
 
       <TasksPanel
@@ -2733,6 +2821,7 @@ function App() {
           setIsSchedulePanelOpen(true)
         }}
         onRequestCloseLead={handleCloseLead}
+        onRequestRemoveLead={handleDeleteLead}
         onDeleteClosedLead={(id) => {
           const next = loadClosedLeads().filter((r) => r.id !== id)
           saveClosedLeads(next)

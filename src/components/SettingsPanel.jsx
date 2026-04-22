@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users, Smartphone } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { showToast } from './ui/toast'
@@ -39,6 +39,13 @@ const SMOOTHING_OPTIONS = [
 const UNIT_OPTIONS = [
   { value: 'miles', label: 'Miles' },
   { value: 'km', label: 'Km' },
+]
+
+const MOBILE_ACTION_BAR_OPTIONS = [
+  { value: 'classic',  label: 'Classic' },
+  { value: 'floating', label: 'Floating' },
+  { value: 'rail',     label: 'Rail' },
+  { value: 'off',      label: 'Off' },
 ]
 
 const DEADLINE_LEAD_OPTIONS = [
@@ -393,6 +400,21 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
             </SettingRow>
             <SettingRow label="Boundary Opacity" description="Default opacity for parcel outlines" stacked>
               <OpacitySlider value={s.parcelBoundaryOpacity ?? 80} onChange={v => { update({ parcelBoundaryOpacity: v }); onBoundaryOpacityChange?.(v) }} />
+            </SettingRow>
+          </Section>
+
+          {/* ---- Mobile ---- */}
+          <Section icon={Smartphone} title="Mobile">
+            <SettingRow
+              label="Action Bar Style"
+              description="Permanent bottom bar for Pipes, Tasks and Schedule on phones"
+              stacked
+            >
+              <SegmentedControl
+                value={s.mobileActionBar || 'classic'}
+                onChange={v => update({ mobileActionBar: v })}
+                options={MOBILE_ACTION_BAR_OPTIONS}
+              />
             </SettingRow>
           </Section>
 

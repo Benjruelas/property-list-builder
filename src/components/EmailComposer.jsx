@@ -88,7 +88,7 @@ export function EmailComposer({
         onClose()
       }
     }}>
-      <DialogContent className="map-panel email-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false}>
+      <DialogContent className="map-panel email-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false} topLayer>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="map-panel-header-toolbar">
             <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">

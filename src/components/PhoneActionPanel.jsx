@@ -49,7 +49,7 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="map-panel phone-action-panel min-w-[280px] max-w-md w-full p-0" showCloseButton={false} blurOverlay>
+      <DialogContent className="map-panel phone-action-panel w-full max-w-[320px] rounded-2xl p-0 overflow-hidden" showCloseButton={false} blurOverlay>
         <DialogHeader className="px-4 pt-4 pb-3 border-b">
           <div className="map-panel-header-toolbar">
             <DialogTitle className="map-panel-header-title-wrap text-lg font-semibold flex items-center gap-2 min-w-0 truncate">

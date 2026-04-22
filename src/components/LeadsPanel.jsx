@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { X, Search, ChevronDown, ChevronRight, Users, Clock, Archive } from 'lucide-react'
+import { X, Search, ChevronDown, ChevronRight, UserSearch, Clock, Archive } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { formatTimeInState, loadLeads, saveLeads } from '../utils/dealPipeline'
@@ -194,7 +194,7 @@ export function LeadsPanel({
           <DialogDescription className="sr-only">Leads across your pipes</DialogDescription>
           <div className="map-panel-header-toolbar">
             <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
-              <Users className="h-5 w-5 shrink-0" />
+              <UserSearch className="h-5 w-5 shrink-0" />
               <span className="truncate">Leads</span>
             </DialogTitle>
             <div className="map-panel-header-actions gap-1">
@@ -255,7 +255,7 @@ export function LeadsPanel({
           {tab === 'active' ? (
             totalAll === 0 ? (
               <div className="text-center py-16">
-                <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <UserSearch className="h-10 w-10 mx-auto mb-3 opacity-30" />
                 <p className="text-sm opacity-60">No leads yet.</p>
                 <p className="text-xs opacity-40 mt-1">Convert parcels to leads from the map or parcel details.</p>
                 {onOpenDealPipeline && (

@@ -1,4 +1,4 @@
-import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, LayoutList, Route, Settings, Users, UsersRound, ListTodo, Calendar, Plus, X } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 export function MapControls({ 
@@ -13,9 +13,6 @@ export function MapControls({
   onOpenListPanel, 
   selectedListIds = [], 
   onOpenOutreach,
-  onOpenDealPipeline,
-  onOpenTasks,
-  onOpenSchedule,
   onTogglePathTracking,
   isPathTrackingActive,
   onOpenPathsPanel,
@@ -27,6 +24,9 @@ export function MapControls({
   onLogout,
   showMenu,
   setShowMenu,
+  /** When true, the hamburger menu button is hidden at mobile breakpoints
+   *  (e.g. because the MobileActionBar is rendering the menu instead). */
+  hideMenuOnMobile = false,
   /** Called before every map-control action to dismiss any open parcel popup */
   onCloseParcelPopup,
 }) {
@@ -137,7 +137,7 @@ export function MapControls({
       </Button>
       
       {/* Menu Dropdown */}
-      <div className="relative">
+      <div className={cn("relative", hideMenuOnMobile && "map-controls-menu--hide-mobile")}>
         <Button
           data-tour="menu"
           onClick={runAction(() => {
@@ -208,18 +208,6 @@ export function MapControls({
                 <span>Outreach</span>
               </button>
 
-              <button
-                data-tour="menu-pipeline"
-                onClick={() => {
-                  setShowMenu(false)
-                  onOpenDealPipeline?.()
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-              >
-                <LayoutList className="h-4 w-4 flex-shrink-0" />
-                <span>Pipes</span>
-              </button>
-
               {/* Leads */}
               <button
                 data-tour="menu-leads"
@@ -229,34 +217,8 @@ export function MapControls({
                 }}
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
-                <Users className="h-4 w-4 flex-shrink-0" />
+                <UserSearch className="h-4 w-4 flex-shrink-0" />
                 <span>Leads</span>
-              </button>
-
-              {/* Tasks — list by pipeline (not calendar) */}
-              <button
-                data-tour="menu-tasks"
-                onClick={() => {
-                  setShowMenu(false)
-                  onOpenTasks?.()
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-              >
-                <ListTodo className="h-4 w-4 flex-shrink-0" />
-                <span>Tasks</span>
-              </button>
-
-              {/* Schedule — calendar view */}
-              <button
-                data-tour="menu-schedule"
-                onClick={() => {
-                  setShowMenu(false)
-                  onOpenSchedule?.()
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-              >
-                <Calendar className="h-4 w-4 flex-shrink-0" />
-                <span>Schedule</span>
               </button>
 
               {/* Teams */}
@@ -268,7 +230,7 @@ export function MapControls({
                 }}
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
-                <UsersRound className="h-4 w-4 flex-shrink-0" />
+                <Users2 className="h-4 w-4 flex-shrink-0" />
                 <span>Teams</span>
               </button>
 

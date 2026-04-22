@@ -852,6 +852,100 @@
   color: rgba(255, 255, 255, 0.85) !important;
 }
 
+/* =========================================================================
+   SchedulePicker (inline) — hour/minute dropdowns, Clear/Set buttons, AM/PM
+   toggle. Re-applies outlines that the list-panel button stripper removes,
+   and makes the AM/PM selected choice read as solid white.
+   ========================================================================= */
+
+/* Hour / Minute dropdown triggers + Clear / Set buttons */
+.list-panel .schedule-picker-btn,
+.map-panel .schedule-picker-btn,
+.schedule-picker-btn {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px) saturate(160%);
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+}
+.list-panel .schedule-picker-btn:hover:not(:disabled),
+.map-panel .schedule-picker-btn:hover:not(:disabled),
+.schedule-picker-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Set (primary) button — emphasized but same outline treatment */
+.list-panel .schedule-picker-btn--primary,
+.map-panel .schedule-picker-btn--primary,
+.schedule-picker-btn--primary {
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+.list-panel .schedule-picker-btn--primary:hover:not(:disabled),
+.map-panel .schedule-picker-btn--primary:hover:not(:disabled),
+.schedule-picker-btn--primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.32) !important;
+}
+
+/* AM / PM segmented toggle: unselected is transparent/dim, selected matches
+   the Create/Cancel pill look (translucent white fill + 0.4 border). */
+.schedule-ampm-group {
+  gap: 4px;
+  overflow: visible;
+}
+.list-panel .schedule-ampm-btn,
+.map-panel .schedule-ampm-btn,
+.schedule-ampm-btn {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  border-radius: 6px !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.list-panel .schedule-ampm-btn:hover:not(:disabled),
+.map-panel .schedule-ampm-btn:hover:not(:disabled),
+.schedule-ampm-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+.list-panel .schedule-ampm-btn.is-selected,
+.map-panel .schedule-ampm-btn.is-selected,
+.schedule-ampm-btn.is-selected {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+.list-panel .schedule-ampm-btn.is-selected:hover:not(:disabled),
+.map-panel .schedule-ampm-btn.is-selected:hover:not(:disabled),
+.schedule-ampm-btn.is-selected:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Dropdown items inside hour/minute menus — restore hover + selected look */
+.list-panel .schedule-picker-menu-item,
+.map-panel .schedule-picker-menu-item,
+.schedule-picker-menu-item {
+  background: transparent !important;
+  border: 0 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+.list-panel .schedule-picker-menu-item:hover:not(:disabled),
+.map-panel .schedule-picker-menu-item:hover:not(:disabled),
+.schedule-picker-menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+.list-panel .schedule-picker-menu-item.is-selected,
+.map-panel .schedule-picker-menu-item.is-selected,
+.schedule-picker-menu-item.is-selected {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  font-weight: 500;
+}
+
 /* Login panel - Forgot password and Sign up: no fill, no border */
 .login-panel button.login-link-btn {
   background: none !important;
@@ -1224,7 +1318,7 @@
 
 /* Icon-only buttons: no fills or outlines (except map buttons) */
 button.icon-only-btn:not(.map-controls-stack *):not(.map-search-stack *),
-button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *) {
+button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-ampm-btn) {
   background: none !important;
   border: none !important;
   backdrop-filter: none !important;
@@ -1232,7 +1326,7 @@ button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *)
   box-shadow: none !important;
 }
 button.icon-only-btn:hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *),
-button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *) {
+button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-ampm-btn) {
   background: none !important;
   border: none !important;
 }
@@ -1554,3 +1648,232 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* =========================================================================
+   Mobile Action Bar (Pipes / Tasks / Schedule)
+   Three visual variants selectable from Settings:
+     .mobile-action-bar--classic   (iOS tab bar)
+     .mobile-action-bar--floating  (macOS dock pill)
+     .mobile-action-bar--rail      (Material bottom nav)
+   Visible on mobile only. Sits above iOS home indicator via safe-area insets.
+   ========================================================================= */
+
+.mobile-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 998;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-action-bar-inner {
+  pointer-events: auto;
+  display: flex;
+  align-items: stretch;
+}
+
+.mobile-action-bar-btn {
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: #ffffff;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+.mobile-action-bar-btn:active {
+  transform: scale(0.96);
+}
+
+/* Hide on tablets and up. The bar is intended for phone-sized screens. */
+@media (min-width: 768px) {
+  .mobile-action-bar {
+    display: none;
+  }
+}
+
+/* ---- Variant: Classic (iOS tab bar) -------------------------------------- */
+.mobile-action-bar--classic .mobile-action-bar-inner {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.mobile-action-bar--classic .mobile-action-bar-btn {
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 8px;
+  min-height: 60px;
+}
+
+.mobile-action-bar--classic .mobile-action-bar-label {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.mobile-action-bar--classic .mobile-action-bar-btn.is-active {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* ---- Variant: Floating (macOS dock) -------------------------------------- */
+.mobile-action-bar--floating {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+.mobile-action-bar--floating .mobile-action-bar-inner {
+  background: rgba(255, 255, 255, 0.3);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+  padding: 6px;
+  gap: 6px;
+  width: min(92vw, 400px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.mobile-action-bar--floating .mobile-action-bar-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 6px;
+  height: 56px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.mobile-action-bar--floating .mobile-action-bar-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.mobile-action-bar--floating .mobile-action-bar-btn.is-active {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.mobile-action-bar--floating .mobile-action-bar-label {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Variant: Rail (Material bottom nav) --------------------------------- */
+.mobile-action-bar--rail .mobile-action-bar-inner {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.mobile-action-bar--rail .mobile-action-bar-btn {
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 6px 8px;
+  min-height: 64px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.mobile-action-bar--rail .mobile-action-bar-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 52px;
+  border-radius: 999px;
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.mobile-action-bar--rail .mobile-action-bar-btn:hover:not(.is-active) {
+  color: #ffffff;
+}
+
+.mobile-action-bar--rail .mobile-action-bar-btn:hover .mobile-action-bar-pill {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.mobile-action-bar--rail .mobile-action-bar-btn.is-active {
+  color: #ffffff;
+}
+
+.mobile-action-bar--rail .mobile-action-bar-btn.is-active .mobile-action-bar-pill {
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+.mobile-action-bar--rail .mobile-action-bar-label {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Action Bar: Menu popup ---- */
+.mobile-action-bar-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.mobile-action-bar-menu {
+  position: fixed;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  /* Default offset — tuned per variant below. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+  min-width: 220px;
+  max-width: calc(100vw - 24px);
+  z-index: 1001;
+  padding: 8px 0;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  transform-origin: bottom right;
+  animation: mobile-action-bar-menu-pop 140ms ease-out;
+}
+
+.mobile-action-bar-menu--classic {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 64px);
+}
+.mobile-action-bar-menu--rail {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+}
+.mobile-action-bar-menu--floating {
+  /* Floating bar pads 12px below itself plus ~68px height. Add a small gap. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+}
+
+@keyframes mobile-action-bar-menu-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* Hide the top-right hamburger button on mobile when the action bar is
+   rendering its own menu, to avoid two menu buttons. */
+@media (max-width: 767px) {
+  .map-controls-menu--hide-mobile {
+    display: none !important;
+  }
+}
+

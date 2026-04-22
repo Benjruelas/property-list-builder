@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRightLeft, Archive, RefreshCw } from 'lucide-react'
+import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRightLeft, Archive, RefreshCw, BadgeCheck } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { DirectionsPicker } from './DirectionsPicker'
-import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts, skipTraceParcels } from '@/utils/skipTrace'
+import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts, skipTraceParcels, buildSkipTraceRequest } from '@/utils/skipTrace'
 import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
@@ -29,6 +29,61 @@ import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 const TASK_MENU_WIDTH = 160
 const TASK_MENU_HEIGHT = 200
 const PADDING = 8
+
+/**
+ * Tiny badge indicating how confident we are that a contact belongs to the
+ * parcel owner. Rendered next to callerId on phones/emails. Skip-trace results
+ * whose callerId doesn't match the owner are already filtered out server-side
+ * (see api/skip-trace.js + api/lib/ownerNameMatch.js); this badge differentiates
+ * a first+last exact match ("high") from a last-name-only or initial match
+ * ("medium").
+ */
+function OwnerMatchBadge({ confidence }) {
+  if (confidence !== 'high' && confidence !== 'medium') return null
+  const isHigh = confidence === 'high'
+  const title = isHigh
+    ? 'Verified owner match (first + last name)'
+    : 'Probable owner match (partial name match)'
+  const color = isHigh ? 'text-emerald-500' : 'text-amber-500'
+  return (
+    <BadgeCheck
+      className={`h-3.5 w-3.5 flex-shrink-0 ${color}`}
+      aria-label={title}
+      title={title}
+    />
+  )
+}
+
+/**
+ * A-F pill for Trestle Real Contact grades. Only the highest-graded contact
+ * makes it this far (server filters), so the grade tells the user exactly
+ * why we picked this number/email: "A = real & contactable, F = deprioritize".
+ */
+function GradeBadge({ grade, activityScore, nameMatch, kind }) {
+  if (!grade) return null
+  const palette = {
+    A: 'bg-green-600 text-white border-green-700',
+    B: 'bg-lime-100 text-lime-700 border-lime-300',
+    C: 'bg-amber-100 text-amber-700 border-amber-300',
+    D: 'bg-orange-100 text-orange-700 border-orange-300',
+    F: 'bg-red-100 text-red-700 border-red-300'
+  }
+  const cls = palette[grade] || 'bg-gray-100 text-gray-700 border-gray-300'
+  const parts = [`Grade ${grade}`]
+  if (kind === 'phone' && typeof activityScore === 'number') parts.push(`activity ${activityScore}`)
+  if (nameMatch === true) parts.push('name match')
+  else if (nameMatch === false) parts.push('name mismatch')
+  const title = parts.join(' · ')
+  return (
+    <span
+      className={`inline-flex items-center justify-center flex-shrink-0 text-[10px] font-semibold leading-none px-1.5 py-0.5 rounded border ${cls}`}
+      title={title}
+      aria-label={title}
+    >
+      {grade}
+    </span>
+  )
+}
 function positionTaskMenu(rect) {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 0
   const vh = typeof window !== 'undefined' ? window.innerHeight : 0
@@ -401,6 +456,8 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                       <a href={`tel:${normalizePhone(p.value)}`} className="text-blue-600 hover:underline truncate">{p.value}</a>
                     )}
                     {p.callerId && <span className="text-gray-500 text-xs flex-shrink-0">({p.callerId})</span>}
+                    <OwnerMatchBadge confidence={p.matchConfidence} />
+                    <GradeBadge grade={p.grade} activityScore={p.activityScore} nameMatch={p.nameMatch} kind="phone" />
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {editContacts ? (
@@ -458,6 +515,8 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                       <span className="text-gray-900 truncate">{e.value}</span>
                     )}
                     {e.callerId && <span className="text-gray-500 text-xs flex-shrink-0">({e.callerId})</span>}
+                    <OwnerMatchBadge confidence={e.matchConfidence} />
+                    <GradeBadge grade={e.grade} nameMatch={e.nameMatch} kind="email" />
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {editContacts ? (
@@ -508,7 +567,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               {skipTracedInfo?.address && (
                 <p className="text-sm text-gray-900">{skipTracedInfo.address}</p>
               )}
-              {!hasSkipTraced && (onSkipTraceParcel || isClosed) && (
+              {(onSkipTraceParcel || isClosed) && (
                 <div className={`flex justify-start w-full ${hasAnyContact ? 'pt-1' : ''}`}>
                   <Button
                     variant="ghost"
@@ -517,11 +576,18 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     onClick={async () => {
                       if (isClosed) {
                         if (closedSkipTracing) return
-                        const addr = dataForParcelDetails?.address || address
-                        if (!addr) { showToast('No address available to skip trace', 'error'); return }
+                        const previousFullAddress = skipTracedInfo?.address || ''
+                        const { payload: requestParcel, error: addressError } = buildSkipTraceRequest(
+                          { ...dataForParcelDetails, id: parcelId || closedId },
+                          { previousFullAddress }
+                        )
+                        if (addressError || !requestParcel) {
+                          showToast(addressError || 'No address available to skip trace', 'error')
+                          return
+                        }
                         try {
                           setClosedSkipTracing(true)
-                          const resp = await skipTraceParcels([{ parcelId: parcelId || closedId, address: addr, ownerName: displayName || undefined }])
+                          const resp = await skipTraceParcels([requestParcel])
                           const info = resp?.results?.[0]?.contactInfo || resp?.results?.[0] || null
                           if (info && !info.error) {
                             saveClosedLeadSkipTraceResult(closedId, {
@@ -531,11 +597,11 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                               emails: info.emails,
                               address: info.address,
                               skipTracedAt: info.skipTracedAt || new Date().toISOString()
-                            })
+                            }, { merge: hasSkipTraced })
                             refreshSkipTrace()
                             scheduleSync()
                             const hasAny = (info.phoneDetails?.length || info.emailDetails?.length || info.phoneNumbers?.length || info.emails?.length)
-                            showToast(hasAny ? 'Contact info added' : 'Skip trace completed — no contacts found', hasAny ? 'success' : 'warning')
+                            showToast(hasAny ? (hasSkipTraced ? 'Contact info refreshed' : 'Contact info added') : 'Skip trace completed — no contacts found', hasAny ? 'success' : 'warning')
                           } else if (info?.error) {
                             showToast(info.error, 'error')
                           } else {
@@ -558,7 +624,9 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                     ) : (
                       <Search className="h-4 w-4 mr-2" />
                     )}
-                    {(isClosed ? closedSkipTracing : isSkipTracingInProgress) ? 'Getting contact...' : 'Get Contact Info'}
+                    {(isClosed ? closedSkipTracing : isSkipTracingInProgress)
+                      ? (hasSkipTraced ? 'Refreshing...' : 'Getting contact...')
+                      : (hasSkipTraced ? 'Refresh Contact Info' : 'Get Contact Info')}
                   </Button>
                 </div>
               )}
@@ -887,7 +955,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/20 text-red-400 transition-colors"
               >
                 <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
-                Remove from Pipe
+                Delete
               </button>
             )}
             {isClosed && onRequestReopenLead && (
