@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
-import { X, FileText, Plus, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2 } from 'lucide-react'
+import { X, FileText, Plus, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, Users } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -396,22 +396,12 @@ export function FormsPanel({
                           <div className="pr-8">
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="font-medium text-sm whitespace-nowrap">{t.name}</div>
-                              {!owned && (
-                                <span
-                                  className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-500/15 border border-blue-400/40 text-blue-200"
-                                  title={`Shared by ${t.ownerEmail || 'owner'}`}
-                                >
-                                  Shared with you
-                                </span>
-                              )}
-                              {owned && hasShares && (
-                                <span
-                                  className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 border border-white/20 text-gray-200"
-                                  title={`Shared with ${sharedEmails.length} user${sharedEmails.length === 1 ? '' : 's'}${teamShares.length > 0 ? ` and ${teamShares.length} team${teamShares.length === 1 ? '' : 's'}` : ''}`}
-                                >
-                                  <Share2 className="h-3 w-3" />
-                                  {sharedEmails.length + teamShares.length}
-                                </span>
+                              {(!owned || hasShares) && (
+                                <Users
+                                  className="h-3.5 w-3.5 flex-shrink-0 text-white/70"
+                                  title={owned ? 'Shared with others' : `Shared by ${t.ownerEmail || 'owner'}`}
+                                  aria-hidden
+                                />
                               )}
                               <TeamBadge teamIds={teamShares} teams={teams} />
                             </div>
