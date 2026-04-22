@@ -2,21 +2,9 @@ import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2
 import { cn } from '@/lib/utils'
 
 /**
- * MobileActionBar — permanent bottom action bar that surfaces the four most
- * frequent flows (Pipes, Tasks, Schedule) plus the hamburger menu outside the
- * top-right control stack on mobile.
- *
- * Three visual variants are available via the `variant` prop so the user can
- * compare designs before committing:
- *   - 'classic'  : iOS-style tab bar. Full-width glass strip flush to the
- *                  bottom edge, equal-width columns, icon over label.
- *   - 'floating' : macOS dock-style pill. Auto-width, centered, floats above
- *                  the edge, icons only with tooltips (labels on hover/focus).
- *   - 'rail'     : Material-style bottom navigation. Full-width bar with a
- *                  top border, accent pill on the active item, icon over
- *                  slightly bolder label.
- *
- * Pass variant='off' (or nothing matching the above) to render nothing.
+ * MobileActionBar — permanent floating bottom action bar (macOS dock style).
+ * Surfaces the four most frequent flows (Pipes, Tasks, Schedule, Menu)
+ * outside the top-right control stack on mobile.
  */
 
 /**
@@ -57,7 +45,6 @@ const ACTIONS = [
 ]
 
 export function MobileActionBar({
-  variant = 'classic',
   activeId = null,
   onOpenPipes,
   onOpenTasks,
@@ -76,8 +63,6 @@ export function MobileActionBar({
   currentUser,
   onLogin,
 }) {
-  if (variant === 'off') return null
-
   const handlers = {
     pipes: onOpenPipes,
     tasks: onOpenTasks,
@@ -100,13 +85,7 @@ export function MobileActionBar({
           aria-expanded={id === 'menu' ? showMenu : undefined}
           data-tour={`action-bar-${id}`}
         >
-          {variant === 'rail' ? (
-            <span className="mobile-action-bar-pill">
-              <Icon className="h-6 w-6" />
-            </span>
-          ) : (
-            <Icon className="h-6 w-6" />
-          )}
+          <Icon className="h-6 w-6" />
           <span className="mobile-action-bar-label">{label}</span>
         </button>
       )
@@ -122,10 +101,7 @@ export function MobileActionBar({
         aria-hidden="true"
       />
       <div
-        className={cn(
-          'mobile-action-bar-menu map-panel hamburger-menu',
-          `mobile-action-bar-menu--${variant}`,
-        )}
+        className="mobile-action-bar-menu map-panel hamburger-menu"
         role="menu"
       >
         <button
@@ -217,7 +193,7 @@ export function MobileActionBar({
     <>
       {menuPopup}
       <nav
-        className={cn('mobile-action-bar', `mobile-action-bar--${variant}`)}
+        className="mobile-action-bar"
         role="navigation"
         aria-label="Primary actions"
       >

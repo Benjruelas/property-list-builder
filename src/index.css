@@ -1650,12 +1650,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 /* =========================================================================
-   Mobile Action Bar (Pipes / Tasks / Schedule)
-   Three visual variants selectable from Settings:
-     .mobile-action-bar--classic   (iOS tab bar)
-     .mobile-action-bar--floating  (macOS dock pill)
-     .mobile-action-bar--rail      (Material bottom nav)
-   Visible on mobile only. Sits above iOS home indicator via safe-area insets.
+   Mobile Action Bar (Pipes / Tasks / Schedule / Menu)
+   macOS-dock-style floating pill, phone-only, anchored above the home
+   indicator via safe-area insets.
    ========================================================================= */
 
 .mobile-action-bar {
@@ -1667,7 +1664,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   display: flex;
   justify-content: center;
   pointer-events: none;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -1676,68 +1673,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   pointer-events: auto;
   display: flex;
   align-items: stretch;
-}
-
-.mobile-action-bar-btn {
-  -webkit-tap-highlight-color: transparent;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  color: #ffffff;
-  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  touch-action: manipulation;
-}
-
-.mobile-action-bar-btn:active {
-  transform: scale(0.96);
-}
-
-/* Hide on tablets and up. The bar is intended for phone-sized screens. */
-@media (min-width: 768px) {
-  .mobile-action-bar {
-    display: none;
-  }
-}
-
-/* ---- Variant: Classic (iOS tab bar) -------------------------------------- */
-.mobile-action-bar--classic .mobile-action-bar-inner {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.3);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  backdrop-filter: blur(12px) saturate(180%);
-  border-top: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12);
-}
-
-.mobile-action-bar--classic .mobile-action-bar-btn {
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 4px 8px;
-  min-height: 60px;
-}
-
-.mobile-action-bar--classic .mobile-action-bar-label {
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.mobile-action-bar--classic .mobile-action-bar-btn.is-active {
-  background: rgba(255, 255, 255, 0.45);
-}
-
-/* ---- Variant: Floating (macOS dock) -------------------------------------- */
-.mobile-action-bar--floating {
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-}
-
-.mobile-action-bar--floating .mobile-action-bar-inner {
   background: rgba(255, 255, 255, 0.3);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
   backdrop-filter: blur(12px) saturate(180%);
@@ -1749,7 +1684,16 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-.mobile-action-bar--floating .mobile-action-bar-btn {
+.mobile-action-bar-btn {
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  cursor: pointer;
+  color: #ffffff;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
   flex: 1 1 0;
   min-width: 0;
   flex-direction: column;
@@ -1761,74 +1705,32 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   border: 1px solid transparent;
 }
 
-.mobile-action-bar--floating .mobile-action-bar-btn:hover {
+.mobile-action-bar-btn:hover {
   background: rgba(255, 255, 255, 0.5);
   border-color: rgba(255, 255, 255, 0.7);
 }
 
-.mobile-action-bar--floating .mobile-action-bar-btn.is-active {
+.mobile-action-bar-btn.is-active {
   background: rgba(255, 255, 255, 0.6);
   border-color: rgba(255, 255, 255, 0.75);
 }
 
-.mobile-action-bar--floating .mobile-action-bar-label {
+.mobile-action-bar-btn:active {
+  transform: scale(0.96);
+}
+
+.mobile-action-bar-label {
   font-size: 10px;
   line-height: 1;
   font-weight: 500;
   letter-spacing: 0.02em;
 }
 
-/* ---- Variant: Rail (Material bottom nav) --------------------------------- */
-.mobile-action-bar--rail .mobile-action-bar-inner {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.3);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  backdrop-filter: blur(12px) saturate(180%);
-  border-top: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12);
-}
-
-.mobile-action-bar--rail .mobile-action-bar-btn {
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 6px 8px;
-  min-height: 64px;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.mobile-action-bar--rail .mobile-action-bar-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  width: 52px;
-  border-radius: 999px;
-  transition: background-color 180ms ease, box-shadow 180ms ease;
-}
-
-.mobile-action-bar--rail .mobile-action-bar-btn:hover:not(.is-active) {
-  color: #ffffff;
-}
-
-.mobile-action-bar--rail .mobile-action-bar-btn:hover .mobile-action-bar-pill {
-  background: rgba(255, 255, 255, 0.4);
-}
-
-.mobile-action-bar--rail .mobile-action-bar-btn.is-active {
-  color: #ffffff;
-}
-
-.mobile-action-bar--rail .mobile-action-bar-btn.is-active .mobile-action-bar-pill {
-  background: rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
-}
-
-.mobile-action-bar--rail .mobile-action-bar-label {
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+/* Hide on tablets and up. The bar is intended for phone-sized screens. */
+@media (min-width: 768px) {
+  .mobile-action-bar {
+    display: none;
+  }
 }
 
 /* ---- Action Bar: Menu popup ---- */
@@ -1841,8 +1743,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .mobile-action-bar-menu {
   position: fixed;
   right: calc(12px + env(safe-area-inset-right, 0px));
-  /* Default offset — tuned per variant below. */
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+  /* Floating bar pads 12px below itself plus ~68px height. Add a small gap. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
   min-width: 220px;
   max-width: calc(100vw - 24px);
   z-index: 1001;
@@ -1851,17 +1753,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   transform-origin: bottom right;
   animation: mobile-action-bar-menu-pop 140ms ease-out;
-}
-
-.mobile-action-bar-menu--classic {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 64px);
-}
-.mobile-action-bar-menu--rail {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
-}
-.mobile-action-bar-menu--floating {
-  /* Floating bar pads 12px below itself plus ~68px height. Add a small gap. */
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
 }
 
 @keyframes mobile-action-bar-menu-pop {

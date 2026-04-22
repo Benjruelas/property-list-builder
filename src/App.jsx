@@ -2475,7 +2475,7 @@ function App() {
         onLogout={logout}
         showMenu={showMenu}
         setShowMenu={setShowMenu}
-        hideMenuOnMobile={(settings.mobileActionBar || 'classic') !== 'off'}
+        hideMenuOnMobile={true}
         onCloseParcelPopup={() => {
           setPopupData(null)
           setClickedParcelId(null)
@@ -2484,7 +2484,6 @@ function App() {
       />
 
       <MobileActionBar
-        variant={settings.mobileActionBar || 'classic'}
         activeId={
           isDealPipelineOpen ? 'pipes'
           : isTasksPanelOpen ? 'tasks'

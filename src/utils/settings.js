@@ -14,9 +14,6 @@ export const DEFAULT_SETTINGS = {
   pathSmoothing: 'normal',     // 'off' | 'light' | 'normal' | 'heavy'
   distanceUnit: 'miles',       // 'miles' | 'km'
 
-  /** Style of the mobile bottom action bar (Pipes / Tasks / Schedule) */
-  mobileActionBar: 'classic',  // 'off' | 'classic' | 'floating' | 'rail'
-
   defaultEmail: '',            // blank = use real recipient
   emailTestMode: false,
   emailSignatureEnabled: false,
