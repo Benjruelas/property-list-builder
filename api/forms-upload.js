@@ -1,5 +1,6 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
 
 /**
  * Vercel Serverless Function - form PDF upload/download via R2.
@@ -7,10 +8,48 @@ import { resolveDevBypassUser } from './lib/devBypassUsers.js'
  * - POST (auth'd): { templateId, pdfBase64 } → writes to forms/{uid}/{templateId}/original.pdf.
  *   Vercel JSON body cap is ~4.5MB so PDF source should be under ~3MB after base64 overhead.
  *   Returns { key, url } where url is the GET endpoint on this same function.
- * - GET  (auth'd): ?key=forms/{uid}/... → streams the PDF back (owner-scoped by key prefix).
+ * - GET  (auth'd): ?key=forms/{uid}/... → streams the PDF back. Access is
+ *   granted to the template owner OR anyone with whom the template is
+ *   shared (sharedWith email / teamShares), so shared users can render
+ *   and fill the form.
  */
 
 const MAX_PDF_BYTES = 6 * 1024 * 1024 // hard cap before Vercel rejects
+
+let kv = null
+let kvAvailable = false
+
+if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+  try {
+    const kvModule = await import('@vercel/kv')
+    kv = kvModule.kv
+    kvAvailable = true
+  } catch {
+    kvAvailable = false
+  }
+} else if (process.env.REDIS_URL) {
+  try {
+    const { createClient } = await import('redis')
+    kv = createClient({ url: process.env.REDIS_URL })
+    await kv.connect()
+    kvAvailable = true
+  } catch {
+    kvAvailable = false
+  }
+}
+
+const TEMPLATES_KV_KEY = 'user_form_templates'
+
+async function loadTemplatesSnapshot() {
+  if (!kvAvailable || !kv) return []
+  try {
+    const data = await kv.get(TEMPLATES_KV_KEY)
+    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 
 let _s3
 function s3() {
@@ -115,9 +154,36 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const key = String(req.query.key || '')
       if (!key) return res.status(400).json({ error: 'key is required' })
-      if (!key.startsWith(`forms/${user.uid}/`)) {
+
+      // Key format: forms/{ownerUid}/{templateId}/original.pdf
+      const parts = key.split('/')
+      if (parts.length < 4 || parts[0] !== 'forms') {
+        return res.status(400).json({ error: 'Malformed key' })
+      }
+      const templateId = parts[2]
+
+      // Fast path: the requester is the owner by key prefix. This keeps
+      // local dev / single-user use unchanged even when KV is unavailable.
+      let allowed = key.startsWith(`forms/${user.uid}/`)
+
+      if (!allowed) {
+        // Share path: look up the template and verify access via the same
+        // helper the forms API uses (sharedWith email or team membership).
+        const [templates, allTeams] = await Promise.all([
+          loadTemplatesSnapshot(),
+          getAllTeams()
+        ])
+        const template = templates.find((t) => t.id === templateId)
+        if (template) {
+          const teamsIndex = fullTeamsIndex(allTeams)
+          if (resolveAccess(template, user, teamsIndex)) allowed = true
+        }
+      }
+
+      if (!allowed) {
         return res.status(403).json({ error: 'Forbidden' })
       }
+
       try {
         const r = await s3().send(new GetObjectCommand({
           Bucket: process.env.R2_BUCKET_NAME,
