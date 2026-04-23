@@ -851,10 +851,8 @@ export function DealPipeline({
                       </button>
                       <div className="flex-1 min-w-0">
                         <div className={task.completed ? 'line-through text-gray-500' : 'font-medium'}>{task.title || '(untitled)'}</div>
-                        {task.parcelId ? (
+                        {task.parcelId && (
                           <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={getLeadLabel(task.parcelId)}>Lead: {getLeadLabel(task.parcelId)}</div>
-                        ) : (
-                          <div className="text-[10px] text-gray-500 mt-0.5 truncate">Pipeline task</div>
                         )}
                         {(task.completed || task.scheduledAt) && (
                           <div className="text-[10px] text-gray-500 mt-0.5">

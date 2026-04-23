@@ -913,9 +913,7 @@ function TaskRow({ task, displayLeads, onToggle, onActivate, onEdit, onDelete, o
   const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
   const leadLine = task.parcelId
     ? `Lead: ${getLeadLabel(lead, task.parcelId)}`
-    : task.pipelineId
-      ? 'Pipeline task'
-      : null
+    : null
   const isDone = task.completed
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
