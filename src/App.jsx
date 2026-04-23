@@ -50,7 +50,8 @@ import { RoofInspectorPanel } from './components/RoofInspectorPanel'
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { getSettings, updateSettings } from './utils/settings'
-import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks } from './utils/leadTasks'
+import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines } from './utils/leadTasks'
+import { addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedLeads, addClosedLead, saveClosedLeads, buildClosedLeadRecord, removeClosedLead } from './utils/closedLeads'
 import { showLocalNotification } from './utils/pushNotifications'
@@ -791,6 +792,37 @@ function App() {
       setActivePipelineId(null)
     }
   }, [currentUser, refreshPipelines])
+
+  // One-shot client migration: move local tasks with a pipelineId up to pipeline.tasks
+  const leadTasksMigrationRunRef = useRef(false)
+  useEffect(() => {
+    if (!currentUser?.uid || !getToken) return
+    if (pipelines.length === 0) return
+    if (leadTasksMigrationRunRef.current) return
+    const flagKey = `leadTasksMigratedV1:${currentUser.uid}`
+    let flagged = false
+    try { flagged = localStorage.getItem(flagKey) === 'true' } catch { /* ignore */ }
+    if (flagged) {
+      leadTasksMigrationRunRef.current = true
+      return
+    }
+    leadTasksMigrationRunRef.current = true
+    ;(async () => {
+      try {
+        const stats = await migrateLeadTasksToPipelines(
+          pipelines,
+          (pipelineId, task) => addPipelineTask(getToken, pipelineId, task)
+        )
+        if (stats.migrated > 0) {
+          await refreshPipelines()
+        }
+        try { localStorage.setItem(flagKey, 'true') } catch { /* ignore */ }
+        scheduleUserDataSync(getToken)
+      } catch (e) {
+        console.warn('leadTasks migration failed:', e?.message || e)
+      }
+    })()
+  }, [currentUser?.uid, getToken, pipelines, refreshPipelines])
 
   // Load deal pipeline leads when panel opens (localStorage mode only; API mode uses pipelines)
   useEffect(() => {
@@ -2715,6 +2747,9 @@ function App() {
         skipTracingInProgress={skipTracingInProgress}
         onGoToParcelOnMap={handleGoToParcelOnMap}
         onRequestRemoveLead={handleDeleteLead}
+        getToken={getToken}
+        currentUser={currentUser}
+        onPipelinesChange={refreshPipelines}
       />
 
       <TasksPanel
@@ -2725,6 +2760,9 @@ function App() {
         leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
         onLeadsChange={pipelines.length > 0 ? () => refreshPipelines() : setDealPipelineLeads}
         onOpenTaskInDealPipeline={handleOpenTaskInDealPipeline}
+        getToken={getToken}
+        currentUser={currentUser}
+        onPipelinesChange={refreshPipelines}
       />
 
       <PhoneActionPanel
@@ -2876,6 +2914,8 @@ function App() {
         }}
         onRequestReopenLead={handleReopenLead}
         onGoToParcelOnMap={handleGoToParcelOnMap}
+        onPipelinesChange={refreshPipelines}
+        getToken={getToken}
       />
 
       <RoofInspectorPanel

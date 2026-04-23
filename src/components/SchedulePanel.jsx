@@ -4,7 +4,9 @@ import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
 import { loadLeads, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
-import { getAllTasks, addTask } from '@/utils/leadTasks'
+import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
+import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
+import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { LeadDetails } from './LeadDetails'
@@ -213,7 +215,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask }) {
+export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => {
     if (pipelines.length > 0) {
@@ -241,9 +243,16 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
   const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
 
+  const apiMode = pipelines.length > 0
+  const [pipePickerState, setPipePickerState] = useState(null)
+
   const refreshTasks = useCallback(() => {
-    setAllTasks(getAllTasks())
-  }, [])
+    if (apiMode) {
+      setAllTasks([...getPersonalTasks(), ...flattenPipelineTasks(pipelines)])
+    } else {
+      setAllTasks(getAllTasks())
+    }
+  }, [apiMode, pipelines])
 
   const selectedLeadPipelineId = useMemo(() => {
     if (!selectedLead) return null
@@ -346,6 +355,32 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
     return h < 12 ? `${h} AM` : `${h - 12} PM`
   }
 
+  const finalizeTaskCreate = useCallback(async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt }) => {
+    if (pipelineId) {
+      try {
+        await addPipelineTask(getToken, pipelineId, {
+          title,
+          parcelId: parcelId || null,
+          scheduledAt,
+          scheduledEndAt
+        })
+        await onPipelinesChange?.()
+        showToast('Task scheduled', 'success')
+      } catch (err) {
+        showToast(err.message || 'Could not add task', 'error')
+        return
+      }
+    } else {
+      addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
+      refreshTasks()
+      scheduleSync()
+      showToast('Task scheduled', 'success')
+    }
+    setShowAddTask(false)
+    const lead = parcelId ? displayLeads.find((l) => l.parcelId === parcelId) : null
+    if (lead) setSelectedLead(lead)
+  }, [getToken, onPipelinesChange, refreshTasks, scheduleSync, displayLeads])
+
   const handleCreateTask = () => {
     const t = addTaskTitle.trim() || 'Task'
     const endAt = addTaskScheduledEndAt && addTaskScheduledEndAt > (addTaskScheduledAt || 0) ? addTaskScheduledEndAt : null
@@ -353,19 +388,48 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
       showToast('End time must be after start time', 'error')
       return
     }
-    let pipelineId = null
-    let parcelId = addTaskLeadId ? String(addTaskLeadId) : null
+    const parcelId = addTaskLeadId ? String(addTaskLeadId) : null
+    const payload = { title: t, scheduledAt: addTaskScheduledAt, scheduledEndAt: endAt, parcelId }
+
     if (parcelId) {
+      // Lead suggestion carries __pipelineId when picked from an API pipe
       const lead = displayLeads.find((l) => l.parcelId === parcelId)
-      pipelineId = lead?.__pipelineId ?? activePipelineId ?? null
+      if (lead?.__pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId: lead.__pipelineId })
+        return
+      }
+      // API mode but __pipelineId missing — look up all pipes containing this parcel
+      if (apiMode) {
+        const owning = pipelinesContainingParcel(pipelines, parcelId)
+        if (owning.length === 1) {
+          finalizeTaskCreate({ ...payload, pipelineId: owning[0].id })
+          return
+        }
+        if (owning.length > 1) {
+          setPipePickerState({
+            open: true,
+            eligiblePipelines: owning,
+            allowNoPipe: false,
+            payload
+          })
+          return
+        }
+      }
+      finalizeTaskCreate({ ...payload, pipelineId: null })
+      return
     }
-    addTask({ pipelineId, parcelId, title: t, scheduledAt: addTaskScheduledAt, scheduledEndAt: endAt })
-    refreshTasks()
-    scheduleSync()
-    showToast('Task scheduled', 'success')
-    setShowAddTask(false)
-    const lead = parcelId ? displayLeads.find((l) => l.parcelId === parcelId) : null
-    if (lead) setSelectedLead(lead)
+
+    // No parcel selected
+    if (apiMode && pipelines.length > 0) {
+      setPipePickerState({
+        open: true,
+        eligiblePipelines: pipelines,
+        allowNoPipe: true,
+        payload
+      })
+      return
+    }
+    finalizeTaskCreate({ ...payload, pipelineId: null })
   }
 
   const leadToParcelData = (lead) => {
@@ -959,6 +1023,8 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
           lead={selectedLead}
           pipelineId={selectedLeadPipelineId}
           parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
+          onPipelinesChange={onPipelinesChange}
+          getToken={getToken}
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
@@ -992,6 +1058,28 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
               onOpenAddTask(lead, pid)
             }
           } : undefined}
+        />
+
+        <ConvertToLeadPipelineDialog
+          open={!!pipePickerState?.open}
+          onOpenChange={(o) => { if (!o) setPipePickerState(null) }}
+          pipelines={pipePickerState?.eligiblePipelines ?? []}
+          currentUser={currentUser}
+          title="Pick a pipe for this task"
+          description="Everyone the pipe is shared with will see this task."
+          allowNoPipe={!!pipePickerState?.allowNoPipe}
+          noPipeLabel="No pipe"
+          noPipeDescription="Only you will see this task."
+          onSelect={(pipelineId) => {
+            const payload = pipePickerState?.payload
+            setPipePickerState(null)
+            if (payload) finalizeTaskCreate({ ...payload, pipelineId })
+          }}
+          onSelectNoPipe={() => {
+            const payload = pipePickerState?.payload
+            setPipePickerState(null)
+            if (payload) finalizeTaskCreate({ ...payload, pipelineId: null })
+          }}
         />
       </DialogContent>
     </Dialog>

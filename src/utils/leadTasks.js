@@ -222,6 +222,103 @@ export const getAllTasks = () => {
 }
 
 /**
+ * Personal tasks only (no pipelineId). Used by TasksPanel / SchedulePanel
+ * when merging with pipeline-scoped tasks fetched via pipelines[].tasks.
+ */
+export const getPersonalTasks = () => {
+  const { tasks } = loadStore()
+  const result = []
+  for (const t of tasks) {
+    if (!(t.title ?? '').toString().trim()) continue
+    if (t.pipelineId != null) continue
+    result.push(normalizeTask(t))
+  }
+  return sortTasksFlat(result)
+}
+
+/**
+ * Remove a task from the local store by id. Used after we successfully
+ * promote a personal task with a pipelineId to pipeline.tasks.
+ */
+export const removeLocalTaskById = (taskId) => {
+  if (!taskId) return
+  const store = loadStore()
+  const before = store.tasks.length
+  store.tasks = store.tasks.filter((t) => t.id !== taskId)
+  if (store.tasks.length !== before) saveStore(store)
+}
+
+/**
+ * One-shot client-side migration: any local task with a pipelineId that
+ * resolves to a pipe the user can access (owner or sharer — which is
+ * implicitly true if the pipe shows up in their pipelines[] fetch) is
+ * pushed up to pipeline.tasks via addPipelineTaskFn and then removed
+ * from the local store.
+ *
+ * Tasks whose pipelineId does not resolve (orphan, pipe deleted, access
+ * lost) are left alone.
+ *
+ * Returns { migrated: number, skipped: number, failed: number }.
+ */
+export const migrateLeadTasksToPipelines = async (pipelines, addPipelineTaskFn) => {
+  const stats = { migrated: 0, skipped: 0, failed: 0 }
+  if (!Array.isArray(pipelines) || pipelines.length === 0) return stats
+  if (typeof addPipelineTaskFn !== 'function') return stats
+
+  const pipeIds = new Set(pipelines.map((p) => p.id))
+  const { tasks } = loadStore()
+  const candidates = tasks.filter((t) => {
+    if (t.pipelineId == null) return false
+    if (!pipeIds.has(t.pipelineId)) return false
+    return (t.title ?? '').toString().trim().length > 0
+  })
+
+  for (const t of candidates) {
+    try {
+      await addPipelineTaskFn(t.pipelineId, {
+        id: t.id,
+        title: t.title,
+        completed: !!t.completed,
+        createdAt: t.createdAt,
+        completedAt: t.completedAt ?? null,
+        scheduledAt: t.scheduledAt ?? null,
+        scheduledEndAt: t.scheduledEndAt ?? null,
+        parcelId: t.parcelId ?? null
+      })
+      removeLocalTaskById(t.id)
+      stats.migrated += 1
+    } catch (e) {
+      const msg = e && e.message ? e.message : ''
+      // parcelId validation failures: strip parcelId and retry as pipe-standalone
+      if (/parcelId/i.test(msg)) {
+        try {
+          await addPipelineTaskFn(t.pipelineId, {
+            id: t.id,
+            title: t.title,
+            completed: !!t.completed,
+            createdAt: t.createdAt,
+            completedAt: t.completedAt ?? null,
+            scheduledAt: t.scheduledAt ?? null,
+            scheduledEndAt: t.scheduledEndAt ?? null,
+            parcelId: null
+          })
+          removeLocalTaskById(t.id)
+          stats.migrated += 1
+          continue
+        } catch {
+          stats.failed += 1
+          continue
+        }
+      }
+      stats.failed += 1
+    }
+  }
+
+  stats.skipped = tasks.filter((t) => t.pipelineId != null && !pipeIds.has(t.pipelineId)).length
+  return stats
+}
+
+/**
  * Tasks for a lead (optionally scoped to a pipeline).
  */
 export const getLeadTasks = (parcelId, pipelineId = null) => {

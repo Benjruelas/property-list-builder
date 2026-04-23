@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadLeads, saveLeads, loadTitle, saveTitle, formatTimeInState, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
-import { getAllTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline, taskBelongsToLocalLeads } from '@/utils/leadTasks'
+import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline, taskBelongsToLocalLeads } from '@/utils/leadTasks'
+import { addPipelineTask, updatePipelineTask, togglePipelineTask, removePipelineTask, flattenPipelineTasks } from '@/utils/pipelineTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
@@ -185,8 +186,14 @@ export function DealPipeline({
   }, [sharePipelineId, shareEmail, runShareValidation])
 
   const refreshAllTasks = useCallback(() => {
-    setAllTasks(getAllTasks())
-  }, [])
+    // Personal tasks = local leadTasks store with no pipelineId (tasks with a
+    // pipelineId now live on the pipeline doc; legacy rows are migrated away
+    // on first load in App.jsx). Pipeline tasks are flattened from
+    // pipelines[].tasks which are fetched by /api/pipelines (access-filtered).
+    const personal = apiMode ? getPersonalTasks() : getAllTasks()
+    const pipeScoped = apiMode ? flattenPipelineTasks(pipelines) : []
+    setAllTasks([...personal, ...pipeScoped])
+  }, [apiMode, pipelines])
 
   useEffect(() => {
     if (!selectedLead) refreshAllTasks()
@@ -425,6 +432,68 @@ export function DealPipeline({
     }
     return allTasks.filter((t) => taskBelongsToLocalLeads(t, displayLeads))
   }, [allTasks, apiMode, activePipelineId, pipelines, displayLeads])
+
+  const commitNewTask = useCallback(async (title) => {
+    const trimmed = (title || '').toString().trim()
+    if (!trimmed) return
+    if (apiMode && activePipelineId) {
+      try {
+        await addPipelineTask(getToken, activePipelineId, {
+          title: trimmed,
+          parcelId: addTaskLeadId || null,
+          scheduledAt: addTaskScheduledAt,
+          scheduledEndAt: addTaskScheduledEndAt
+        })
+        await onPipelinesChange?.()
+        showToast('Task added', 'success')
+      } catch (err) {
+        showToast(err.message || 'Could not add task', 'error')
+        return
+      }
+    } else {
+      addTask({
+        pipelineId: null,
+        parcelId: addTaskLeadId || null,
+        title: trimmed,
+        scheduledAt: addTaskScheduledAt,
+        scheduledEndAt: addTaskScheduledEndAt
+      })
+      refreshAllTasks()
+      scheduleSync()
+      showToast('Task added', 'success')
+    }
+    setShowAddTaskDialog(false)
+    const lead = addTaskLeadId ? displayLeads.find((l) => l.parcelId === addTaskLeadId) : null
+    if (lead) setSelectedLead(lead)
+  }, [apiMode, activePipelineId, getToken, addTaskLeadId, addTaskScheduledAt, addTaskScheduledEndAt, onPipelinesChange, refreshAllTasks, scheduleSync, displayLeads])
+
+  const commitEditTask = useCallback(async (title) => {
+    const trimmed = (title || '').toString().trim()
+    if (!trimmed || !editTask?.task) return
+    const task = editTask.task
+    if (task.__source === 'pipeline' && task.pipelineId) {
+      try {
+        await updatePipelineTask(getToken, task.pipelineId, {
+          id: task.id,
+          title: trimmed,
+          scheduledAt: editTaskScheduledAt,
+          scheduledEndAt: editTaskScheduledEndAt
+        })
+        await onPipelinesChange?.()
+        showToast('Task updated', 'success')
+        setEditTask(null)
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
+    updateLeadTaskTitle(task.parcelId, task.id, trimmed)
+    updateLeadTaskSchedule(task.parcelId, task.id, editTaskScheduledAt, editTaskScheduledEndAt)
+    refreshAllTasks()
+    scheduleSync()
+    showToast('Task updated', 'success')
+    setEditTask(null)
+  }, [editTask, editTaskScheduledAt, editTaskScheduledEndAt, getToken, onPipelinesChange, refreshAllTasks, scheduleSync])
 
   const getLeadLabel = (parcelId) => {
     if (!parcelId) return 'Pipeline task'
@@ -756,7 +825,21 @@ export function DealPipeline({
                     <div className="flex items-start gap-2">
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); toggleLeadTask(task.parcelId, task.id); refreshAllTasks(); scheduleSync() }}
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (task.__source === 'pipeline' && task.pipelineId) {
+                            try {
+                              await togglePipelineTask(getToken, task.pipelineId, task.id)
+                              onPipelinesChange?.()
+                            } catch (err) {
+                              showToast(err.message || 'Failed to update task', 'error')
+                            }
+                          } else {
+                            toggleLeadTask(task.parcelId, task.id)
+                            refreshAllTasks()
+                            scheduleSync()
+                          }
+                        }}
                         className="flex-shrink-0 mt-0.5 text-gray-600 hover:text-gray-900"
                         title={task.completed ? 'Mark incomplete' : 'Mark done'}
                       >
@@ -856,6 +939,8 @@ export function DealPipeline({
         lead={selectedLead}
         pipelineId={apiMode ? activePipelineId : null}
         pipelineTeamShares={apiMode ? (pipelines.find((p) => p.id === activePipelineId)?.teamShares || []) : []}
+        pipelines={pipelines}
+        onPipelinesChange={onPipelinesChange}
         getToken={getToken}
         onTeamTasksChange={() => {
           onPipelinesChange?.()
@@ -997,23 +1082,11 @@ export function DealPipeline({
                 placeholder="e.g. Call back on Monday"
                 className="text-sm"
                 autoFocus={addTaskFromLead}
-                onKeyDown={(e) => {
+                onKeyDown={async (e) => {
                   if (e.key === 'Enter') {
                     const t = addTaskTitle.trim()
                     if (t) {
-                      addTask({
-                        pipelineId: apiMode && activePipelineId ? activePipelineId : null,
-                        parcelId: addTaskLeadId || null,
-                        title: t,
-                        scheduledAt: addTaskScheduledAt,
-                        scheduledEndAt: addTaskScheduledEndAt
-                      })
-                      refreshAllTasks()
-                      scheduleSync()
-                      showToast('Task added', 'success')
-                      setShowAddTaskDialog(false)
-                      const lead = addTaskLeadId ? displayLeads.find((l) => l.parcelId === addTaskLeadId) : null
-                      if (lead) setSelectedLead(lead)
+                      await commitNewTask(t)
                     }
                   }
                 }}
@@ -1032,22 +1105,10 @@ export function DealPipeline({
                 size="sm"
                 variant="outline"
                 className="create-list-btn flex-1"
-                onClick={() => {
+                onClick={async () => {
                   const t = addTaskTitle.trim()
                   if (t) {
-                    addTask({
-                      pipelineId: apiMode && activePipelineId ? activePipelineId : null,
-                      parcelId: addTaskLeadId || null,
-                      title: t,
-                      scheduledAt: addTaskScheduledAt,
-                      scheduledEndAt: addTaskScheduledEndAt
-                    })
-                    refreshAllTasks()
-                    scheduleSync()
-                    showToast('Task added', 'success')
-                    setShowAddTaskDialog(false)
-                    const lead = addTaskLeadId ? displayLeads.find((l) => l.parcelId === addTaskLeadId) : null
-                    if (lead) setSelectedLead(lead)
+                    await commitNewTask(t)
                   }
                 }}
                 disabled={!addTaskTitle.trim()}
@@ -1105,17 +1166,10 @@ export function DealPipeline({
                   onChange={(e) => setEditTaskTitle(e.target.value)}
                   placeholder="e.g. Call back on Monday"
                   className="text-sm"
-                  onKeyDown={(e) => {
+                  onKeyDown={async (e) => {
                     if (e.key === 'Enter') {
                       const t = editTaskTitle.trim()
-                      if (t) {
-                        updateLeadTaskTitle(editTask.task.parcelId, editTask.task.id, t)
-                        updateLeadTaskSchedule(editTask.task.parcelId, editTask.task.id, editTaskScheduledAt, editTaskScheduledEndAt)
-                        refreshAllTasks()
-                        scheduleSync()
-                        showToast('Task updated', 'success')
-                        setEditTask(null)
-                      }
+                      if (t) await commitEditTask(t)
                     }
                   }}
                 />
@@ -1133,16 +1187,9 @@ export function DealPipeline({
                   size="sm"
                   variant="outline"
                   className="create-list-btn flex-1"
-                  onClick={() => {
+                  onClick={async () => {
                     const t = editTaskTitle.trim()
-                    if (t) {
-                      updateLeadTaskTitle(editTask.task.parcelId, editTask.task.id, t)
-                      updateLeadTaskSchedule(editTask.task.parcelId, editTask.task.id, editTaskScheduledAt, editTaskScheduledEndAt)
-                      refreshAllTasks()
-                      scheduleSync()
-                      showToast('Task updated', 'success')
-                      setEditTask(null)
-                    }
+                    if (t) await commitEditTask(t)
                   }}
                   disabled={!editTaskTitle.trim()}
                 >
@@ -1473,8 +1520,18 @@ export function DealPipeline({
                   message: `Delete "${(taskMenu.task.title || '').trim() || '(untitled)'}"?`,
                   confirmLabel: 'Delete',
                   variant: 'danger',
-                  onConfirm: () => {
-                    deleteLeadTask(taskMenu.task.parcelId, taskMenu.task.id)
+                  onConfirm: async () => {
+                    const task = taskMenu.task
+                    if (task.__source === 'pipeline' && task.pipelineId) {
+                      try {
+                        await removePipelineTask(getToken, task.pipelineId, task.id)
+                        await onPipelinesChange?.()
+                      } catch (err) {
+                        showToast(err.message || 'Could not delete task', 'error')
+                      }
+                      return
+                    }
+                    deleteLeadTask(task.parcelId, task.id)
                     refreshAllTasks()
                     scheduleSync()
                   }

@@ -6,8 +6,10 @@ import { Input } from './ui/input'
 import { loadLeads, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import {
   getAllTasks,
+  getPersonalTasks,
   toggleLeadTask,
   deleteLeadTask,
+  removeLocalTaskById,
   formatTaskScheduledDate,
   formatTaskCompletedDate,
   groupOpenTasksByPipeline,
@@ -16,6 +18,15 @@ import {
   getPipelineForTask,
   updateTaskById
 } from '@/utils/leadTasks'
+import {
+  addPipelineTask,
+  updatePipelineTask,
+  togglePipelineTask,
+  removePipelineTask,
+  flattenPipelineTasks,
+  pipelinesContainingParcel
+} from '@/utils/pipelineTasks'
+import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 
@@ -97,7 +108,10 @@ export function TasksPanel({
   onLeadsChange,
   activePipelineId = null,
   onOpenTaskInDealPipeline,
-  onOpenScheduleAtDate
+  onOpenScheduleAtDate,
+  getToken = null,
+  currentUser = null,
+  onPipelinesChange
 }) {
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
@@ -157,9 +171,15 @@ export function TasksPanel({
     return results
   }, [assignLeadSearch, assignLeadsPool, displayLeads, apiMode])
 
+  const [pipePickerState, setPipePickerState] = useState(null)
+
   const refreshTasks = useCallback(() => {
-    setAllTasks(getAllTasks())
-  }, [])
+    if (apiMode) {
+      setAllTasks([...getPersonalTasks(), ...flattenPipelineTasks(pipelines)])
+    } else {
+      setAllTasks(getAllTasks())
+    }
+  }, [apiMode, pipelines])
 
   useEffect(() => {
     if (isOpen) refreshTasks()
@@ -217,29 +237,70 @@ export function TasksPanel({
     setShowAddTask(true)
   }
 
+  const finalizeTaskCreate = useCallback(async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt }) => {
+    if (pipelineId) {
+      try {
+        await addPipelineTask(getToken, pipelineId, {
+          title,
+          parcelId: parcelId || null,
+          scheduledAt,
+          scheduledEndAt
+        })
+        await onPipelinesChange?.()
+        showToast('Task added', 'success')
+      } catch (err) {
+        showToast(err.message || 'Could not add task', 'error')
+        return
+      }
+    } else {
+      addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
+      refreshTasks()
+      scheduleSync()
+      showToast('Task added', 'success')
+    }
+    setShowAddTask(false)
+  }, [getToken, onPipelinesChange, refreshTasks, scheduleSync])
+
   const handleCreateTask = () => {
     const trimmed = addTaskTitle.trim()
     if (!trimmed) {
       showToast('Enter a task title', 'error')
       return
     }
-    const t = trimmed
     const endAt = addTaskScheduledEndAt && addTaskScheduledEndAt > (addTaskScheduledAt || 0) ? addTaskScheduledEndAt : null
     if (endAt && addTaskScheduledAt && endAt <= addTaskScheduledAt) {
       showToast('End time must be after start time', 'error')
       return
     }
-    let pipelineId = null
-    let parcelId = addTaskLeadId ? String(addTaskLeadId) : null
+    const parcelId = addTaskLeadId ? String(addTaskLeadId) : null
+    const payload = { title: trimmed, scheduledAt: addTaskScheduledAt, scheduledEndAt: endAt, parcelId }
+
     if (parcelId) {
       const lead = displayLeads.find((l) => l.parcelId === parcelId)
-      pipelineId = lead?.__pipelineId ?? activePipelineId ?? null
+      if (lead?.__pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId: lead.__pipelineId })
+        return
+      }
+      if (apiMode) {
+        const owning = pipelinesContainingParcel(pipelines, parcelId)
+        if (owning.length === 1) {
+          finalizeTaskCreate({ ...payload, pipelineId: owning[0].id })
+          return
+        }
+        if (owning.length > 1) {
+          setPipePickerState({ open: true, eligiblePipelines: owning, allowNoPipe: false, payload })
+          return
+        }
+      }
+      finalizeTaskCreate({ ...payload, pipelineId: null })
+      return
     }
-    addTask({ pipelineId, parcelId, title: t, scheduledAt: addTaskScheduledAt, scheduledEndAt: endAt })
-    refreshTasks()
-    scheduleSync()
-    showToast('Task added', 'success')
-    setShowAddTask(false)
+
+    if (apiMode && pipelines.length > 0) {
+      setPipePickerState({ open: true, eligiblePipelines: pipelines, allowNoPipe: true, payload })
+      return
+    }
+    finalizeTaskCreate({ ...payload, pipelineId: null })
   }
 
   const { unlabeled, groups } = useMemo(
@@ -257,14 +318,33 @@ export function TasksPanel({
     [allTasks]
   )
 
-  const handleToggle = (e, task) => {
+  const handleToggle = async (e, task) => {
     e.stopPropagation()
+    if (task.__source === 'pipeline' && task.pipelineId) {
+      try {
+        await togglePipelineTask(getToken, task.pipelineId, task.id)
+        await onPipelinesChange?.()
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
     toggleLeadTask(task.parcelId, task.id)
     refreshTasks()
     scheduleSync()
   }
 
-  const handleDeleteTask = (task) => {
+  const handleDeleteTask = async (task) => {
+    if (task.__source === 'pipeline' && task.pipelineId) {
+      try {
+        await removePipelineTask(getToken, task.pipelineId, task.id)
+        await onPipelinesChange?.()
+        showToast('Task deleted', 'success')
+      } catch (err) {
+        showToast(err.message || 'Could not delete task', 'error')
+      }
+      return
+    }
     deleteLeadTask(task.parcelId, task.id)
     refreshTasks()
     scheduleSync()
@@ -302,7 +382,7 @@ export function TasksPanel({
     })
   }
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingTask) return
     const t = editTitle.trim() || 'Task'
     const endAt = editScheduledEndAt && editScheduledEndAt > (editScheduledAt || 0) ? editScheduledEndAt : null
@@ -326,17 +406,74 @@ export function TasksPanel({
         if (!lead) parcelId = null
       }
     }
-    updateTaskById(editingTask.id, {
-      title: t,
-      scheduledAt: editScheduledAt,
-      scheduledEndAt: endAt,
-      pipelineId,
-      parcelId
-    })
-    refreshTasks()
-    scheduleSync()
-    showToast('Task updated', 'success')
-    setEditingTask(null)
+
+    const wasPipeline = editingTask.__source === 'pipeline' && editingTask.pipelineId
+    const goingToPipe = !!pipelineId
+    const sameTargetPipe = wasPipeline && goingToPipe && editingTask.pipelineId === pipelineId
+
+    try {
+      if (sameTargetPipe) {
+        // Stay within the same pipeline — just update in place.
+        await updatePipelineTask(getToken, pipelineId, {
+          id: editingTask.id,
+          title: t,
+          scheduledAt: editScheduledAt,
+          scheduledEndAt: endAt,
+          parcelId
+        })
+        await onPipelinesChange?.()
+      } else if (wasPipeline && !goingToPipe) {
+        // Moved off a pipe → becomes personal. Delete from pipe, add locally.
+        await removePipelineTask(getToken, editingTask.pipelineId, editingTask.id)
+        addTask({
+          pipelineId: null,
+          parcelId: parcelId || null,
+          title: t,
+          scheduledAt: editScheduledAt,
+          scheduledEndAt: endAt
+        })
+        await onPipelinesChange?.()
+        scheduleSync()
+      } else if (wasPipeline && goingToPipe && !sameTargetPipe) {
+        // Moved to a different pipe → delete from old + add to new.
+        await removePipelineTask(getToken, editingTask.pipelineId, editingTask.id)
+        await addPipelineTask(getToken, pipelineId, {
+          id: editingTask.id,
+          title: t,
+          parcelId: parcelId || null,
+          scheduledAt: editScheduledAt,
+          scheduledEndAt: endAt
+        })
+        await onPipelinesChange?.()
+      } else if (!wasPipeline && goingToPipe) {
+        // Personal → pipe: remove from local store, add to pipe.
+        removeLocalTaskById(editingTask.id)
+        await addPipelineTask(getToken, pipelineId, {
+          id: editingTask.id,
+          title: t,
+          parcelId: parcelId || null,
+          scheduledAt: editScheduledAt,
+          scheduledEndAt: endAt
+        })
+        await onPipelinesChange?.()
+        scheduleSync()
+      } else {
+        // Personal → personal: unchanged path.
+        updateTaskById(editingTask.id, {
+          title: t,
+          scheduledAt: editScheduledAt,
+          scheduledEndAt: endAt,
+          pipelineId: null,
+          parcelId
+        })
+        refreshTasks()
+        scheduleSync()
+      }
+      showToast('Task updated', 'success')
+      setEditingTask(null)
+    } catch (err) {
+      showToast(err.message || 'Could not update task', 'error')
+    }
   }
 
   const hasOpen = unlabeled.length > 0 || groups.length > 0
@@ -746,6 +883,28 @@ export function TasksPanel({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConvertToLeadPipelineDialog
+        open={!!pipePickerState?.open}
+        onOpenChange={(o) => { if (!o) setPipePickerState(null) }}
+        pipelines={pipePickerState?.eligiblePipelines ?? []}
+        currentUser={currentUser}
+        title="Pick a pipe for this task"
+        description="Everyone the pipe is shared with will see this task."
+        allowNoPipe={!!pipePickerState?.allowNoPipe}
+        noPipeLabel="No pipe"
+        noPipeDescription="Only you will see this task."
+        onSelect={(pipelineId) => {
+          const payload = pipePickerState?.payload
+          setPipePickerState(null)
+          if (payload) finalizeTaskCreate({ ...payload, pipelineId })
+        }}
+        onSelectNoPipe={() => {
+          const payload = pipePickerState?.payload
+          setPipePickerState(null)
+          if (payload) finalizeTaskCreate({ ...payload, pipelineId: null })
+        }}
+      />
     </>
   )
 }

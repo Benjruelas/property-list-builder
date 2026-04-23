@@ -1,11 +1,35 @@
-import { X, Users } from 'lucide-react'
+import { X, Users, User } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog'
 import { Button } from './ui/button'
 
 /**
- * @param {{ open: boolean, onOpenChange: (open: boolean) => void, pipelines: Array<{ id: string, title?: string, ownerId?: string }>, currentUser: { uid?: string } | null, onSelect: (pipelineId: string) => void }} props
+ * @param {{
+ *   open: boolean,
+ *   onOpenChange: (open: boolean) => void,
+ *   pipelines: Array<{ id: string, title?: string, ownerId?: string }>,
+ *   currentUser: { uid?: string } | null,
+ *   onSelect: (pipelineId: string) => void,
+ *   title?: string,
+ *   description?: string,
+ *   allowNoPipe?: boolean,
+ *   noPipeLabel?: string,
+ *   noPipeDescription?: string,
+ *   onSelectNoPipe?: () => void
+ * }} props
  */
-export function ConvertToLeadPipelineDialog({ open, onOpenChange, pipelines, currentUser, onSelect, title = 'Add to which pipeline?', description = 'Choose a pipeline to convert this parcel into a lead.' }) {
+export function ConvertToLeadPipelineDialog({
+  open,
+  onOpenChange,
+  pipelines,
+  currentUser,
+  onSelect,
+  title = 'Add to which pipeline?',
+  description = 'Choose a pipeline to convert this parcel into a lead.',
+  allowNoPipe = false,
+  noPipeLabel = 'No pipe',
+  noPipeDescription = 'Only you will see this task.',
+  onSelectNoPipe
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -42,6 +66,23 @@ export function ConvertToLeadPipelineDialog({ open, onOpenChange, pipelines, cur
               </div>
             </button>
           ))}
+          {allowNoPipe && (
+            <button
+              type="button"
+              className="w-full text-left rounded-lg px-3 py-3 border border-white/15 bg-white/[0.05] hover:bg-white/10 text-white/90 text-sm font-medium transition-colors flex items-center gap-2"
+              onClick={() => {
+                if (typeof onSelectNoPipe === 'function') onSelectNoPipe()
+              }}
+            >
+              <User className="h-4 w-4 flex-shrink-0 text-white/70" aria-hidden />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate">{noPipeLabel}</span>
+                {noPipeDescription && (
+                  <span className="text-xs text-white/60 truncate">{noPipeDescription}</span>
+                )}
+              </div>
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

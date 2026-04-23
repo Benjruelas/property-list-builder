@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, Check, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRightLeft, Archive, RefreshCw, BadgeCheck } from 'lucide-react'
 import { Button } from './ui/button'
@@ -8,6 +8,7 @@ import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts, delet
 import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
+import { togglePipelineTask, updatePipelineTask, removePipelineTask } from '@/utils/pipelineTasks'
 import { showToast } from './ui/toast'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
 import {
@@ -71,7 +72,7 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], pipelines = [], onPipelinesChange, getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead }) {
   const isClosed = !!closedRecord
   const closedId = closedRecord?.id || null
   const [closedSnap, setClosedSnap] = useState(closedRecord)
@@ -113,14 +114,36 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
     if (parcelId) saveParcelNote(parcelId, v)
   }
 
+  // Collect tasks from pipeline docs for this lead's parcel. Memoized so
+  // identity only changes when pipelines or parcelId actually changes,
+  // avoiding effect / render churn when a parent re-renders with the same
+  // pipelines reference.
+  const pipelineScopedTasksForParcel = useMemo(() => {
+    if (!parcelId || !Array.isArray(pipelines) || pipelines.length === 0) return []
+    const out = []
+    for (const p of pipelines) {
+      if (!p || !Array.isArray(p.tasks)) continue
+      for (const t of p.tasks) {
+        if (!t || t.parcelId !== parcelId) continue
+        out.push({ ...t, pipelineId: p.id, __source: 'pipeline' })
+      }
+    }
+    return out
+  }, [pipelines, parcelId])
+
   const readTasks = () => {
     if (isClosed) return getClosedLeadTasks(closedSnap)
-    return parcelId ? getLeadTasks(parcelId, pipelineId) : []
+    if (!parcelId) return []
+    const personal = getLeadTasks(parcelId, null)
+    return [...personal, ...pipelineScopedTasksForParcel]
   }
 
   const refreshTasks = () => {
     if (isClosed) { refreshClosedSnap(); setTasks(getClosedLeadTasks(getClosedLeadById(closedId))) }
-    else if (parcelId) setTasks(getLeadTasks(parcelId, pipelineId))
+    else if (parcelId) {
+      const personal = getLeadTasks(parcelId, null)
+      setTasks([...personal, ...pipelineScopedTasksForParcel])
+    }
     onTasksChange?.()
   }
 
@@ -188,7 +211,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
     } else if (isOpen && parcelId) {
       const info = getSkipTracedParcel(parcelId)
       setSkipTracedInfo(info)
-      setTasks(getLeadTasks(parcelId, pipelineId))
+      setTasks(readTasks())
       setNote(getParcelNote(parcelId) || '')
       setIsEditingNote(false)
     } else {
@@ -200,6 +223,16 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
       setIsEditingNote(false)
     }
   }, [isOpen, parcelId, pipelineId, isClosed, closedId, closedRecord])
+
+  // Refresh task list when pipeline-scoped tasks for this parcel change
+  // (e.g. a teammate added/completed a task on a shared pipe). Uses the
+  // memoized derived value so we only react to real data changes.
+  useEffect(() => {
+    if (!isOpen || isClosed || !parcelId) return
+    const personal = getLeadTasks(parcelId, null)
+    setTasks([...personal, ...pipelineScopedTasksForParcel])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineScopedTasksForParcel, isOpen, isClosed, parcelId])
 
   useEffect(() => {
     setEditContacts(false)
@@ -312,17 +345,51 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
     scheduleSync()
   }
 
-  const doToggleTask = (taskId) => {
-    if (isClosed) toggleClosedLeadTask(closedId, taskId)
-    else toggleLeadTask(parcelId, taskId)
+  // Find a task in the currently rendered list so we can route mutations to
+  // the right store (pipeline vs personal vs closed).
+  const findTask = (taskId) => tasks.find((t) => t.id === taskId) || null
+
+  const doToggleTask = async (taskId) => {
+    if (isClosed) { toggleClosedLeadTask(closedId, taskId); return }
+    const t = findTask(taskId)
+    if (t && t.__source === 'pipeline' && t.pipelineId) {
+      try {
+        await togglePipelineTask(getToken, t.pipelineId, t.id)
+        await onPipelinesChange?.()
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
+    toggleLeadTask(parcelId, taskId)
   }
-  const doDeleteTask = (taskId) => {
-    if (isClosed) deleteClosedLeadTask(closedId, taskId)
-    else deleteLeadTask(parcelId, taskId)
+  const doDeleteTask = async (taskId) => {
+    if (isClosed) { deleteClosedLeadTask(closedId, taskId); return }
+    const t = findTask(taskId)
+    if (t && t.__source === 'pipeline' && t.pipelineId) {
+      try {
+        await removePipelineTask(getToken, t.pipelineId, t.id)
+        await onPipelinesChange?.()
+      } catch (err) {
+        showToast(err.message || 'Could not delete task', 'error')
+      }
+      return
+    }
+    deleteLeadTask(parcelId, taskId)
   }
-  const doUpdateTaskTitle = (taskId, title) => {
-    if (isClosed) updateClosedLeadTaskTitle(closedId, taskId, title)
-    else updateLeadTaskTitle(parcelId, taskId, title)
+  const doUpdateTaskTitle = async (taskId, title) => {
+    if (isClosed) { updateClosedLeadTaskTitle(closedId, taskId, title); return }
+    const t = findTask(taskId)
+    if (t && t.__source === 'pipeline' && t.pipelineId) {
+      try {
+        await updatePipelineTask(getToken, t.pipelineId, { id: t.id, title })
+        await onPipelinesChange?.()
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
+    updateLeadTaskTitle(parcelId, taskId, title)
   }
 
   const closedDate = closedSnap?.closedAt
