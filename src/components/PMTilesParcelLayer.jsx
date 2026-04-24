@@ -98,7 +98,13 @@ function mapProperties(raw) {
     PROP_ID:        canonicalParcelId(raw) || '',
     PARCEL_ID_ALT:  raw.parcelid2  || '',
     SITUS_ADDR:     raw.parceladdr || '',
-    SITUS_CITY:     raw.parcelcity || raw.cousubname || '',
+    // Prefer Census Designated Place (placename) over assessor's parcelcity:
+    // in split-ZIP / ETJ areas the assessor field often reports the taxing
+    // jurisdiction (e.g. "Fort Worth" for a 76028 parcel that everyone —
+    // USPS, Mapbox, and residents — calls Burleson). cousubname (Census
+    // county subdivision, e.g. "Fort Worth CCD") is intentionally excluded
+    // here because it covers whole swaths of a county and isn't a city.
+    SITUS_CITY:     raw.placename || raw.parcelcity || '',
     SITUS_STATE:    raw.parcelstate || '',
     SITUS_ZIP:      raw.parcelzip  || '',
     OWNER_NAME:     raw.ownername  || '',
@@ -140,7 +146,7 @@ function mapProperties(raw) {
     RANGE:          raw.range      || '',
     COUNTY:         raw.countyname || '',
     COUNTY_FIPS:    raw.geoid      || '',
-    CITY:           raw.cousubname || '',
+    CITY:           raw.placename  || raw.parcelcity || '',
     CENSUS_TRACT:   raw.tractname  || '',
     PLACE_NAME:     raw.placename  || '',
     LATITUDE:       raw.centroidy  ?? '',
@@ -265,7 +271,13 @@ export function PMTilesParcelLayer({
     } catch { /* ignore if layers not ready */ }
   }
 
-  useEffect(() => { repaint() })
+  // Repaint only when something that actually affects paint expressions changes.
+  // Running on every render (no deps) caused repaint() to fire at animation-frame
+  // rate during map interactions, producing a ~78 Hz storm of paint-property
+  // mutations and canvas repaints.
+  useEffect(() => {
+    repaint()
+  }, [boundaryColor, boundaryOpacity, clickedParcelId, selectedParcels])
 
   // Add source + layers fully imperatively
   useEffect(() => {
@@ -273,9 +285,14 @@ export function PMTilesParcelLayer({
     if (!map || !mapReady) return
     let cancelled = false
     let labelUpdateTimer = null
+    // Signature of the last GeoJSON we pushed into LABEL_SOURCE. Used to short-circuit
+    // redundant setData() calls — every setData fires a sourcedata event, which would
+    // otherwise re-enter this handler and produce a continuous label-refresh loop.
+    let lastLabelKey = ''
 
     const tileUrl = window.location.origin + '/api/tiles?z={z}&x={x}&y={y}'
     const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
+    const EMPTY_LABEL_KEY = 'empty'
 
     function refreshLabels() {
       if (cancelled) return
@@ -286,9 +303,22 @@ export function PMTilesParcelLayer({
           const zoom = map.getZoom()
           const src = map.getSource(LABEL_SOURCE)
           if (!src) return
-          if (zoom < 17) { src.setData(emptyGeoJSON); return }
+          if (zoom < 17) {
+            if (lastLabelKey !== EMPTY_LABEL_KEY) {
+              src.setData(emptyGeoJSON)
+              lastLabelKey = EMPTY_LABEL_KEY
+            }
+            return
+          }
           const features = map.queryRenderedFeatures({ layers: [FILL_LAYER] })
-          src.setData(buildLabelGeoJSON(features))
+          const geo = buildLabelGeoJSON(features)
+          // Cheap content fingerprint: feature count + concatenated labels. If
+          // nothing visibly changed, skip setData entirely — every setData emits
+          // a sourcedata event, which would otherwise re-enter this handler.
+          const key = geo.features.length + '|' + geo.features.map(f => f.properties._label).join(',')
+          if (key === lastLabelKey) return
+          lastLabelKey = key
+          src.setData(geo)
         } catch { /* ignore */ }
       }, 80)
     }
@@ -372,7 +402,16 @@ export function PMTilesParcelLayer({
     map.on('styledata', onStyleData)
 
     map.on('moveend', refreshLabels)
-    map.on('sourcedata', refreshLabels)
+    // Only react to sourcedata events for the parcels vector source. Reacting to
+    // every source (basemap rasters, our own LABEL_SOURCE setData, terrain DEM,
+    // etc.) previously produced a self-sustaining refresh loop running at ~12 Hz
+    // forever, rebuilding the label GeoJSON and re-uploading GPU buffers.
+    const onSourceData = (e) => {
+      if (e.sourceId !== SOURCE_ID) return
+      if (!e.isSourceLoaded && !e.tile) return
+      refreshLabels()
+    }
+    map.on('sourcedata', onSourceData)
 
     const onClick = (e) => {
       const features = e.features?.length ? e.features : (() => {
@@ -408,7 +447,7 @@ export function PMTilesParcelLayer({
       cancelled = true
       if (labelUpdateTimer) clearTimeout(labelUpdateTimer)
       map.off('moveend', refreshLabels)
-      map.off('sourcedata', refreshLabels)
+      map.off('sourcedata', onSourceData)
       map.off('click', FILL_LAYER, onClick)
       map.off('mouseenter', FILL_LAYER, onEnter)
       map.off('mouseleave', FILL_LAYER, onLeave)

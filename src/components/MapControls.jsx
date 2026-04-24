@@ -1,6 +1,36 @@
-import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X, FileText } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X, FileText, Calendar, ListTodo } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
+
+/**
+ * Hardware pipe icon (L-shaped section with rectangular flanges on both open
+ * ends). Kept in sync with the MobileActionBar glyph so desktop/mobile share
+ * the same "Pipes" visual identity.
+ */
+function PipeIcon({ className, ...props }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="3" y="2" width="8" height="3" rx="0.5" />
+      <line x1="3.5" y1="3.5" x2="10.5" y2="3.5" />
+      <rect x="19" y="12" width="3" height="8" rx="0.5" />
+      <line x1="20.5" y1="12.5" x2="20.5" y2="19.5" />
+      <path d="M5 5 L5 13 Q5 18 10 18 L19 18" />
+      <path d="M9 5 L9 13 Q9 14 10 14 L19 14" />
+    </svg>
+  )
+}
+
 export function MapControls({ 
   onRecenter, 
   onToggleCompass,
@@ -20,6 +50,9 @@ export function MapControls({
   onOpenSettings,
   onOpenLeads,
   onOpenForms,
+  onOpenPipes,
+  onOpenTasks,
+  onOpenSchedule,
   currentUser,
   onLogin,
   onLogout,
@@ -165,6 +198,55 @@ export function MapControls({
               onClick={() => setShowMenu(false)}
             />
             <div className="map-panel hamburger-menu absolute right-full top-0 mr-2 rounded-xl min-w-[200px] z-[1000] py-2">
+              {/* Pipes / Tasks / Schedule — surfaced here on desktop since the
+                  MobileActionBar is hidden at md+. Keep them at the top so
+                  primary deal-flow actions are one menu-open away. */}
+              {onOpenPipes && (
+                <button
+                  data-tour="menu-pipes"
+                  onClick={() => {
+                    setShowMenu(false)
+                    onOpenPipes()
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+                >
+                  <PipeIcon className="h-4 w-4 flex-shrink-0" />
+                  <span>Pipes</span>
+                </button>
+              )}
+
+              {onOpenTasks && (
+                <button
+                  data-tour="menu-tasks"
+                  onClick={() => {
+                    setShowMenu(false)
+                    onOpenTasks()
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+                >
+                  <ListTodo className="h-4 w-4 flex-shrink-0" />
+                  <span>Tasks</span>
+                </button>
+              )}
+
+              {onOpenSchedule && (
+                <button
+                  data-tour="menu-schedule"
+                  onClick={() => {
+                    setShowMenu(false)
+                    onOpenSchedule()
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+                >
+                  <Calendar className="h-4 w-4 flex-shrink-0" />
+                  <span>Schedule</span>
+                </button>
+              )}
+
+              {(onOpenPipes || onOpenTasks || onOpenSchedule) && (
+                <div className="my-1 border-t border-gray-200" />
+              )}
+
               {/* Lists Button */}
               <button
                 data-tour="menu-lists"

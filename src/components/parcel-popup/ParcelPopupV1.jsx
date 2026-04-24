@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { useEffect, useRef } from 'react'
 import { X, ChevronUp, ListPlus, UserPlus, CheckCircle2, Loader2 } from 'lucide-react'
 import { OwnerOccupiedBadge } from '@/components/OwnerOccupiedBadge'
 import { usePopupPosition } from './usePopupPosition'
@@ -12,11 +13,29 @@ export function ParcelPopupV1({
   onClose, onOpenDetails, onAddToList, onConvertToLead, isLead,
 }) {
   const pos = usePopupPosition(mapRef, popupData?.lat, popupData?.lng)
+  const cardRef = useRef(null)
+
+  // Dismiss the popup on any pointer-down outside the card. Map-parcel clicks
+  // will still replace the popup (the map click handler runs after the outside
+  // dismissal — net effect is the same: popup shows for the newly clicked
+  // parcel). Clicks inside the card keep it open via its own stopPropagation.
+  useEffect(() => {
+    if (!popupData) return
+    const handlePointerDown = (e) => {
+      const card = cardRef.current
+      if (!card) return
+      if (card.contains(e.target)) return
+      onClose?.()
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [popupData, onClose])
 
   if (!popupData || !pos) return null
 
   const card = (
     <div
+      ref={cardRef}
       className="fixed z-[10000] transition-all duration-300 ease-out"
       style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)' }}
     >

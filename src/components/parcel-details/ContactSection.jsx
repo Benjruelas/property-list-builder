@@ -46,18 +46,9 @@ export function ContactSection({
         <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
           <Phone className="h-5 w-5" />
           <span>{compact ? 'Contact' : 'Contact Information'}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="parcel-details-edit-btn h-7 px-2 ml-auto"
-            onClick={() => { setEditContacts(e => !e); setNewPhone(''); setNewEmail('') }}
-            title={editContacts ? 'Done' : 'Add contact manually'}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
         </div>
 
-        <div className="rounded-lg border border-dashed border-white/20 bg-white/5 px-4 py-6 text-center space-y-3">
+        <div className="rounded-lg border border-dashed border-white/20 bg-white/5 px-4 py-5 text-center space-y-3">
           <div className="flex justify-center">
             <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
               <Phone className="h-5 w-5 opacity-70" />
@@ -65,7 +56,7 @@ export function ContactSection({
           </div>
           <div className="space-y-1">
             <div className="text-sm font-medium">No contact info yet</div>
-            <div className="text-xs opacity-60">Skip trace this parcel to fetch the owner's best-graded phone and email.</div>
+            <div className="text-xs opacity-60">Add contacts below, or skip trace this parcel to fetch the owner's best-graded phone and email.</div>
           </div>
           {onSkipTrace && (
             <Button
@@ -86,18 +77,18 @@ export function ContactSection({
           )}
         </div>
 
-        {editContacts && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <input type="tel" placeholder="Add phone" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addPhone()} />
-              <Button variant="outline" size="sm" className="h-7" onClick={addPhone}><Plus className="h-3.5 w-3.5" /></Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="email" placeholder="Add email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addEmail()} />
-              <Button variant="outline" size="sm" className="h-7" onClick={addEmail}><Plus className="h-3.5 w-3.5" /></Button>
-            </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
+            <input type="tel" placeholder="Add phone" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addPhone()} />
+            <Button variant="outline" size="sm" className="h-7" onClick={addPhone} disabled={!newPhone.trim()} title="Add phone"><Plus className="h-3.5 w-3.5" /></Button>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />
+            <input type="email" placeholder="Add email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addEmail()} />
+            <Button variant="outline" size="sm" className="h-7" onClick={addEmail} disabled={!newEmail.trim()} title="Add email"><Plus className="h-3.5 w-3.5" /></Button>
+          </div>
+        </div>
       </div>
     )
   }

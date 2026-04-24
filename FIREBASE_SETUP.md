@@ -25,7 +25,7 @@ This guide will help you set up Firebase Authentication for email/password and G
 2. Select **Project settings**
 3. Scroll down to "Your apps" section
 4. If you don't have a web app, click the **</>** (web) icon to add one
-5. Register your app with a nickname (e.g., "Property List Builder")
+5. Register your app with a nickname (e.g., "KnockScout")
 6. Copy the Firebase configuration object (it looks like this):
 
 ```javascript

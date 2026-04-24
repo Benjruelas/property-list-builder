@@ -10,6 +10,12 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+// Shared `onboarding@resend.dev` can only deliver to the Resend account
+// owner's own email; set RESEND_FROM_EMAIL (or EXPORT_FROM_EMAIL) to a
+// verified-domain address to send to anyone.
+const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
+const FROM_ADDRESS = process.env.EXPORT_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || DEFAULT_FROM
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -42,7 +48,7 @@ export default async function handler(req, res) {
     const filename = `${sanitizedName}_export_${Date.now()}.csv`
 
     const { data, error } = await resend.emails.send({
-      from: 'Property List Builder <onboarding@resend.dev>',
+      from: FROM_ADDRESS,
       to: [userEmail],
       subject: `Your exported list: ${listName}`,
       html: `<p>Please find your exported property list attached.</p><p>List: ${listName}</p><p>Exported on ${new Date().toLocaleDateString()}.</p>`,

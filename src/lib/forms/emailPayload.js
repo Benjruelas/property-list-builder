@@ -28,9 +28,10 @@ function stripDataUrlPrefix(b64) {
  * @param {string} opts.recipient
  * @param {string} [opts.subject]
  * @param {string} [opts.message]
+ * @param {boolean} [opts.sendMeCopy]
  * @param {string} opts.flattenedPdfBase64
  */
-export function buildSendPayload({ template, values = {}, recipient, subject, message, flattenedPdfBase64 }) {
+export function buildSendPayload({ template, values = {}, recipient, subject, message, sendMeCopy = false, flattenedPdfBase64 }) {
   if (!template || !template.id) {
     throw new Error('template is required')
   }
@@ -68,6 +69,7 @@ export function buildSendPayload({ template, values = {}, recipient, subject, me
     recipientEmail: trimmedRecipient,
     subject: safeSubject,
     message: safeMessage,
+    sendMeCopy: !!sendMeCopy,
     pdfBase64: cleanedPdf,
     values: strippedValues,
   }

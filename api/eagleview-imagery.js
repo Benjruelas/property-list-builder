@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   const zoom = Math.min(23, Math.max(9, parseInt(zoomParam) || 20))
   const isSandbox = (process.env.EAGLEVIEW_USE_SANDBOX || '').trim() === '1'
   const baseUrl = isSandbox ? SANDBOX_BASE : PROD_BASE
-  const referer = process.env.EAGLEVIEW_REFERER || 'https://knockscout.app/'
+  const referer = process.env.EAGLEVIEW_REFERER || 'https://knockscout.com/'
 
   const headers = {
     'x-api-key': apiKey.trim(),

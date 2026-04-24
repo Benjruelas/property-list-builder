@@ -9,11 +9,11 @@ import { NotesSection } from './NotesSection'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'contact', label: 'Contact' },
   { id: 'property', label: 'Property' },
   { id: 'valuation', label: 'Value' },
   { id: 'ownership', label: 'Owner' },
   { id: 'legal', label: 'Legal' },
-  { id: 'contact', label: 'Contact' },
 ]
 
 /**

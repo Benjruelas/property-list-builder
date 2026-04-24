@@ -51,11 +51,13 @@ import { PermissionPrompt, hasGrantedPermissions } from './components/Permission
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { getSettings, updateSettings } from './utils/settings'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines } from './utils/leadTasks'
+import { removePipelineTask } from './utils/pipelineTasks'
 import { addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedLeads, addClosedLead, saveClosedLeads, buildClosedLeadRecord, removeClosedLead } from './utils/closedLeads'
 import { showLocalNotification } from './utils/pushNotifications'
 import { addLead, loadColumns, loadLeads, saveLeads, loadTitle, isParcelALead, getStreetAddress } from './utils/dealPipeline'
+import { splitOwnerName } from './utils/ownerName'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
@@ -849,11 +851,15 @@ function App() {
     }
     const firstColId = pipe.columns?.[0]?.id || 'col-0'
     const now = Date.now()
+    const rawOwner = parcelData.properties?.OWNER_NAME || null
+    const { firstName, lastName } = splitOwnerName(rawOwner)
     const lead = {
       id: `lead-${now}-${parcelData.id}`,
       parcelId: parcelData.id,
       address: getStreetAddress(parcelData),
-      owner: parcelData.properties?.OWNER_NAME || null,
+      owner: rawOwner,
+      firstName,
+      lastName,
       lat: parcelData.lat ?? (parcelData.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
       lng: parcelData.lng ?? (parcelData.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
       status: firstColId,
@@ -960,6 +966,18 @@ function App() {
       if (apiPipeline) {
         const remaining = (apiPipeline.leads || []).filter((l) => l.id !== lead.id)
         await updatePipeline(getToken, apiPipeline.id, { leads: remaining })
+        // Optimistically update pipelines state so the popup/details panels
+        // stop treating this parcel as a lead immediately (which brings the
+        // "Add to Pipeline" button back) without waiting for the refresh.
+        setPipelines((prev) => prev.map((p) => p.id === apiPipeline.id
+          ? {
+              ...p,
+              leads: remaining,
+              tasks: parcelId
+                ? (p.tasks || []).filter((t) => t?.parcelId !== parcelId)
+                : (p.tasks || [])
+            }
+          : p))
         await refreshPipelines()
       } else {
         const remaining = loadLeads().filter((l) => l.id !== lead.id)
@@ -1022,10 +1040,30 @@ function App() {
 
       const affectedApiPipelines = (pipelines || []).filter((p) => (p.leads || []).some(matchesLead))
       for (const p of affectedApiPipelines) {
+        // Remove any pipeline-scoped tasks tied to this lead's parcel before
+        // rewriting the leads array, so those tasks don't linger as orphans.
+        if (parcelId) {
+          const pipelineTasksForLead = (p.tasks || []).filter((t) => t?.parcelId === parcelId)
+          for (const t of pipelineTasksForLead) {
+            try { await removePipelineTask(getToken, p.id, t.id) } catch { /* non-fatal */ }
+          }
+        }
         const remaining = (p.leads || []).filter((l) => !matchesLead(l))
         await updatePipeline(getToken, p.id, { leads: remaining })
       }
       if (affectedApiPipelines.length > 0) {
+        // Optimistically strip the lead (and its pipeline tasks) from our
+        // pipelines state so derived checks like isParcelALeadCheck flip to
+        // false immediately — this is what lets the "Add to Pipeline" button
+        // return on the popup and details panels the instant deletion
+        // completes, instead of waiting on the refreshPipelines round-trip.
+        setPipelines((prev) => prev.map((p) => ({
+          ...p,
+          leads: (p.leads || []).filter((l) => !matchesLead(l)),
+          tasks: parcelId
+            ? (p.tasks || []).filter((t) => t?.parcelId !== parcelId)
+            : (p.tasks || [])
+        })))
         await refreshPipelines()
       }
 
@@ -2534,6 +2572,9 @@ function App() {
         onOpenSettings={openSettingsPanel}
         onOpenLeads={openLeadsPanel}
         onOpenForms={openFormsPanel}
+        onOpenPipes={openDealPipeline}
+        onOpenTasks={openTasks}
+        onOpenSchedule={openSchedule}
         currentUser={currentUser}
         onLogin={openLogin}
         onLogout={logout}
@@ -2696,6 +2737,13 @@ function App() {
           if (!activePipelineId) return
           try {
             await updatePipeline(getToken, activePipelineId, { leads: newLeads })
+            // Optimistically sync local pipelines state so any parcel panels
+            // currently open re-derive isLead against the new leads array
+            // (restoring the "Add to Pipeline" button for removed leads)
+            // without waiting on refreshPipelines.
+            setPipelines((prev) => prev.map((p) => p.id === activePipelineId
+              ? { ...p, leads: newLeads }
+              : p))
             await refreshPipelines()
           } catch (e) { showToast(e.message || 'Failed to update', 'error') }
         } : setDealPipelineLeads}
@@ -2895,6 +2943,13 @@ function App() {
           if (!pid) return
           try {
             await updatePipeline(getToken, pid, { leads: newLeads })
+            // Optimistically sync local pipelines state so parcel panels
+            // re-derive isLead immediately (letting the "Add to Pipeline"
+            // button return for any removed leads) without waiting on the
+            // refreshPipelines round-trip.
+            setPipelines((prev) => prev.map((p) => p.id === pid
+              ? { ...p, leads: newLeads }
+              : p))
             await refreshPipelines()
           } catch (e) { showToast(e.message || 'Failed to update', 'error') }
         } : setDealPipelineLeads}

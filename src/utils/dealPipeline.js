@@ -2,6 +2,8 @@
  * Deal pipeline - leads and columns stored in localStorage
  */
 
+import { splitOwnerName } from './ownerName'
+
 const COLUMNS_KEY = 'deal_pipeline_columns'
 const LEADS_KEY = 'deal_pipeline_leads'
 const TITLE_KEY = 'deal_pipeline_title'
@@ -134,11 +136,15 @@ export const addLead = (parcelData, columns) => {
   if (leads.some(l => l.parcelId === parcelData.id)) return null
   const firstColId = columns?.[0]?.id || 'col-0'
   const now = Date.now()
+  const rawOwner = parcelData.properties?.OWNER_NAME || null
+  const { firstName, lastName } = splitOwnerName(rawOwner)
   const lead = {
     id: `lead-${now}-${parcelData.id}`,
     parcelId: parcelData.id,
     address: getStreetAddress(parcelData),
-    owner: parcelData.properties?.OWNER_NAME || null,
+    owner: rawOwner,
+    firstName,
+    lastName,
     lat: parcelData.lat ?? (parcelData.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
     lng: parcelData.lng ?? (parcelData.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
     status: firstColId,

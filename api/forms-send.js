@@ -12,6 +12,13 @@ import { resolveDevBypassUser } from './lib/devBypassUsers.js'
 const resend = new Resend(process.env.RESEND_API_KEY)
 const MAX_PDF_BYTES = 8 * 1024 * 1024
 
+// Resend's shared `onboarding@resend.dev` sender only allows delivery to the
+// Resend account owner's own email. To actually send forms to arbitrary
+// recipients the deployer must verify a domain in Resend and set
+// FORMS_FROM_EMAIL (e.g. "KnockScout <forms@msg.knockscout.com>").
+const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
+const FROM_ADDRESS = process.env.FORMS_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || DEFAULT_FROM
+
 let kv = null
 let kvAvailable = false
 
@@ -125,7 +132,8 @@ export default async function handler(req, res) {
       message,
       templateId,
       templateName,
-      values
+      values,
+      sendMeCopy
     } = req.body || {}
 
     if (!pdfBase64 || typeof pdfBase64 !== 'string') {
@@ -157,17 +165,24 @@ export default async function handler(req, res) {
       <p>The completed PDF is attached.</p>
     `
 
-    // Only include `replyTo` when we actually have a well-formed email
-    // address — Resend rejects empty strings / missing local-parts / domains.
+    // Only include `replyTo` / `bcc` when we actually have a well-formed
+    // email address — Resend rejects empty strings / missing local-parts.
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const replyToEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
+    const userEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
       ? user.email.trim()
       : null
 
+    // "Send me a copy" — BCC the signed-in user on the same message. Skip it
+    // when the user is also the recipient (avoids a duplicate in their inbox).
+    const bccList = (sendMeCopy && userEmail && userEmail.toLowerCase() !== recipientEmail.trim().toLowerCase())
+      ? [userEmail]
+      : null
+
     const { data, error } = await resend.emails.send({
-      from: 'Property List Builder <onboarding@resend.dev>',
+      from: FROM_ADDRESS,
       to: [recipientEmail.trim()],
-      ...(replyToEmail ? { replyTo: replyToEmail } : {}),
+      ...(userEmail ? { replyTo: userEmail } : {}),
+      ...(bccList ? { bcc: bccList } : {}),
       subject: safeSubject,
       html: htmlBody,
       attachments: [{ filename, content: buf }]
@@ -184,6 +199,7 @@ export default async function handler(req, res) {
       ownerId: user.uid,
       submittedAt: new Date().toISOString(),
       recipientEmail: recipientEmail.trim().toLowerCase(),
+      sentCopyToSender: !!bccList,
       values: values && typeof values === 'object' ? values : {}
     }
     appendSubmission(submission).catch(() => {})

@@ -3,6 +3,8 @@
  * Templates are stored in localStorage
  */
 
+import { splitOwnerName, composeFullName } from './ownerName'
+
 const STORAGE_KEY = 'email_templates'
 
 /**
@@ -98,9 +100,24 @@ export const replaceTemplateTags = (text, parcelData) => {
   if (!text || !parcelData) return text || ''
 
   const properties = parcelData.properties || {}
+  const lead = parcelData.lead || null
+
+  // First/last priority: explicit fields on parcelData, then embedded lead,
+  // then parsed from the raw OWNER_NAME string.
+  const ownerRaw = properties.OWNER_NAME || parcelData.ownerName || lead?.owner || ''
+  const parsed = (ownerRaw || '') ? splitOwnerName(ownerRaw) : { firstName: '', lastName: '' }
+  const firstName = (parcelData.firstName || lead?.firstName || parsed.firstName || '').toString().trim()
+  const lastName = (parcelData.lastName || lead?.lastName || parsed.lastName || '').toString().trim()
+  const fullName = composeFullName(firstName, lastName) || ownerRaw || ''
 
   const tagMap = {
-    'Owner Name': properties.OWNER_NAME || parcelData.ownerName || '',
+    'Owner Name': ownerRaw || fullName,
+    'First Name': firstName,
+    'Last Name': lastName,
+    'Full Name': fullName,
+    'FirstName': firstName,
+    'LastName': lastName,
+    'FullName': fullName,
     'Address': parcelData.address || properties.SITUS_ADDR || properties.SITE_ADDR || '',
     'City': properties.scity || properties.PROP_CITY || properties.SITUS_CITY || properties.CITY || '',
     'State': properties.state2 || properties.PROP_STATE || properties.SITUS_STATE || properties.STATE || 'TX',
@@ -112,8 +129,11 @@ export const replaceTemplateTags = (text, parcelData) => {
 
   let result = text
 
-  Object.keys(tagMap).forEach(tag => {
-    const regex = new RegExp(`\\{${tag}\\}`, 'gi')
+  // Replace longer tag names first so "First Name" wins over accidental
+  // overlap with a shorter tag if any were ever added.
+  const sortedTags = Object.keys(tagMap).sort((a, b) => b.length - a.length)
+  sortedTags.forEach(tag => {
+    const regex = new RegExp(`\\{${tag.replace(/ /g, '\\s*')}\\}`, 'gi')
     result = result.replace(regex, tagMap[tag] || '')
   })
 
@@ -124,6 +144,9 @@ export const replaceTemplateTags = (text, parcelData) => {
  * Available template tags for insertion
  */
 export const AVAILABLE_TAGS = [
+  'First Name',
+  'Last Name',
+  'Full Name',
   'Owner Name',
   'Address',
   'City',

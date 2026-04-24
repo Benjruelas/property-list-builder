@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadLeads, saveLeads, loadTitle, saveTitle, formatTimeInState, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
-import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline, taskBelongsToLocalLeads } from '@/utils/leadTasks'
+import { displayLeadName } from '@/utils/ownerName'
+import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, deleteAllLeadTasks, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline, taskBelongsToLocalLeads } from '@/utils/leadTasks'
 import { addPipelineTask, updatePipelineTask, togglePipelineTask, removePipelineTask, flattenPipelineTasks } from '@/utils/pipelineTasks'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
@@ -325,8 +326,38 @@ export function DealPipeline({
     const leadLabel = lead ? [getStreetAddress(lead) || lead.address, lead.owner].filter(Boolean).join(' — ') || 'Unknown' : 'Unknown'
     const confirmed = await showConfirm('Remove this lead from the pipeline?', 'Remove lead', { detail: leadLabel })
     if (!confirmed) return
+    if (apiMode && !canCollaboratePipeline) {
+      // persistLeads no-ops for non-collaborators; bail before touching tasks too.
+      persistLeads(displayLeads.filter(l => l.id !== leadId))
+      return
+    }
     if (selectedLead?.id === leadId) setSelectedLead(null)
     persistLeads(displayLeads.filter(l => l.id !== leadId))
+
+    // A lead's tasks should not outlive the lead. Clean up any tasks tied to
+    // this parcel: in API mode remove the pipeline's tasks[] entries for that
+    // parcel; in local mode drop them from the local task store.
+    const parcelId = lead?.parcelId
+    if (parcelId) {
+      if (apiMode && activePipeline) {
+        const pipelineTasksForLead = (activePipeline.tasks || []).filter((t) => t?.parcelId === parcelId)
+        let removedAny = false
+        for (const t of pipelineTasksForLead) {
+          try {
+            await removePipelineTask(getToken, activePipeline.id, t.id)
+            removedAny = true
+          } catch { /* non-fatal */ }
+        }
+        if (removedAny) {
+          try { await onPipelinesChange?.() } catch { /* non-fatal */ }
+        }
+      } else {
+        deleteAllLeadTasks(parcelId, null)
+        refreshAllTasks()
+        scheduleSync()
+      }
+    }
+
     showToast('Lead removed', 'success')
   }
 
@@ -674,8 +705,18 @@ export function DealPipeline({
                       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate text-white" title={lead.address}>{getStreetAddress(lead) || lead.address}</div>
-                        {lead.owner && <div className="text-[11px] truncate text-white/85">{lead.owner}</div>}
+                        {(() => {
+                          const streetAddr = getStreetAddress(lead) || lead.address || ''
+                          const name = displayLeadName(lead, lead.properties)
+                          const title = name || streetAddr || 'Unknown'
+                          const subtitle = name ? streetAddr : ''
+                          return (
+                            <>
+                              <div className="font-medium truncate text-white" title={title}>{title}</div>
+                              {subtitle && <div className="text-[11px] truncate text-white/85" title={subtitle}>{subtitle}</div>}
+                            </>
+                          )
+                        })()}
                         {(() => {
                           const duration = formatTimeInState(lead)
                           if (!duration) return null

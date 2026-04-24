@@ -1,4 +1,4 @@
-# Knockscout
+# KnockScout
 
 A mobile-first field canvassing and property intelligence platform built with React, Leaflet, and Vercel serverless functions. Designed for door-to-door sales teams, roofing contractors, and real estate professionals who need to identify properties, gather owner contact info, manage leads, and generate roof measurement reports -- all from the field.
 

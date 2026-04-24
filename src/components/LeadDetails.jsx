@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { DirectionsPicker } from './DirectionsPicker'
 import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts, deleteSkipTracedParcel, saveSkipTracedParcel, skipTraceParcels, buildSkipTraceRequest } from '@/utils/skipTrace'
 import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
+import { splitOwnerName, composeFullName, displayLeadName } from '@/utils/ownerName'
 import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
 import { togglePipelineTask, updatePipelineTask, removePipelineTask } from '@/utils/pipelineTasks'
@@ -92,7 +93,8 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   const [teamTaskDraft, setTeamTaskDraft] = useState('')
   const [teamTaskPending, setTeamTaskPending] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
-  const [nameDraft, setNameDraft] = useState('')
+  const [firstNameDraft, setFirstNameDraft] = useState('')
+  const [lastNameDraft, setLastNameDraft] = useState('')
   const [taskMenu, setTaskMenu] = useState(null)
   const [pipeMenu, setPipeMenu] = useState(null)
   const [note, setNote] = useState('')
@@ -198,7 +200,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   }
   const fullAddr = (lead || parcelData) ? getFullAddress(lead || parcelData) : ''
   const address = (fullAddr && fullAddr !== 'Unknown' ? fullAddr : null) || lead?.address || parcelData?.address || parcelData?.properties?.SITUS_ADDR || parcelData?.properties?.SITE_ADDR || 'No address available'
-  const displayName = lead?.owner ?? parcelData?.properties?.OWNER_NAME ?? ''
+  const displayName = displayLeadName(lead, parcelData?.properties)
 
   useEffect(() => {
     if (isOpen && isClosed && closedId) {
@@ -259,18 +261,44 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   const normalizePhone = (p) => (p || '').replace(/[^\d+]/g, '')
 
   const handleSaveName = () => {
-    const trimmed = nameDraft.trim()
-    if (lead && trimmed) {
-      const updated = { ...lead, owner: trimmed }
+    const firstName = firstNameDraft.trim()
+    const lastName = lastNameDraft.trim()
+    if (lead && (firstName || lastName)) {
+      const full = composeFullName(firstName, lastName)
+      // Mirror the edited name back into the cached parcel properties so
+      // template tags that still read OWNER_NAME stay in sync.
+      const nextProps = lead.properties
+        ? { ...lead.properties, OWNER_NAME: full || lead.properties.OWNER_NAME }
+        : lead.properties
+      const updated = {
+        ...lead,
+        firstName,
+        lastName,
+        owner: full || lead.owner,
+        properties: nextProps
+      }
       onLeadUpdate?.(updated)
       scheduleSync()
     }
     setIsEditingName(false)
-    setNameDraft('')
+    setFirstNameDraft('')
+    setLastNameDraft('')
   }
 
   const handleStartEditName = () => {
-    setNameDraft(displayName)
+    // Prefer the structured fields when they exist; otherwise derive from
+    // the raw owner string (or parcel OWNER_NAME) so users get sensible
+    // defaults even for legacy leads created before first/last split.
+    const hasStructured = !!(lead?.firstName || lead?.lastName)
+    if (hasStructured) {
+      setFirstNameDraft(lead.firstName || '')
+      setLastNameDraft(lead.lastName || '')
+    } else {
+      const source = lead?.owner || parcelData?.properties?.OWNER_NAME || ''
+      const { firstName, lastName } = splitOwnerName(source)
+      setFirstNameDraft(firstName)
+      setLastNameDraft(lastName)
+    }
     setIsEditingName(true)
   }
 
@@ -430,18 +458,36 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
         <div className="px-4 py-4 space-y-4 text-left bg-transparent">
           <div className="space-y-1">
             {isEditingName ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <input
-                  type="text"
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setIsEditingName(false); setNameDraft('') } }}
-                  className="border rounded px-2 py-1.5 text-sm font-bold flex-1 min-w-0"
-                  autoFocus
-                  placeholder="Lead name"
-                />
-                <Button variant="default" size="sm" onClick={handleSaveName}>Save</Button>
-                <Button variant="ghost" size="sm" onClick={() => { setIsEditingName(false); setNameDraft('') }}>Cancel</Button>
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={firstNameDraft}
+                    onChange={(e) => setFirstNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveName()
+                      if (e.key === 'Escape') { setIsEditingName(false); setFirstNameDraft(''); setLastNameDraft('') }
+                    }}
+                    className="border rounded px-2 py-1.5 text-sm font-bold flex-1 min-w-0"
+                    autoFocus
+                    placeholder="First name"
+                  />
+                  <input
+                    type="text"
+                    value={lastNameDraft}
+                    onChange={(e) => setLastNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveName()
+                      if (e.key === 'Escape') { setIsEditingName(false); setFirstNameDraft(''); setLastNameDraft('') }
+                    }}
+                    className="border rounded px-2 py-1.5 text-sm font-bold flex-1 min-w-0"
+                    placeholder="Last name"
+                  />
+                </div>
+                <div className="flex items-center gap-2 justify-end">
+                  <Button variant="ghost" size="sm" onClick={() => { setIsEditingName(false); setFirstNameDraft(''); setLastNameDraft('') }}>Cancel</Button>
+                  <Button variant="default" size="sm" onClick={handleSaveName}>Save</Button>
+                </div>
               </div>
             ) : (
               <button

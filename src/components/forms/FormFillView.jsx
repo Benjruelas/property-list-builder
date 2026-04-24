@@ -33,6 +33,7 @@ export function FormFillView({ template, onBack }) {
   const [recipient, setRecipient] = useState('')
   const [subject, setSubject] = useState(`Completed form: ${template.name || 'Form'}`)
   const [message, setMessage] = useState('')
+  const [sendMeCopy, setSendMeCopy] = useState(false)
 
   const scrollContainerRef = useRef(null)
   const pageRefs = useRef({})
@@ -338,6 +339,7 @@ export function FormFillView({ template, onBack }) {
         recipient,
         subject,
         message,
+        sendMeCopy,
         flattenedPdfBase64: pdfBase64,
       })
       await sendForm(getToken, payload)
@@ -352,7 +354,7 @@ export function FormFillView({ template, onBack }) {
     } finally {
       setSending(false)
     }
-  }, [flattenPdf, getToken, isFieldFilled, message, onBack, orderedFields, recipient, subject, template, validateRequired, values])
+  }, [flattenPdf, getToken, isFieldFilled, message, onBack, orderedFields, recipient, sendMeCopy, subject, template, validateRequired, values])
 
   const stepLabel = currentField
     ? (currentField.label && currentField.label.trim()) || currentField.type
@@ -561,6 +563,15 @@ export function FormFillView({ template, onBack }) {
                 rows={4}
                 className="forms-send-textarea mt-1 flex w-full rounded-md px-3 py-2 text-sm focus-visible:outline-none"
               />
+            </label>
+            <label className="flex items-center gap-2 text-xs opacity-90 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={sendMeCopy}
+                onChange={(e) => setSendMeCopy(e.target.checked)}
+                className="h-4 w-4 accent-blue-600 cursor-pointer"
+              />
+              Send me a copy
             </label>
           </div>
 
