@@ -11,6 +11,7 @@ import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteL
 import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
 import { getMembersForTeamSharedPipeline, formatAssigneeList } from '@/utils/teamTaskUtils'
 import { TeamMemberAssignSectionLight } from '@/components/TeamMemberAssignSection'
+import { PipeIcon } from './PipeIcon'
 import { togglePipelineTask, updatePipelineTask, removePipelineTask } from '@/utils/pipelineTasks'
 import { showToast } from './ui/toast'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
@@ -75,7 +76,7 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], teams = [], pipelines = [], onPipelinesChange, getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], teams = [], pipelines = [], onPipelinesChange, getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead, taskListEpoch = 0 }) {
   const isClosed = !!closedRecord
   const closedId = closedRecord?.id || null
   const [closedSnap, setClosedSnap] = useState(closedRecord)
@@ -251,7 +252,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
     const personal = getLeadTasks(parcelId, null)
     setTasks([...personal, ...pipelineScopedTasksForParcel])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipelineScopedTasksForParcel, isOpen, isClosed, parcelId])
+  }, [pipelineScopedTasksForParcel, isOpen, isClosed, parcelId, taskListEpoch])
 
   useEffect(() => {
     setEditContacts(false)
@@ -992,10 +993,11 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                             </span>
                             {!isClosed && task.__source === 'pipeline' ? (
                               <span
-                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 uppercase tracking-wide"
+                                className="inline-flex items-center"
                                 title="Visible to everyone with access to this pipeline"
+                                aria-label="Pipeline task (shared with this pipeline)"
                               >
-                                Pipeline
+                                <PipeIcon className="h-3.5 w-3.5 text-violet-600 flex-shrink-0" />
                               </span>
                             ) : !isClosed && hasMixedTaskSources ? (
                               <span
@@ -1094,7 +1096,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
               >
                 <Pencil className="h-3.5 w-3.5 flex-shrink-0" />
-                Edit
+                Edit task
               </button>
             )}
             <button

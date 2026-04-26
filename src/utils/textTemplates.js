@@ -86,3 +86,32 @@ export const deleteTextTemplate = (templateId) => {
   const filtered = templates.filter((t) => t.id !== templateId)
   saveTextTemplates(filtered)
 }
+
+export const OUTREACH_TEXT_SHARE_TYPE = 'knockscout-outreach-text-v1'
+
+/** @returns {string} JSON to copy/share so teammates can import in Outreach */
+export const serializeTextTemplateForShare = (t) =>
+  JSON.stringify(
+    {
+      type: OUTREACH_TEXT_SHARE_TYPE,
+      name: t.name || 'Untitled',
+      body: t.body ?? '',
+    },
+    null,
+    2
+  )
+
+/**
+ * @param {string} jsonString
+ * @returns {string} new template id
+ */
+export const importTextTemplateFromShareJson = (jsonString) => {
+  const data = JSON.parse((jsonString || '').trim())
+  if (data.type !== OUTREACH_TEXT_SHARE_TYPE) {
+    throw new Error('This is not a valid shared text template')
+  }
+  return addTextTemplate({
+    name: data.name,
+    body: data.body,
+  })
+}

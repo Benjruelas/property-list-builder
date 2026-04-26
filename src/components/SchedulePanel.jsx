@@ -12,6 +12,7 @@ import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { LeadDetails } from './LeadDetails'
+import { EditLeadTaskDialog } from './EditLeadTaskDialog'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -245,6 +246,8 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   const [addTaskTitle, setAddTaskTitle] = useState('')
   const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
   const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
+  const [editTaskContext, setEditTaskContext] = useState(null)
+  const [leadDetailsTaskEpoch, setLeadDetailsTaskEpoch] = useState(0)
 
   const apiMode = pipelines.length > 0
   const [pipePickerState, setPipePickerState] = useState(null)
@@ -597,7 +600,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setShowAddTask(false); onClose?.() } }}>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setShowAddTask(false); setEditTaskContext(null); onClose?.() } }}>
       <DialogContent
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         showCloseButton={false}
@@ -1073,6 +1076,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
             if (onLeadsChange) onLeadsChange(loadLeads())
           }}
           onTasksChange={refreshTasks}
+          taskListEpoch={leadDetailsTaskEpoch}
           onViewTaskOnSchedule={(task) => {
             if (task?.scheduledAt) {
               const d = new Date(task.scheduledAt)
@@ -1083,6 +1087,9 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
               setViewMode('day')
               setSelectedLead(null)
             }
+          }}
+          onOpenEditTask={(t, l) => {
+            if (t) setEditTaskContext({ task: t, lead: l || null })
           }}
           pipelines={pipelines}
           pipelineName={pipelines.length > 0 ? (pipelines.find(p => p.id === selectedLeadPipelineId)?.title || 'Pipes') : null}
@@ -1096,6 +1103,22 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
               onOpenAddTask(lead, pid)
             }
           } : undefined}
+        />
+
+        <EditLeadTaskDialog
+          open={!!editTaskContext}
+          onOpenChange={(o) => { if (!o) setEditTaskContext(null) }}
+          context={editTaskContext}
+          pipelines={pipelines}
+          teams={teams}
+          displayLeads={displayLeads}
+          getToken={getToken}
+          onPipelinesChange={onPipelinesChange}
+          scheduleSync={scheduleSync}
+          onSaved={() => {
+            refreshTasks()
+            setLeadDetailsTaskEpoch((e) => e + 1)
+          }}
         />
 
         <ConvertToLeadPipelineDialog

@@ -4,6 +4,8 @@ import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { formatTimeInState, loadLeads, saveLeads } from '../utils/dealPipeline'
 import { LeadDetails } from './LeadDetails'
+import { EditLeadTaskDialog } from './EditLeadTaskDialog'
+import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
 function getColumnName(colId, columns) {
   const col = columns.find(c => c.id === colId)
@@ -110,11 +112,14 @@ export function LeadsPanel({
   getToken,
   teams = [],
 }) {
+  const { scheduleSync } = useUserDataSync()
   const [search, setSearch] = useState('')
   const [collapsedPipelines, setCollapsedPipelines] = useState({})
   const [selectedLead, setSelectedLead] = useState(null)
   const [selectedLeadPipelineId, setSelectedLeadPipelineId] = useState(null)
   const [selectedClosedLead, setSelectedClosedLead] = useState(null)
+  const [editTaskContext, setEditTaskContext] = useState(null)
+  const [leadDetailsTaskEpoch, setLeadDetailsTaskEpoch] = useState(0)
   const [tab, setTab] = useState('active')
   const [pipelineFilter, setPipelineFilter] = useState('all')
   const [stageFilter, setStageFilter] = useState('all')
@@ -187,6 +192,14 @@ export function LeadsPanel({
     return p?.columns || []
   }, [allPipelineData, stageScopedPipelineId])
 
+  const displayLeads = useMemo(() => {
+    if (pipelines.length > 0) {
+      return pipelines.flatMap((p) => (p.leads || []).map((l) => ({ ...l, __pipelineId: p.id, __pipelineTitle: p.title })))
+    }
+    if (dealPipelineLeads.length > 0) return dealPipelineLeads
+    return loadLeads()
+  }, [pipelines, dealPipelineLeads])
+
   const totalLeads = filteredPipelines.reduce((sum, p) => sum + p.leads.length, 0)
   const totalAll = allPipelineData.reduce((sum, p) => sum + p.leads.length, 0)
 
@@ -227,7 +240,7 @@ export function LeadsPanel({
   }, [allPipelineData, onLeadsChange])
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); setSelectedLeadPipelineId(null); onClose() } }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); setSelectedLeadPipelineId(null); setEditTaskContext(null); onClose() } }}>
       <DialogContent
         className="map-panel list-panel fullscreen-panel"
         showCloseButton={false}
@@ -435,6 +448,7 @@ export function LeadsPanel({
         isSkipTracingInProgress={selectedLead && skipTracingInProgress?.has?.(selectedLead.parcelId)}
         onLeadUpdate={handleLeadUpdate}
         onTasksChange={() => {}}
+        taskListEpoch={leadDetailsTaskEpoch}
         onViewTaskOnSchedule={onOpenScheduleAtDate ? (task) => {
           if (task?.scheduledAt) {
             setSelectedLead(null)
@@ -442,6 +456,9 @@ export function LeadsPanel({
             onOpenScheduleAtDate(task.scheduledAt)
           }
         } : undefined}
+        onOpenEditTask={(t, l) => {
+          if (t) setEditTaskContext({ task: t, lead: l || null })
+        }}
         pipelineName={pipelines.length > 0 ? (pipelines.find(p => p.id === selectedLeadPipelineId)?.title || 'Pipes') : null}
         onRequestMoveLead={onRequestMoveLead}
         onRequestRemoveLead={onRequestRemoveLead}
@@ -461,6 +478,22 @@ export function LeadsPanel({
             onOpenAddTask(lead, pid)
           }
         } : undefined}
+      />
+
+      <EditLeadTaskDialog
+        open={!!editTaskContext}
+        onOpenChange={(o) => { if (!o) setEditTaskContext(null) }}
+        context={editTaskContext}
+        pipelines={pipelines}
+        teams={teams}
+        displayLeads={displayLeads}
+        getToken={getToken}
+        onPipelinesChange={onPipelinesChange}
+        scheduleSync={scheduleSync}
+        onSaved={() => {
+          onPipelinesChange?.()
+          setLeadDetailsTaskEpoch((e) => e + 1)
+        }}
       />
 
       <LeadDetails

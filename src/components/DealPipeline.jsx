@@ -1284,13 +1284,17 @@ export function DealPipeline({
 
       {/* Edit Task dialog */}
       <Dialog open={!!editTask} onOpenChange={(open) => !open && setEditTask(null)}>
-        <DialogContent className="map-panel list-panel new-task-panel max-w-md max-h-[80vh] p-0" showCloseButton={false} nestedOverlay>
-          <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
+        <DialogContent
+          className="map-panel list-panel new-task-panel !flex !max-w-md w-[min(92vw,24rem)] max-h-[min(92vh,900px)] min-h-[min(68vh,560px)] flex-col gap-0 p-0 !rounded-2xl"
+          showCloseButton={false}
+          nestedOverlay
+        >
+          <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-2 border-b border-white/20">
             <DialogTitle className="text-xl font-semibold">Edit Task</DialogTitle>
             <DialogDescription className="sr-only">Edit task details</DialogDescription>
           </DialogHeader>
           {editTask && (
-            <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-140px)] space-y-3 create-list-form">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4 scrollbar-hide create-list-form">
               {editTask.task.parcelId ? (
                 <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95 space-y-1">
                   {(() => {

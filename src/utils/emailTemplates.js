@@ -90,6 +90,37 @@ export const deleteEmailTemplate = (templateId) => {
   saveEmailTemplates(filtered)
 }
 
+export const OUTREACH_EMAIL_SHARE_TYPE = 'knockscout-outreach-email-v1'
+
+/** @returns {string} JSON to copy/share so teammates can import in Outreach */
+export const serializeEmailTemplateForShare = (t) =>
+  JSON.stringify(
+    {
+      type: OUTREACH_EMAIL_SHARE_TYPE,
+      name: t.name || 'Untitled',
+      subject: t.subject ?? '',
+      body: t.body ?? '',
+    },
+    null,
+    2
+  )
+
+/**
+ * @param {string} jsonString
+ * @returns {string} new template id
+ */
+export const importEmailTemplateFromShareJson = (jsonString) => {
+  const data = JSON.parse((jsonString || '').trim())
+  if (data.type !== OUTREACH_EMAIL_SHARE_TYPE) {
+    throw new Error('This is not a valid shared email template')
+  }
+  return addEmailTemplate({
+    name: data.name,
+    subject: data.subject,
+    body: data.body,
+  })
+}
+
 /**
  * Replace template tags with actual values from parcel data
  * @param {string} text - Text with tags like {Owner Name}, {Address}, {City}
