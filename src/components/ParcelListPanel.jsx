@@ -178,22 +178,25 @@ export function ParcelListPanel({
                   <div 
                     key={parcelId} 
                     className={cn(
-                      "border rounded-xl transition-all overflow-hidden",
-                      isExpanded ? "shadow-md" : "border-gray-200 hover:border-gray-300"
+                      "map-panel-list-item rounded-xl transition-all overflow-hidden border border-white/10",
+                      isExpanded ? "border-solid bg-white/[0.06]" : "hover:bg-white/[0.08]"
                     )}
-                    style={isExpanded ? { borderColor: parcelBoundaryColor } : undefined}
+                    style={isExpanded ? {
+                      borderColor: parcelBoundaryColor,
+                      boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+                    } : undefined}
                   >
                     <div 
-                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
+                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-white/[0.04]"
                       onClick={() => toggleParcel(parcelId)}
                     >
-                      <span className="font-semibold text-sm text-gray-900 flex-1 truncate">
+                      <span className="font-semibold text-sm text-white/90 flex-1 truncate">
                         {address}
                       </span>
                       {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-gray-500 ml-2 flex-shrink-0" />
+                        <ChevronDown className="h-4 w-4 text-white/45 ml-2 flex-shrink-0" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-500 ml-2 flex-shrink-0" />
+                        <ChevronRight className="h-4 w-4 text-white/45 ml-2 flex-shrink-0" />
                       )}
                     </div>
                     

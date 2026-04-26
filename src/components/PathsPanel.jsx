@@ -254,14 +254,14 @@ export function PathsPanel({
                       <div
                         key={path.id}
                         className={cn(
-                          "flex items-start justify-between gap-2 p-3 border-2 rounded-lg transition-all cursor-pointer",
+                          "flex items-start justify-between gap-2 p-3 rounded-lg transition-all cursor-pointer",
                           isVisible
-                            ? ""
-                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                            ? "border border-solid bg-white/[0.08]"
+                            : "map-panel-list-item border border-white/10 bg-white/[0.04] hover:bg-white/[0.08]"
                         )}
                         style={isVisible ? {
                           borderColor: color,
-                          backgroundColor: 'rgba(255, 255, 255, 0.06)'
+                          backgroundColor: 'rgba(255, 255, 255, 0.08)',
                         } : undefined}
                         onClick={() => {
                           if (!isRenaming && onCenterOnPath) onCenterOnPath(path.id)

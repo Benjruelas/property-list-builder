@@ -38,8 +38,27 @@ export function ListPanel({
   onBulkEmail,
   onExportList,
   isAddingSingleParcel = false,
-  isBulkEmailMode = false
+  isBulkEmailMode = false,
+  /** Matches Settings → Parcel boundary color (list add / multi-select prompts). */
+  parcelBoundaryColor = '#2563eb',
 }) {
+  const parcelPromptBannerStyle =
+    typeof parcelBoundaryColor === 'string' && /^#[0-9A-Fa-f]{6}$/i.test(parcelBoundaryColor)
+      ? {
+          color: 'white',
+          borderColor: parcelBoundaryColor,
+          backgroundColor: `${parcelBoundaryColor}22`,
+        }
+      : { color: 'white', borderColor: parcelBoundaryColor }
+
+  const isHex6 = typeof parcelBoundaryColor === 'string' && /^#[0-9A-Fa-f]{6}$/i.test(parcelBoundaryColor)
+  const addParcelsBtnHoverEnter = (e) => {
+    if (isHex6) e.currentTarget.style.backgroundColor = `${parcelBoundaryColor}33`
+    else e.currentTarget.style.backgroundColor = 'rgba(37, 99, 234, 0.2)'
+  }
+  const addParcelsBtnHoverLeave = (e) => {
+    e.currentTarget.style.backgroundColor = 'transparent'
+  }
   const [newListName, setNewListName] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
@@ -281,7 +300,7 @@ export function ListPanel({
                 className="create-new-list-btn"
                 title="Create new list"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4" style={{ color: parcelBoundaryColor }} />
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose} title="Close">
                 <X className="h-4 w-4" />
@@ -292,12 +311,12 @@ export function ListPanel({
 
         <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           {isAddingSingleParcel && (
-            <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={{ color: 'white', borderColor: '#2563eb' }}>
+            <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={parcelPromptBannerStyle}>
               Select a list to add this parcel to
             </div>
           )}
           {!isAddingSingleParcel && selectedParcelsCount > 0 && (
-            <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={{ color: 'white', borderColor: '#2563eb' }}>
+            <div className="mb-4 p-3 rounded-lg text-sm font-medium text-center border" style={parcelPromptBannerStyle}>
               {selectedParcelsCount} parcel{selectedParcelsCount !== 1 ? 's' : ''} selected
             </div>
           )}
@@ -356,17 +375,17 @@ export function ListPanel({
                       <div 
                         key={list.id} 
                         className={cn(
-                          "flex items-center justify-between p-3 border-2 rounded-lg transition-all",
-                          isSelected 
-                            ? "" 
-                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50",
+                          "map-panel-list-item flex items-center justify-between p-3 rounded-lg transition-all",
+                          isSelected
+                            ? "border border-solid bg-white/[0.08]"
+                            : "border border-white/10 bg-white/[0.04] hover:bg-white/[0.08]",
                           !isAddingSingleParcel && !isBulkEmailMode && (list.parcels?.length ?? 0) === 0
                             ? "cursor-not-allowed opacity-75"
                             : "cursor-pointer"
                         )}
                         style={isSelected ? {
                           borderColor: listColor ?? LIST_HIGHLIGHT_COLORS[0],
-                          backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                          backgroundColor: 'rgba(255, 255, 255, 0.08)',
                         } : undefined}
                         onClick={(e) => {
                           if (isAddingSingleParcel) {
@@ -431,10 +450,13 @@ export function ListPanel({
                               e.stopPropagation()
                               onAddParcelsToList(list.id)
                             }}
-                            className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full hover:opacity-90 hover:bg-[#2563eb]/20 transition-colors"
+                            onMouseEnter={addParcelsBtnHoverEnter}
+                            onMouseLeave={addParcelsBtnHoverLeave}
+                            className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full transition-colors"
+                            style={{ color: parcelBoundaryColor }}
                             title="Add selected parcels to this list"
                           >
-                            <Plus className="h-5 w-5" strokeWidth={2.5} color="#2563eb" />
+                            <Plus className="h-5 w-5" strokeWidth={2.5} color={parcelBoundaryColor} />
                           </button>
                         )}
                         <div className="relative ml-2 flex items-center gap-1">

@@ -14,6 +14,7 @@ const DialogClose = DialogPrimitive.Close
 const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
+    data-app-dialog-backdrop
     className={cn(
       "fixed inset-0 z-[9998] bg-black/80 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
@@ -53,7 +54,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
   <DialogPortal container={typeof document !== 'undefined' ? document.getElementById('modal-root') || document.body : undefined}>
     {nestedOverlay ? (
       <>
-        <DialogPrimitive.Overlay className={cn("fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zOverlay)} />
+        <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zOverlay)} />
         <DialogPrimitive.Content
           ref={ref}
           className={cn(
@@ -75,12 +76,12 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
         </DialogPrimitive.Content>
       </>
     ) : hideOverlay ? (
-      <DialogPrimitive.Overlay className={cn("fixed inset-0 bg-black/60 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zHideOverlay)} />
+      <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/60 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zHideOverlay)} />
     ) : focusOverlay ? (
-      <DialogPrimitive.Overlay className={cn("fixed inset-0 bg-black/95 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", topLayer ? 'z-[10020]' : 'z-[9998]')} />
+      <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/95 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", topLayer ? 'z-[10020]' : 'z-[9998]')} />
     ) : blurOverlay ? (
       <>
-        <DialogPrimitive.Overlay className={cn("fixed inset-0 bg-black/40 backdrop-blur-lg pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zOverlay)} />
+        <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/40 backdrop-blur-lg pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zOverlay)} />
         <DialogPrimitive.Content
           ref={ref}
           className={cn(

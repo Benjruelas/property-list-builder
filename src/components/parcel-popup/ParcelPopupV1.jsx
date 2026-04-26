@@ -25,6 +25,24 @@ export function ParcelPopupV1({
       const card = cardRef.current
       if (!card) return
       if (card.contains(e.target)) return
+      // Clicks on map app chrome (list panel, address/zoom, controls) or on any
+      // open dialog/overlay are not "map background" — if we call onClose here
+      // (capture phase), the real control click can be lost and the list/panel
+      // stays open with parcel state already cleared.
+      if (
+        e.target?.closest?.(
+          [
+            '.map-panel',
+            '.list-panel',
+            '.map-controls-stack',
+            '.map-search-stack',
+            '[data-app-dialog-backdrop]',
+            '[role="dialog"]',
+          ].join(', ')
+        )
+      ) {
+        return
+      }
       onClose?.()
     }
     document.addEventListener('pointerdown', handlePointerDown, true)

@@ -46,7 +46,8 @@ import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmo
 import { SettingsPanel } from './components/SettingsPanel'
 import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
 import { LeadsPanel } from './components/LeadsPanel'
-import { RoofInspectorPanel } from './components/RoofInspectorPanel'
+import { HailDataPanel } from './components/HailDataPanel'
+// import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { getSettings, updateSettings } from './utils/settings'
@@ -220,6 +221,10 @@ function App() {
       setTeams([])
       setIsSettingsPanelOpen(false)
       setIsLeadsPanelOpen(false)
+      setIsHailDataOpen(false)
+      // setIsRoofInspectorOpen(false) // roof inspector — restore later
+      returnToParcelDetailsAfterHailRef.current = false
+      // returnToParcelDetailsAfterRoofRef.current = false // roof inspector — restore later
       setPickPipelineForParcel(null)
       setPaths([])
       setVisiblePathIds([])
@@ -313,8 +318,10 @@ function App() {
   const [teams, setTeams] = useState([])
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false)
   const [isLeadsPanelOpen, setIsLeadsPanelOpen] = useState(false)
-  const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false)
-  const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
+  const [isHailDataOpen, setIsHailDataOpen] = useState(false)
+  const [hailDataParcel, setHailDataParcel] = useState(null)
+  // const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false) // roof inspector — restore later
+  // const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
   const [settings, setSettings] = useState(() => getSettings())
   const [showMenu, setShowMenu] = useState(false)
   const pathTrackerRef = useRef(null)
@@ -342,7 +349,8 @@ function App() {
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isOutreachPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isRoofInspectorOpen
+    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isHailDataOpen
+    // || isRoofInspectorOpen // roof inspector — restore later
   const hasPopup = clickedParcelId != null
 
   // iOS Safari resize fix
@@ -1940,7 +1948,19 @@ function App() {
 
   const suppressPopupCloseRef = useRef(false)
   const isParcelDetailsOpenRef = useRef(false)
+  /** When set, next handleParcelDetailsClose (from Radix onOpenChange) must not clear clickedParcelId/Data — e.g. Add to list from details keeps parcel data for the list picker. */
+  const suppressParcelDetailsDataClearRef = useRef(false)
+  // const returnToParcelDetailsAfterRoofRef = useRef(false) // roof inspector — restore with RoofInspectorPanel
+  /** When true, closing HailDataPanel should reopen ParcelDetails (nav stack from More details). */
+  const returnToParcelDetailsAfterHailRef = useRef(false)
+  const wasParcelDetailsOpenRef = useRef(false)
   useEffect(() => { isParcelDetailsOpenRef.current = isParcelDetailsOpen }, [isParcelDetailsOpen])
+  useEffect(() => {
+    if (isParcelDetailsOpen && !wasParcelDetailsOpenRef.current) {
+      suppressParcelDetailsDataClearRef.current = false
+    }
+    wasParcelDetailsOpenRef.current = isParcelDetailsOpen
+  }, [isParcelDetailsOpen])
   const handleCloseParcelPopup = useCallback(() => {
     if (suppressPopupCloseRef.current) {
       suppressPopupCloseRef.current = false
@@ -1958,6 +1978,10 @@ function App() {
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
     setIsParcelDetailsOpen(false)
+    if (suppressParcelDetailsDataClearRef.current) {
+      suppressParcelDetailsDataClearRef.current = false
+      return
+    }
     const openedFromMap = parcelDetailsSourceRef.current === 'map'
     if (options.reopenPopup && openedFromMap && clickedParcelData) {
       openParcelPopup(clickedParcelData)
@@ -2783,7 +2807,9 @@ function App() {
         onClose={() => {
           setIsListPanelOpen(false)
           setShowListSelector(false)
-          setClickedParcelData(null)
+          if (!popupData) {
+            setClickedParcelData(null)
+          }
         }}
         selectedListIds={selectedListIds}
         onToggleListHighlight={(listId) => {
@@ -2820,6 +2846,7 @@ function App() {
         onExportList={handleExportList}
         isAddingSingleParcel={showListSelector && !!clickedParcelData}
         isBulkEmailMode={showListSelector && !!selectedEmailTemplate}
+        parcelBoundaryColor={settings.parcelBoundaryColor}
       />
 
       <ParcelListPanel
@@ -2867,9 +2894,31 @@ function App() {
           } : popupData}
           isLead={clickedParcelData ? isParcelALeadCheck(clickedParcelData.id) : false}
           onSkipTrace={() => { if (clickedParcelData) handleSkipTraceParcel(clickedParcelData) }}
-          onAddToList={() => { setShowListSelector(true); setIsListPanelOpen(true) }}
+          onAddToList={() => {
+            suppressParcelDetailsDataClearRef.current = true
+            setShowListSelector(true)
+            setIsListPanelOpen(true)
+            setIsParcelDetailsOpen(false)
+          }}
           onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
-          onHailData={() => { if (clickedParcelData) { setRoofInspectorParcel(clickedParcelData); setIsRoofInspectorOpen(true) } }}
+          onHailData={() => {
+            if (!clickedParcelData) return
+            setHailDataParcel(clickedParcelData)
+            suppressParcelDetailsDataClearRef.current = true
+            returnToParcelDetailsAfterHailRef.current = true
+            setIsParcelDetailsOpen(false)
+            setIsHailDataOpen(true)
+          }}
+          /* roof inspector — restore later
+          onRoofInspector={() => {
+            if (!clickedParcelData) return
+            setRoofInspectorParcel(clickedParcelData)
+            suppressParcelDetailsDataClearRef.current = true
+            returnToParcelDetailsAfterRoofRef.current = true
+            setIsParcelDetailsOpen(false)
+            setIsRoofInspectorOpen(true)
+          }}
+          */
         />,
         document.body
       )}
@@ -3147,11 +3196,31 @@ function App() {
         onOpenAddTask={handleOpenAddTaskForLead}
       />
 
+      <HailDataPanel
+        isOpen={isHailDataOpen}
+        onClose={() => {
+          setIsHailDataOpen(false)
+          if (returnToParcelDetailsAfterHailRef.current) {
+            returnToParcelDetailsAfterHailRef.current = false
+            setIsParcelDetailsOpen(true)
+          }
+        }}
+        parcelData={hailDataParcel}
+      />
+
+      {/*
       <RoofInspectorPanel
         isOpen={isRoofInspectorOpen}
-        onClose={() => setIsRoofInspectorOpen(false)}
+        onClose={() => {
+          setIsRoofInspectorOpen(false)
+          if (returnToParcelDetailsAfterRoofRef.current) {
+            returnToParcelDetailsAfterRoofRef.current = false
+            setIsParcelDetailsOpen(true)
+          }
+        }}
         parcelData={roofInspectorParcel}
       />
+      */}
 
       {/* Authentication Dialogs */}
       <Login

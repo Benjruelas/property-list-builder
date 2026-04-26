@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Phone, ListPlus, UserPlus, CloudRain, CheckCircle2, Loader2 } from 'lucide-react'
+import { X, Phone, ListPlus, UserPlus, CloudRain, /* Telescope, */ CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { DirectionsPicker } from '../DirectionsPicker'
@@ -20,7 +20,7 @@ const TABS = [
  * Option 3: Tabbed Card
  * Horizontal tabs to switch between focused views, no scroll needed per tab.
  */
-export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, isLead, popupData }) {
+export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, /* onRoofInspector, */ isLead, popupData }) {
   const data = useParcelDetailsData({ isOpen, parcelData, lists, enableAutoClose, onClose })
   const [activeTab, setActiveTab] = useState('overview')
 
@@ -128,6 +128,9 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
             {onAddToList && <button onClick={() => onAddToList()} className="p-3.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white transition-colors" title="Add to List"><ListPlus size={22} /></button>}
             {!isLead && onConvertToLead && <button onClick={() => onConvertToLead()} className="p-3.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white transition-colors" title="Convert to Lead"><UserPlus size={22} /></button>}
             {onHailData && <button onClick={() => onHailData()} className="p-3.5 rounded-xl bg-orange-600/80 hover:bg-orange-600 text-white transition-colors" title="Hail Data"><CloudRain size={22} /></button>}
+            {/* roof inspector — restore onRoofInspector prop + Telescope import
+            {onRoofInspector && <button onClick={() => onRoofInspector()} className="p-3.5 rounded-xl bg-sky-600/80 hover:bg-sky-600 text-white transition-colors" title="Roof Inspector"><Telescope size={22} /></button>}
+            */}
           </div>
 
           {/* Inline Notes */}

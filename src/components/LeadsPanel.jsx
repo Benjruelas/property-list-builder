@@ -10,12 +10,16 @@ function getColumnName(colId, columns) {
   return col?.name || colId
 }
 
+/** Separate list items (spaced, rounded), same border language as ListPanel. */
+const leadListRowClass =
+  'map-panel-list-item leads-panel-list-item flex flex-col gap-1 px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
+
 function LeadCard({ lead, columns, pipelineTitle, onClick }) {
   const stageName = getColumnName(lead.status, columns)
   const timeStr = formatTimeInState(lead)
   return (
     <div
-      className="leads-card flex flex-col gap-1 px-3.5 py-3 rounded-lg cursor-pointer active:scale-[0.98] transition-transform"
+      className={leadListRowClass}
       onClick={() => onClick?.(lead)}
       role="button"
       tabIndex={0}
@@ -51,7 +55,7 @@ function ClosedLeadCard({ lead, onClick }) {
     : ''
   return (
     <div
-      className="leads-card flex flex-col gap-1 px-3.5 py-3 rounded-lg cursor-pointer active:scale-[0.98] transition-transform"
+      className={leadListRowClass}
       onClick={() => onClick?.(lead)}
       role="button"
       tabIndex={0}

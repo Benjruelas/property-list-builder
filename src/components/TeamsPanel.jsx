@@ -162,7 +162,7 @@ export function TeamsPanel({
                       key={team.id}
                       type="button"
                       onClick={() => setOpenTeamId(team.id)}
-                      className="w-full flex items-start justify-between gap-2 p-3 border-2 border-gray-200 rounded-lg transition-all cursor-pointer hover:border-gray-300 hover:bg-gray-50 text-left"
+                      className="map-panel-list-item w-full flex items-start justify-between gap-2 p-3 rounded-lg transition-all cursor-pointer border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-left"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">

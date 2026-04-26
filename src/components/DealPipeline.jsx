@@ -778,8 +778,8 @@ export function DealPipeline({
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && handleLeadClick(lead)}
-                      className={`deal-pipeline-lead-card px-2 py-1.5 rounded-md border border-white/30 text-white text-xs group flex items-center gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedLeadId === lead.id ? 'opacity-50' : ''}`}
-                      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                      className={`deal-pipeline-lead-card map-panel-list-item px-2 py-1.5 rounded-md border border-white/10 text-white text-xs group flex items-center gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedLeadId === lead.id ? 'opacity-50' : ''}`}
+                      style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }}
                     >
                       <div className="flex-1 min-w-0">
                         {(() => {
@@ -931,7 +931,7 @@ export function DealPipeline({
                     const unscheduled = filtered.filter((t) => !t.scheduledAt)
                     const TaskItem = ({ task }) => (
                   <div
-                    className={`text-xs rounded-md p-2 max-md:p-1.5 border cursor-pointer transition-colors ${task.completed ? 'opacity-60 bg-gray-100/70 dark:bg-white/[0.03] border-gray-200/80 dark:border-white/10 hover:opacity-80' : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                    className={`text-xs map-panel-list-item rounded-md p-2 max-md:p-1.5 cursor-pointer transition-colors border border-solid ${task.completed ? 'opacity-60 border-white/[0.08] bg-white/[0.04] hover:opacity-90 hover:bg-white/[0.07]' : 'border-white/10 bg-white/[0.06] hover:bg-white/10'}`}
                     onClick={() => {
                       if (!task.parcelId) return
                       const lead = displayLeads.find((l) => l.parcelId === task.parcelId)

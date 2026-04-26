@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -1073,6 +1074,15 @@ export function TasksPanel({
   )
 }
 
+const TASK_OPTIONS_MENU_W = 168
+const VIEWPORT_PAD = 8
+
+function getModalPortalContainer() {
+  if (typeof document === 'undefined') return null
+  // Same layer as Radix `Dialog` — body-only portals render *under* #modal-root (index.html z-index 2147483647).
+  return document.getElementById('modal-root') || document.body
+}
+
 function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead }) {
   const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
   const leadLine = task.parcelId
@@ -1081,12 +1091,46 @@ function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit,
   const assigneeStr = task.__source === 'team' ? formatAssigneeList(task.assignedUids, teams) : null
   const isDone = task.completed
   const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef(null)
+  const [menuFixed, setMenuFixed] = useState(null)
+  const optionsBtnRef = useRef(null)
+  const portalMenuRef = useRef(null)
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuFixed(null)
+      return
+    }
+    const place = () => {
+      if (!optionsBtnRef.current) return
+      const br = optionsBtnRef.current.getBoundingClientRect()
+      const left = Math.max(
+        VIEWPORT_PAD,
+        Math.min(br.right - TASK_OPTIONS_MENU_W, window.innerWidth - TASK_OPTIONS_MENU_W - VIEWPORT_PAD)
+      )
+      let top = br.bottom + 4
+      if (portalMenuRef.current) {
+        const h = portalMenuRef.current.getBoundingClientRect().height
+        if (top + h > window.innerHeight - VIEWPORT_PAD) {
+          top = br.top - h - 4
+        }
+        if (top < VIEWPORT_PAD) top = VIEWPORT_PAD
+      }
+      setMenuFixed((prev) => {
+        if (prev && Math.abs(prev.top - top) < 0.5 && Math.abs(prev.left - left) < 0.5) return prev
+        return { top, left }
+      })
+    }
+    place()
+    const id = requestAnimationFrame(place)
+    return () => cancelAnimationFrame(id)
+  }, [menuOpen])
 
   useEffect(() => {
     if (!menuOpen) return
     const handleOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+      const t = e.target
+      if (optionsBtnRef.current?.contains(t) || portalMenuRef.current?.contains(t)) return
+      setMenuOpen(false)
     }
     document.addEventListener('pointerdown', handleOutside)
     return () => document.removeEventListener('pointerdown', handleOutside)
@@ -1095,11 +1139,11 @@ function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit,
   return (
     <div
       className={cn(
-        'text-sm rounded-lg p-3 border transition-colors',
+        'text-sm rounded-lg p-3 transition-colors',
         onActivate ? 'cursor-pointer' : '',
         isDone
-          ? 'opacity-80 border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'
-          : 'border-white/15 bg-white/[0.06] hover:bg-white/10'
+          ? 'map-panel-list-item opacity-80 border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.08]'
+          : 'map-panel-list-item border border-white/10 bg-white/[0.06] hover:bg-white/10'
       )}
       onClick={onActivate ? () => onActivate() : undefined}
       role={onActivate ? 'button' : undefined}
@@ -1159,8 +1203,9 @@ function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit,
             </div>
           )}
         </div>
-        <div ref={menuRef} className="relative flex-shrink-0">
+        <div className="relative flex-shrink-0">
           <button
+            ref={optionsBtnRef}
             type="button"
             onClick={(e) => { e.stopPropagation(); setMenuOpen((p) => !p) }}
             className="p-1.5 -m-1 rounded-md text-white/50 hover:text-white/80 hover:bg-white/10 transition-colors"
@@ -1168,10 +1213,19 @@ function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit,
           >
             <MoreVertical className="h-[18px] w-[18px]" />
           </button>
-          {menuOpen && (
+          {menuOpen && menuFixed && getModalPortalContainer() && createPortal(
             <div
-              className="absolute right-0 top-full mt-1 z-[100] rounded-xl py-1 overflow-hidden shadow-xl border border-white/20 min-w-[160px]"
-              style={{ background: 'rgba(30, 30, 30, 0.92)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+              ref={portalMenuRef}
+              data-task-options-dropdown
+              className="pointer-events-auto fixed z-[10030] rounded-xl py-1 overflow-hidden shadow-xl border border-white/20 min-w-[160px]"
+              style={{
+                top: menuFixed.top,
+                left: menuFixed.left,
+                background: 'rgba(30, 30, 30, 0.92)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+              }}
+              role="menu"
             >
               {onOpenLead && (
                 <button
@@ -1209,7 +1263,8 @@ function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit,
                   <Trash2 className="h-4 w-4" /> Delete
                 </button>
               )}
-            </div>
+            </div>,
+            getModalPortalContainer()
           )}
         </div>
       </div>

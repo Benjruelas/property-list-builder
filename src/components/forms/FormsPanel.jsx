@@ -388,8 +388,7 @@ export function FormsPanel({
                       <div
                         key={t.id}
                         onClick={() => { setActiveTemplateId(t.id); setView('fill') }}
-                        className="relative w-full sm:w-auto border-2 border-white/20 hover:border-white/40 rounded-lg p-4 transition-all cursor-pointer"
-                        style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }}
+                        className="map-panel-list-item relative w-full sm:w-auto rounded-lg p-4 transition-all cursor-pointer border border-white/10 bg-white/[0.06] hover:bg-white/[0.1]"
                       >
                         <div className="flex items-start gap-2">
                           <FileText className="h-5 w-5 flex-shrink-0 mt-0.5 opacity-80" />
