@@ -9,6 +9,9 @@ import { loadColumns, saveColumns, loadLeads, saveLeads, loadTitle, saveTitle, f
 import { displayLeadName } from '@/utils/ownerName'
 import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, deleteAllLeadTasks, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline, taskBelongsToLocalLeads } from '@/utils/leadTasks'
 import { addPipelineTask, updatePipelineTask, togglePipelineTask, removePipelineTask, flattenPipelineTasks } from '@/utils/pipelineTasks'
+import { addTeamTask, updateTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
+import { getMembersForTeamSharedPipeline, flattenTeamTasks, formatAssigneeList } from '@/utils/teamTaskUtils'
+import { TeamMemberAssignSectionLight } from './TeamMemberAssignSection'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
@@ -105,6 +108,8 @@ export function DealPipeline({
   const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
   const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
   const [addTaskFromLead, setAddTaskFromLead] = useState(false)
+  const [addTaskAssignUids, setAddTaskAssignUids] = useState([])
+  const [editTaskAssignUids, setEditTaskAssignUids] = useState([])
   const [tasksCollapsed, setTasksCollapsed] = useState(false)
   const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [scheduledSectionCollapsed, setScheduledSectionCollapsed] = useState(false)
@@ -193,7 +198,8 @@ export function DealPipeline({
     // pipelines[].tasks which are fetched by /api/pipelines (access-filtered).
     const personal = apiMode ? getPersonalTasks() : getAllTasks()
     const pipeScoped = apiMode ? flattenPipelineTasks(pipelines) : []
-    setAllTasks([...personal, ...pipeScoped])
+    const teamScoped = apiMode ? flattenTeamTasks(pipelines) : []
+    setAllTasks([...personal, ...pipeScoped, ...teamScoped])
   }, [apiMode, pipelines])
 
   useEffect(() => {
@@ -467,7 +473,23 @@ export function DealPipeline({
   const commitNewTask = useCallback(async (title) => {
     const trimmed = (title || '').toString().trim()
     if (!trimmed) return
-    if (apiMode && activePipelineId) {
+    const isTeamPipe =
+      activePipeline && Array.isArray(activePipeline.teamShares) && activePipeline.teamShares.length > 0
+    const lead = addTaskLeadId ? displayLeads.find((l) => l.parcelId === addTaskLeadId) : null
+    if (apiMode && activePipelineId && isTeamPipe && lead?.id) {
+      try {
+        await addTeamTask(getToken, activePipelineId, lead.id, {
+          title: trimmed,
+          dueAt: addTaskScheduledAt,
+          assignedUids: addTaskAssignUids
+        })
+        await onPipelinesChange?.()
+        showToast('Team task added', 'success')
+      } catch (err) {
+        showToast(err.message || 'Could not add team task', 'error')
+        return
+      }
+    } else if (apiMode && activePipelineId) {
       try {
         await addPipelineTask(getToken, activePipelineId, {
           title: trimmed,
@@ -494,14 +516,31 @@ export function DealPipeline({
       showToast('Task added', 'success')
     }
     setShowAddTaskDialog(false)
-    const lead = addTaskLeadId ? displayLeads.find((l) => l.parcelId === addTaskLeadId) : null
+    setAddTaskAssignUids([])
     if (lead) setSelectedLead(lead)
-  }, [apiMode, activePipelineId, getToken, addTaskLeadId, addTaskScheduledAt, addTaskScheduledEndAt, onPipelinesChange, refreshAllTasks, scheduleSync, displayLeads])
+  }, [apiMode, activePipelineId, activePipeline, getToken, addTaskLeadId, addTaskScheduledAt, addTaskScheduledEndAt, addTaskAssignUids, onPipelinesChange, refreshAllTasks, scheduleSync, displayLeads])
 
   const commitEditTask = useCallback(async (title) => {
     const trimmed = (title || '').toString().trim()
     if (!trimmed || !editTask?.task) return
     const task = editTask.task
+    if (task.__source === 'team' && task.pipelineId && task.leadId) {
+      try {
+        await updateTeamTask(getToken, task.pipelineId, task.leadId, {
+          id: task.id,
+          title: trimmed,
+          dueAt: editTaskScheduledAt,
+          assignedUids: editTaskAssignUids
+        })
+        await onPipelinesChange?.()
+        showToast('Task updated', 'success')
+        setEditTask(null)
+        setEditTaskAssignUids([])
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
     if (task.__source === 'pipeline' && task.pipelineId) {
       try {
         await updatePipelineTask(getToken, task.pipelineId, {
@@ -524,7 +563,7 @@ export function DealPipeline({
     scheduleSync()
     showToast('Task updated', 'success')
     setEditTask(null)
-  }, [editTask, editTaskScheduledAt, editTaskScheduledEndAt, getToken, onPipelinesChange, refreshAllTasks, scheduleSync])
+  }, [editTask, editTaskScheduledAt, editTaskScheduledEndAt, editTaskAssignUids, getToken, onPipelinesChange, refreshAllTasks, scheduleSync])
 
   const getLeadLabel = (parcelId) => {
     if (!parcelId) return 'Pipeline task'
@@ -532,6 +571,13 @@ export function DealPipeline({
     if (lead) return getStreetAddress(lead) || lead.address || lead.owner || parcelId
     return parcelId
   }
+
+  const newTaskTeamMembers = useMemo(
+    () => (activePipeline ? getMembersForTeamSharedPipeline(activePipeline, teams) : []),
+    [activePipeline, teams]
+  )
+  const canAddTeamTaskInDialog =
+    apiMode && activePipeline && (activePipeline.teamShares || []).length > 0 && !!addTaskLeadId
 
   const addTaskLeadSuggestions = (() => {
     const q = (addTaskLeadSearch || '').trim().toLowerCase()
@@ -833,6 +879,7 @@ export function DealPipeline({
                   setAddTaskScheduledAt(null)
                   setAddTaskScheduledEndAt(null)
                   setAddTaskFromLead(false)
+                  setAddTaskAssignUids([])
                   setShowAddTaskDialog(true)
                 }}
                 title="Add task"
@@ -868,7 +915,14 @@ export function DealPipeline({
                         type="button"
                         onClick={async (e) => {
                           e.stopPropagation()
-                          if (task.__source === 'pipeline' && task.pipelineId) {
+                          if (task.__source === 'team' && task.pipelineId && task.leadId) {
+                            try {
+                              await toggleTeamTask(getToken, task.pipelineId, task.leadId, task.id)
+                              onPipelinesChange?.()
+                            } catch (err) {
+                              showToast(err.message || 'Failed to update task', 'error')
+                            }
+                          } else if (task.__source === 'pipeline' && task.pipelineId) {
                             try {
                               await togglePipelineTask(getToken, task.pipelineId, task.id)
                               onPipelinesChange?.()
@@ -891,9 +945,23 @@ export function DealPipeline({
                         )}
                       </button>
                       <div className="flex-1 min-w-0">
-                        <div className={task.completed ? 'line-through text-gray-500' : 'font-medium'}>{task.title || '(untitled)'}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                          <span className={task.completed ? 'line-through text-gray-500' : 'font-medium'}>
+                            {task.title || '(untitled)'}
+                          </span>
+                          {task.__source === 'team' && (
+                            <span className="text-[9px] font-medium px-1 py-0 rounded bg-blue-100/90 text-blue-800 dark:bg-blue-500/20 dark:text-blue-200 uppercase">
+                              Team
+                            </span>
+                          )}
+                        </div>
                         {task.parcelId && (
                           <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={getLeadLabel(task.parcelId)}>Lead: {getLeadLabel(task.parcelId)}</div>
+                        )}
+                        {task.__source === 'team' && formatAssigneeList(task.assignedUids, teams) && (
+                          <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={formatAssigneeList(task.assignedUids, teams)}>
+                            {formatAssigneeList(task.assignedUids, teams)}
+                          </div>
                         )}
                         {(task.completed || task.scheduledAt) && (
                           <div className="text-[10px] text-gray-500 mt-0.5">
@@ -936,7 +1004,7 @@ export function DealPipeline({
                             </button>
                             {!scheduledSectionCollapsed && (
                               <div className="space-y-1.5">
-                                {scheduled.map((task) => <TaskItem key={task.id} task={task} />)}
+                                {scheduled.map((task) => <TaskItem key={`${task.id}-${task.__source || 'p'}`} task={task} />)}
                               </div>
                             )}
                           </div>
@@ -957,7 +1025,7 @@ export function DealPipeline({
                             </button>
                             {!unscheduledSectionCollapsed && (
                               <div className="space-y-1.5">
-                                {unscheduled.map((task) => <TaskItem key={task.id} task={task} />)}
+                                {unscheduled.map((task) => <TaskItem key={`${task.id}-${task.__source || 'p'}`} task={task} />)}
                               </div>
                             )}
                           </div>
@@ -978,6 +1046,7 @@ export function DealPipeline({
         lead={selectedLead}
         pipelineId={apiMode ? activePipelineId : null}
         pipelineTeamShares={apiMode ? (pipelines.find((p) => p.id === activePipelineId)?.teamShares || []) : []}
+        teams={teams}
         pipelines={pipelines}
         onPipelinesChange={onPipelinesChange}
         getToken={getToken}
@@ -1000,6 +1069,7 @@ export function DealPipeline({
             setAddTaskLeadId(lead.parcelId)
             setAddTaskLeadSearch(getLeadLabel(lead.parcelId))
             setAddTaskTitle('')
+            setAddTaskAssignUids([])
             const startOfHour = new Date()
             startOfHour.setMinutes(0, 0, 0)
             const startTs = startOfHour.getTime()
@@ -1135,10 +1205,21 @@ export function DealPipeline({
               inline
               value={addTaskScheduledAt}
               onChange={setAddTaskScheduledAt}
-              endValue={addTaskScheduledEndAt}
-              onEndChange={setAddTaskScheduledEndAt}
+              endValue={canAddTeamTaskInDialog ? null : addTaskScheduledEndAt}
+              onEndChange={canAddTeamTaskInDialog ? undefined : setAddTaskScheduledEndAt}
               minDate={Date.now()}
             />
+            {canAddTeamTaskInDialog && newTaskTeamMembers.length > 0 && (
+              <TeamMemberAssignSectionLight
+                members={newTaskTeamMembers}
+                selectedUids={addTaskAssignUids}
+                onToggle={(uid) => {
+                  setAddTaskAssignUids((prev) =>
+                    prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
+                  )
+                }}
+              />
+            )}
             <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
@@ -1154,7 +1235,15 @@ export function DealPipeline({
               >
                 Create
               </Button>
-              <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={() => setShowAddTaskDialog(false)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="create-list-btn flex-1"
+                onClick={() => {
+                  setAddTaskAssignUids([])
+                  setShowAddTaskDialog(false)
+                }}
+              >
                 Cancel
               </Button>
             </div>
@@ -1217,10 +1306,21 @@ export function DealPipeline({
                 inline
                 value={editTaskScheduledAt}
                 onChange={setEditTaskScheduledAt}
-                endValue={editTaskScheduledEndAt}
-                onEndChange={setEditTaskScheduledEndAt}
+                endValue={editTask.task?.__source === 'team' ? null : editTaskScheduledEndAt}
+                onEndChange={editTask.task?.__source === 'team' ? undefined : setEditTaskScheduledEndAt}
                 minDate={Date.now()}
               />
+              {editTask.task?.__source === 'team' && (activePipeline?.teamShares || []).length > 0 && (
+                <TeamMemberAssignSectionLight
+                  members={newTaskTeamMembers}
+                  selectedUids={editTaskAssignUids}
+                  onToggle={(uid) => {
+                    setEditTaskAssignUids((prev) =>
+                      prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
+                    )
+                  }}
+                />
+              )}
               <div className="flex gap-2 pt-1">
                 <Button
                   size="sm"
@@ -1234,7 +1334,15 @@ export function DealPipeline({
                 >
                   Save
                 </Button>
-                <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={() => setEditTask(null)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="create-list-btn flex-1"
+                  onClick={() => {
+                    setEditTaskAssignUids([])
+                    setEditTask(null)
+                  }}
+                >
                   Cancel
                 </Button>
               </div>
@@ -1519,13 +1627,13 @@ export function DealPipeline({
             role="menu"
             onClick={(e) => e.stopPropagation()}
           >
-            {!taskMenu.task.completed && taskMenu.task.scheduledAt && onOpenScheduleAtDate && (
+            {!taskMenu.task.completed && (taskMenu.task.scheduledAt || taskMenu.task.dueAt) && onOpenScheduleAtDate && (
               <button
                 type="button"
                 onClick={() => {
                   setTaskMenu(null)
                   setSelectedLead(null)
-                  onOpenScheduleAtDate(taskMenu.task.scheduledAt)
+                  onOpenScheduleAtDate(taskMenu.task.scheduledAt || taskMenu.task.dueAt)
                 }}
                 className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
               >
@@ -1541,8 +1649,17 @@ export function DealPipeline({
                 setSelectedLead(null)
                 setEditTask({ task: taskMenu.task, lead: lead || null })
                 setEditTaskTitle(taskMenu.task.title || '')
-                setEditTaskScheduledAt(taskMenu.task.scheduledAt ?? null)
-                setEditTaskScheduledEndAt(taskMenu.task.scheduledEndAt ?? null)
+                setEditTaskScheduledAt(
+                  taskMenu.task.__source === 'team'
+                    ? (taskMenu.task.dueAt ?? taskMenu.task.scheduledAt ?? null)
+                    : (taskMenu.task.scheduledAt ?? null)
+                )
+                setEditTaskScheduledEndAt(taskMenu.task.__source === 'team' ? null : (taskMenu.task.scheduledEndAt ?? null))
+                setEditTaskAssignUids(
+                  taskMenu.task.__source === 'team' && Array.isArray(taskMenu.task.assignedUids)
+                    ? [...taskMenu.task.assignedUids]
+                    : []
+                )
               }}
               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
             >
@@ -1561,6 +1678,15 @@ export function DealPipeline({
                   variant: 'danger',
                   onConfirm: async () => {
                     const task = taskMenu.task
+                    if (task.__source === 'team' && task.pipelineId && task.leadId) {
+                      try {
+                        await removeTeamTask(getToken, task.pipelineId, task.leadId, task.id)
+                        await onPipelinesChange?.()
+                      } catch (err) {
+                        showToast(err.message || 'Could not delete task', 'error')
+                      }
+                      return
+                    }
                     if (task.__source === 'pipeline' && task.pipelineId) {
                       try {
                         await removePipelineTask(getToken, task.pipelineId, task.id)

@@ -162,43 +162,41 @@ function pidMatch(pid) {
   ]
 }
 
-function buildColorExpression(clickedParcelId, selectedParcels, parcelIdToColorIndex, baseColor = '#2563eb') {
+// Multi-select uses feature-state ('selected') so toggling a selection doesn't
+// trigger bucket re-tessellation in the worker. Clicked + list highlights stay
+// in the case expression because they change infrequently.
+const FS_SELECTED = ['boolean', ['feature-state', 'selected'], false]
+
+function buildColorExpression(clickedParcelId, parcelIdToColorIndex, baseColor = '#2563eb') {
   const cases = []
+  cases.push(FS_SELECTED, '#059669')
   if (clickedParcelId) {
     cases.push(pidMatch(clickedParcelId), baseColor)
-  }
-  for (const pid of selectedParcels) {
-    cases.push(pidMatch(pid), '#059669')
   }
   for (const [pid, idx] of parcelIdToColorIndex) {
     cases.push(pidMatch(pid), LIST_HIGHLIGHT_COLORS[idx] || LIST_HIGHLIGHT_COLORS[0])
   }
-  if (cases.length === 0) return baseColor
   return ['case', ...cases, baseColor]
 }
 
-function buildFillColorExpression(clickedParcelId, selectedParcels, parcelIdToColorIndex, baseColor = '#2563eb') {
+function buildFillColorExpression(clickedParcelId, parcelIdToColorIndex, baseColor = '#2563eb') {
   const cases = []
+  cases.push(FS_SELECTED, '#10b981')
   if (clickedParcelId) {
     cases.push(pidMatch(clickedParcelId), baseColor)
-  }
-  for (const pid of selectedParcels) {
-    cases.push(pidMatch(pid), '#10b981')
   }
   for (const [pid, idx] of parcelIdToColorIndex) {
     const c = LIST_HIGHLIGHT_COLORS[idx] || LIST_HIGHLIGHT_COLORS[0]
     cases.push(pidMatch(pid), c)
   }
-  if (cases.length === 0) return 'transparent'
   return ['case', ...cases, 'transparent']
 }
 
-function buildWidthExpression(clickedParcelId, selectedParcels, parcelIdToColorIndex) {
+function buildWidthExpression(clickedParcelId, parcelIdToColorIndex) {
   const cases = []
+  cases.push(FS_SELECTED, 3)
   if (clickedParcelId) cases.push(pidMatch(clickedParcelId), 3)
-  for (const pid of selectedParcels) cases.push(pidMatch(pid), 3)
   for (const [pid] of parcelIdToColorIndex) cases.push(pidMatch(pid), 3)
-  if (cases.length === 0) return 2
   return ['case', ...cases, 2]
 }
 
@@ -227,6 +225,9 @@ export function PMTilesParcelLayer({
   const selectedRef = useRef(selectedParcels)
   const colorIndexRef = useRef(new Map())
   const layersAddedRef = useRef(false)
+  // Tracks which feature ids currently have selected=true feature-state so we
+  // can diff and reconcile when selectedParcels changes from the parent.
+  const featureStateIdsRef = useRef(new Set())
 
   colorRef.current = boundaryColor || '#2563eb'
   opacityRef.current = boundaryOpacity ?? 80
@@ -256,28 +257,58 @@ export function PMTilesParcelLayer({
     } catch { return }
     const color = colorRef.current
     const clicked = clickedRef.current
-    const selected = selectedRef.current
     const idxMap = colorIndexRef.current
     try {
       map.setPaintProperty(FILL_LAYER, 'fill-color',
-        buildFillColorExpression(clicked, selected, idxMap, color))
+        buildFillColorExpression(clicked, idxMap, color))
       map.setPaintProperty(LINE_LAYER, 'line-color',
-        buildColorExpression(clicked, selected, idxMap, color))
+        buildColorExpression(clicked, idxMap, color))
       map.setPaintProperty(LINE_LAYER, 'line-width',
-        buildWidthExpression(clicked, selected, idxMap))
+        buildWidthExpression(clicked, idxMap))
       map.setPaintProperty(LINE_LAYER, 'line-opacity',
         (opacityRef.current ?? 80) / 100)
       map.triggerRepaint()
     } catch { /* ignore if layers not ready */ }
   }
 
-  // Repaint only when something that actually affects paint expressions changes.
-  // Running on every render (no deps) caused repaint() to fire at animation-frame
-  // rate during map interactions, producing a ~78 Hz storm of paint-property
-  // mutations and canvas repaints.
+  // Repaint when paint-expression-affecting props change. selectedParcels does
+  // not affect the paint expression (it's driven by feature-state via the
+  // reconciliation effect below), but we don't depend on it here so we don't
+  // run the full repaint on every selection toggle.
   useEffect(() => {
     repaint()
-  }, [boundaryColor, boundaryOpacity, clickedParcelId, selectedParcels])
+  }, [boundaryColor, boundaryOpacity, clickedParcelId])
+
+  // Reconcile feature-state with selectedParcels prop. This handles external
+  // selection changes (list operations, etc.) and keeps the optimistic
+  // click-handler updates aligned with the authoritative React state.
+  useEffect(() => {
+    const map = mapRef?.current
+    if (!map || !layersAddedRef.current) return
+    const current = featureStateIdsRef.current
+    const next = new Set(selectedParcels || [])
+    for (const id of current) {
+      if (!next.has(id)) {
+        try {
+          map.setFeatureState(
+            { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id },
+            { selected: false }
+          )
+        } catch { /* ignore */ }
+      }
+    }
+    for (const id of next) {
+      if (!current.has(id)) {
+        try {
+          map.setFeatureState(
+            { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id },
+            { selected: true }
+          )
+        } catch { /* ignore */ }
+      }
+    }
+    featureStateIdsRef.current = next
+  }, [selectedParcels])
 
   // Add source + layers fully imperatively
   useEffect(() => {
@@ -326,12 +357,27 @@ export function PMTilesParcelLayer({
     function ensureLayers() {
       if (cancelled || layersAddedRef.current) return
       try {
+        // promoteId tells MapLibre to use the 'lrid' property as feature.id,
+        // which is required for setFeatureState({source, sourceLayer, id}, ...).
+        // If a previous mount (e.g. HMR) created the source without promoteId we
+        // remove dependent layers + source and recreate so feature-state works.
+        const expectedPromoteId = { [SOURCE_LAYER]: 'lrid' }
+        const styleSrc = map.getStyle()?.sources?.[SOURCE_ID]
+        const hasCorrectPromoteId = styleSrc
+          && JSON.stringify(styleSrc.promoteId) === JSON.stringify(expectedPromoteId)
+        if (styleSrc && !hasCorrectPromoteId) {
+          if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
+          if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
+          if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
+          map.removeSource(SOURCE_ID)
+        }
         if (!map.getSource(SOURCE_ID)) {
           map.addSource(SOURCE_ID, {
             type: 'vector',
             tiles: [tileUrl],
             minzoom: PARCEL_MIN_ZOOM,
             maxzoom: PARCEL_TILE_MAXZOOM,
+            promoteId: expectedPromoteId,
           })
         }
         if (!map.getLayer(FILL_LAYER)) {
@@ -424,7 +470,23 @@ export function PMTilesParcelLayer({
       const properties = mapProperties(raw)
       const parcelId = properties.PROP_ID
       if (!parcelId) return
-      if (!isMultiSelectRef.current) {
+      if (isMultiSelectRef.current) {
+        // Optimistically toggle via setFeatureState. This is bucket-free (no
+        // worker re-tessellation) so the canvas updates on the very next frame.
+        // The parent's setSelectedParcels reconciles via the diff effect above.
+        const next = new Set(selectedRef.current || [])
+        const willSelect = !next.has(parcelId)
+        if (willSelect) next.add(parcelId); else next.delete(parcelId)
+        selectedRef.current = next
+        try {
+          map.setFeatureState(
+            { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: parcelId },
+            { selected: willSelect }
+          )
+          if (willSelect) featureStateIdsRef.current.add(parcelId)
+          else featureStateIdsRef.current.delete(parcelId)
+        } catch { /* ignore */ }
+      } else {
         clickedRef.current = parcelId
         repaint()
       }

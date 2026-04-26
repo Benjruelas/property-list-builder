@@ -2,7 +2,7 @@
  * Vercel Serverless Function - Teams.
  *
  * - GET    /api/teams                    -> teams user owns or is a member of
- * - POST   /api/teams                    -> create team (paid-plan gate)       body: { name }
+ * - POST   /api/teams                    -> create team                        body: { name }
  * - PATCH  /api/teams                    -> team mutations                     body: { teamId, action, ... }
  *     action 'rename'          : { name }                (owner only)
  *     action 'add-member'      : { email }               (owner only, enforces seatLimit)
@@ -14,7 +14,7 @@
  * Requires Firebase Auth Bearer token. Accepts dev-bypass on localhost.
  */
 
-import { resolveDevBypassUser, isDevBypassToken } from './lib/devBypassUsers.js'
+import { resolveDevBypassUser } from './lib/devBypassUsers.js'
 import {
   getAllTeams,
   saveAllTeams,
@@ -70,32 +70,6 @@ async function stripTeamIdFromAllResources(teamId) {
   }
 }
 
-/**
- * Paywall gate. Phase 1: env-var allowlist OR user's user_data.plan === 'pro'.
- * Full Stripe wiring is a separate workstream.
- */
-async function userCanCreateTeam(user, { allowDevBypass, idToken }) {
-  if (allowDevBypass && isDevBypassToken(idToken)) return true
-
-  const allowlist = (process.env.TEAMS_ENABLED_FOR || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-  const email = (user.email || '').toLowerCase()
-  if (allowlist.includes(email)) return true
-
-  if (!kvAvailable || !kv) return false
-  try {
-    const key = `user_data:${user.uid}`
-    const data = await kv.get(key)
-    const blob = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    const plan = blob && blob.appSettings && blob.appSettings.plan
-    return plan === 'pro'
-  } catch {
-    return false
-  }
-}
-
 function normalizeTeamForWire(team) {
   return {
     id: team.id,
@@ -146,14 +120,6 @@ export default async function handler(req, res) {
       const trimmed = (name || '').trim()
       if (!trimmed) return res.status(400).json({ error: 'Team name is required' })
       if (trimmed.length > 80) return res.status(400).json({ error: 'Team name is too long' })
-
-      const allowed = await userCanCreateTeam(user, { allowDevBypass, idToken })
-      if (!allowed) {
-        return res.status(402).json({
-          error: 'upgrade_required',
-          message: 'Teams is a Pro feature. Upgrade to create a team.'
-        })
-      }
 
       const now = new Date().toISOString()
       const newTeam = {

@@ -104,6 +104,7 @@ export function LeadsPanel({
   onOpenAddTask,
   onPipelinesChange,
   getToken,
+  teams = [],
 }) {
   const [search, setSearch] = useState('')
   const [collapsedPipelines, setCollapsedPipelines] = useState({})
@@ -346,8 +347,13 @@ export function LeadsPanel({
         onClose={() => { setSelectedLead(null); setSelectedLeadPipelineId(null) }}
         lead={selectedLead}
         pipelineId={pipelines.length > 0 ? selectedLeadPipelineId : null}
+        pipelineTeamShares={pipelines.length > 0 && selectedLeadPipelineId
+          ? (pipelines.find((p) => p.id === selectedLeadPipelineId)?.teamShares || [])
+          : []}
+        teams={teams}
         pipelines={pipelines}
         onPipelinesChange={onPipelinesChange}
+        onTeamTasksChange={onPipelinesChange}
         getToken={getToken}
         parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
         onOpenParcelDetails={onOpenParcelDetails}

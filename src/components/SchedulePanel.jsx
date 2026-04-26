@@ -6,6 +6,8 @@ import { Input } from './ui/input'
 import { loadLeads, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
 import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
+import { addTeamTask } from '@/utils/teamTasks'
+import { flattenTeamTasks } from '@/utils/teamTaskUtils'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
@@ -49,6 +51,7 @@ function getLeadLabel(lead, parcelId) {
 function getTaskCalendarSubtitle(task, pipelines, displayLeads) {
   if (task.pipelineId == null && task.parcelId == null) return 'Standalone'
   const bits = []
+  if (task.__source === 'team') bits.push('Team task')
   const pipe = pipelines.find((p) => p.id === task.pipelineId)
   if (pipe?.title) bits.push(pipe.title)
   if (task.parcelId) {
@@ -215,7 +218,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange }) {
+export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [] }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => {
     if (pipelines.length > 0) {
@@ -248,7 +251,11 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
 
   const refreshTasks = useCallback(() => {
     if (apiMode) {
-      setAllTasks([...getPersonalTasks(), ...flattenPipelineTasks(pipelines)])
+      setAllTasks([
+        ...getPersonalTasks(),
+        ...flattenPipelineTasks(pipelines),
+        ...flattenTeamTasks(pipelines)
+      ])
     } else {
       setAllTasks(getAllTasks())
     }
@@ -355,31 +362,57 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
     return h < 12 ? `${h} AM` : `${h - 12} PM`
   }
 
-  const finalizeTaskCreate = useCallback(async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt }) => {
-    if (pipelineId) {
-      try {
-        await addPipelineTask(getToken, pipelineId, {
-          title,
-          parcelId: parcelId || null,
-          scheduledAt,
-          scheduledEndAt
-        })
-        await onPipelinesChange?.()
+  const finalizeTaskCreate = useCallback(
+    async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+      if (pipelineId) {
+        const pipe = pipelines.find((p) => p.id === pipelineId)
+        const isTeamPipe = pipe && Array.isArray(pipe.teamShares) && pipe.teamShares.length > 0
+        if (isTeamPipe && parcelId) {
+          const lead = (pipe?.leads || []).find((l) => String(l.parcelId) === String(parcelId))
+          if (lead?.id) {
+            try {
+              await addTeamTask(getToken, pipelineId, lead.id, {
+                title,
+                dueAt: scheduledAt,
+                assignedUids
+              })
+              await onPipelinesChange?.()
+              showToast('Team task scheduled', 'success')
+            } catch (err) {
+              showToast(err.message || 'Could not add team task', 'error')
+              return
+            }
+            setShowAddTask(false)
+            const l = displayLeads.find((x) => x.parcelId === parcelId)
+            if (l) setSelectedLead(l)
+            return
+          }
+        }
+        try {
+          await addPipelineTask(getToken, pipelineId, {
+            title,
+            parcelId: parcelId || null,
+            scheduledAt,
+            scheduledEndAt
+          })
+          await onPipelinesChange?.()
+          showToast('Task scheduled', 'success')
+        } catch (err) {
+          showToast(err.message || 'Could not add task', 'error')
+          return
+        }
+      } else {
+        addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
+        refreshTasks()
+        scheduleSync()
         showToast('Task scheduled', 'success')
-      } catch (err) {
-        showToast(err.message || 'Could not add task', 'error')
-        return
       }
-    } else {
-      addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
-      refreshTasks()
-      scheduleSync()
-      showToast('Task scheduled', 'success')
-    }
-    setShowAddTask(false)
-    const lead = parcelId ? displayLeads.find((l) => l.parcelId === parcelId) : null
-    if (lead) setSelectedLead(lead)
-  }, [getToken, onPipelinesChange, refreshTasks, scheduleSync, displayLeads])
+      setShowAddTask(false)
+      const lead = parcelId ? displayLeads.find((l) => l.parcelId === parcelId) : null
+      if (lead) setSelectedLead(lead)
+    },
+    [getToken, onPipelinesChange, refreshTasks, scheduleSync, displayLeads, pipelines]
+  )
 
   const handleCreateTask = () => {
     const t = addTaskTitle.trim() || 'Task'
@@ -1022,8 +1055,13 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
           onClose={() => setSelectedLead(null)}
           lead={selectedLead}
           pipelineId={selectedLeadPipelineId}
+          pipelineTeamShares={selectedLeadPipelineId
+            ? (pipelines.find((p) => p.id === selectedLeadPipelineId)?.teamShares || [])
+            : []}
+          teams={teams}
           parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
           onPipelinesChange={onPipelinesChange}
+          onTeamTasksChange={onPipelinesChange}
           getToken={getToken}
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}

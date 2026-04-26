@@ -26,6 +26,9 @@ import {
   flattenPipelineTasks,
   pipelinesContainingParcel
 } from '@/utils/pipelineTasks'
+import { addTeamTask, updateTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
+import { flattenTeamTasks, getMembersForTeamSharedPipeline, formatAssigneeList } from '@/utils/teamTaskUtils'
+import { TeamMemberAssignSection } from './TeamMemberAssignSection'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
@@ -111,7 +114,8 @@ export function TasksPanel({
   onOpenScheduleAtDate,
   getToken = null,
   currentUser = null,
-  onPipelinesChange
+  onPipelinesChange,
+  teams = []
 }) {
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
@@ -124,6 +128,8 @@ export function TasksPanel({
   const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
   const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
   const [addTaskDateTimeExpanded, setAddTaskDateTimeExpanded] = useState(false)
+  const [addTaskTeamAssignUids, setAddTaskTeamAssignUids] = useState([])
+  const [editTeamAssignUids, setEditTeamAssignUids] = useState([])
 
   const [collapsedSections, setCollapsedSections] = useState({})
   const [showClosedTasks, setShowClosedTasks] = useState(false)
@@ -175,7 +181,11 @@ export function TasksPanel({
 
   const refreshTasks = useCallback(() => {
     if (apiMode) {
-      setAllTasks([...getPersonalTasks(), ...flattenPipelineTasks(pipelines)])
+      setAllTasks([
+        ...getPersonalTasks(),
+        ...flattenPipelineTasks(pipelines),
+        ...flattenTeamTasks(pipelines)
+      ])
     } else {
       setAllTasks(getAllTasks())
     }
@@ -193,10 +203,19 @@ export function TasksPanel({
   useEffect(() => {
     if (!editingTask) return
     setEditTitle(editingTask.title || '')
-    setEditScheduledAt(editingTask.scheduledAt ?? null)
-    setEditScheduledEndAt(editingTask.scheduledEndAt ?? null)
+    setEditScheduledAt(
+      editingTask.__source === 'team'
+        ? (editingTask.dueAt ?? editingTask.scheduledAt ?? null)
+        : (editingTask.scheduledAt ?? null)
+    )
+    setEditScheduledEndAt(editingTask.__source === 'team' ? null : (editingTask.scheduledEndAt ?? null))
     setAssignPipelineId(editingTask.pipelineId || '')
     setAssignParcelId(editingTask.parcelId ? String(editingTask.parcelId) : '')
+    setEditTeamAssignUids(
+      editingTask.__source === 'team' && Array.isArray(editingTask.assignedUids)
+        ? [...editingTask.assignedUids]
+        : []
+    )
     const lead = editingTask.parcelId ? displayLeads.find((l) => l.parcelId === editingTask.parcelId) : null
     setAssignLeadSearch(
       lead ? getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId : ''
@@ -234,32 +253,75 @@ export function TasksPanel({
     setAddTaskScheduledAt(null)
     setAddTaskScheduledEndAt(null)
     setAddTaskDateTimeExpanded(false)
+    setAddTaskTeamAssignUids([])
     setShowAddTask(true)
   }
 
-  const finalizeTaskCreate = useCallback(async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt }) => {
-    if (pipelineId) {
-      try {
-        await addPipelineTask(getToken, pipelineId, {
-          title,
-          parcelId: parcelId || null,
-          scheduledAt,
-          scheduledEndAt
-        })
-        await onPipelinesChange?.()
+  const newTaskPipelineForAssign = useMemo(() => {
+    if (!addTaskLeadId) return null
+    const lead = displayLeads.find((l) => l.parcelId === addTaskLeadId)
+    const pid = lead?.__pipelineId
+    if (!pid) return null
+    return pipelines.find((p) => p.id === pid) || null
+  }, [addTaskLeadId, displayLeads, pipelines])
+  const newTaskMemberList = useMemo(
+    () =>
+      newTaskPipelineForAssign
+        ? getMembersForTeamSharedPipeline(newTaskPipelineForAssign, teams)
+        : [],
+    [newTaskPipelineForAssign, teams]
+  )
+  const newTaskIsTeamContext = newTaskMemberList.length > 0
+
+  const finalizeTaskCreate = useCallback(
+    async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+      if (pipelineId) {
+        const pipe = pipelines.find((p) => p.id === pipelineId)
+        const isTeamPipe = pipe && Array.isArray(pipe.teamShares) && pipe.teamShares.length > 0
+        if (isTeamPipe && parcelId) {
+          const lead = (pipe?.leads || []).find((l) => String(l.parcelId) === String(parcelId))
+          if (lead?.id) {
+            try {
+              await addTeamTask(getToken, pipelineId, lead.id, {
+                title,
+                dueAt: scheduledAt,
+                assignedUids
+              })
+              await onPipelinesChange?.()
+              showToast('Team task added', 'success')
+            } catch (err) {
+              showToast(err.message || 'Could not add team task', 'error')
+              return
+            }
+            setShowAddTask(false)
+            setAddTaskTeamAssignUids([])
+            return
+          }
+        }
+        try {
+          await addPipelineTask(getToken, pipelineId, {
+            title,
+            parcelId: parcelId || null,
+            scheduledAt,
+            scheduledEndAt
+          })
+          await onPipelinesChange?.()
+          showToast('Task added', 'success')
+        } catch (err) {
+          showToast(err.message || 'Could not add task', 'error')
+          return
+        }
+      } else {
+        addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
+        refreshTasks()
+        scheduleSync()
         showToast('Task added', 'success')
-      } catch (err) {
-        showToast(err.message || 'Could not add task', 'error')
-        return
       }
-    } else {
-      addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
-      refreshTasks()
-      scheduleSync()
-      showToast('Task added', 'success')
-    }
-    setShowAddTask(false)
-  }, [getToken, onPipelinesChange, refreshTasks, scheduleSync])
+      setShowAddTask(false)
+      setAddTaskTeamAssignUids([])
+    },
+    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipelines]
+  )
 
   const handleCreateTask = () => {
     const trimmed = addTaskTitle.trim()
@@ -268,12 +330,20 @@ export function TasksPanel({
       return
     }
     const endAt = addTaskScheduledEndAt && addTaskScheduledEndAt > (addTaskScheduledAt || 0) ? addTaskScheduledEndAt : null
-    if (endAt && addTaskScheduledAt && endAt <= addTaskScheduledAt) {
-      showToast('End time must be after start time', 'error')
-      return
+    if (!newTaskIsTeamContext) {
+      if (endAt && addTaskScheduledAt && endAt <= addTaskScheduledAt) {
+        showToast('End time must be after start time', 'error')
+        return
+      }
     }
     const parcelId = addTaskLeadId ? String(addTaskLeadId) : null
-    const payload = { title: trimmed, scheduledAt: addTaskScheduledAt, scheduledEndAt: endAt, parcelId }
+    const payload = {
+      title: trimmed,
+      scheduledAt: addTaskScheduledAt,
+      scheduledEndAt: endAt,
+      parcelId,
+      assignedUids: addTaskTeamAssignUids
+    }
 
     if (parcelId) {
       const lead = displayLeads.find((l) => l.parcelId === parcelId)
@@ -320,6 +390,15 @@ export function TasksPanel({
 
   const handleToggle = async (e, task) => {
     e.stopPropagation()
+    if (task.__source === 'team' && task.pipelineId && task.leadId) {
+      try {
+        await toggleTeamTask(getToken, task.pipelineId, task.leadId, task.id)
+        await onPipelinesChange?.()
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
     if (task.__source === 'pipeline' && task.pipelineId) {
       try {
         await togglePipelineTask(getToken, task.pipelineId, task.id)
@@ -335,6 +414,16 @@ export function TasksPanel({
   }
 
   const handleDeleteTask = async (task) => {
+    if (task.__source === 'team' && task.pipelineId && task.leadId) {
+      try {
+        await removeTeamTask(getToken, task.pipelineId, task.leadId, task.id)
+        await onPipelinesChange?.()
+        showToast('Task deleted', 'success')
+      } catch (err) {
+        showToast(err.message || 'Could not delete task', 'error')
+      }
+      return
+    }
     if (task.__source === 'pipeline' && task.pipelineId) {
       try {
         await removePipelineTask(getToken, task.pipelineId, task.id)
@@ -352,9 +441,10 @@ export function TasksPanel({
   }
 
   const handleViewOnSchedule = (task) => {
-    if (!task.scheduledAt || !onOpenScheduleAtDate) return
+    const at = task.scheduledAt || task.dueAt
+    if (!at || !onOpenScheduleAtDate) return
     onClose?.()
-    onOpenScheduleAtDate(task.scheduledAt)
+    onOpenScheduleAtDate(at)
   }
 
   const toggleSection = (sectionId) => {
@@ -385,6 +475,23 @@ export function TasksPanel({
   const handleSaveEdit = async () => {
     if (!editingTask) return
     const t = editTitle.trim() || 'Task'
+    if (editingTask.__source === 'team' && editingTask.pipelineId && editingTask.leadId) {
+      try {
+        await updateTeamTask(getToken, editingTask.pipelineId, editingTask.leadId, {
+          id: editingTask.id,
+          title: t,
+          dueAt: editScheduledAt,
+          assignedUids: editTeamAssignUids
+        })
+        await onPipelinesChange?.()
+        showToast('Task updated', 'success')
+        setEditingTask(null)
+        setEditTeamAssignUids([])
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
     const endAt = editScheduledEndAt && editScheduledEndAt > (editScheduledAt || 0) ? editScheduledEndAt : null
     if (endAt && editScheduledAt && endAt <= editScheduledAt) {
       showToast('End time must be after start time', 'error')
@@ -527,15 +634,16 @@ export function TasksPanel({
             <section className="mb-4" aria-label="Tasks not in a pipe">
               <ul className="space-y-2">
                 {unlabeled.map((task) => (
-                  <li key={task.id}>
+                  <li key={`${task.id}-${task.__source || 'p'}`}>
                     <TaskRow
                       task={task}
                       displayLeads={displayLeads}
+                      teams={teams}
                       onToggle={handleToggle}
-                      onActivate={task.parcelId && task.scheduledAt ? null : () => handleRowActivate(task, 'unlabeled')}
+                      onActivate={task.parcelId && (task.scheduledAt || task.dueAt) ? null : () => handleRowActivate(task, 'unlabeled')}
                       onEdit={() => setEditingTask(task)}
                       onDelete={() => handleDeleteTask(task)}
-                      onViewOnSchedule={task.scheduledAt && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
+                      onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
                       onOpenLead={task.parcelId ? () => handleRowActivate(task, task.pipelineId || 'unlabeled') : null}
                     />
                   </li>
@@ -566,15 +674,16 @@ export function TasksPanel({
                 {!collapsed && (
                   <ul className="space-y-2">
                     {tasks.map((task) => (
-                      <li key={task.id}>
+                      <li key={`${task.id}-${task.__source || 'p'}`}>
                         <TaskRow
                           task={task}
                           displayLeads={displayLeads}
+                          teams={teams}
                           onToggle={handleToggle}
-                          onActivate={task.parcelId && task.scheduledAt ? null : () => handleRowActivate(task, sid)}
+                          onActivate={task.parcelId && (task.scheduledAt || task.dueAt) ? null : () => handleRowActivate(task, sid)}
                           onEdit={() => setEditingTask(task)}
                           onDelete={() => handleDeleteTask(task)}
-                          onViewOnSchedule={task.scheduledAt && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
+                          onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
                           onOpenLead={task.parcelId ? () => handleRowActivate(task, sid) : null}
                         />
                       </li>
@@ -591,10 +700,11 @@ export function TasksPanel({
                 <section className="mb-4" aria-label="Closed tasks not in a pipe">
                   <ul className="space-y-2">
                     {closedUnlabeled.map((task) => (
-                      <li key={task.id}>
+                      <li key={`${task.id}-${task.__source || 'p'}`}>
                         <TaskRow
                           task={task}
                           displayLeads={displayLeads}
+                          teams={teams}
                           onToggle={handleToggle}
                           onActivate={() => handleRowActivate(task, 'unlabeled')}
                           onEdit={() => setEditingTask(task)}
@@ -630,10 +740,11 @@ export function TasksPanel({
                     {!collapsed && (
                       <ul className="space-y-2">
                         {tasks.map((task) => (
-                          <li key={task.id}>
+                          <li key={`${task.id}-${task.__source || 'p'}`}>
                             <TaskRow
                               task={task}
                               displayLeads={displayLeads}
+                              teams={teams}
                               onToggle={handleToggle}
                               onActivate={() => handleRowActivate(task, pipeline.id === '__local__' ? '__local__' : pipeline.id)}
                               onEdit={() => setEditingTask(task)}
@@ -761,18 +872,37 @@ export function TasksPanel({
                     hideLabel
                     value={addTaskScheduledAt}
                     onChange={setAddTaskScheduledAt}
-                    endValue={addTaskScheduledEndAt}
-                    onEndChange={setAddTaskScheduledEndAt}
+                    endValue={newTaskIsTeamContext ? null : addTaskScheduledEndAt}
+                    onEndChange={newTaskIsTeamContext ? undefined : setAddTaskScheduledEndAt}
                     minDate={Date.now()}
                   />
                 </div>
               )}
             </div>
+            {newTaskIsTeamContext && (
+              <TeamMemberAssignSection
+                members={newTaskMemberList}
+                selectedUids={addTaskTeamAssignUids}
+                onToggle={(uid) => {
+                  setAddTaskTeamAssignUids((prev) =>
+                    prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
+                  )
+                }}
+              />
+            )}
             <div className="flex gap-2 pt-1">
               <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={handleCreateTask}>
                 Create
               </Button>
-              <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={() => setShowAddTask(false)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="create-list-btn flex-1"
+                onClick={() => {
+                  setAddTaskTeamAssignUids([])
+                  setShowAddTask(false)
+                }}
+              >
                 Cancel
               </Button>
             </div>
@@ -803,11 +933,11 @@ export function TasksPanel({
               inline
               value={editScheduledAt}
               onChange={setEditScheduledAt}
-              endValue={editScheduledEndAt}
-              onEndChange={setEditScheduledEndAt}
+              endValue={editingTask?.__source === 'team' ? null : editScheduledEndAt}
+              onEndChange={editingTask?.__source === 'team' ? undefined : setEditScheduledEndAt}
               minDate={Date.now()}
             />
-            {apiMode && (
+            {apiMode && editingTask?.__source !== 'team' && (
               <PipelineDropdown
                 value={assignPipelineId}
                 onChange={(val) => {
@@ -820,6 +950,12 @@ export function TasksPanel({
             )}
             <div className="relative">
               <label className="text-xs font-medium block mb-1 opacity-90">Assign to lead (optional)</label>
+              {editingTask?.__source === 'team' ? (
+                <p className="text-sm text-white/80 py-2 rounded-md border border-white/15 px-2 bg-white/[0.04]">
+                  {assignLeadSearch || (editingTask.parcelId ? 'Lead' : '')}
+                </p>
+              ) : (
+              <>
               <Input
                 value={assignLeadSearch}
                 onChange={(e) => {
@@ -871,12 +1007,40 @@ export function TasksPanel({
                   ))}
                 </ul>
               )}
+              </>
+              )}
             </div>
+            {editingTask?.__source === 'team' && (
+              (() => {
+                const p = pipelines.find((x) => x.id === editingTask.pipelineId)
+                const mem = p ? getMembersForTeamSharedPipeline(p, teams) : []
+                if (mem.length === 0) return null
+                return (
+                  <TeamMemberAssignSection
+                    members={mem}
+                    selectedUids={editTeamAssignUids}
+                    onToggle={(uid) => {
+                      setEditTeamAssignUids((prev) =>
+                        prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
+                      )
+                    }}
+                  />
+                )
+              })()
+            )}
             <div className="flex gap-2 pt-1">
               <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={handleSaveEdit}>
                 Save
               </Button>
-              <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={() => setEditingTask(null)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="create-list-btn flex-1"
+                onClick={() => {
+                  setEditTeamAssignUids([])
+                  setEditingTask(null)
+                }}
+              >
                 Cancel
               </Button>
             </div>
@@ -909,11 +1073,12 @@ export function TasksPanel({
   )
 }
 
-function TaskRow({ task, displayLeads, onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead }) {
+function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead }) {
   const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
   const leadLine = task.parcelId
     ? `Lead: ${getLeadLabel(lead, task.parcelId)}`
     : null
+  const assigneeStr = task.__source === 'team' ? formatAssigneeList(task.assignedUids, teams) : null
   const isDone = task.completed
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
@@ -963,12 +1128,24 @@ function TaskRow({ task, displayLeads, onToggle, onActivate, onEdit, onDelete, o
           )}
         </button>
         <div className="flex-1 min-w-0">
-          <div className={cn('font-medium text-white/95', isDone && 'line-through text-white/55')}>
-            {task.title || '(untitled)'}
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <span className={cn('font-medium text-white/95', isDone && 'line-through text-white/55')}>
+              {task.title || '(untitled)'}
+            </span>
+            {task.__source === 'team' && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/25 text-blue-200 border border-blue-400/40 uppercase tracking-wide shrink-0">
+                Team
+              </span>
+            )}
           </div>
           {leadLine && (
             <div className="text-xs text-white/55 mt-0.5 truncate" title={leadLine}>
               {leadLine}
+            </div>
+          )}
+          {assigneeStr && (
+            <div className="text-xs text-white/45 mt-0.5 truncate" title={assigneeStr}>
+              {assigneeStr}
             </div>
           )}
           {isDone && task.completedAt != null && (

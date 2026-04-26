@@ -1788,14 +1788,21 @@ function App() {
   }, [lists, skipTracingInProgress])
 
   const suppressPopupCloseRef = useRef(false)
+  const isParcelDetailsOpenRef = useRef(false)
+  useEffect(() => { isParcelDetailsOpenRef.current = isParcelDetailsOpen }, [isParcelDetailsOpen])
   const handleCloseParcelPopup = useCallback(() => {
     if (suppressPopupCloseRef.current) {
       suppressPopupCloseRef.current = false
       return
     }
     setPopupData(null)
-    setClickedParcelId(null)
-    setClickedParcelData(null)
+    // Never clear the selected parcel while the Details panel is open — the
+    // panel reads `clickedParcelData` to render and would unmount mid-flight,
+    // leaving Radix's dialog state out of sync with the React state.
+    if (!isParcelDetailsOpenRef.current) {
+      setClickedParcelId(null)
+      setClickedParcelData(null)
+    }
   }, [])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
@@ -2373,7 +2380,12 @@ function App() {
         })
       }
       
-      if (clickedParcelId === parcelId && clickedParcelData) {
+      // Refresh the popup's status badges only if the popup is currently
+      // showing. If the More Details panel is open the popup is hidden
+      // intentionally; re-opening it here would stack it on top of the panel
+      // and its outside-click handler would clear `clickedParcelData`,
+      // unmounting the panel and breaking pointer events.
+      if (clickedParcelId === parcelId && clickedParcelData && !isParcelDetailsOpen) {
         openParcelPopup(clickedParcelData)
       }
     } catch (error) {
@@ -2386,7 +2398,7 @@ function App() {
         return next
       })
     }
-  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup, isParcelDetailsOpen])
 
   return (
     <UserDataSyncProvider getToken={getToken}>
@@ -2465,6 +2477,7 @@ function App() {
             onParcelClick={handleParcelClick}
             clickedParcelId={clickedParcelId}
             selectedParcels={selectedParcels}
+            isMultiSelectActive={isMultiSelectActive}
             selectedListIds={selectedListIds}
             lists={lists}
             boundaryColor={settings.parcelBoundaryColor}
@@ -2798,6 +2811,7 @@ function App() {
         getToken={getToken}
         currentUser={currentUser}
         onPipelinesChange={refreshPipelines}
+        teams={teams}
       />
 
       <TasksPanel
@@ -2811,6 +2825,7 @@ function App() {
         getToken={getToken}
         currentUser={currentUser}
         onPipelinesChange={refreshPipelines}
+        teams={teams}
       />
 
       <PhoneActionPanel
@@ -2971,6 +2986,7 @@ function App() {
         onGoToParcelOnMap={handleGoToParcelOnMap}
         onPipelinesChange={refreshPipelines}
         getToken={getToken}
+        teams={teams}
       />
 
       <RoofInspectorPanel

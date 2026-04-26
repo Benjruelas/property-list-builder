@@ -9,6 +9,8 @@ import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
 import { splitOwnerName, composeFullName, displayLeadName } from '@/utils/ownerName'
 import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
 import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
+import { getMembersForTeamSharedPipeline, formatAssigneeList } from '@/utils/teamTaskUtils'
+import { TeamMemberAssignSectionLight } from '@/components/TeamMemberAssignSection'
 import { togglePipelineTask, updatePipelineTask, removePipelineTask } from '@/utils/pipelineTasks'
 import { showToast } from './ui/toast'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
@@ -73,7 +75,7 @@ function positionTaskMenu(rect) {
  * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
  * Shows owner, address, skip trace data (if available), or a skip trace button.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], pipelines = [], onPipelinesChange, getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead }) {
+export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], teams = [], pipelines = [], onPipelinesChange, getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead }) {
   const isClosed = !!closedRecord
   const closedId = closedRecord?.id || null
   const [closedSnap, setClosedSnap] = useState(closedRecord)
@@ -91,6 +93,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   const [tasks, setTasks] = useState([])
   const [showTeamTaskInput, setShowTeamTaskInput] = useState(false)
   const [teamTaskDraft, setTeamTaskDraft] = useState('')
+  const [teamTaskAssignUids, setTeamTaskAssignUids] = useState([])
   const [teamTaskPending, setTeamTaskPending] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [firstNameDraft, setFirstNameDraft] = useState('')
@@ -152,14 +155,24 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   const hasTeamSharing = Array.isArray(pipelineTeamShares) && pipelineTeamShares.length > 0
   const teamTasks = Array.isArray(lead?.teamTasks) ? lead.teamTasks : []
   const canMutateTeamTasks = !!(pipelineId && lead?.id && getToken)
+  const teamAssignMembers = useMemo(() => {
+    if (!hasTeamSharing || !pipelineId) return []
+    const pipe = (pipelines || []).find((p) => p.id === pipelineId)
+    if (!pipe) return []
+    return getMembersForTeamSharedPipeline(pipe, teams)
+  }, [hasTeamSharing, pipelineId, pipelines, teams])
 
   const handleAddTeamTask = async () => {
     const title = teamTaskDraft.trim()
     if (!title || !canMutateTeamTasks) return
     setTeamTaskPending(true)
     try {
-      await addTeamTask(getToken, pipelineId, lead.id, { title })
+      await addTeamTask(getToken, pipelineId, lead.id, {
+        title,
+        assignedUids: teamTaskAssignUids
+      })
       setTeamTaskDraft('')
+      setTeamTaskAssignUids([])
       setShowTeamTaskInput(false)
       onTeamTasksChange?.()
     } catch (e) {
@@ -789,33 +802,56 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0"
-                  onClick={() => setShowTeamTaskInput((v) => !v)}
+                  onClick={() => {
+                    setShowTeamTaskInput((v) => {
+                      if (v) {
+                        setTeamTaskDraft('')
+                        setTeamTaskAssignUids([])
+                      }
+                      return !v
+                    })
+                  }}
                   title="Add team task"
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
               </div>
               {showTeamTaskInput && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={teamTaskDraft}
-                    onChange={(e) => setTeamTaskDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddTeamTask()
-                      else if (e.key === 'Escape') {
-                        setShowTeamTaskInput(false)
-                        setTeamTaskDraft('')
-                      }
-                    }}
-                    placeholder="Team task title..."
-                    autoFocus
-                    disabled={teamTaskPending}
-                    className="border rounded px-2 py-1 text-sm w-full"
-                  />
-                  <Button size="sm" onClick={handleAddTeamTask} disabled={teamTaskPending || !teamTaskDraft.trim()}>
-                    Add
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={teamTaskDraft}
+                      onChange={(e) => setTeamTaskDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddTeamTask()
+                        else if (e.key === 'Escape') {
+                          setShowTeamTaskInput(false)
+                          setTeamTaskDraft('')
+                          setTeamTaskAssignUids([])
+                        }
+                      }}
+                      placeholder="Team task title..."
+                      autoFocus
+                      disabled={teamTaskPending}
+                      className="border rounded px-2 py-1 text-sm w-full"
+                    />
+                    <Button size="sm" onClick={handleAddTeamTask} disabled={teamTaskPending || !teamTaskDraft.trim()}>
+                      Add
+                    </Button>
+                  </div>
+                  {teamAssignMembers.length > 0 && (
+                    <TeamMemberAssignSectionLight
+                      members={teamAssignMembers}
+                      selectedUids={teamTaskAssignUids}
+                      onToggle={(uid) => {
+                        setTeamTaskAssignUids((prev) =>
+                          prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
+                        )
+                      }}
+                      disabled={teamTaskPending}
+                    />
+                  )}
                 </div>
               )}
               {teamTasks.length > 0 && (
@@ -846,13 +882,19 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                             Team
                           </span>
                         </div>
-                        {(task.completedAt || task.createdByEmail) && (
-                          <div className="text-[11px] text-gray-500 mt-0.5">
-                            {task.completedAt
-                              ? `Completed ${formatTaskCompletedDate(new Date(task.completedAt).getTime())}`
-                              : task.createdByEmail
-                              ? `Added by ${task.createdByEmail}`
-                              : ''}
+                        {(formatAssigneeList(task.assignedUids, teams) ||
+                          task.completedAt ||
+                          task.createdByEmail) && (
+                          <div className="text-[11px] text-gray-500 mt-0.5 space-y-0.5">
+                            {(() => {
+                              const names = formatAssigneeList(task.assignedUids, teams)
+                              return names ? <div>Assigned: {names}</div> : null
+                            })()}
+                            {task.completedAt ? (
+                              <div>Completed {formatTaskCompletedDate(new Date(task.completedAt).getTime())}</div>
+                            ) : task.createdByEmail ? (
+                              <div>Added by {task.createdByEmail}</div>
+                            ) : null}
                           </div>
                         )}
                       </div>

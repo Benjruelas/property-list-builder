@@ -66,13 +66,39 @@ async function savePipelines(rows) {
   }
 }
 
-function normalizeTask(raw, user) {
+function num(v) {
+  if (v == null) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function collectAllowedMemberUids(pipeline, allTeams) {
+  const ids = Array.isArray(pipeline.teamShares) ? pipeline.teamShares : []
+  const allowed = new Set()
+  for (const tid of ids) {
+    const team = allTeams.find((t) => t.id === tid)
+    if (!team || !Array.isArray(team.members)) continue
+    for (const m of team.members) {
+      if (m && m.uid) allowed.add(String(m.uid))
+    }
+  }
+  return allowed
+}
+
+function filterAssignedUids(raw, allowed) {
+  if (!Array.isArray(raw)) return []
+  return raw.map((u) => String(u)).filter((u) => allowed.has(u))
+}
+
+function normalizeTask(raw, user, allowedUids) {
   const now = new Date().toISOString()
+  const dueN = num(raw.dueAt)
   return {
     id: raw.id || `ttask_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     title: String(raw.title || '').trim(),
     notes: raw.notes ? String(raw.notes) : '',
-    dueAt: raw.dueAt || null,
+    dueAt: dueN,
+    assignedUids: filterAssignedUids(raw.assignedUids, allowedUids),
     createdAt: raw.createdAt || now,
     createdBy: raw.createdBy || user.uid,
     createdByEmail: raw.createdByEmail || user.email,
@@ -118,6 +144,8 @@ export default async function handler(req, res) {
     const access = resolveAccess(pipeline, user, teamsIndex)
     if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
 
+    const allowedMemberUids = collectAllowedMemberUids(pipeline, allTeams)
+
     const leadIdx = (pipeline.leads || []).findIndex(
       (l) => l.id === leadId || l.parcelId === leadId
     )
@@ -129,7 +157,7 @@ export default async function handler(req, res) {
       if (!String(task.title || '').trim()) {
         return res.status(400).json({ error: 'Task title is required' })
       }
-      lead.teamTasks.push(normalizeTask(task, user))
+      lead.teamTasks.push(normalizeTask(task, user, allowedMemberUids))
     } else if (action === 'update') {
       const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
       if (tIdx === -1) return res.status(404).json({ error: 'Task not found' })
@@ -137,7 +165,10 @@ export default async function handler(req, res) {
         ...lead.teamTasks[tIdx],
         ...(task.title !== undefined ? { title: String(task.title).trim() } : {}),
         ...(task.notes !== undefined ? { notes: String(task.notes) } : {}),
-        ...(task.dueAt !== undefined ? { dueAt: task.dueAt } : {})
+        ...(task.dueAt !== undefined ? { dueAt: num(task.dueAt) } : {}),
+        ...(task.assignedUids !== undefined
+          ? { assignedUids: filterAssignedUids(task.assignedUids, allowedMemberUids) }
+          : {})
       }
     } else if (action === 'remove') {
       const before = lead.teamTasks.length
