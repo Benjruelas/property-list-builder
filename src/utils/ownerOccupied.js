@@ -77,6 +77,20 @@ function normAddr(s) {
 
 export function computeOwnerOccupied(properties) {
   if (!properties || typeof properties !== 'object') return null
+
+  // Prefer the homestead-exemption flag when the assessor provides one
+  // (Texas, Florida, and most southern states publish this directly). It's a
+  // legally-attested "this is my primary residence" claim by the owner, so
+  // it's a stronger signal than any address-substring heuristic — it survives
+  // PO-box mailing addresses, name suffix mismatches, and revocable-trust
+  // ownership all of which break the situs-vs-mailing comparison below.
+  const hsRaw = properties.HOMESTEAD_EXEMPTION
+  if (hsRaw !== undefined && hsRaw !== null && hsRaw !== '') {
+    const norm = String(hsRaw).trim().toLowerCase()
+    if (['yes', 'y', 'true', '1'].includes(norm)) return 'Yes'
+    if (['no', 'n', 'false', '0'].includes(norm)) return 'No'
+  }
+
   const rawSitus = properties.SITUS_ADDR || properties.SITE_ADDR || properties.ADDRESS
   const rawMail = properties.MAIL_ADDR || properties.MAILING_ADDR || properties.PSTLADRESS
   if (!rawSitus || !rawMail) return null

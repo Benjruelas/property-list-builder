@@ -153,6 +153,10 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
   }
 
   const hasTeamSharing = Array.isArray(pipelineTeamShares) && pipelineTeamShares.length > 0
+  const hasMixedTaskSources = useMemo(
+    () => hasTeamSharing || pipelineScopedTasksForParcel.length > 0,
+    [hasTeamSharing, pipelineScopedTasksForParcel]
+  )
   const teamTasks = Array.isArray(lead?.teamTasks) ? lead.teamTasks : []
   const canMutateTeamTasks = !!(pipelineId && lead?.id && getToken)
   const teamAssignMembers = useMemo(() => {
@@ -982,9 +986,26 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                         />
                       ) : (
                         <>
-                          <span className={task.completed ? 'line-through text-gray-500' : 'text-gray-900'}>
-                            {task.title}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={task.completed ? 'line-through text-gray-500' : 'text-gray-900'}>
+                              {task.title}
+                            </span>
+                            {!isClosed && task.__source === 'pipeline' ? (
+                              <span
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 uppercase tracking-wide"
+                                title="Visible to everyone with access to this pipeline"
+                              >
+                                Pipeline
+                              </span>
+                            ) : !isClosed && hasMixedTaskSources ? (
+                              <span
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase tracking-wide"
+                                title="Only you see this task"
+                              >
+                                Personal
+                              </span>
+                            ) : null}
+                          </div>
                           {(task.completed || task.scheduledAt) && (
                             <div className="text-[11px] text-gray-500 mt-0.5">
                               <span>

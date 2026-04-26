@@ -6,16 +6,21 @@ import { computeOwnerOccupied } from '@/utils/ownerOccupied'
 
 const PROPERTY_LABELS = {
   PROP_ID: 'Parcel ID', PROPID: 'Property ID', PARCEL_ID: 'Parcel ID', PARCEL_ID_ALT: 'Alternate Parcel ID', PIN: 'Parcel Number', APN: 'Assessor Parcel Number',
+  LL_UUID: 'Stable Parcel UUID', LL_STABLE_ID: 'Stable Parcel ID',
   SITUS_ADDR: 'Site Address', SITE_ADDR: 'Street Address', ADDRESS: 'Address', ADDR: 'Address',
   SITUS: 'Situs Address', SITEADRESS: 'Site Address', SITEADDRESS: 'Site Address',
   OWNER_NAME: 'Owner', OWNER: 'Owner', OWNERNME1: 'Owner Name', MAIL_OWNER: 'Mailing Owner',
   LOC_LAND_U: 'Land Use', LAND_USE: 'Land Use', LAND_USE_CODE: 'Land Use Code', LAND_USE_CLASS: 'Land Use Class',
   USE_CODE: 'Land Use Code', USE_DESC: 'Land Use',
+  LBCS_ACTIVITY: 'LBCS Activity', LBCS_FUNCTION: 'LBCS Function', LBCS_STRUCTURE: 'LBCS Structure',
+  LBCS_SITE: 'LBCS Site', LBCS_OWNERSHIP: 'LBCS Ownership',
   PROP_CLASS: 'Property Class', PROPCLASS: 'Property Class', PROPERTY_CLASS: 'Property Class',
   YEAR_BUILT: 'Year Built', YEARBLT: 'Year Built',
   SQFT: 'Square Feet', SQ_FT: 'Square Feet', BLDG_SQFT: 'Building Sq Ft', LIVING_SQFT: 'Living Square Feet',
   NUM_BLDGS: 'Buildings', NUM_UNITS: 'Units', NUM_FLOORS: 'Floors',
+  BLDG_COUNT: 'Building Count (GIS)', BLDG_FOOTPRINT_SQFT: 'Building Footprint',
   ACRES: 'Acres', ACREAGE: 'Acreage', GIS_ACRES: 'Acres', ASSDACRES: 'Assessed Acres',
+  LL_GIS_ACRES: 'GIS Acres', LL_GIS_SQFT: 'GIS Square Feet',
   CALC_AREA_SQM: 'Lot Area',
   BEDROOMS: 'Bedrooms', BEDROOM: 'Bedrooms', BEDS: 'Bedrooms',
   BATHROOMS: 'Full Baths', BATHROOM: 'Bathrooms', BATHS: 'Bathrooms', HALF_BATHS: 'Half Baths',
@@ -24,11 +29,14 @@ const PROPERTY_LABELS = {
   IMPR_VAL: 'Improvement Value', IMPROVEMENT_VALUE: 'Improvement Value', IMPVALUE: 'Improvement Value', MRKT_VAL_BLDG: 'Building Value',
   AG_VAL: 'Agriculture Value',
   SALE_PRICE: 'Last Sale Price', SALE_DATE: 'Last Sale Date',
+  PRIOR_SALE_PRICE: 'Prior Sale Price', PRIOR_SALE_DATE: 'Prior Sale Date',
   TAX_ACCT: 'Tax Account #', TAX_YEAR: 'Tax Year', TAXROLLYEAR: 'Tax Year', ASMT_LEVYR: 'Assessment Year',
+  HOMESTEAD_EXEMPTION: 'Homestead Exemption', QOZ: 'Opportunity Zone', QOZ_TRACT: 'Opportunity Zone Tract',
   LATITUDE: 'Latitude', LAT: 'Latitude',
   LONGITUDE: 'Longitude', LNG: 'Longitude', LON: 'Longitude',
   MAIL_ADDR: 'Mailing Address', MAILING_ADDR: 'Mailing Address', PSTLADRESS: 'Mailing Address',
   MAIL_CITY: 'Mailing City', MAIL_STATE: 'Mailing State', MAIL_ZIP: 'Mailing Zip',
+  DPV_MATCH: 'Mail Deliverable', DPV_NOTES: 'Deliverability Notes',
   SITUS_CITY: 'City', PROP_CITY: 'City', CITY: 'City',
   SITUS_STATE: 'State', PROP_STATE: 'State', STATE: 'State', state2: 'State',
   SITUS_ZIP: 'Zip Code', PROP_ZIP: 'Zip Code', ZIP: 'Zip Code', ZIP_CODE: 'Zip Code', szip: 'Zip Code', szip5: 'Zip Code',
@@ -40,25 +48,42 @@ const PROPERTY_LABELS = {
   TOWNSHIP: 'Township', SECTION: 'Section', QTR_SECTION: 'Quarter Section', RANGE: 'Range',
   ZONING: 'Zoning', ZONING_CODE: 'Zoning Code',
   COUNTY: 'County', COUNTY_NAME: 'County', CONAME: 'County', COUNTY_FIPS: 'County FIPS',
-  CENSUS_TRACT: 'Census Tract', PLACE_NAME: 'Place Name',
+  CENSUS_TRACT: 'Census Tract', CENSUS_BLOCK: 'Census Block', CENSUS_BLOCKGROUP: 'Census Block Group', CENSUS_ZCTA: 'Census ZCTA',
+  PLACE_NAME: 'Place Name',
+  SCHOOL_DISTRICT: 'School District', SCHOOL_DIST_ID: 'School District ID',
+  CONG_DIST: 'Congressional District', STATE_HOUSE_DIST: 'State House District', STATE_SENATE_DIST: 'State Senate District',
+  JURISDICTION_PATH: 'Jurisdiction',
   LAST_UPDATED: 'Data Last Updated',
+  ADDRESS_SOURCE: 'Address Source', PARVAL_SOURCE: 'Total Value Source',
+  IMPROV_SOURCE: 'Improvement Value Source', LANDVAL_SOURCE: 'Land Value Source',
   SCITY: 'City', ADDR_LINE1: 'Address Line 1', STREET: 'Street',
 }
 
-const CURRENCY_KEYS = new Set(['MKT_VAL', 'LAND_VAL', 'IMPR_VAL', 'AG_VAL', 'SALE_PRICE', 'TOTAL_VALUE', 'LAND_VALUE', 'IMPROVEMENT_VALUE', 'ASSESSED_VALUE', 'LNDVALUE', 'IMPVALUE', 'MRKT_VAL_TOT', 'MRKT_VAL_LAND', 'MRKT_VAL_BLDG'])
-const SQFT_KEYS = new Set(['SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT'])
-const ACRE_KEYS = new Set(['ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES'])
-const DATE_KEYS = new Set(['SALE_DATE', 'LAST_UPDATED'])
-const ZERO_OK_KEYS = new Set(['BEDROOMS', 'BATHROOMS', 'HALF_BATHS', 'NUM_BLDGS', 'NUM_UNITS', 'NUM_FLOORS', 'TAX_YEAR', 'YEAR_BUILT'])
+const CURRENCY_KEYS = new Set(['MKT_VAL', 'LAND_VAL', 'IMPR_VAL', 'AG_VAL', 'SALE_PRICE', 'PRIOR_SALE_PRICE', 'TOTAL_VALUE', 'LAND_VALUE', 'IMPROVEMENT_VALUE', 'ASSESSED_VALUE', 'LNDVALUE', 'IMPVALUE', 'MRKT_VAL_TOT', 'MRKT_VAL_LAND', 'MRKT_VAL_BLDG'])
+const SQFT_KEYS = new Set(['SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT', 'LL_GIS_SQFT', 'BLDG_FOOTPRINT_SQFT'])
+const ACRE_KEYS = new Set(['ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES', 'LL_GIS_ACRES'])
+const DATE_KEYS = new Set(['SALE_DATE', 'PRIOR_SALE_DATE', 'LAST_UPDATED'])
+const ZERO_OK_KEYS = new Set(['BEDROOMS', 'BATHROOMS', 'HALF_BATHS', 'NUM_BLDGS', 'NUM_UNITS', 'NUM_FLOORS', 'BLDG_COUNT', 'TAX_YEAR', 'YEAR_BUILT'])
+const YES_NO_KEYS = new Set(['HOMESTEAD_EXEMPTION', 'QOZ'])
+
+// USPS DPV match codes — translate the cryptic single letters into a
+// human-readable indicator so users can tell at a glance whether a mailing
+// address will actually be delivered to.
+const DPV_LABELS = {
+  Y: 'Yes — deliverable',
+  D: 'Yes — missing unit #',
+  S: 'Yes — extra info ignored',
+  N: 'No — not deliverable',
+}
 
 export const CATEGORIES = {
-  identification: { title: 'Identification', keys: ['PROP_ID', 'PROPID', 'PARCEL_ID', 'PARCEL_ID_ALT', 'PIN', 'APN', 'TAXPARCELID', 'ACCOUNT', 'TAX_ACCT'] },
+  identification: { title: 'Identification', keys: ['PROP_ID', 'PROPID', 'PARCEL_ID', 'PARCEL_ID_ALT', 'LL_UUID', 'LL_STABLE_ID', 'PIN', 'APN', 'TAXPARCELID', 'ACCOUNT', 'TAX_ACCT'] },
   address: { title: 'Address', keys: ['SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'ADDR', 'SITUS', 'SITEADRESS', 'SITEADDRESS', 'ADDR_LINE1', 'STREET', 'SITUS_CITY', 'PROP_CITY', 'SITUS_STATE', 'PROP_STATE', 'STATE', 'state2', 'SITUS_ZIP', 'PROP_ZIP', 'ZIP', 'ZIP_CODE', 'szip', 'szip5'] },
-  ownership: { title: 'Ownership', keys: ['OWNER_NAME', 'OWNER', 'OWNERNME1', 'MAIL_OWNER'] },
-  property: { title: 'Property', keys: ['USE_CODE', 'USE_DESC', 'LOC_LAND_U', 'LAND_USE', 'LAND_USE_CODE', 'LAND_USE_CLASS', 'PROP_CLASS', 'PROPCLASS', 'PROPERTY_CLASS', 'YEAR_BUILT', 'YEARBLT', 'SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT', 'NUM_BLDGS', 'NUM_UNITS', 'NUM_FLOORS', 'ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES', 'CALC_AREA_SQM', 'BEDROOMS', 'BEDROOM', 'BEDS', 'BATHROOMS', 'BATHROOM', 'BATHS', 'HALF_BATHS', 'ZONING', 'ZONING_CODE'] },
-  valuation: { title: 'Valuation', keys: ['MKT_VAL', 'TOTAL_VALUE', 'ASSESSED_VALUE', 'MRKT_VAL_TOT', 'LAND_VAL', 'LAND_VALUE', 'LNDVALUE', 'MRKT_VAL_LAND', 'IMPR_VAL', 'IMPROVEMENT_VALUE', 'IMPVALUE', 'MRKT_VAL_BLDG', 'AG_VAL', 'SALE_PRICE', 'SALE_DATE', 'TAX_YEAR', 'TAXROLLYEAR', 'ASMT_LEVYR'] },
-  location: { title: 'Location', keys: ['LATITUDE', 'LAT', 'LONGITUDE', 'LNG', 'LON', 'COUNTY', 'COUNTY_NAME', 'CONAME', 'COUNTY_FIPS', 'CENSUS_TRACT', 'PLACE_NAME', 'LAST_UPDATED'] },
-  mailing: { title: 'Mailing Address', keys: ['MAIL_ADDR', 'MAILING_ADDR', 'PSTLADRESS', 'MAIL_CITY', 'MAIL_STATE', 'MAIL_ZIP'] },
+  ownership: { title: 'Ownership', keys: ['OWNER_NAME', 'OWNER', 'OWNERNME1', 'MAIL_OWNER', 'HOMESTEAD_EXEMPTION'] },
+  property: { title: 'Property', keys: ['USE_CODE', 'USE_DESC', 'LOC_LAND_U', 'LAND_USE', 'LAND_USE_CODE', 'LAND_USE_CLASS', 'PROP_CLASS', 'PROPCLASS', 'PROPERTY_CLASS', 'LBCS_ACTIVITY', 'LBCS_FUNCTION', 'LBCS_STRUCTURE', 'LBCS_SITE', 'LBCS_OWNERSHIP', 'YEAR_BUILT', 'YEARBLT', 'SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT', 'BLDG_FOOTPRINT_SQFT', 'NUM_BLDGS', 'NUM_UNITS', 'NUM_FLOORS', 'BLDG_COUNT', 'ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES', 'LL_GIS_ACRES', 'LL_GIS_SQFT', 'CALC_AREA_SQM', 'BEDROOMS', 'BEDROOM', 'BEDS', 'BATHROOMS', 'BATHROOM', 'BATHS', 'HALF_BATHS', 'ZONING', 'ZONING_CODE'] },
+  valuation: { title: 'Valuation', keys: ['MKT_VAL', 'TOTAL_VALUE', 'ASSESSED_VALUE', 'MRKT_VAL_TOT', 'LAND_VAL', 'LAND_VALUE', 'LNDVALUE', 'MRKT_VAL_LAND', 'IMPR_VAL', 'IMPROVEMENT_VALUE', 'IMPVALUE', 'MRKT_VAL_BLDG', 'AG_VAL', 'SALE_PRICE', 'SALE_DATE', 'PRIOR_SALE_PRICE', 'PRIOR_SALE_DATE', 'TAX_YEAR', 'TAXROLLYEAR', 'ASMT_LEVYR', 'PARVAL_SOURCE', 'IMPROV_SOURCE', 'LANDVAL_SOURCE'] },
+  location: { title: 'Location', keys: ['LATITUDE', 'LAT', 'LONGITUDE', 'LNG', 'LON', 'COUNTY', 'COUNTY_NAME', 'CONAME', 'COUNTY_FIPS', 'CENSUS_TRACT', 'CENSUS_BLOCK', 'CENSUS_BLOCKGROUP', 'CENSUS_ZCTA', 'PLACE_NAME', 'SCHOOL_DISTRICT', 'SCHOOL_DIST_ID', 'CONG_DIST', 'STATE_HOUSE_DIST', 'STATE_SENATE_DIST', 'QOZ', 'QOZ_TRACT', 'JURISDICTION_PATH', 'LAST_UPDATED'] },
+  mailing: { title: 'Mailing Address', keys: ['MAIL_ADDR', 'MAILING_ADDR', 'PSTLADRESS', 'MAIL_CITY', 'MAIL_STATE', 'MAIL_ZIP', 'DPV_MATCH', 'DPV_NOTES', 'ADDRESS_SOURCE'] },
   legal: { title: 'Legal & Lot', keys: ['LEGAL_DESC', 'LEGAL_DESCRIP', 'SUBDIVISION', 'SUBDIV', 'LOT', 'LOT_NUM', 'BLOCK', 'BLOCK_NUM', 'BOOK', 'PAGE', 'TOWNSHIP', 'SECTION', 'QTR_SECTION', 'RANGE'] },
 }
 
@@ -92,6 +117,15 @@ function formatValue(key, value) {
       if (!isNaN(d.getTime())) return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     } catch { /* fall through */ }
   }
+  if (YES_NO_KEYS.has(upperKey)) {
+    // Regrid uses lowercase 'yes'/'no' / 'y'/'n' / 'true'/'false' inconsistently.
+    const norm = str.toLowerCase()
+    if (['yes', 'y', 'true', '1'].includes(norm)) return 'Yes'
+    if (['no', 'n', 'false', '0'].includes(norm)) return 'No'
+  }
+  if (upperKey === 'DPV_MATCH') {
+    return DPV_LABELS[str.toUpperCase()] || str
+  }
   return str
 }
 
@@ -102,7 +136,7 @@ function keyToLabel(key) {
 function normalizeParcelForDetails(raw) {
   if (!raw) return null
   const props = { ...(raw.properties || {}) }
-  const propertyLikeKeys = ['PROP_ID', 'PROPID', 'SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'OWNER_NAME', 'OWNER', 'OWNERNME1', 'YEAR_BUILT', 'YEARBLT', 'SQFT', 'ACRES', 'TOTAL_VALUE', 'LATITUDE', 'LONGITUDE', 'LAT', 'LNG', 'LON', 'LOC_LAND_U', 'LAND_USE', 'MAIL_ADDR', 'LEGAL_DESC', 'BEDROOMS', 'BATHROOMS', 'COUNTY', 'COUNTY_FIPS', 'CENSUS_TRACT', 'PLACE_NAME', 'ZIP', 'STATE', 'CITY', 'MAIL_CITY', 'MAIL_STATE', 'MAIL_ZIP', 'PROP_CLASS', 'SUBDIVISION', 'LOT', 'BLOCK', 'ZONING']
+  const propertyLikeKeys = ['PROP_ID', 'PROPID', 'SITUS_ADDR', 'SITE_ADDR', 'ADDRESS', 'OWNER_NAME', 'OWNER', 'OWNERNME1', 'YEAR_BUILT', 'YEARBLT', 'SQFT', 'ACRES', 'TOTAL_VALUE', 'LATITUDE', 'LONGITUDE', 'LAT', 'LNG', 'LON', 'LOC_LAND_U', 'LAND_USE', 'MAIL_ADDR', 'LEGAL_DESC', 'BEDROOMS', 'BATHROOMS', 'COUNTY', 'COUNTY_FIPS', 'CENSUS_TRACT', 'PLACE_NAME', 'ZIP', 'STATE', 'CITY', 'MAIL_CITY', 'MAIL_STATE', 'MAIL_ZIP', 'PROP_CLASS', 'SUBDIVISION', 'LOT', 'BLOCK', 'ZONING', 'HOMESTEAD_EXEMPTION', 'QOZ', 'SCHOOL_DISTRICT', 'DPV_MATCH', 'PRIOR_SALE_PRICE', 'PRIOR_SALE_DATE', 'LL_UUID']
   for (const key of propertyLikeKeys) {
     if (raw[key] != null && raw[key] !== '' && !(key in props)) props[key] = raw[key]
   }
@@ -215,6 +249,11 @@ export function useParcelDetailsData({ isOpen, parcelData, lists = [], enableAut
 
   const categorizedProps = buildCategorizedProperties()
 
+  const isQOZ = (() => {
+    const v = String(properties.QOZ || '').trim().toLowerCase()
+    return ['yes', 'y', 'true', '1'].includes(v)
+  })()
+
   const quickStats = {
     value: categorizedProps.valuation.find(i => ['MKT_VAL', 'TOTAL_VALUE', 'ASSESSED_VALUE', 'MRKT_VAL_TOT'].includes(i.key))?.value,
     sqft: categorizedProps.property.find(i => ['SQFT', 'SQ_FT', 'BLDG_SQFT', 'LIVING_SQFT'].includes(i.key))?.value,
@@ -222,10 +261,12 @@ export function useParcelDetailsData({ isOpen, parcelData, lists = [], enableAut
     beds: properties.BEDROOMS || properties.BEDROOM || properties.BEDS || null,
     baths: properties.BATHROOMS || properties.BATHROOM || properties.BATHS || null,
     halfBaths: properties.HALF_BATHS || null,
-    acres: categorizedProps.property.find(i => ['ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES', 'CALC_AREA_SQM'].includes(i.key))?.value,
+    acres: categorizedProps.property.find(i => ['ACRES', 'ACREAGE', 'GIS_ACRES', 'ASSDACRES', 'LL_GIS_ACRES', 'CALC_AREA_SQM'].includes(i.key))?.value,
     zoning: properties.ZONING || properties.ZONING_CODE || null,
     age: age != null ? `${age} yrs` : null,
     landUse: properties.USE_DESC || properties.LOC_LAND_U || properties.LAND_USE || null,
+    schoolDistrict: properties.SCHOOL_DISTRICT || null,
+    isQOZ,
   }
 
   const normalizePhoneNumber = (phone) => (phone || '').replace(/[^\d+]/g, '')

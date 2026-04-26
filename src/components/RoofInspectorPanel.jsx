@@ -59,7 +59,7 @@ export function RoofInspectorPanel({ isOpen, onClose, parcelData }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/hail-events?lat=${lat}&lng=${lng}&radius_miles=5&from_year=2010`)
+      const res = await fetch(`/api/hail-events?lat=${lat}&lng=${lng}&radius_miles=10&from_year=2010`)
       if (!res.ok) throw new Error(`Hail API: ${res.status}`)
       setHailData(await res.json())
     } catch (e) {

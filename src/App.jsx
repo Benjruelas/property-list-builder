@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import MapGL, { Marker as MapMarker, Source, Layer } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { CompassOrientation } from './components/CompassOrientation'
-import { NorthIndicator } from './components/NorthIndicator'
+// import { NorthIndicator } from './components/NorthIndicator'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
 import { MobileActionBar } from './components/MobileActionBar'
@@ -50,9 +50,8 @@ import { RoofInspectorPanel } from './components/RoofInspectorPanel'
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { getSettings, updateSettings } from './utils/settings'
-import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines } from './utils/leadTasks'
-import { removePipelineTask } from './utils/pipelineTasks'
-import { addPipelineTask } from './utils/pipelineTasks'
+import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
+import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedLeads, addClosedLead, saveClosedLeads, buildClosedLeadRecord, removeClosedLead } from './utils/closedLeads'
 import { showLocalNotification } from './utils/pushNotifications'
@@ -295,10 +294,14 @@ function App() {
   const [activePipelineId, setActivePipelineId] = useState(null)
   /** When set, user must pick a pipeline (multiple eligible). */
   const [pickPipelineForParcel, setPickPipelineForParcel] = useState(null)
+  /** When set, user is choosing a target pipeline to move a lead into. */
+  const [moveLeadContext, setMoveLeadContext] = useState(null)
   const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
   const [isTasksPanelOpen, setIsTasksPanelOpen] = useState(false)
   const [dealPipelineLeadFocusKey, setDealPipelineLeadFocusKey] = useState(0)
   const [dealPipelineFocusParcelId, setDealPipelineFocusParcelId] = useState(null)
+  const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
+  const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
   const [scheduleInitialDate, setScheduleInitialDate] = useState(null)
   const [phoneActionPanel, setPhoneActionPanel] = useState(null) // { phone, parcelData } | null
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
@@ -1011,8 +1014,27 @@ function App() {
 
   const handleDeleteLead = useCallback(async (lead /* , pipelineId */) => {
     if (!lead) return
+
+    const parcelId = lead.parcelId
+    const matchesLead = (l) => {
+      if (!l) return false
+      if (lead.id != null && l.id === lead.id) return true
+      if (parcelId && l.parcelId === parcelId) return true
+      return false
+    }
+    const affectedApiPipelines = (pipelines || []).filter((p) => (p.leads || []).some(matchesLead))
+    const pipelineCount = affectedApiPipelines.length
+    let message = 'This lead, its tasks, notes, and contacts will be permanently deleted. This cannot be undone.'
+    if (pipelineCount > 1) {
+      const titles = affectedApiPipelines.map((p) => p.title || 'Pipes').slice(0, 3).join(', ')
+      const more = pipelineCount > 3 ? ` and ${pipelineCount - 3} more` : ''
+      message = `This lead exists in ${pipelineCount} pipelines (${titles}${more}). It and all its tasks, notes, and contacts will be permanently deleted from every pipeline. This cannot be undone.`
+    } else if (pipelineCount === 1) {
+      message = `This lead and all its tasks, notes, and contacts will be permanently deleted from "${affectedApiPipelines[0].title || 'Pipes'}". This cannot be undone.`
+    }
+
     const confirmed = await showConfirm(
-      'This lead, its tasks, notes, and contacts will be permanently deleted and removed from all pipelines. This cannot be undone.',
+      message,
       'Delete Lead',
       {
         detail: lead.owner || lead.address || 'Lead',
@@ -1022,8 +1044,6 @@ function App() {
     )
     if (!confirmed) return
 
-    const parcelId = lead.parcelId
-
     if (parcelId) {
       saveParcelNote(parcelId, '')
       deleteAllLeadTasks(parcelId, null)
@@ -1031,14 +1051,6 @@ function App() {
     }
 
     try {
-      const matchesLead = (l) => {
-        if (!l) return false
-        if (lead.id != null && l.id === lead.id) return true
-        if (parcelId && l.parcelId === parcelId) return true
-        return false
-      }
-
-      const affectedApiPipelines = (pipelines || []).filter((p) => (p.leads || []).some(matchesLead))
       for (const p of affectedApiPipelines) {
         // Remove any pipeline-scoped tasks tied to this lead's parcel before
         // rewriting the leads array, so those tasks don't linger as orphans.
@@ -1167,6 +1179,125 @@ function App() {
         : 'Lead reopened',
       'success'
     )
+  }, [pipelines, getToken, refreshPipelines])
+
+  /**
+   * Open the target-pipeline picker for moving a lead between API pipelines.
+   * No-ops in local-only mode, when the source pipeline is unknown, or when
+   * there are no other pipelines the user can write to.
+   */
+  const handleRequestMoveLead = useCallback((lead, sourcePipelineId) => {
+    if (!lead || !sourcePipelineId) return
+    const eligible = pipelines.filter((p) =>
+      p.id !== sourcePipelineId && canAddLeadsToPipeline(currentUser, p, teams)
+    )
+    if (eligible.length === 0) {
+      showToast('No other pipelines you can move this lead to', 'warning')
+      return
+    }
+    setMoveLeadContext({ lead, sourcePipelineId, eligiblePipelines: eligible })
+  }, [pipelines, currentUser, teams])
+
+  /**
+   * Move a lead from sourcePipelineId to targetPipelineId, migrating tied
+   * data: pipeline-scoped tasks (pipeline.tasks), team tasks on the lead
+   * (lead.teamTasks travels with the lead), and any local lead_tasks tagged
+   * to the source pipeline. Order: add lead+tasks to target first, then
+   * remove from source, so we never orphan tasks if the second leg fails.
+   */
+  const handleMoveLead = useCallback(async (lead, sourcePipelineId, targetPipelineId) => {
+    if (!lead || !sourcePipelineId || !targetPipelineId) return false
+    if (sourcePipelineId === targetPipelineId) return false
+    const source = pipelines.find((p) => p.id === sourcePipelineId)
+    const target = pipelines.find((p) => p.id === targetPipelineId)
+    if (!source || !target) {
+      showToast('Source or target pipeline not found', 'error')
+      return false
+    }
+
+    const targetColumns = target.columns || []
+    const targetStatus = targetColumns.some((c) => c.id === lead.status)
+      ? lead.status
+      : (targetColumns[0]?.id || lead.status || 'col-0')
+    const now = Date.now()
+    const movedLead = {
+      ...lead,
+      status: targetStatus,
+      statusEnteredAt: now,
+      cumulativeTimeByStatus: { ...(lead.cumulativeTimeByStatus || {}) }
+    }
+    const parcelId = lead.parcelId
+    const sourcePipelineTasks = parcelId
+      ? (source.tasks || []).filter((t) => t?.parcelId === parcelId)
+      : []
+
+    try {
+      const targetLeads = [...(target.leads || []), movedLead]
+      await updatePipeline(getToken, targetPipelineId, { leads: targetLeads })
+
+      for (const t of sourcePipelineTasks) {
+        try {
+          await addPipelineTask(getToken, targetPipelineId, {
+            id: t.id,
+            title: t.title,
+            completed: !!t.completed,
+            createdAt: t.createdAt,
+            completedAt: t.completedAt ?? null,
+            scheduledAt: t.scheduledAt ?? null,
+            scheduledEndAt: t.scheduledEndAt ?? null,
+            parcelId: t.parcelId
+          })
+        } catch (e) {
+          console.warn('Move lead: task copy failed', e?.message || e)
+        }
+      }
+
+      for (const t of sourcePipelineTasks) {
+        try { await removePipelineTask(getToken, sourcePipelineId, t.id) }
+        catch (e) { console.warn('Move lead: source task remove failed', e?.message || e) }
+      }
+
+      const remainingSourceLeads = (source.leads || []).filter((l) => l.id !== lead.id)
+      await updatePipeline(getToken, sourcePipelineId, { leads: remainingSourceLeads })
+    } catch (e) {
+      showToast(e.message || 'Could not move lead', 'error')
+      try { await refreshPipelines() } catch { /* ignore */ }
+      return false
+    }
+
+    if (parcelId) {
+      const localTasks = getAllTasks()
+      for (const t of localTasks) {
+        if (t.parcelId === parcelId && t.pipelineId === sourcePipelineId) {
+          updateTaskById(t.id, { pipelineId: targetPipelineId })
+        }
+      }
+    }
+
+    setPipelines((prev) => prev.map((p) => {
+      if (p.id === sourcePipelineId) {
+        return {
+          ...p,
+          leads: (p.leads || []).filter((l) => l.id !== lead.id),
+          tasks: (p.tasks || []).filter((t) => !(parcelId && t?.parcelId === parcelId))
+        }
+      }
+      if (p.id === targetPipelineId) {
+        return {
+          ...p,
+          leads: [...(p.leads || []), movedLead],
+          tasks: [
+            ...(p.tasks || []),
+            ...sourcePipelineTasks.map((t) => ({ ...t }))
+          ]
+        }
+      }
+      return p
+    }))
+    await refreshPipelines()
+    scheduleUserDataSync(getToken)
+    showToast(`Lead moved to ${target.title || 'pipeline'}`, 'success')
+    return true
   }, [pipelines, getToken, refreshPipelines])
 
   // Background polling for skip trace jobs
@@ -1748,6 +1879,10 @@ function App() {
     setDealPipelineFocusParcelId(null)
   }, [])
 
+  const handleDealPipelineAddTaskHandled = useCallback(() => {
+    setDealPipelineAddTaskParcelId(null)
+  }, [])
+
   const handleOpenTaskInDealPipeline = useCallback(({ pipelineId, parcelId, mode }) => {
     setIsTasksPanelOpen(false)
     setDealPipelineFocusParcelId(parcelId ?? null)
@@ -1755,6 +1890,22 @@ function App() {
       setActivePipelineId(pipelineId)
     }
     setDealPipelineLeadFocusKey((k) => k + 1)
+    setIsDealPipelineOpen(true)
+  }, [])
+
+  /**
+   * Bring the user into the Pipes board for a given lead with the in-board
+   * "New Task" dialog prefilled with that lead. Used by entry points outside
+   * the board (Leads list, Schedule, etc.) so they reuse one task-creation UI.
+   */
+  const handleOpenAddTaskForLead = useCallback((lead, pipelineId) => {
+    if (!lead?.parcelId) return
+    setIsLeadsPanelOpen(false)
+    setIsSchedulePanelOpen(false)
+    setIsTasksPanelOpen(false)
+    if (pipelineId) setActivePipelineId(pipelineId)
+    setDealPipelineAddTaskParcelId(lead.parcelId)
+    setDealPipelineAddTaskKey((k) => k + 1)
     setIsDealPipelineOpen(true)
   }, [])
 
@@ -2470,7 +2621,7 @@ function App() {
           touchPitch={false}
         >
           <CompassOrientation isActive={isCompassActive} heading={heading} mapRef={mapInstanceRef} />
-          <NorthIndicator mapRef={mapInstanceRef} />
+          {/* <NorthIndicator mapRef={mapInstanceRef} /> */}
           <PMTilesParcelLayer 
             mapRef={mapInstanceRef}
             mapReady={mapReady}
@@ -2737,6 +2888,9 @@ function App() {
         focusLeadRequestKey={dealPipelineLeadFocusKey}
         focusParcelId={dealPipelineFocusParcelId}
         onFocusLeadHandled={handleDealPipelineFocusHandled}
+        addTaskRequestKey={dealPipelineAddTaskKey}
+        addTaskRequestParcelId={dealPipelineAddTaskParcelId}
+        onAddTaskRequestHandled={handleDealPipelineAddTaskHandled}
         onPipelinesChange={refreshPipelines}
         onActivePipelineChange={setActivePipelineId}
         onSharePipeline={handleSharePipeline}
@@ -2790,6 +2944,7 @@ function App() {
         onGoToParcelOnMap={handleGoToParcelOnMap}
         onRequestCloseLead={handleCloseLead}
         onRequestRemoveLead={handleDeleteLead}
+        onRequestMoveLead={handleRequestMoveLead}
       />
 
       <SchedulePanel
@@ -2808,6 +2963,7 @@ function App() {
         skipTracingInProgress={skipTracingInProgress}
         onGoToParcelOnMap={handleGoToParcelOnMap}
         onRequestRemoveLead={handleDeleteLead}
+        onRequestMoveLead={handleRequestMoveLead}
         getToken={getToken}
         currentUser={currentUser}
         onPipelinesChange={refreshPipelines}
@@ -2975,6 +3131,7 @@ function App() {
         }}
         onRequestCloseLead={handleCloseLead}
         onRequestRemoveLead={handleDeleteLead}
+        onRequestMoveLead={handleRequestMoveLead}
         onDeleteClosedLead={(id) => {
           const next = loadClosedLeads().filter((r) => r.id !== id)
           saveClosedLeads(next)
@@ -2987,6 +3144,7 @@ function App() {
         onPipelinesChange={refreshPipelines}
         getToken={getToken}
         teams={teams}
+        onOpenAddTask={handleOpenAddTaskForLead}
       />
 
       <RoofInspectorPanel
@@ -3034,6 +3192,22 @@ function App() {
           const ctx = pickPipelineForParcel
           setPickPipelineForParcel(null)
           if (ctx?.parcelData) handleAddLeadToPipeline(ctx.parcelData, pipelineId)
+        }}
+      />
+
+      <ConvertToLeadPipelineDialog
+        open={!!moveLeadContext}
+        onOpenChange={(o) => { if (!o) setMoveLeadContext(null) }}
+        pipelines={moveLeadContext?.eligiblePipelines ?? []}
+        currentUser={currentUser}
+        title="Move to which pipeline?"
+        description="Choose a pipeline to move this lead into. Tasks tied to this lead will move with it."
+        onSelect={(targetPipelineId) => {
+          const ctx = moveLeadContext
+          setMoveLeadContext(null)
+          if (ctx?.lead && ctx?.sourcePipelineId) {
+            handleMoveLead(ctx.lead, ctx.sourcePipelineId, targetPipelineId)
+          }
         }}
       />
 

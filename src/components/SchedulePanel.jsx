@@ -229,7 +229,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   const [allTasks, setAllTasks] = useState([])
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth())
-  const [viewMode, setViewMode] = useState('month') // 'month' | 'week' | 'day'
+  const [viewMode, setViewMode] = useState('day') // 'month' | 'week' | 'day'
   const [weekStart, setWeekStart] = useState(null) // Sunday of displayed week (for week view)
   const [dayViewDate, setDayViewDate] = useState(() => {
     const n = new Date()
@@ -282,7 +282,7 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
       const d = new Date(initialDate)
       setViewYear(d.getFullYear())
       setViewMonth(d.getMonth())
-      setViewMode('month')
+      setViewMode('day')
       setWeekStart(getSundayOfWeek(d))
       setDayViewDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
       onInitialDateConsumed?.()

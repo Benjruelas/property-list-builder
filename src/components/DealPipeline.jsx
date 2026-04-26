@@ -77,6 +77,10 @@ export function DealPipeline({
   focusLeadRequestKey = 0,
   focusParcelId = null,
   onFocusLeadHandled,
+  /** Increment to open the in-board "New Task" dialog prefilled for parcel id. */
+  addTaskRequestKey = 0,
+  addTaskRequestParcelId = null,
+  onAddTaskRequestHandled,
   onRequestMoveLead,
   onRequestRemoveLead,
   onRequestCloseLead,
@@ -226,6 +230,33 @@ export function DealPipeline({
     }, 100)
     return () => clearTimeout(id)
   }, [isOpen, focusLeadRequestKey, focusParcelId, displayLeads, onFocusLeadHandled])
+
+  // External callers (Leads list, Schedule) request the in-board New Task
+  // dialog prefilled for a specific lead. Mirror the focus-lead pattern so
+  // the same state machine handles both.
+  useEffect(() => {
+    if (!isOpen || !addTaskRequestKey) return
+    if (addTaskRequestParcelId == null || addTaskRequestParcelId === '') return
+    const id = window.setTimeout(() => {
+      const lead = displayLeads.find((l) => String(l.parcelId) === String(addTaskRequestParcelId))
+      if (lead) {
+        setAddTaskLeadId(lead.parcelId)
+        setAddTaskLeadSearch(getLeadLabel(lead.parcelId))
+        setAddTaskTitle('')
+        setAddTaskAssignUids([])
+        const startOfHour = new Date()
+        startOfHour.setMinutes(0, 0, 0)
+        const startTs = startOfHour.getTime()
+        setAddTaskScheduledAt(startTs)
+        setAddTaskScheduledEndAt(startTs + 60 * 60 * 1000)
+        setAddTaskFromLead(true)
+        setShowAddTaskDialog(true)
+      }
+      onAddTaskRequestHandled?.()
+    }, 120)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, addTaskRequestKey, addTaskRequestParcelId, displayLeads])
 
   useEffect(() => {
     if (isOpen) {

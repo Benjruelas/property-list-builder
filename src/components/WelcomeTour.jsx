@@ -5,7 +5,7 @@ const STEPS = [
   // Left side of screen
   { target: '.map-search-stack button',     title: 'Address Search',      desc: 'Search for any address or paste coordinates to jump there', menuRequired: false },
   { target: '.maplibregl-ctrl-zoom-in',      title: 'Zoom Controls',       desc: 'Zoom in and out of the map', menuRequired: false },
-  { target: '.north-indicator',             title: 'North Indicator',     desc: 'Shows which direction is geographic North — rotates as the map rotates', menuRequired: false },
+  // { target: '.north-indicator',             title: 'North Indicator',     desc: 'Shows which direction is geographic North — rotates as the map rotates', menuRequired: false },
   // Right side of screen
   { target: '[data-tour="recenter"]',       title: 'Recenter Map',        desc: 'Tap to snap the map back to your current location', menuRequired: false },
   { target: '[data-tour="compass"]',        title: 'Compass Mode',        desc: 'Rotates the map to match the direction you are facing', menuRequired: false },

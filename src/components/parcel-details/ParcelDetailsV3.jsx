@@ -39,9 +39,10 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
   pick('property', ['YEAR_BUILT', 'YEARBLT'])
   pick('property', ['BEDROOMS', 'BEDROOM', 'BEDS'])
   pick('property', ['BATHROOMS', 'BATHROOM', 'BATHS'])
-  pick('property', ['ACRES', 'ACREAGE', 'GIS_ACRES', 'CALC_AREA_SQM'])
+  pick('property', ['ACRES', 'ACREAGE', 'GIS_ACRES', 'LL_GIS_ACRES', 'CALC_AREA_SQM'])
   pick('property', ['ZONING', 'ZONING_CODE'])
   pick('property', ['USE_DESC', 'LOC_LAND_U', 'LAND_USE'])
+  pick('location', ['SCHOOL_DISTRICT'])
   const allOwnership = [...(categorizedProps.ownership || [])]
   const allIdentification = [...(categorizedProps.identification || [])]
 
@@ -73,11 +74,19 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">
                 <DialogTitle className="text-3xl font-bold leading-tight">{address}</DialogTitle>
-                <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   {ownerName && <span className="text-lg opacity-60">{ownerName}</span>}
                   {ownerOccupied && (
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${ownerOccupied === 'Yes' ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400'}`}>
                       {ownerOccupied === 'Yes' ? 'Owner Occupied' : 'Absentee'}
+                    </span>
+                  )}
+                  {quickStats.isQOZ && (
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-500/15 text-purple-400"
+                      title="Qualified Opportunity Zone — capital-gains tax incentive available to investors"
+                    >
+                      Opportunity Zone
                     </span>
                   )}
                   {quickStats.value && <span className="text-sm font-semibold ml-auto">{quickStats.value}</span>}
