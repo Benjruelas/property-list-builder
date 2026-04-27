@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
-import { X, Plus, RefreshCw, Users2, Shield, Trash2 } from 'lucide-react'
+import { X, Plus, Users2, Shield, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
-import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { createTeam, fetchTeams, teamRoleForUser } from '@/utils/teams'
 import { TeamDetails } from './TeamDetails'
+
+/** Match ListPanel list rows; `teams-panel-list-item` is excluded in index.css from .list-panel button resets. */
+const TEAM_LIST_ITEM_CLASS =
+  'teams-panel-list-item map-panel-list-item w-full flex flex-col items-stretch p-3 rounded-lg transition-all cursor-pointer text-left border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98]'
 
 export function TeamsPanel({
   isOpen,
@@ -20,7 +23,6 @@ export function TeamsPanel({
   const [newName, setNewName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [openTeamId, setOpenTeamId] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!isOpen) {
@@ -32,12 +34,7 @@ export function TeamsPanel({
 
   const refresh = async () => {
     if (!onTeamsChange) return
-    setRefreshing(true)
-    try {
-      await onTeamsChange()
-    } finally {
-      setRefreshing(false)
-    }
+    await onTeamsChange()
   }
 
   const handleCreate = async () => {
@@ -93,15 +90,6 @@ export function TeamsPanel({
             <div className="map-panel-header-toolbar">
               <DialogTitle className="map-panel-header-title-wrap text-left text-xl font-semibold truncate">Teams</DialogTitle>
               <div className="map-panel-header-actions gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={refresh}
-                  title="Refresh teams"
-                  disabled={refreshing}
-                >
-                  <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-                </Button>
                 <Button variant="ghost" size="icon" onClick={onClose} title="Close">
                   <X className="h-4 w-4" />
                 </Button>
@@ -162,23 +150,23 @@ export function TeamsPanel({
                       key={team.id}
                       type="button"
                       onClick={() => setOpenTeamId(team.id)}
-                      className="map-panel-list-item w-full flex items-start justify-between gap-2 p-3 rounded-lg transition-all cursor-pointer border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-left"
+                      className={TEAM_LIST_ITEM_CLASS}
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2 min-w-0 w-full">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <span className="font-medium text-sm truncate">{team.name}</span>
                           {isOwner && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/40 uppercase tracking-wide flex items-center gap-1">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/40 uppercase tracking-wide flex items-center gap-1 shrink-0">
                               <Shield className="h-2.5 w-2.5" /> Owner
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {team.members?.length || 0} member{(team.members?.length || 0) === 1 ? '' : 's'}
-                          {!isOwner && team.ownerEmail ? ` · owned by ${team.ownerEmail}` : ''}
-                        </p>
+                        <Users2 className="h-4 w-4 flex-shrink-0 text-white/70" aria-hidden />
                       </div>
-                      <Users2 className="h-4 w-4 flex-shrink-0 text-gray-400 mt-1" />
+                      <span className="text-xs text-gray-500 block mt-0.5 w-full min-w-0 text-left">
+                        {team.members?.length || 0} member{(team.members?.length || 0) === 1 ? '' : 's'}
+                        {!isOwner && team.ownerEmail ? ` · owned by ${team.ownerEmail}` : ''}
+                      </span>
                     </button>
                   )
                 })}

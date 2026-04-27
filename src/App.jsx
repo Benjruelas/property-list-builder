@@ -1350,7 +1350,7 @@ function App() {
           return
         }
 
-        // Address matching utilities (same as in handleBulkSkipTraceList)
+        // Address matching utilities for batch job result ingestion
         const parseAddress = (addressStr) => {
           if (!addressStr || !addressStr.trim()) return null
           const parts = addressStr.split(',').map(p => p.trim()).filter(p => p.length > 0)
@@ -2290,121 +2290,6 @@ function App() {
     await handleBulkEmailListSelected(listId)
   }, [handleBulkEmailListSelected])
 
-  const handleBulkSkipTraceList = useCallback(async (listId) => {
-    try {
-      const list = lists.find(l => l.id === listId)
-      if (!list || !list.parcels || list.parcels.length === 0) {
-        showToast('List is empty', 'warning')
-        return
-      }
-
-      // Prepare parcels for skip tracing (filter out already skip traced ones)
-      const parcelsToTrace = list.parcels
-        .filter(parcel => {
-          const parcelId = parcel.id || parcel
-          return !isParcelSkipTraced(parcelId)
-        })
-        .map(parcel => {
-          const parcelId = parcel.id || parcel
-          const props = parcel.properties || parcel
-          const parcelData = { id: parcelId, address: parcel.address, properties: props }
-          const { payload } = buildSkipTraceRequest(parcelData)
-          return payload
-        })
-        .filter(Boolean) // drop parcels without a usable address
-
-      if (parcelsToTrace.length === 0) {
-        showToast('No parcels to skip trace (all already traced or missing addresses)', 'info')
-        return
-      }
-
-      const confirmed = await showConfirm(
-        `Skip trace ${parcelsToTrace.length} parcel${parcelsToTrace.length > 1 ? 's' : ''} from "${list.name}"? This will run in the background and you'll be notified when complete.`,
-        'Bulk Skip Trace'
-      )
-      if (!confirmed) {
-        return
-      }
-
-      // Mark all as in progress
-      setSkipTracingInProgress(prev => {
-        const next = new Set(prev)
-        parcelsToTrace.forEach(p => next.add(p.parcelId))
-        return next
-      })
-
-      showToast(`Starting bulk skip trace for ${parcelsToTrace.length} parcels...`, 'info', 3000)
-      
-      try {
-        // Submit skip trace job. Trestle is synchronous — results come back in the
-        // same response keyed by parcelId, so no async job tracking or address-
-        // matching is needed.
-        const result = await skipTraceParcels(parcelsToTrace)
-
-        const syncResults = Array.isArray(result?.results) ? result.results : []
-        const errored = syncResults.filter(r => r.error)
-        const resultsWithParcelIds = syncResults
-          .filter(r => r.parcelId && !r.error && ((r.phoneNumbers?.length || 0) > 0 || (r.emails?.length || 0) > 0))
-          .map(r => ({
-            parcelId: r.parcelId,
-            phone: r.phone || null,
-            email: r.email || null,
-            phoneNumbers: r.phoneNumbers || (r.phone ? [r.phone] : []),
-            emails: r.emails || (r.email ? [r.email] : []),
-            phoneDetails: r.phoneDetails,
-            emailDetails: r.emailDetails,
-            address: r.address || null,
-            skipTracedAt: r.skipTracedAt || new Date().toISOString()
-          }))
-
-        saveSkipTracedParcels(resultsWithParcelIds)
-        scheduleUserDataSync(getToken)
-
-        const matchedIds = new Set(resultsWithParcelIds.map(r => r.parcelId))
-        const skipTracedParcels = list.parcels.filter(p => {
-          const pid = p.id || p.properties?.PROP_ID || p
-          return matchedIds.has(pid)
-        })
-        if (skipTracedParcels.length > 0) {
-          addListToSkipTracedList(listId, list.name, skipTracedParcels)
-          scheduleUserDataSync(getToken)
-        }
-
-        setSkipTracingInProgress(prev => {
-          const next = new Set(prev)
-          parcelsToTrace.forEach(p => next.delete(p.parcelId))
-          return next
-        })
-
-        const matchedCount = resultsWithParcelIds.length
-        const totalRequested = parcelsToTrace.length
-        const erroredCount = errored.length
-        if (erroredCount > 0 && matchedCount === 0) {
-          const sample = errored[0].error
-          showToast(`Skip trace failed for all ${totalRequested} parcels: ${sample}`, 'error', 10000)
-        } else if (erroredCount > 0) {
-          showToast(`Skip trace: ${matchedCount} of ${totalRequested} found contacts, ${erroredCount} errored.`, 'warning', 8000)
-        } else {
-          showToast(`Skip trace completed: ${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found contacts.`, matchedCount > 0 ? 'success' : 'warning', 6000)
-        }
-        notifySkipTraceComplete(list.name, `${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found${erroredCount > 0 ? `, ${erroredCount} errored` : ''}`)
-      } catch (error) {
-        console.error('Bulk skip trace submission error:', error)
-        showToast(`Failed to submit skip trace job: ${error.message}`, 'error')
-        // Remove from in progress on error
-        setSkipTracingInProgress(prev => {
-          const next = new Set(prev)
-          parcelsToTrace.forEach(p => next.delete(p.parcelId))
-          return next
-        })
-      }
-      
-    } catch (error) {
-      console.error('Bulk skip trace error:', error)
-      showToast(`Bulk skip trace failed: ${error.message}`, 'error')
-    }
-  }, [lists, skipTracingInProgress])
-
   // Handle skip tracing a single parcel (from popup or list)
   const handleSkipTraceParcel = useCallback(async (parcelData) => {
     if (!parcelData) {
@@ -2841,7 +2726,6 @@ function App() {
           setViewingListId(listId)
           setIsParcelListPanelOpen(true)
         }}
-        onBulkSkipTrace={handleBulkSkipTraceList}
         onBulkEmail={handleBulkEmailFromList}
         onExportList={handleExportList}
         isAddingSingleParcel={showListSelector && !!clickedParcelData}
@@ -2872,7 +2756,6 @@ function App() {
         onSkipTraceParcel={handleSkipTraceParcel}
         onConvertToLead={handleConvertToLead}
         isParcelALead={isParcelALeadCheck}
-        onBulkSkipTrace={handleBulkSkipTraceList}
         onExportList={handleExportList}
         skipTracingInProgress={skipTracingInProgress}
       />

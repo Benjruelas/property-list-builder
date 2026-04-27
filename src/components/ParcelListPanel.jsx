@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, ChevronRight, ChevronDown, Trash2, Download, Phone } from 'lucide-react'
+import { ArrowLeft, ChevronRight, ChevronDown, Trash2, Download } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -18,7 +18,6 @@ export function ParcelListPanel({
   onSkipTraceParcel,
   onConvertToLead,
   isParcelALead: isParcelALeadProp,
-  onBulkSkipTrace,
   onExportList,
   skipTracingInProgress = new Set(),
   /** Matches map parcel outlines — expanded row border + expanded gradients */
@@ -130,17 +129,6 @@ export function ParcelListPanel({
               </DialogTitle>
             </div>
             <div className="map-panel-header-actions gap-1">
-              {onBulkSkipTrace && parcels.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-green-700 hover:text-green-800"
-                  onClick={() => onBulkSkipTrace(selectedListId)}
-                  title="Skip trace all parcels in this list"
-                >
-                  <Phone className="h-4 w-4" />
-                </Button>
-              )}
               {onExportList && parcels.length > 0 && (
                 <Button
                   variant="ghost"

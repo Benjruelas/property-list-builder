@@ -907,16 +907,16 @@
 }
 
 /* List panel - no fills on buttons (except delete, create new list, create form) */
-/* Exclude calendar-day-btn - needs borders for grid lines; leads-panel-list-item - Leads panel cards */
-.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item) {
+/* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams) */
+.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-new-list-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.calendar-day-btn):not(.share-dialog-btn):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):hover:not(:disabled) {
   background: transparent !important;
 }
 

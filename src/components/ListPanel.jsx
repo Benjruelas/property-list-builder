@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Eye, Trash2, Check, Phone, Mail, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
+import { X, Plus, Eye, Trash2, Check, Mail, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { Input } from './ui/input'
-import { TeamShareSection, TeamBadge } from './TeamShareSection'
+import { TeamShareSection } from './TeamShareSection'
 
 const LIST_HIGHLIGHT_COLORS = [
   '#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626',
@@ -34,7 +34,6 @@ export function ListPanel({
   onValidateShareEmail,
   onCreateList,
   onViewListContents,
-  onBulkSkipTrace,
   onBulkEmail,
   onExportList,
   isAddingSingleParcel = false,
@@ -73,6 +72,8 @@ export function ListPanel({
   const [shareEmailError, setShareEmailError] = useState('')
   const [isValidatingShare, setIsValidatingShare] = useState(false)
   const validateTimeoutRef = useRef(null)
+  /** Optimistic team picks in Share dialog; avoids waiting for server to show checkmarks */
+  const [localTeamShareIds, setLocalTeamShareIds] = useState(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -81,6 +82,7 @@ export function ListPanel({
       setRenamingListId(null)
       setRenameValue('')
       setShareListId(null)
+      setLocalTeamShareIds(null)
       setShareEmail('')
       setShareEmailValid(null)
       setShareEmailError('')
@@ -262,6 +264,36 @@ export function ListPanel({
   const allLists = lists || []
   const isListOwnedByUser = (list) => list?.ownerId === currentUser?.uid
 
+  useEffect(() => {
+    if (!shareListId) {
+      setLocalTeamShareIds(null)
+      return
+    }
+    const list = allLists.find((l) => l.id === shareListId)
+    setLocalTeamShareIds([...(list?.teamShares || [])])
+  }, [shareListId])
+
+  const handleToggleShareTeam = useCallback(
+    (teamId) => {
+      if (!onShareListWithTeams || !shareListId) return
+      setLocalTeamShareIds((prev) => {
+        const list = allLists.find((l) => l.id === shareListId)
+        const base = prev ?? (list?.teamShares || [])
+        const next = base.includes(teamId) ? base.filter((id) => id !== teamId) : [...base, teamId]
+        void (async () => {
+          try {
+            await onShareListWithTeams(shareListId, next)
+          } catch (e) {
+            setLocalTeamShareIds(base)
+            showToast(e.message || 'Failed to update team share', 'error')
+          }
+        })()
+        return next
+      })
+    },
+    [onShareListWithTeams, shareListId, allLists]
+  )
+
   const handleToggleHighlight = (listId) => {
     if (!onToggleListHighlight) return
     if (selectedListIds.includes(listId)) {
@@ -439,7 +471,6 @@ export function ListPanel({
                             {!isListOwnedByUser(list) && (
                               <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                             )}
-                            <TeamBadge teamIds={list.teamShares} teams={teams} />
                           </div>
                           <span className="text-xs text-gray-500">{list.parcels?.length ?? 0} parcels</span>
                         </div>
@@ -514,25 +545,14 @@ export function ListPanel({
             const list = allLists.find((l) => l.id === shareListId)
             const currentShared = list?.sharedWith || []
             const isShared = currentShared.length > 0
-            const currentTeamShares = list?.teamShares || []
-            const toggleTeam = async (teamId) => {
-              if (!onShareListWithTeams) return
-              const next = currentTeamShares.includes(teamId)
-                ? currentTeamShares.filter((id) => id !== teamId)
-                : [...currentTeamShares, teamId]
-              try {
-                await onShareListWithTeams(shareListId, next)
-              } catch (e) {
-                showToast(e.message || 'Failed to update team share', 'error')
-              }
-            }
+            const selectedTeamIds = localTeamShareIds ?? list?.teamShares ?? []
             return (
               <>
                 {onShareListWithTeams && (
                   <TeamShareSection
                     teams={teams}
-                    selectedTeamIds={currentTeamShares}
-                    onToggle={toggleTeam}
+                    selectedTeamIds={selectedTeamIds}
+                    onToggle={handleToggleShareTeam}
                   />
                 )}
                 {isShared && (
@@ -612,12 +632,6 @@ export function ListPanel({
                 <button type="button" onClick={() => { closeDropdown(); onBulkEmail(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
                   <Mail className="h-4 w-4 flex-shrink-0" />
                   Email list
-                </button>
-              )}
-              {onBulkSkipTrace && list.parcels?.length > 0 && (
-                <button type="button" onClick={() => { closeDropdown(); onBulkSkipTrace(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
-                  <Phone className="h-4 w-4 flex-shrink-0" />
-                  Skip trace list
                 </button>
               )}
               {onExportList && (
