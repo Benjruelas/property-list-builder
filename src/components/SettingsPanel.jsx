@@ -651,30 +651,33 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
             </div>
           </Section>
 
-          {/* ---- Restart Welcome Tour ---- */}
-          {onRestartTour && (
-            <button
-              type="button"
-              onClick={onRestartTour}
-              className="settings-data-btn w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-lg transition-colors"
-            >
-              <HelpCircle className="h-4 w-4 opacity-70" />
-              Restart Welcome Tour
-            </button>
-          )}
-
-          {onLogout && (
-            <button
-              type="button"
-              onClick={async () => {
-                onClose?.()
-                await onLogout()
-              }}
-              className="settings-data-btn-danger w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-lg transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </button>
+          {/* ---- Bottom: tour + sign out (account actions) ---- */}
+          {(onRestartTour || onLogout) && (
+            <div className="mt-4 space-y-2 border-t border-white/15 pt-4">
+              {onRestartTour && (
+                <button
+                  type="button"
+                  onClick={onRestartTour}
+                  className="settings-data-btn w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-lg transition-colors"
+                >
+                  <HelpCircle className="h-4 w-4 opacity-70" />
+                  Restart Welcome Tour
+                </button>
+              )}
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    onClose?.()
+                    await onLogout()
+                  }}
+                  className="settings-data-btn-danger w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-lg transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </button>
+              )}
+            </div>
           )}
         </div>
       </DialogContent>

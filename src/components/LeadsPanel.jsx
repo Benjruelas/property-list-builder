@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { X, Search, ChevronDown, ChevronRight, UserSearch, Clock, Archive } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -121,8 +121,6 @@ export function LeadsPanel({
   const [editTaskContext, setEditTaskContext] = useState(null)
   const [leadDetailsTaskEpoch, setLeadDetailsTaskEpoch] = useState(0)
   const [tab, setTab] = useState('active')
-  const [pipelineFilter, setPipelineFilter] = useState('all')
-  const [stageFilter, setStageFilter] = useState('all')
 
   const allPipelineData = useMemo(() => {
     if (pipelines.length > 0) {
@@ -144,53 +142,19 @@ export function LeadsPanel({
     return []
   }, [pipelines, dealPipelineLeads])
 
-  // If the selected pipeline filter no longer matches any pipeline (e.g. user
-  // deleted it elsewhere), reset to "all" so leads are not silently hidden.
-  useEffect(() => {
-    if (pipelineFilter !== 'all' && !allPipelineData.some((p) => p.id === pipelineFilter)) {
-      setPipelineFilter('all')
-    }
-  }, [allPipelineData, pipelineFilter])
-
-  // Stage filter is only valid when a single pipeline is selected; reset
-  // whenever the active pipeline filter changes so we never show "stage X"
-  // where X belongs to another pipeline.
-  useEffect(() => {
-    setStageFilter('all')
-  }, [pipelineFilter])
-
-  // The pipeline whose stages drive the stage filter. Single-pipeline mode
-  // implicitly scopes stage filtering to that pipeline so users don't need to
-  // touch a redundant pipeline picker.
-  const stageScopedPipelineId = pipelineFilter !== 'all'
-    ? pipelineFilter
-    : (allPipelineData.length === 1 ? allPipelineData[0].id : null)
-
   const filteredPipelines = useMemo(() => {
     const q = search.toLowerCase().trim()
-    const scoped = pipelineFilter === 'all'
-      ? allPipelineData
-      : allPipelineData.filter((p) => p.id === pipelineFilter)
-    return scoped.map(p => {
+    return allPipelineData.map((p) => {
       let leads = [...p.leads].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      if (stageFilter !== 'all' && stageScopedPipelineId === p.id) {
-        leads = leads.filter((l) => l.status === stageFilter)
-      }
       if (q) {
-        leads = leads.filter(l =>
+        leads = leads.filter((l) =>
           (l.address || '').toLowerCase().includes(q) ||
           (l.owner || '').toLowerCase().includes(q)
         )
       }
       return { ...p, leads }
     })
-  }, [allPipelineData, search, pipelineFilter, stageFilter, stageScopedPipelineId])
-
-  const stageOptions = useMemo(() => {
-    if (!stageScopedPipelineId) return []
-    const p = allPipelineData.find((pp) => pp.id === stageScopedPipelineId)
-    return p?.columns || []
-  }, [allPipelineData, stageScopedPipelineId])
+  }, [allPipelineData, search])
 
   const displayLeads = useMemo(() => {
     if (pipelines.length > 0) {
@@ -304,37 +268,6 @@ export function LeadsPanel({
               aria-label="Search leads"
             />
           </div>
-
-          {tab === 'active' && (allPipelineData.length > 1 || stageOptions.length > 0) && (
-            <div className="mt-2 flex items-center gap-2">
-              {allPipelineData.length > 1 && (
-                <select
-                  value={pipelineFilter}
-                  onChange={(e) => setPipelineFilter(e.target.value)}
-                  className="leads-filter-select text-xs rounded-lg px-2 py-1.5 flex-1 min-w-0"
-                  aria-label="Filter by pipeline"
-                >
-                  <option value="all">All pipelines</option>
-                  {allPipelineData.map((p) => (
-                    <option key={p.id} value={p.id}>{p.title}</option>
-                  ))}
-                </select>
-              )}
-              {stageOptions.length > 0 && (
-                <select
-                  value={stageFilter}
-                  onChange={(e) => setStageFilter(e.target.value)}
-                  className="leads-filter-select text-xs rounded-lg px-2 py-1.5 flex-1 min-w-0"
-                  aria-label="Filter by stage"
-                >
-                  <option value="all">All stages</option>
-                  {stageOptions.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
 
         </DialogHeader>
 

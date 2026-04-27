@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Send, Loader2, PenLine, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, PenLine, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
@@ -17,6 +17,9 @@ import { buildSendPayload } from '../../lib/forms/emailPayload'
 import { SignaturePadModal } from './SignaturePadModal'
 
 const RENDER_SCALE = 1.5
+/** Pinch / Ctrl+scroll zoom: 1 = default fit, higher = more magnification */
+const FILL_ZOOM_MIN = 1
+const FILL_ZOOM_MAX = 2.5
 
 export function FormFillView({ template, onBack }) {
   const { getToken } = useAuth()
@@ -36,10 +39,17 @@ export function FormFillView({ template, onBack }) {
   const [sendMeCopy, setSendMeCopy] = useState(false)
 
   const scrollContainerRef = useRef(null)
+  const zoomInnerRef = useRef(null)
+  const fillZoomRef = useRef(1)
+  const pinchRef = useRef(null)
   const pageRefs = useRef({})
   const renderedPages = useRef(new Set())
   const inflightRenders = useRef(new Map())
   const workerRef = useRef(null)
+
+  const [fillZoom, setFillZoom] = useState(1)
+  const [unscaledSize, setUnscaledSize] = useState({ w: 0, h: 0 })
+  const [scrollPos, setScrollPos] = useState({ top: 0, left: 0 })
 
   // Natural reading order: page → y → x.
   const orderedFields = useMemo(() => {
@@ -98,6 +108,98 @@ export function FormFillView({ template, onBack }) {
       inflightRenders.current.clear()
     }
   }, [template.originalPdfKey, getToken])
+
+  useEffect(() => {
+    fillZoomRef.current = fillZoom
+  }, [fillZoom])
+
+  // Measure the unscaled PDF stack (before CSS transform) so we can extend scroll when zoomed in.
+  useEffect(() => {
+    const el = zoomInnerRef.current
+    if (!el) return
+    const measure = () => {
+      setUnscaledSize({ w: el.offsetWidth, h: el.offsetHeight })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [pageSizes.length, loading, loadingErr])
+
+  // Pinch-to-zoom and Ctrl/Cmd+wheel; prevent two-finger scroll from being eaten without updating zoom.
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+    const clampZoom = (z) => Math.min(FILL_ZOOM_MAX, Math.max(FILL_ZOOM_MIN, z))
+
+    const onTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        const a = e.touches[0]
+        const b = e.touches[1]
+        pinchRef.current = { d0: dist(a, b), z0: fillZoomRef.current }
+      }
+    }
+    const onTouchMove = (e) => {
+      if (e.touches.length !== 2) return
+      if (!pinchRef.current) {
+        const a = e.touches[0]
+        const b = e.touches[1]
+        pinchRef.current = { d0: dist(a, b), z0: fillZoomRef.current }
+      }
+      const d0 = pinchRef.current.d0
+      if (d0 < 4) return
+      e.preventDefault()
+      const a = e.touches[0]
+      const b = e.touches[1]
+      const d1 = dist(a, b)
+      const { z0 } = pinchRef.current
+      setFillZoom(clampZoom(z0 * (d1 / d0)))
+    }
+    const onTouchEnd = () => {
+      pinchRef.current = null
+    }
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      setFillZoom((z) => clampZoom(z - e.deltaY * 0.0045))
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+      el.removeEventListener('wheel', onWheel)
+    }
+  }, [pageSizes.length, loading, loadingErr])
+
+  const resetFillView = useCallback(() => {
+    setFillZoom(1)
+    fillZoomRef.current = 1
+    const s = scrollContainerRef.current
+    if (s) {
+      s.scrollTop = 0
+      s.scrollLeft = 0
+    }
+    setScrollPos({ top: 0, left: 0 })
+  }, [])
+
+  const handleScrollContainerScroll = useCallback((e) => {
+    const t = e.currentTarget
+    setScrollPos({ top: t.scrollTop, left: t.scrollLeft })
+  }, [])
+
+  const needsViewReset = useMemo(() => {
+    if (Math.abs(fillZoom - 1) > 0.02) return true
+    if (scrollPos.top > 2 || scrollPos.left > 2) return true
+    return false
+  }, [fillZoom, scrollPos.left, scrollPos.top])
 
   const renderPage = useCallback(async (pageIndex) => {
     if (!pdfDoc) return
@@ -208,39 +310,14 @@ export function FormFillView({ template, onBack }) {
   const goNext = useCallback(() => {
     setTourStep((s) => {
       if (s >= orderedFields.length) return s
-      const cur = orderedFields[s]
-      if (cur?.required && !isFieldFilled(cur, values[cur.id])) {
-        showToast(
-          `"${cur.label || cur.type}" is required. Please fill it in before continuing.`,
-          'error'
-        )
-        return s
+      if (s < orderedFields.length - 1) {
+        return s + 1
       }
-      const next = s + 1
-      if (next >= orderedFields.length) {
-        // Reached end of guide — gate the send dialog behind a full required-
-        // field check (covers fields earlier in the tour that the user may
-        // have skipped via arrow-prev + skip-next chain).
-        const missing = []
-        for (const f of (template.fields || [])) {
-          if (!f.required) continue
-          if (!isFieldFilled(f, values[f.id])) missing.push(f.label || f.type)
-        }
-        if (missing.length > 0) {
-          showToast(
-            `There are required fields still empty: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}`,
-            'error'
-          )
-          const firstMissingIdx = orderedFields.findIndex(
-            (f) => f.required && !isFieldFilled(f, values[f.id])
-          )
-          return firstMissingIdx >= 0 ? firstMissingIdx : s
-        }
-        setSendOpen(true)
-      }
-      return next
+      // On last field: try to open send; validation (required only) runs in tryOpenSend.
+      queueMicrotask(() => tryOpenSend())
+      return s
     })
-  }, [isFieldFilled, orderedFields, template.fields, values])
+  }, [orderedFields.length, tryOpenSend])
 
   const goPrev = useCallback(() => {
     setTourStep((s) => Math.max(0, s - 1))
@@ -383,6 +460,19 @@ export function FormFillView({ template, onBack }) {
         </Button>
         <div className="font-medium text-sm truncate">{template.name}</div>
         <div className="flex-1" />
+        {needsViewReset && (
+          <Button
+            variant="ghost"
+            size="icon"
+            type="button"
+            onClick={resetFillView}
+            title="Reset view — return to default size and position"
+            aria-label="Reset view — return to default size and position"
+            className="shrink-0"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        )}
         <Button
           onClick={tryOpenSend}
           disabled={loading || !!loadingErr}
@@ -459,7 +549,9 @@ export function FormFillView({ template, onBack }) {
 
       <div
         ref={scrollContainerRef}
-        className="fill-scroll-container flex-1 overflow-y-auto bg-gray-200/50 p-4 space-y-4"
+        onScroll={handleScrollContainerScroll}
+        className="fill-scroll-container flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-behavior-contain bg-gray-200/50 p-4"
+        style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {loading && (
           <div className="flex items-center justify-center py-20 text-sm text-gray-600">
@@ -470,51 +562,73 @@ export function FormFillView({ template, onBack }) {
           <div className="text-center py-20 text-sm text-red-600">{loadingErr}</div>
         )}
 
-        {!loading && !loadingErr && pageSizes.map((size, pageIndex) => {
-          const fieldsHere = fieldsByPage.get(pageIndex) || []
-          const displayW = size.width
-          const displayH = size.height
-          return (
+        {!loading && !loadingErr && pageSizes.length > 0 && (
+          <>
             <div
-              key={pageIndex}
-              ref={(el) => {
-                pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
-                pageRefs.current[pageIndex].wrapper = el
-              }}
-              data-page-index={pageIndex}
-              className="pdf-page-wrapper relative mx-auto bg-white shadow-sm"
+              ref={zoomInnerRef}
+              className="form-fill-zoom-inner w-full space-y-4"
               style={{
-                width: '100%',
-                maxWidth: `${displayW}px`,
-                aspectRatio: `${displayW} / ${displayH}`,
-                containerType: 'size',
+                transform: `scale(${fillZoom})`,
+                transformOrigin: 'top left',
+                willChange: 'transform',
+                minWidth: `${fillZoom * 100}%`,
               }}
             >
-              <canvas
-                ref={(el) => {
-                  pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
-                  pageRefs.current[pageIndex].canvas = el
-                }}
-                style={{ width: '100%', height: '100%', display: 'block' }}
-              />
-              {fieldsHere.map((f) => (
-                <InteractiveFillField
-                  key={f.id}
-                  field={f}
-                  value={values[f.id]}
-                  onChange={(v) => setValue(f.id, v)}
-                  isCurrent={currentField?.id === f.id}
-                  onOpenSignature={() => {
-                    setSigFieldId(f.id)
-                    setSigOpen(true)
-                  }}
-                  onFocus={() => setStepForField(f.id)}
-                  onEnter={goNext}
-                />
-              ))}
+              {pageSizes.map((size, pageIndex) => {
+                const fieldsHere = fieldsByPage.get(pageIndex) || []
+                const displayW = size.width
+                const displayH = size.height
+                return (
+                  <div
+                    key={pageIndex}
+                    ref={(el) => {
+                      pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
+                      pageRefs.current[pageIndex].wrapper = el
+                    }}
+                    data-page-index={pageIndex}
+                    className="pdf-page-wrapper relative mx-auto bg-white shadow-sm"
+                    style={{
+                      width: '100%',
+                      maxWidth: `${displayW}px`,
+                      aspectRatio: `${displayW} / ${displayH}`,
+                      containerType: 'size',
+                    }}
+                  >
+                    <canvas
+                      ref={(el) => {
+                        pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
+                        pageRefs.current[pageIndex].canvas = el
+                      }}
+                      style={{ width: '100%', height: '100%', display: 'block' }}
+                    />
+                    {fieldsHere.map((f) => (
+                      <InteractiveFillField
+                        key={f.id}
+                        field={f}
+                        value={values[f.id]}
+                        onChange={(v) => setValue(f.id, v)}
+                        isCurrent={currentField?.id === f.id}
+                        onOpenSignature={() => {
+                          setSigFieldId(f.id)
+                          setSigOpen(true)
+                        }}
+                        onFocus={() => setStepForField(f.id)}
+                        onEnter={goNext}
+                      />
+                    ))}
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
+            {fillZoom > 1.001 && unscaledSize.h > 0 && (
+              <div
+                className="pointer-events-none w-px"
+                aria-hidden
+                style={{ height: (fillZoom - 1) * unscaledSize.h }}
+              />
+            )}
+          </>
+        )}
       </div>
 
       <SignaturePadModal

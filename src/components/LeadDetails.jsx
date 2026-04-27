@@ -44,6 +44,15 @@ const PADDING = 8
  * a first+last exact match ("high") from a last-name-only or initial match
  * ("medium").
  */
+// Lead Details body: shared icon column so Phone/Mail/checkboxes share one vertical edge
+const leadDetailsIconCol = 'w-5 shrink-0 flex items-center justify-center text-gray-500'
+const leadDetailsTaskCheckCol = 'w-5 shrink-0 flex items-center justify-center self-start text-gray-600 pt-0.5'
+const leadDetailsIconSpacer = 'w-5 shrink-0'
+/** Offset to align controls with contact line text: icon col (w-5) + row gap-2 */
+const leadDetailsTextAlignPad = 'pl-7'
+/** Match Tasks header add button: h-7 w-7 so ⋮ / trash line up with the + control */
+const leadDetailsTaskActionCol = 'h-7 w-7 shrink-0 flex items-center justify-center self-start'
+
 function OwnerMatchBadge({ confidence }) {
   if (confidence !== 'high' && confidence !== 'medium') return null
   const isHigh = confidence === 'high'
@@ -444,7 +453,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o && !pipeMenu) onClose?.() }}>
-      <DialogContent className="map-panel lead-details-panel max-w-xs p-0 rounded-2xl" showCloseButton={false} blurOverlay onPointerDownOutside={(e) => { if (pipeMenu) e.preventDefault() }} onInteractOutside={(e) => { if (pipeMenu) e.preventDefault() }}>
+      <DialogContent className="map-panel lead-details-panel max-w-xs min-w-0 overflow-x-hidden p-0 rounded-2xl" showCloseButton={false} blurOverlay onPointerDownOutside={(e) => { if (pipeMenu) e.preventDefault() }} onInteractOutside={(e) => { if (pipeMenu) e.preventDefault() }}>
         <DialogHeader className="px-4 pt-4 pb-3 border-b border-gray-200">
           <DialogDescription className="sr-only">Lead details, notes, contact information, and tasks</DialogDescription>
           <div className="map-panel-header-toolbar">
@@ -473,7 +482,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
           </div>
         </DialogHeader>
 
-        <div className="px-4 py-4 space-y-4 text-left bg-transparent">
+        <div className="min-w-0 max-w-full overflow-x-hidden px-4 py-4 space-y-4 text-left bg-transparent">
           <div className="space-y-1">
             {isEditingName ? (
               <div className="space-y-2">
@@ -618,19 +627,21 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 )}
               </div>
               {phoneDetails.map((p, idx) => (
-                <div key={`p-${idx}`} className="flex items-center justify-between gap-2 text-sm group">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                <div key={`p-${idx}`} className="flex min-w-0 w-full max-w-full items-center justify-between gap-2 text-sm group">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <div className={leadDetailsIconCol} aria-hidden>
+                      <Phone className="h-4 w-4" />
+                    </div>
                     {onPhoneClick ? (
                       <button
                         type="button"
                         onClick={() => onPhoneClick(p.value, dataForParcelDetails)}
-                        className="text-blue-600 hover:underline truncate text-left"
+                        className="min-w-0 max-w-full flex-1 text-left text-blue-600 hover:underline truncate"
                       >
                         {p.value}
                       </button>
                     ) : (
-                      <a href={`tel:${normalizePhone(p.value)}`} className="text-blue-600 hover:underline truncate">{p.value}</a>
+                      <a href={`tel:${normalizePhone(p.value)}`} className="min-w-0 max-w-full flex-1 truncate text-blue-600 hover:underline">{p.value}</a>
                     )}
                     <OwnerMatchBadge confidence={p.matchConfidence} />
                   </div>
@@ -660,6 +671,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               ))}
               {editContacts && (
                 <div className="flex items-center gap-2 justify-start w-full">
+                  <div className={leadDetailsIconSpacer} aria-hidden />
                   <input
                     type="tel"
                     placeholder="Add phone"
@@ -679,13 +691,15 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 </div>
               )}
               {emailDetails.map((e, idx) => (
-                <div key={`e-${idx}`} className="flex items-center justify-between gap-2 text-sm group">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                <div key={`e-${idx}`} className="flex min-w-0 w-full max-w-full items-center justify-between gap-2 text-sm group">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <div className={leadDetailsIconCol} aria-hidden>
+                      <Mail className="h-4 w-4" />
+                    </div>
                     {onEmailClick ? (
-                      <button onClick={() => onEmailClick(e.value, dataForParcelDetails)} className="text-sky-600 hover:underline truncate">{e.value}</button>
+                      <button type="button" onClick={() => onEmailClick(e.value, dataForParcelDetails)} className="min-w-0 max-w-full flex-1 text-left text-sky-600 hover:underline truncate">{e.value}</button>
                     ) : (
-                      <span className="text-gray-900 truncate">{e.value}</span>
+                      <span className="min-w-0 max-w-full flex-1 text-gray-900 truncate">{e.value}</span>
                     )}
                     <OwnerMatchBadge confidence={e.matchConfidence} />
                   </div>
@@ -715,6 +729,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               ))}
               {editContacts && (
                 <div className="flex items-center gap-2 justify-start w-full">
+                  <div className={leadDetailsIconSpacer} aria-hidden />
                   <input
                     type="email"
                     placeholder="Add email"
@@ -733,8 +748,8 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                   </Button>
                 </div>
               )}
-              {(onSkipTraceParcel || isClosed) && (
-                <div className={`flex justify-start w-full ${hasAnyContact ? 'pt-1' : ''}`}>
+              {(onSkipTraceParcel || isClosed) && (!hasSkipTraced || editContacts) && (
+                <div className={`flex justify-start w-full ${leadDetailsTextAlignPad} ${hasAnyContact ? 'pt-1' : ''}`}>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -824,6 +839,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               {showTeamTaskInput && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
+                    <div className={leadDetailsIconSpacer} aria-hidden />
                     <input
                       type="text"
                       value={teamTaskDraft}
@@ -839,7 +855,7 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                       placeholder="Team task title..."
                       autoFocus
                       disabled={teamTaskPending}
-                      className="border rounded px-2 py-1 text-sm w-full"
+                      className="border rounded px-2 py-1 text-sm min-w-0 flex-1"
                     />
                     <Button size="sm" onClick={handleAddTeamTask} disabled={teamTaskPending || !teamTaskDraft.trim()}>
                       Add
@@ -863,18 +879,20 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                 <ul className="space-y-1.5">
                   {teamTasks.map((task) => (
                     <li key={task.id} className="flex items-start gap-2 text-sm group">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTeamTask(task.id)}
-                        className="flex-shrink-0 mt-0.5 text-gray-600 hover:text-gray-900"
-                        title={task.completedAt ? 'Mark incomplete' : 'Mark done'}
-                      >
-                        {task.completedAt ? (
-                          <CheckSquare className="h-4 w-4 text-green-600 fill-green-600" />
-                        ) : (
-                          <Square className="h-4 w-4" />
-                        )}
-                      </button>
+                      <div className={leadDetailsTaskCheckCol}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTeamTask(task.id)}
+                          className="text-gray-600 hover:text-gray-900 flex items-center justify-center"
+                          title={task.completedAt ? 'Mark incomplete' : 'Mark done'}
+                        >
+                          {task.completedAt ? (
+                            <CheckSquare className="h-4 w-4 text-green-600 fill-green-600" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={task.completedAt ? 'line-through text-gray-500' : 'text-gray-900'}>
@@ -903,14 +921,16 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                           </div>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTeamTask(task.id)}
-                        className="flex-shrink-0 text-gray-400 hover:text-red-500 p-0.5 -mt-0.5 -mr-0.5 opacity-70 group-hover:opacity-100"
-                        title="Delete team task"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className={leadDetailsTaskActionCol}>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTeamTask(task.id)}
+                          className="text-gray-400 hover:text-red-500 h-4 w-4 flex items-center justify-center p-0 opacity-70 group-hover:opacity-100"
+                          title="Delete team task"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -947,22 +967,24 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
               <ul className="space-y-1.5">
                 {tasks.map((task) => (
                   <li key={task.id} className="flex items-start gap-2 text-sm group">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        doToggleTask(task.id)
-                        refreshTasks()
-                        scheduleSync()
-                      }}
-                      className="flex-shrink-0 mt-0.5 text-gray-600 hover:text-gray-900"
-                      title={task.completed ? 'Mark incomplete' : 'Mark done'}
-                    >
-                      {task.completed ? (
-                        <CheckSquare className="h-4 w-4 text-green-600 fill-green-600" />
-                      ) : (
-                        <Square className="h-4 w-4" />
-                      )}
-                    </button>
+                    <div className={leadDetailsTaskCheckCol}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          doToggleTask(task.id)
+                          refreshTasks()
+                          scheduleSync()
+                        }}
+                        className="text-gray-600 hover:text-gray-900 flex items-center justify-center"
+                        title={task.completed ? 'Mark incomplete' : 'Mark done'}
+                      >
+                        {task.completed ? (
+                          <CheckSquare className="h-4 w-4 text-green-600 fill-green-600" />
+                        ) : (
+                          <Square className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                     <div className="flex-1 min-w-0">
                       {task.title === '' ? (
                         <input
@@ -1020,18 +1042,20 @@ export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = nu
                         </>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const rect = e.currentTarget.getBoundingClientRect()
-                        setTaskMenu({ task, anchor: positionTaskMenu(rect) })
-                      }}
-                      className="flex-shrink-0 text-gray-400 hover:text-gray-700 p-0.5 -mt-0.5 -mr-0.5 opacity-70 group-hover:opacity-100"
-                      title="Task options"
-                    >
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </button>
+                    <div className={leadDetailsTaskActionCol}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setTaskMenu({ task, anchor: positionTaskMenu(rect) })
+                        }}
+                        className="text-gray-400 hover:text-gray-700 h-4 w-4 flex items-center justify-center p-0 opacity-70 group-hover:opacity-100"
+                        title="Task options"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

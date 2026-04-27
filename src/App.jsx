@@ -3140,6 +3140,7 @@ function App() {
           setShowMenu(false)
           handleSettingsChange({ tourCompleted: false })
         }}
+        onLogout={currentUser ? handleLogout : undefined}
       />
 
       <LeadsPanel
