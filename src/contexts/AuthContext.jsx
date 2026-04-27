@@ -99,6 +99,8 @@ export const AuthProvider = ({ children }) => {
   const signInWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider()
+      // Force the Google account chooser instead of silently reusing the last session
+      provider.setCustomParameters({ prompt: 'select_account' })
       await signInWithRedirect(auth, provider)
       showToast('Redirecting to Google...', 'info')
     } catch (error) {
