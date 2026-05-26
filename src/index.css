@@ -847,17 +847,17 @@
 }
 
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
-/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn) {
+/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle, form-fill buttons - those use transparent/no fill */
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):hover:not(:disabled),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):hover:not(:disabled) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
@@ -1653,6 +1653,25 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 /* Step bar wrapper — sits between the panel header and the scroll area.
    Centers the pill horizontally over the panel. */
+.fill-tour-stepbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.65rem 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 5;
+}
+.fill-tour-stepbar-side {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fill-tour-stepbar-side--right:not(:has(button)) {
+  display: none;
+}
 .fill-tour-stepbar-wrap {
   display: flex;
   justify-content: center;
@@ -1661,6 +1680,13 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   position: relative;
   z-index: 5;
+}
+.fill-tour-stepbar-wrap--inline {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0;
+  border-bottom: none;
+  background: transparent;
 }
 /* Glass aesthetic — translucent white with blur, matches .map-panel. */
 .fill-tour-stepbar {
@@ -1715,17 +1741,18 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
   color: #fff;
   border-radius: 999px;
   width: 2.1rem;
   height: 2.1rem;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, opacity 0.15s;
+  transition: border-color 0.15s, color 0.15s, opacity 0.15s;
 }
 .fill-tour-stepbar-arrow:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.22);
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.55);
 }
 .fill-tour-stepbar-arrow:disabled {
   opacity: 0.35;
@@ -1735,7 +1762,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background: rgba(255, 255, 255, 0.2);
+  background: transparent;
   color: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 999px;
@@ -1744,10 +1771,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   font-weight: 600;
   cursor: pointer;
   margin-left: 0.3rem;
-  transition: background 0.15s, border-color 0.15s;
+  transition: border-color 0.15s, color 0.15s;
 }
 .fill-tour-stepbar-action:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: transparent;
   border-color: rgba(255, 255, 255, 0.75);
 }
 .fill-tour-stepbar-progress {
@@ -1766,20 +1793,264 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
 }
 
+/* Public form link page — light theme overrides (fill UI is glass/dark by default). */
+.public-form-page .fill-tour-stepbar-row {
+  background: #f3f4f6;
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+.public-form-page .fill-tour-stepbar-wrap {
+  background: #f3f4f6;
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+.public-form-page .fill-tour-stepbar {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #111827;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+.public-form-page .fill-tour-stepbar-count {
+  color: #111827;
+}
+.public-form-page .fill-tour-stepbar-count-of {
+  color: #6b7280;
+  opacity: 1;
+}
+.public-form-page .fill-tour-stepbar-arrow {
+  background: transparent;
+  color: #374151;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+.public-form-page .fill-tour-stepbar-arrow:hover:not(:disabled) {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.22);
+}
+.public-form-page .fill-tour-stepbar-action {
+  background: transparent;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.public-form-page .fill-tour-stepbar-action:hover {
+  background: transparent;
+  border-color: #93c5fd;
+}
+.public-form-page .fill-tour-stepbar-progress {
+  background: #e5e7eb;
+}
+.public-form-page .fill-tour-stepbar-progress-bar {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  box-shadow: none;
+}
+.public-form-page .fill-scroll-container {
+  background: #e5e7eb;
+}
+
+/* Form fill — smooth scroll when stepping between fields */
+.fill-scroll-container {
+  scroll-behavior: smooth;
+}
+
+/* Form fill header — icon-only, no fills (matches pipeline / list panels) */
+.map-panel .form-fill-icon-btn,
+.public-form-page .form-fill-icon-btn {
+  background: none !important;
+  background-color: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+.map-panel .form-fill-icon-btn:hover:not(:disabled),
+.public-form-page .form-fill-icon-btn:hover:not(:disabled) {
+  background: none !important;
+  background-color: transparent !important;
+  border: none !important;
+}
+.map-panel .form-fill-icon-btn.form-fill-icon-btn--ready,
+.public-form-page .form-fill-icon-btn.form-fill-icon-btn--ready {
+  color: rgba(134, 239, 172, 1) !important;
+}
+.public-form-page .form-fill-icon-btn {
+  color: #374151;
+}
+.public-form-page .form-fill-icon-btn.form-fill-icon-btn--ready {
+  color: #16a34a !important;
+}
+
+/* Toolbar flanking buttons — outline only, no fill */
+.form-fill-toolbar-btn {
+  width: 3rem !important;
+  height: 3rem !important;
+  min-width: 3rem !important;
+  min-height: 3rem !important;
+  padding: 0 !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.form-fill-toolbar-btn:hover:not(:disabled) {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.42) !important;
+}
+.public-form-page .form-fill-toolbar-btn {
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #374151 !important;
+}
+.public-form-page .form-fill-toolbar-btn:hover:not(:disabled) {
+  background: transparent !important;
+  border-color: rgba(0, 0, 0, 0.16) !important;
+}
+.public-form-page .form-fill-toolbar-btn.form-fill-icon-btn--ready {
+  border-color: rgba(22, 163, 74, 0.35) !important;
+  background: transparent !important;
+  color: #16a34a !important;
+}
+
+/* Form fill — labeled Submit / Send action button (outline only) */
+.form-fill-submit-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.4rem !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 2.5rem !important;
+  padding: 0.5rem 0.95rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.5) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.form-fill-submit-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.form-fill-submit-btn--ready,
+.form-fill-submit-btn.form-fill-submit-btn--ready {
+  background: transparent !important;
+  border-color: rgb(134 239 172) !important;
+  color: rgb(134 239 172) !important;
+}
+.form-fill-submit-btn--ready:hover:not(:disabled),
+.form-fill-submit-btn.form-fill-submit-btn--ready:hover:not(:disabled) {
+  background: transparent !important;
+  border-color: rgb(134 239 172) !important;
+  color: rgb(134 239 172) !important;
+}
+.public-form-page .form-fill-submit-btn {
+  border: 1.5px solid #4b5563 !important;
+  background: transparent !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+.public-form-page .form-fill-submit-btn:hover:not(:disabled) {
+  background: transparent !important;
+  border-color: #111827 !important;
+  color: #111827 !important;
+}
+.public-form-page .form-fill-submit-btn--ready {
+  border-color: #111827 !important;
+  background: transparent !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+.public-form-page .form-fill-submit-btn--ready:hover:not(:disabled) {
+  background: transparent !important;
+  border-color: #111827 !important;
+  color: #111827 !important;
+}
+
+/* Override map-panel default button fills inside form fill UI */
+.map-panel .form-fill-root button,
+.map-panel .form-fill-root [role="button"],
+.map-panel .form-fill-root .fill-tour-stepbar-arrow,
+.map-panel .form-fill-root .fill-tour-stepbar-action {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+.map-panel .form-fill-root button:hover:not(:disabled),
+.map-panel .form-fill-root [role="button"]:hover:not(:disabled),
+.map-panel .form-fill-root .fill-tour-stepbar-arrow:hover:not(:disabled),
+.map-panel .form-fill-root .fill-tour-stepbar-action:hover:not(:disabled) {
+  background: transparent !important;
+}
+
+@keyframes fill-field-focus-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 4px rgba(59, 130, 246, 0.2),
+      0 8px 22px rgba(37, 99, 235, 0.38);
+  }
+  50% {
+    box-shadow:
+      0 0 0 7px rgba(59, 130, 246, 0.28),
+      0 10px 28px rgba(37, 99, 235, 0.48);
+  }
+}
+.fill-field-current {
+  animation: fill-field-focus-pulse 1.1s ease-in-out 2;
+}
+
+/* Send-form / share popup dialogs — darker panel for readable text on mobile */
+.map-panel.forms-send-dialog,
+.map-panel.share-list-dialog {
+  background: rgba(12, 14, 18, 0.94) !important;
+  backdrop-filter: blur(24px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+}
+.map-panel.forms-send-dialog {
+  border-radius: 0.75rem !important;
+}
+.forms-send-dialog input,
+.forms-send-dialog textarea,
+.share-list-dialog input,
+.share-list-dialog textarea {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+}
+.forms-send-dialog input::placeholder,
+.forms-send-dialog textarea::placeholder,
+.share-list-dialog input::placeholder,
+.share-list-dialog textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
 /* Send-form dialog — glass aesthetic matching the rest of the app.
    Override shadcn's light-theme Button defaults so the actions are visible
    on the glass backdrop. */
 .forms-send-dialog .forms-send-confirm,
 .map-panel .forms-send-dialog .forms-send-confirm {
-  background: rgba(255, 255, 255, 0.22) !important;
-  border: 1px solid rgba(255, 255, 255, 0.55) !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.55) !important;
+  border-radius: 0.375rem !important;
   color: rgba(255, 255, 255, 0.98) !important;
   font-weight: 600 !important;
   box-shadow: none !important;
 }
 .forms-send-dialog .forms-send-confirm:hover:not(:disabled),
 .map-panel .forms-send-dialog .forms-send-confirm:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.32) !important;
+  background: rgba(255, 255, 255, 0.28) !important;
   border-color: rgba(255, 255, 255, 0.75) !important;
 }
 .forms-send-dialog .forms-send-confirm:disabled,
@@ -1788,35 +2059,36 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 .forms-send-dialog .forms-send-cancel,
 .map-panel .forms-send-dialog .forms-send-cancel {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  color: rgba(255, 255, 255, 0.8) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+  border-radius: 0.375rem !important;
+  color: rgba(255, 255, 255, 0.92) !important;
 }
 .forms-send-dialog .forms-send-cancel:hover:not(:disabled),
 .map-panel .forms-send-dialog .forms-send-cancel:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
   color: #fff !important;
 }
 /* Message textarea — glass styling. */
 .forms-send-dialog .forms-send-textarea,
 .map-panel .forms-send-dialog .forms-send-textarea {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: rgba(255, 255, 255, 0.95) !important;
-  -webkit-text-fill-color: rgba(255, 255, 255, 0.95) !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
-  caret-color: rgba(255, 255, 255, 0.95) !important;
+  background: rgba(0, 0, 0, 0.35) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  caret-color: rgba(255, 255, 255, 0.98) !important;
   resize: vertical;
 }
 .forms-send-dialog .forms-send-textarea::placeholder {
-  color: rgba(255, 255, 255, 0.45) !important;
-  -webkit-text-fill-color: rgba(255, 255, 255, 0.45) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.5) !important;
 }
 .forms-send-dialog .forms-send-textarea:focus,
 .map-panel .forms-send-dialog .forms-send-textarea:focus {
   border-color: rgba(255, 255, 255, 0.55) !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Settings panel — use box-shadow for borders (border-color gets overridden) */
@@ -2056,3 +2328,155 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   }
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Form fill layouts — Glass bottom dock (app) / recipient (public)   */
+/* ------------------------------------------------------------------ */
+
+.form-fill-guide-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.form-fill-guide-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+/* Full-width form footer — pinned to bottom of fill view */
+.form-fill-footer {
+  width: 100%;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  padding: 0.65rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+.form-fill-footer-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.form-fill-footer-inner--fill {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  row-gap: 0.35rem;
+}
+.form-fill-footer--fill .form-fill-footer-guide {
+  display: contents;
+}
+.form-fill-footer--fill .form-fill-guide-title {
+  grid-column: 2;
+  grid-row: 1;
+}
+.form-fill-footer--fill .form-fill-guide-controls {
+  grid-column: 2;
+  grid-row: 2;
+}
+.form-fill-footer--fill .fill-tour-stepbar-progress {
+  grid-column: 2;
+  grid-row: 3;
+  width: 100%;
+}
+.form-fill-footer-side--left {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: center;
+}
+.form-fill-footer-side--left .form-fill-footer-btn {
+  flex: 0 0 auto !important;
+}
+.form-fill-footer-side--right {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: center;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.form-fill-footer-side--right .form-fill-footer-btn {
+  flex: 0 0 auto !important;
+}
+.form-fill-footer-inner--actions {
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+}
+.form-fill-footer-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.form-fill-footer-guide .form-fill-guide-title {
+  text-align: center;
+  width: 100%;
+}
+.form-fill-footer-btn {
+  flex: 1 1 0 !important;
+  flex-shrink: 1 !important;
+  min-width: 0;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.35rem !important;
+  padding: 0.45rem 0.4rem !important;
+  font-size: 0.75rem !important;
+  line-height: 1.2 !important;
+  white-space: nowrap;
+  border: 1.5px solid rgba(255, 255, 255, 0.5) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+.form-fill-footer-btn:hover:not(:disabled) {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+}
+.form-fill-footer-btn.form-fill-submit-btn--ready,
+.form-fill-footer-btn.form-fill-submit-btn--ready:hover:not(:disabled) {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: rgb(134 239 172) !important;
+  color: rgb(134 239 172) !important;
+}
+.form-fill-footer-btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.form-fill-action-bar-btn {
+  min-height: 2.5rem;
+}
+
+.form-fill-layout-bottom-dock .fill-scroll-container {
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+.public-form-fill.form-fill-layout-recipient .form-fill-footer {
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-top-color: #e5e7eb;
+}

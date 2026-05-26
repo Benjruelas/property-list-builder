@@ -35,6 +35,7 @@ export function MapControls({
   hideMenuOnMobile = false,
   /** Called before every map-control action to dismiss any open parcel popup */
   onCloseParcelPopup,
+  NotificationMenuItem,
 }) {
   const multiSelectAddToListMode = isMultiSelectActive && multiSelectParcelCount > 0
   // Run any map-control action through this so the parcel popup auto-closes.
@@ -215,7 +216,11 @@ export function MapControls({
                 </button>
               )}
 
-              {(onOpenPipes || onOpenTasks || onOpenSchedule) && (
+              {NotificationMenuItem && (
+                <NotificationMenuItem onSelect={() => setShowMenu(false)} />
+              )}
+
+              {(onOpenPipes || onOpenTasks || onOpenSchedule || NotificationMenuItem) && (
                 <div className="my-1 border-t border-gray-200" />
               )}
 

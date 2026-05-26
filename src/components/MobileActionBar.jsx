@@ -34,6 +34,7 @@ export function MobileActionBar({
   onOpenSettings,
   currentUser,
   onLogin,
+  NotificationMenuItem,
 }) {
   const handlers = {
     pipes: onOpenPipes,
@@ -76,6 +77,10 @@ export function MobileActionBar({
         className="mobile-action-bar-menu map-panel hamburger-menu"
         role="menu"
       >
+        {NotificationMenuItem && <NotificationMenuItem onSelect={closeMenu} />}
+
+        {NotificationMenuItem && <div className="my-1 border-t border-gray-200" />}
+
         <button
           data-tour="menu-lists"
           onClick={() => { closeMenu(); onOpenListPanel?.() }}

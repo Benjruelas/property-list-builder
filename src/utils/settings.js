@@ -24,10 +24,15 @@ export const DEFAULT_SETTINGS = {
   /** Push (server) + local notification preferences; synced in appSettings blob */
   notifications: {
     pushEnabled: false,
+    deviceAlertsEnabled: true,
     listShared: true,
     pipelineShared: true,
     pipelineLeadStage: true,
+    pathShared: true,
+    formSubmitted: true,
+    teamAdded: true,
     skipTraceComplete: true,
+    skipTraceFailed: true,
     taskDeadline: true,
     /** Minutes before scheduled time to fire reminder */
     taskDeadlineLeadMinutes: 60,

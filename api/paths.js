@@ -154,6 +154,14 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Only the path owner can update this path' })
       }
 
+      const teamsIndex = fullTeamsIndex(allTeams)
+      const prevSharedSet = new Set(
+        (path.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
+      )
+      let newlyAddedPathShares = []
+      const prevTeamShares = new Set(path.teamShares || [])
+      let newlyAddedTeamShares = []
+
       if (name !== undefined && name.trim()) {
         path.name = name.trim()
       }
@@ -163,11 +171,11 @@ export default async function handler(req, res) {
         const emails = arr.map(e => (e && String(e).trim()).toLowerCase()).filter(Boolean)
         const uniqueEmails = [...new Set(emails)]
         if (uniqueEmails.length > 50) return res.status(400).json({ error: 'Maximum 50 share emails allowed' })
+        newlyAddedPathShares = uniqueEmails.filter((e) => !prevSharedSet.has(e))
         path.sharedWith = uniqueEmails
       }
 
       if (teamShares !== undefined) {
-        const teamsIndex = fullTeamsIndex(allTeams)
         const arr = Array.isArray(teamShares) ? teamShares : []
         const unique = [...new Set(arr.filter(Boolean))]
         for (const tid of unique) {
@@ -180,12 +188,40 @@ export default async function handler(req, res) {
             return res.status(403).json({ error: 'You must be a member of each team you share with' })
           }
         }
+        newlyAddedTeamShares = unique.filter((tid) => !prevTeamShares.has(tid))
         path.teamShares = unique
       }
 
       path.updatedAt = new Date().toISOString()
       all[idx] = path
       await saveAllPaths(all)
+
+      if (newlyAddedPathShares.length > 0) {
+        try {
+          const { notifyNewPathShares } = await import('./push-utils.js')
+          await notifyNewPathShares(newlyAddedPathShares, {
+            pathName: path.name,
+            pathId: path.id,
+            actorEmail: user.email
+          })
+        } catch (e) {
+          console.warn('path push notify', e.message)
+        }
+      }
+      if (newlyAddedTeamShares.length > 0) {
+        try {
+          const { notifyTeamResourceShare } = await import('./push-utils.js')
+          await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
+            resourceType: 'path',
+            resourceName: path.name,
+            resourceId: path.id,
+            actorEmail: user.email
+          })
+        } catch (e) {
+          console.warn('path team push notify', e.message)
+        }
+      }
+
       return res.status(200).json({ path })
     }
 

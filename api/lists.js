@@ -184,6 +184,8 @@ export default async function handler(req, res) {
         (list.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
       let newlyAddedListShares = []
+      const prevTeamShares = new Set(list.teamShares || [])
+      let newlyAddedTeamShares = []
 
       if (sharedWith !== undefined) {
         const arr = Array.isArray(sharedWith) ? sharedWith : []
@@ -229,6 +231,7 @@ export default async function handler(req, res) {
           }
         }
         list.teamShares = unique
+        newlyAddedTeamShares = unique.filter((tid) => !prevTeamShares.has(tid))
       }
 
       if (name !== undefined) {
@@ -256,10 +259,25 @@ export default async function handler(req, res) {
           const { notifyNewListShares } = await import('./push-utils.js')
           await notifyNewListShares(newlyAddedListShares, {
             listName: list.name,
+            listId: list.id,
             actorEmail: user.email
           })
         } catch (e) {
           console.warn('list push notify', e.message)
+        }
+      }
+
+      if (isOwner && teamShares !== undefined && newlyAddedTeamShares.length > 0) {
+        try {
+          const { notifyTeamResourceShare } = await import('./push-utils.js')
+          await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
+            resourceType: 'list',
+            resourceName: list.name,
+            resourceId: list.id,
+            actorEmail: user.email
+          })
+        } catch (e) {
+          console.warn('list team push notify', e.message)
         }
       }
 

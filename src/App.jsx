@@ -37,6 +37,7 @@ import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
 const FormsPanel = lazy(() => import('./components/forms/FormsPanel').then(m => ({ default: m.FormsPanel })))
+import { PublicFormPage } from './components/forms/PublicFormPage'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { TeamsPanel } from './components/TeamsPanel'
@@ -50,12 +51,13 @@ import { HailDataPanel } from './components/HailDataPanel'
 // import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
+import { useNotificationInbox } from './components/NotificationInbox'
 import { getSettings, updateSettings } from './utils/settings'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
 import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedLeads, addClosedLead, saveClosedLeads, buildClosedLeadRecord, removeClosedLead } from './utils/closedLeads'
-import { showLocalNotification } from './utils/pushNotifications'
+import { showLocalNotification, subscribeToWebPush } from './utils/pushNotifications'
 import { addLead, loadColumns, loadLeads, saveLeads, loadTitle, isParcelALead, getStreetAddress } from './utils/dealPipeline'
 import { splitOwnerName } from './utils/ownerName'
 import { listToCsv } from './utils/exportList'
@@ -72,15 +74,16 @@ function nextDefaultPathName(paths) {
   return `Path ${max + 1}`
 }
 
-function notifySkipTraceComplete(listName, detail) {
+function notifySkipTraceEvent(label, detail, { failed = false } = {}) {
   try {
     const ns = getSettings().notifications
-    if (!ns?.skipTraceComplete || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
-      return
-    }
-    showLocalNotification('Skip trace complete', {
-      body: `${listName}: ${detail}`,
-      tag: `skip-list-${listName}-${Date.now()}`
+    if (ns?.deviceAlertsEnabled === false) return
+    const allowed = failed ? ns?.skipTraceFailed !== false : ns?.skipTraceComplete !== false
+    if (!allowed) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    showLocalNotification(failed ? 'Skip trace failed' : 'Skip trace complete', {
+      body: `${label}: ${detail}`,
+      tag: `skip-${failed ? 'fail' : 'ok'}-${label}-${Date.now()}`
     })
   } catch {
     /* ignore */
@@ -428,7 +431,7 @@ function App() {
     const tick = () => {
       const g = getSettings()
       const n = g.notifications || {}
-      if (!n.taskDeadline || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      if (n.deviceAlertsEnabled === false || !n.taskDeadline || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
         return
       }
       const leadMs = (n.taskDeadlineLeadMinutes || 60) * 60 * 1000
@@ -553,6 +556,9 @@ function App() {
       if (serverLists.length > 0 && !fresh.tourCompleted) {
         const next = updateSettings({ tourCompleted: true }, getToken)
         setSettings(next)
+      }
+      if (fresh.notifications?.pushEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        subscribeToWebPush(getToken).catch(() => {})
       }
     })
   }, [currentUser?.uid, getToken])
@@ -1321,12 +1327,26 @@ function App() {
         updateSkipTraceJob(job.jobId, { status: 'processing' })
         scheduleUserDataSync(getToken)
 
-        // Poll for results
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-        const maxRetries = isMobile ? 120 : 60
-        const interval = isMobile ? 6000 : 5000
-        
-        const results = await pollSkipTraceJobUntilComplete(job.jobId, maxRetries, interval)
+        // Poll for results (sync API returns results immediately)
+        const parcels = []
+        for (const p of job.parcelsToTrace || []) {
+          if (p.request) {
+            parcels.push(p.request)
+            continue
+          }
+          const parcelData = {
+            id: p.parcelId,
+            properties: { SITUS_ADDR: p.address, PROP_ID: p.parcelId }
+          }
+          const { payload } = buildSkipTraceRequest(parcelData, {
+            previousFullAddress: getSkipTracedParcel(p.parcelId)?.address || ''
+          })
+          if (payload) parcels.push(payload)
+        }
+        if (!parcels.length) throw new Error('No valid skip trace requests in job')
+
+        const result = await skipTraceParcels(parcels)
+        const results = result.results || []
         
         // Process results
         if (results.length === 0) {
@@ -1346,7 +1366,7 @@ function App() {
           })
           
           showToast(`Skip trace completed for "${job.listName}", but no contact information was found.`, 'warning')
-          notifySkipTraceComplete(job.listName, 'no contact information was found')
+          notifySkipTraceEvent(job.listName, 'no contact information was found')
           return
         }
 
@@ -1485,7 +1505,7 @@ function App() {
         const matchedCount = resultsWithParcelIds.length
         const totalRequested = job.parcelsToTrace.length
         showToast(`✅ Skip trace completed for "${job.listName}": ${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found!`, 'success', 8000)
-        notifySkipTraceComplete(job.listName, `${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found`)
+        notifySkipTraceEvent(job.listName, `${matchedCount} of ${totalRequested} parcel${totalRequested > 1 ? 's' : ''} found`)
 
       } catch (error) {
         console.error(`Error processing skip trace job ${job.jobId}:`, error)
@@ -1504,6 +1524,7 @@ function App() {
         })
         
         showToast(`❌ Skip trace failed for "${job.listName}": ${error.message}`, 'error', 8000)
+        notifySkipTraceEvent(job.listName, error.message, { failed: true })
       }
     }
 
@@ -2064,6 +2085,63 @@ function App() {
     if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
     setIsTeamsPanelOpen(true)
   }, [authLoading, currentUser])
+
+  const handleNotificationNavigate = useCallback((data) => {
+    if (!data?.type) return
+    const type = data.type
+    if (type === 'listShared' && data.listId) {
+      setSelectedListIds((prev) => (prev.includes(data.listId) ? prev : [...prev, data.listId].slice(0, 20)))
+      setIsListPanelOpen(true)
+      return
+    }
+    if (type === 'pipelineShared' || type === 'pipelineLeadStage') {
+      setIsDealPipelineOpen(true)
+      return
+    }
+    if (type === 'pathShared') {
+      setIsPathsPanelOpen(true)
+      return
+    }
+    if (type === 'formSubmitted') {
+      setIsFormsPanelOpen(true)
+      return
+    }
+    if (type === 'teamAdded') {
+      setIsTeamsPanelOpen(true)
+      return
+    }
+    if (type === 'taskDeadline') {
+      setIsTasksPanelOpen(true)
+    }
+  }, [])
+
+  const notificationInbox = useNotificationInbox({
+    getToken,
+    currentUser,
+    onNavigate: handleNotificationNavigate,
+  })
+
+  useEffect(() => {
+    if (!permissionsReady || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const notify = params.get('notify')
+    if (!notify) return
+    handleNotificationNavigate({
+      type: notify,
+      listId: params.get('listId') || undefined,
+      pipelineId: params.get('pipelineId') || undefined,
+      pathId: params.get('pathId') || undefined,
+      teamId: params.get('teamId') || undefined,
+      templateId: params.get('templateId') || undefined,
+      leadId: params.get('leadId') || undefined,
+      taskId: params.get('taskId') || undefined,
+    })
+    params.delete('notify')
+    ;['listId', 'pipelineId', 'pathId', 'teamId', 'templateId', 'leadId', 'taskId'].forEach((k) => params.delete(k))
+    const qs = params.toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`)
+  }, [permissionsReady, handleNotificationNavigate])
+
   const openLeadsPanel = useCallback(() => setIsLeadsPanelOpen(true), [])
   const openSettingsPanel = useCallback(() => setIsSettingsPanelOpen(true), [])
   const openLogin = useCallback(() => setIsLoginOpen(true), [])
@@ -2290,6 +2368,45 @@ function App() {
     await handleBulkEmailListSelected(listId)
   }, [handleBulkEmailListSelected])
 
+  const handleSkipTraceList = useCallback(async (listId) => {
+    if (authLoading) return
+    if (!currentUser?.uid) { setIsLoginOpen(true); return }
+    const list = lists.find((l) => l.id === listId)
+    if (!list?.parcels?.length) {
+      showToast('List has no parcels to skip trace', 'error')
+      return
+    }
+    const parcelsToTrace = []
+    for (const parcel of list.parcels) {
+      const parcelId = parcel?.id || parcel?.properties?.PROP_ID || parcel
+      const parcelData = typeof parcel === 'object' && parcel?.properties
+        ? { id: parcelId, properties: parcel.properties }
+        : { id: parcelId, properties: { PROP_ID: parcelId } }
+      const { payload, error } = buildSkipTraceRequest(parcelData, {
+        previousFullAddress: getSkipTracedParcel(parcelId)?.address || ''
+      })
+      if (payload) parcelsToTrace.push({ parcelId, address: payload.address, request: payload })
+      else if (error) console.warn('skip trace list skip parcel', parcelId, error)
+    }
+    if (!parcelsToTrace.length) {
+      showToast('No parcels with valid addresses to skip trace', 'error')
+      return
+    }
+    addSkipTraceJob({
+      listId: list.id,
+      listName: list.name,
+      parcelsToTrace,
+      status: 'pending'
+    })
+    scheduleUserDataSync(getToken)
+    setSkipTracingInProgress((prev) => {
+      const next = new Set(prev)
+      parcelsToTrace.forEach((p) => next.add(p.parcelId))
+      return next
+    })
+    showToast(`Skip trace queued for "${list.name}" (${parcelsToTrace.length} parcels)`, 'info')
+  }, [authLoading, currentUser, lists, getToken])
+
   // Handle skip tracing a single parcel (from popup or list)
   const handleSkipTraceParcel = useCallback(async (parcelData) => {
     if (!parcelData) {
@@ -2357,6 +2474,7 @@ function App() {
       if (results.length === 0) {
         console.warn('Skip trace completed but returned no results. This may mean no contact information was found for this parcel.')
         showToast('Skip trace completed, but no contact information was found for this parcel.', 'warning')
+        notifySkipTraceEvent(requestParcel.address || parcelId, 'no contact information found')
         return
       }
 
@@ -2367,6 +2485,7 @@ function App() {
       if (contactInfo.error) {
         console.error('Skip trace provider error:', contactInfo.error)
         showToast(`Skip trace failed: ${contactInfo.error}`, 'error', 8000)
+        notifySkipTraceEvent(requestParcel.address || parcelId, contactInfo.error, { failed: true })
         return
       }
 
@@ -2392,6 +2511,7 @@ function App() {
         console.warn('[skipTrace] parcel props keys:', Object.keys(parcelData?.properties || {}))
         console.warn('[skipTrace] full contactInfo:', JSON.stringify(contactInfo, null, 2))
         showToast(message, 'warning', 7000)
+        notifySkipTraceEvent(requestParcel.address || parcelId, message)
         return
       }
       
@@ -2431,6 +2551,7 @@ function App() {
       scheduleUserDataSync(getToken)
 
       showToast(isRefresh ? 'Contact info refreshed!' : 'Skip trace completed successfully!', 'success')
+      notifySkipTraceEvent(requestParcel.address || parcelId, isRefresh ? 'contact info refreshed' : 'contacts found')
       
       // Update clicked parcel data if it's the current parcel (for both map popup and list)
       if (clickedParcelData && clickedParcelData.id === parcelId) {
@@ -2451,6 +2572,7 @@ function App() {
     } catch (error) {
       console.error('Skip trace error:', error)
       showToast(`Skip trace failed: ${error.message}`, 'error')
+      notifySkipTraceEvent(parcelId, error.message, { failed: true })
     } finally {
       setSkipTracingInProgress(prev => {
         const next = new Set(prev)
@@ -2659,7 +2781,9 @@ function App() {
           setClickedParcelId(null)
           setClickedParcelData(null)
         }}
+        NotificationMenuItem={notificationInbox.MenuItem}
       />
+      {notificationInbox.panel}
 
       <MobileActionBar
         activeId={
@@ -2684,6 +2808,7 @@ function App() {
         onOpenSettings={openSettingsPanel}
         currentUser={currentUser}
         onLogin={openLogin}
+        NotificationMenuItem={notificationInbox.MenuItem}
       />
 
       <ListPanel
@@ -2728,6 +2853,7 @@ function App() {
         }}
         onBulkEmail={handleBulkEmailFromList}
         onExportList={handleExportList}
+        onSkipTraceList={handleSkipTraceList}
         isAddingSingleParcel={showListSelector && !!clickedParcelData}
         isBulkEmailMode={showListSelector && !!selectedEmailTemplate}
         parcelBoundaryColor={settings.parcelBoundaryColor}
@@ -3172,3 +3298,18 @@ function App() {
 }
 
 export default App
+
+export function AppWithPublicFormRoute() {
+  const formToken = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('form')
+    : null
+  if (formToken) {
+    return (
+      <div className="h-[100dvh] overflow-hidden">
+        <PublicFormPage token={formToken} />
+        <ToastContainer />
+      </div>
+    )
+  }
+  return <App />
+}

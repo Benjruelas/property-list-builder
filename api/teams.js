@@ -207,6 +207,16 @@ export default async function handler(req, res) {
         team.updatedAt = now
         all[idx] = team
         await saveAllTeams(all)
+        try {
+          const { notifyTeamMemberAdded } = await import('./push-utils.js')
+          await notifyTeamMemberAdded(resolved.email, {
+            teamName: team.name,
+            teamId: team.id,
+            actorEmail: user.email
+          })
+        } catch (e) {
+          console.warn('team member push notify', e.message)
+        }
         return res.status(200).json({ team: normalizeTeamForWire(team) })
       }
 

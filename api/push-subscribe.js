@@ -1,9 +1,9 @@
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
 
 /**
- * Register / unregister Web Push subscription (KV). Requires Firebase auth.
+ * Register / unregister Web Push subscriptions (KV). Supports multiple devices per user.
  * POST { subscription: PushSubscription JSON }
- * DELETE — remove subscription for current user
+ * DELETE — remove all subscriptions for current user
  */
 
 let kv = null
@@ -48,6 +48,39 @@ async function verifyFirebaseToken(idToken) {
   } catch (e) {
     console.error('Token verify error', e.message)
     return null
+  }
+}
+
+function endpointId(subscription) {
+  const ep = subscription?.endpoint || ''
+  return ep ? ep.slice(-48) : `sub_${Date.now()}`
+}
+
+async function loadSubscriptions(uid) {
+  try {
+    const raw = await kv.get(`push_subs:${uid}`)
+    const parsed = typeof raw === 'string' ? (raw ? JSON.parse(raw) : []) : raw
+    if (Array.isArray(parsed) && parsed.length) return parsed
+
+    const legacy = await kv.get(`push_sub:${uid}`)
+    if (legacy) {
+      const sub = typeof legacy === 'string' ? JSON.parse(legacy) : legacy
+      if (sub?.endpoint) {
+        return [{ id: endpointId(sub), subscription: sub, updatedAt: new Date().toISOString() }]
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return []
+}
+
+async function saveSubscriptions(uid, entries) {
+  await kv.set(`push_subs:${uid}`, entries)
+  if (entries.length === 1) {
+    await kv.set(`push_sub:${uid}`, JSON.stringify(entries[0].subscription))
+  } else if (entries.length === 0) {
+    await kv.del(`push_sub:${uid}`)
   }
 }
 
@@ -97,15 +130,28 @@ export default async function handler(req, res) {
         }
       }
 
-      await kv.set(`push_sub:${user.uid}`, JSON.stringify(subscription))
+      const now = new Date().toISOString()
+      const id = endpointId(subscription)
+      const entries = await loadSubscriptions(user.uid)
+      const idx = entries.findIndex((e) => e.id === id || e.subscription?.endpoint === subscription.endpoint)
+      const entry = { id, subscription, updatedAt: now }
+      if (idx >= 0) entries[idx] = entry
+      else entries.push(entry)
+
+      const maxDevices = 5
+      entries.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      while (entries.length > maxDevices) entries.pop()
+
+      await saveSubscriptions(user.uid, entries)
       await kv.set(`push_by_email:${email}`, user.uid)
       await kv.set(`push_uid:${user.uid}`, email)
 
-      return res.status(200).json({ ok: true })
+      return res.status(200).json({ ok: true, deviceCount: entries.length })
     }
 
     if (req.method === 'DELETE') {
       const email = await kv.get(`push_uid:${user.uid}`)
+      await kv.del(`push_subs:${user.uid}`)
       await kv.del(`push_sub:${user.uid}`)
       await kv.del(`push_uid:${user.uid}`)
       if (email) {

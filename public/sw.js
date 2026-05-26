@@ -21,14 +21,34 @@ self.addEventListener('push', (event) => {
   )
 })
 
+function buildNotifyUrl(payload) {
+  const type = payload?.type
+  const params = new URLSearchParams()
+  params.set('notify', type || 'general')
+  if (payload?.listId) params.set('listId', payload.listId)
+  if (payload?.pipelineId) params.set('pipelineId', payload.pipelineId)
+  if (payload?.pathId) params.set('pathId', payload.pathId)
+  if (payload?.teamId) params.set('teamId', payload.teamId)
+  if (payload?.templateId) params.set('templateId', payload.templateId)
+  if (payload?.leadId) params.set('leadId', payload.leadId)
+  if (payload?.taskId) params.set('taskId', payload.taskId)
+  return `/?${params.toString()}`
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
+  const payload = event.notification.data || {}
+  const targetUrl = buildNotifyUrl(payload)
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const c of clientList) {
-        if (c.url && 'focus' in c) return c.focus()
+        if (c.url && 'focus' in c) {
+          c.postMessage({ type: 'NOTIFICATION_CLICK', data: payload })
+          return c.focus()
+        }
       }
-      if (self.clients.openWindow) return self.clients.openWindow('/')
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl)
     })
   )
 })

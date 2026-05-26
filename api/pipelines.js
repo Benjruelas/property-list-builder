@@ -109,22 +109,35 @@ function normalizeColumns(cols) {
 
 async function runPipelinePushNotifications({
   sharedWith,
+  teamShares,
   leads,
   isOwner,
   pipeline,
   prevLeadsSnapshot,
   newlyAddedPipelineShares,
+  newlyAddedTeamShares,
+  teamsIndex,
   user
 }) {
   try {
     const {
       notifyNewPipelineShares,
       notifyPipelineLeadStatusChanges,
+      notifyTeamResourceShare,
       diffLeadStatusChanges
     } = await import('./push-utils.js')
     if (sharedWith !== undefined && isOwner && newlyAddedPipelineShares.length > 0) {
       await notifyNewPipelineShares(newlyAddedPipelineShares, {
         pipelineTitle: pipeline.title,
+        pipelineId: pipeline.id,
+        actorEmail: user.email
+      })
+    }
+    if (teamShares !== undefined && isOwner && newlyAddedTeamShares?.length > 0) {
+      await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
+        resourceType: 'pipeline',
+        resourceName: pipeline.title,
+        resourceId: pipeline.id,
         actorEmail: user.email
       })
     }
@@ -133,6 +146,7 @@ async function runPipelinePushNotifications({
       if (changes.length > 0) {
         await notifyPipelineLeadStatusChanges(changes, {
           pipelineTitle: pipeline.title,
+          pipelineId: pipeline.id,
           columns: pipeline.columns || [],
           ownerEmail: pipeline.ownerEmail,
           sharedWith: pipeline.sharedWith || [],
@@ -211,6 +225,8 @@ export default async function handler(req, res) {
         (pipeline.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
       let newlyAddedPipelineShares = []
+      const prevTeamShares = new Set(pipeline.teamShares || [])
+      let newlyAddedTeamShares = []
       const teamsIndex = fullTeamsIndex(allTeams)
       const access = resolveAccess(pipeline, user, teamsIndex)
       const isOwner = access === 'owner'
@@ -288,6 +304,7 @@ export default async function handler(req, res) {
           }
         }
         pipeline.teamShares = unique
+        newlyAddedTeamShares = unique.filter((tid) => !prevTeamShares.has(tid))
       }
 
       pipeline.updatedAt = new Date().toISOString()
@@ -296,11 +313,14 @@ export default async function handler(req, res) {
 
       await runPipelinePushNotifications({
         sharedWith,
+        teamShares,
         leads,
         isOwner,
         pipeline,
         prevLeadsSnapshot,
         newlyAddedPipelineShares,
+        newlyAddedTeamShares,
+        teamsIndex,
         user
       })
 

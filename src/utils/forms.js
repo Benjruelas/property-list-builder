@@ -148,5 +148,55 @@ export async function sendForm(getToken, payload) {
     const err = await parseJsonSafe(res)
     throw new Error(err.error || 'Failed to send form')
   }
-  return await parseJsonSafe(res)
+  return parseJsonSafe(res)
+}
+
+export async function createFormInvite(getToken, { templateId, recipientEmail, subject, message, prefillValues }) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to send form links')
+  const res = await fetch(`${getApiBase()}/forms-invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ templateId, recipientEmail, subject, message, prefillValues })
+  })
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to send form link')
+  }
+  return parseJsonSafe(res)
+}
+
+export async function fetchPublicForm(formToken) {
+  const token = String(formToken || '').trim()
+  if (!token) throw new Error('Form link is missing')
+  const res = await fetch(`${getApiBase()}/public-form?token=${encodeURIComponent(token)}`)
+  const data = await parseJsonSafe(res)
+  if (!res.ok) throw new Error(data.error || 'Failed to load form')
+  return data
+}
+
+export async function downloadPublicFormPdf(formToken) {
+  const token = String(formToken || '').trim()
+  if (!token) throw new Error('Form link is missing')
+  const res = await fetch(`${getApiBase()}/public-form?token=${encodeURIComponent(token)}&pdf=1`)
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to download PDF')
+  }
+  return await res.arrayBuffer()
+}
+
+export async function submitPublicForm(formToken, { pdfBase64, values }) {
+  const token = String(formToken || '').trim()
+  if (!token) throw new Error('Form link is missing')
+  const res = await fetch(`${getApiBase()}/public-form`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, pdfBase64, values })
+  })
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to submit form')
+  }
+  return parseJsonSafe(res)
 }

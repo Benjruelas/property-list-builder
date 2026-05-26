@@ -566,45 +566,62 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
           {/* ---- Notifications ---- */}
           <Section icon={Bell} title="Notifications" defaultOpen>
             <p className="text-xs opacity-50 -mt-1 mb-2">
-              Server alerts require signing in. Skip trace and task reminders use this device when the app is open or in the background.
+              Collaboration alerts use server push (sign in required). Device alerts work on this browser when permission is granted.
             </p>
-            <SettingRow label="Enable notifications" description="Browser permission + web push when signed in">
+
+            <p className="text-xs font-semibold opacity-70 uppercase tracking-wide mb-1 mt-2">Collaboration (server push)</p>
+            <SettingRow label="Enable collaboration alerts" description="Browser permission + web push when signed in">
               <Toggle checked={n.pushEnabled} onChange={handlePushMasterToggle} />
             </SettingRow>
             {n.pushEnabled && (
               <>
                 <SettingRow label="List shared with you" description="When someone adds you to a list">
-                  <Toggle
-                    checked={n.listShared}
-                    onChange={(v) => update({ notifications: { ...n, listShared: v } })}
-                    disabled={!getToken}
-                  />
+                  <Toggle checked={n.listShared} onChange={(v) => update({ notifications: { ...n, listShared: v } })} disabled={!getToken} />
                 </SettingRow>
                 <SettingRow label="Pipeline shared with you" description="When someone adds you to a pipeline">
-                  <Toggle
-                    checked={n.pipelineShared}
-                    onChange={(v) => update({ notifications: { ...n, pipelineShared: v } })}
-                    disabled={!getToken}
-                  />
+                  <Toggle checked={n.pipelineShared} onChange={(v) => update({ notifications: { ...n, pipelineShared: v } })} disabled={!getToken} />
+                </SettingRow>
+                <SettingRow label="Path shared with you" description="When someone shares a path with you">
+                  <Toggle checked={n.pathShared} onChange={(v) => update({ notifications: { ...n, pathShared: v } })} disabled={!getToken} />
                 </SettingRow>
                 <SettingRow label="Lead stage changes" description="When a lead moves columns in a shared pipeline">
-                  <Toggle
-                    checked={n.pipelineLeadStage}
-                    onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })}
-                    disabled={!getToken}
-                  />
+                  <Toggle checked={n.pipelineLeadStage} onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })} disabled={!getToken} />
                 </SettingRow>
-                <SettingRow label="Skip trace finished" description="When bulk skip trace completes for a list">
-                  <Toggle
-                    checked={n.skipTraceComplete}
-                    onChange={(v) => update({ notifications: { ...n, skipTraceComplete: v } })}
-                  />
+                <SettingRow label="Form submitted" description="When someone completes a form you sent">
+                  <Toggle checked={n.formSubmitted} onChange={(v) => update({ notifications: { ...n, formSubmitted: v } })} disabled={!getToken} />
+                </SettingRow>
+                <SettingRow label="Added to a team" description="When you are invited to a team">
+                  <Toggle checked={n.teamAdded} onChange={(v) => update({ notifications: { ...n, teamAdded: v } })} disabled={!getToken} />
+                </SettingRow>
+              </>
+            )}
+
+            <p className="text-xs font-semibold opacity-70 uppercase tracking-wide mb-1 mt-4">This device</p>
+            <SettingRow label="Device alerts" description="Local notifications on this browser">
+              <Toggle
+                checked={n.deviceAlertsEnabled !== false}
+                onChange={async (on) => {
+                  if (on && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+                    const perm = await Notification.requestPermission()
+                    if (perm !== 'granted') {
+                      showToast('Notification permission denied', 'error')
+                      return
+                    }
+                  }
+                  update({ notifications: { ...n, deviceAlertsEnabled: on } })
+                }}
+              />
+            </SettingRow>
+            {n.deviceAlertsEnabled !== false && (
+              <>
+                <SettingRow label="Skip trace finished" description="When skip trace completes">
+                  <Toggle checked={n.skipTraceComplete} onChange={(v) => update({ notifications: { ...n, skipTraceComplete: v } })} />
+                </SettingRow>
+                <SettingRow label="Skip trace failed" description="When skip trace fails">
+                  <Toggle checked={n.skipTraceFailed !== false} onChange={(v) => update({ notifications: { ...n, skipTraceFailed: v } })} />
                 </SettingRow>
                 <SettingRow label="Task deadline reminders" description="Before a scheduled task time">
-                  <Toggle
-                    checked={n.taskDeadline}
-                    onChange={(v) => update({ notifications: { ...n, taskDeadline: v } })}
-                  />
+                  <Toggle checked={n.taskDeadline} onChange={(v) => update({ notifications: { ...n, taskDeadline: v } })} />
                 </SettingRow>
                 {n.taskDeadline && (
                   <div className="mt-1">

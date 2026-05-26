@@ -290,6 +290,7 @@ export default async function handler(req, res) {
       }
 
       if (teamShares !== undefined) {
+        const prevTeamShares = new Set(t.teamShares || [])
         const arr = Array.isArray(teamShares) ? teamShares : []
         const unique = [...new Set(arr.filter(Boolean))]
         for (const tid of unique) {
@@ -302,7 +303,21 @@ export default async function handler(req, res) {
             return res.status(403).json({ error: 'You must be a member of each team you share with' })
           }
         }
+        const newlyAddedTeamShares = unique.filter((tid) => !prevTeamShares.has(tid))
         t.teamShares = unique
+        if (isOwner && newlyAddedTeamShares.length > 0) {
+          try {
+            const { notifyTeamResourceShare } = await import('./push-utils.js')
+            await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
+              resourceType: 'form',
+              resourceName: t.name,
+              resourceId: t.id,
+              actorEmail: user.email
+            })
+          } catch (e) {
+            console.warn('form team push notify', e.message)
+          }
+        }
       }
 
       t.updatedAt = new Date().toISOString()

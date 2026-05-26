@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Eye, Trash2, Check, Mail, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
+import { X, Plus, Eye, Trash2, Check, Mail, MoreVertical, FileDown, Share2, Users, Pencil, Phone } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -36,6 +36,7 @@ export function ListPanel({
   onViewListContents,
   onBulkEmail,
   onExportList,
+  onSkipTraceList,
   isAddingSingleParcel = false,
   isBulkEmailMode = false,
   /** Matches Settings → Parcel boundary color (list add / multi-select prompts). */
@@ -638,6 +639,12 @@ export function ListPanel({
                 <button type="button" onClick={() => { closeDropdown(); onExportList(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
                   <FileDown className="h-4 w-4 flex-shrink-0" />
                   Export list
+                </button>
+              )}
+              {onSkipTraceList && list.parcels?.length > 0 && (
+                <button type="button" onClick={() => { closeDropdown(); onSkipTraceList(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
+                  <Phone className="h-4 w-4 flex-shrink-0" />
+                  Skip trace list
                 </button>
               )}
               {onShareList && isListOwnedByUser(list) && (

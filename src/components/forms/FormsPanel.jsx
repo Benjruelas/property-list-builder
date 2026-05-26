@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
-import { X, FileText, Plus, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, Users } from 'lucide-react'
+import { X, FileText, Plus, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, Users, Link2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -18,6 +18,7 @@ import {
 
 const FormBuilderView = lazy(() => import('./FormBuilderView'))
 const FormFillView = lazy(() => import('./FormFillView'))
+import { SendFormLinkDialog } from './SendFormLinkDialog'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -61,6 +62,8 @@ export function FormsPanel({
 
   // Share dialog state
   const [shareTemplateId, setShareTemplateId] = useState(null)
+  const [linkTemplateId, setLinkTemplateId] = useState(null)
+  const [linkPrefillValues, setLinkPrefillValues] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
   const [shareEmailValid, setShareEmailValid] = useState(null)
   const [shareEmailError, setShareEmailError] = useState('')
@@ -111,6 +114,7 @@ export function FormsPanel({
       setView('list')
       setActiveTemplateId(null)
       setShareTemplateId(null)
+      setLinkTemplateId(null)
       setShareEmail('')
       setShareEmailValid(null)
       setShareEmailError('')
@@ -316,6 +320,11 @@ export function FormsPanel({
     [templates, activeTemplateId]
   )
 
+  const linkTemplate = useMemo(
+    () => templates.find((t) => t.id === linkTemplateId) || null,
+    [templates, linkTemplateId]
+  )
+
   const handleTemplateUpdated = useCallback((updated) => {
     setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
   }, [])
@@ -456,6 +465,10 @@ export function FormsPanel({
               template={activeTemplate}
               onBack={() => { setView('list'); setActiveTemplateId(null); refresh() }}
               onTemplateUpdated={handleTemplateUpdated}
+              onRequestCompletion={(prefillValues) => {
+                setLinkTemplateId(activeTemplate.id)
+                setLinkPrefillValues(prefillValues || null)
+              }}
             />
           </Suspense>
         )}
@@ -510,6 +523,18 @@ export function FormsPanel({
                     Share
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu()
+                    setLinkTemplateId(t.id)
+                    setLinkPrefillValues(null)
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
+                >
+                  <Link2 className="h-4 w-4 flex-shrink-0" />
+                  Send link
+                </button>
                 {owned ? (
                   <div
                     role="button"
@@ -629,6 +654,16 @@ export function FormsPanel({
           </DialogContent>
         </Dialog>
       )}
+
+      <SendFormLinkDialog
+        open={!!linkTemplateId}
+        template={linkTemplate}
+        prefillValues={linkPrefillValues}
+        onClose={() => {
+          setLinkTemplateId(null)
+          setLinkPrefillValues(null)
+        }}
+      />
     </Dialog>
   )
 }
