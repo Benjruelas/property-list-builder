@@ -48,6 +48,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
 import { LeadsPanel } from './components/LeadsPanel'
 import { HailDataPanel } from './components/HailDataPanel'
+import { HailStormOverlay, HailStormDismissPill } from './components/HailStormOverlay'
 // import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
@@ -323,6 +324,7 @@ function App() {
   const [isLeadsPanelOpen, setIsLeadsPanelOpen] = useState(false)
   const [isHailDataOpen, setIsHailDataOpen] = useState(false)
   const [hailDataParcel, setHailDataParcel] = useState(null)
+  const [selectedHailEvent, setSelectedHailEvent] = useState(null)
   // const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false) // roof inspector — restore later
   // const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
   const [settings, setSettings] = useState(() => getSettings())
@@ -348,6 +350,57 @@ function App() {
   })
 
   const memoizedMapStyle = useMemo(() => getMapStyle(settings.mapStyle), [settings.mapStyle])
+
+  const hailParcelCoords = useMemo(() => {
+    if (!hailDataParcel) return null
+    const lat = hailDataParcel.lat ?? hailDataParcel.properties?.LATITUDE
+    const lng = hailDataParcel.lng ?? hailDataParcel.properties?.LONGITUDE
+    if (lat == null || lng == null) return null
+    const latN = Number(lat)
+    const lngN = Number(lng)
+    if (Number.isNaN(latN) || Number.isNaN(lngN)) return null
+    return { lat: latN, lng: lngN }
+  }, [hailDataParcel])
+
+  const handleSelectHailEvent = useCallback((evt) => {
+    setSelectedHailEvent(evt)
+    setIsHailDataOpen(false)
+  }, [])
+
+  const handleDismissHailEvent = useCallback(() => {
+    setSelectedHailEvent(null)
+    setIsHailDataOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedHailEvent || !mapRef.current) return
+    programmaticMoveRef.current = true
+    const map = mapRef.current
+
+    if (hailParcelCoords) {
+      const minLng = Math.min(hailParcelCoords.lng, selectedHailEvent.lng)
+      const maxLng = Math.max(hailParcelCoords.lng, selectedHailEvent.lng)
+      const minLat = Math.min(hailParcelCoords.lat, selectedHailEvent.lat)
+      const maxLat = Math.max(hailParcelCoords.lat, selectedHailEvent.lat)
+      const lngPad = Math.max(0.08, (maxLng - minLng) * 0.35)
+      const latPad = Math.max(0.08, (maxLat - minLat) * 0.35)
+      map.fitBounds(
+        [
+          [minLng - lngPad, minLat - latPad],
+          [maxLng + lngPad, maxLat + latPad],
+        ],
+        { padding: 72, maxZoom: 10, duration: 700 }
+      )
+    } else {
+      map.easeTo({
+        center: [selectedHailEvent.lng, selectedHailEvent.lat],
+        zoom: 8,
+        duration: 700,
+      })
+    }
+
+    setTimeout(() => { programmaticMoveRef.current = false }, 800)
+  }, [selectedHailEvent, hailParcelCoords])
 
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isOutreachPanelOpen ||
@@ -2679,7 +2732,12 @@ function App() {
           {userLocation && (
             <LocationMarker position={userLocation} />
           )}
+          <HailStormOverlay event={selectedHailEvent} />
         </MapGL>
+        <HailStormDismissPill
+          event={selectedHailEvent}
+          onDismiss={handleDismissHailEvent}
+        />
       </div>
 
       <ParcelPopupV1
@@ -2913,6 +2971,7 @@ function App() {
           onHailData={() => {
             if (!clickedParcelData) return
             setHailDataParcel(clickedParcelData)
+            setSelectedHailEvent(null)
             suppressParcelDetailsDataClearRef.current = true
             returnToParcelDetailsAfterHailRef.current = true
             setIsParcelDetailsOpen(false)
@@ -3210,12 +3269,14 @@ function App() {
         isOpen={isHailDataOpen}
         onClose={() => {
           setIsHailDataOpen(false)
+          setSelectedHailEvent(null)
           if (returnToParcelDetailsAfterHailRef.current) {
             returnToParcelDetailsAfterHailRef.current = false
             setIsParcelDetailsOpen(true)
           }
         }}
         parcelData={hailDataParcel}
+        onSelectEvent={handleSelectHailEvent}
       />
 
       {/*

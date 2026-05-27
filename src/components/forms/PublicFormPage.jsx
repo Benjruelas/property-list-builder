@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { fetchPublicForm } from '../../utils/forms'
 import { cn } from '@/lib/utils'
+import { PublicFormBrandBar } from './PublicFormBrand'
+import { PublicFormSubmittingOverlay } from './PublicFormSubmittingOverlay'
 
 const FormFillView = lazy(() => import('./FormFillView'))
 
@@ -9,6 +11,7 @@ export function PublicFormPage({ token }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [formData, setFormData] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
   useEffect(() => {
@@ -50,8 +53,11 @@ export function PublicFormPage({ token }) {
   if (loading) {
     return (
       <div className={pageClass}>
-        <div className="flex flex-1 items-center justify-center text-sm text-gray-600">
-          <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Loading form…
+        <PublicFormBrandBar className="public-form-brand-bar--page" />
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <p className="text-sm text-gray-600 flex items-center justify-center">
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading form…
+          </p>
         </div>
       </div>
     )
@@ -60,6 +66,7 @@ export function PublicFormPage({ token }) {
   if (error) {
     return (
       <div className={pageClass}>
+        <PublicFormBrandBar className="public-form-brand-bar--page" />
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
           <h1 className="text-lg font-semibold mb-2">Form unavailable</h1>
@@ -72,25 +79,15 @@ export function PublicFormPage({ token }) {
   if (submitted) {
     return (
       <div className={pageClass}>
-        <div className="relative flex min-h-screen flex-col bg-gray-100 text-gray-900">
-          <div
-            className="absolute inset-x-0 top-0 flex flex-col items-center px-6 text-center"
-            style={{ paddingTop: 'calc(2rem + env(safe-area-inset-top, 0px))' }}
-          >
-            <span className="text-2xl font-bold tracking-tight text-gray-900">KnockScout</span>
-            <img
-              src="/icon-192.png"
-              alt=""
-              className="mt-3 h-11 w-11 rounded-xl shadow-sm"
-              width={44}
-              height={44}
-            />
-          </div>
-          <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-            <CheckCircle2 className="h-10 w-10 text-green-600 mb-3" />
-            <h1 className="text-lg font-semibold mb-2">Form submitted</h1>
-            <p className="text-sm text-gray-600 max-w-md">
-              Thank you. Your completed form has been sent. This link is no longer active.
+        <PublicFormBrandBar className="public-form-brand-bar--page" />
+        <div className="flex flex-1 items-center justify-center px-6 py-10">
+          <div className="public-form-status-card">
+            <div className="public-form-status-icon" aria-hidden>
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            </div>
+            <h1 className="public-form-status-title">Form submitted</h1>
+            <p className="public-form-status-text">
+              Thank you. Your completed form has been sent securely. This link is no longer active.
             </p>
           </div>
         </div>
@@ -99,7 +96,8 @@ export function PublicFormPage({ token }) {
   }
 
   return (
-    <div className={cn('public-form-page flex flex-col h-[100dvh] overflow-hidden bg-white text-gray-900')}>
+    <div className={cn('public-form-page flex flex-col h-[100dvh] overflow-hidden bg-white text-gray-900 relative')}>
+      {submitting && <PublicFormSubmittingOverlay />}
       {formData?.message && (
         <div className="shrink-0 px-4 py-3 bg-blue-50 border-b border-blue-100 text-sm text-blue-900">
           {formData.message}
@@ -112,8 +110,11 @@ export function PublicFormPage({ token }) {
       )}
       <div className="flex flex-1 min-h-0 flex flex-col">
         <Suspense fallback={
-          <div className="flex flex-1 items-center justify-center text-sm text-gray-600">
-            <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Loading form…
+          <div className="flex flex-1 flex-col">
+            <PublicFormBrandBar className="public-form-brand-bar--page" />
+            <div className="flex flex-1 items-center justify-center text-sm text-gray-600">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading form…
+            </div>
           </div>
         }>
           <FormFillView
@@ -122,6 +123,7 @@ export function PublicFormPage({ token }) {
             template={template}
             initialValues={prefillValues}
             lockedFieldIds={lockedFieldIds}
+            onSubmittingChange={setSubmitting}
             onSubmitted={() => setSubmitted(true)}
           />
         </Suspense>

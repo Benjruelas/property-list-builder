@@ -54,6 +54,45 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+/** SPC compiled CSV stores times in CST (except GMT reports). */
+function spcTimeParts(timeStr) {
+  if (!timeStr) return null
+  const s = String(timeStr).trim()
+  if (s.includes(':')) {
+    const [h, m] = s.split(':')
+    const hh = parseInt(h, 10)
+    const mm = parseInt(m, 10)
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+    return { hh, mm }
+  }
+  const padded = s.padStart(4, '0')
+  const hh = parseInt(padded.slice(0, 2), 10)
+  const mm = parseInt(padded.slice(2, 4), 10)
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+  return { hh, mm }
+}
+
+function spcLocalTimeToUtc(date, timeStr, tz) {
+  if (!date || !timeStr) return null
+  const parts = spcTimeParts(timeStr)
+  if (!parts) return null
+  const [y, m, d] = date.split('-').map(Number)
+  const tzNum = parseInt(tz, 10)
+  // SPC converts all times to CST except GMT (tz=9) which stays UTC
+  const utcAddHours = tzNum === 9 ? 0 : 6
+  const dt = new Date(Date.UTC(y, m - 1, d, parts.hh + utcAddHours, parts.mm))
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}`
+}
+
+function spcUtcTimeFromDailyReport(timeRaw) {
+  const padded = String(timeRaw || '').trim().padStart(4, '0')
+  if (padded.length < 4) return null
+  return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`
+}
+
+const HAIL_GRID_CACHE_PREFIX = 'hail/grid/v2'
+
 function gridKey(lat, lng) {
   return `${Math.floor(lat)}/${Math.floor(lng)}`
 }
@@ -70,6 +109,8 @@ function parseSpcCsv(csvText) {
     if (year < 2000) continue
 
     const date = cols[4]?.trim()
+    const time = cols[5]?.trim()
+    const tz = cols[6]?.trim()
     const mag = parseFloat(cols[10])
     const lat = parseFloat(cols[15])
     const lng = parseFloat(cols[16])
@@ -77,45 +118,75 @@ function parseSpcCsv(csvText) {
 
     const key = gridKey(lat, lng)
     if (!grid[key]) grid[key] = []
-    grid[key].push({ date, year, lat, lng, size_inches: isNaN(mag) ? null : mag })
+    grid[key].push({
+      date,
+      year,
+      lat,
+      lng,
+      size_inches: isNaN(mag) ? null : mag,
+      time_utc: spcLocalTimeToUtc(date, time, tz),
+    })
   }
 
   return grid
 }
 
 async function extractCsvFromZip(zipBuffer) {
-  const { Readable } = await import('stream')
-  const { createInflateRaw } = await import('zlib')
+  const { inflateRawSync } = await import('zlib')
 
-  const view = new DataView(zipBuffer.buffer, zipBuffer.byteOffset, zipBuffer.byteLength)
+  const EOCD_SIG = 0x06054b50
+  const CD_SIG = 0x02014b50
+  const LOCAL_SIG = 0x04034b50
 
-  // Find the first local file header (PK\x03\x04)
-  let offset = 0
-  if (view.getUint32(offset, true) !== 0x04034b50) {
-    throw new Error('Not a ZIP file')
+  let eocd = -1
+  for (let i = zipBuffer.length - 22; i >= Math.max(0, zipBuffer.length - 65557); i--) {
+    if (zipBuffer.readUInt32LE(i) === EOCD_SIG) {
+      eocd = i
+      break
+    }
+  }
+  if (eocd < 0) throw new Error('Invalid ZIP: end of central directory not found')
+
+  const cdOffset = zipBuffer.readUInt32LE(eocd + 16)
+  let pos = cdOffset
+
+  while (pos + 46 <= eocd && zipBuffer.readUInt32LE(pos) === CD_SIG) {
+    const compressionMethod = zipBuffer.readUInt16LE(pos + 10)
+    const compressedSize = zipBuffer.readUInt32LE(pos + 20)
+    const fnLen = zipBuffer.readUInt16LE(pos + 28)
+    const extraLen = zipBuffer.readUInt16LE(pos + 30)
+    const commentLen = zipBuffer.readUInt16LE(pos + 32)
+    const localHeaderOffset = zipBuffer.readUInt32LE(pos + 42)
+    const filename = zipBuffer.toString('utf8', pos + 46, pos + 46 + fnLen)
+
+    pos += 46 + fnLen + extraLen + commentLen
+
+    if (filename.startsWith('__MACOSX/') || !filename.endsWith('.csv')) continue
+
+    if (zipBuffer.readUInt32LE(localHeaderOffset) !== LOCAL_SIG) {
+      throw new Error(`Invalid ZIP: local header missing for ${filename}`)
+    }
+
+    const localFnLen = zipBuffer.readUInt16LE(localHeaderOffset + 26)
+    const localExtraLen = zipBuffer.readUInt16LE(localHeaderOffset + 28)
+    const dataOffset = localHeaderOffset + 30 + localFnLen + localExtraLen
+
+    if (!compressedSize) {
+      throw new Error(`Invalid ZIP: missing compressed size for ${filename}`)
+    }
+
+    const compressedData = zipBuffer.subarray(dataOffset, dataOffset + compressedSize)
+
+    if (compressionMethod === 0) {
+      return compressedData.toString('utf-8')
+    }
+    if (compressionMethod === 8) {
+      return inflateRawSync(compressedData).toString('utf-8')
+    }
+    throw new Error(`Unsupported ZIP compression method ${compressionMethod}`)
   }
 
-  const compressionMethod = view.getUint16(offset + 8, true)
-  const compressedSize = view.getUint32(offset + 18, true)
-  const fnLen = view.getUint16(offset + 26, true)
-  const extraLen = view.getUint16(offset + 28, true)
-  const dataOffset = offset + 30 + fnLen + extraLen
-
-  if (compressionMethod === 0) {
-    return zipBuffer.subarray(dataOffset, dataOffset + compressedSize).toString('utf-8')
-  }
-
-  // Deflate (method 8) — use raw inflate
-  const compressedData = zipBuffer.subarray(dataOffset, dataOffset + compressedSize)
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    const inflate = createInflateRaw()
-    const readable = Readable.from(compressedData)
-    readable.pipe(inflate)
-    inflate.on('data', (chunk) => chunks.push(chunk))
-    inflate.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
-    inflate.on('error', reject)
-  })
+  throw new Error('CSV entry not found in ZIP')
 }
 
 function parseSpcDailyReport(csvText, dateStr) {
@@ -142,6 +213,7 @@ function parseSpcDailyReport(csvText, dateStr) {
 
     const fullYear = 2000 + parseInt(dateStr.slice(0, 2), 10)
     const isoDate = `${fullYear}-${dateStr.slice(2, 4)}-${dateStr.slice(4, 6)}`
+    const timeRaw = cols[0]?.trim()
 
     events.push({
       date: isoDate,
@@ -149,6 +221,7 @@ function parseSpcDailyReport(csvText, dateStr) {
       lat,
       lng,
       size_inches: size ? size / 100 : null,
+      time_utc: spcUtcTimeFromDailyReport(timeRaw),
     })
   }
   return events
@@ -243,7 +316,7 @@ async function fetchRecentHailEvents(lat, lng, radius) {
 
 async function getGridCell(lat, lng) {
   const key = gridKey(lat, lng)
-  const r2Key = `hail/grid/${key}.json`
+  const r2Key = `${HAIL_GRID_CACHE_PREFIX}/${key}.json`
 
   // Check R2 cache
   try {
@@ -260,6 +333,9 @@ async function getGridCell(lat, lng) {
   if (!res.ok) throw new Error(`SPC download failed: ${res.status}`)
 
   const zipBuf = Buffer.from(await res.arrayBuffer())
+  if (zipBuf.length < 1_000_000) {
+    throw new Error(`SPC download looks truncated (${zipBuf.length} bytes)`)
+  }
   const csvText = await extractCsvFromZip(zipBuf)
   const grid = parseSpcCsv(csvText)
 
@@ -270,7 +346,7 @@ async function getGridCell(lat, lng) {
   for (let i = 0; i < cellKeys.length; i += batchSize) {
     const batch = cellKeys.slice(i, i + batchSize)
     await Promise.all(batch.map(ck =>
-      putToR2(`hail/grid/${ck}.json`, Buffer.from(JSON.stringify(grid[ck]))).catch(() => {})
+      putToR2(`${HAIL_GRID_CACHE_PREFIX}/${ck}.json`, Buffer.from(JSON.stringify(grid[ck]))).catch(() => {})
     ))
   }
 
@@ -298,7 +374,7 @@ export default async function handler(req, res) {
       for (let dLng = -1; dLng <= 1; dLng++) {
         const gLat = centerLatGrid + dLat
         const gLng = centerLngGrid + dLng
-        const r2Key = `hail/grid/${gLat}/${gLng}.json`
+        const r2Key = `${HAIL_GRID_CACHE_PREFIX}/${gLat}/${gLng}.json`
         cellPromises.push(
           getFromR2(r2Key)
             .then(buf => buf ? JSON.parse(buf.toString('utf-8')) : null)
@@ -340,6 +416,7 @@ export default async function handler(req, res) {
             distance_mi: Math.round(dist * 10) / 10,
             hail_size_inches: evt.size_inches,
             year: evt.year,
+            time_utc: evt.time_utc || null,
           })
         }
       }
@@ -357,6 +434,7 @@ export default async function handler(req, res) {
           distance_mi: Math.round(dist * 10) / 10,
           hail_size_inches: evt.size_inches,
           year: evt.year,
+          time_utc: evt.time_utc || null,
         })
       }
     }

@@ -26,6 +26,8 @@ const RENDER_SCALE = 1.5
 /** Pinch / Ctrl+scroll zoom: 1 = default fit, higher = more magnification */
 const FILL_ZOOM_MIN = 1
 const FILL_ZOOM_MAX = 2.5
+/** Auto-fit can scale below 1 so the full form fits on screen for review */
+const FIT_TO_SCREEN_MIN = 0.35
 /** Auto-focus zoom when stepping between fields */
 const FILL_FOCUS_ZOOM_MIN = 1.45
 const FILL_FOCUS_ZOOM_MAX = 2.35
@@ -36,6 +38,7 @@ export function FormFillView({
   mode = 'authenticated',
   publicToken,
   onSubmitted,
+  onSubmittingChange,
   onRequestCompletion,
   initialValues,
   lockedFieldIds,
@@ -82,8 +85,10 @@ export function FormFillView({
   const workerRef = useRef(null)
 
   const [fillZoom, setFillZoom] = useState(1)
+  const [reviewFitZoom, setReviewFitZoom] = useState(1)
   const [unscaledSize, setUnscaledSize] = useState({ w: 0, h: 0 })
   const [scrollPos, setScrollPos] = useState({ top: 0, left: 0 })
+  const [reviewFitsViewport, setReviewFitsViewport] = useState(true)
 
   // Natural reading order: page → y → x.
   const orderedFields = useMemo(() => {
@@ -259,12 +264,46 @@ export function FormFillView({
   const computeViewModeZoom = useCallback(() => {
     const scroller = scrollContainerRef.current
     const pageEl = pageRefs.current[0]?.wrapper
+    const inner = zoomInnerRef.current
     if (!scroller || !pageEl || pageEl.offsetWidth < 1) return 1
-    const pad = 16
-    const availableW = scroller.clientWidth - pad
-    const fitZoom = availableW / pageEl.offsetWidth
-    return Math.min(FILL_ZOOM_MAX, Math.max(1.2, fitZoom))
-  }, [])
+    const padX = 16
+    const availableW = Math.max(120, scroller.clientWidth - padX)
+    const fitZoomW = availableW / pageEl.offsetWidth
+    if (!isPublic) {
+      return Math.min(FILL_ZOOM_MAX, Math.max(1.2, fitZoomW))
+    }
+    const padY = 32
+    const availableH = Math.max(120, scroller.clientHeight - padY)
+    let fitZoom = fitZoomW
+    if (inner && inner.offsetHeight > 0) {
+      fitZoom = Math.min(fitZoomW, availableH / inner.offsetHeight)
+    }
+    return Math.min(FILL_ZOOM_MAX, Math.max(FIT_TO_SCREEN_MIN, fitZoom))
+  }, [isPublic, pageSizes.length])
+
+  const applyReviewFit = useCallback(() => {
+    const s = scrollContainerRef.current
+    if (s) {
+      s.scrollTop = 0
+      s.scrollLeft = 0
+    }
+    setScrollPos({ top: 0, left: 0 })
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const z = computeViewModeZoom()
+        setFillZoom(z)
+        fillZoomRef.current = z
+        setReviewFitZoom(z)
+        requestAnimationFrame(() => {
+          const scroller = scrollContainerRef.current
+          if (scroller) {
+            scroller.scrollTop = 0
+            scroller.scrollLeft = 0
+          }
+        })
+      })
+    })
+  }, [computeViewModeZoom])
 
   const resetFillView = useCallback(() => {
     lastFocusedFieldRef.current = null
@@ -275,12 +314,23 @@ export function FormFillView({
       s.scrollLeft = 0
     }
     setScrollPos({ top: 0, left: 0 })
+    if (fillMode) {
+      requestAnimationFrame(() => {
+        setFillZoom(1)
+        fillZoomRef.current = 1
+      })
+      return
+    }
+    if (isPublic) {
+      applyReviewFit()
+      return
+    }
     requestAnimationFrame(() => {
-      const z = fillMode ? 1 : computeViewModeZoom()
+      const z = computeViewModeZoom()
       setFillZoom(z)
       fillZoomRef.current = z
     })
-  }, [computeViewModeZoom, fillMode])
+  }, [applyReviewFit, computeViewModeZoom, fillMode, isPublic])
 
   const getFieldMetrics = useCallback((field, zoom) => {
     const pageEl = pageRefs.current[field.page]?.wrapper
@@ -380,10 +430,15 @@ export function FormFillView({
   }, [])
 
   const needsViewReset = useMemo(() => {
-    if (Math.abs(fillZoom - 1) > 0.02) return true
+    if (fillMode) return false
+    if (isPublic) {
+      if (Math.abs(fillZoom - reviewFitZoom) > 0.05) return true
+    } else if (Math.abs(fillZoom - 1) > 0.02) {
+      return true
+    }
     if (scrollPos.top > 2 || scrollPos.left > 2) return true
     return false
-  }, [fillZoom, scrollPos.left, scrollPos.top])
+  }, [fillMode, fillZoom, isPublic, reviewFitZoom, scrollPos.left, scrollPos.top])
 
   const renderPage = useCallback(async (pageIndex, force = false) => {
     if (!pdfDoc) return
@@ -513,12 +568,16 @@ export function FormFillView({
     setFillMode(false)
     formFocusZoomRef.current = null
     lastFocusedFieldRef.current = null
+    if (isPublic) {
+      applyReviewFit()
+      return
+    }
     requestAnimationFrame(() => {
       const z = computeViewModeZoom()
       setFillZoom(z)
       fillZoomRef.current = z
     })
-  }, [computeViewModeZoom])
+  }, [applyReviewFit, computeViewModeZoom, isPublic])
 
   const setStepForField = useCallback((fieldId) => {
     if (effectiveLockedSet.has(fieldId)) return
@@ -541,14 +600,22 @@ export function FormFillView({
       if (Math.abs(z - fillZoomRef.current) <= 0.02) return
       setFillZoom(z)
       fillZoomRef.current = z
+      if (isPublic) setReviewFitZoom(z)
       await renderPage(0, true)
     })()
     return () => { cancelled = true }
-  }, [fillMode, loading, loadingErr, pdfDoc, pageSizes.length, computeViewModeZoom, renderPage])
+  }, [fillMode, isPublic, loading, loadingErr, pdfDoc, pageSizes.length, computeViewModeZoom, renderPage])
+
+  const allFieldsFilled = useMemo(() => {
+    const fields = template.fields || []
+    if (!fields.length) return false
+    return fields.every((f) => isFieldFilled(f, values[f.id]))
+  }, [isFieldFilled, template.fields, values])
 
   // Linear pan from previous field → current field (fill mode only).
   useEffect(() => {
     if (!fillMode || !currentField || loading || loadingErr || !pdfDoc) return
+    if (isPublic && allFieldsFilled) return
     const scroller = scrollContainerRef.current
     const pageEl = pageRefs.current[currentField.page]?.wrapper
     if (!scroller || !pageEl) return
@@ -584,7 +651,7 @@ export function FormFillView({
     })()
 
     return () => { cancelled = true }
-  }, [fillMode, currentField, loading, loadingErr, pdfDoc, renderPage, resolveFocusZoom, scrollLinearToField])
+  }, [allFieldsFilled, fillMode, isPublic, currentField, loading, loadingErr, pdfDoc, renderPage, resolveFocusZoom, scrollLinearToField])
 
   // Redraw canvases only after manual pinch/wheel zoom (CSS transform + canvas compositing bug).
   useEffect(() => {
@@ -708,6 +775,7 @@ export function FormFillView({
       return
     }
     setSending(true)
+    onSubmittingChange?.(true)
     try {
       const flattened = await flattenPdf()
       const pdfBase64 = bytesToBase64(flattened)
@@ -717,11 +785,12 @@ export function FormFillView({
       })
       onSubmitted?.()
     } catch (e) {
+      onSubmittingChange?.(false)
       showToast(e.message || 'Failed to submit form', 'error')
     } finally {
       setSending(false)
     }
-  }, [flattenPdf, isFieldFilled, onSubmitted, activeTourFields, publicToken, stripValuesForSubmit, validateRequired, values])
+  }, [flattenPdf, isFieldFilled, onSubmitted, onSubmittingChange, activeTourFields, publicToken, stripValuesForSubmit, validateRequired, values])
 
   const getFilledValuesForInvite = useCallback(() => {
     const out = {}
@@ -793,27 +862,72 @@ export function FormFillView({
   const totalFields = activeTourFields.length
   const progressPct = totalFields > 0 ? Math.round((filledCount / totalFields) * 100) : 0
   const allRequiredFilled = useMemo(() => validateRequired().length === 0, [validateRequired])
-  const allFieldsFilled = useMemo(() => {
-    const fields = template.fields || []
-    if (!fields.length) return false
-    return fields.every((f) => isFieldFilled(f, values[f.id]))
-  }, [isFieldFilled, template.fields, values])
   const submitReady = allRequiredFilled && !loading && !loadingErr && !sending
 
   const showSubmitControl = isPublic ? submitReady : true
 
-  // When every field is complete, leave fill mode and hide the field guide.
+  // Recipient only: auto-fit for review once every field is complete.
   useEffect(() => {
-    if (!fillMode || !allFieldsFilled) return
+    if (!isPublic || !fillMode || !allFieldsFilled) return
     exitFillMode()
-  }, [allFieldsFilled, exitFillMode, fillMode])
+  }, [allFieldsFilled, exitFillMode, fillMode, isPublic])
+
+  const publicReviewMode = isPublic && !fillMode
+
+  // Keep completed public forms centered — clear fill-mode scroll offset after layout.
+  useEffect(() => {
+    if (!publicReviewMode) return
+    const scroller = scrollContainerRef.current
+    if (!scroller) return
+    scroller.scrollLeft = 0
+    scroller.scrollTop = 0
+    setScrollPos({ top: 0, left: 0 })
+  }, [publicReviewMode, fillZoom, unscaledSize.w, unscaledSize.h])
+
+  // Re-fit after the submit footer appears so the form stays fully visible.
+  useEffect(() => {
+    if (!publicReviewMode || !submitReady) return
+    let cancelled = false
+    ;(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if (cancelled) return
+      const z = computeViewModeZoom()
+      setFillZoom(z)
+      fillZoomRef.current = z
+      setReviewFitZoom(z)
+    })()
+    return () => { cancelled = true }
+  }, [publicReviewMode, submitReady, computeViewModeZoom])
+
+  // Only vertically center when the form fits; otherwise align to top so nothing is clipped.
+  useEffect(() => {
+    if (!publicReviewMode) return
+    const scroller = scrollContainerRef.current
+    if (!scroller) return
+    const measure = () => {
+      const contentH = unscaledSize.h * fillZoom
+      const pad = 20
+      const fits = !contentH || contentH <= scroller.clientHeight - pad
+      setReviewFitsViewport(fits)
+      if (!fits) {
+        scroller.scrollTop = 0
+        setScrollPos({ top: 0, left: scroller.scrollLeft })
+      }
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(scroller)
+    return () => ro.disconnect()
+  }, [publicReviewMode, unscaledSize.h, fillZoom])
 
   const renderSubmitButton = (className) => {
-    const label = isPublic ? 'Submit' : 'Send'
+    const label = isPublic
+      ? (submitReady ? 'Submit now' : 'Submit')
+      : 'Send'
     const inFooter = className?.includes('form-fill-footer')
     return (
       <Button
-        variant="outline"
+        variant={submitReady && isPublic ? 'default' : 'outline'}
         onClick={tryOpenSend}
         disabled={loading || !!loadingErr || sending}
         className={cn(
@@ -821,19 +935,19 @@ export function FormFillView({
           inFooter
             ? 'form-fill-action-bar-btn form-fill-footer-btn'
             : 'form-fill-submit-btn',
-          submitReady && 'form-fill-submit-btn--ready',
+          submitReady && isPublic && 'form-fill-submit-btn--ready form-fill-submit-btn--prominent',
           className
         )}
         title={isPublic
-          ? (submitReady ? 'Submit completed form' : 'Submit form')
+          ? (submitReady ? 'Review your form, then submit' : 'Submit form')
           : (submitReady ? 'Send completed form' : 'Send link to complete form')}
         aria-label={isPublic
-          ? (submitReady ? 'Submit completed form' : 'Submit form')
+          ? (submitReady ? 'Submit completed form now' : 'Submit form')
           : (submitReady ? 'Send completed form' : 'Send link to complete form')}
       >
         {sending ? (
           <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-        ) : submitReady ? (
+        ) : submitReady && isPublic ? (
           <CheckCircle2 className="h-4 w-4 shrink-0" />
         ) : (
           <Send className="h-4 w-4 shrink-0" />
@@ -875,6 +989,7 @@ export function FormFillView({
     values,
     progressPct,
     filledCount,
+    submitReady,
   }
 
   return (
@@ -892,8 +1007,10 @@ export function FormFillView({
         ref={scrollContainerRef}
         onScroll={handleScrollContainerScroll}
         className={cn(
-          'fill-scroll-container flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-behavior-contain bg-gray-200/50',
-          fillMode ? 'p-4' : 'px-2 py-3'
+          'fill-scroll-container flex-1 min-h-0 overscroll-behavior-contain bg-gray-200/50',
+          fillMode && 'p-4 overflow-y-auto overflow-x-auto',
+          !fillMode && !publicReviewMode && 'px-2 py-3 overflow-y-auto overflow-x-auto',
+          publicReviewMode && 'public-form-review-scroll'
         )}
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
@@ -909,64 +1026,88 @@ export function FormFillView({
         {!loading && !loadingErr && pageSizes.length > 0 && (
           <>
             <div
-              ref={zoomInnerRef}
-              className="form-fill-zoom-inner w-full space-y-4"
-              style={{
-                transform: `scale(${fillZoom})`,
-                transformOrigin: 'top left',
-                minWidth: `${fillZoom * 100}%`,
-              }}
+              className={cn(
+                publicReviewMode && 'public-form-review-frame',
+                publicReviewMode && (reviewFitsViewport
+                  ? 'public-form-review-frame--fits'
+                  : 'public-form-review-frame--scroll')
+              )}
             >
-              {pageSizes.map((size, pageIndex) => {
-                const fieldsHere = fieldsByPage.get(pageIndex) || []
-                const displayW = size.width
-                const displayH = size.height
-                return (
-                  <div
-                    key={pageIndex}
-                    ref={(el) => {
-                      pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
-                      pageRefs.current[pageIndex].wrapper = el
-                    }}
-                    data-page-index={pageIndex}
-                    className="pdf-page-wrapper relative mx-auto bg-white shadow-sm"
-                    style={{
-                      width: '100%',
-                      maxWidth: fillMode ? `${displayW}px` : undefined,
-                      aspectRatio: `${displayW} / ${displayH}`,
-                      containerType: 'size',
-                    }}
-                  >
-                    <canvas
-                      ref={(el) => {
-                        pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
-                        pageRefs.current[pageIndex].canvas = el
-                      }}
-                      style={{ width: '100%', height: '100%', display: 'block' }}
-                    />
-                    {fieldsHere.map((f) => (
-                      <InteractiveFillField
-                        key={f.id}
-                        field={f}
-                        value={values[f.id]}
-                        onChange={(v) => setValue(f.id, v)}
-                        isCurrent={fillMode && currentField?.id === f.id}
-                        viewOnly={!fillMode}
-                        locked={effectiveLockedSet.has(f.id)}
-                        onActivate={() => enterFillMode(f.id)}
-                        onOpenSignature={() => {
-                          setSigFieldId(f.id)
-                          setSigOpen(true)
+              <div
+                className={cn(publicReviewMode && 'public-form-review-stage')}
+                style={
+                  publicReviewMode && unscaledSize.w > 0
+                    ? {
+                        width: unscaledSize.w * fillZoom,
+                        minHeight: unscaledSize.h * fillZoom,
+                      }
+                    : undefined
+                }
+              >
+                <div
+                  ref={zoomInnerRef}
+                  className={cn('form-fill-zoom-inner space-y-4', !publicReviewMode && 'w-full')}
+                  style={{
+                    transform: `scale(${fillZoom})`,
+                    transformOrigin: 'top left',
+                    width: publicReviewMode && unscaledSize.w > 0 ? unscaledSize.w : undefined,
+                    minWidth: fillMode ? `${fillZoom * 100}%` : undefined,
+                  }}
+                >
+                  {pageSizes.map((size, pageIndex) => {
+                    const fieldsHere = fieldsByPage.get(pageIndex) || []
+                    const displayW = size.width
+                    const displayH = size.height
+                    const pageMaxWidth = fillMode || isPublic ? `${displayW}px` : undefined
+                    return (
+                      <div
+                        key={pageIndex}
+                        ref={(el) => {
+                          pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
+                          pageRefs.current[pageIndex].wrapper = el
                         }}
-                        onFocus={() => setStepForField(f.id)}
-                        onEnter={goNext}
-                      />
-                    ))}
-                  </div>
-                )
-              })}
+                        data-page-index={pageIndex}
+                        className="pdf-page-wrapper relative mx-auto bg-white shadow-sm"
+                        style={{
+                          width: '100%',
+                          maxWidth: pageMaxWidth,
+                          aspectRatio: `${displayW} / ${displayH}`,
+                          containerType: 'size',
+                        }}
+                      >
+                        <canvas
+                          ref={(el) => {
+                            pageRefs.current[pageIndex] = pageRefs.current[pageIndex] || {}
+                            pageRefs.current[pageIndex].canvas = el
+                          }}
+                          style={{ width: '100%', height: '100%', display: 'block' }}
+                        />
+                        {fieldsHere.map((f) => (
+                          <InteractiveFillField
+                            key={f.id}
+                            field={f}
+                            value={values[f.id]}
+                            onChange={(v) => setValue(f.id, v)}
+                            isCurrent={fillMode && currentField?.id === f.id}
+                            viewOnly={!fillMode}
+                            reviewTypography={publicReviewMode}
+                            locked={effectiveLockedSet.has(f.id)}
+                            onActivate={() => enterFillMode(f.id)}
+                            onOpenSignature={() => {
+                              setSigFieldId(f.id)
+                              setSigOpen(true)
+                            }}
+                            onFocus={() => setStepForField(f.id)}
+                            onEnter={goNext}
+                          />
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
-            {fillZoom > 1.001 && unscaledSize.h > 0 && (
+            {fillMode && fillZoom > 1.001 && unscaledSize.h > 0 && (
               <div
                 className="pointer-events-none w-px"
                 aria-hidden
@@ -1074,6 +1215,7 @@ function InteractiveFillField({
   onChange,
   isCurrent,
   viewOnly = false,
+  reviewTypography = false,
   locked = false,
   onActivate,
   onOpenSignature,
@@ -1102,7 +1244,9 @@ function InteractiveFillField({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: `clamp(9px, ${field.height * 70}cqh, 16px)`,
+    fontSize: reviewTypography
+      ? `clamp(10px, ${field.height * 90}cqh, 20px)`
+      : `clamp(9px, ${field.height * 70}cqh, 16px)`,
     boxSizing: 'border-box',
     background: locked
       ? 'rgba(107,114,128,0.14)'

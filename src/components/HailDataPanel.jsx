@@ -13,7 +13,7 @@ function HailSizeIndicator({ inches }) {
   )
 }
 
-function HailYearGroup({ year, events, defaultOpen }) {
+function HailYearGroup({ year, events, defaultOpen, onSelectEvent }) {
   const [open, setOpen] = useState(defaultOpen)
   const maxSize = events.reduce((m, e) => Math.max(m, e.hail_size_inches || 0), 0)
   const severityColor = maxSize >= 2 ? 'text-red-400' : maxSize >= 1 ? 'text-orange-400' : 'text-yellow-400'
@@ -33,11 +33,17 @@ function HailYearGroup({ year, events, defaultOpen }) {
       {open && (
         <div className="pl-6 pb-2 space-y-0.5">
           {events.map((evt, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs py-1">
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelectEvent?.(evt)}
+              className="hail-event-row w-full flex items-center gap-2 text-xs py-1.5 px-2 -mx-2 rounded-md text-left bg-transparent hover:bg-white/10 transition-colors"
+              title="View storm on map"
+            >
               <span className="opacity-50 w-20 shrink-0">{evt.date || year}</span>
               <HailSizeIndicator inches={evt.hail_size_inches} />
               <span className="opacity-40 ml-auto shrink-0">{evt.distance_mi} mi</span>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -45,7 +51,7 @@ function HailYearGroup({ year, events, defaultOpen }) {
   )
 }
 
-export function HailDataPanel({ isOpen, onClose, parcelData }) {
+export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
   const [hailData, setHailData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -160,6 +166,7 @@ export function HailDataPanel({ isOpen, onClose, parcelData }) {
                       year={group.year}
                       events={group.events}
                       defaultOpen={i === 0}
+                      onSelectEvent={onSelectEvent}
                     />
                   ))}
                 </div>

@@ -1,5 +1,6 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Maximize2, PenLine } from 'lucide-react'
 import { Button } from '../ui/button'
+import { PublicFormBrand, PublicFormBrandBar } from './PublicFormBrand'
 
 function FieldGuideControls({
   stepLabel,
@@ -95,6 +96,7 @@ export function FormFillChrome({
   values,
   progressPct,
   filledCount,
+  submitReady,
 }) {
   const showFillGuide = fillMode && currentField && !sigOpen && !sendOpen
 
@@ -102,17 +104,18 @@ export function FormFillChrome({
     if (layout === 'recipient') {
       return (
         <header
-          className="form-fill-header shrink-0 border-b px-6 pt-6 pb-4 form-fill-header--public border-gray-200 bg-white text-center"
-          style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+          className="form-fill-header shrink-0 border-b px-4 pb-4 form-fill-header--public border-gray-200 bg-white"
+          style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}
         >
-          <h1 className="text-xl font-semibold text-gray-900 truncate max-w-full mx-auto">
-            {template.name}
-          </h1>
-          {showSubmitControl && (
-            <div className="flex justify-center w-full mt-3">
-              {renderSubmitButton()}
+          <div className="form-fill-header-public-row">
+            <div className="form-fill-header-public-side" aria-hidden />
+            <h1 className="form-fill-header-public-title">
+              {template.name}
+            </h1>
+            <div className="form-fill-header-public-side form-fill-header-public-side--logo">
+              <PublicFormBrand logoOnly variant="header" />
             </div>
-          )}
+          </div>
         </header>
       )
     }
@@ -185,6 +188,23 @@ export function FormFillChrome({
   }
 
   if (part === 'footer') {
+    if (layout === 'recipient') {
+      if (!showSubmitControl) return null
+      return (
+        <footer
+          className="form-fill-footer form-fill-footer--public-submit shrink-0"
+          aria-label="Submit form"
+        >
+          <div className="form-fill-footer-inner form-fill-footer-inner--public-submit">
+            <p className="form-fill-review-hint form-fill-review-hint--public">
+              Review your form above, then submit.
+            </p>
+            {renderSubmitButton('form-fill-footer-btn form-fill-submit-btn--footer')}
+          </div>
+        </footer>
+      )
+    }
+
     if (layout !== 'bottom-dock') return null
 
     if (showFillGuide) {
@@ -229,6 +249,9 @@ export function FormFillChrome({
       return (
         <footer className="form-fill-footer form-fill-footer--view shrink-0" aria-label="Form actions">
           <div className="form-fill-footer-inner form-fill-footer-inner--actions">
+            {submitReady && isPublic && (
+              <p className="form-fill-review-hint">Review your form, then send.</p>
+            )}
             {needsViewReset && (
               <Button
                 variant="outline"
