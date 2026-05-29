@@ -3,6 +3,9 @@ import { X, CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 
+const hailDataCache = new Map()
+const HAIL_CACHE_TTL_MS = 30 * 60 * 1000
+
 function HailSizeIndicator({ inches }) {
   if (!inches) return null
   const color = inches < 1 ? 'bg-yellow-500' : inches < 2 ? 'bg-orange-500' : 'bg-red-500'
@@ -62,12 +65,23 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
 
   const loadHail = useCallback(async () => {
     if (!lat || !lng) return
+    const cacheKey = `${lat},${lng}`
+    const cached = hailDataCache.get(cacheKey)
+    if (cached && Date.now() - cached.fetchedAt < HAIL_CACHE_TTL_MS) {
+      setHailData(cached.data)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
       const res = await fetch(`/api/hail-events?lat=${lat}&lng=${lng}&radius_miles=10&from_year=2010`)
       if (!res.ok) throw new Error(`Hail API: ${res.status}`)
-      setHailData(await res.json())
+      const data = await res.json()
+      hailDataCache.set(cacheKey, { data, fetchedAt: Date.now() })
+      setHailData(data)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -77,11 +91,9 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
 
   useEffect(() => {
     if (isOpen && lat && lng) {
-      setHailData(null)
-      setError(null)
       loadHail()
     }
-  }, [isOpen, lat, lng])
+  }, [isOpen, lat, lng, loadHail])
 
   const hailByYear = useMemo(() => {
     if (!hailData?.events?.length) return []

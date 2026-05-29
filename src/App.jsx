@@ -49,6 +49,7 @@ import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineD
 import { LeadsPanel } from './components/LeadsPanel'
 import { HailDataPanel } from './components/HailDataPanel'
 import { HailStormOverlay, HailStormDismissPill } from './components/HailStormOverlay'
+import { useHailStormTimeline } from './hooks/useHailStormTimeline'
 // import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
@@ -371,6 +372,8 @@ function App() {
     setSelectedHailEvent(null)
     setIsHailDataOpen(true)
   }, [])
+
+  const hailStormTimeline = useHailStormTimeline(selectedHailEvent)
 
   useEffect(() => {
     if (!selectedHailEvent || !mapRef.current) return
@@ -2732,10 +2735,11 @@ function App() {
           {userLocation && (
             <LocationMarker position={userLocation} />
           )}
-          <HailStormOverlay event={selectedHailEvent} />
+          <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
         </MapGL>
         <HailStormDismissPill
           event={selectedHailEvent}
+          timeline={hailStormTimeline}
           onDismiss={handleDismissHailEvent}
         />
       </div>

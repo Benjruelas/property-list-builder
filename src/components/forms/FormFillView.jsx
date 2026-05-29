@@ -150,12 +150,13 @@ export function FormFillView({
         if (cancelled) return
         const doc = await mod.getDocument({ data: buf.slice(0) }).promise
         if (cancelled) { try { doc.destroy() } catch { /* ignore */ } return }
-        const sizes = []
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i)
+        const pages = await Promise.all(
+          Array.from({ length: doc.numPages }, (_, i) => doc.getPage(i + 1))
+        )
+        const sizes = pages.map((page) => {
           const vp = page.getViewport({ scale: RENDER_SCALE })
-          sizes.push({ width: vp.width, height: vp.height })
-        }
+          return { width: vp.width, height: vp.height }
+        })
         if (cancelled) return
         setPdfBuffer(buf)
         setPdfDoc(doc)
@@ -473,18 +474,10 @@ export function FormFillView({
     }
   }, [renderPage])
 
-  // Eagerly render pages once the PDF is ready (don't rely on intersection alone).
+  // Render the first page immediately; other pages load via intersection observer.
   useEffect(() => {
     if (!pdfDoc || loading || !pageSizes.length) return
-    let cancelled = false
-    ;(async () => {
-      await new Promise((resolve) => requestAnimationFrame(resolve))
-      for (let i = 0; i < pageSizes.length; i++) {
-        if (cancelled) return
-        await renderPage(i)
-      }
-    })()
-    return () => { cancelled = true }
+    renderPage(0)
   }, [pdfDoc, loading, pageSizes.length, renderPage])
 
   useEffect(() => {
