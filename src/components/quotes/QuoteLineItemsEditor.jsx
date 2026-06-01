@@ -85,7 +85,7 @@ function LineItemEditForm({ item, showOptions, onChange, onDone }) {
         value={item.description || ''}
         onChange={(e) => update({ description: e.target.value })}
       />
-      <div className={cn('grid gap-2 text-sm', item.showCostFields !== false ? 'grid-cols-4' : 'grid-cols-2')}>
+      <div className={cn('grid gap-2 text-sm', item.showCostFields !== false ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2')}>
         <div>
           <span className="text-[10px] opacity-50 block mb-0.5">Qty</span>
           <input
@@ -241,7 +241,7 @@ export function QuoteLineItemsEditor({
   const canEdit = !readOnly && !locked
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0">
       {canEdit && onGlobalMarkupChange != null && (
         <div className="flex items-center justify-between gap-2 text-sm">
           <span className="opacity-70">Global markup %</span>
@@ -343,7 +343,7 @@ export function QuoteLineItemsEditor({
           <span className="tabular-nums">{formatQuoteMoney(totals.total)}</span>
         </div>
         {showProfit && profit && (
-          <div className={cn(FINANCES_SUMMARY_ROW, 'rounded-lg border border-white/10 mt-2 items-center')}>
+          <div className={cn(FINANCES_SUMMARY_ROW, 'rounded-lg border border-white/10 mt-2 items-center flex-wrap gap-y-1')}>
             <span className="text-sm font-medium flex-1">Quote profit</span>
             <span className={cn('text-sm font-medium tabular-nums shrink-0', profitValueClass(profit.profit))}>
               {formatQuoteMoney(profit.profit)}

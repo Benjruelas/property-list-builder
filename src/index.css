@@ -128,9 +128,17 @@
     transform: none !important;
     top: 0 !important;
     left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     padding: 0 !important;
     display: flex !important;
     flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .quotes-panel.fullscreen-panel {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
   }
 }
 
@@ -567,13 +575,20 @@
     padding: 0 !important;
     box-sizing: border-box !important;
   }
-  /* Columns: ensure content doesn't sit under home indicator */
+  /* Columns: scroll within area above pinned tasks bar */
   .deal-pipeline-columns {
-    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: 0.75rem !important;
   }
-  /* Task list: bottom padding for home indicator */
+  /* Tasks bar: lifted from bottom edge, safe-area aware */
+  .deal-pipeline-tasks {
+    margin-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .deal-pipeline-tasks-header {
+    padding-bottom: 0.5rem !important;
+  }
+  /* Task list scroll area (above header on mobile) */
   .deal-pipeline-tasks .overflow-y-auto {
-    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    padding-bottom: 0.5rem !important;
   }
   /* Schedule panel: bottom padding for home indicator */
   .schedule-panel-content {

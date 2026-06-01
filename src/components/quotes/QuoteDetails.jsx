@@ -39,19 +39,25 @@ export function QuoteDetails({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.() }}>
       <DialogContent
-        className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0 max-w-lg w-[min(96vw,32rem)]"
+        className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
         showCloseButton={false}
         nestedOverlay
         topLayer
       >
-        <DialogHeader style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}>
+        <DialogHeader
+          className="flex-shrink-0 px-4 pb-3 border-b border-white/20 text-left"
+          style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}
+        >
           <DialogDescription className="sr-only">Quote details</DialogDescription>
           <PanelHeader onBack={onClose} title={quote.title || 'Quote'}>
             <QuoteStatusBadge status={quote.status} />
           </PanelHeader>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-4 space-y-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+        <div
+          className="flex-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto scrollbar-hide overscroll-contain px-4 py-4 space-y-4"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+        >
           <div className="text-sm space-y-1 opacity-90">
             {leadName && <p><span className="opacity-60">Lead:</span> {leadName}</p>}
             {quote.validUntil && <p><span className="opacity-60">Valid until:</span> {quote.validUntil.slice(0, 10)}</p>}

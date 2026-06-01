@@ -35,9 +35,10 @@ export default defineConfig({
     port: 3000,
     host: true,
     proxy: {
+      // Vite on :3000 — run `npm run dev:api` (vercel dev on :3001) for serverless routes.
       '/api': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
+        target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3001',
+        changeOrigin: true,
       },
       '/__/auth': {
         target: `https://${process.env.VITE_FIREBASE_PROJECT_ID || 'roofscout-885c6'}.firebaseapp.com`,

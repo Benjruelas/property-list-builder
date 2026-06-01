@@ -55,7 +55,7 @@ export function DirectionsPicker({ lat, lng, variant = 'icon', className = '', i
   }
 
   const dropdown = (
-    <div className={DROPDOWN_CLASS} style={{ ...DROPDOWN_STYLE, ...(variant === 'button' || iconSize ? { left: 0 } : { right: 0 }), top: '100%', marginTop: 4, position: 'absolute' }}>
+    <div className={DROPDOWN_CLASS} style={{ ...DROPDOWN_STYLE, ...(variant === 'button' || variant === 'row' || iconSize ? { left: 0 } : { right: 0 }), top: '100%', marginTop: 4, position: 'absolute' }}>
       <button
         type="button"
         onClick={() => handleSelect('google')}
@@ -74,6 +74,23 @@ export function DirectionsPicker({ lat, lng, variant = 'icon', className = '', i
       </button>
     </div>
   )
+
+  if (variant === 'row') {
+    return (
+      <div ref={ref} className={`relative w-full ${className}`}>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={(e) => { e.stopPropagation(); setOpen((p) => !p) }}
+          className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80 disabled:opacity-40"
+        >
+          <Navigation className="h-4 w-4 opacity-50 shrink-0" />
+          <span>Directions</span>
+        </button>
+        {open && dropdown}
+      </div>
+    )
+  }
 
   if (variant === 'button') {
     return (

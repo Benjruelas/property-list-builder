@@ -1,4 +1,5 @@
-import { Lock, Users, UserCheck, Check } from 'lucide-react'
+import { Lock, Users, UserCheck, Check, ChevronDown } from 'lucide-react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { VISIBILITY, visibilityLabel } from '@/utils/access'
 
@@ -21,7 +22,11 @@ export function ResourceSharePicker({
   sharedWithEmails = [],
   onSharedWithChange,
   className = '',
+  collapsible = false,
+  defaultExpanded = false,
 }) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+
   if (!team) {
     return (
       <div className={cn('mb-4', className)}>
@@ -33,6 +38,7 @@ export function ResourceSharePicker({
 
   const members = (team.members || []).filter((m) => m.uid !== team.ownerId || true)
   const selected = new Set(sharedMemberUids || [])
+  const shareSummary = visibilityLabel({ visibility, sharedMemberUids, teamShares: visibility === VISIBILITY.TEAM ? [team.id] : [] })
 
   const setVisibility = (v) => {
     onChange?.({
@@ -48,9 +54,8 @@ export function ResourceSharePicker({
     onChange?.({ visibility: VISIBILITY.MEMBERS, sharedMemberUids: next })
   }
 
-  return (
-    <div className={cn('mb-4', className)}>
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Sharing</p>
+  const pickerBody = (
+    <>
       <p className="text-xs text-gray-500 mb-2">Control who on {team.name} can access this.</p>
       <ul className="space-y-1.5 mb-3">
         {OPTIONS.map(({ value, label, icon: Icon, desc }) => {
@@ -138,6 +143,33 @@ export function ResourceSharePicker({
             className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
           />
         </div>
+      )}
+    </>
+  )
+
+  return (
+    <div className={cn('mb-4', className)}>
+      {collapsible ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 py-2 text-left rounded-lg hover:bg-white/[0.04] transition-colors"
+            aria-expanded={expanded}
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase opacity-50 tracking-wide">Sharing</p>
+              <p className="text-xs opacity-60 truncate mt-0.5">{shareSummary}</p>
+            </div>
+            <ChevronDown className={cn('h-4 w-4 shrink-0 opacity-50 transition-transform', expanded && 'rotate-180')} />
+          </button>
+          {expanded && <div className="pt-2">{pickerBody}</div>}
+        </>
+      ) : (
+        <>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Sharing</p>
+          {pickerBody}
+        </>
       )}
     </div>
   )

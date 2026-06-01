@@ -1,4 +1,5 @@
-import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X, FileText, FileSpreadsheet, Calendar, ListTodo, Briefcase } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X, FileText, Calendar, ListTodo, Briefcase } from 'lucide-react'
+import { QuoteIcon } from './icons/QuoteIcon'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 import { PipeIcon } from './PipeIcon'
@@ -318,7 +319,7 @@ export function MapControls({
                 }}
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
               >
-                <FileSpreadsheet className="h-4 w-4 flex-shrink-0" />
+                <QuoteIcon className="h-4 w-4 flex-shrink-0" />
                 <span>Quotes</span>
               </button>
 

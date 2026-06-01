@@ -277,6 +277,7 @@ export function CreateLeadDialog({
               onChange={setShareState}
               disabled={saving}
               allowExternalSharing={allowExternalSharing}
+              collapsible
             />
           )}
 

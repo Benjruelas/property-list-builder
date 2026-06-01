@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  FileSpreadsheet,
   Plus,
   Loader2,
   MoreVertical,
@@ -11,6 +10,7 @@ import {
   MessageSquare,
   Search,
 } from 'lucide-react'
+import { QuoteIcon } from '../icons/QuoteIcon'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
@@ -301,7 +301,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
             ) : tab === 'quotes' ? (
               quotes.length === 0 ? (
                 <div className="text-center py-16">
-                  <FileSpreadsheet className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <QuoteIcon className="h-10 w-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm opacity-60">No quotes yet.</p>
                   <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">Create a quote to send pricing to a lead.</p>
                 </div>

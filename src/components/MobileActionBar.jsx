@@ -1,4 +1,5 @@
-import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2, Settings, User, FileText, FileSpreadsheet, Briefcase } from 'lucide-react'
+import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2, Settings, User, FileText, Briefcase } from 'lucide-react'
+import { QuoteIcon } from './icons/QuoteIcon'
 import { cn } from '@/lib/utils'
 import { PipeIcon } from './PipeIcon'
 
@@ -148,7 +149,7 @@ export function MobileActionBar({
           onClick={() => { closeMenu(); onOpenQuotes?.() }}
           className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
         >
-          <FileSpreadsheet className="h-4 w-4 flex-shrink-0" />
+          <QuoteIcon className="h-4 w-4 flex-shrink-0" />
           <span>Quotes</span>
         </button>
 

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { ChevronRight, Archive, ArrowRightLeft, Trash2, Upload, Download, FileText, Loader2, User, MoreVertical, FileSpreadsheet, Plus } from 'lucide-react'
+import { ChevronRight, Archive, ArrowRightLeft, Trash2, Upload, Download, FileText, Loader2, User, MoreVertical, Plus } from 'lucide-react'
+import { QuoteIcon } from './icons/QuoteIcon'
 import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
@@ -85,7 +86,6 @@ export function DealDetails({
 
   useEffect(() => {
     setMenuOpen(false)
-    setMenuAnchor(null)
   }, [d?.id])
 
   if (!d) return null
@@ -284,7 +284,7 @@ export function DealDetails({
                 <ul className="space-y-1">
                   {dealQuotes.map((q) => (
                     <li key={q.id} className="flex items-center gap-2 py-2 px-2 rounded-lg bg-white/[0.04] text-sm">
-                      <FileSpreadsheet className="h-4 w-4 shrink-0 opacity-50" />
+                      <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
                       <span className="flex-1 truncate">{q.title || 'Quote'}</span>
                       <QuoteStatusBadge status={q.status} />
                       <span className="text-xs opacity-50 shrink-0">{formatQuoteMoney(q.total)}</span>

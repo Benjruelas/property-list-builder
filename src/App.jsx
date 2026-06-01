@@ -1841,25 +1841,101 @@ function App() {
 
   // Function to open parcel details (can accept parcel data or use clickedParcelData)
   /**
-   * Close any open lead/pipe/schedule/tasks panel and fly the map to the
-   * parcel's coordinates. Used when the user clicks the Address row inside
-   * LeadDetails — we want to return them to the map centered on the address.
+   * Close every overlay panel and return to the bare map.
    */
-  const handleGoToParcelOnMap = useCallback((parcelData) => {
-    const lat = Number(parcelData?.lat ?? parcelData?.properties?.LATITUDE ?? parcelData?.properties?.latitude)
-    const lng = Number(parcelData?.lng ?? parcelData?.properties?.LONGITUDE ?? parcelData?.properties?.longitude)
-    setIsLeadsPanelOpen(false)
+  const closeAllPanelsForMap = useCallback(() => {
+    setIsListPanelOpen(false)
+    setShowListSelector(false)
+    setIsSkipTracedListPanelOpen(false)
+    setIsParcelListPanelOpen(false)
+    setViewingListId(null)
+    setIsParcelDetailsOpen(false)
+    setIsOutreachPanelOpen(false)
+    setPhoneActionPanel(null)
+    setIsEmailComposerOpen(false)
+    setIsBulkEmailPreviewOpen(false)
     setIsDealPipelineOpen(false)
+    setDealPipelineFocusDealId(null)
     setIsSchedulePanelOpen(false)
-    setIsTasksPanelOpen(false)
-    setIsActivityPanelOpen(false)
     setScheduleInitialDate(null)
     scheduleNavStackRef.current = []
     setScheduleNavDepth(0)
-    if (Number.isFinite(lat) && Number.isFinite(lng) && mapRef.current) {
+    setIsTasksPanelOpen(false)
+    setIsActivityPanelOpen(false)
+    setActivityNavStackActive(false)
+    setIsPathsPanelOpen(false)
+    setIsFormsPanelOpen(false)
+    setIsQuotesPanelOpen(false)
+    setQuoteDealPrefill(null)
+    setIsTeamsPanelOpen(false)
+    setIsSettingsPanelOpen(false)
+    setIsLeadsPanelOpen(false)
+    setLeadsPanelFocusLeadId(null)
+    setIsDealsPanelOpen(false)
+    setIsHailDataOpen(false)
+    setShowMenu(false)
+    setPopupData(null)
+  }, [])
+
+  const openParcelPopup = useCallback((data) => {
+    if (!data) return
+    const parcelId = data.id || data.parcelId || data.properties?.PROP_ID
+    const address = data.address || data.properties?.SITUS_ADDR || data.properties?.SITE_ADDR || data.properties?.ADDRESS || 'No address'
+    const properties = data.properties || {}
+    const lat = data.lat ?? data.latlng?.lat ?? properties.LATITUDE ?? properties.latitude
+    const lng = data.lng ?? data.latlng?.lng ?? properties.LONGITUDE ?? properties.longitude
+    if (lat == null || lng == null || !parcelId) return
+    const currentYear = new Date().getFullYear()
+    const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
+    const age = yearBuilt ? currentYear - yearBuilt : null
+    const hasSkipTraced = isParcelSkipTraced(parcelId)
+    const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
+    const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
+    const parcelData = { id: parcelId, properties, address, lat, lng }
+    setClickedParcelId(parcelId)
+    setClickedParcelData(parcelData)
+    setPopupData({
+      parcelId, lat, lng, address,
+      ownerName: properties.OWNER_NAME || '', age,
+      ownerOccupied: computeOwnerOccupied(properties),
+      listNames: listsWithParcel.map(l => l.name),
+      hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
+    })
+  }, [lists, skipTracingInProgress])
+
+  /**
+   * Close any open panel, fly to the parcel, highlight it, and show the map popup.
+   */
+  const handleGoToParcelOnMap = useCallback((raw) => {
+    if (!raw) return
+    const parcelId = raw.id || raw.parcelId || raw.properties?.PROP_ID || raw.PROP_ID
+    const lat = Number(raw.lat ?? raw.latlng?.lat ?? raw.properties?.LATITUDE ?? raw.properties?.latitude)
+    const lng = Number(raw.lng ?? raw.latlng?.lng ?? raw.properties?.LONGITUDE ?? raw.properties?.longitude)
+    const address = raw.address || raw.properties?.SITUS_ADDR || raw.properties?.SITE_ADDR || raw.properties?.ADDRESS || 'No address'
+    const properties = raw.properties || {
+      OWNER_NAME: `${raw.firstName || ''} ${raw.lastName || ''}`.trim(),
+      SITUS_ADDR: address,
+      LATITUDE: lat,
+      LONGITUDE: lng,
+      PROP_ID: parcelId,
+    }
+    closeAllPanelsForMap()
+    if (!parcelId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      showToast('No map location for this parcel', 'error')
+      return
+    }
+    const normalized = {
+      id: parcelId,
+      address,
+      properties: { ...properties, PROP_ID: parcelId },
+      lat,
+      lng,
+    }
+    openParcelPopup(normalized)
+    if (mapRef.current) {
       mapRef.current.flyTo({ center: [lng, lat], zoom: 17, duration: 500 })
     }
-  }, [])
+  }, [closeAllPanelsForMap, openParcelPopup, showToast])
 
   const handleOpenParcelDetails = useCallback((parcelData = null) => {
     // Wait for auth to finish loading before checking
@@ -1916,31 +1992,6 @@ function App() {
   const handlePhoneClick = useCallback((phone, parcelData) => {
     setPhoneActionPanel({ phone, parcelData: parcelData || null })
   }, [])
-
-  const openParcelPopup = useCallback((data) => {
-    if (!data) return
-    const parcelId = data.id || data.properties?.PROP_ID
-    const address = data.address || data.properties?.SITUS_ADDR || data.properties?.SITE_ADDR || data.properties?.ADDRESS || 'No address'
-    const properties = data.properties || {}
-    const lat = data.lat ?? data.latlng?.lat
-    const lng = data.lng ?? data.latlng?.lng
-    if (lat == null || lng == null) return
-    const currentYear = new Date().getFullYear()
-    const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
-    const age = yearBuilt ? currentYear - yearBuilt : null
-    const hasSkipTraced = isParcelSkipTraced(parcelId)
-    const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
-    const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
-    setClickedParcelId(parcelId)
-    setClickedParcelData(data)
-    setPopupData({
-      parcelId, lat, lng, address,
-      ownerName: properties.OWNER_NAME || '', age,
-      ownerOccupied: computeOwnerOccupied(properties),
-      listNames: listsWithParcel.map(l => l.name),
-      hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
-    })
-  }, [lists, skipTracingInProgress])
 
   const suppressPopupCloseRef = useRef(false)
   const isParcelDetailsOpenRef = useRef(false)

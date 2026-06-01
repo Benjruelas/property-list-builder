@@ -4,6 +4,7 @@ import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { PanelBackButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { DirectionsPicker } from './DirectionsPicker'
 import { cn } from '@/lib/utils'
 import { displayLeadName, formatLeadAddress, deleteLead, updateLead } from '@/utils/leads'
 import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
@@ -86,6 +87,9 @@ export function LeadDetails({
   const name = displayLeadName(lead)
   const address = formatLeadAddress(lead)
   const isOwner = currentUserId && lead.ownerId === currentUserId
+  const parcelLat = Number(lead.lat ?? parcelData?.lat ?? parcelData?.properties?.LATITUDE ?? parcelData?.properties?.latitude)
+  const parcelLng = Number(lead.lng ?? parcelData?.lng ?? parcelData?.properties?.LONGITUDE ?? parcelData?.properties?.longitude)
+  const hasCoords = Number.isFinite(parcelLat) && Number.isFinite(parcelLng)
 
   const saveNotes = () => {
     if (!notesDirty) return
@@ -210,11 +214,14 @@ export function LeadDetails({
               <button
                 type="button"
                 className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80"
-                onClick={() => onGoToParcelOnMap?.(parcelData) || onOpenParcelDetails?.(parcelData)}
+                onClick={() => onGoToParcelOnMap?.(parcelData || lead)}
               >
                 <MapPin className="h-4 w-4 opacity-50 shrink-0" />
                 <span>View on map</span>
               </button>
+            )}
+            {hasCoords && (
+              <DirectionsPicker lat={parcelLat} lng={parcelLng} variant="row" />
             )}
           </div>
 
@@ -228,6 +235,7 @@ export function LeadDetails({
                   onChange={handleShareChange}
                   disabled={savingShares}
                   allowExternalSharing={allowExternalSharing}
+                  collapsible
                 />
               ) : (
                 <div className="flex items-center gap-2">

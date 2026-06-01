@@ -614,6 +614,8 @@ export function DealPipeline({
     return allTasks.filter((t) => taskBelongsToLocalDeals(t, displayDeals))
   }, [allTasks, apiMode, activePipelineId, pipelines, displayDeals])
 
+  const hasPipeTasks = displayTasks.length > 0
+
   const getDealLabel = (dealId, parcelId) => {
     if (dealId) {
       const deal = displayDeals.find((d) => d.id === dealId)
@@ -1018,9 +1020,21 @@ export function DealPipeline({
           </div>
           </div>
 
-          {/* Tasks - all tasks across leads, collapsible (collapses to right edge on desktop, expands pipeline) */}
-          <div className={`w-full md:flex-shrink-0 border-t md:border-t-0 md:border-l flex flex-col border-white/20 transition-[width] duration-200 deal-pipeline-tasks ${tasksCollapsed ? 'md:w-16' : 'md:w-80'} ${!tasksCollapsed ? 'max-md:h-[50vh] max-md:flex-shrink-0' : 'max-md:h-[10vh] max-md:flex-shrink-0'}`}>
-            <div className={`deal-pipeline-tasks-header px-3 py-2 border-b flex items-center gap-2 flex-shrink-0 ${tasksCollapsed ? 'md:flex-row md:px-2 md:py-3 md:justify-between md:min-h-[48px]' : 'justify-between'}`}>
+          {/* Tasks - collapsible; mobile: pinned bottom, expands upward; desktop: right sidebar */}
+          <div
+            className={cn(
+              'w-full flex flex-col border-t md:border-t-0 md:border-l border-white/20 transition-[width] duration-200 deal-pipeline-tasks',
+              'max-lg:mt-auto max-lg:flex-shrink-0 max-lg:flex-col-reverse',
+              tasksCollapsed ? 'md:w-16' : 'md:w-80 md:self-start h-auto',
+            )}
+          >
+            <div
+              className={cn(
+                'deal-pipeline-tasks-header px-3 py-2 flex items-center gap-2 flex-shrink-0 min-h-[44px]',
+                'border-white/20 max-lg:border-t max-lg:border-b-0 border-b',
+                tasksCollapsed ? 'md:flex-row md:px-2 md:py-3 md:justify-between md:min-h-[48px]' : 'justify-between',
+              )}
+            >
               <button
                 type="button"
                 className={`flex items-center min-w-0 flex-1 md:flex-none pipeline-icon-btn ${tasksCollapsed ? 'md:justify-between md:w-full md:px-1' : 'gap-2'}`}
@@ -1085,12 +1099,15 @@ export function DealPipeline({
               </div>
               )}
             </div>
-            <div className={`overflow-y-auto scrollbar-hide p-2 space-y-3 max-md:space-y-1.5 max-md:p-1.5 border-white/10 ${tasksCollapsed ? 'hidden' : 'flex-1'} md:flex-1`}>
-              {displayTasks.length === 0 ? (
-                <p className="text-sm text-gray-500 py-4 px-2">No tasks yet</p>
-              ) : (
-                <>
-                  {(() => {
+            {hasPipeTasks && !tasksCollapsed && (
+            <div
+              className={cn(
+                'scrollbar-hide p-2 space-y-3 max-md:space-y-1.5 max-md:p-1.5 border-white/10 overflow-y-auto',
+                'max-lg:border-b border-white/10',
+                'max-h-[min(50vh,calc(var(--vw-height,100vh)-10rem))] md:max-h-[min(70vh,calc(var(--vw-height,100vh)-10rem))]',
+              )}
+            >
+              {(() => {
                     const filtered = showCompletedTasks ? displayTasks : displayTasks.filter((t) => !t.completed)
                     const scheduled = filtered.filter((t) => t.scheduledAt)
                     const unscheduled = filtered.filter((t) => !t.scheduledAt)
@@ -1225,9 +1242,8 @@ export function DealPipeline({
                       </>
                     )
                   })()}
-                </>
-              )}
             </div>
+            )}
           </div>
         </div>
       </DialogContent>
