@@ -86,7 +86,7 @@ export function ListPanel({
       setRenamingListId(null)
       setRenameValue('')
       setShareListId(null)
-      setLocalTeamShareIds(null)
+      setLocalShareState(null)
       setShareEmail('')
       setShareEmailValid(null)
       setShareEmailError('')

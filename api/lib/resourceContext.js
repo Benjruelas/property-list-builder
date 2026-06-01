@@ -2,7 +2,7 @@
  * Shared team + access context for resource APIs (leads, lists, paths, pipelines, forms).
  */
 
-import { fullTeamsIndex, userHasTeamMembership } from './teams.js'
+import { fullTeamsIndex } from './teams.js'
 import {
   resolveResourceAccess,
   canView,
@@ -12,6 +12,7 @@ import {
   applyVisibilityPatch,
   normalizeResourceVisibility,
   isTeamAdmin,
+  userHasTeamMembership,
 } from './access.js'
 
 export function buildAccessContext(allTeams, user) {

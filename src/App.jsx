@@ -42,6 +42,7 @@ import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as dele
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { TeamsPanel } from './components/TeamsPanel'
 import { fetchTeamContext } from './utils/teams'
+import { subscribeToWebPush } from './utils/pushNotifications'
 import { reverseGeocodeCity } from './utils/reverseGeocode'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
