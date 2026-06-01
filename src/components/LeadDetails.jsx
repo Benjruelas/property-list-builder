@@ -214,7 +214,10 @@ export function LeadDetails({
               <button
                 type="button"
                 className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80"
-                onClick={() => onGoToParcelOnMap?.(parcelData || lead)}
+                onClick={() => {
+                  onClose?.()
+                  onGoToParcelOnMap?.(parcelData || lead)
+                }}
               >
                 <MapPin className="h-4 w-4 opacity-50 shrink-0" />
                 <span>View on map</span>

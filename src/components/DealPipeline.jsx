@@ -325,6 +325,12 @@ export function DealPipeline({
     setLeadOverlayId(lead.id)
   }, [leadOverlayId])
 
+  const handleGoToParcelOnMap = useCallback((data) => {
+    setLeadOverlayId(null)
+    setSelectedDeal(null)
+    onGoToParcelOnMap?.(data)
+  }, [onGoToParcelOnMap])
+
   const handleLeadUpdate = useCallback(async (updated) => {
     try {
       const saved = await updateLead(getToken, updated.id, updated)
@@ -1248,7 +1254,7 @@ export function DealPipeline({
         </div>
       </DialogContent>
 
-      {selectedDeal && (
+      {isOpen && selectedDeal && (
         <DealDetails
           deal={selectedDeal}
           pipeline={activePipeline}
@@ -1285,7 +1291,7 @@ export function DealPipeline({
         />
       )}
 
-      {leadOverlay && (
+      {isOpen && leadOverlay && (
         <LeadDetails
           isOpen
           onClose={handleLeadOverlayClose}
@@ -1296,7 +1302,7 @@ export function DealPipeline({
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
-          onGoToParcelOnMap={onGoToParcelOnMap}
+          onGoToParcelOnMap={handleGoToParcelOnMap}
           onLeadUpdate={handleLeadUpdate}
           onCreateDeal={onOpenCreateDeal}
           onOpenDeal={(deal) => {

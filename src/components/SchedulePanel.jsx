@@ -291,6 +291,10 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
   }, [isOpen, refreshTasks])
 
   useEffect(() => {
+    if (!isOpen) setSelectedLead(null)
+  }, [isOpen])
+
+  useEffect(() => {
     if (isOpen && initialDate != null) {
       const d = new Date(initialDate)
       setViewYear(d.getFullYear())

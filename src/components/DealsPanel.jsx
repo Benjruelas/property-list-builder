@@ -198,6 +198,23 @@ export function DealsPanel({
     if (!selectedDeal) setLeadOverlayId(null)
   }, [selectedDeal?.id])
 
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedDeal(null)
+      setSelectedPipelineId(null)
+      setSelectedClosed(null)
+      setLeadOverlayId(null)
+    }
+  }, [isOpen])
+
+  const handleGoToParcelOnMap = useCallback((data) => {
+    setLeadOverlayId(null)
+    setSelectedDeal(null)
+    setSelectedPipelineId(null)
+    setSelectedClosed(null)
+    onGoToParcelOnMap?.(data)
+  }, [onGoToParcelOnMap])
+
   const handleLeadUpdate = useCallback(async (updated) => {
     try {
       const saved = await updateLead(getToken, updated.id, updated)
@@ -403,7 +420,7 @@ export function DealsPanel({
         </OptionsMenuItem>
       </OptionsMenuDropdown>
 
-      {selectedDeal && selectedPipeline && (
+      {isOpen && selectedDeal && selectedPipeline && (
         <DealDetails
           deal={selectedDeal}
           pipeline={selectedPipeline}
@@ -425,7 +442,7 @@ export function DealsPanel({
         />
       )}
 
-      {leadOverlay && (
+      {isOpen && leadOverlay && (
         <LeadDetails
           isOpen
           onClose={() => setLeadOverlayId(null)}
@@ -436,7 +453,7 @@ export function DealsPanel({
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
-          onGoToParcelOnMap={onGoToParcelOnMap}
+          onGoToParcelOnMap={handleGoToParcelOnMap}
           onLeadUpdate={handleLeadUpdate}
           onCreateDeal={onCreateDeal}
           onOpenDeal={(deal, pipelineId) => {
@@ -459,7 +476,7 @@ export function DealsPanel({
         />
       )}
 
-      {selectedClosed && (
+      {isOpen && selectedClosed && (
         <DealDetails
           deal={selectedClosed.deal}
           pipeline={{ columns: selectedClosed.closedFrom?.columns, id: selectedClosed.closedFrom?.id, title: selectedClosed.closedFrom?.title }}
