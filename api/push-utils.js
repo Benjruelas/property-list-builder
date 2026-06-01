@@ -189,6 +189,11 @@ export async function sendWebPushToEmail(recipientEmail, payload, kind, actor = 
             await kv.set(
               `push_subs:${uid}`,
               remaining.map((s) => ({ id: subscriptionEndpointId(s), subscription: s, updatedAt: new Date().toISOString() }))
+            ).catch(() =>
+              kv.set(
+                `push_subs:${uid}`,
+                JSON.stringify(remaining.map((s) => ({ id: subscriptionEndpointId(s), subscription: s, updatedAt: new Date().toISOString() })))
+              )
             )
           } else {
             await kv.del(`push_subs:${uid}`)

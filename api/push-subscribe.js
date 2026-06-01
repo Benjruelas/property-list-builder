@@ -76,7 +76,9 @@ async function loadSubscriptions(uid) {
 }
 
 async function saveSubscriptions(uid, entries) {
-  await kv.set(`push_subs:${uid}`, entries)
+  await kv.set(`push_subs:${uid}`, entries).catch(() =>
+    kv.set(`push_subs:${uid}`, JSON.stringify(entries))
+  )
   if (entries.length === 1) {
     await kv.set(`push_sub:${uid}`, JSON.stringify(entries[0].subscription))
   } else if (entries.length === 0) {
@@ -108,7 +110,12 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'Push storage unavailable' })
   }
 
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  let body
+  try {
+    body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON body' })
+  }
 
   try {
     if (req.method === 'POST') {
