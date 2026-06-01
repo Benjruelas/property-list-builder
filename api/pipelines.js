@@ -1,12 +1,22 @@
 import { resolveDevBypassUser, isDevBypassToken } from './lib/devBypassUsers.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { getAllTeams } from './lib/teams.js'
+import {
+  buildAccessContext,
+  getResourceAccess,
+  filterVisibleResources,
+  canEdit,
+  canDelete,
+  canChangeVisibility,
+  applyResourceVisibilityPatch,
+  isTeamAdmin,
+} from './lib/resourceContext.js'
 
 /**
  * Vercel Serverless Function
  * User-scoped deal pipelines. Requires Firebase Auth (Bearer token).
  * - GET: Pipelines owned by user, shared with user's email, or shared with a team the user belongs to.
  * - POST: Create pipeline (owner = current user)
- * - PATCH: Owner = any field (title, columns, leads, sharedWith, teamShares). Collaborators (email or team) = leads only.
+ * - PATCH: Owner = any field (title, columns, deals, sharedWith, teamShares). Collaborators (email or team) = deals only.
  * - DELETE: Delete pipeline (owner only)
  *
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
@@ -107,13 +117,22 @@ function normalizeColumns(cols) {
   })).filter(c => c.name)
 }
 
+function normalizePipelineDeals(pipeline) {
+  if (!pipeline.deals && Array.isArray(pipeline.leads)) {
+    pipeline.deals = []
+    delete pipeline.leads
+  }
+  if (!Array.isArray(pipeline.deals)) pipeline.deals = []
+  return pipeline
+}
+
 async function runPipelinePushNotifications({
   sharedWith,
   teamShares,
-  leads,
+  deals,
   isOwner,
   pipeline,
-  prevLeadsSnapshot,
+  prevDealsSnapshot,
   newlyAddedPipelineShares,
   newlyAddedTeamShares,
   teamsIndex,
@@ -122,9 +141,9 @@ async function runPipelinePushNotifications({
   try {
     const {
       notifyNewPipelineShares,
-      notifyPipelineLeadStatusChanges,
+      notifyPipelineDealStatusChanges,
       notifyTeamResourceShare,
-      diffLeadStatusChanges
+      diffDealStatusChanges
     } = await import('./push-utils.js')
     if (sharedWith !== undefined && isOwner && newlyAddedPipelineShares.length > 0) {
       await notifyNewPipelineShares(newlyAddedPipelineShares, {
@@ -141,10 +160,10 @@ async function runPipelinePushNotifications({
         actorEmail: user.email
       })
     }
-    if (leads !== undefined && Array.isArray(leads)) {
-      const changes = diffLeadStatusChanges(prevLeadsSnapshot, pipeline.leads)
+    if (deals !== undefined && Array.isArray(deals)) {
+      const changes = diffDealStatusChanges(prevDealsSnapshot, pipeline.deals)
       if (changes.length > 0) {
-        await notifyPipelineLeadStatusChanges(changes, {
+        await notifyPipelineDealStatusChanges(changes, {
           pipelineTitle: pipeline.title,
           pipelineId: pipeline.id,
           columns: pipeline.columns || [],
@@ -156,6 +175,86 @@ async function runPipelinePushNotifications({
     }
   } catch (e) {
     console.warn('pipeline push notify', e.message)
+  }
+}
+
+function columnName(columns, colId) {
+  const col = (columns || []).find((c) => c.id === colId)
+  return col?.name || colId || 'Unknown'
+}
+
+async function runPipelineActivityLog({
+  pipeline,
+  prevDealsSnapshot,
+  newlyAddedTeamShares,
+  teamsIndex,
+  user,
+  columns,
+}) {
+  try {
+    const {
+      logTeamActivity,
+      actorLabel,
+      teamIdsFromResource,
+      diffDealChanges,
+      dealActivityLabel,
+    } = await import('./lib/activityLog.js')
+
+    const teamIds = teamIdsFromResource(pipeline)
+    if (teamIds.length === 0) return
+
+    const label = actorLabel(user)
+    const pipeTitle = pipeline.title || 'pipeline'
+
+    if (newlyAddedTeamShares?.length > 0) {
+      for (const tid of newlyAddedTeamShares) {
+        await logTeamActivity({
+          teamIds: [tid],
+          actor: user,
+          type: 'pipeline.shared',
+          summary: `${label} shared pipe "${pipeTitle}" with the team`,
+          entity: { kind: 'pipeline', pipelineId: pipeline.id },
+          nav: { type: 'pipeline', pipelineId: pipeline.id },
+        })
+      }
+    }
+
+    const dealChanges = diffDealChanges(prevDealsSnapshot, pipeline.deals)
+    for (const change of dealChanges) {
+      const dealLabel = dealActivityLabel(change.deal)
+      if (change.type === 'deal.created') {
+        await logTeamActivity({
+          teamIds,
+          actor: user,
+          type: 'deal.created',
+          summary: `${label} added deal "${dealLabel}" to ${pipeTitle}`,
+          entity: { kind: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
+          nav: { type: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
+        })
+      } else if (change.type === 'deal.moved') {
+        const from = columnName(columns, change.oldStatus)
+        const to = columnName(columns, change.newStatus)
+        await logTeamActivity({
+          teamIds,
+          actor: user,
+          type: 'deal.moved',
+          summary: `${label} moved "${dealLabel}" from ${from} to ${to}`,
+          entity: { kind: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
+          nav: { type: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
+        })
+      } else if (change.type === 'deal.removed') {
+        await logTeamActivity({
+          teamIds,
+          actor: user,
+          type: 'deal.removed',
+          summary: `${label} removed deal "${dealLabel}" from ${pipeTitle}`,
+          entity: { kind: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
+          nav: { type: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('pipeline activity log', e.message)
   }
 }
 
@@ -184,24 +283,28 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
-      const teamsIndex = fullTeamsIndex(allTeams)
-      const pipelines = all.filter((p) => resolveAccess(p, user, teamsIndex) !== null)
+      const ctx = buildAccessContext(allTeams, user)
+      const pipelines = filterVisibleResources(all.map(normalizePipelineDeals), user, ctx)
       return res.status(200).json({ pipelines })
     }
 
     if (method === 'POST') {
-      const { title = 'Deal Pipeline', columns, leads } = body
+      const { title = 'Deal Pipeline', columns, deals } = body
       const cols = normalizeColumns(columns)
-      const leadsArr = Array.isArray(leads) ? leads : []
+      const dealsArr = Array.isArray(deals) ? deals : []
       const newPipeline = {
         id: `pipe_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
         title: (title || 'Deal Pipeline').trim() || 'Deal Pipeline',
         columns: cols,
-        leads: leadsArr,
+        deals: dealsArr,
         ownerId: user.uid,
         ownerEmail: user.email,
         sharedWith: [],
         teamShares: [],
+        teamId: null,
+        visibility: 'private',
+        sharedMemberUids: [],
+        isTeamPipe: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -212,49 +315,55 @@ export default async function handler(req, res) {
     }
 
     if (method === 'PATCH') {
-      const { pipelineId, title, columns, leads, sharedWith, teamShares } = body
+      const { pipelineId, title, columns, deals, sharedWith, teamShares } = body
       if (!pipelineId) return res.status(400).json({ error: 'pipelineId is required' })
 
       const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
       const idx = all.findIndex((p) => p.id === pipelineId)
       if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
 
-      const pipeline = all[idx]
-      const prevLeadsSnapshot = JSON.parse(JSON.stringify(pipeline.leads || []))
+      const pipeline = normalizePipelineDeals(all[idx])
+      const prevDealsSnapshot = JSON.parse(JSON.stringify(pipeline.deals || []))
       const prevSharedSet = new Set(
         (pipeline.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
       let newlyAddedPipelineShares = []
       const prevTeamShares = new Set(pipeline.teamShares || [])
       let newlyAddedTeamShares = []
-      const teamsIndex = fullTeamsIndex(allTeams)
-      const access = resolveAccess(pipeline, user, teamsIndex)
-      const isOwner = access === 'owner'
+      const ctx = buildAccessContext(allTeams, user)
+      const teamsIndex = ctx.teamsIndex
+      const access = getResourceAccess(pipeline, user, ctx)
+      const pipeIsTeam = pipeline.isTeamPipe === true
+      const canManageMeta = pipeIsTeam ? isTeamAdmin(ctx.team, user.uid) : canChangeVisibility(access)
 
-      if (!access) {
+      if (!canEdit(access) && access !== 'admin_view') {
         return res.status(403).json({ error: 'Only the pipeline owner or collaborators can update this pipeline' })
       }
+      if (access === 'admin_view') {
+        return res.status(403).json({ error: 'Admins can view but not edit private pipelines' })
+      }
 
-      if (!isOwner) {
-        if (title !== undefined || columns !== undefined || sharedWith !== undefined || teamShares !== undefined) {
-          return res.status(403).json({ error: 'Only the pipeline owner can change title, columns, or sharing' })
+      if (!canManageMeta) {
+        if (title !== undefined || columns !== undefined || sharedWith !== undefined || teamShares !== undefined || body.visibility !== undefined || body.sharedMemberUids !== undefined) {
+          return res.status(403).json({ error: pipeIsTeam ? 'Only team admins can change team Pipe settings' : 'Only the pipeline owner can change title, columns, or sharing' })
         }
-        if (leads === undefined) {
+        if (deals === undefined) {
           return res.status(400).json({ error: 'No permitted updates' })
         }
       }
 
-      if (title !== undefined) {
+      if (title !== undefined && canManageMeta) {
         pipeline.title = (title || 'Deal Pipeline').trim() || 'Deal Pipeline'
       }
-      if (columns !== undefined) {
+      if (columns !== undefined && canManageMeta) {
         pipeline.columns = normalizeColumns(columns)
       }
-      if (leads !== undefined && Array.isArray(leads)) {
-        pipeline.leads = leads
+      if (deals !== undefined && Array.isArray(deals)) {
+        pipeline.deals = deals
       }
+      delete pipeline.leads
 
-      if (sharedWith !== undefined) {
+      if (sharedWith !== undefined && canManageMeta) {
         const arr = Array.isArray(sharedWith) ? sharedWith : []
         const emails = arr.map((e) => (e && String(e).trim()).toLowerCase()).filter(Boolean)
         const uniqueEmails = [...new Set(emails)]
@@ -290,7 +399,7 @@ export default async function handler(req, res) {
         pipeline.sharedWith = uniqueEmails
       }
 
-      if (teamShares !== undefined) {
+      if (teamShares !== undefined && canManageMeta) {
         const arr = Array.isArray(teamShares) ? teamShares : []
         const unique = [...new Set(arr.filter(Boolean))]
         for (const tid of unique) {
@@ -307,6 +416,18 @@ export default async function handler(req, res) {
         newlyAddedTeamShares = unique.filter((tid) => !prevTeamShares.has(tid))
       }
 
+      if (canManageMeta && (body.visibility !== undefined || body.sharedMemberUids !== undefined)) {
+        try {
+          const patched = applyResourceVisibilityPatch(pipeline, body, ctx)
+          pipeline.visibility = patched.visibility
+          pipeline.teamId = patched.teamId
+          pipeline.sharedMemberUids = patched.sharedMemberUids
+          if (patched.teamShares?.length) pipeline.teamShares = patched.teamShares
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+      }
+
       pipeline.updatedAt = new Date().toISOString()
       all[idx] = pipeline
       await saveAllPipelines(all)
@@ -314,14 +435,23 @@ export default async function handler(req, res) {
       await runPipelinePushNotifications({
         sharedWith,
         teamShares,
-        leads,
-        isOwner,
+        deals,
+        isOwner: canManageMeta,
         pipeline,
-        prevLeadsSnapshot,
+        prevDealsSnapshot,
         newlyAddedPipelineShares,
         newlyAddedTeamShares,
         teamsIndex,
         user
+      })
+
+      await runPipelineActivityLog({
+        pipeline,
+        prevDealsSnapshot,
+        newlyAddedTeamShares,
+        teamsIndex,
+        user,
+        columns: pipeline.columns || [],
       })
 
       return res.status(200).json({ pipeline })
@@ -331,10 +461,15 @@ export default async function handler(req, res) {
       const { pipelineId } = body
       if (!pipelineId) return res.status(400).json({ error: 'pipelineId is required' })
 
-      const all = await getAllPipelines()
+      const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
+      const ctx = buildAccessContext(allTeams, user)
       const idx = all.findIndex((p) => p.id === pipelineId)
       if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
-      if (all[idx].ownerId !== user.uid) {
+      if (all[idx].isTeamPipe) {
+        return res.status(403).json({ error: 'Team Pipe cannot be deleted' })
+      }
+      const access = getResourceAccess(all[idx], user, ctx)
+      if (!canDelete(access)) {
         return res.status(403).json({ error: 'Only the pipeline owner can delete this pipeline' })
       }
       all.splice(idx, 1)

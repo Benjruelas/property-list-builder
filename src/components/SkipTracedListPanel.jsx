@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Phone, ChevronDown, ChevronRight } from 'lucide-react'
-import { Button } from './ui/button'
+import { PanelHeader } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { getSkipTracedList } from '../utils/skipTracedList'
@@ -47,19 +47,7 @@ export function SkipTracedListPanel({
     }}>
       <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay>
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
-          <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold truncate">Skiptraced Parcels</DialogTitle>
-            <div className="map-panel-header-actions">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <PanelHeader onBack={onClose} title="Skiptraced Parcels" />
           <DialogDescription className="sr-only">
             List of all parcels and lists that have been skip traced.
           </DialogDescription>

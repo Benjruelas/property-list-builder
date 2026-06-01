@@ -1,9 +1,15 @@
 import { resolveDevBypassUser, isDevBypassToken } from './lib/devBypassUsers.js'
+import { getAllTeams } from './lib/teams.js'
 import {
-  getAllTeams,
-  fullTeamsIndex,
-  resolveAccess
-} from './lib/teams.js'
+  buildAccessContext,
+  getResourceAccess,
+  filterVisibleResources,
+  canEdit,
+  canDelete,
+  canChangeVisibility,
+  applyResourceVisibilityPatch,
+  activityAudienceForResource,
+} from './lib/resourceContext.js'
 
 /**
  * Vercel Serverless Function - property lists. Firebase Bearer auth.
@@ -126,8 +132,8 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
-      const teamsIndex = fullTeamsIndex(allTeams)
-      const lists = all.filter((l) => resolveAccess(l, user, teamsIndex) !== null)
+      const ctx = buildAccessContext(allTeams, user)
+      const lists = filterVisibleResources(all, user, ctx)
       return res.status(200).json({ lists })
     }
 
@@ -144,6 +150,9 @@ export default async function handler(req, res) {
         ownerEmail: user.email,
         sharedWith: [],
         teamShares: [],
+        teamId: null,
+        visibility: 'private',
+        sharedMemberUids: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -162,17 +171,18 @@ export default async function handler(req, res) {
       if (idx === -1) return res.status(404).json({ error: 'List not found' })
 
       const list = all[idx]
-      const teamsIndex = fullTeamsIndex(allTeams)
-      const access = resolveAccess(list, user, teamsIndex)
-      if (!access) {
+      const ctx = buildAccessContext(allTeams, user)
+      const access = getResourceAccess(list, user, ctx)
+      if (!canEdit(access) && access !== 'admin_view') {
         return res.status(403).json({ error: 'You do not have access to this list' })
       }
-      const isOwner = access === 'owner'
+      if (access === 'admin_view') {
+        return res.status(403).json({ error: 'Admins can view but not edit private lists' })
+      }
+      const isOwner = canChangeVisibility(access)
 
-      // Collaborators may only touch parcels (add/remove). Everything else
-      // requires owner - matches the normalized rights table in the plan.
       if (!isOwner) {
-        if (name !== undefined || sharedWith !== undefined || teamShares !== undefined) {
+        if (name !== undefined || sharedWith !== undefined || teamShares !== undefined || body.visibility !== undefined || body.sharedMemberUids !== undefined) {
           return res.status(403).json({ error: 'Only the list owner can change name or sharing' })
         }
         if (newParcels === undefined && removeParcels === undefined) {
@@ -218,10 +228,8 @@ export default async function handler(req, res) {
       if (teamShares !== undefined) {
         const arr = Array.isArray(teamShares) ? teamShares : []
         const unique = [...new Set(arr.filter(Boolean))]
-        // Each id must exist AND the patcher must own or be a member of it
-        // (prevents leaking resources into teams they don't belong to).
         for (const tid of unique) {
-          const team = teamsIndex[tid]
+          const team = ctx.teamsIndex[tid]
           if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
           const isMember =
             team.ownerId === user.uid ||
@@ -232,6 +240,21 @@ export default async function handler(req, res) {
         }
         list.teamShares = unique
         newlyAddedTeamShares = unique.filter((tid) => !prevTeamShares.has(tid))
+      }
+
+      if (body.visibility !== undefined || body.sharedMemberUids !== undefined) {
+        try {
+          const patched = applyResourceVisibilityPatch(list, body, ctx)
+          list.visibility = patched.visibility
+          list.teamId = patched.teamId
+          list.sharedMemberUids = patched.sharedMemberUids
+          if (patched.teamShares?.length) list.teamShares = patched.teamShares
+          if (patched.visibility === 'team' && ctx.team?.id) {
+            newlyAddedTeamShares = prevTeamShares.has(ctx.team.id) ? newlyAddedTeamShares : [...newlyAddedTeamShares, ctx.team.id]
+          }
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
       }
 
       if (name !== undefined) {
@@ -270,7 +293,7 @@ export default async function handler(req, res) {
       if (isOwner && teamShares !== undefined && newlyAddedTeamShares.length > 0) {
         try {
           const { notifyTeamResourceShare } = await import('./push-utils.js')
-          await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
+          await notifyTeamResourceShare(newlyAddedTeamShares, ctx.teamsIndex, {
             resourceType: 'list',
             resourceName: list.name,
             resourceId: list.id,
@@ -281,6 +304,47 @@ export default async function handler(req, res) {
         }
       }
 
+      try {
+        const { logTeamActivity, actorLabel, teamIdsFromResource } = await import('./lib/activityLog.js')
+        const teamIds = teamIdsFromResource(list)
+        const label = actorLabel(user)
+        if (newlyAddedTeamShares.length > 0) {
+          for (const tid of newlyAddedTeamShares) {
+            await logTeamActivity({
+              teamIds: [tid],
+              actor: user,
+              type: 'list.shared',
+              summary: `${label} shared list "${list.name}" with the team`,
+              entity: { kind: 'list', listId: list.id },
+              nav: { type: 'list', listId: list.id },
+              audience: activityAudienceForResource(list),
+            })
+          }
+        }
+        if (teamIds.length > 0 && newParcels && Array.isArray(newParcels) && newParcels.length > 0) {
+          await logTeamActivity({
+            teamIds,
+            actor: user,
+            type: 'list.parcel_added',
+            summary: `${label} added ${newParcels.length} parcel${newParcels.length === 1 ? '' : 's'} to "${list.name}"`,
+            entity: { kind: 'list', listId: list.id },
+            nav: { type: 'list', listId: list.id },
+          })
+        }
+        if (teamIds.length > 0 && removeParcels && Array.isArray(removeParcels) && removeParcels.length > 0) {
+          await logTeamActivity({
+            teamIds,
+            actor: user,
+            type: 'list.parcel_removed',
+            summary: `${label} removed ${removeParcels.length} parcel${removeParcels.length === 1 ? '' : 's'} from "${list.name}"`,
+            entity: { kind: 'list', listId: list.id },
+            nav: { type: 'list', listId: list.id },
+          })
+        }
+      } catch (e) {
+        console.warn('list activity log', e.message)
+      }
+
       return res.status(200).json({ list })
     }
 
@@ -288,10 +352,12 @@ export default async function handler(req, res) {
       const { listId } = body
       if (!listId) return res.status(400).json({ error: 'listId is required' })
 
-      const all = await getAllLists()
+      const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
+      const ctx = buildAccessContext(allTeams, user)
       const idx = all.findIndex((l) => l.id === listId)
       if (idx === -1) return res.status(404).json({ error: 'List not found' })
-      if (all[idx].ownerId !== user.uid) {
+      const access = getResourceAccess(all[idx], user, ctx)
+      if (!canDelete(access)) {
         return res.status(403).json({ error: 'Only the list owner can delete this list' })
       }
       all.splice(idx, 1)

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Mail, Send, Edit2, CheckCircle2, Loader2 } from 'lucide-react'
+import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -137,24 +138,7 @@ export function BulkEmailPreview({
     }}>
       <DialogContent className="map-panel email-panel max-w-3xl max-h-[90vh] p-0" showCloseButton={false} topLayer>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
-          <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
-              <Mail className="h-5 w-5 shrink-0" />
-              <span className="truncate">Email Preview & Confirmation</span>
-            </DialogTitle>
-            <div className="map-panel-header-actions">
-              {!isSending && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onClose}
-                  title="Close"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
+          <PanelHeader onBack={onClose} title="Email Preview & Confirmation" icon={Mail} />
           <DialogDescription>
             Preview and confirm bulk email sending
           </DialogDescription>

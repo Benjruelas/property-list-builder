@@ -1,1235 +1,353 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Phone, Mail, User, Pencil, Star, Trash2, Plus, Check, CheckSquare, Square, Search, Loader2, Calendar, MoreVertical, ArrowRightLeft, Archive, RefreshCw, BadgeCheck } from 'lucide-react'
+import { Phone, Mail, MapPin, Pencil, Trash2, Briefcase, ChevronRight, MoreVertical, Plus } from 'lucide-react'
 import { Button } from './ui/button'
+import { PanelBackButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { DirectionsPicker } from './DirectionsPicker'
-import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts, deleteSkipTracedParcel, saveSkipTracedParcel, skipTraceParcels, buildSkipTraceRequest } from '@/utils/skipTrace'
-import { getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
-import { splitOwnerName, composeFullName, displayLeadName } from '@/utils/ownerName'
-import { getLeadTasks, addLeadTask, toggleLeadTask, updateLeadTaskTitle, deleteLeadTask, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate } from '@/utils/leadTasks'
-import { addTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
-import { getMembersForTeamSharedPipeline, formatAssigneeList } from '@/utils/teamTaskUtils'
-import { TeamMemberAssignSectionLight } from '@/components/TeamMemberAssignSection'
-import { PipeIcon } from './PipeIcon'
-import { togglePipelineTask, updatePipelineTask, removePipelineTask } from '@/utils/pipelineTasks'
+import { cn } from '@/lib/utils'
+import { displayLeadName, formatLeadAddress, deleteLead, updateLead } from '@/utils/leads'
+import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
+import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
+import { findDealsForLead } from '@/utils/deals'
+import { formatTimeInState } from '@/utils/dealPipeline'
+import { LeadTasksSection } from './LeadTasksSection'
+import { DealProfitBadge } from './DealLineItemsSection'
 import { showToast } from './ui/toast'
-import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
-import {
-  getClosedLeadNote,
-  saveClosedLeadNote,
-  getClosedLeadTasks,
-  addClosedLeadTask,
-  toggleClosedLeadTask,
-  updateClosedLeadTaskTitle,
-  deleteClosedLeadTask,
-  getClosedLeadContacts,
-  updateClosedLeadContacts,
-  updateClosedLeadContactMeta,
-  saveClosedLeadSkipTraceResult,
-  getClosedLeadById,
-  updateClosedLead
-} from '@/utils/closedLeads'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
+import { showConfirm } from './ui/confirm-dialog'
 
-const TASK_MENU_WIDTH = 160
-const TASK_MENU_HEIGHT = 200
-const PADDING = 8
-
-/**
- * Tiny badge indicating how confident we are that a contact belongs to the
- * parcel owner. Rendered next to callerId on phones/emails. Skip-trace results
- * whose callerId doesn't match the owner are already filtered out server-side
- * (see api/skip-trace.js + api/lib/ownerNameMatch.js); this badge differentiates
- * a first+last exact match ("high") from a last-name-only or initial match
- * ("medium").
- */
-// Lead Details body: shared icon column so Phone/Mail/checkboxes share one vertical edge
-const leadDetailsIconCol = 'w-5 shrink-0 flex items-center justify-center text-gray-500'
-const leadDetailsTaskCheckCol = 'w-5 shrink-0 flex items-center justify-center self-start text-gray-600 pt-0.5'
-const leadDetailsIconSpacer = 'w-5 shrink-0'
-/** Offset to align controls with contact line text: icon col (w-5) + row gap-2 */
-const leadDetailsTextAlignPad = 'pl-7'
-/** Match Tasks header add button: h-7 w-7 so ⋮ / trash line up with the + control */
-const leadDetailsTaskActionCol = 'h-7 w-7 shrink-0 flex items-center justify-center self-start'
-
-function OwnerMatchBadge({ confidence }) {
-  if (confidence !== 'high' && confidence !== 'medium') return null
-  const isHigh = confidence === 'high'
-  const title = isHigh
-    ? 'Verified owner match (first + last name)'
-    : 'Probable owner match (partial name match)'
-  const color = isHigh ? 'text-emerald-500' : 'text-amber-500'
-  return (
-    <BadgeCheck
-      className={`h-3.5 w-3.5 flex-shrink-0 ${color}`}
-      aria-label={title}
-      title={title}
-    />
-  )
+function getColumnName(colId, columns) {
+  const col = columns?.find((c) => c.id === colId)
+  return col?.name || colId
 }
 
-function positionTaskMenu(rect) {
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 0
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 0
-  let top = rect.bottom + 4
-  // Align menu's right edge with button's right edge so menu opens leftward (matches task list)
-  let left = rect.right - TASK_MENU_WIDTH
-  if (top + TASK_MENU_HEIGHT > vh - PADDING) top = Math.max(PADDING, rect.top - TASK_MENU_HEIGHT - 4)
-  if (left + TASK_MENU_WIDTH > vw - PADDING) left = vw - TASK_MENU_WIDTH - PADDING
-  if (left < PADDING) left = PADDING
-  return { top, left }
-}
+const MENU_WIDTH = 180
+const MENU_PADDING = 8
 
 /**
- * LeadDetails - Compact panel when a lead is clicked in the Deal Pipeline.
- * Shows owner, address, skip trace data (if available), or a skip trace button.
+ * Lead-only detail panel — contact info, notes, linked deals.
  */
-export function LeadDetails({ isOpen, onClose, lead, parcelData, pipelineId = null, pipelineName = null, pipelineTeamShares = [], teams = [], pipelines = [], onPipelinesChange, getToken = null, onTeamTasksChange, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, isSkipTracingInProgress, onLeadUpdate, onTasksChange, onOpenAddTask, onViewTaskOnSchedule, onOpenEditTask, onRequestMoveLead, onRequestRemoveLead, onRequestCloseLead, onGoToParcelOnMap, onGoToPipeline, closedRecord = null, onRequestReopenLead, onRequestDeleteClosedLead, taskListEpoch = 0 }) {
-  const isClosed = !!closedRecord
-  const closedId = closedRecord?.id || null
-  const [closedSnap, setClosedSnap] = useState(closedRecord)
-  useEffect(() => { setClosedSnap(closedRecord) }, [closedRecord])
-  const refreshClosedSnap = () => {
-    if (!closedId) return
-    setClosedSnap(getClosedLeadById(closedId))
-  }
-  const { scheduleSync } = useUserDataSync()
-  const [skipTracedInfo, setSkipTracedInfo] = useState(null)
-  const [editContacts, setEditContacts] = useState(false)
-  const contactsEditSnapshot = useRef(null)
-  const [newPhone, setNewPhone] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [tasks, setTasks] = useState([])
-  const [showTeamTaskInput, setShowTeamTaskInput] = useState(false)
-  const [teamTaskDraft, setTeamTaskDraft] = useState('')
-  const [teamTaskAssignUids, setTeamTaskAssignUids] = useState([])
-  const [teamTaskPending, setTeamTaskPending] = useState(false)
-  const [isEditingName, setIsEditingName] = useState(false)
-  const [firstNameDraft, setFirstNameDraft] = useState('')
-  const [lastNameDraft, setLastNameDraft] = useState('')
-  const [taskMenu, setTaskMenu] = useState(null)
-  const [pipeMenu, setPipeMenu] = useState(null)
-  const [note, setNote] = useState('')
-  const [isEditingNote, setIsEditingNote] = useState(false)
-  const [closedSkipTracing, setClosedSkipTracing] = useState(false)
+export function LeadDetails({
+  isOpen,
+  onClose,
+  lead,
+  pipelines = [],
+  getToken,
+  parcelData,
+  onOpenParcelDetails,
+  onEmailClick,
+  onPhoneClick,
+  onGoToParcelOnMap,
+  onLeadUpdate,
+  onEditLead,
+  onCreateDeal,
+  onOpenDeal,
+  onLeadDeleted,
+  nestedOverlay = true,
+  topLayer = false,
+  teams = [],
+  teamMembership = null,
+  onPipelinesChange,
+  onOpenScheduleAtDate,
+  leads = [],
+  taskListEpoch = 0,
+  currentUserId = null,
+}) {
+  const activeTeam = teams?.[0] || null
+  const allowExternalSharing = teamMembership?.allowExternalSharing === true
+  const [notes, setNotes] = useState('')
+  const [notesDirty, setNotesDirty] = useState(false)
+  const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
+  const [savingShares, setSavingShares] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState(null)
 
-  const parcelId = lead?.parcelId || parcelData?.id
-
-  const readNote = () => {
-    if (isClosed) return getClosedLeadNote(closedSnap)
-    return parcelId ? (getParcelNote(parcelId) || '') : ''
-  }
-  const writeNote = (v) => {
-    if (isClosed) {
-      saveClosedLeadNote(closedId, v)
-      refreshClosedSnap()
-      return
-    }
-    if (parcelId) saveParcelNote(parcelId, v)
-  }
-
-  // Collect tasks from pipeline docs for this lead's parcel. Memoized so
-  // identity only changes when pipelines or parcelId actually changes,
-  // avoiding effect / render churn when a parent re-renders with the same
-  // pipelines reference.
-  const pipelineScopedTasksForParcel = useMemo(() => {
-    if (!parcelId || !Array.isArray(pipelines) || pipelines.length === 0) return []
-    const out = []
-    for (const p of pipelines) {
-      if (!p || !Array.isArray(p.tasks)) continue
-      for (const t of p.tasks) {
-        if (!t || t.parcelId !== parcelId) continue
-        out.push({ ...t, pipelineId: p.id, __source: 'pipeline' })
-      }
-    }
-    return out
-  }, [pipelines, parcelId])
-
-  const readTasks = () => {
-    if (isClosed) return getClosedLeadTasks(closedSnap)
-    if (!parcelId) return []
-    const personal = getLeadTasks(parcelId, null)
-    return [...personal, ...pipelineScopedTasksForParcel]
-  }
-
-  const refreshTasks = () => {
-    if (isClosed) { refreshClosedSnap(); setTasks(getClosedLeadTasks(getClosedLeadById(closedId))) }
-    else if (parcelId) {
-      const personal = getLeadTasks(parcelId, null)
-      setTasks([...personal, ...pipelineScopedTasksForParcel])
-    }
-    onTasksChange?.()
-  }
-
-  const hasTeamSharing = Array.isArray(pipelineTeamShares) && pipelineTeamShares.length > 0
-  const hasMixedTaskSources = useMemo(
-    () => hasTeamSharing || pipelineScopedTasksForParcel.length > 0,
-    [hasTeamSharing, pipelineScopedTasksForParcel]
-  )
-  const teamTasks = Array.isArray(lead?.teamTasks) ? lead.teamTasks : []
-  const canMutateTeamTasks = !!(pipelineId && lead?.id && getToken)
-  const teamAssignMembers = useMemo(() => {
-    if (!hasTeamSharing || !pipelineId) return []
-    const pipe = (pipelines || []).find((p) => p.id === pipelineId)
-    if (!pipe) return []
-    return getMembersForTeamSharedPipeline(pipe, teams)
-  }, [hasTeamSharing, pipelineId, pipelines, teams])
-
-  const handleAddTeamTask = async () => {
-    const title = teamTaskDraft.trim()
-    if (!title || !canMutateTeamTasks) return
-    setTeamTaskPending(true)
-    try {
-      await addTeamTask(getToken, pipelineId, lead.id, {
-        title,
-        assignedUids: teamTaskAssignUids
+  useEffect(() => {
+    if (lead) {
+      setNotes(lead.notes || '')
+      setNotesDirty(false)
+      const norm = normalizeResourceVisibility(lead)
+      setShareState({
+        visibility: norm.visibility || VISIBILITY.PRIVATE,
+        sharedMemberUids: norm.sharedMemberUids || [],
       })
-      setTeamTaskDraft('')
-      setTeamTaskAssignUids([])
-      setShowTeamTaskInput(false)
-      onTeamTasksChange?.()
+    }
+  }, [lead])
+
+  useEffect(() => {
+    setMenuOpen(false)
+    setMenuAnchor(null)
+  }, [lead?.id, isOpen])
+
+  const linkedDeals = useMemo(() => {
+    if (!lead?.id) return []
+    return findDealsForLead(pipelines, lead.id)
+  }, [lead, pipelines])
+
+  if (!isOpen || !lead) return null
+
+  const name = displayLeadName(lead)
+  const address = formatLeadAddress(lead)
+  const isOwner = currentUserId && lead.ownerId === currentUserId
+
+  const saveNotes = () => {
+    if (!notesDirty) return
+    onLeadUpdate?.({ ...lead, notes, updatedAt: new Date().toISOString() })
+    setNotesDirty(false)
+  }
+
+  const handleDelete = async () => {
+    const ok = await showConfirm(
+      'Delete this lead?',
+      linkedDeals.length > 0
+        ? `This lead has ${linkedDeals.length} deal(s) in pipes. Delete anyway?`
+        : 'This cannot be undone.'
+    )
+    if (!ok) return
+    try {
+      await deleteLead(getToken, lead.id)
+      showToast('Lead deleted', 'success')
+      onLeadDeleted?.()
+      onClose?.()
     } catch (e) {
-      showToast(e.message || 'Failed to add team task', 'error')
+      showToast(e.message || 'Could not delete lead', 'error')
+    }
+  }
+
+  const closeMenu = () => {
+    setMenuOpen(false)
+    setMenuAnchor(null)
+  }
+
+  const openMenu = (event) => {
+    event.stopPropagation()
+    const rect = event.currentTarget.getBoundingClientRect()
+    let top = rect.bottom + 4
+    let left = rect.right - MENU_WIDTH
+    if (left < MENU_PADDING) left = MENU_PADDING
+    if (left + MENU_WIDTH > window.innerWidth - MENU_PADDING) {
+      left = window.innerWidth - MENU_WIDTH - MENU_PADDING
+    }
+    const menuHeight = 140
+    if (top + menuHeight > window.innerHeight - MENU_PADDING) {
+      top = Math.max(MENU_PADDING, rect.top - menuHeight - 4)
+    }
+    setMenuAnchor({ top, left })
+    setMenuOpen(true)
+  }
+
+  const handleShareChange = async (next) => {
+    if (!isOwner || !getToken) return
+    setShareState(next)
+    setSavingShares(true)
+    try {
+      const saved = await updateLead(getToken, lead.id, {
+        visibility: next.visibility,
+        sharedMemberUids: next.sharedMemberUids,
+        teamId: activeTeam?.id || null,
+        teamShares: next.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
+      })
+      onLeadUpdate?.(saved)
+      showToast('Sharing updated', 'success')
+    } catch (e) {
+      const norm = normalizeResourceVisibility(lead)
+      setShareState({
+        visibility: norm.visibility || VISIBILITY.PRIVATE,
+        sharedMemberUids: norm.sharedMemberUids || [],
+      })
+      showToast(e.message || 'Could not update sharing', 'error')
     } finally {
-      setTeamTaskPending(false)
+      setSavingShares(false)
     }
   }
-
-  const handleToggleTeamTask = async (taskId) => {
-    if (!canMutateTeamTasks) return
-    try {
-      await toggleTeamTask(getToken, pipelineId, lead.id, taskId)
-      onTeamTasksChange?.()
-    } catch (e) {
-      showToast(e.message || 'Failed to update team task', 'error')
-    }
-  }
-
-  const handleRemoveTeamTask = async (taskId) => {
-    if (!canMutateTeamTasks) return
-    try {
-      await removeTeamTask(getToken, pipelineId, lead.id, taskId)
-      onTeamTasksChange?.()
-    } catch (e) {
-      showToast(e.message || 'Failed to remove team task', 'error')
-    }
-  }
-
-  const refreshSkipTrace = () => {
-    if (isClosed) {
-      const rec = getClosedLeadById(closedId)
-      setClosedSnap(rec)
-      setSkipTracedInfo(getClosedLeadContacts(rec))
-      return
-    }
-    if (parcelId) setSkipTracedInfo(getSkipTracedParcel(parcelId))
-  }
-  const fullAddr = (lead || parcelData) ? getFullAddress(lead || parcelData) : ''
-  const address = (fullAddr && fullAddr !== 'Unknown' ? fullAddr : null) || lead?.address || parcelData?.address || parcelData?.properties?.SITUS_ADDR || parcelData?.properties?.SITE_ADDR || 'No address available'
-  const displayName = displayLeadName(lead, parcelData?.properties)
-
-  useEffect(() => {
-    if (isOpen && isClosed && closedId) {
-      const rec = getClosedLeadById(closedId) || closedRecord
-      setClosedSnap(rec)
-      setSkipTracedInfo(getClosedLeadContacts(rec))
-      setTasks(getClosedLeadTasks(rec))
-      setNote(getClosedLeadNote(rec))
-      setIsEditingNote(false)
-    } else if (isOpen && parcelId) {
-      const info = getSkipTracedParcel(parcelId)
-      setSkipTracedInfo(info)
-      setTasks(readTasks())
-      setNote(getParcelNote(parcelId) || '')
-      setIsEditingNote(false)
-    } else {
-      setSkipTracedInfo(null)
-      setTasks([])
-      setTaskMenu(null)
-      setPipeMenu(null)
-      setNote('')
-      setIsEditingNote(false)
-    }
-  }, [isOpen, parcelId, pipelineId, isClosed, closedId, closedRecord])
-
-  // Refresh task list when pipeline-scoped tasks for this parcel change
-  // (e.g. a teammate added/completed a task on a shared pipe). Uses the
-  // memoized derived value so we only react to real data changes.
-  useEffect(() => {
-    if (!isOpen || isClosed || !parcelId) return
-    const personal = getLeadTasks(parcelId, null)
-    setTasks([...personal, ...pipelineScopedTasksForParcel])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipelineScopedTasksForParcel, isOpen, isClosed, parcelId, taskListEpoch])
-
-  useEffect(() => {
-    setEditContacts(false)
-    setNewPhone('')
-    setNewEmail('')
-    contactsEditSnapshot.current = null
-  }, [isOpen, parcelId, closedId, isClosed])
-
-  if (!lead && !parcelData) return null
-
-  const dataForParcelDetails = parcelData || {
-    id: parcelId,
-    address,
-    properties: lead?.properties || { OWNER_NAME: displayName, SITUS_ADDR: address, LATITUDE: lead?.lat, LONGITUDE: lead?.lng },
-    lat: lead?.lat,
-    lng: lead?.lng,
-  }
-
-  const handleViewParcelData = () => {
-    onOpenParcelDetails?.(dataForParcelDetails)
-    // Don't close LeadDetails - ParcelDetails opens on top; when ParcelDetails is closed, LeadDetails remains visible
-  }
-
-  const normalizePhone = (p) => (p || '').replace(/[^\d+]/g, '')
-
-  const handleSaveName = () => {
-    const firstName = firstNameDraft.trim()
-    const lastName = lastNameDraft.trim()
-    if (lead && (firstName || lastName)) {
-      const full = composeFullName(firstName, lastName)
-      // Mirror the edited name back into the cached parcel properties so
-      // template tags that still read OWNER_NAME stay in sync.
-      const nextProps = lead.properties
-        ? { ...lead.properties, OWNER_NAME: full || lead.properties.OWNER_NAME }
-        : lead.properties
-      const updated = {
-        ...lead,
-        firstName,
-        lastName,
-        owner: full || lead.owner,
-        properties: nextProps
-      }
-      onLeadUpdate?.(updated)
-      scheduleSync()
-    }
-    setIsEditingName(false)
-    setFirstNameDraft('')
-    setLastNameDraft('')
-  }
-
-  const handleStartEditName = () => {
-    // Prefer the structured fields when they exist; otherwise derive from
-    // the raw owner string (or parcel OWNER_NAME) so users get sensible
-    // defaults even for legacy leads created before first/last split.
-    const hasStructured = !!(lead?.firstName || lead?.lastName)
-    if (hasStructured) {
-      setFirstNameDraft(lead.firstName || '')
-      setLastNameDraft(lead.lastName || '')
-    } else {
-      const source = lead?.owner || parcelData?.properties?.OWNER_NAME || ''
-      const { firstName, lastName } = splitOwnerName(source)
-      setFirstNameDraft(firstName)
-      setLastNameDraft(lastName)
-    }
-    setIsEditingName(true)
-  }
-
-  const handleSaveNote = () => {
-    if (isClosed) {
-      writeNote(note)
-    } else {
-      if (!parcelId) return
-      saveParcelNote(parcelId, note)
-    }
-    scheduleSync()
-    setIsEditingNote(false)
-  }
-
-  const handleCancelNote = () => {
-    setNote(readNote())
-    setIsEditingNote(false)
-  }
-
-  const phoneDetails = skipTracedInfo?.phoneDetails || (skipTracedInfo?.phoneNumbers || (skipTracedInfo?.phone ? [skipTracedInfo.phone] : [])).map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 }))
-  const emailDetails = skipTracedInfo?.emailDetails || (skipTracedInfo?.emails || (skipTracedInfo?.email ? [skipTracedInfo.email] : [])).map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 }))
-  const hasSkipTraced = !!skipTracedInfo?.skipTracedAt
-  const hasAnyContact = phoneDetails.length > 0 || emailDetails.length > 0
-
-  const applyContactMeta = (type, value, meta) => {
-    if (isClosed) updateClosedLeadContactMeta(closedId, type, value, meta)
-    else updateContactMeta(parcelId, type, value, meta)
-  }
-  const applyContactsUpdate = (type, newDetails) => {
-    if (isClosed) updateClosedLeadContacts(closedId, type, newDetails)
-    else updateSkipTracedContacts(parcelId, type, newDetails)
-  }
-
-  const startEditContacts = () => {
-    contactsEditSnapshot.current =
-      skipTracedInfo == null
-        ? null
-        : JSON.parse(JSON.stringify(skipTracedInfo))
-    setNewPhone('')
-    setNewEmail('')
-    setEditContacts(true)
-  }
-  const acceptEditContacts = () => {
-    setNewPhone('')
-    setNewEmail('')
-    setEditContacts(false)
-    contactsEditSnapshot.current = null
-    scheduleSync()
-  }
-  const cancelEditContacts = () => {
-    const snap = contactsEditSnapshot.current
-    if (isClosed) {
-      if (snap == null) updateClosedLead(closedId, () => ({ contacts: null }))
-      else
-        updateClosedLead(closedId, () => ({
-          contacts: JSON.parse(JSON.stringify(snap))
-        }))
-    } else if (snap == null) {
-      if (parcelId) deleteSkipTracedParcel(parcelId)
-    } else {
-      saveSkipTracedParcel(
-        parcelId,
-        { ...JSON.parse(JSON.stringify(snap)) },
-        { merge: false }
-      )
-    }
-    setNewPhone('')
-    setNewEmail('')
-    setEditContacts(false)
-    contactsEditSnapshot.current = null
-    refreshSkipTrace()
-    scheduleSync()
-  }
-
-  // Find a task in the currently rendered list so we can route mutations to
-  // the right store (pipeline vs personal vs closed).
-  const findTask = (taskId) => tasks.find((t) => t.id === taskId) || null
-
-  const doToggleTask = async (taskId) => {
-    if (isClosed) { toggleClosedLeadTask(closedId, taskId); return }
-    const t = findTask(taskId)
-    if (t && t.__source === 'pipeline' && t.pipelineId) {
-      try {
-        await togglePipelineTask(getToken, t.pipelineId, t.id)
-        await onPipelinesChange?.()
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
-      return
-    }
-    toggleLeadTask(parcelId, taskId)
-  }
-  const doDeleteTask = async (taskId) => {
-    if (isClosed) { deleteClosedLeadTask(closedId, taskId); return }
-    const t = findTask(taskId)
-    if (t && t.__source === 'pipeline' && t.pipelineId) {
-      try {
-        await removePipelineTask(getToken, t.pipelineId, t.id)
-        await onPipelinesChange?.()
-      } catch (err) {
-        showToast(err.message || 'Could not delete task', 'error')
-      }
-      return
-    }
-    deleteLeadTask(parcelId, taskId)
-  }
-  const doUpdateTaskTitle = async (taskId, title) => {
-    if (isClosed) { updateClosedLeadTaskTitle(closedId, taskId, title); return }
-    const t = findTask(taskId)
-    if (t && t.__source === 'pipeline' && t.pipelineId) {
-      try {
-        await updatePipelineTask(getToken, t.pipelineId, { id: t.id, title })
-        await onPipelinesChange?.()
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
-      return
-    }
-    updateLeadTaskTitle(parcelId, taskId, title)
-  }
-
-  const closedDate = closedSnap?.closedAt
-    ? new Date(closedSnap.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    : ''
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o && !pipeMenu) onClose?.() }}>
-      <DialogContent className="map-panel lead-details-panel max-w-xs min-w-0 overflow-x-hidden p-0 rounded-2xl" showCloseButton={false} blurOverlay onPointerDownOutside={(e) => { if (pipeMenu) e.preventDefault() }} onInteractOutside={(e) => { if (pipeMenu) e.preventDefault() }}>
-        <DialogHeader className="px-4 pt-4 pb-3 border-b border-gray-200">
-          <DialogDescription className="sr-only">Lead details, notes, contact information, and tasks</DialogDescription>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose?.() }}>
+      <DialogContent
+        className="map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
+        showCloseButton={false}
+        nestedOverlay={nestedOverlay}
+        topLayer={topLayer}
+      >
+        <DialogHeader
+          className="px-5 pt-5 pb-3 border-b border-white/20 flex-shrink-0 text-left"
+          style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}
+        >
+          <DialogDescription className="sr-only">Lead details</DialogDescription>
           <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-lg font-semibold flex items-center min-w-0">
-              <User className="h-5 w-5 shrink-0" />
-            </DialogTitle>
+            <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
+              <PanelBackButton onClick={onClose} />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-xl font-semibold truncate">{name}</DialogTitle>
+                <p className="text-xs opacity-50 truncate mt-0.5" title={lead.address || undefined}>{address}</p>
+              </div>
+            </div>
             <div className="map-panel-header-actions gap-1">
-              <DirectionsPicker lat={dataForParcelDetails?.lat} lng={dataForParcelDetails?.lng} />
-              {(isClosed ? (onRequestReopenLead || onRequestDeleteClosedLead) : (lead && (onRequestCloseLead || (pipelineId && (onRequestMoveLead || onRequestRemoveLead))))) && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Lead options"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect()
-                    setPipeMenu(prev => prev ? null : { anchor: positionTaskMenu(rect) })
-                  }}
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              )}
-              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-                <X className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(menuOpen && 'opacity-90')}
+                onClick={openMenu}
+                title="Options"
+              >
+                <MoreVertical className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="min-w-0 max-w-full overflow-x-hidden px-4 py-4 space-y-4 text-left bg-transparent">
-          <div className="space-y-1">
-            {isEditingName ? (
-              <div className="space-y-2">
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    value={firstNameDraft}
-                    onChange={(e) => setFirstNameDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveName()
-                      if (e.key === 'Escape') { setIsEditingName(false); setFirstNameDraft(''); setLastNameDraft('') }
-                    }}
-                    className="border rounded px-2 py-1.5 text-sm font-bold flex-1 min-w-0"
-                    autoFocus
-                    placeholder="First name"
-                  />
-                  <input
-                    type="text"
-                    value={lastNameDraft}
-                    onChange={(e) => setLastNameDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveName()
-                      if (e.key === 'Escape') { setIsEditingName(false); setFirstNameDraft(''); setLastNameDraft('') }
-                    }}
-                    className="border rounded px-2 py-1.5 text-sm font-bold flex-1 min-w-0"
-                    placeholder="Last name"
-                  />
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                  <Button variant="ghost" size="sm" onClick={() => { setIsEditingName(false); setFirstNameDraft(''); setLastNameDraft('') }}>Cancel</Button>
-                  <Button variant="default" size="sm" onClick={handleSaveName}>Save</Button>
-                </div>
-              </div>
-            ) : (
+        <div
+          className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 space-y-4 min-h-0"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <div className="space-y-2">
+            {lead.phone && (
               <button
                 type="button"
-                onClick={lead ? handleStartEditName : undefined}
-                className={`text-gray-900 font-bold block text-left ${lead ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-                title={lead ? 'Click to edit name' : undefined}
+                className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80"
+                onClick={() => onPhoneClick?.(lead.phone, parcelData)}
               >
-                {displayName || (lead ? 'Click to add name' : '—')}
+                <Phone className="h-4 w-4 opacity-50 shrink-0" />
+                <span>{lead.phone}</span>
+              </button>
+            )}
+            {lead.email && (
+              <button
+                type="button"
+                className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80 truncate"
+                onClick={() => onEmailClick?.(lead.email, parcelData)}
+              >
+                <Mail className="h-4 w-4 opacity-50 shrink-0" />
+                <span className="truncate">{lead.email}</span>
+              </button>
+            )}
+            {lead.parcelId && (
+              <button
+                type="button"
+                className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80"
+                onClick={() => onGoToParcelOnMap?.(parcelData) || onOpenParcelDetails?.(parcelData)}
+              >
+                <MapPin className="h-4 w-4 opacity-50 shrink-0" />
+                <span>View on map</span>
               </button>
             )}
           </div>
 
-          <div className="space-y-1 pt-3 border-t border-gray-200">
-            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
-            <button
-              type="button"
-              onClick={() => {
-                const data = { ...dataForParcelDetails }
-                onGoToParcelOnMap?.(data)
-                onClose?.()
-              }}
-              className="text-blue-400 hover:text-blue-300 hover:underline text-left transition-colors"
-            >
-              {address}
-            </button>
-          </div>
-
-          {/* Notes — same parcel-level notes as More Details / lists */}
-          {parcelId && (
-            <div className="space-y-2 pt-3 border-t border-gray-200">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Notes</div>
-              {isEditingNote ? (
-                <div className="space-y-2">
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Add a note..."
-                    className="w-full min-h-[72px] p-2.5 rounded-lg text-sm resize-y border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                    rows={3}
-                    autoFocus
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="ghost" size="sm" type="button" onClick={handleCancelNote}>
-                      Cancel
-                    </Button>
-                    <Button size="sm" type="button" onClick={handleSaveNote}>
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              ) : note ? (
-                <button
-                  type="button"
-                  onClick={() => setIsEditingNote(true)}
-                  className="w-full text-left rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 hover:bg-gray-100 transition-colors whitespace-pre-wrap"
-                  title="Edit note"
-                >
-                  {note}
-                </button>
+          {(activeTeam && (isOwner || shareState.visibility !== VISIBILITY.PRIVATE)) && (
+            <section>
+              {isOwner ? (
+                <ResourceSharePicker
+                  team={activeTeam}
+                  visibility={shareState.visibility}
+                  sharedMemberUids={shareState.sharedMemberUids}
+                  onChange={handleShareChange}
+                  disabled={savingShares}
+                  allowExternalSharing={allowExternalSharing}
+                />
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsEditingNote(true)}
-                  className="w-full text-left rounded-lg border border-dashed border-gray-300 px-3 py-2.5 text-sm text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors"
-                >
-                  + Add a note…
-                </button>
+                <div className="flex items-center gap-2">
+                  <VisibilityBadge resource={lead} />
+                </div>
               )}
-            </div>
+            </section>
           )}
 
-          <div className="space-y-1.5 pt-3 border-t border-gray-200 flex flex-col items-start">
-              <div className="flex items-center gap-2 w-full justify-between">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Info</span>
-                {editContacts ? (
-                  <div className="flex items-center gap-0.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700"
-                      onClick={acceptEditContacts}
-                      title="Save"
-                      type="button"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-gray-500 hover:text-gray-800"
-                      onClick={cancelEditContacts}
-                      title="Cancel"
-                      type="button"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    onClick={startEditContacts}
-                    title="Edit contact info"
-                    type="button"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
-              {phoneDetails.map((p, idx) => (
-                <div key={`p-${idx}`} className="flex min-w-0 w-full max-w-full items-center justify-between gap-2 text-sm group">
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <div className={leadDetailsIconCol} aria-hidden>
-                      <Phone className="h-4 w-4" />
-                    </div>
-                    {onPhoneClick ? (
-                      <button
-                        type="button"
-                        onClick={() => onPhoneClick(p.value, dataForParcelDetails)}
-                        className="min-w-0 max-w-full flex-1 text-left text-blue-600 hover:underline truncate"
-                      >
-                        {p.value}
-                      </button>
-                    ) : (
-                      <a href={`tel:${normalizePhone(p.value)}`} className="min-w-0 max-w-full flex-1 truncate text-blue-600 hover:underline">{p.value}</a>
-                    )}
-                    <OwnerMatchBadge confidence={p.matchConfidence} />
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {editContacts && (
-                      <button
-                        type="button"
-                        onClick={() => { applyContactMeta('phone', p.value, { primary: !p.primary }); refreshSkipTrace(); scheduleSync() }}
-                        title={p.primary ? 'Remove from primary' : 'Set as primary'}
-                        className="text-amber-500 hover:text-amber-600"
-                      >
-                        {p.primary ? <Star className="h-4 w-4 fill-current" /> : <Star className="h-4 w-4" />}
-                      </button>
-                    )}
-                    {editContacts && (
-                      <button
-                        type="button"
-                        onClick={() => { applyContactsUpdate('phone', phoneDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
-                        className="text-red-500 hover:text-red-600 opacity-70 hover:opacity-100 p-0.5"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {editContacts && (
-                <div className="flex items-center gap-2 justify-start w-full">
-                  <div className={leadDetailsIconSpacer} aria-hidden />
-                  <input
-                    type="tel"
-                    placeholder="Add phone"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    className="border rounded px-2 py-1 text-sm w-36"
-                    onKeyDown={(e) => { if (e.key === 'Enter') { applyContactsUpdate('phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 lead-details-add-btn"
-                    onClick={() => { if (newPhone.trim()) { applyContactsUpdate('phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }]); setNewPhone(''); refreshSkipTrace(); scheduleSync() } }}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
-              {emailDetails.map((e, idx) => (
-                <div key={`e-${idx}`} className="flex min-w-0 w-full max-w-full items-center justify-between gap-2 text-sm group">
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <div className={leadDetailsIconCol} aria-hidden>
-                      <Mail className="h-4 w-4" />
-                    </div>
-                    {onEmailClick ? (
-                      <button type="button" onClick={() => onEmailClick(e.value, dataForParcelDetails)} className="min-w-0 max-w-full flex-1 text-left text-sky-600 hover:underline truncate">{e.value}</button>
-                    ) : (
-                      <span className="min-w-0 max-w-full flex-1 text-gray-900 truncate">{e.value}</span>
-                    )}
-                    <OwnerMatchBadge confidence={e.matchConfidence} />
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {editContacts && (
-                      <button
-                        type="button"
-                        onClick={() => { applyContactMeta('email', e.value, { primary: !e.primary }); refreshSkipTrace(); scheduleSync() }}
-                        title={e.primary ? 'Remove from primary' : 'Set as primary'}
-                        className="text-amber-500 hover:text-amber-600"
-                      >
-                        {e.primary ? <Star className="h-4 w-4 fill-current" /> : <Star className="h-4 w-4" />}
-                      </button>
-                    )}
-                    {editContacts && (
-                      <button
-                        type="button"
-                        onClick={() => { applyContactsUpdate('email', emailDetails.filter((_, i) => i !== idx)); refreshSkipTrace(); scheduleSync() }}
-                        className="text-red-500 hover:text-red-600 opacity-70 hover:opacity-100 p-0.5"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {editContacts && (
-                <div className="flex items-center gap-2 justify-start w-full">
-                  <div className={leadDetailsIconSpacer} aria-hidden />
-                  <input
-                    type="email"
-                    placeholder="Add email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    className="border rounded px-2 py-1 text-sm w-44"
-                    onKeyDown={(e) => { if (e.key === 'Enter') { applyContactsUpdate('email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 lead-details-add-btn"
-                    onClick={() => { if (newEmail.trim()) { applyContactsUpdate('email', [...emailDetails, { value: newEmail.trim(), primary: emailDetails.length === 0 }]); setNewEmail(''); refreshSkipTrace(); scheduleSync() } }}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
-              {(onSkipTraceParcel || isClosed) && (!hasSkipTraced || editContacts) && (
-                <div className={`flex justify-start w-full ${leadDetailsTextAlignPad} ${hasAnyContact ? 'pt-1' : ''}`}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-green-400 hover:text-green-300 px-2"
-                    onClick={async () => {
-                      if (isClosed) {
-                        if (closedSkipTracing) return
-                        const previousFullAddress = skipTracedInfo?.address || ''
-                        const { payload: requestParcel, error: addressError } = buildSkipTraceRequest(
-                          { ...dataForParcelDetails, id: parcelId || closedId },
-                          { previousFullAddress }
-                        )
-                        if (addressError || !requestParcel) {
-                          showToast(addressError || 'No address available to skip trace', 'error')
-                          return
-                        }
-                        try {
-                          setClosedSkipTracing(true)
-                          const resp = await skipTraceParcels([requestParcel])
-                          const info = resp?.results?.[0]?.contactInfo || resp?.results?.[0] || null
-                          if (info && !info.error) {
-                            saveClosedLeadSkipTraceResult(closedId, {
-                              phoneDetails: info.phoneDetails,
-                              emailDetails: info.emailDetails,
-                              phoneNumbers: info.phoneNumbers,
-                              emails: info.emails,
-                              address: info.address,
-                              skipTracedAt: info.skipTracedAt || new Date().toISOString()
-                            }, { merge: hasSkipTraced })
-                            refreshSkipTrace()
-                            scheduleSync()
-                            const hasAny = (info.phoneDetails?.length || info.emailDetails?.length || info.phoneNumbers?.length || info.emails?.length)
-                            showToast(hasAny ? (hasSkipTraced ? 'Contact info refreshed' : 'Contact info added') : 'Skip trace completed — no contacts found', hasAny ? 'success' : 'warning')
-                          } else if (info?.error) {
-                            showToast(info.error, 'error')
-                          } else {
-                            showToast('Skip trace returned no data', 'warning')
-                          }
-                        } catch (e) {
-                          showToast(e.message || 'Skip trace failed', 'error')
-                        } finally {
-                          setClosedSkipTracing(false)
-                        }
-                        return
-                      }
-                      await onSkipTraceParcel(dataForParcelDetails)
-                      refreshSkipTrace()
-                    }}
-                    disabled={isClosed ? closedSkipTracing : isSkipTracingInProgress}
-                  >
-                    {(isClosed ? closedSkipTracing : isSkipTracingInProgress) ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4 mr-2" />
-                    )}
-                    {(isClosed ? closedSkipTracing : isSkipTracingInProgress)
-                      ? (hasSkipTraced ? 'Refreshing...' : 'Getting contact...')
-                      : (hasSkipTraced ? 'Refresh Contact Info' : 'Get Contact Info')}
-                  </Button>
-                </div>
-              )}
-            </div>
+          <section>
+            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Notes</h3>
+            <textarea
+              value={notes}
+              onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }}
+              onBlur={saveNotes}
+              rows={4}
+              className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none"
+              placeholder="Lead notes…"
+            />
+          </section>
 
-          {/* Team Tasks (visible to all team members with access to this pipeline) */}
-          {!isClosed && hasTeamSharing && canMutateTeamTasks && (
-            <div className="pt-3 border-t border-gray-200 space-y-2">
-              <div className="flex items-center gap-2 justify-between">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Team Tasks</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => {
-                    setShowTeamTaskInput((v) => {
-                      if (v) {
-                        setTeamTaskDraft('')
-                        setTeamTaskAssignUids([])
-                      }
-                      return !v
-                    })
-                  }}
-                  title="Add team task"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              {showTeamTaskInput && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className={leadDetailsIconSpacer} aria-hidden />
-                    <input
-                      type="text"
-                      value={teamTaskDraft}
-                      onChange={(e) => setTeamTaskDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddTeamTask()
-                        else if (e.key === 'Escape') {
-                          setShowTeamTaskInput(false)
-                          setTeamTaskDraft('')
-                          setTeamTaskAssignUids([])
-                        }
-                      }}
-                      placeholder="Team task title..."
-                      autoFocus
-                      disabled={teamTaskPending}
-                      className="border rounded px-2 py-1 text-sm min-w-0 flex-1"
-                    />
-                    <Button size="sm" onClick={handleAddTeamTask} disabled={teamTaskPending || !teamTaskDraft.trim()}>
-                      Add
-                    </Button>
-                  </div>
-                  {teamAssignMembers.length > 0 && (
-                    <TeamMemberAssignSectionLight
-                      members={teamAssignMembers}
-                      selectedUids={teamTaskAssignUids}
-                      onToggle={(uid) => {
-                        setTeamTaskAssignUids((prev) =>
-                          prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
-                        )
-                      }}
-                      disabled={teamTaskPending}
-                    />
-                  )}
-                </div>
-              )}
-              {teamTasks.length > 0 && (
-                <ul className="space-y-1.5">
-                  {teamTasks.map((task) => (
-                    <li key={task.id} className="flex items-start gap-2 text-sm group">
-                      <div className={leadDetailsTaskCheckCol}>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleTeamTask(task.id)}
-                          className="text-gray-600 hover:text-gray-900 flex items-center justify-center"
-                          title={task.completedAt ? 'Mark incomplete' : 'Mark done'}
-                        >
-                          {task.completedAt ? (
-                            <CheckSquare className="h-4 w-4 text-green-600 fill-green-600" />
-                          ) : (
-                            <Square className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={task.completedAt ? 'line-through text-gray-500' : 'text-gray-900'}>
-                            {task.title}
-                          </span>
-                          <span
-                            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wide"
-                            title="Shared with pipeline team"
-                          >
-                            Team
-                          </span>
-                        </div>
-                        {(formatAssigneeList(task.assignedUids, teams) ||
-                          task.completedAt ||
-                          task.createdByEmail) && (
-                          <div className="text-[11px] text-gray-500 mt-0.5 space-y-0.5">
-                            {(() => {
-                              const names = formatAssigneeList(task.assignedUids, teams)
-                              return names ? <div>Assigned: {names}</div> : null
-                            })()}
-                            {task.completedAt ? (
-                              <div>Completed {formatTaskCompletedDate(new Date(task.completedAt).getTime())}</div>
-                            ) : task.createdByEmail ? (
-                              <div>Added by {task.createdByEmail}</div>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                      <div className={leadDetailsTaskActionCol}>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTeamTask(task.id)}
-                          className="text-gray-400 hover:text-red-500 h-4 w-4 flex items-center justify-center p-0 opacity-70 group-hover:opacity-100"
-                          title="Delete team task"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          <LeadTasksSection
+            lead={lead}
+            leads={leads}
+            pipelines={pipelines}
+            teams={teams}
+            getToken={getToken}
+            onPipelinesChange={onPipelinesChange}
+            onOpenScheduleAtDate={onOpenScheduleAtDate}
+            refreshKey={taskListEpoch}
+          />
 
-          {/* Tasks */}
-          <div className="pt-3 border-t border-gray-200 space-y-2">
-            <div className="flex items-center gap-2 justify-between">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                {hasTeamSharing ? 'My Tasks' : 'Tasks'}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0 lead-details-add-btn"
-                onClick={() => {
-                  if (isClosed) {
-                    addClosedLeadTask(closedId, { title: '' })
-                    refreshTasks()
-                    scheduleSync()
-                    return
-                  }
-                  onOpenAddTask?.(lead)
-                }}
-                disabled={isClosed ? false : !onOpenAddTask}
-                title="Add task"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            {tasks.length > 0 && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Deals</h3>
+            {linkedDeals.length === 0 ? (
+              <p className="text-xs opacity-40 py-2">No deals yet. Add this lead to a pipe to start tracking.</p>
+            ) : (
               <ul className="space-y-1.5">
-                {tasks.map((task) => (
-                  <li key={task.id} className="flex items-start gap-2 text-sm group">
-                    <div className={leadDetailsTaskCheckCol}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          doToggleTask(task.id)
-                          refreshTasks()
-                          scheduleSync()
-                        }}
-                        className="text-gray-600 hover:text-gray-900 flex items-center justify-center"
-                        title={task.completed ? 'Mark incomplete' : 'Mark done'}
-                      >
-                        {task.completed ? (
-                          <CheckSquare className="h-4 w-4 text-green-600 fill-green-600" />
-                        ) : (
-                          <Square className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {task.title === '' ? (
-                        <input
-                          type="text"
-                          placeholder="Task title..."
-                          className="border rounded px-2 py-1 text-sm w-full"
-                          defaultValue=""
-                          onBlur={(e) => {
-                            const v = e.target.value.trim()
-                            if (!v) {
-                              doDeleteTask(task.id)
-                              refreshTasks()
-                            } else {
-                              doUpdateTaskTitle(task.id, v)
-                              refreshTasks()
-                            }
-                            scheduleSync()
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') e.target.blur()
-                          }}
-                        />
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={task.completed ? 'line-through text-gray-500' : 'text-gray-900'}>
-                              {task.title}
-                            </span>
-                            {!isClosed && task.__source === 'pipeline' ? (
-                              <span
-                                className="inline-flex items-center"
-                                title="Visible to everyone with access to this pipeline"
-                                aria-label="Pipeline task (shared with this pipeline)"
-                              >
-                                <PipeIcon className="h-3.5 w-3.5 text-violet-600 flex-shrink-0" />
-                              </span>
-                            ) : !isClosed && hasMixedTaskSources ? (
-                              <span
-                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase tracking-wide"
-                                title="Only you see this task"
-                              >
-                                Personal
-                              </span>
-                            ) : null}
-                          </div>
-                          {(task.completed || task.scheduledAt) && (
-                            <div className="text-[11px] text-gray-500 mt-0.5">
-                              <span>
-                                {task.completed
-                                  ? `Completed ${formatTaskCompletedDate(task.completedAt)}`
-                                  : `Scheduled: ${formatTaskScheduledDate(task.scheduledAt)}`}
-                              </span>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <div className={leadDetailsTaskActionCol}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setTaskMenu({ task, anchor: positionTaskMenu(rect) })
-                        }}
-                        className="text-gray-400 hover:text-gray-700 h-4 w-4 flex items-center justify-center p-0 opacity-70 group-hover:opacity-100"
-                        title="Task options"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
-                    </div>
+                {linkedDeals.map((d) => (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenDeal?.(d, d.__pipelineId)}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-left"
+                    >
+                      <Briefcase className="h-4 w-4 shrink-0 opacity-50" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm truncate">{d.title || d.leadAddress}</div>
+                        <div className="text-[11px] opacity-40 flex gap-2 flex-wrap items-center">
+                          <span>{d.__pipelineTitle}</span>
+                          <span>{getColumnName(d.status, d.__columns)}</span>
+                          {formatTimeInState(d) && <span>{formatTimeInState(d)}</span>}
+                          <DealProfitBadge deal={d} className="text-[11px]" />
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
-          </div>
-
-          {isClosed && closedSnap && (
-            <div className="pt-3 border-t border-gray-200">
-              <span className="leads-stage-badge inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium">
-                <Archive className="h-3 w-3" />
-                Closed{closedDate ? ` ${closedDate}` : ''}
-              </span>
-              {closedSnap.closedFrom?.title && (
-                <span className="ml-2 text-[11px] opacity-60">from {closedSnap.closedFrom.title}</span>
-              )}
-            </div>
-          )}
-          {!isClosed && pipelineName && (
-            <div className="pt-3 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => onGoToPipeline?.(pipelineId)}
-                className="leads-stage-badge inline-flex items-center text-[11px] px-2 py-0.5 rounded-full font-medium hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
-              >
-                {pipelineName}
-              </button>
-            </div>
-          )}
-
+          </section>
         </div>
       </DialogContent>
 
-      {taskMenu && typeof document !== 'undefined' && createPortal(
-        <div data-task-menu className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
-          <div className="fixed inset-0 z-[10011]" onClick={() => setTaskMenu(null)} aria-hidden />
+      {menuOpen && menuAnchor && typeof document !== 'undefined' && createPortal(
+        <div data-lead-details-menu className="pointer-events-auto fixed inset-0 z-[10030]">
+          <div className="fixed inset-0 z-[10031]" onClick={closeMenu} aria-hidden />
           <div
-            className="map-panel list-panel fixed z-[10012] rounded-lg min-w-[160px] py-1 overflow-hidden shadow-xl"
-            style={{ top: taskMenu.anchor.top, left: taskMenu.anchor.left }}
+            className="map-panel list-panel fixed z-[10032] rounded-xl min-w-[180px] pt-1 overflow-hidden"
+            style={{ top: menuAnchor.top, left: menuAnchor.left }}
             role="menu"
             onClick={(e) => e.stopPropagation()}
           >
-            {!taskMenu.task.completed && taskMenu.task.scheduledAt && onViewTaskOnSchedule && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTaskMenu(null)
-                  onViewTaskOnSchedule(taskMenu.task)
-                }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
-              >
-                <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
-                View on calendar
-              </button>
-            )}
-            {onOpenEditTask && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTaskMenu(null)
-                  onOpenEditTask(taskMenu.task, lead)
-                }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
-              >
-                <Pencil className="h-3.5 w-3.5 flex-shrink-0" />
-                Edit task
-              </button>
-            )}
             <button
               type="button"
-              onClick={() => {
-                setTaskMenu(null)
-                doDeleteTask(taskMenu.task.id)
-                refreshTasks()
-                scheduleSync()
-              }}
-              className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/20 text-red-400 transition-colors"
+              onClick={() => { closeMenu(); onEditLead?.(lead) }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
             >
-              <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
-              Delete
+              <Pencil className="h-4 w-4 shrink-0" />
+              Edit lead
             </button>
+            <button
+              type="button"
+              onClick={() => { closeMenu(); onCreateDeal?.(lead) }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              Create deal
+            </button>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => { closeMenu(); handleDelete() }}
+              onKeyDown={(e) => e.key === 'Enter' && handleDelete()}
+              className="list-panel-delete-btn w-full px-3 py-2 pb-2 rounded-b-xl text-left text-sm flex items-center gap-2 transition-colors text-red-400 hover:bg-red-600/80 cursor-pointer"
+            >
+              <Trash2 className="h-4 w-4 shrink-0" />
+              Delete lead
+            </div>
           </div>
         </div>,
         document.getElementById('modal-root') || document.body
       )}
-
-      {pipeMenu && typeof document !== 'undefined' && createPortal(
-        <div data-pipe-menu className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
-          <div className="fixed inset-0 z-[10011]" onClick={() => setPipeMenu(null)} aria-hidden />
-          <div
-            className="map-panel list-panel fixed z-[10012] rounded-lg min-w-[160px] py-1 overflow-hidden shadow-xl"
-            style={{ top: pipeMenu.anchor.top, left: pipeMenu.anchor.left }}
-            role="menu"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {!isClosed && onRequestCloseLead && (
-              <button
-                type="button"
-                onClick={() => {
-                  const l = lead, pid = pipelineId
-                  setPipeMenu(null)
-                  onClose?.()
-                  onRequestCloseLead(l, pid)
-                }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
-              >
-                <Archive className="h-3.5 w-3.5 flex-shrink-0" />
-                Close Lead
-              </button>
-            )}
-            {!isClosed && pipelineId && onRequestMoveLead && (
-              <button
-                type="button"
-                onClick={() => {
-                  const l = lead, pid = pipelineId
-                  setPipeMenu(null)
-                  onClose?.()
-                  onRequestMoveLead(l, pid)
-                }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
-              >
-                <ArrowRightLeft className="h-3.5 w-3.5 flex-shrink-0" />
-                Move to Pipe
-              </button>
-            )}
-            {!isClosed && pipelineId && onRequestRemoveLead && (
-              <button
-                type="button"
-                onClick={() => {
-                  const l = lead, pid = pipelineId
-                  setPipeMenu(null)
-                  onClose?.()
-                  onRequestRemoveLead(l, pid)
-                }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/20 text-red-400 transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
-                Delete
-              </button>
-            )}
-            {isClosed && onRequestReopenLead && (
-              <button
-                type="button"
-                onClick={() => {
-                  const rec = closedSnap
-                  setPipeMenu(null)
-                  onClose?.()
-                  onRequestReopenLead(rec)
-                }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
-              >
-                <RefreshCw className="h-3.5 w-3.5 flex-shrink-0" />
-                Reopen Lead
-              </button>
-            )}
-            {isClosed && onRequestDeleteClosedLead && (
-              <button
-                type="button"
-                onClick={() => {
-                  const id = closedId
-                  setPipeMenu(null)
-                  onClose?.()
-                  onRequestDeleteClosedLead(id)
-                }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/20 text-red-400 transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
-                Delete Archive
-              </button>
-            )}
-          </div>
-        </div>,
-        document.getElementById('modal-root') || document.body
-      )}
-
     </Dialog>
   )
 }
+
+export default LeadDetails

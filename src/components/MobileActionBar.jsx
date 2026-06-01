@@ -1,4 +1,4 @@
-import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2, Settings, User, FileText } from 'lucide-react'
+import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2, Settings, User, FileText, Briefcase } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PipeIcon } from './PipeIcon'
 
@@ -29,6 +29,7 @@ export function MobileActionBar({
   isPathTrackingActive,
   onOpenOutreach,
   onOpenLeads,
+  onOpenDeals,
   onOpenForms,
   onOpenTeamsPanel,
   onOpenSettings,
@@ -121,6 +122,15 @@ export function MobileActionBar({
         >
           <UserSearch className="h-4 w-4 flex-shrink-0" />
           <span>Leads</span>
+        </button>
+
+        <button
+          data-tour="menu-deals"
+          onClick={() => { closeMenu(); onOpenDeals?.() }}
+          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+        >
+          <Briefcase className="h-4 w-4 flex-shrink-0" />
+          <span>Deals</span>
         </button>
 
         <button

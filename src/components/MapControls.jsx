@@ -1,4 +1,4 @@
-import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X, FileText, Calendar, ListTodo } from 'lucide-react'
+import { Navigation, CheckSquare, Square, List, Circle, Send, User, Menu, Compass, Route, Settings, UserSearch, Users2, Plus, X, FileText, Calendar, ListTodo, Briefcase } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 import { PipeIcon } from './PipeIcon'
@@ -21,6 +21,7 @@ export function MapControls({
   onOpenTeamsPanel,
   onOpenSettings,
   onOpenLeads,
+  onOpenDeals,
   onOpenForms,
   onOpenPipes,
   onOpenTasks,
@@ -279,6 +280,19 @@ export function MapControls({
               >
                 <UserSearch className="h-4 w-4 flex-shrink-0" />
                 <span>Leads</span>
+              </button>
+
+              {/* Deals */}
+              <button
+                data-tour="menu-deals"
+                onClick={() => {
+                  setShowMenu(false)
+                  onOpenDeals?.()
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+              >
+                <Briefcase className="h-4 w-4 flex-shrink-0" />
+                <span>Deals</span>
               </button>
 
               {/* Forms */}

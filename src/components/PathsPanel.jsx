@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { X, RefreshCw, Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Users } from 'lucide-react'
+import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
-import { TeamShareSection, TeamBadge } from './TeamShareSection'
+import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
+import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 
 const PATH_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
@@ -24,6 +26,7 @@ export function PathsPanel({
   onSharePath,
   onSharePathWithTeams,
   teams = [],
+  teamMembership = null,
   onValidateShareEmail,
   onCenterOnPath,
   visiblePathIds = [],
@@ -36,6 +39,7 @@ export function PathsPanel({
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef(null)
   const [sharePathId, setSharePathId] = useState(null)
+  const [localShareState, setLocalShareState] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
   const [shareEmailValid, setShareEmailValid] = useState(null)
   const [shareEmailError, setShareEmailError] = useState('')
@@ -49,6 +53,7 @@ export function PathsPanel({
       setRenamingPathId(null)
       setRenameValue('')
       setSharePathId(null)
+      setLocalShareState(null)
       setShareEmail('')
       setShareEmailValid(null)
       setShareEmailError('')
@@ -104,6 +109,40 @@ export function PathsPanel({
     validateTimeoutRef.current = setTimeout(() => { validateTimeoutRef.current = null; runValidation(shareEmail) }, 400)
     return () => { if (validateTimeoutRef.current) clearTimeout(validateTimeoutRef.current) }
   }, [sharePathId, shareEmail, runValidation])
+
+  useEffect(() => {
+    if (!sharePathId) {
+      setLocalShareState(null)
+      return
+    }
+    const path = paths.find((p) => p.id === sharePathId)
+    const norm = normalizeResourceVisibility(path || {})
+    setLocalShareState({
+      visibility: norm.visibility || VISIBILITY.PRIVATE,
+      sharedMemberUids: norm.sharedMemberUids || [],
+    })
+  }, [sharePathId, paths])
+
+  const handleShareChange = useCallback(
+    (next) => {
+      if (!onSharePathWithTeams || !sharePathId) return
+      setLocalShareState(next)
+      void (async () => {
+        try {
+          await onSharePathWithTeams(sharePathId, next)
+        } catch (e) {
+          const path = paths.find((p) => p.id === sharePathId)
+          const norm = normalizeResourceVisibility(path || {})
+          setLocalShareState({
+            visibility: norm.visibility || VISIBILITY.PRIVATE,
+            sharedMemberUids: norm.sharedMemberUids || [],
+          })
+          showToast(e.message || 'Failed to update sharing', 'error')
+        }
+      })()
+    },
+    [onSharePathWithTeams, sharePathId, paths]
+  )
 
   const handleShareSave = () => {
     if (!sharePathId || !onSharePath) return
@@ -208,22 +247,16 @@ export function PathsPanel({
         >
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
             <DialogDescription className="sr-only">View and manage your recorded GPS paths</DialogDescription>
-            <div className="map-panel-header-toolbar">
-              <DialogTitle className="map-panel-header-title-wrap text-left text-xl font-semibold truncate">Paths</DialogTitle>
-              <div className="map-panel-header-actions gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onPathsChange?.()}
-                  title="Refresh paths"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            <PanelHeader onBack={onClose} title="Paths">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onPathsChange?.()}
+                title="Refresh paths"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </PanelHeader>
           </DialogHeader>
 
           <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
@@ -297,7 +330,7 @@ export function PathsPanel({
                               {(!isPathOwnedByUser(path) || (path.sharedWith && path.sharedWith.length > 0)) && (
                                 <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title={isPathOwnedByUser(path) ? 'Shared with others' : 'Shared with you'} aria-hidden />
                               )}
-                              <TeamBadge teamIds={path.teamShares} teams={teams} />
+                              <VisibilityBadge resource={path} />
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5 leading-snug line-clamp-2">
                               {metaLine}
@@ -403,28 +436,21 @@ export function PathsPanel({
               const path = allPaths.find(p => p.id === sharePathId)
               const currentShared = path?.sharedWith || []
               const isShared = currentShared.length > 0
-              const currentTeamShares = path?.teamShares || []
-              const toggleTeam = async (teamId) => {
-                if (!onSharePathWithTeams) return
-                const next = currentTeamShares.includes(teamId)
-                  ? currentTeamShares.filter((id) => id !== teamId)
-                  : [...currentTeamShares, teamId]
-                try {
-                  await onSharePathWithTeams(sharePathId, next)
-                } catch (e) {
-                  showToast(e.message || 'Failed to update team share', 'error')
-                }
-              }
+              const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+              const activeTeam = teams?.[0] || null
+              const allowExternalSharing = teamMembership?.allowExternalSharing === true
               return (
                 <>
-                  {onSharePathWithTeams && (
-                    <TeamShareSection
-                      teams={teams}
-                      selectedTeamIds={currentTeamShares}
-                      onToggle={toggleTeam}
+                  {onSharePathWithTeams && activeTeam && (
+                    <ResourceSharePicker
+                      team={activeTeam}
+                      visibility={shareState.visibility}
+                      sharedMemberUids={shareState.sharedMemberUids}
+                      onChange={handleShareChange}
+                      allowExternalSharing={allowExternalSharing}
                     />
                   )}
-                  {isShared && (
+                  {allowExternalSharing && isShared && (
                     <div className="mb-4">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
                       <ul className="space-y-1.5">
@@ -447,6 +473,8 @@ export function PathsPanel({
                       </ul>
                     </div>
                   )}
+                  {allowExternalSharing && (
+                    <>
                   <Input
                     type="email"
                     placeholder="user@example.com"
@@ -477,6 +505,13 @@ export function PathsPanel({
                     </Button>
                     <Button variant="outline" onClick={() => { setSharePathId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Cancel</Button>
                   </div>
+                    </>
+                  )}
+                  {!allowExternalSharing && (
+                    <div className="flex gap-2 flex-wrap mt-2">
+                      <Button variant="outline" onClick={() => { setSharePathId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Done</Button>
+                    </div>
+                  )}
                 </>
               )
             })()}

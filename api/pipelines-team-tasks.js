@@ -104,7 +104,26 @@ function normalizeTask(raw, user, allowedUids) {
     createdByEmail: raw.createdByEmail || user.email,
     completedAt: raw.completedAt || null,
     completedBy: raw.completedBy || null,
+    dealId: raw.dealId && String(raw.dealId).trim() ? String(raw.dealId).trim() : null,
     scope: 'team'
+  }
+}
+
+async function logTeamTaskActivity(pipeline, user, type, task, summary) {
+  try {
+    const { logTeamActivity, teamIdsFromResource } = await import('./lib/activityLog.js')
+    const teamIds = teamIdsFromResource(pipeline)
+    if (teamIds.length === 0) return
+    await logTeamActivity({
+      teamIds,
+      actor: user,
+      type,
+      summary,
+      entity: { kind: 'task', taskId: task.id, pipelineId: pipeline.id, leadId: task.leadId || null },
+      nav: { type: 'task', taskId: task.id, pipelineId: pipeline.id },
+    })
+  } catch (e) {
+    console.warn('team task activity', e.message)
   }
 }
 
@@ -146,18 +165,35 @@ export default async function handler(req, res) {
 
     const allowedMemberUids = collectAllowedMemberUids(pipeline, allTeams)
 
-    const leadIdx = (pipeline.leads || []).findIndex(
+    let leadIdx = (pipeline.leads || []).findIndex(
       (l) => l.id === leadId || l.parcelId === leadId
     )
-    if (leadIdx === -1) return res.status(404).json({ error: 'Lead not found' })
+    if (leadIdx === -1) {
+      const deal = (pipeline.deals || []).find((d) => d.leadId === leadId)
+      if (!deal) return res.status(404).json({ error: 'Lead not found' })
+      pipeline.leads = Array.isArray(pipeline.leads) ? pipeline.leads : []
+      leadIdx = pipeline.leads.findIndex((l) => l.id === leadId)
+      if (leadIdx === -1) {
+        pipeline.leads.push({
+          id: leadId,
+          parcelId: deal.parcelId || null,
+          teamTasks: [],
+        })
+        leadIdx = pipeline.leads.length - 1
+      }
+    }
     const lead = pipeline.leads[leadIdx]
     lead.teamTasks = Array.isArray(lead.teamTasks) ? lead.teamTasks : []
+    const { actorLabel } = await import('./lib/activityLog.js')
+    const actor = actorLabel(user)
 
     if (action === 'add') {
       if (!String(task.title || '').trim()) {
         return res.status(400).json({ error: 'Task title is required' })
       }
-      lead.teamTasks.push(normalizeTask(task, user, allowedMemberUids))
+      const normalized = normalizeTask(task, user, allowedMemberUids)
+      lead.teamTasks.push(normalized)
+      await logTeamTaskActivity(pipeline, user, 'task.created', { ...normalized, leadId }, `${actor} created task "${normalized.title}"`)
     } else if (action === 'update') {
       const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
       if (tIdx === -1) return res.status(404).json({ error: 'Task not found' })
@@ -168,13 +204,20 @@ export default async function handler(req, res) {
         ...(task.dueAt !== undefined ? { dueAt: num(task.dueAt) } : {}),
         ...(task.assignedUids !== undefined
           ? { assignedUids: filterAssignedUids(task.assignedUids, allowedMemberUids) }
+          : {}),
+        ...(task.dealId !== undefined
+          ? { dealId: task.dealId && String(task.dealId).trim() ? String(task.dealId).trim() : null }
           : {})
       }
     } else if (action === 'remove') {
+      const removed = lead.teamTasks.find((t) => t.id === task.id)
       const before = lead.teamTasks.length
       lead.teamTasks = lead.teamTasks.filter((t) => t.id !== task.id)
       if (lead.teamTasks.length === before) {
         return res.status(404).json({ error: 'Task not found' })
+      }
+      if (removed) {
+        await logTeamTaskActivity(pipeline, user, 'task.deleted', { ...removed, leadId }, `${actor} deleted task "${removed.title}"`)
       }
     } else if (action === 'toggle-complete') {
       const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
@@ -185,6 +228,9 @@ export default async function handler(req, res) {
         ...cur,
         completedAt: completing ? new Date().toISOString() : null,
         completedBy: completing ? user.uid : null
+      }
+      if (completing) {
+        await logTeamTaskActivity(pipeline, user, 'task.completed', { ...cur, leadId }, `${actor} completed task "${cur.title}"`)
       }
     } else {
       return res.status(400).json({ error: `Unknown action: ${action}` })

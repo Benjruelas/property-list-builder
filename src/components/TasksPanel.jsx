@@ -1,10 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
+import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
-import { loadLeads, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
+import { getFullAddress } from '@/utils/dealPipeline'
+import { displayLeadName } from '@/utils/leads'
 import {
   getAllTasks,
   getPersonalTasks,
@@ -35,72 +37,13 @@ import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 
 import { SchedulePicker } from './SchedulePicker'
+import { PipelineDropdown } from './PipelineDropdown'
 import { cn } from '@/lib/utils'
 
 function getLeadLabel(lead, parcelId) {
-  if (!parcelId) return 'Standalone'
-  return getStreetAddress(lead) || lead?.address || lead?.owner || parcelId
-}
-
-function PipelineDropdown({ value, onChange, pipelines }) {
-  const [open, setOpen] = useState(false)
-  const selected = pipelines.find((p) => p.id === value)
-  const label = selected ? (selected.title || 'Pipeline') : 'None (unassigned)'
-
-  const options = [{ id: '', title: 'None (unassigned)' }, ...pipelines]
-
-  return (
-    <div>
-      <label className="text-xs font-medium block mb-1 opacity-90">Pipeline</label>
-      <div
-        role="listbox"
-        tabIndex={0}
-        onClick={() => setOpen((p) => !p)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((p) => !p) } }}
-        className="w-full h-10 rounded-md px-3 py-2 text-sm text-left flex items-center justify-between gap-2 cursor-pointer"
-        style={{
-          border: '1px solid rgba(255,255,255,0.2)',
-          background: 'rgba(255,255,255,0.06)',
-          color: 'rgba(255,255,255,0.95)',
-          borderRadius: open ? '0.375rem 0.375rem 0 0' : undefined,
-        }}
-      >
-        <span className="truncate" style={{ color: value ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.5)' }}>
-          {label}
-        </span>
-        <ChevronDown
-          className="h-3.5 w-3.5 shrink-0 opacity-60 transition-transform"
-          style={{ transform: open ? 'rotate(180deg)' : undefined }}
-        />
-      </div>
-      {open && (
-        <div
-          className="rounded-b-md overflow-hidden"
-          style={{ border: '1px solid rgba(255,255,255,0.25)', borderTop: 'none' }}
-        >
-          {options.map((p) => {
-            const optId = p.id || ''
-            const isSelected = value === optId
-            return (
-              <button
-                key={optId}
-                type="button"
-                onClick={() => { onChange(optId); setOpen(false) }}
-                className="w-full px-3 py-2 text-sm text-left flex items-center justify-between gap-2 transition-colors pipeline-dropdown-item"
-                style={{
-                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
-                  background: isSelected ? 'rgba(255,255,255,0.1)' : 'transparent',
-                }}
-              >
-                <span className="truncate">{p.title || 'Pipeline'}</span>
-                {isSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
+  if (!lead && !parcelId) return 'Standalone'
+  if (lead) return displayLeadName(lead) || lead.address || parcelId || 'Lead'
+  return parcelId || 'Lead'
 }
 
 export function TasksPanel({
@@ -113,6 +56,7 @@ export function TasksPanel({
   activePipelineId = null,
   onOpenTaskInDealPipeline,
   onOpenScheduleAtDate,
+  onOpenLead,
   getToken = null,
   currentUser = null,
   onPipelinesChange,
@@ -146,19 +90,9 @@ export function TasksPanel({
 
   const apiMode = pipelines.length > 0
 
-  const displayLeads = useMemo(() => {
-    if (pipelines.length > 0) {
-      return pipelines.flatMap((p) => (p.leads || []).map((l) => ({ ...l, __pipelineId: p.id, __pipelineTitle: p.title })))
-    }
-    return onLeadsChange ? leads : loadLeads()
-  }, [pipelines, leads, onLeadsChange])
+  const displayLeads = useMemo(() => leads, [leads])
 
-  const assignLeadsPool = useMemo(() => {
-    if (!apiMode) return displayLeads
-    if (!assignPipelineId) return []
-    const pipe = pipelines.find((p) => p.id === assignPipelineId)
-    return (pipe?.leads || []).map((l) => ({ ...l, __pipelineId: pipe.id, __pipelineTitle: pipe.title }))
-  }, [apiMode, assignPipelineId, pipelines, displayLeads])
+  const assignLeadsPool = useMemo(() => displayLeads, [displayLeads])
 
   const assignLeadSuggestions = useMemo(() => {
     const q = (assignLeadSearch || '').trim().toLowerCase()
@@ -444,13 +378,32 @@ export function TasksPanel({
   const handleViewOnSchedule = (task) => {
     const at = task.scheduledAt || task.dueAt
     if (!at || !onOpenScheduleAtDate) return
-    onClose?.()
     onOpenScheduleAtDate(at)
   }
 
   const toggleSection = (sectionId) => {
     setCollapsedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }))
   }
+
+  const resolveLeadFromTask = useCallback((task) => {
+    if (task.leadId) {
+      const byId = displayLeads.find((l) => l.id === task.leadId)
+      if (byId) return byId
+    }
+    if (task.parcelId) {
+      return displayLeads.find((l) => l.parcelId === task.parcelId || l.id === task.parcelId)
+    }
+    return null
+  }, [displayLeads])
+
+  const handleOpenLeadFromTask = useCallback((task) => {
+    const lead = resolveLeadFromTask(task)
+    if (!lead) {
+      showToast('Lead not found', 'error')
+      return
+    }
+    onOpenLead?.(lead)
+  }, [resolveLeadFromTask, onOpenLead])
 
   const handleRowActivate = (task, sectionKey) => {
     if (sectionKey === 'unlabeled') {
@@ -601,28 +554,22 @@ export function TasksPanel({
           style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
         >
           <DialogDescription className="sr-only">Tasks grouped by pipe</DialogDescription>
-          <div className="map-panel-header-toolbar gap-2">
-            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold truncate">Tasks</DialogTitle>
-            <div className="map-panel-header-actions gap-1">
-              {completedCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowClosedTasks((s) => !s)}
-                  title={showClosedTasks ? 'Hide closed tasks' : 'View closed tasks'}
-                  aria-pressed={showClosedTasks}
-                >
-                  {showClosedTasks ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              )}
-              <Button variant="ghost" size="icon" onClick={openAddTask} title="New task">
-                <Plus className="h-4 w-4" />
+          <PanelHeader onBack={onClose} title="Tasks">
+            {completedCount > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowClosedTasks((s) => !s)}
+                title={showClosedTasks ? 'Hide closed tasks' : 'View closed tasks'}
+                aria-pressed={showClosedTasks}
+              >
+                {showClosedTasks ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+            )}
+            <Button variant="ghost" size="icon" onClick={openAddTask} title="New task">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </PanelHeader>
         </DialogHeader>
         <div
           className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-6 py-4"
@@ -645,7 +592,7 @@ export function TasksPanel({
                       onEdit={() => setEditingTask(task)}
                       onDelete={() => handleDeleteTask(task)}
                       onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
-                      onOpenLead={task.parcelId ? () => handleRowActivate(task, task.pipelineId || 'unlabeled') : null}
+                      onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
                     />
                   </li>
                 ))}
@@ -685,7 +632,7 @@ export function TasksPanel({
                           onEdit={() => setEditingTask(task)}
                           onDelete={() => handleDeleteTask(task)}
                           onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
-                          onOpenLead={task.parcelId ? () => handleRowActivate(task, sid) : null}
+                          onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
                         />
                       </li>
                     ))}
@@ -711,7 +658,7 @@ export function TasksPanel({
                           onEdit={() => setEditingTask(task)}
                           onDelete={() => handleDeleteTask(task)}
                           onViewOnSchedule={null}
-                          onOpenLead={task.parcelId ? () => handleRowActivate(task, task.pipelineId || 'unlabeled') : null}
+                          onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
                         />
                       </li>
                     ))}
@@ -751,7 +698,7 @@ export function TasksPanel({
                               onEdit={() => setEditingTask(task)}
                               onDelete={() => handleDeleteTask(task)}
                               onViewOnSchedule={null}
-                              onOpenLead={task.parcelId ? () => handleRowActivate(task, pipeline.id === '__local__' ? '__local__' : pipeline.id) : null}
+                              onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
                             />
                           </li>
                         ))}
@@ -772,7 +719,7 @@ export function TasksPanel({
             className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
             style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
           >
-            <DialogTitle className="text-xl font-semibold">New task</DialogTitle>
+            <PanelHeader onBack={() => setShowAddTask(false)} title="New task" />
             <DialogDescription className="sr-only">
               Create a task. Title is required. Date, time, and lead assignment are optional.
             </DialogDescription>
@@ -917,7 +864,7 @@ export function TasksPanel({
             className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
             style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
           >
-            <DialogTitle className="text-xl font-semibold">Edit task</DialogTitle>
+            <PanelHeader onBack={() => setEditingTask(null)} title="Edit task" />
             <DialogDescription className="sr-only">Edit title, schedule, or assign to a pipeline and lead</DialogDescription>
           </DialogHeader>
           <div className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
@@ -947,6 +894,7 @@ export function TasksPanel({
                   setAssignLeadSearch('')
                 }}
                 pipelines={pipelines}
+                allowEmpty
               />
             )}
             <div className="relative">
@@ -1083,9 +1031,9 @@ function getModalPortalContainer() {
   return document.getElementById('modal-root') || document.body
 }
 
-function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead }) {
-  const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
-  const leadLine = task.parcelId
+export function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead, hideLeadLine = false }) {
+  const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId || l.id === task.parcelId) : null
+  const leadLine = !hideLeadLine && task.parcelId
     ? `Lead: ${getLeadLabel(lead, task.parcelId)}`
     : null
   const assigneeStr = task.__source === 'team' ? formatAssigneeList(task.assignedUids, teams) : null

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Bell, Check, Loader2, X } from 'lucide-react'
+import { Bell, Check, ChevronDown, Loader2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { Button } from './ui/button'
 import { fetchNotifications, markNotificationsRead } from '../utils/notifications'
+import { fetchActivity } from '../utils/activity'
 import { cn } from '@/lib/utils'
 
 function formatWhen(iso) {
@@ -15,13 +16,91 @@ function formatWhen(iso) {
   }
 }
 
-export function useNotificationInbox({ getToken, currentUser, onNavigate }) {
+function actorInitial(email) {
+  const e = (email || '').trim()
+  if (!e) return '?'
+  return e.charAt(0).toUpperCase()
+}
+
+function ActivityFeedSection({
+  activities,
+  loading,
+  teamFilter,
+  onTeamFilterChange,
+  teams,
+  onOpenActivity,
+  isAdmin = false,
+}) {
+  const filterTeams = teams?.length > 0 ? teams : []
+
+  return (
+    <div className="border-t border-white/15">
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-white/[0.02]">
+        <h4 className="text-xs font-semibold uppercase opacity-50 tracking-wide">Activity</h4>
+        {filterTeams.length > 1 && (
+          <div className="relative shrink-0">
+            <select
+              value={teamFilter || ''}
+              onChange={(e) => onTeamFilterChange(e.target.value || null)}
+              className="text-[11px] rounded-md pl-2 pr-6 py-1 bg-white/5 border border-white/15 appearance-none max-w-[140px] truncate"
+              aria-label="Filter activity by team"
+            >
+              <option value="">All teams</option>
+              {filterTeams.map((t) => (
+                <option key={t.id} value={t.id}>{t.name || 'Team'}</option>
+              ))}
+            </select>
+            <ChevronDown className="h-3 w-3 absolute right-1.5 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
+          </div>
+        )}
+      </div>
+      {loading && activities.length === 0 ? (
+        <div className="flex items-center justify-center py-8 text-sm opacity-70">
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
+        </div>
+      ) : activities.length === 0 ? (
+        <p className="text-center py-8 text-sm opacity-50 px-4">No team activity yet.</p>
+      ) : (
+        <ul>
+          {activities.map((a) => (
+            <li key={a.id}>
+              <button
+                type="button"
+                onClick={() => onOpenActivity?.(a.nav || a.entity)}
+                className="w-full text-left px-4 py-3 border-b border-white/10 hover:bg-white/5 transition-colors flex gap-2.5"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold uppercase">
+                  {actorInitial(a.actorEmail)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <div className="text-sm leading-snug flex items-center gap-2 flex-wrap">
+                    {a.summary}
+                    {isAdmin && a.audience === 'admin_only' && (
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase">Admin</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] opacity-50 mt-0.5">{formatWhen(a.createdAt)}</div>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+export function useNotificationInbox({ getToken, currentUser, teams = [], teamMembership = null, onNavigate }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [activities, setActivities] = useState([])
+  const [activityTeams, setActivityTeams] = useState([])
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [teamFilter, setTeamFilter] = useState(null)
 
-  const refresh = useCallback(async () => {
+  const refreshNotifications = useCallback(async () => {
     if (!currentUser || !getToken) return
     setLoading(true)
     try {
@@ -35,15 +114,37 @@ export function useNotificationInbox({ getToken, currentUser, onNavigate }) {
     }
   }, [currentUser, getToken])
 
+  const refreshActivity = useCallback(async () => {
+    if (!currentUser || !getToken) return
+    setActivityLoading(true)
+    try {
+      const data = await fetchActivity(getToken, { teamId: teamFilter, limit: 50 })
+      setActivities(data.activities || [])
+      if (data.teams?.length) setActivityTeams(data.teams)
+    } catch {
+      /* ignore */
+    } finally {
+      setActivityLoading(false)
+    }
+  }, [currentUser, getToken, teamFilter])
+
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshNotifications(), refreshActivity()])
+  }, [refreshNotifications, refreshActivity])
+
   useEffect(() => {
-    refresh()
+    refreshNotifications()
     const id = setInterval(refresh, 60000)
     return () => clearInterval(id)
-  }, [refresh])
+  }, [refresh, refreshNotifications])
 
   useEffect(() => {
     if (open) refresh()
   }, [open, refresh])
+
+  useEffect(() => {
+    if (currentUser) refreshActivity()
+  }, [teamFilter, refreshActivity, currentUser])
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
@@ -71,6 +172,12 @@ export function useNotificationInbox({ getToken, currentUser, onNavigate }) {
     onNavigate?.(n.data || { type: n.type })
   }
 
+  const handleOpenActivity = (nav) => {
+    if (!nav?.type) return
+    setOpen(false)
+    onNavigate?.(nav)
+  }
+
   const handleMarkAllRead = async () => {
     if (!getToken) return
     try {
@@ -82,11 +189,13 @@ export function useNotificationInbox({ getToken, currentUser, onNavigate }) {
     }
   }
 
+  const displayTeams = activityTeams.length > 0 ? activityTeams : (teams || []).map((t) => ({ id: t.id, name: t.name }))
+
   const panel = open && currentUser && typeof document !== 'undefined' ? createPortal(
     <div className="notification-inbox-overlay fixed inset-0 z-[10050]">
       <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} aria-hidden />
       <div className="notification-inbox-panel map-panel absolute right-4 top-14 w-[min(92vw,380px)] max-h-[70vh] overflow-hidden flex flex-col rounded-xl shadow-xl">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/15">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/15 shrink-0">
           <h3 className="font-semibold text-sm">Notifications</h3>
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
@@ -99,7 +208,7 @@ export function useNotificationInbox({ getToken, currentUser, onNavigate }) {
             </Button>
           </div>
         </div>
-        <div className="overflow-y-auto flex-1">
+        <div className="overflow-y-auto flex-1 min-h-0">
           {loading && notifications.length === 0 ? (
             <div className="flex items-center justify-center py-10 text-sm opacity-70">
               <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
@@ -126,6 +235,15 @@ export function useNotificationInbox({ getToken, currentUser, onNavigate }) {
               ))}
             </ul>
           )}
+          <ActivityFeedSection
+            activities={activities}
+            loading={activityLoading}
+            teamFilter={teamFilter}
+            onTeamFilterChange={setTeamFilter}
+            teams={displayTeams}
+            onOpenActivity={handleOpenActivity}
+            isAdmin={teamMembership?.role === 'admin'}
+          />
         </div>
       </div>
     </div>,

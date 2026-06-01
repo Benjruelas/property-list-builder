@@ -1,5 +1,5 @@
 /**
- * Teams API client. All methods require an async getToken() that returns
+ * Teams API client v2. All methods require an async getToken() that returns
  * a Firebase ID token (or the dev-bypass token in dev mode).
  */
 
@@ -14,7 +14,7 @@ async function apiCall(getToken, method, body = null) {
   if (!token) throw new Error('Sign in required')
   const opts = {
     method,
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}` },
   }
   if (body) {
     opts.headers['Content-Type'] = 'application/json'
@@ -31,20 +31,29 @@ async function apiCall(getToken, method, body = null) {
   return data
 }
 
-export async function fetchTeams(getToken) {
+export async function fetchTeamContext(getToken) {
   try {
     const token = await getToken()
-    if (!token) return []
+    if (!token) return { teams: [], membership: null, pendingInvites: [] }
     const res = await fetch(`${getApiBase()}/teams`, {
       method: 'GET',
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` },
     })
-    if (!res.ok) return []
+    if (!res.ok) return { teams: [], membership: null, pendingInvites: [] }
     const data = await res.json().catch(() => ({}))
-    return data.teams || []
+    return {
+      teams: data.teams || [],
+      membership: data.membership || null,
+      pendingInvites: data.pendingInvites || [],
+    }
   } catch {
-    return []
+    return { teams: [], membership: null, pendingInvites: [] }
   }
+}
+
+export async function fetchTeams(getToken) {
+  const ctx = await fetchTeamContext(getToken)
+  return ctx.teams
 }
 
 export async function createTeam(getToken, name) {
@@ -61,13 +70,45 @@ export async function deleteTeam(getToken, teamId) {
   await apiCall(getToken, 'DELETE', { teamId })
 }
 
+export async function inviteTeamMember(getToken, teamId, email) {
+  const data = await apiCall(getToken, 'PATCH', { teamId, action: 'invite-member', email })
+  return data
+}
+
 export async function addTeamMember(getToken, teamId, email) {
-  const data = await apiCall(getToken, 'PATCH', { teamId, action: 'add-member', email })
-  return data.team
+  return inviteTeamMember(getToken, teamId, email)
 }
 
 export async function removeTeamMember(getToken, teamId, uid) {
   const data = await apiCall(getToken, 'PATCH', { teamId, action: 'remove-member', uid })
+  return data.team
+}
+
+export async function acceptTeamInvite(getToken, { inviteId, teamId } = {}) {
+  const data = await apiCall(getToken, 'PATCH', { action: 'accept-invite', inviteId, teamId })
+  return data.team
+}
+
+export async function declineTeamInvite(getToken, { inviteId, teamId } = {}) {
+  await apiCall(getToken, 'PATCH', { action: 'decline-invite', inviteId, teamId })
+}
+
+export async function promoteTeamAdmin(getToken, teamId, uid) {
+  const data = await apiCall(getToken, 'PATCH', { teamId, action: 'promote-admin', uid })
+  return data.team
+}
+
+export async function demoteTeamAdmin(getToken, teamId, uid) {
+  const data = await apiCall(getToken, 'PATCH', { teamId, action: 'demote-admin', uid })
+  return data.team
+}
+
+export async function updateTeamSettings(getToken, teamId, settings) {
+  const data = await apiCall(getToken, 'PATCH', {
+    teamId,
+    action: 'update-settings',
+    ...settings,
+  })
   return data.team
 }
 
@@ -76,19 +117,20 @@ export async function transferTeamOwnership(getToken, teamId, toUid) {
   return data.team
 }
 
-/**
- * Shorthand: is the given user the owner of a team?
- */
 export function isTeamOwner(team, user) {
   return !!(team && user && team.ownerId === user.uid)
 }
 
-/**
- * Human-friendly role badge.
- */
 export function teamRoleForUser(team, user) {
   if (!team || !user) return null
-  if (team.ownerId === user.uid) return 'owner'
-  const m = (team.members || []).find((m) => m.uid === user.uid)
-  return m ? m.role : null
+  if (team.viewerRole) return team.viewerRole
+  if (team.ownerId === user.uid) return 'admin'
+  const m = (team.members || []).find((mem) => mem.uid === user.uid)
+  if (!m) return null
+  if (m.role === 'admin' || m.role === 'owner') return 'admin'
+  return 'member'
+}
+
+export function isTeamAdminRole(team, user) {
+  return teamRoleForUser(team, user) === 'admin'
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, Phone, ListPlus, UserPlus, CloudRain, /* Telescope, */ CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '../ui/button'
+import { PanelBackButton } from '../ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { DirectionsPicker } from '../DirectionsPicker'
 import { useParcelDetailsData, CATEGORIES } from './useParcelDetailsData'
@@ -71,7 +72,8 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
           {/* Header: Address + Close */}
           <DialogHeader className="px-6 pt-5 pb-3 border-b-0 text-left" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
             <DialogDescription className="sr-only">Tabbed parcel details view</DialogDescription>
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <PanelBackButton onClick={() => handleClose(true)} className="mt-1" />
               <div className="flex-1 min-w-0">
                 <DialogTitle className="text-3xl font-bold leading-tight">{address}</DialogTitle>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -92,7 +94,6 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
                   {quickStats.value && <span className="text-sm font-semibold ml-auto">{quickStats.value}</span>}
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => handleClose(true)} className="parcel-details-close-btn shrink-0 mt-1"><X className="h-4 w-4" /></Button>
             </div>
           </DialogHeader>
 

@@ -225,6 +225,23 @@ export default async function handler(req, res) {
         console.warn('form submit push notify', e.message)
       }
 
+      try {
+        const { logTeamActivity, teamIdsFromResource } = await import('./lib/activityLog.js')
+        const teamIds = teamIdsFromResource(template || {})
+        if (teamIds.length > 0) {
+          await logTeamActivity({
+            teamIds,
+            actor: { email: recipientEmail },
+            type: 'form.submitted',
+            summary: `${recipientEmail || 'Someone'} submitted form "${templateName}"`,
+            entity: { kind: 'form', templateId: invite.templateId },
+            nav: { type: 'form', templateId: invite.templateId },
+          })
+        }
+      } catch (e) {
+        console.warn('form submit activity log', e.message)
+      }
+
       return res.status(200).json({ success: true, submissionId: submission.id })
     }
 

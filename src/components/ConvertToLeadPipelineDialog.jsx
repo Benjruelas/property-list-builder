@@ -1,4 +1,5 @@
-import { X, Users, User } from 'lucide-react'
+import { Users, User } from 'lucide-react'
+import { PanelBackButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog'
 import { Button } from './ui/button'
 
@@ -38,16 +39,14 @@ export function ConvertToLeadPipelineDialog({
         blurOverlay
       >
         <div className="map-panel-header-toolbar map-panel-header-toolbar--top gap-2 px-4 pt-4 pb-3 border-b border-white/15">
-          <div className="map-panel-header-title-wrap min-w-0">
-            <DialogTitle className="text-lg font-semibold text-white/95">{title}</DialogTitle>
-            <DialogDescription className="text-sm text-white/65 mt-1">
-              {description}
-            </DialogDescription>
-          </div>
-          <div className="map-panel-header-actions">
-            <button type="button" className="pipeline-icon-btn flex-shrink-0 p-1 rounded-md text-white/60 hover:text-white/90 transition-colors" onClick={() => onOpenChange(false)} title="Close">
-              <X className="h-4 w-4" />
-            </button>
+          <div className="map-panel-header-title-wrap flex min-w-0 items-start gap-3">
+            <PanelBackButton onClick={() => onOpenChange(false)} />
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-lg font-semibold text-white/95">{title}</DialogTitle>
+              <DialogDescription className="text-sm text-white/65 mt-1">
+                {description}
+              </DialogDescription>
+            </div>
           </div>
         </div>
         <div className="flex flex-col gap-2 p-4 max-h-[min(60vh,320px)] overflow-y-auto">

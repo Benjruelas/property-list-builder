@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users } from 'lucide-react'
+import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { showToast } from './ui/toast'
@@ -337,17 +338,7 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
       >
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Application settings</DialogDescription>
-          <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
-              <Settings className="h-5 w-5 shrink-0" />
-              <span className="truncate">Settings</span>
-            </DialogTitle>
-            <div className="map-panel-header-actions">
-              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <PanelHeader onBack={onClose} title="Settings" icon={Settings} />
         </DialogHeader>
 
         <div className="px-4 py-4 overflow-y-auto scrollbar-hide flex-1 space-y-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>

@@ -324,9 +324,64 @@ function columnName(columns, statusId) {
 }
 
 function leadLabel(lead) {
-  const a = lead?.address || lead?.properties?.SITUS_ADDR || ''
-  const o = lead?.owner || lead?.properties?.OWNER_NAME || ''
+  const a = lead?.address || lead?.leadAddress || lead?.properties?.SITUS_ADDR || ''
+  const o = lead?.owner || lead?.leadName || lead?.properties?.OWNER_NAME || ''
   return (a || o || 'Lead').slice(0, 80)
+}
+
+function dealLabel(deal) {
+  return leadLabel(deal)
+}
+
+export function diffDealStatusChanges(oldDeals, newDeals) {
+  const oldById = new Map()
+  for (const d of oldDeals || []) {
+    if (d?.id) oldById.set(d.id, d.status)
+  }
+  const changes = []
+  for (const nd of newDeals || []) {
+    if (!nd?.id) continue
+    const prev = oldById.get(nd.id)
+    if (prev !== undefined && prev !== nd.status) {
+      changes.push({ deal: nd, oldStatus: prev, newStatus: nd.status })
+    }
+  }
+  return changes
+}
+
+export async function notifyPipelineDealStatusChanges(
+  changes,
+  { pipelineTitle, pipelineId, columns, ownerEmail, sharedWith, actorEmail }
+) {
+  const recipients = new Set()
+  const o = (ownerEmail || '').toLowerCase().trim()
+  if (o) recipients.add(o)
+  for (const s of sharedWith || []) {
+    const t = (s || '').toLowerCase().trim()
+    if (t) recipients.add(t)
+  }
+  const actor = (actorEmail || '').toLowerCase().trim()
+  recipients.delete(actor)
+
+  for (const { deal, oldStatus, newStatus } of changes) {
+    const from = columnName(columns, oldStatus)
+    const to = columnName(columns, newStatus)
+    const label = dealLabel(deal)
+    const body = `"${label}" moved from ${from} \u2192 ${to} in ${pipelineTitle || 'pipeline'}`
+    for (const email of recipients) {
+      await sendWebPushToEmail(
+        email,
+        {
+          title: 'Deal stage updated',
+          body,
+          tag: `deal-${deal.id}-${newStatus}`,
+          data: { type: 'pipelineDealStage', pipelineId, dealId: deal.id, newStatus },
+        },
+        'pipelineDealStage',
+        { email: actorEmail }
+      )
+    }
+  }
 }
 
 export async function notifyPipelineLeadStatusChanges(

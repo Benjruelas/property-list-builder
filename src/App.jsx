@@ -26,7 +26,7 @@ import { useAuth } from './contexts/AuthContext'
 import { UserDataSyncProvider } from './contexts/UserDataSyncContext'
 import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
-import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail, canAddLeadsToPipeline } from './utils/pipelines'
+import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
@@ -41,12 +41,15 @@ import { PublicFormPage } from './components/forms/PublicFormPage'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { TeamsPanel } from './components/TeamsPanel'
-import { fetchTeams } from './utils/teams'
+import { fetchTeamContext } from './utils/teams'
 import { reverseGeocodeCity } from './utils/reverseGeocode'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
 import { LeadsPanel } from './components/LeadsPanel'
+import { DealsPanel } from './components/DealsPanel'
+import { CreateLeadDialog } from './components/CreateLeadDialog'
+import { CreateDealDialog } from './components/CreateDealDialog'
 import { HailDataPanel } from './components/HailDataPanel'
 import { HailStormOverlay, HailStormDismissPill } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
@@ -54,14 +57,16 @@ import { useHailStormTimeline } from './hooks/useHailStormTimeline'
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
+import { useTeamDataSync } from './hooks/useTeamDataSync'
 import { getSettings, updateSettings } from './utils/settings'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
 import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
-import { loadClosedLeads, addClosedLead, saveClosedLeads, buildClosedLeadRecord, removeClosedLead } from './utils/closedLeads'
-import { showLocalNotification, subscribeToWebPush } from './utils/pushNotifications'
-import { addLead, loadColumns, loadLeads, saveLeads, loadTitle, isParcelALead, getStreetAddress } from './utils/dealPipeline'
-import { splitOwnerName } from './utils/ownerName'
+import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
+import { fetchLeads, buildLeadPrefillFromParcel, isParcelALead as isParcelInLeadsList } from './utils/leads'
+import { buildDealFromLead, resolvePipelineId } from './utils/deals'
+import { createTasksForDeal } from './utils/dealTasks'
+import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
@@ -224,6 +229,8 @@ function App() {
       setIsFormsPanelOpen(false)
       setIsTeamsPanelOpen(false)
       setTeams([])
+      setTeamMembership(null)
+      setPendingTeamInvites([])
       setIsSettingsPanelOpen(false)
       setIsLeadsPanelOpen(false)
       setIsHailDataOpen(false)
@@ -298,18 +305,22 @@ function App() {
   const [showListSelector, setShowListSelector] = useState(false) // Show list selector in popup
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const [isDealPipelineOpen, setIsDealPipelineOpen] = useState(false)
-  const [dealPipelineLeads, setDealPipelineLeads] = useState([])
-  const [closedLeads, setClosedLeads] = useState(() => loadClosedLeads())
+  const [dealPipelineDeals, setDealPipelineDeals] = useState([])
+  const [leads, setLeads] = useState([])
+  const [closedDeals, setClosedDeals] = useState(() => loadClosedDeals())
   const [pipelines, setPipelines] = useState([])
   const [activePipelineId, setActivePipelineId] = useState(null)
-  /** When set, user must pick a pipeline (multiple eligible). */
-  const [pickPipelineForParcel, setPickPipelineForParcel] = useState(null)
-  /** When set, user is choosing a target pipeline to move a lead into. */
-  const [moveLeadContext, setMoveLeadContext] = useState(null)
+  const [createLeadOpen, setCreateLeadOpen] = useState(false)
+  const [createLeadPrefill, setCreateLeadPrefill] = useState(null)
+  const [createDealOpen, setCreateDealOpen] = useState(false)
+  const [createDealPrefill, setCreateDealPrefill] = useState(null)
+  const [createDealSaving, setCreateDealSaving] = useState(false)
+  /** When set, user is choosing a target pipeline to move a deal into. */
+  const [moveDealContext, setMoveDealContext] = useState(null)
   const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
   const [isTasksPanelOpen, setIsTasksPanelOpen] = useState(false)
-  const [dealPipelineLeadFocusKey, setDealPipelineLeadFocusKey] = useState(0)
-  const [dealPipelineFocusParcelId, setDealPipelineFocusParcelId] = useState(null)
+  const [dealPipelineDealFocusKey, setDealPipelineDealFocusKey] = useState(0)
+  const [dealPipelineFocusDealId, setDealPipelineFocusDealId] = useState(null)
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
   const [scheduleInitialDate, setScheduleInitialDate] = useState(null)
@@ -321,8 +332,14 @@ function App() {
   const [visiblePathIds, setVisiblePathIds] = useState([])
   const [isTeamsPanelOpen, setIsTeamsPanelOpen] = useState(false)
   const [teams, setTeams] = useState([])
+  const [teamMembership, setTeamMembership] = useState(null)
+  const [pendingTeamInvites, setPendingTeamInvites] = useState([])
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false)
   const [isLeadsPanelOpen, setIsLeadsPanelOpen] = useState(false)
+  const [leadsPanelFocusLeadId, setLeadsPanelFocusLeadId] = useState(null)
+  const [isDealsPanelOpen, setIsDealsPanelOpen] = useState(false)
+  /** Schedule opened from another panel — keep that panel mounted and stack schedule on top. */
+  const scheduleNavStackRef = useRef([])
   const [isHailDataOpen, setIsHailDataOpen] = useState(false)
   const [hailDataParcel, setHailDataParcel] = useState(null)
   const [selectedHailEvent, setSelectedHailEvent] = useState(null)
@@ -408,7 +425,7 @@ function App() {
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isOutreachPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isHailDataOpen
+    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isDealsPanelOpen || isHailDataOpen
     // || isRoofInspectorOpen // roof inspector — restore later
   const hasPopup = clickedParcelId != null
 
@@ -603,8 +620,8 @@ function App() {
       loadUserData(getToken),
       fetchLists(getToken).catch(() => []),
     ]).then(([, serverLists]) => {
-      setDealPipelineLeads(loadLeads())
-      setClosedLeads(loadClosedLeads())
+      setDealPipelineDeals(loadDeals())
+      setClosedDeals(loadClosedDeals())
       const fresh = getSettings()
       setSettings(fresh)
       if (serverLists.length > 0) setLists(serverLists)
@@ -678,8 +695,10 @@ function App() {
   const refreshTeams = useCallback(async () => {
     if (!currentUser) return
     try {
-      const next = await fetchTeams(getToken)
-      setTeams(next)
+      const ctx = await fetchTeamContext(getToken)
+      setTeams(ctx.teams)
+      setTeamMembership(ctx.membership)
+      setPendingTeamInvites(ctx.pendingInvites || [])
     } catch (error) {
       console.error('Error loading teams:', error)
     }
@@ -687,7 +706,11 @@ function App() {
 
   useEffect(() => {
     if (currentUser) refreshTeams()
-    else setTeams([])
+    else {
+      setTeams([])
+      setTeamMembership(null)
+      setPendingTeamInvites([])
+    }
   }, [currentUser, refreshTeams])
 
   const handleTogglePathTracking = useCallback(async () => {
@@ -782,26 +805,28 @@ function App() {
     }
   }, [getToken])
 
-  const handleShareFormWithTeams = useCallback(async (templateId, teamShares) => {
+  const handleShareFormWithTeams = useCallback(async (templateId, sharePatch) => {
     try {
-      const updated = await shareTemplateWithTeamsApi(getToken, templateId, teamShares)
-      showToast('Team sharing updated', 'success')
+      const teamId = teams[0]?.id
+      const updated = await shareTemplateWithTeamsApi(getToken, templateId, sharePatch, teamId)
+      showToast('Sharing updated', 'success')
       return updated
     } catch (error) {
-      showToast(error.message || 'Failed to update team sharing', 'error')
+      showToast(error.message || 'Failed to update sharing', 'error')
       throw error
     }
-  }, [getToken])
+  }, [getToken, teams])
 
-  const handleSharePathWithTeams = useCallback(async (pathId, teamShares) => {
+  const handleSharePathWithTeams = useCallback(async (pathId, sharePatch) => {
     try {
-      await sharePathWithTeamsApi(getToken, pathId, teamShares)
+      const teamId = teams[0]?.id
+      await sharePathWithTeamsApi(getToken, pathId, sharePatch, teamId)
       await refreshPaths()
-      showToast('Team sharing updated', 'success')
+      showToast('Sharing updated', 'success')
     } catch (error) {
-      showToast(error.message || 'Failed to update team sharing', 'error')
+      showToast(error.message || 'Failed to update sharing', 'error')
     }
-  }, [getToken, refreshPaths])
+  }, [getToken, refreshPaths, teams])
 
   const handleCenterOnPath = useCallback((pathId) => {
     const path = paths.find(p => p.id === pathId)
@@ -820,12 +845,22 @@ function App() {
     }
   }, [paths, visiblePathIds])
 
+  const refreshLeads = useCallback(async () => {
+    if (!currentUser) return
+    try {
+      const next = await fetchLeads(getToken)
+      setLeads(next)
+    } catch (error) {
+      console.error('Error loading leads:', error)
+    }
+  }, [currentUser, getToken])
+
   const refreshPipelines = useCallback(async () => {
     if (!currentUser) return
     try {
       const next = await fetchPipelines(getToken)
       if (next.length > 0) {
-        setPipelines(next)
+        setPipelines(next.map((p) => ({ ...p, deals: p.deals || [], leads: undefined })))
         setActivePipelineId((prev) => {
           if (prev && next.some((p) => p.id === prev)) return prev
           const first = next.find((p) => p.ownerId === currentUser.uid) || next[0]
@@ -833,16 +868,14 @@ function App() {
         })
       } else {
         const cols = loadColumns()
-        const leads = loadLeads()
-        const title = (() => {
-          try { return localStorage.getItem('deal_pipeline_title') || 'Pipes' } catch { return 'Pipes' }
-        })()
-        if (leads.length > 0 || cols.some((c) => (c?.name || '').trim())) {
+        const deals = loadDeals()
+        const title = loadTitle()
+        if (deals.length > 0 || cols.some((c) => (c?.name || '').trim())) {
           try {
-            const created = await createPipeline(getToken, { title, columns: cols, leads })
+            const created = await createPipeline(getToken, { title, columns: cols, deals })
             setPipelines([created])
             setActivePipelineId(created.id)
-            setDealPipelineLeads(created.leads || [])
+            setDealPipelineDeals(created.deals || [])
           } catch (e) {
             console.warn('Pipeline migration failed:', e.message)
             setPipelines([])
@@ -861,12 +894,28 @@ function App() {
   }, [currentUser, getToken])
 
   useEffect(() => {
-    if (currentUser) refreshPipelines()
-    else {
+    if (currentUser) {
+      runLeadsDealsFreshStartMigration()
+      refreshPipelines()
+      refreshLeads()
+    } else {
       setPipelines([])
       setActivePipelineId(null)
+      setLeads([])
     }
-  }, [currentUser, refreshPipelines])
+  }, [currentUser, refreshPipelines, refreshLeads])
+
+  useEffect(() => {
+    if (!currentUser || pipelines.length === 0) return
+    if (localStorage.getItem('leads_deals_v2_migrated') === '1') return
+    ;(async () => {
+      const result = await runApiPipelinesFreshStartMigration(getToken, pipelines, updatePipeline)
+      if (result.migrated) {
+        showToast('Pipes now track Deals linked to Leads. Create a Lead first, then add a Deal to a pipe.', 'info')
+        await refreshPipelines()
+      }
+    })()
+  }, [currentUser, pipelines.length, getToken, refreshPipelines])
 
   // One-shot client migration: move local tasks with a pipelineId up to pipeline.tasks
   const leadTasksMigrationRunRef = useRef(false)
@@ -899,63 +948,32 @@ function App() {
     })()
   }, [currentUser?.uid, getToken, pipelines, refreshPipelines])
 
-  // Load deal pipeline leads when panel opens (localStorage mode only; API mode uses pipelines)
   useEffect(() => {
-    if (isDealPipelineOpen && pipelines.length === 0) setDealPipelineLeads(loadLeads())
+    if (isDealPipelineOpen && pipelines.length === 0) setDealPipelineDeals(loadDeals())
   }, [isDealPipelineOpen, pipelines.length])
 
-  // Refresh leads when schedule or tasks panel opens (localStorage mode only)
   useEffect(() => {
-    if ((isSchedulePanelOpen || isTasksPanelOpen) && pipelines.length === 0) setDealPipelineLeads(loadLeads())
+    if ((isSchedulePanelOpen || isTasksPanelOpen) && pipelines.length === 0) setDealPipelineDeals(loadDeals())
   }, [isSchedulePanelOpen, isTasksPanelOpen, pipelines.length])
 
-  const isParcelALeadCheck = useCallback((parcelId) => {
+  const activePipelineDeals = useMemo(() => {
     if (pipelines.length > 0) {
-      return pipelines.some((p) => (p.leads || []).some((l) => l.parcelId === parcelId))
+      return pipelines.find((p) => p.id === activePipelineId)?.deals ?? []
     }
-    return isParcelALead(parcelId)
-  }, [pipelines])
+    return dealPipelineDeals
+  }, [pipelines, activePipelineId, dealPipelineDeals])
 
-  const handleAddLeadToPipeline = useCallback(async (parcelData, pipelineId) => {
-    const pipe = pipelines.find((p) => p.id === pipelineId)
-    if (!pipe || !canAddLeadsToPipeline(currentUser, pipe)) {
-      showToast('You cannot add leads to this pipeline', 'error')
-      return
-    }
-    const firstColId = pipe.columns?.[0]?.id || 'col-0'
-    const now = Date.now()
-    const rawOwner = parcelData.properties?.OWNER_NAME || null
-    const { firstName, lastName } = splitOwnerName(rawOwner)
-    const lead = {
-      id: `lead-${now}-${parcelData.id}`,
-      parcelId: parcelData.id,
-      address: getStreetAddress(parcelData),
-      owner: rawOwner,
-      firstName,
-      lastName,
-      lat: parcelData.lat ?? (parcelData.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
-      lng: parcelData.lng ?? (parcelData.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
-      status: firstColId,
-      createdAt: now,
-      statusEnteredAt: now,
-      cumulativeTimeByStatus: {},
-      properties: parcelData.properties || null
-    }
-    try {
-      await updatePipeline(getToken, pipelineId, { leads: [...(pipe.leads || []), lead] })
-      await refreshPipelines()
-      setActivePipelineId(pipelineId)
-      setIsDealPipelineOpen(true)
-      showToast('Parcel added to Pipes', 'success')
-    } catch (e) {
-      showToast(e.message || 'Could not add lead', 'error')
-    }
-  }, [currentUser, getToken, pipelines, refreshPipelines])
+  const isParcelALeadCheck = useCallback((parcelId) => isParcelInLeadsList(leads, parcelId), [leads])
 
-  const handleConvertToLead = useCallback(async (parcelData) => {
-    if (!currentUser || !currentUser.uid) {
+  const handleResolveParcelForLead = useCallback(async (lat, lng) => {
+    if (!parcelLayerRef.current?.findParcelAtLocation) return null
+    return parcelLayerRef.current.findParcelAtLocation(lat, lng)
+  }, [])
+
+  const handleConvertToLead = useCallback((parcelData) => {
+    if (!currentUser?.uid) {
       setIsLoginOpen(true)
-      showToast('Please sign in to use Pipes', 'info')
+      showToast('Please sign in to create leads', 'info')
       return
     }
     if (!parcelData?.id) {
@@ -966,409 +984,263 @@ function App() {
       showToast('Parcel is already a lead', 'warning')
       return
     }
+    const skip = getSkipTracedParcel(parcelData.id)
+    setCreateLeadPrefill(buildLeadPrefillFromParcel(parcelData, skip))
+    setCreateLeadOpen(true)
+  }, [currentUser, isParcelALeadCheck])
+
+  const handleLeadCreated = useCallback((lead) => {
+    setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
+    refreshLeads()
+    setCreateLeadPrefill(null)
+  }, [refreshLeads])
+
+  const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks } = {}) => {
+    if (!lead?.id) return
+    const pid = pipelineId || activePipelineId
     if (pipelines.length > 0) {
-      const eligible = pipelines.filter((p) => canAddLeadsToPipeline(currentUser, p))
-      if (eligible.length === 0) {
-        showToast('You need a pipeline you own or can edit to add leads.', 'warning')
+      const pipe = pipelines.find((p) => p.id === pid)
+      if (!pipe || !canAddDealsToPipeline(currentUser, pipe, teams)) {
+        showToast('You cannot add deals to this pipeline', 'error')
         return
       }
-      if (eligible.length === 1) {
-        await handleAddLeadToPipeline(parcelData, eligible[0].id)
-        return
+      const deal = buildDealFromLead(lead, pipe.columns, pid, { title, notes, payments, costs })
+      try {
+        await updatePipeline(getToken, pid, { deals: [...(pipe.deals || []), deal] })
+        setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals: [...(p.deals || []), deal] } : p)))
+        await refreshPipelines()
+        if (Array.isArray(tasks) && tasks.length > 0) {
+          const { created, failed } = await createTasksForDeal({
+            deal,
+            lead,
+            pipeline: pipe,
+            tasks,
+            getToken,
+            apiMode: true,
+          })
+          if (created > 0) await refreshPipelines()
+          if (failed > 0) {
+            showToast('Deal created but some tasks could not be added', 'warning')
+          }
+        }
+        setActivePipelineId(pid)
+        setIsDealPipelineOpen(true)
+        showToast('Deal added to pipe', 'success')
+      } catch (e) {
+        showToast(e.message || 'Could not create deal', 'error')
       }
-      setPickPipelineForParcel({ parcelData, eligiblePipelines: eligible })
       return
     }
-    const columns = loadColumns()
-    const lead = addLead(parcelData, columns)
-    if (lead) {
-      setDealPipelineLeads(loadLeads())
-      scheduleUserDataSync(getToken)
-      setIsDealPipelineOpen(true)
-      showToast('Parcel added to Pipes', 'success')
-    } else {
-      showToast('Could not add lead', 'error')
+    const cols = loadColumns()
+    const deal = buildDealFromLead(lead, cols, null, { title, notes, payments, costs })
+    const next = [...loadDeals(), deal]
+    saveDeals(next)
+    setDealPipelineDeals(next)
+    if (Array.isArray(tasks) && tasks.length > 0) {
+      const { failed } = await createTasksForDeal({
+        deal,
+        lead,
+        pipeline: null,
+        tasks,
+        apiMode: false,
+      })
+      if (failed > 0) {
+        showToast('Deal created but some tasks could not be added', 'warning')
+      } else {
+        scheduleUserDataSync()
+      }
     }
-  }, [currentUser, getToken, pipelines, isParcelALeadCheck, handleAddLeadToPipeline, scheduleUserDataSync])
+    setIsDealPipelineOpen(true)
+    showToast('Deal added to pipe', 'success')
+  }, [activePipelineId, currentUser, getToken, pipelines, refreshPipelines, teams])
 
-  /**
-   * Close a lead: snapshot all related data (notes, tasks, contacts, pipeline,
-   * stage durations) into the closed-leads archive, then delete the live copies
-   * and remove the lead from its pipeline.
-   */
-  const archiveAndRemoveLead = useCallback(async (lead, pipelineId) => {
-    if (!lead) return false
-    const parcelId = lead.parcelId
-    const apiPipeline = pipelineId ? pipelines.find((p) => p.id === pipelineId) : null
-    const pipelineSnapshot = apiPipeline
-      ? {
-          id: apiPipeline.id,
-          title: apiPipeline.title || 'Pipes',
-          isLocal: false,
-          columns: apiPipeline.columns || []
-        }
-      : {
-          id: '_local',
-          title: loadTitle(),
-          isLocal: true,
-          columns: loadColumns()
-        }
+  const openCreateDealDialog = useCallback((prefill = {}) => {
+    if (!currentUser?.uid) {
+      setIsLoginOpen(true)
+      return
+    }
+    const eligible = pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))
+    if (pipelines.length > 0 && eligible.length === 0) {
+      showToast('Create or open a pipeline first', 'warning')
+      return
+    }
+    setCreateDealPrefill(prefill)
+    setCreateDealOpen(true)
+  }, [currentUser, pipelines, teams])
 
-    const parcelNote = parcelId ? getParcelNote(parcelId) : null
-    const leadTasksSnapshot = parcelId ? getLeadTasks(parcelId, apiPipeline ? pipelineId : null) : []
-    const contactsSnapshot = parcelId ? getSkipTracedParcel(parcelId) : null
-
-    const record = buildClosedLeadRecord({
-      lead,
-      pipeline: pipelineSnapshot,
-      parcelNote,
-      tasks: leadTasksSnapshot,
-      contacts: contactsSnapshot
+  const handleCreateDealRequest = useCallback((lead, preferredPipelineId) => {
+    if (!lead) return
+    openCreateDealDialog({
+      leadId: lead.id,
+      pipelineId: preferredPipelineId || undefined,
     })
+  }, [openCreateDealDialog])
 
-    addClosedLead(record)
-    setClosedLeads(loadClosedLeads())
+  const handleCreateDealSubmit = useCallback(async ({ title, notes, leadId, pipelineId, payments, costs, tasks }) => {
+    const lead = leads.find((l) => l.id === leadId)
+    if (!lead) {
+      showToast('Lead not found', 'error')
+      return
+    }
+    setCreateDealSaving(true)
+    try {
+      await handleCreateDeal(lead, pipelineId, { title, notes, payments, costs, tasks })
+      setCreateDealOpen(false)
+      setCreateDealPrefill(null)
+    } finally {
+      setCreateDealSaving(false)
+    }
+  }, [leads, handleCreateDeal])
 
-    if (parcelId) {
-      saveParcelNote(parcelId, '')
-      deleteAllLeadTasks(parcelId, apiPipeline ? pipelineId : null)
-      deleteSkipTracedParcel(parcelId)
+  const archiveAndRemoveDeal = useCallback(async (deal, pipelineOrId) => {
+    if (!deal) return false
+    const pipelineId = resolvePipelineId(pipelineOrId)
+    const apiPipeline = pipelineId ? pipelines.find((p) => p.id === pipelineId) : null
+    const leadRecord = leads.find((l) => l.id === deal.leadId) || null
+    const pipelineSnapshot = apiPipeline
+      ? { id: apiPipeline.id, title: apiPipeline.title || 'Pipes', isLocal: false, columns: apiPipeline.columns || [] }
+      : { id: '_local', title: loadTitle(), isLocal: true, columns: loadColumns() }
+
+    const now = Date.now()
+    const cum = { ...(deal.cumulativeTimeByStatus || {}) }
+    const entered = deal.statusEnteredAt ?? deal.createdAt
+    if (deal.status && entered) {
+      cum[deal.status] = (cum[deal.status] || 0) + Math.max(0, now - entered)
     }
 
     try {
       if (apiPipeline) {
-        const remaining = (apiPipeline.leads || []).filter((l) => l.id !== lead.id)
-        await updatePipeline(getToken, apiPipeline.id, { leads: remaining })
-        // Optimistically update pipelines state so the popup/details panels
-        // stop treating this parcel as a lead immediately (which brings the
-        // "Add to Pipeline" button back) without waiting for the refresh.
-        setPipelines((prev) => prev.map((p) => p.id === apiPipeline.id
-          ? {
-              ...p,
-              leads: remaining,
-              tasks: parcelId
-                ? (p.tasks || []).filter((t) => t?.parcelId !== parcelId)
-                : (p.tasks || [])
-            }
-          : p))
+        const remaining = (apiPipeline.deals || []).filter((d) => d.id !== deal.id)
+        await updatePipeline(getToken, apiPipeline.id, { deals: remaining })
+        setPipelines((prev) => prev.map((p) => (p.id === apiPipeline.id ? { ...p, deals: remaining } : p)))
         await refreshPipelines()
       } else {
-        const remaining = loadLeads().filter((l) => l.id !== lead.id)
-        saveLeads(remaining)
-        setDealPipelineLeads(remaining)
+        const remaining = loadDeals().filter((d) => d.id !== deal.id)
+        saveDeals(remaining)
+        setDealPipelineDeals(remaining)
       }
+
+      addClosedDeal(buildClosedDealRecord({
+        deal: { ...deal, cumulativeTimeByStatus: cum },
+        lead: leadRecord,
+        pipeline: pipelineSnapshot,
+        stageTime: cum,
+      }))
+      setClosedDeals(loadClosedDeals())
     } catch (e) {
-      showToast(e.message || 'Could not remove lead from pipeline', 'error')
+      showToast(e.message || 'Could not close deal', 'error')
       return false
     }
-
     scheduleUserDataSync(getToken)
     return true
-  }, [pipelines, getToken, refreshPipelines])
+  }, [getToken, leads, pipelines, refreshPipelines])
 
-  const handleCloseLead = useCallback(async (lead, pipelineId) => {
-    if (!lead) return
+  const handleCloseDeal = useCallback(async (deal, pipelineOrId) => {
+    if (!deal) return false
     const confirmed = await showConfirm(
-      'This lead will be archived with all its history and removed from the pipeline.',
-      'Close Lead',
-      {
-        detail: lead.owner || lead.address || 'Lead',
-        detailSubtitle: lead.owner ? (lead.address || '') : '',
-        confirmText: 'Close Lead'
-      }
+      'This deal will be archived and removed from the pipeline.',
+      'Close Deal',
+      { detail: deal.title || deal.leadAddress || 'Deal', confirmText: 'Close Deal' }
     )
-    if (!confirmed) return
-    const ok = await archiveAndRemoveLead(lead, pipelineId)
-    if (ok) showToast('Lead closed and archived', 'success')
-  }, [archiveAndRemoveLead])
+    if (!confirmed) return false
+    const ok = await archiveAndRemoveDeal(deal, pipelineOrId)
+    if (ok) showToast('Deal closed and archived', 'success')
+    return ok
+  }, [archiveAndRemoveDeal])
 
-  const handleDeleteLead = useCallback(async (lead /* , pipelineId */) => {
-    if (!lead) return
-
-    const parcelId = lead.parcelId
-    const matchesLead = (l) => {
-      if (!l) return false
-      if (lead.id != null && l.id === lead.id) return true
-      if (parcelId && l.parcelId === parcelId) return true
+  const handleRemoveDeal = useCallback(async (deal, pipelineOrId) => {
+    if (!deal) return false
+    const confirmed = await showConfirm(
+      'Remove this deal from the pipeline? Tasks and files on the deal will be lost.',
+      'Remove Deal',
+      { detail: deal.title || 'Deal', confirmText: 'Remove' }
+    )
+    if (!confirmed) return false
+    const pipelineId = resolvePipelineId(pipelineOrId)
+    try {
+      const apiPipeline = pipelineId ? pipelines.find((p) => p.id === pipelineId) : null
+      if (apiPipeline) {
+        const remaining = (apiPipeline.deals || []).filter((d) => d.id !== deal.id)
+        await updatePipeline(getToken, apiPipeline.id, { deals: remaining })
+        setPipelines((prev) => prev.map((p) => (p.id === apiPipeline.id ? { ...p, deals: remaining } : p)))
+        await refreshPipelines()
+      } else {
+        const remaining = loadDeals().filter((d) => d.id !== deal.id)
+        saveDeals(remaining)
+        setDealPipelineDeals(remaining)
+      }
+      showToast('Deal removed', 'success')
+      return true
+    } catch (e) {
+      showToast(e.message || 'Could not remove deal', 'error')
       return false
     }
-    const affectedApiPipelines = (pipelines || []).filter((p) => (p.leads || []).some(matchesLead))
-    const pipelineCount = affectedApiPipelines.length
-    let message = 'This lead, its tasks, notes, and contacts will be permanently deleted. This cannot be undone.'
-    if (pipelineCount > 1) {
-      const titles = affectedApiPipelines.map((p) => p.title || 'Pipes').slice(0, 3).join(', ')
-      const more = pipelineCount > 3 ? ` and ${pipelineCount - 3} more` : ''
-      message = `This lead exists in ${pipelineCount} pipelines (${titles}${more}). It and all its tasks, notes, and contacts will be permanently deleted from every pipeline. This cannot be undone.`
-    } else if (pipelineCount === 1) {
-      message = `This lead and all its tasks, notes, and contacts will be permanently deleted from "${affectedApiPipelines[0].title || 'Pipes'}". This cannot be undone.`
-    }
+  }, [getToken, pipelines, refreshPipelines])
 
-    const confirmed = await showConfirm(
-      message,
-      'Delete Lead',
-      {
-        detail: lead.owner || lead.address || 'Lead',
-        detailSubtitle: lead.owner ? (lead.address || '') : '',
-        confirmText: 'Delete'
-      }
-    )
-    if (!confirmed) return
-
-    if (parcelId) {
-      saveParcelNote(parcelId, '')
-      deleteAllLeadTasks(parcelId, null)
-      deleteSkipTracedParcel(parcelId)
-    }
-
-    try {
-      for (const p of affectedApiPipelines) {
-        // Remove any pipeline-scoped tasks tied to this lead's parcel before
-        // rewriting the leads array, so those tasks don't linger as orphans.
-        if (parcelId) {
-          const pipelineTasksForLead = (p.tasks || []).filter((t) => t?.parcelId === parcelId)
-          for (const t of pipelineTasksForLead) {
-            try { await removePipelineTask(getToken, p.id, t.id) } catch { /* non-fatal */ }
-          }
-        }
-        const remaining = (p.leads || []).filter((l) => !matchesLead(l))
-        await updatePipeline(getToken, p.id, { leads: remaining })
-      }
-      if (affectedApiPipelines.length > 0) {
-        // Optimistically strip the lead (and its pipeline tasks) from our
-        // pipelines state so derived checks like isParcelALeadCheck flip to
-        // false immediately — this is what lets the "Add to Pipeline" button
-        // return on the popup and details panels the instant deletion
-        // completes, instead of waiting on the refreshPipelines round-trip.
-        setPipelines((prev) => prev.map((p) => ({
-          ...p,
-          leads: (p.leads || []).filter((l) => !matchesLead(l)),
-          tasks: parcelId
-            ? (p.tasks || []).filter((t) => t?.parcelId !== parcelId)
-            : (p.tasks || [])
-        })))
-        await refreshPipelines()
-      }
-
-      const localLeads = loadLeads()
-      const remainingLocal = localLeads.filter((l) => !matchesLead(l))
-      if (remainingLocal.length !== localLeads.length) {
-        saveLeads(remainingLocal)
-        setDealPipelineLeads(remainingLocal)
-      }
-    } catch (e) {
-      showToast(e.message || 'Could not delete lead from pipelines', 'error')
-      return
-    }
-
-    scheduleUserDataSync(getToken)
-    showToast('Lead deleted', 'success')
-  }, [pipelines, getToken, refreshPipelines])
-
-  /**
-   * Reopen a closed lead: restore notes/tasks/contacts to live stores and add the
-   * lead back into its original pipeline (falls back to first API pipeline, or
-   * local pipeline, if the original no longer exists). The archive record is
-   * removed on success.
-   */
-  const handleReopenLead = useCallback(async (record) => {
-    if (!record) return
-    const leadName = record.lead?.owner || record.lead?.address || 'Lead'
-    const confirmed = await showConfirm(
-      'This lead will be restored to its pipeline with all notes, tasks, and contacts.',
-      'Reopen Lead',
-      {
-        detail: leadName,
-        detailSubtitle: record.lead?.owner ? (record.lead.address || '') : '',
-        confirmText: 'Reopen'
-      }
-    )
-    if (!confirmed) return
-
-    const closedFrom = record.closedFrom || {}
-    const isOriginalLocal = !!closedFrom.isLocal
-    const apiPipeline = !isOriginalLocal && closedFrom.pipelineId
-      ? pipelines.find((p) => p.id === closedFrom.pipelineId)
-      : null
-    const fallbackApi = !apiPipeline && !isOriginalLocal && pipelines.length > 0 ? pipelines[0] : null
-    const targetApi = apiPipeline || fallbackApi
-    const useLocal = !targetApi
-
-    const columns = useLocal ? loadColumns() : (targetApi.columns || [])
-    const now = Date.now()
-    const originalStatus = record.lead?.status
-    const status = columns.some((c) => c.id === originalStatus)
-      ? originalStatus
-      : (columns[0]?.id || originalStatus || null)
-
-    const leadToRestore = {
-      ...record.lead,
-      status,
-      statusEnteredAt: now,
-      cumulativeTimeByStatus: { ...(record.stageTime || record.lead?.cumulativeTimeByStatus || {}) }
-    }
-
-    const parcelId = record.parcelId || leadToRestore.parcelId || null
-
-    if (parcelId) {
-      if (record.notes) saveParcelNote(parcelId, record.notes)
-      if (record.contacts) {
-        saveSkipTracedParcel(parcelId, {
-          ...record.contacts,
-          skipTracedAt: record.contacts.skipTracedAt ?? null
-        })
-      }
-    }
-    if (Array.isArray(record.tasks) && record.tasks.length > 0 && parcelId) {
-      restoreLeadTasks(record.tasks, {
-        parcelId,
-        pipelineId: useLocal ? null : targetApi.id
-      })
-    }
-
-    try {
-      if (useLocal) {
-        const next = [...loadLeads(), leadToRestore]
-        saveLeads(next)
-        setDealPipelineLeads(next)
-      } else {
-        const nextLeads = [...(targetApi.leads || []), leadToRestore]
-        await updatePipeline(getToken, targetApi.id, { leads: nextLeads })
-        await refreshPipelines()
-      }
-    } catch (e) {
-      showToast(e.message || 'Could not reopen lead into pipeline', 'error')
-      return
-    }
-
-    removeClosedLead(record.id)
-    setClosedLeads(loadClosedLeads())
-    scheduleUserDataSync(getToken)
-    showToast(
-      useLocal && !isOriginalLocal
-        ? 'Lead reopened in local pipeline (original pipeline not found)'
-        : 'Lead reopened',
-      'success'
-    )
-  }, [pipelines, getToken, refreshPipelines])
-
-  /**
-   * Open the target-pipeline picker for moving a lead between API pipelines.
-   * No-ops in local-only mode, when the source pipeline is unknown, or when
-   * there are no other pipelines the user can write to.
-   */
-  const handleRequestMoveLead = useCallback((lead, sourcePipelineId) => {
-    if (!lead || !sourcePipelineId) return
+  const handleRequestMoveDeal = useCallback((deal, sourcePipelineOrId) => {
+    const sourcePipelineId = resolvePipelineId(sourcePipelineOrId)
+    if (!deal || !sourcePipelineId) return
     const eligible = pipelines.filter((p) =>
-      p.id !== sourcePipelineId && canAddLeadsToPipeline(currentUser, p, teams)
+      p.id !== sourcePipelineId && canAddDealsToPipeline(currentUser, p, teams)
     )
     if (eligible.length === 0) {
-      showToast('No other pipelines you can move this lead to', 'warning')
+      showToast('No other pipelines you can move this deal to', 'warning')
       return
     }
-    setMoveLeadContext({ lead, sourcePipelineId, eligiblePipelines: eligible })
+    setMoveDealContext({ deal, sourcePipelineId, eligiblePipelines: eligible })
   }, [pipelines, currentUser, teams])
 
-  /**
-   * Move a lead from sourcePipelineId to targetPipelineId, migrating tied
-   * data: pipeline-scoped tasks (pipeline.tasks), team tasks on the lead
-   * (lead.teamTasks travels with the lead), and any local lead_tasks tagged
-   * to the source pipeline. Order: add lead+tasks to target first, then
-   * remove from source, so we never orphan tasks if the second leg fails.
-   */
-  const handleMoveLead = useCallback(async (lead, sourcePipelineId, targetPipelineId) => {
-    if (!lead || !sourcePipelineId || !targetPipelineId) return false
-    if (sourcePipelineId === targetPipelineId) return false
+  const handleMoveDeal = useCallback(async (deal, sourcePipelineId, targetPipelineId) => {
+    if (!deal || !sourcePipelineId || !targetPipelineId || sourcePipelineId === targetPipelineId) return false
     const source = pipelines.find((p) => p.id === sourcePipelineId)
     const target = pipelines.find((p) => p.id === targetPipelineId)
     if (!source || !target) {
-      showToast('Source or target pipeline not found', 'error')
+      showToast('Pipeline not found', 'error')
       return false
     }
-
     const targetColumns = target.columns || []
-    const targetStatus = targetColumns.some((c) => c.id === lead.status)
-      ? lead.status
-      : (targetColumns[0]?.id || lead.status || 'col-0')
+    const targetStatus = targetColumns.some((c) => c.id === deal.status)
+      ? deal.status
+      : (targetColumns[0]?.id || deal.status || 'col-0')
     const now = Date.now()
-    const movedLead = {
-      ...lead,
+    const movedDeal = {
+      ...deal,
       status: targetStatus,
       statusEnteredAt: now,
-      cumulativeTimeByStatus: { ...(lead.cumulativeTimeByStatus || {}) }
+      cumulativeTimeByStatus: { ...(deal.cumulativeTimeByStatus || {}) },
+      updatedAt: now,
     }
-    const parcelId = lead.parcelId
-    const sourcePipelineTasks = parcelId
-      ? (source.tasks || []).filter((t) => t?.parcelId === parcelId)
-      : []
-
     try {
-      const targetLeads = [...(target.leads || []), movedLead]
-      await updatePipeline(getToken, targetPipelineId, { leads: targetLeads })
-
-      for (const t of sourcePipelineTasks) {
-        try {
-          await addPipelineTask(getToken, targetPipelineId, {
-            id: t.id,
-            title: t.title,
-            completed: !!t.completed,
-            createdAt: t.createdAt,
-            completedAt: t.completedAt ?? null,
-            scheduledAt: t.scheduledAt ?? null,
-            scheduledEndAt: t.scheduledEndAt ?? null,
-            parcelId: t.parcelId
-          })
-        } catch (e) {
-          console.warn('Move lead: task copy failed', e?.message || e)
-        }
-      }
-
-      for (const t of sourcePipelineTasks) {
-        try { await removePipelineTask(getToken, sourcePipelineId, t.id) }
-        catch (e) { console.warn('Move lead: source task remove failed', e?.message || e) }
-      }
-
-      const remainingSourceLeads = (source.leads || []).filter((l) => l.id !== lead.id)
-      await updatePipeline(getToken, sourcePipelineId, { leads: remainingSourceLeads })
+      await updatePipeline(getToken, targetPipelineId, { deals: [...(target.deals || []), movedDeal] })
+      const remaining = (source.deals || []).filter((d) => d.id !== deal.id)
+      await updatePipeline(getToken, sourcePipelineId, { deals: remaining })
+      await refreshPipelines()
+      showToast(`Deal moved to ${target.title || 'pipeline'}`, 'success')
+      return true
     } catch (e) {
-      showToast(e.message || 'Could not move lead', 'error')
-      try { await refreshPipelines() } catch { /* ignore */ }
+      showToast(e.message || 'Could not move deal', 'error')
       return false
     }
+  }, [getToken, pipelines, refreshPipelines])
 
-    if (parcelId) {
-      const localTasks = getAllTasks()
-      for (const t of localTasks) {
-        if (t.parcelId === parcelId && t.pipelineId === sourcePipelineId) {
-          updateTaskById(t.id, { pipelineId: targetPipelineId })
-        }
+  const handleDealUpdate = useCallback(async (updatedDeal, pipelineOrId) => {
+    const pid = resolvePipelineId(pipelineOrId) || activePipelineId
+    if (pipelines.length > 0 && pid) {
+      const pipe = pipelines.find((p) => p.id === pid)
+      if (!pipe) return
+      const deals = (pipe.deals || []).map((d) => (d.id === updatedDeal.id ? updatedDeal : d))
+      try {
+        await updatePipeline(getToken, pid, { deals })
+        setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals } : p)))
+      } catch (e) {
+        showToast(e.message || 'Failed to update deal', 'error')
       }
+      return
     }
-
-    setPipelines((prev) => prev.map((p) => {
-      if (p.id === sourcePipelineId) {
-        return {
-          ...p,
-          leads: (p.leads || []).filter((l) => l.id !== lead.id),
-          tasks: (p.tasks || []).filter((t) => !(parcelId && t?.parcelId === parcelId))
-        }
-      }
-      if (p.id === targetPipelineId) {
-        return {
-          ...p,
-          leads: [...(p.leads || []), movedLead],
-          tasks: [
-            ...(p.tasks || []),
-            ...sourcePipelineTasks.map((t) => ({ ...t }))
-          ]
-        }
-      }
-      return p
-    }))
-    await refreshPipelines()
-    scheduleUserDataSync(getToken)
-    showToast(`Lead moved to ${target.title || 'pipeline'}`, 'success')
-    return true
-  }, [pipelines, getToken, refreshPipelines])
+    const next = loadDeals().map((d) => (d.id === updatedDeal.id ? updatedDeal : d))
+    saveDeals(next)
+    setDealPipelineDeals(next)
+  }, [activePipelineId, getToken, pipelines])
 
   // Background polling for skip trace jobs
   useEffect(() => {
@@ -1616,15 +1488,21 @@ function App() {
     }
   }, [getToken, refreshPipelines])
 
-  const handleSharePipelineWithTeams = useCallback(async (pipelineId, teamShares) => {
+  const handleSharePipelineWithTeams = useCallback(async (pipelineId, sharePatch) => {
     try {
-      await updatePipeline(getToken, pipelineId, { teamShares })
+      const teamId = teams[0]?.id
+      await updatePipeline(getToken, pipelineId, {
+        visibility: sharePatch.visibility,
+        sharedMemberUids: sharePatch.sharedMemberUids || [],
+        teamId: sharePatch.visibility === 'team' ? teamId : null,
+        teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
+      })
       await refreshPipelines()
-      showToast('Team sharing updated', 'success')
+      showToast('Sharing updated', 'success')
     } catch (error) {
-      showToast(error.message || 'Failed to update team sharing', 'error')
+      showToast(error.message || 'Failed to update sharing', 'error')
     }
-  }, [getToken, refreshPipelines])
+  }, [getToken, refreshPipelines, teams])
 
   const handleShareList = useCallback(async (listId, sharedWith) => {
     try {
@@ -1636,15 +1514,21 @@ function App() {
     }
   }, [getToken, refreshLists])
 
-  const handleShareListWithTeams = useCallback(async (listId, teamShares) => {
+  const handleShareListWithTeams = useCallback(async (listId, sharePatch) => {
     try {
-      await updateList(getToken, listId, { teamShares })
+      const teamId = teams[0]?.id
+      await updateList(getToken, listId, {
+        visibility: sharePatch.visibility,
+        sharedMemberUids: sharePatch.sharedMemberUids || [],
+        teamId: sharePatch.visibility === 'team' ? teamId : null,
+        teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
+      })
       await refreshLists()
-      showToast('Team sharing updated', 'success')
+      showToast('Sharing updated', 'success')
     } catch (error) {
-      showToast(error.message || 'Failed to update team sharing', 'error')
+      showToast(error.message || 'Failed to update sharing', 'error')
     }
-  }, [getToken, refreshLists])
+  }, [getToken, refreshLists, teams])
 
   const handleRenameList = useCallback(async (listId, newName) => {
     try {
@@ -1923,6 +1807,8 @@ function App() {
     setIsSchedulePanelOpen(false)
     setIsTasksPanelOpen(false)
     setScheduleInitialDate(null)
+    scheduleNavStackRef.current = []
+    setScheduleNavDepth(0)
     if (Number.isFinite(lat) && Number.isFinite(lng) && mapRef.current) {
       mapRef.current.flyTo({ center: [lng, lat], zoom: 17, duration: 500 })
     }
@@ -1961,38 +1847,24 @@ function App() {
   }, [currentUser, authLoading, clickedParcelData])
 
   const handleDealPipelineFocusHandled = useCallback(() => {
-    setDealPipelineFocusParcelId(null)
+    setDealPipelineFocusDealId(null)
   }, [])
 
   const handleDealPipelineAddTaskHandled = useCallback(() => {
     setDealPipelineAddTaskParcelId(null)
   }, [])
 
-  const handleOpenTaskInDealPipeline = useCallback(({ pipelineId, parcelId, mode }) => {
+  const handleOpenTaskInDealPipeline = useCallback(({ pipelineId, dealId, parcelId, mode }) => {
     setIsTasksPanelOpen(false)
-    setDealPipelineFocusParcelId(parcelId ?? null)
+    setDealPipelineFocusDealId(dealId ?? null)
     if (mode === 'api' && pipelineId) {
       setActivePipelineId(pipelineId)
     }
-    setDealPipelineLeadFocusKey((k) => k + 1)
+    setDealPipelineDealFocusKey((k) => k + 1)
     setIsDealPipelineOpen(true)
   }, [])
 
-  /**
-   * Bring the user into the Pipes board for a given lead with the in-board
-   * "New Task" dialog prefilled with that lead. Used by entry points outside
-   * the board (Leads list, Schedule, etc.) so they reuse one task-creation UI.
-   */
-  const handleOpenAddTaskForLead = useCallback((lead, pipelineId) => {
-    if (!lead?.parcelId) return
-    setIsLeadsPanelOpen(false)
-    setIsSchedulePanelOpen(false)
-    setIsTasksPanelOpen(false)
-    if (pipelineId) setActivePipelineId(pipelineId)
-    setDealPipelineAddTaskParcelId(lead.parcelId)
-    setDealPipelineAddTaskKey((k) => k + 1)
-    setIsDealPipelineOpen(true)
-  }, [])
+  const openDealsPanel = useCallback(() => setIsDealsPanelOpen(true), [])
 
   const handlePhoneClick = useCallback((phone, parcelData) => {
     setPhoneActionPanel({ phone, parcelData: parcelData || null })
@@ -2120,6 +1992,34 @@ function App() {
     if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
     setIsSchedulePanelOpen(true)
   }, [authLoading, currentUser])
+
+  const [scheduleNavDepth, setScheduleNavDepth] = useState(0)
+
+  const openScheduleAtDate = useCallback((ts, navFrom = null) => {
+    if (navFrom) {
+      scheduleNavStackRef.current.push(navFrom)
+      setScheduleNavDepth((d) => d + 1)
+    }
+    setScheduleInitialDate(ts)
+    setIsSchedulePanelOpen(true)
+  }, [])
+
+  const closeSchedulePanel = useCallback(() => {
+    setIsSchedulePanelOpen(false)
+    setScheduleInitialDate(null)
+    if (scheduleNavStackRef.current.length > 0) {
+      scheduleNavStackRef.current.pop()
+      setScheduleNavDepth((d) => Math.max(0, d - 1))
+    }
+  }, [])
+
+  const scheduleStacked =
+    isSchedulePanelOpen &&
+    (scheduleNavDepth > 0 ||
+      isLeadsPanelOpen ||
+      isTasksPanelOpen ||
+      isDealPipelineOpen ||
+      isDealsPanelOpen)
   const openListPanel = useCallback(() => {
     if (authLoading) return
     if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
@@ -2145,35 +2045,87 @@ function App() {
   const handleNotificationNavigate = useCallback((data) => {
     if (!data?.type) return
     const type = data.type
-    if (type === 'listShared' && data.listId) {
+    if (type === 'lead' && data.leadId) {
+      if (!leads.some((l) => l.id === data.leadId)) {
+        showToast("You don't have access to this lead", 'warning')
+        return
+      }
+      setLeadsPanelFocusLeadId(data.leadId)
+      setIsLeadsPanelOpen(true)
+      return
+    }
+    if (type === 'deal' && data.dealId) {
+      if (data.pipelineId && !pipelines.some((p) => p.id === data.pipelineId)) {
+        showToast("You don't have access to this deal", 'warning')
+        return
+      }
+      if (data.pipelineId) setActivePipelineId(data.pipelineId)
+      setIsDealPipelineOpen(true)
+      setDealPipelineFocusDealId(data.dealId)
+      setDealPipelineDealFocusKey((k) => k + 1)
+      return
+    }
+    if (type === 'pipeline' && data.pipelineId) {
+      if (!pipelines.some((p) => p.id === data.pipelineId)) {
+        showToast("You don't have access to this pipe", 'warning')
+        return
+      }
+      setActivePipelineId(data.pipelineId)
+      setIsDealPipelineOpen(true)
+      return
+    }
+    if (type === 'task' || type === 'taskDeadline') {
+      setIsTasksPanelOpen(true)
+      if (data.scheduledAt) setIsSchedulePanelOpen(true)
+      return
+    }
+    if (type === 'schedule') {
+      setIsSchedulePanelOpen(true)
+      return
+    }
+    if ((type === 'listShared' || type === 'list') && data.listId) {
+      if (!lists.some((l) => l.id === data.listId)) {
+        showToast("You don't have access to this list", 'warning')
+        return
+      }
       setSelectedListIds((prev) => (prev.includes(data.listId) ? prev : [...prev, data.listId].slice(0, 20)))
       setIsListPanelOpen(true)
       return
     }
     if (type === 'pipelineShared' || type === 'pipelineLeadStage') {
+      if (data.pipelineId && !pipelines.some((p) => p.id === data.pipelineId)) {
+        showToast("You don't have access to this pipe", 'warning')
+        return
+      }
+      if (data.pipelineId) setActivePipelineId(data.pipelineId)
       setIsDealPipelineOpen(true)
       return
     }
-    if (type === 'pathShared') {
+    if (type === 'pathShared' || type === 'path') {
       setIsPathsPanelOpen(true)
       return
     }
-    if (type === 'formSubmitted') {
+    if (type === 'formSubmitted' || type === 'form') {
       setIsFormsPanelOpen(true)
       return
     }
-    if (type === 'teamAdded') {
+    if (type === 'teamAdded' || type === 'team') {
       setIsTeamsPanelOpen(true)
       return
     }
-    if (type === 'taskDeadline') {
-      setIsTasksPanelOpen(true)
-    }
-  }, [])
+  }, [leads, pipelines, lists])
+
+  useTeamDataSync({
+    enabled: !!currentUser?.uid && teams.length > 0,
+    refreshPipelines,
+    refreshLeads,
+  })
 
   const notificationInbox = useNotificationInbox({
     getToken,
     currentUser,
+    teams,
+    teamMembership,
     onNavigate: handleNotificationNavigate,
   })
 
@@ -2199,6 +2151,16 @@ function App() {
   }, [permissionsReady, handleNotificationNavigate])
 
   const openLeadsPanel = useCallback(() => setIsLeadsPanelOpen(true), [])
+
+  const openLeadDetails = useCallback((lead) => {
+    if (!lead?.id) return
+    setLeadsPanelFocusLeadId(lead.id)
+    setIsLeadsPanelOpen(true)
+  }, [])
+
+  const handleLeadsPanelFocusHandled = useCallback(() => {
+    setLeadsPanelFocusLeadId(null)
+  }, [])
   const openSettingsPanel = useCallback(() => setIsSettingsPanelOpen(true), [])
   const openLogin = useCallback(() => setIsLoginOpen(true), [])
 
@@ -2828,6 +2790,7 @@ function App() {
         onOpenTeamsPanel={openTeamsPanel}
         onOpenSettings={openSettingsPanel}
         onOpenLeads={openLeadsPanel}
+        onOpenDeals={openDealsPanel}
         onOpenForms={openFormsPanel}
         onOpenPipes={openDealPipeline}
         onOpenTasks={openTasks}
@@ -2865,6 +2828,7 @@ function App() {
         isPathTrackingActive={isPathTrackingActive}
         onOpenOutreach={handleOpenOutreach}
         onOpenLeads={openLeadsPanel}
+        onOpenDeals={openDealsPanel}
         onOpenForms={openFormsPanel}
         onOpenTeamsPanel={openTeamsPanel}
         onOpenSettings={openSettingsPanel}
@@ -2904,6 +2868,7 @@ function App() {
         onShareList={handleShareList}
         onShareListWithTeams={handleShareListWithTeams}
         teams={teams}
+        teamMembership={teamMembership}
         onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
         onCreateList={async (name) => {
           await createList(getToken, name, [])
@@ -3006,9 +2971,9 @@ function App() {
         onClose={() => setIsDealPipelineOpen(false)}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
-        focusLeadRequestKey={dealPipelineLeadFocusKey}
-        focusParcelId={dealPipelineFocusParcelId}
-        onFocusLeadHandled={handleDealPipelineFocusHandled}
+        focusDealRequestKey={dealPipelineDealFocusKey}
+        focusDealId={dealPipelineFocusDealId}
+        onFocusDealHandled={handleDealPipelineFocusHandled}
         addTaskRequestKey={dealPipelineAddTaskKey}
         addTaskRequestParcelId={dealPipelineAddTaskParcelId}
         onAddTaskRequestHandled={handleDealPipelineAddTaskHandled}
@@ -3017,24 +2982,23 @@ function App() {
         onSharePipeline={handleSharePipeline}
         onSharePipelineWithTeams={handleSharePipelineWithTeams}
         teams={teams}
+        teamMembership={teamMembership}
         onValidateShareEmail={(email) => validatePipelineShareEmail(getToken, email)}
         currentUser={currentUser}
         getToken={getToken}
-        leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
-        onLeadsChange={pipelines.length > 0 ? async (newLeads) => {
+        leads={leads}
+        deals={activePipelineDeals}
+        onDealsChange={pipelines.length > 0 ? async (newDeals) => {
           if (!activePipelineId) return
           try {
-            await updatePipeline(getToken, activePipelineId, { leads: newLeads })
-            // Optimistically sync local pipelines state so any parcel panels
-            // currently open re-derive isLead against the new leads array
-            // (restoring the "Add to Pipeline" button for removed leads)
-            // without waiting on refreshPipelines.
+            await updatePipeline(getToken, activePipelineId, { deals: newDeals })
             setPipelines((prev) => prev.map((p) => p.id === activePipelineId
-              ? { ...p, leads: newLeads }
+              ? { ...p, deals: newDeals }
               : p))
             await refreshPipelines()
           } catch (e) { showToast(e.message || 'Failed to update', 'error') }
-        } : setDealPipelineLeads}
+        } : setDealPipelineDeals}
+        onOpenCreateDeal={(prefill) => openCreateDealDialog({ pipelineId: activePipelineId, ...prefill })}
         onColumnsChange={pipelines.length > 0 && activePipelineId ? async (cols) => {
           try {
             await updatePipeline(getToken, activePipelineId, { columns: cols })
@@ -3052,43 +3016,38 @@ function App() {
         onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
-        onOpenScheduleAtDate={(ts) => {
-          setIsDealPipelineOpen(false)
-          setScheduleInitialDate(ts)
-          setIsSchedulePanelOpen(true)
-        }}
-        onCenterParcel={(location) => {
-          if (mapRef.current) {
-            mapRef.current.flyTo({ center: [location.lng, location.lat], zoom: 17, duration: 500 })
-          }
-        }}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'dealPipeline' })}
         onGoToParcelOnMap={handleGoToParcelOnMap}
-        onRequestCloseLead={handleCloseLead}
-        onRequestRemoveLead={handleDeleteLead}
-        onRequestMoveLead={handleRequestMoveLead}
+        onRequestCloseDeal={handleCloseDeal}
+        onRequestRemoveDeal={handleRemoveDeal}
+        onRequestMoveDeal={handleRequestMoveDeal}
+        onLeadsChange={setLeads}
+        onRefreshLeads={refreshLeads}
       />
 
       <SchedulePanel
         isOpen={isSchedulePanelOpen}
-        onClose={() => { setIsSchedulePanelOpen(false); setScheduleInitialDate(null) }}
+        stacked={scheduleStacked}
+        onClose={closeSchedulePanel}
         initialDate={scheduleInitialDate}
         onInitialDateConsumed={() => setScheduleInitialDate(null)}
-        leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
+        leads={leads}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
-        onLeadsChange={pipelines.length > 0 ? () => refreshPipelines() : setDealPipelineLeads}
+        deals={activePipelineDeals}
+        onLeadsChange={() => refreshLeads()}
+        onDealsChange={() => refreshPipelines()}
         onOpenParcelDetails={handleOpenParcelDetails}
         onEmailClick={handleEmailClick}
         onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
         onGoToParcelOnMap={handleGoToParcelOnMap}
-        onRequestRemoveLead={handleDeleteLead}
-        onRequestMoveLead={handleRequestMoveLead}
         getToken={getToken}
         currentUser={currentUser}
         onPipelinesChange={refreshPipelines}
         teams={teams}
+        teamMembership={teamMembership}
       />
 
       <TasksPanel
@@ -3096,13 +3055,17 @@ function App() {
         onClose={() => setIsTasksPanelOpen(false)}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
-        leads={pipelines.length > 0 ? (pipelines.find((p) => p.id === activePipelineId)?.leads ?? []) : dealPipelineLeads}
-        onLeadsChange={pipelines.length > 0 ? () => refreshPipelines() : setDealPipelineLeads}
+        leads={leads}
+        deals={activePipelineDeals}
+        onLeadsChange={() => refreshLeads()}
+        onDealsChange={() => refreshPipelines()}
         onOpenTaskInDealPipeline={handleOpenTaskInDealPipeline}
         getToken={getToken}
         currentUser={currentUser}
         onPipelinesChange={refreshPipelines}
         teams={teams}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'tasks' })}
+        onOpenLead={openLeadDetails}
       />
 
       <PhoneActionPanel
@@ -3167,6 +3130,7 @@ function App() {
             isOpen={isFormsPanelOpen}
             onClose={() => setIsFormsPanelOpen(false)}
             teams={teams}
+            teamMembership={teamMembership}
             onShareForm={handleShareForm}
             onShareFormWithTeams={handleShareFormWithTeams}
             onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
@@ -3185,6 +3149,7 @@ function App() {
         onSharePath={handleSharePath}
         onSharePathWithTeams={handleSharePathWithTeams}
         teams={teams}
+        teamMembership={teamMembership}
         onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
         onCenterOnPath={handleCenterOnPath}
         visiblePathIds={visiblePathIds}
@@ -3199,6 +3164,8 @@ function App() {
         getToken={getToken}
         teams={teams}
         onTeamsChange={refreshTeams}
+        pendingInvites={pendingTeamInvites}
+        teamMembership={teamMembership}
       />
 
       <SettingsPanel
@@ -3218,55 +3185,79 @@ function App() {
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
         onClose={() => setIsLeadsPanelOpen(false)}
+        leads={leads}
         pipelines={pipelines}
-        dealPipelineLeads={dealPipelineLeads}
-        closedLeads={closedLeads}
-        onOpenDealPipeline={(pipelineId) => {
-          setIsLeadsPanelOpen(false)
-          if (pipelineId) setActivePipelineId(pipelineId)
-          setIsDealPipelineOpen(true)
-        }}
+        onLeadsChange={setLeads}
+        onRefreshLeads={refreshLeads}
+        getToken={getToken}
+        onResolveParcel={handleResolveParcelForLead}
         onOpenParcelDetails={handleOpenParcelDetails}
         onEmailClick={handleEmailClick}
         onPhoneClick={handlePhoneClick}
-        onSkipTraceParcel={handleSkipTraceParcel}
-        skipTracingInProgress={skipTracingInProgress}
-        onLeadsChange={pipelines.length > 0 ? async (newLeads, pipelineId) => {
-          const pid = pipelineId || activePipelineId
-          if (!pid) return
-          try {
-            await updatePipeline(getToken, pid, { leads: newLeads })
-            // Optimistically sync local pipelines state so parcel panels
-            // re-derive isLead immediately (letting the "Add to Pipeline"
-            // button return for any removed leads) without waiting on the
-            // refreshPipelines round-trip.
-            setPipelines((prev) => prev.map((p) => p.id === pid
-              ? { ...p, leads: newLeads }
-              : p))
-            await refreshPipelines()
-          } catch (e) { showToast(e.message || 'Failed to update', 'error') }
-        } : setDealPipelineLeads}
-        onOpenScheduleAtDate={(ts) => {
-          setIsLeadsPanelOpen(false)
-          setScheduleInitialDate(ts)
-          setIsSchedulePanelOpen(true)
-        }}
-        onRequestCloseLead={handleCloseLead}
-        onRequestRemoveLead={handleDeleteLead}
-        onRequestMoveLead={handleRequestMoveLead}
-        onDeleteClosedLead={(id) => {
-          const next = loadClosedLeads().filter((r) => r.id !== id)
-          saveClosedLeads(next)
-          setClosedLeads(next)
-          scheduleUserDataSync(getToken)
-          showToast('Closed lead deleted', 'success')
-        }}
-        onRequestReopenLead={handleReopenLead}
         onGoToParcelOnMap={handleGoToParcelOnMap}
+        onCreateDeal={handleCreateDealRequest}
+        onOpenDeal={(deal, pipelineId) => {
+          if (pipelineId) setActivePipelineId(pipelineId)
+          setIsDealPipelineOpen(true)
+          setDealPipelineFocusDealId(deal.id)
+          setDealPipelineDealFocusKey((k) => k + 1)
+        }}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'leads' })}
         onPipelinesChange={refreshPipelines}
+        teams={teams}
+        teamMembership={teamMembership}
+        focusLeadId={leadsPanelFocusLeadId}
+        onFocusLeadHandled={handleLeadsPanelFocusHandled}
+        currentUserId={currentUser?.uid}
+      />
+
+      <DealsPanel
+        isOpen={isDealsPanelOpen}
+        onClose={() => setIsDealsPanelOpen(false)}
+        pipelines={pipelines}
+        leads={leads}
+        closedDeals={closedDeals}
+        onDealUpdate={handleDealUpdate}
+        onRequestMoveDeal={handleRequestMoveDeal}
+        onRequestCloseDeal={handleCloseDeal}
+        onRequestRemoveDeal={handleRemoveDeal}
+        onCreateDeal={() => openCreateDealDialog()}
         getToken={getToken}
         teams={teams}
-        onOpenAddTask={handleOpenAddTaskForLead}
+        teamMembership={teamMembership}
+        onPipelinesChange={refreshPipelines}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'deals' })}
+        onLeadsChange={setLeads}
+        onRefreshLeads={refreshLeads}
+        onOpenParcelDetails={handleOpenParcelDetails}
+        onEmailClick={handleEmailClick}
+        onPhoneClick={handlePhoneClick}
+        onGoToParcelOnMap={handleGoToParcelOnMap}
+        currentUserId={currentUser?.uid}
+      />
+
+      <CreateLeadDialog
+        open={createLeadOpen}
+        onOpenChange={(v) => { setCreateLeadOpen(v); if (!v) setCreateLeadPrefill(null) }}
+        prefill={createLeadPrefill}
+        getToken={getToken}
+        onResolveParcel={handleResolveParcelForLead}
+        onCreated={handleLeadCreated}
+        existingLeads={leads}
+        teams={teams}
+        teamMembership={teamMembership}
+      />
+
+      <CreateDealDialog
+        open={createDealOpen}
+        onOpenChange={(v) => { setCreateDealOpen(v); if (!v) setCreateDealPrefill(null) }}
+        prefill={createDealPrefill}
+        leads={leads}
+        pipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
+        teams={teams}
+        saving={createDealSaving}
+        onSubmit={handleCreateDealSubmit}
+        nestedOverlay={isDealPipelineOpen || isLeadsPanelOpen || isDealsPanelOpen}
       />
 
       <HailDataPanel
@@ -3328,29 +3319,17 @@ function App() {
       />
 
       <ConvertToLeadPipelineDialog
-        open={!!pickPipelineForParcel}
-        onOpenChange={(o) => { if (!o) setPickPipelineForParcel(null) }}
-        pipelines={pickPipelineForParcel?.eligiblePipelines ?? []}
-        currentUser={currentUser}
-        onSelect={(pipelineId) => {
-          const ctx = pickPipelineForParcel
-          setPickPipelineForParcel(null)
-          if (ctx?.parcelData) handleAddLeadToPipeline(ctx.parcelData, pipelineId)
-        }}
-      />
-
-      <ConvertToLeadPipelineDialog
-        open={!!moveLeadContext}
-        onOpenChange={(o) => { if (!o) setMoveLeadContext(null) }}
-        pipelines={moveLeadContext?.eligiblePipelines ?? []}
+        open={!!moveDealContext}
+        onOpenChange={(o) => { if (!o) setMoveDealContext(null) }}
+        pipelines={moveDealContext?.eligiblePipelines ?? []}
         currentUser={currentUser}
         title="Move to which pipeline?"
-        description="Choose a pipeline to move this lead into. Tasks tied to this lead will move with it."
+        description="Choose a pipeline to move this deal into."
         onSelect={(targetPipelineId) => {
-          const ctx = moveLeadContext
-          setMoveLeadContext(null)
-          if (ctx?.lead && ctx?.sourcePipelineId) {
-            handleMoveLead(ctx.lead, ctx.sourcePipelineId, targetPipelineId)
+          const ctx = moveDealContext
+          setMoveDealContext(null)
+          if (ctx?.deal && ctx?.sourcePipelineId) {
+            handleMoveDeal(ctx.deal, ctx.sourcePipelineId, targetPipelineId)
           }
         }}
       />

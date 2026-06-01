@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } fro
 import { createPortal } from 'react-dom'
 import { X, FileText, Plus, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, Users, Link2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
+import { PanelHeader } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
 import { showConfirm } from '../ui/confirm-dialog'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '@/lib/utils'
-import { TeamShareSection, TeamBadge } from '../TeamShareSection'
+import { ResourceSharePicker, VisibilityBadge } from '../ResourceSharePicker'
+import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 import {
   fetchTemplates,
   createTemplate,
@@ -47,6 +49,7 @@ export function FormsPanel({
   isOpen,
   onClose,
   teams = [],
+  teamMembership = null,
   onShareForm,
   onShareFormWithTeams,
   onValidateShareEmail
@@ -62,6 +65,7 @@ export function FormsPanel({
 
   // Share dialog state
   const [shareTemplateId, setShareTemplateId] = useState(null)
+  const [localShareState, setLocalShareState] = useState(null)
   const [linkTemplateId, setLinkTemplateId] = useState(null)
   const [linkPrefillValues, setLinkPrefillValues] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
@@ -114,6 +118,7 @@ export function FormsPanel({
       setView('list')
       setActiveTemplateId(null)
       setShareTemplateId(null)
+      setLocalShareState(null)
       setLinkTemplateId(null)
       setShareEmail('')
       setShareEmailValid(null)
@@ -296,24 +301,39 @@ export function FormsPanel({
     }
   }, [shareTemplateId, onShareForm, templates, refresh])
 
-  const handleToggleTeamShare = useCallback(async (teamId) => {
+  const handleToggleTeamShare = useCallback(async (sharePatch) => {
     if (!shareTemplateId || !onShareFormWithTeams) return
-    const template = templates.find((t) => t.id === shareTemplateId)
-    const current = template?.teamShares || []
-    const next = current.includes(teamId)
-      ? current.filter((id) => id !== teamId)
-      : [...current, teamId]
+    setLocalShareState(sharePatch)
     try {
-      const updated = await onShareFormWithTeams(shareTemplateId, next)
+      const updated = await onShareFormWithTeams(shareTemplateId, sharePatch)
       if (updated) {
         setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
       } else {
         await refresh()
       }
     } catch (e) {
-      showToast(e.message || 'Failed to update team share', 'error')
+      const template = templates.find((t) => t.id === shareTemplateId)
+      const norm = normalizeResourceVisibility(template || {})
+      setLocalShareState({
+        visibility: norm.visibility || VISIBILITY.PRIVATE,
+        sharedMemberUids: norm.sharedMemberUids || [],
+      })
+      showToast(e.message || 'Failed to update sharing', 'error')
     }
   }, [shareTemplateId, onShareFormWithTeams, templates, refresh])
+
+  useEffect(() => {
+    if (!shareTemplateId) {
+      setLocalShareState(null)
+      return
+    }
+    const template = templates.find((t) => t.id === shareTemplateId)
+    const norm = normalizeResourceVisibility(template || {})
+    setLocalShareState({
+      visibility: norm.visibility || VISIBILITY.PRIVATE,
+      sharedMemberUids: norm.sharedMemberUids || [],
+    })
+  }, [shareTemplateId, templates])
 
   const activeTemplate = useMemo(
     () => templates.find((t) => t.id === activeTemplateId) || null,
@@ -348,25 +368,19 @@ export function FormsPanel({
               style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
             >
               <DialogDescription className="sr-only">Create, open, fill, or delete your form templates.</DialogDescription>
-              <div className="flex items-center justify-between gap-2">
-                <DialogTitle className="text-xl font-semibold">Forms</DialogTitle>
-                <div className="flex items-center gap-2">
-                  <Button onClick={handleNewForm} size="sm" disabled={uploading}>
-                    {uploading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading…
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4 mr-2" /> New Form
-                      </>
-                    )}
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <PanelHeader onBack={onClose} title="Forms">
+                <Button onClick={handleNewForm} size="sm" disabled={uploading}>
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading…
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" /> New Form
+                    </>
+                  )}
+                </Button>
+              </PanelHeader>
             </DialogHeader>
 
             <div
@@ -391,8 +405,8 @@ export function FormsPanel({
                   {templates.map((t) => {
                     const owned = isOwnedByUser(t)
                     const sharedEmails = t.sharedWith || []
-                    const teamShares = t.teamShares || []
-                    const hasShares = sharedEmails.length > 0 || teamShares.length > 0
+                    const norm = normalizeResourceVisibility(t)
+                    const hasShares = sharedEmails.length > 0 || norm.visibility !== VISIBILITY.PRIVATE
                     return (
                       <div
                         key={t.id}
@@ -411,7 +425,7 @@ export function FormsPanel({
                                   aria-hidden
                                 />
                               )}
-                              <TeamBadge teamIds={teamShares} teams={teams} />
+                              <VisibilityBadge resource={t} />
                             </div>
                             <div className="text-xs opacity-70 mt-0.5">
                               {t.pageCount || 0} page{(t.pageCount || 0) === 1 ? '' : 's'}
@@ -573,21 +587,25 @@ export function FormsPanel({
             {(() => {
               const template = templates.find((t) => t.id === shareTemplateId)
               const currentShared = template?.sharedWith || []
-              const currentTeamShares = template?.teamShares || []
               const isShared = currentShared.length > 0
+              const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+              const activeTeam = teams?.[0] || null
+              const allowExternalSharing = teamMembership?.allowExternalSharing === true
               return (
                 <>
                   <p className="text-xs text-gray-400 mb-3">
                     Recipients can view and fill this form. Only you can edit or delete it.
                   </p>
-                  {onShareFormWithTeams && (
-                    <TeamShareSection
-                      teams={teams}
-                      selectedTeamIds={currentTeamShares}
-                      onToggle={handleToggleTeamShare}
+                  {onShareFormWithTeams && activeTeam && (
+                    <ResourceSharePicker
+                      team={activeTeam}
+                      visibility={shareState.visibility}
+                      sharedMemberUids={shareState.sharedMemberUids}
+                      onChange={handleToggleTeamShare}
+                      allowExternalSharing={allowExternalSharing}
                     />
                   )}
-                  {isShared && (
+                  {allowExternalSharing && isShared && (
                     <div className="mb-4">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
                         Shared with
@@ -612,6 +630,8 @@ export function FormsPanel({
                       </ul>
                     </div>
                   )}
+                  {allowExternalSharing && (
+                    <>
                   <Input
                     type="email"
                     placeholder="user@example.com"
@@ -648,6 +668,19 @@ export function FormsPanel({
                       Close
                     </Button>
                   </div>
+                    </>
+                  )}
+                  {!allowExternalSharing && (
+                    <div className="flex gap-2 flex-wrap mt-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => { setShareTemplateId(null); setShareEmail('') }}
+                        className="flex-1 min-w-0 share-dialog-btn"
+                      >
+                        Done
+                      </Button>
+                    </div>
+                  )}
                 </>
               )
             })()}

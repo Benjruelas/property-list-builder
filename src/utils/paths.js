@@ -68,13 +68,19 @@ export async function sharePath(getToken, pathId, sharedWith) {
   return data.path
 }
 
-export async function sharePathWithTeams(getToken, pathId, teamShares) {
+export async function sharePathWithTeams(getToken, pathId, sharePatch, teamId = null) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to share paths')
   const res = await fetch(`${getApiBase()}/paths`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ pathId, teamShares })
+    body: JSON.stringify({
+      pathId,
+      visibility: sharePatch.visibility,
+      sharedMemberUids: sharePatch.sharedMemberUids || [],
+      teamId: sharePatch.visibility === 'team' ? teamId : null,
+      teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
+    })
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

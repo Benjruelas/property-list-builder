@@ -85,8 +85,27 @@ function normalizeTask(raw, user) {
     scheduledAt: num(raw.scheduledAt),
     scheduledEndAt: num(raw.scheduledEndAt),
     parcelId: raw.parcelId && String(raw.parcelId).trim() ? String(raw.parcelId) : null,
+    dealId: raw.dealId && String(raw.dealId).trim() ? String(raw.dealId) : null,
     createdBy: raw.createdBy || user.uid,
     createdByEmail: raw.createdByEmail || user.email || null
+  }
+}
+
+async function logPipelineTaskActivity(pipeline, user, type, task, summary) {
+  try {
+    const { logTeamActivity, teamIdsFromResource } = await import('./lib/activityLog.js')
+    const teamIds = teamIdsFromResource(pipeline)
+    if (teamIds.length === 0) return
+    await logTeamActivity({
+      teamIds,
+      actor: user,
+      type,
+      summary,
+      entity: { kind: 'task', taskId: task.id, pipelineId: pipeline.id, dealId: task.dealId || null },
+      nav: { type: 'task', taskId: task.id, pipelineId: pipeline.id },
+    })
+  } catch (e) {
+    console.warn('pipeline task activity', e.message)
   }
 }
 
@@ -124,15 +143,25 @@ export default async function handler(req, res) {
     if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
 
     pipeline.tasks = Array.isArray(pipeline.tasks) ? pipeline.tasks : []
+    const { actorLabel } = await import('./lib/activityLog.js')
+    const actor = actorLabel(user)
 
     if (action === 'add') {
       if (!String(task.title || '').trim()) {
         return res.status(400).json({ error: 'Task title is required' })
       }
+      if (task.dealId) {
+        const dealMatch = (pipeline.deals || []).some((d) => d.id === task.dealId)
+        if (!dealMatch) return res.status(400).json({ error: 'dealId not found in this pipeline' })
+      }
       if (task.parcelId) {
-        const match = (pipeline.leads || []).some(
-          (l) => l.parcelId === task.parcelId || l.id === task.parcelId
-        )
+        const match =
+          (pipeline.deals || []).some(
+            (d) => d.parcelId === task.parcelId || d.leadId === task.parcelId
+          ) ||
+          (pipeline.leads || []).some(
+            (l) => l.parcelId === task.parcelId || l.id === task.parcelId
+          )
         if (!match) return res.status(400).json({ error: 'parcelId not found in this pipeline' })
       }
       const normalized = normalizeTask(task, user)
@@ -140,6 +169,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ pipeline, task: normalized, alreadyExists: true })
       }
       pipeline.tasks.push(normalized)
+      await logPipelineTaskActivity(pipeline, user, 'task.created', normalized, `${actor} created task "${normalized.title}"`)
     } else if (action === 'update') {
       const tIdx = pipeline.tasks.findIndex((t) => t.id === task.id)
       if (tIdx === -1) return res.status(404).json({ error: 'Task not found' })
@@ -155,19 +185,35 @@ export default async function handler(req, res) {
       if (task.parcelId !== undefined) {
         const p = task.parcelId && String(task.parcelId).trim() ? String(task.parcelId) : null
         if (p) {
-          const match = (pipeline.leads || []).some(
-            (l) => l.parcelId === p || l.id === p
-          )
+          const match =
+            (pipeline.deals || []).some(
+              (d) => d.parcelId === p || d.leadId === p
+            ) ||
+            (pipeline.leads || []).some(
+              (l) => l.parcelId === p || l.id === p
+            )
           if (!match) return res.status(400).json({ error: 'parcelId not found in this pipeline' })
         }
         next.parcelId = p
       }
+      if (task.dealId !== undefined) {
+        const d = task.dealId && String(task.dealId).trim() ? String(task.dealId) : null
+        if (d) {
+          const dealMatch = (pipeline.deals || []).some((deal) => deal.id === d)
+          if (!dealMatch) return res.status(400).json({ error: 'dealId not found in this pipeline' })
+        }
+        next.dealId = d
+      }
       pipeline.tasks[tIdx] = next
     } else if (action === 'remove') {
+      const removed = pipeline.tasks.find((t) => t.id === task.id)
       const before = pipeline.tasks.length
       pipeline.tasks = pipeline.tasks.filter((t) => t.id !== task.id)
       if (pipeline.tasks.length === before) {
         return res.status(404).json({ error: 'Task not found' })
+      }
+      if (removed) {
+        await logPipelineTaskActivity(pipeline, user, 'task.deleted', removed, `${actor} deleted task "${removed.title}"`)
       }
     } else if (action === 'toggle-complete') {
       const tIdx = pipeline.tasks.findIndex((t) => t.id === task.id)
@@ -178,6 +224,9 @@ export default async function handler(req, res) {
         ...cur,
         completed: completing,
         completedAt: completing ? Date.now() : null
+      }
+      if (completing) {
+        await logPipelineTaskActivity(pipeline, user, 'task.completed', pipeline.tasks[tIdx], `${actor} completed task "${cur.title}"`)
       }
     } else {
       return res.status(400).json({ error: `Unknown action: ${action}` })

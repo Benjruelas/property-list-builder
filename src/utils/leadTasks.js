@@ -24,7 +24,8 @@ function normalizeTask(t) {
     scheduledAt: t.scheduledAt ?? null,
     scheduledEndAt: t.scheduledEndAt ?? null,
     pipelineId: t.pipelineId != null && t.pipelineId !== '' ? t.pipelineId : null,
-    parcelId: t.parcelId != null && t.parcelId !== '' && t.parcelId !== LEGACY_UNASSIGNED ? t.parcelId : null
+    parcelId: t.parcelId != null && t.parcelId !== '' && t.parcelId !== LEGACY_UNASSIGNED ? t.parcelId : null,
+    dealId: t.dealId != null && t.dealId !== '' ? t.dealId : null,
   }
 }
 
@@ -319,6 +320,14 @@ export const migrateLeadTasksToPipelines = async (pipelines, addPipelineTaskFn) 
 }
 
 /**
+ * Storage key for tasks tied to a lead (parcel when linked, otherwise lead id).
+ */
+export function leadTaskKey(lead) {
+  if (!lead) return null
+  return lead.parcelId || lead.id || null
+}
+
+/**
  * Tasks for a lead (optionally scoped to a pipeline).
  */
 export const getLeadTasks = (parcelId, pipelineId = null) => {
@@ -346,22 +355,27 @@ function findTaskIndexById(taskId) {
 export const addTask = ({
   pipelineId = null,
   parcelId = null,
+  dealId = null,
   title = '',
   scheduledAt = null,
-  scheduledEndAt = null
+  scheduledEndAt = null,
+  completed = false,
+  completedAt = null,
 } = {}) => {
   const store = loadStore()
   const now = Date.now()
+  const isCompleted = !!completed
   const task = normalizeTask({
     id: `task-${now}-${Math.random().toString(36).slice(2, 9)}`,
     title: (title ?? '').toString().trim(),
-    completed: false,
+    completed: isCompleted,
     createdAt: now,
-    completedAt: null,
+    completedAt: isCompleted ? (completedAt && Number.isFinite(completedAt) ? completedAt : now) : null,
     scheduledAt: scheduledAt && Number.isFinite(scheduledAt) ? scheduledAt : null,
     scheduledEndAt: scheduledEndAt && Number.isFinite(scheduledEndAt) ? scheduledEndAt : null,
     pipelineId: pipelineId && String(pipelineId).trim() ? pipelineId : null,
-    parcelId: parcelId && String(parcelId).trim() ? parcelId : null
+    parcelId: parcelId && String(parcelId).trim() ? parcelId : null,
+    dealId: dealId && String(dealId).trim() ? dealId : null
   })
   store.tasks = [...store.tasks, task]
   saveStore(store)

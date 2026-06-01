@@ -1,5 +1,25 @@
 # Release Notes
 
+## Team Workspace v2 (May 2026)
+
+Major upgrade to team collaboration with explicit sharing, multi-admin roles, invites, activity filtering, and server-backed team tasks.
+
+### What's new
+
+- **Explicit sharing** — Resources default to private. Share with the whole team or pick specific members via the new share picker.
+- **Admin roles** — Multiple admins per team; creator is first admin. Admins can view (but not edit) teammates' private CRM data.
+- **Pending invites** — Admins invite by email; users accept or decline from the Teams panel.
+- **Team Pipe** — Auto-created on team setup; new deals default to the team Pipe.
+- **Activity feed v2** — `admin_only` vs `resource_viewers` audience; admins see all team activity.
+- **Server tasks** — Team users get `/api/tasks` with required assignment at creation.
+- **Settings** — Admins can toggle external email sharing (off by default).
+
+### Migration
+
+Existing `teamShares` data is normalized to `visibility: team` on read. No manual migration required.
+
+---
+
 ## Teams Feature (April 2026)
 
 This release introduces **Teams**, a new sharing layer that lets owners share resources with an entire group of users at once instead of inviting them one-by-one. New members automatically inherit access to everything the team has been given.

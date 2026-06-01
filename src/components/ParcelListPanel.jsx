@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ArrowLeft, ChevronRight, ChevronDown, Trash2, Download } from 'lucide-react'
+import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -115,15 +116,7 @@ export function ParcelListPanel({
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <div className="map-panel-header-toolbar gap-3">
             <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="shrink-0"
-                onClick={onBack || onClose}
-                title="Back to lists"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+              <PanelBackButton onClick={onBack || onClose} title="Back to lists" />
               <DialogTitle className="min-w-0 flex-1 truncate text-xl font-semibold">
                 {listName || 'Parcels'}
               </DialogTitle>

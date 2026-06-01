@@ -9,12 +9,9 @@ const getApiBase = () => {
 }
 
 /**
- * Owner or collaborator (email in sharedWith). Same rule for adding/moving leads and
- * for collaborative work in the UI; server PATCH allows collaborators to send `leads` only.
- * @param {{ uid?: string, email?: string } | null} user
- * @param {{ ownerId?: string, sharedWith?: string[] } | null} pipeline
+ * Owner or collaborator may add/move deals on a pipeline.
  */
-export function canAddLeadsToPipeline(user, pipeline, teams = []) {
+export function canAddDealsToPipeline(user, pipeline, teams = []) {
   if (!user?.uid || !pipeline) return false
   if (pipeline.ownerId === user.uid) return true
   const email = (user.email || '').toLowerCase().trim()
@@ -33,9 +30,13 @@ export function canAddLeadsToPipeline(user, pipeline, teams = []) {
   return false
 }
 
-/** Alias: anyone with access may update leads (and use tasks) on that pipeline; only the owner may change structure/sharing. */
-export function canCollaborateOnPipeline(user, pipeline) {
-  return canAddLeadsToPipeline(user, pipeline)
+/** @deprecated use canAddDealsToPipeline */
+export function canAddLeadsToPipeline(user, pipeline, teams = []) {
+  return canAddDealsToPipeline(user, pipeline, teams)
+}
+
+export function canCollaborateOnPipeline(user, pipeline, teams = []) {
+  return canAddDealsToPipeline(user, pipeline, teams)
 }
 
 export async function fetchPipelines(getToken) {
@@ -50,13 +51,13 @@ export async function fetchPipelines(getToken) {
   return data.pipelines || []
 }
 
-export async function createPipeline(getToken, { title = 'Pipes', columns, leads = [] } = {}) {
+export async function createPipeline(getToken, { title = 'Pipes', columns, deals = [] } = {}) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to create pipelines')
   const res = await fetch(`${getApiBase()}/pipelines`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ title: title.trim() || 'Pipes', columns, leads })
+    body: JSON.stringify({ title: title.trim() || 'Pipes', columns, deals })
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -66,13 +67,14 @@ export async function createPipeline(getToken, { title = 'Pipes', columns, leads
   return data.pipeline
 }
 
-export async function updatePipeline(getToken, pipelineId, { title, columns, leads, sharedWith, teamShares }) {
+export async function updatePipeline(getToken, pipelineId, { title, columns, deals, leads, sharedWith, teamShares }) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to update pipelines')
   const body = { pipelineId }
   if (title !== undefined) body.title = title
   if (columns !== undefined) body.columns = columns
-  if (leads !== undefined) body.leads = leads
+  if (deals !== undefined) body.deals = deals
+  if (leads !== undefined) body.deals = leads
   if (sharedWith !== undefined) body.sharedWith = sharedWith
   if (teamShares !== undefined) body.teamShares = teamShares
   const res = await fetch(`${getApiBase()}/pipelines`, {

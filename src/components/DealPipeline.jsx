@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Check, Users } from 'lucide-react'
 import { Button } from './ui/button'
+import { PanelBackButton, PanelHeader } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
-import { loadColumns, saveColumns, loadLeads, saveLeads, loadTitle, saveTitle, formatTimeInState, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
-import { displayLeadName } from '@/utils/ownerName'
-import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, deleteAllLeadTasks, formatTaskTimeAgo, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline, taskBelongsToLocalLeads } from '@/utils/leadTasks'
+import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle, formatTimeInState } from '@/utils/dealPipeline'
+import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, deleteAllLeadTasks, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline } from '@/utils/leadTasks'
 import { addPipelineTask, updatePipelineTask, togglePipelineTask, removePipelineTask, flattenPipelineTasks } from '@/utils/pipelineTasks'
 import { addTeamTask, updateTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
 import { getMembersForTeamSharedPipeline, flattenTeamTasks, formatAssigneeList } from '@/utils/teamTaskUtils'
@@ -15,10 +15,15 @@ import { TeamMemberAssignSectionLight } from './TeamMemberAssignSection'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
+import { DealDetails } from './DealDetails'
 import { LeadDetails } from './LeadDetails'
+import { DealProfitBadge } from './DealLineItemsSection'
+import { dealHasFinancials } from '@/utils/dealFinances'
 import { SchedulePicker } from './SchedulePicker'
 import { createPipeline, canCollaborateOnPipeline } from '@/utils/pipelines'
-import { TeamShareSection, TeamBadge } from './TeamShareSection'
+import { displayLeadName, updateLead } from '@/utils/leads'
+import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
+import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 
 const MAX_COLUMNS = 10
 const PIPELINE_OPTIONS_MENU_W = 200
@@ -49,6 +54,40 @@ function anchorMenuLeftAligned(rect, menuWidth) {
   return { top: rect.bottom + 4, left }
 }
 
+function taskBelongsToLocalDeals(task, displayDeals) {
+  const standalone = task.pipelineId == null && task.parcelId == null && task.dealId == null
+  if (standalone) return false
+  if (task.dealId && displayDeals.some((d) => d.id === task.dealId)) return true
+  if (task.parcelId && displayDeals.some((d) => String(d.parcelId) === String(task.parcelId))) return true
+  return false
+}
+
+function getDealCardLabels(deal, leads) {
+  const title = (deal.title || '').trim() || 'Untitled deal'
+  let leadName = (deal.leadName || '').trim()
+  if (deal.leadId && leads?.length) {
+    const lead = leads.find((l) => l.id === deal.leadId)
+    if (lead) leadName = displayLeadName(lead)
+  }
+  return { title, leadName }
+}
+
+function leadToParcelData(lead) {
+  if (!lead) return null
+  return {
+    id: lead.parcelId,
+    address: lead.address,
+    properties: lead.properties || {
+      OWNER_NAME: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
+      SITUS_ADDR: lead.address,
+      LATITUDE: lead.lat,
+      LONGITUDE: lead.lng,
+    },
+    lat: lead.lat,
+    lng: lead.lng,
+  }
+}
+
 export function DealPipeline({
   isOpen,
   onClose,
@@ -57,8 +96,10 @@ export function DealPipeline({
   onPhoneClick,
   onSkipTraceParcel,
   skipTracingInProgress,
+  deals = [],
+  onDealsChange,
   leads = [],
-  onLeadsChange,
+  onOpenCreateDeal,
   onOpenScheduleAtDate,
   pipelines = [],
   activePipelineId,
@@ -67,51 +108,55 @@ export function DealPipeline({
   onSharePipeline,
   onSharePipelineWithTeams,
   teams = [],
+  teamMembership = null,
   onDeletePipeline,
   onValidateShareEmail,
   currentUser,
   getToken,
   onColumnsChange,
   onTitleChange,
-  /** Increment to focus a lead card and open Lead Details (parcel id). */
-  focusLeadRequestKey = 0,
-  focusParcelId = null,
-  onFocusLeadHandled,
+  /** Increment to focus a deal card and open Deal Details. */
+  focusDealRequestKey = 0,
+  focusDealId = null,
+  onFocusDealHandled,
   /** Increment to open the in-board "New Task" dialog prefilled for parcel id. */
   addTaskRequestKey = 0,
   addTaskRequestParcelId = null,
   onAddTaskRequestHandled,
-  onRequestMoveLead,
-  onRequestRemoveLead,
-  onRequestCloseLead,
+  onRequestMoveDeal,
+  onRequestRemoveDeal,
+  onRequestCloseDeal,
   onGoToParcelOnMap,
+  onLeadsChange,
+  onRefreshLeads,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0]
   const [columns, setColumns] = useState([])
-  const [localLeads, setLocalLeads] = useState([])
-  const [optimisticLeads, setOptimisticLeads] = useState(null)
-  const displayLeads = optimisticLeads ?? (onLeadsChange ? leads : localLeads)
+  const [localDeals, setLocalDeals] = useState([])
+  const [optimisticDeals, setOptimisticDeals] = useState(null)
+  const displayDeals = optimisticDeals ?? (onDealsChange ? deals : localDeals)
   const [editingColumnId, setEditingColumnId] = useState(null)
   const [editingColumnName, setEditingColumnName] = useState('')
   const [showAddColumn, setShowAddColumn] = useState(false)
   const [newColumnName, setNewColumnName] = useState('')
-  const [draggedLeadId, setDraggedLeadId] = useState(null)
+  const [draggedDealId, setDraggedDealId] = useState(null)
   const [dragOverColId, setDragOverColId] = useState(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [pipelineTitle, setPipelineTitle] = useState('Pipes')
-  const [selectedLead, setSelectedLead] = useState(null)
+  const [selectedDeal, setSelectedDeal] = useState(null)
+  const [leadOverlayId, setLeadOverlayId] = useState(null)
   const [allTasks, setAllTasks] = useState([])
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false)
-  const [addTaskLeadId, setAddTaskLeadId] = useState('')
-  const [addTaskLeadSearch, setAddTaskLeadSearch] = useState('')
+  const [addTaskDealId, setAddTaskDealId] = useState('')
+  const [addTaskDealSearch, setAddTaskDealSearch] = useState('')
   const [addTaskSuggestionsOpen, setAddTaskSuggestionsOpen] = useState(false)
   const [addTaskHighlightIndex, setAddTaskHighlightIndex] = useState(-1)
   const [addTaskTitle, setAddTaskTitle] = useState('')
   const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
   const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
-  const [addTaskFromLead, setAddTaskFromLead] = useState(false)
+  const [addTaskFromDeal, setAddTaskFromDeal] = useState(false)
   const [addTaskAssignUids, setAddTaskAssignUids] = useState([])
   const [editTaskAssignUids, setEditTaskAssignUids] = useState([])
   const [tasksCollapsed, setTasksCollapsed] = useState(false)
@@ -131,6 +176,7 @@ export function DealPipeline({
   const [createPipelineDialogOpen, setCreatePipelineDialogOpen] = useState(false)
   const [newPipelineTitle, setNewPipelineTitle] = useState('')
   const [sharePipelineId, setSharePipelineId] = useState(null)
+  const [localShareState, setLocalShareState] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
   const [shareEmailValid, setShareEmailValid] = useState(null)
   const [shareEmailError, setShareEmailError] = useState('')
@@ -195,6 +241,40 @@ export function DealPipeline({
     }
   }, [sharePipelineId, shareEmail, runShareValidation])
 
+  useEffect(() => {
+    if (!sharePipelineId) {
+      setLocalShareState(null)
+      return
+    }
+    const pipe = pipelines.find((p) => p.id === sharePipelineId)
+    const norm = normalizeResourceVisibility(pipe || {})
+    setLocalShareState({
+      visibility: norm.visibility || VISIBILITY.PRIVATE,
+      sharedMemberUids: norm.sharedMemberUids || [],
+    })
+  }, [sharePipelineId, pipelines])
+
+  const handlePipelineShareChange = useCallback(
+    (next) => {
+      if (!onSharePipelineWithTeams || !sharePipelineId) return
+      setLocalShareState(next)
+      void (async () => {
+        try {
+          await onSharePipelineWithTeams(sharePipelineId, next)
+        } catch (e) {
+          const pipe = pipelines.find((p) => p.id === sharePipelineId)
+          const norm = normalizeResourceVisibility(pipe || {})
+          setLocalShareState({
+            visibility: norm.visibility || VISIBILITY.PRIVATE,
+            sharedMemberUids: norm.sharedMemberUids || [],
+          })
+          showToast(e.message || 'Failed to update sharing', 'error')
+        }
+      })()
+    },
+    [onSharePipelineWithTeams, sharePipelineId, pipelines]
+  )
+
   const refreshAllTasks = useCallback(() => {
     // Personal tasks = local leadTasks store with no pipelineId (tasks with a
     // pipelineId now live on the pipeline doc; legacy rows are migrated away
@@ -207,29 +287,50 @@ export function DealPipeline({
   }, [apiMode, pipelines])
 
   useEffect(() => {
-    if (!selectedLead) refreshAllTasks()
-  }, [selectedLead, refreshAllTasks])
+    if (!selectedDeal) refreshAllTasks()
+  }, [selectedDeal, refreshAllTasks])
 
   useEffect(() => {
-    if (!selectedLead) return
-    const fresh = displayLeads.find((l) => l.id === selectedLead.id)
-    if (fresh && fresh !== selectedLead) {
-      setSelectedLead(fresh)
+    if (!selectedDeal) return
+    const fresh = displayDeals.find((d) => d.id === selectedDeal.id)
+    if (fresh && fresh !== selectedDeal) {
+      setSelectedDeal(fresh)
     }
-  }, [displayLeads, selectedLead])
+  }, [displayDeals, selectedDeal])
 
   useEffect(() => {
-    if (!isOpen || !focusLeadRequestKey) return
-    if (focusParcelId == null || focusParcelId === '') return
+    if (!isOpen || !focusDealRequestKey) return
+    if (focusDealId == null || focusDealId === '') return
     const id = window.setTimeout(() => {
-      const lead = displayLeads.find((l) => String(l.parcelId) === String(focusParcelId))
-      if (lead) {
-        setSelectedLead(lead)
+      const deal = displayDeals.find((d) => d.id === focusDealId || String(d.parcelId) === String(focusDealId))
+      if (deal) {
+        setSelectedDeal(deal)
       }
-      onFocusLeadHandled?.()
+      onFocusDealHandled?.()
     }, 100)
     return () => clearTimeout(id)
-  }, [isOpen, focusLeadRequestKey, focusParcelId, displayLeads, onFocusLeadHandled])
+  }, [isOpen, focusDealRequestKey, focusDealId, displayDeals, onFocusDealHandled])
+
+  useEffect(() => {
+    if (!selectedDeal) setLeadOverlayId(null)
+  }, [selectedDeal?.id])
+
+  const leadOverlay = leadOverlayId ? leads.find((l) => l.id === leadOverlayId) : null
+
+  const openLeadFromDeal = useCallback((lead) => {
+    if (!lead?.id) return
+    if (leadOverlayId === lead.id) return
+    setLeadOverlayId(lead.id)
+  }, [leadOverlayId])
+
+  const handleLeadUpdate = useCallback(async (updated) => {
+    try {
+      const saved = await updateLead(getToken, updated.id, updated)
+      onLeadsChange?.(leads.map((l) => (l.id === saved.id ? saved : l)))
+    } catch (e) {
+      showToast(e.message || 'Could not update lead', 'error')
+    }
+  }, [getToken, leads, onLeadsChange])
 
   // External callers (Leads list, Schedule) request the in-board New Task
   // dialog prefilled for a specific lead. Mirror the focus-lead pattern so
@@ -238,10 +339,10 @@ export function DealPipeline({
     if (!isOpen || !addTaskRequestKey) return
     if (addTaskRequestParcelId == null || addTaskRequestParcelId === '') return
     const id = window.setTimeout(() => {
-      const lead = displayLeads.find((l) => String(l.parcelId) === String(addTaskRequestParcelId))
-      if (lead) {
-        setAddTaskLeadId(lead.parcelId)
-        setAddTaskLeadSearch(getLeadLabel(lead.parcelId))
+      const deal = displayDeals.find((d) => String(d.parcelId) === String(addTaskRequestParcelId))
+      if (deal) {
+        setAddTaskDealId(deal.id)
+        setAddTaskDealSearch(getDealLabel(deal.id))
         setAddTaskTitle('')
         setAddTaskAssignUids([])
         const startOfHour = new Date()
@@ -249,14 +350,14 @@ export function DealPipeline({
         const startTs = startOfHour.getTime()
         setAddTaskScheduledAt(startTs)
         setAddTaskScheduledEndAt(startTs + 60 * 60 * 1000)
-        setAddTaskFromLead(true)
+        setAddTaskFromDeal(true)
         setShowAddTaskDialog(true)
       }
       onAddTaskRequestHandled?.()
     }, 120)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, addTaskRequestKey, addTaskRequestParcelId, displayLeads])
+  }, [isOpen, addTaskRequestKey, addTaskRequestParcelId, displayDeals])
 
   useEffect(() => {
     if (isOpen) {
@@ -266,25 +367,25 @@ export function DealPipeline({
       } else {
         setColumns(loadColumns())
         setPipelineTitle(loadTitle())
-        let lsLeads = loadLeads()
-        const needsMigration = lsLeads.some(l =>
-          (l.statusEnteredAt == null && l.createdAt != null) || (l.cumulativeTimeByStatus == null)
+        let lsDeals = loadDeals()
+        const needsMigration = lsDeals.some(d =>
+          (d.statusEnteredAt == null && d.createdAt != null) || (d.cumulativeTimeByStatus == null)
         )
         if (needsMigration) {
-          lsLeads = lsLeads.map(l => ({
-            ...l,
-            statusEnteredAt: l.statusEnteredAt ?? l.createdAt ?? Date.now(),
-            cumulativeTimeByStatus: l.cumulativeTimeByStatus || {},
+          lsDeals = lsDeals.map(d => ({
+            ...d,
+            statusEnteredAt: d.statusEnteredAt ?? d.createdAt ?? Date.now(),
+            cumulativeTimeByStatus: d.cumulativeTimeByStatus || {},
           }))
-          saveLeads(lsLeads)
-          if (onLeadsChange) onLeadsChange(lsLeads)
+          saveDeals(lsDeals)
+          if (onDealsChange) onDealsChange(lsDeals)
           scheduleSync()
         }
-        if (!onLeadsChange) setLocalLeads(lsLeads)
+        if (!onDealsChange) setLocalDeals(lsDeals)
       }
       refreshAllTasks()
     }
-  }, [isOpen, onLeadsChange, scheduleSync, refreshAllTasks, apiMode, activePipeline])
+  }, [isOpen, onDealsChange, scheduleSync, refreshAllTasks, apiMode, activePipeline])
 
   const persistColumns = useCallback((cols) => {
     setColumns(cols)
@@ -296,22 +397,22 @@ export function DealPipeline({
     }
   }, [scheduleSync, apiMode, onColumnsChange])
 
-  const persistLeads = useCallback(
-    (l) => {
+  const persistDeals = useCallback(
+    (d) => {
       if (apiMode && !canCollaboratePipeline) {
-        showToast('You cannot update leads on this pipeline', 'error')
+        showToast('You cannot update deals on this pipeline', 'error')
         return
       }
-      if (apiMode && onLeadsChange) {
-        setOptimisticLeads(l)
-        onLeadsChange(l).then(() => setOptimisticLeads(null)).catch(() => setOptimisticLeads(null))
+      if (apiMode && onDealsChange) {
+        setOptimisticDeals(d)
+        onDealsChange(d).then(() => setOptimisticDeals(null)).catch(() => setOptimisticDeals(null))
       } else {
-        setLocalLeads(l)
-        saveLeads(l)
+        setLocalDeals(d)
+        saveDeals(d)
         scheduleSync()
       }
     },
-    [scheduleSync, apiMode, onLeadsChange, canCollaboratePipeline]
+    [scheduleSync, apiMode, onDealsChange, canCollaboratePipeline]
   )
 
   const handleAddColumn = () => {
@@ -325,23 +426,23 @@ export function DealPipeline({
 
   const handleDeleteColumn = async (colId) => {
     const col = columns.find(c => c.id === colId)
-    const count = displayLeads.filter(l => l.status === colId).length
+    const count = displayDeals.filter(d => d.status === colId).length
     const message = count > 0
-      ? `Delete "${col?.name}"? ${count} lead(s) will be moved to the first column.`
+      ? `Delete "${col?.name}"? ${count} deal(s) will be moved to the first column.`
       : `Delete "${col?.name}"?`
     const confirmed = await showConfirm(message, 'Delete column')
     if (!confirmed) return
     const firstColId = columns[0]?.id
     const now = Date.now()
-    const updatedLeads = displayLeads.map(l => {
-      if (l.status !== colId) return l
-      const entered = l.statusEnteredAt ?? l.createdAt ?? now
+    const updatedDeals = displayDeals.map(d => {
+      if (d.status !== colId) return d
+      const entered = d.statusEnteredAt ?? d.createdAt ?? now
       const stintMs = Math.max(0, now - entered)
-      const cum = { ...(l.cumulativeTimeByStatus || {}) }
+      const cum = { ...(d.cumulativeTimeByStatus || {}) }
       cum[colId] = (cum[colId] || 0) + stintMs
-      return { ...l, status: firstColId || colId, statusEnteredAt: now, cumulativeTimeByStatus: cum }
+      return { ...d, status: firstColId || colId, statusEnteredAt: now, cumulativeTimeByStatus: cum }
     })
-    persistLeads(updatedLeads)
+    persistDeals(updatedDeals)
     persistColumns(columns.filter(c => c.id !== colId))
     showToast('Column deleted', 'success')
   }
@@ -357,29 +458,25 @@ export function DealPipeline({
     showToast('Column renamed', 'success')
   }
 
-  const handleDeleteLead = async (leadId, e) => {
+  const handleDeleteDeal = async (dealId, e) => {
     e?.stopPropagation()
-    const lead = displayLeads.find((l) => l.id === leadId)
-    const leadLabel = lead ? [getStreetAddress(lead) || lead.address, lead.owner].filter(Boolean).join(' — ') || 'Unknown' : 'Unknown'
-    const confirmed = await showConfirm('Remove this lead from the pipeline?', 'Remove lead', { detail: leadLabel })
+    const deal = displayDeals.find((d) => d.id === dealId)
+    const dealLabel = deal ? (deal.title || deal.leadName || deal.leadAddress || 'Unknown') : 'Unknown'
+    const confirmed = await showConfirm('Remove this deal from the pipeline?', 'Remove deal', { detail: dealLabel })
     if (!confirmed) return
     if (apiMode && !canCollaboratePipeline) {
-      // persistLeads no-ops for non-collaborators; bail before touching tasks too.
-      persistLeads(displayLeads.filter(l => l.id !== leadId))
+      persistDeals(displayDeals.filter(d => d.id !== dealId))
       return
     }
-    if (selectedLead?.id === leadId) setSelectedLead(null)
-    persistLeads(displayLeads.filter(l => l.id !== leadId))
+    if (selectedDeal?.id === dealId) setSelectedDeal(null)
+    persistDeals(displayDeals.filter(d => d.id !== dealId))
 
-    // A lead's tasks should not outlive the lead. Clean up any tasks tied to
-    // this parcel: in API mode remove the pipeline's tasks[] entries for that
-    // parcel; in local mode drop them from the local task store.
-    const parcelId = lead?.parcelId
+    const parcelId = deal?.parcelId
     if (parcelId) {
       if (apiMode && activePipeline) {
-        const pipelineTasksForLead = (activePipeline.tasks || []).filter((t) => t?.parcelId === parcelId)
+        const pipelineTasksForDeal = (activePipeline.tasks || []).filter((t) => t?.parcelId === parcelId || t?.dealId === dealId)
         let removedAny = false
-        for (const t of pipelineTasksForLead) {
+        for (const t of pipelineTasksForDeal) {
           try {
             await removePipelineTask(getToken, activePipeline.id, t.id)
             removedAny = true
@@ -395,38 +492,38 @@ export function DealPipeline({
       }
     }
 
-    showToast('Lead removed', 'success')
+    showToast('Deal removed', 'success')
   }
 
-  const handleMoveLead = (leadId, newStatus) => {
+  const handleMoveDeal = (dealId, newStatus) => {
     const now = Date.now()
-    persistLeads(displayLeads.map(l => {
-      if (l.id !== leadId) return l
-      if (l.status === newStatus) return l
-      const entered = l.statusEnteredAt ?? l.createdAt ?? now
+    persistDeals(displayDeals.map(d => {
+      if (d.id !== dealId) return d
+      if (d.status === newStatus) return d
+      const entered = d.statusEnteredAt ?? d.createdAt ?? now
       const stintMs = Math.max(0, now - entered)
-      const cum = { ...(l.cumulativeTimeByStatus || {}) }
-      cum[l.status] = (cum[l.status] || 0) + stintMs
-      return { ...l, status: newStatus, statusEnteredAt: now, cumulativeTimeByStatus: cum }
+      const cum = { ...(d.cumulativeTimeByStatus || {}) }
+      cum[d.status] = (cum[d.status] || 0) + stintMs
+      return { ...d, status: newStatus, statusEnteredAt: now, cumulativeTimeByStatus: cum }
     }))
   }
 
-  const handleMoveToNext = (leadId) => {
-    const lead = displayLeads.find(l => l.id === leadId)
-    if (!lead) return
-    const idx = columns.findIndex(c => c.id === lead.status)
+  const handleMoveToNext = (dealId) => {
+    const deal = displayDeals.find(d => d.id === dealId)
+    if (!deal) return
+    const idx = columns.findIndex(c => c.id === deal.status)
     if (idx < 0 || idx >= columns.length - 1) return
-    handleMoveLead(leadId, columns[idx + 1].id)
+    handleMoveDeal(dealId, columns[idx + 1].id)
   }
 
-  const handleDragStart = (e, leadId) => {
-    setDraggedLeadId(leadId)
+  const handleDragStart = (e, dealId) => {
+    setDraggedDealId(dealId)
     e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', leadId)
+    e.dataTransfer.setData('text/plain', dealId)
   }
 
   const handleDragEnd = () => {
-    setDraggedLeadId(null)
+    setDraggedDealId(null)
     setDragOverColId(null)
     justDraggedRef.current = true
     setTimeout(() => { justDraggedRef.current = false }, 0)
@@ -444,25 +541,32 @@ export function DealPipeline({
 
   const handleDrop = (e, colId) => {
     e.preventDefault()
-    const leadId = e.dataTransfer.getData('text/plain')
-    if (leadId) handleMoveLead(leadId, colId)
-    setDraggedLeadId(null)
+    const dealId = e.dataTransfer.getData('text/plain')
+    if (dealId) handleMoveDeal(dealId, colId)
+    setDraggedDealId(null)
     setDragOverColId(null)
   }
 
-  const getLeadsForColumn = (colId) => displayLeads.filter(l => l.status === colId)
+  const getDealsForColumn = (colId) => displayDeals.filter(d => d.status === colId)
 
-  const leadToParcelData = (lead) => ({
-    id: lead.parcelId,
-    address: lead.address,
-    properties: lead.properties || { OWNER_NAME: lead.owner, SITUS_ADDR: lead.address, LATITUDE: lead.lat, LONGITUDE: lead.lng },
-    lat: lead.lat,
-    lng: lead.lng,
-  })
+  const openDealFromTask = (task) => {
+    if (task.dealId) {
+      const deal = displayDeals.find((d) => d.id === task.dealId)
+      if (deal) { setSelectedDeal(deal); return }
+    }
+    if (task.parcelId) {
+      const deal = displayDeals.find((d) => String(d.parcelId) === String(task.parcelId))
+      if (deal) { setSelectedDeal(deal); return }
+    }
+    if (task.__source === 'team' && task.leadId) {
+      const deal = displayDeals.find((d) => d.leadId === task.leadId)
+      if (deal) setSelectedDeal(deal)
+    }
+  }
 
-  const handleLeadClick = (lead) => {
+  const handleDealClick = (deal) => {
     if (justDraggedRef.current) return
-    setSelectedLead(lead)
+    setSelectedDeal(deal)
   }
 
   const toggleEditMode = () => {
@@ -498,18 +602,31 @@ export function DealPipeline({
     if (apiMode) {
       return allTasks.filter((t) => taskBelongsToPipeline(t, activePipelineId, pipelines))
     }
-    return allTasks.filter((t) => taskBelongsToLocalLeads(t, displayLeads))
-  }, [allTasks, apiMode, activePipelineId, pipelines, displayLeads])
+    return allTasks.filter((t) => taskBelongsToLocalDeals(t, displayDeals))
+  }, [allTasks, apiMode, activePipelineId, pipelines, displayDeals])
+
+  const getDealLabel = (dealId, parcelId) => {
+    if (dealId) {
+      const deal = displayDeals.find((d) => d.id === dealId)
+      if (deal) return deal.title || deal.leadName || deal.leadAddress || dealId
+    }
+    if (parcelId) {
+      const deal = displayDeals.find((d) => String(d.parcelId) === String(parcelId))
+      if (deal) return deal.title || deal.leadName || deal.leadAddress || parcelId
+    }
+    if (!dealId && !parcelId) return 'Pipeline task'
+    return dealId || parcelId
+  }
 
   const commitNewTask = useCallback(async (title) => {
     const trimmed = (title || '').toString().trim()
     if (!trimmed) return
     const isTeamPipe =
       activePipeline && Array.isArray(activePipeline.teamShares) && activePipeline.teamShares.length > 0
-    const lead = addTaskLeadId ? displayLeads.find((l) => l.parcelId === addTaskLeadId) : null
-    if (apiMode && activePipelineId && isTeamPipe && lead?.id) {
+    const deal = addTaskDealId ? displayDeals.find((d) => d.id === addTaskDealId) : null
+    if (apiMode && activePipelineId && isTeamPipe && deal?.leadId) {
       try {
-        await addTeamTask(getToken, activePipelineId, lead.id, {
+        await addTeamTask(getToken, activePipelineId, deal.leadId, {
           title: trimmed,
           dueAt: addTaskScheduledAt,
           assignedUids: addTaskAssignUids
@@ -524,7 +641,8 @@ export function DealPipeline({
       try {
         await addPipelineTask(getToken, activePipelineId, {
           title: trimmed,
-          parcelId: addTaskLeadId || null,
+          parcelId: deal?.parcelId || null,
+          dealId: deal?.id || null,
           scheduledAt: addTaskScheduledAt,
           scheduledEndAt: addTaskScheduledEndAt
         })
@@ -537,7 +655,7 @@ export function DealPipeline({
     } else {
       addTask({
         pipelineId: null,
-        parcelId: addTaskLeadId || null,
+        parcelId: deal?.parcelId || null,
         title: trimmed,
         scheduledAt: addTaskScheduledAt,
         scheduledEndAt: addTaskScheduledEndAt
@@ -548,8 +666,8 @@ export function DealPipeline({
     }
     setShowAddTaskDialog(false)
     setAddTaskAssignUids([])
-    if (lead) setSelectedLead(lead)
-  }, [apiMode, activePipelineId, activePipeline, getToken, addTaskLeadId, addTaskScheduledAt, addTaskScheduledEndAt, addTaskAssignUids, onPipelinesChange, refreshAllTasks, scheduleSync, displayLeads])
+    if (deal) setSelectedDeal(deal)
+  }, [apiMode, activePipelineId, activePipeline, getToken, addTaskDealId, addTaskScheduledAt, addTaskScheduledEndAt, addTaskAssignUids, onPipelinesChange, refreshAllTasks, scheduleSync, displayDeals])
 
   const commitEditTask = useCallback(async (title) => {
     const trimmed = (title || '').toString().trim()
@@ -596,53 +714,45 @@ export function DealPipeline({
     setEditTask(null)
   }, [editTask, editTaskScheduledAt, editTaskScheduledEndAt, editTaskAssignUids, getToken, onPipelinesChange, refreshAllTasks, scheduleSync])
 
-  const getLeadLabel = (parcelId) => {
-    if (!parcelId) return 'Pipeline task'
-    const lead = displayLeads.find((l) => l.parcelId === parcelId)
-    if (lead) return getStreetAddress(lead) || lead.address || lead.owner || parcelId
-    return parcelId
-  }
-
   const newTaskTeamMembers = useMemo(
     () => (activePipeline ? getMembersForTeamSharedPipeline(activePipeline, teams) : []),
     [activePipeline, teams]
   )
   const canAddTeamTaskInDialog =
-    apiMode && activePipeline && (activePipeline.teamShares || []).length > 0 && !!addTaskLeadId
+    apiMode && activePipeline && (activePipeline.teamShares || []).length > 0 && !!addTaskDealId
 
-  const addTaskLeadSuggestions = (() => {
-    const q = (addTaskLeadSearch || '').trim().toLowerCase()
+  const addTaskDealSuggestions = (() => {
+    const q = (addTaskDealSearch || '').trim().toLowerCase()
     const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const results = []
-    for (const lead of displayLeads) {
-      const label = (getLeadLabel(lead.parcelId) || '').toLowerCase()
-      const fullAddr = (getFullAddress(lead) || '').toLowerCase()
-      const owner = (lead.owner || '').toLowerCase()
-      const address = (lead.address || '').toLowerCase()
+    for (const deal of displayDeals) {
+      const label = (getDealLabel(deal.id) || '').toLowerCase()
+      const leadName = (deal.leadName || '').toLowerCase()
+      const leadAddress = (deal.leadAddress || '').toLowerCase()
+      const title = (deal.title || '').toLowerCase()
       if (tokens.length) {
-        const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
+        const searchable = [label, leadName, leadAddress, title].filter(Boolean).join(' ')
         if (!tokens.every((tok) => searchable.includes(tok))) continue
       }
-      const ownerStr = (lead.owner || '').trim()
-      const addressStr = (getStreetAddress(lead) || lead.address || '').trim()
-      const fullAddrStr = (getFullAddress(lead) || '').trim()
-      const ownerMatched = tokens.length && ownerStr && tokens.every((t) => owner.includes(t))
-      const addressMatched = tokens.length && (addressStr || fullAddrStr) && tokens.every((t) => (address + ' ' + fullAddr).includes(t))
+      const nameStr = (deal.leadName || '').trim()
+      const addressStr = (deal.leadAddress || '').trim()
+      const nameMatched = tokens.length && nameStr && tokens.every((t) => leadName.includes(t))
+      const addressMatched = tokens.length && addressStr && tokens.every((t) => leadAddress.includes(t))
       let matchLabel, displayValue
-      if (ownerMatched && !addressMatched) {
-        matchLabel = 'Owner'
-        displayValue = ownerStr
-      } else if (addressMatched && !ownerMatched) {
+      if (nameMatched && !addressMatched) {
+        matchLabel = 'Name'
+        displayValue = nameStr
+      } else if (addressMatched && !nameMatched) {
         matchLabel = 'Address'
-        displayValue = fullAddrStr || addressStr || getLeadLabel(lead.parcelId)
-      } else if (ownerMatched && addressMatched) {
-        matchLabel = 'Owner · Address'
-        displayValue = `${ownerStr} — ${fullAddrStr || addressStr || getLeadLabel(lead.parcelId)}`
+        displayValue = addressStr || getDealLabel(deal.id)
+      } else if (nameMatched && addressMatched) {
+        matchLabel = 'Name · Address'
+        displayValue = `${nameStr} — ${addressStr || getDealLabel(deal.id)}`
       } else {
         matchLabel = null
-        displayValue = getLeadLabel(lead.parcelId)
+        displayValue = getDealLabel(deal.id)
       }
-      results.push({ lead, matchLabel, displayValue })
+      results.push({ deal, matchLabel, displayValue })
     }
     results.sort((a, b) => (a.displayValue || '').localeCompare(b.displayValue || '', undefined, { sensitivity: 'base' }))
     return results
@@ -659,9 +769,14 @@ export function DealPipeline({
         }}
       >
         <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
-          <DialogDescription className="sr-only">Manage leads in your pipe</DialogDescription>
+          <DialogDescription className="sr-only">Manage deals in your pipe</DialogDescription>
           <div className="map-panel-header-toolbar">
-            <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-1.5">
+            <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
+              <PanelBackButton
+                onClick={() => { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setPipelineDropdownOpen(false); setPipelineSwitcherOpen(false); setSharePipelineId(null); onClose?.() }}
+                className="pipeline-icon-btn"
+              />
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
               {isEditMode ? (
                 <Input
                   value={pipelineTitle}
@@ -717,11 +832,21 @@ export function DealPipeline({
                   <Settings className="h-4 w-4" />
                 </Button>
               )}
+              </div>
             </div>
             <div className="map-panel-header-actions">
-              <Button variant="ghost" size="icon" className="pipeline-icon-btn" onClick={() => { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setPipelineDropdownOpen(false); setPipelineSwitcherOpen(false); setSharePipelineId(null); onClose?.() }} title="Close">
-                <X className="h-5 w-5" />
-              </Button>
+              {!isEditMode && canCollaboratePipeline && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="pipeline-icon-btn shrink-0"
+                  onClick={() => onOpenCreateDeal?.()}
+                  title="Add deal"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Deal
+                </Button>
+              )}
             </div>
           </div>
         </DialogHeader>
@@ -768,50 +893,59 @@ export function DealPipeline({
                   onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
                   onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
                 >
-                  {getLeadsForColumn(col.id).map((lead) => (
+                  {getDealsForColumn(col.id).map((deal) => (
                     <div
-                      key={lead.id}
+                      key={deal.id}
                       draggable={canCollaboratePipeline}
-                      onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, lead.id) : undefined}
+                      onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, deal.id) : undefined}
                       onDragEnd={canCollaboratePipeline ? handleDragEnd : undefined}
-                      onClick={() => handleLeadClick(lead)}
+                      onClick={() => handleDealClick(deal)}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && handleLeadClick(lead)}
-                      className={`deal-pipeline-lead-card map-panel-list-item px-2 py-1.5 rounded-md border border-white/10 text-white text-xs group flex items-center gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedLeadId === lead.id ? 'opacity-50' : ''}`}
+                      onKeyDown={(e) => e.key === 'Enter' && handleDealClick(deal)}
+                      className={`deal-pipeline-lead-card map-panel-list-item px-2 py-1.5 rounded-md border border-white/10 text-white text-xs group flex items-center gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedDealId === deal.id ? 'opacity-50' : ''}`}
                       style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }}
                     >
                       <div className="flex-1 min-w-0">
                         {(() => {
-                          const streetAddr = getStreetAddress(lead) || lead.address || ''
-                          const name = displayLeadName(lead, lead.properties)
-                          const title = name || streetAddr || 'Unknown'
-                          const subtitle = name ? streetAddr : ''
+                          const { title, leadName } = getDealCardLabels(deal, leads)
                           return (
                             <>
-                              <div className="font-medium truncate text-white" title={title}>{title}</div>
-                              {subtitle && <div className="text-[11px] truncate text-white/85" title={subtitle}>{subtitle}</div>}
+                              <div className="font-medium truncate text-white" title={title}>
+                                {title}
+                              </div>
+                              {leadName && (
+                                <div className="text-[11px] truncate text-white/85" title={leadName}>
+                                  {leadName}
+                                </div>
+                              )}
                             </>
                           )
                         })()}
                         {(() => {
-                          const duration = formatTimeInState(lead)
-                          if (!duration) return null
-                          return <div className="text-[10px] mt-0.5 text-white/75" title="Cumulative time in this stage">{duration}</div>
+                          const duration = formatTimeInState(deal)
+                          const hasProfit = dealHasFinancials(deal)
+                          if (!duration && !hasProfit) return null
+                          return (
+                            <div className="text-[10px] mt-0.5 text-white/75 flex items-center gap-2 flex-wrap">
+                              {duration && <span title="Cumulative time in this stage">{duration}</span>}
+                              {hasProfit && <DealProfitBadge deal={deal} className="text-[10px]" />}
+                            </div>
+                          )
                         })()}
                       </div>
                       <div className="flex items-center gap-0.5 flex-shrink-0 text-white/90">
                         {isEditMode ? (
-                          <button type="button" className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 text-red-400 hover:text-red-300" onClick={(e) => handleDeleteLead(lead.id, e)} title="Remove lead">
+                          <button type="button" className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 text-red-400 hover:text-red-300" onClick={(e) => handleDeleteDeal(deal.id, e)} title="Remove deal">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         ) : (
                           <button
                             type="button"
                             className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed text-white/90"
-                            onClick={(e) => { e.stopPropagation(); handleMoveToNext(lead.id) }}
+                            onClick={(e) => { e.stopPropagation(); handleMoveToNext(deal.id) }}
                             title="Move to next stage"
-                            disabled={!canCollaboratePipeline || columns.findIndex(c => c.id === lead.status) >= columns.length - 1}
+                            disabled={!canCollaboratePipeline || columns.findIndex(c => c.id === deal.status) >= columns.length - 1}
                           >
                             <ArrowRight className="h-3.5 w-3.5" />
                           </button>
@@ -902,14 +1036,14 @@ export function DealPipeline({
                 size="sm"
                 className="pipeline-icon-btn h-7 w-7 p-0 flex-shrink-0"
                 onClick={() => {
-                  setAddTaskLeadId('')
-                  setAddTaskLeadSearch('')
+                  setAddTaskDealId('')
+                  setAddTaskDealSearch('')
                   setAddTaskSuggestionsOpen(false)
                   setAddTaskHighlightIndex(-1)
                   setAddTaskTitle('')
                   setAddTaskScheduledAt(null)
                   setAddTaskScheduledEndAt(null)
-                  setAddTaskFromLead(false)
+                  setAddTaskFromDeal(false)
                   setAddTaskAssignUids([])
                   setShowAddTaskDialog(true)
                 }}
@@ -932,14 +1066,10 @@ export function DealPipeline({
                     const TaskItem = ({ task }) => (
                   <div
                     className={`text-xs map-panel-list-item rounded-md p-2 max-md:p-1.5 cursor-pointer transition-colors border border-solid ${task.completed ? 'opacity-60 border-white/[0.08] bg-white/[0.04] hover:opacity-90 hover:bg-white/[0.07]' : 'border-white/10 bg-white/[0.06] hover:bg-white/10'}`}
-                    onClick={() => {
-                      if (!task.parcelId) return
-                      const lead = displayLeads.find((l) => l.parcelId === task.parcelId)
-                      if (lead) setSelectedLead(lead)
-                    }}
+                    onClick={() => openDealFromTask(task)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && task.parcelId) { const lead = displayLeads.find((l) => l.parcelId === task.parcelId); if (lead) setSelectedLead(lead) } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDealFromTask(task) }}
                   >
                     <div className="flex items-start gap-2">
                       <button
@@ -986,8 +1116,8 @@ export function DealPipeline({
                             </span>
                           )}
                         </div>
-                        {task.parcelId && (
-                          <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={getLeadLabel(task.parcelId)}>Lead: {getLeadLabel(task.parcelId)}</div>
+                        {(task.dealId || task.parcelId) && (
+                          <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={getDealLabel(task.dealId, task.parcelId)}>Deal: {getDealLabel(task.dealId, task.parcelId)}</div>
                         )}
                         {task.__source === 'team' && formatAssigneeList(task.assignedUids, teams) && (
                           <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={formatAssigneeList(task.assignedUids, teams)}>
@@ -1071,103 +1201,111 @@ export function DealPipeline({
         </div>
       </DialogContent>
 
-      <LeadDetails
-        isOpen={!!selectedLead}
-        onClose={() => setSelectedLead(null)}
-        lead={selectedLead}
-        pipelineId={apiMode ? activePipelineId : null}
-        pipelineTeamShares={apiMode ? (pipelines.find((p) => p.id === activePipelineId)?.teamShares || []) : []}
-        teams={teams}
-        pipelines={pipelines}
-        onPipelinesChange={onPipelinesChange}
-        getToken={getToken}
-        onTeamTasksChange={() => {
-          onPipelinesChange?.()
-        }}
-        parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
-        onOpenParcelDetails={onOpenParcelDetails}
-        onEmailClick={onEmailClick}
-        onPhoneClick={onPhoneClick}
-        onSkipTraceParcel={onSkipTraceParcel}
-        isSkipTracingInProgress={selectedLead && skipTracingInProgress?.has?.(selectedLead.parcelId)}
-        onLeadUpdate={(updated) => {
-          setSelectedLead(updated)
-          persistLeads(displayLeads.map(l => l.id === updated.id ? updated : l))
-        }}
-        onTasksChange={refreshAllTasks}
-        onOpenAddTask={(lead) => {
-          if (lead) {
-            setAddTaskLeadId(lead.parcelId)
-            setAddTaskLeadSearch(getLeadLabel(lead.parcelId))
-            setAddTaskTitle('')
-            setAddTaskAssignUids([])
-            const startOfHour = new Date()
-            startOfHour.setMinutes(0, 0, 0)
-            const startTs = startOfHour.getTime()
-            setAddTaskScheduledAt(startTs)
-            setAddTaskScheduledEndAt(startTs + 60 * 60 * 1000)
-            setAddTaskFromLead(true)
-            setShowAddTaskDialog(true)
-          }
-        }}
-        onViewTaskOnSchedule={onOpenScheduleAtDate ? (task) => {
-          if (task?.scheduledAt) {
-            setSelectedLead(null)
-            onOpenScheduleAtDate(task.scheduledAt)
-          }
-        } : undefined}
-        onOpenEditTask={(task, lead) => {
-          if (task) {
-            setEditTask({ task, lead: lead || null })
-            setEditTaskTitle(task.title || '')
-            setEditTaskScheduledAt(task.scheduledAt ?? null)
-            setEditTaskScheduledEndAt(task.scheduledEndAt ?? null)
-          }
-        }}
-        pipelineName={apiMode ? (activePipeline?.title || 'Pipes') : null}
-        onRequestMoveLead={onRequestMoveLead}
-        onRequestRemoveLead={onRequestRemoveLead}
-        onRequestCloseLead={onRequestCloseLead}
-        onGoToParcelOnMap={onGoToParcelOnMap}
-      />
+      {selectedDeal && (
+        <DealDetails
+          deal={selectedDeal}
+          pipeline={activePipeline}
+          lead={leads.find((l) => l.id === selectedDeal.leadId) || null}
+          pipelines={pipelines}
+          leads={leads}
+          teams={teams}
+          onPipelinesChange={onPipelinesChange}
+          onOpenScheduleAtDate={onOpenScheduleAtDate}
+          onOpenLead={openLeadFromDeal}
+          leadLinkActive={!!leadOverlayId && leadOverlayId === selectedDeal.leadId}
+          onClose={() => { setSelectedDeal(null); setLeadOverlayId(null) }}
+          onDealUpdate={(updated) => {
+            setSelectedDeal(updated)
+            persistDeals(displayDeals.map(d => d.id === updated.id ? updated : d))
+          }}
+          onRequestMoveDeal={onRequestMoveDeal}
+          onRequestCloseDeal={async (deal, pipeline) => {
+            const ok = await onRequestCloseDeal?.(deal, pipeline)
+            if (ok) {
+              setSelectedDeal(null)
+              setLeadOverlayId(null)
+            }
+          }}
+          onRequestRemoveDeal={async (deal, pipeline) => {
+            const ok = await onRequestRemoveDeal?.(deal, pipeline)
+            if (ok) {
+              setSelectedDeal(null)
+              setLeadOverlayId(null)
+            }
+          }}
+          getToken={getToken}
+        />
+      )}
+
+      {leadOverlay && (
+        <LeadDetails
+          isOpen
+          onClose={() => setLeadOverlayId(null)}
+          lead={leadOverlay}
+          pipelines={pipelines}
+          getToken={getToken}
+          parcelData={leadToParcelData(leadOverlay)}
+          onOpenParcelDetails={onOpenParcelDetails}
+          onEmailClick={onEmailClick}
+          onPhoneClick={onPhoneClick}
+          onGoToParcelOnMap={onGoToParcelOnMap}
+          onLeadUpdate={handleLeadUpdate}
+          onCreateDeal={onOpenCreateDeal}
+          onOpenDeal={(deal) => {
+            setLeadOverlayId(null)
+            setSelectedDeal(deal)
+          }}
+          onLeadDeleted={() => {
+            setLeadOverlayId(null)
+            onRefreshLeads?.()
+          }}
+          onOpenScheduleAtDate={onOpenScheduleAtDate}
+          onPipelinesChange={onPipelinesChange}
+          teams={teams}
+          teamMembership={teamMembership}
+          leads={leads}
+          nestedOverlay
+          topLayer
+        />
+      )}
 
       {/* Add task from tasks sidebar */}
       <Dialog open={showAddTaskDialog} onOpenChange={setShowAddTaskDialog}>
         <DialogContent className="map-panel list-panel new-task-panel w-[min(92vw,22rem)] max-w-sm max-h-[80vh] p-0 rounded-2xl" showCloseButton={false} nestedOverlay>
           <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
-            <DialogTitle className="text-xl font-semibold">New Task</DialogTitle>
-            <DialogDescription className="sr-only">Create a new task and assign it to a lead</DialogDescription>
+            <PanelHeader onBack={() => setShowAddTaskDialog(false)} title="New Task" />
+            <DialogDescription className="sr-only">Create a new task and assign it to a deal</DialogDescription>
           </DialogHeader>
           <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-140px)] space-y-3 create-list-form">
-            {!addTaskFromLead ? (
+            {!addTaskFromDeal ? (
             <div className="relative">
-              <label className="text-xs font-medium block mb-1 opacity-90">Assign to lead</label>
+              <label className="text-xs font-medium block mb-1 opacity-90">Assign to deal</label>
               <Input
-                value={addTaskLeadSearch}
+                value={addTaskDealSearch}
                 onChange={(e) => {
-                  setAddTaskLeadSearch(e.target.value)
-                  setAddTaskLeadId('') // clear selection when typing
+                  setAddTaskDealSearch(e.target.value)
+                  setAddTaskDealId('')
                   setAddTaskSuggestionsOpen(true)
                   setAddTaskHighlightIndex(-1)
                 }}
                 onFocus={() => setAddTaskSuggestionsOpen(true)}
                 onBlur={() => setTimeout(() => setAddTaskSuggestionsOpen(false), 150)}
-                placeholder="Type address or name..."
+                placeholder="Type name or address..."
                 className="text-sm"
-                autoFocus={!addTaskFromLead}
+                autoFocus={!addTaskFromDeal}
                 onKeyDown={(e) => {
-                  if (!addTaskSuggestionsOpen || addTaskLeadSuggestions.length === 0) return
+                  if (!addTaskSuggestionsOpen || addTaskDealSuggestions.length === 0) return
                   if (e.key === 'ArrowDown') {
                     e.preventDefault()
-                    setAddTaskHighlightIndex((i) => Math.min(i + 1, addTaskLeadSuggestions.length - 1))
+                    setAddTaskHighlightIndex((i) => Math.min(i + 1, addTaskDealSuggestions.length - 1))
                   } else if (e.key === 'ArrowUp') {
                     e.preventDefault()
                     setAddTaskHighlightIndex((i) => Math.max(i - 1, -1))
-                  } else if (e.key === 'Enter' && addTaskHighlightIndex >= 0 && addTaskLeadSuggestions[addTaskHighlightIndex]) {
+                  } else if (e.key === 'Enter' && addTaskHighlightIndex >= 0 && addTaskDealSuggestions[addTaskHighlightIndex]) {
                     e.preventDefault()
-                    const item = addTaskLeadSuggestions[addTaskHighlightIndex]
-                    setAddTaskLeadId(item.lead.parcelId)
-                    setAddTaskLeadSearch(getLeadLabel(item.lead.parcelId))
+                    const item = addTaskDealSuggestions[addTaskHighlightIndex]
+                    setAddTaskDealId(item.deal.id)
+                    setAddTaskDealSearch(getDealLabel(item.deal.id))
                     setAddTaskSuggestionsOpen(false)
                     setAddTaskHighlightIndex(-1)
                   } else if (e.key === 'Escape') {
@@ -1176,21 +1314,21 @@ export function DealPipeline({
                   }
                 }}
               />
-              {addTaskSuggestionsOpen && addTaskLeadSuggestions.length > 0 && (
+              {addTaskSuggestionsOpen && addTaskDealSuggestions.length > 0 && (
                 <ul
                   className="add-task-lead-dropdown absolute z-50 left-0 right-0 mt-0.5 max-h-40 overflow-y-auto rounded-lg border py-1 text-sm"
                   role="listbox"
                 >
-                  {addTaskLeadSuggestions.map((item, idx) => (
+                  {addTaskDealSuggestions.map((item, idx) => (
                     <li
-                      key={item.lead.id}
+                      key={item.deal.id}
                       role="option"
                       aria-selected={addTaskHighlightIndex === idx}
                       className={`px-3 py-2 cursor-pointer ${addTaskHighlightIndex === idx ? 'bg-white/10' : 'hover:bg-white/10'}`}
                       onMouseDown={(e) => {
                         e.preventDefault()
-                        setAddTaskLeadId(item.lead.parcelId)
-                        setAddTaskLeadSearch(getLeadLabel(item.lead.parcelId))
+                        setAddTaskDealId(item.deal.id)
+                        setAddTaskDealSearch(getDealLabel(item.deal.id))
                         setAddTaskSuggestionsOpen(false)
                         setAddTaskHighlightIndex(-1)
                       }}
@@ -1210,8 +1348,8 @@ export function DealPipeline({
             </div>
             ) : (
             <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95">
-              <span className="text-[10px] uppercase text-white/70">Lead</span>
-              <div className="truncate">{addTaskLeadSearch || 'Unknown'}</div>
+              <span className="text-[10px] uppercase text-white/70">Deal</span>
+              <div className="truncate">{addTaskDealSearch || 'Unknown'}</div>
             </div>
             )}
             <div>
@@ -1221,7 +1359,7 @@ export function DealPipeline({
                 onChange={(e) => setAddTaskTitle(e.target.value)}
                 placeholder="e.g. Call back on Monday"
                 className="text-sm"
-                autoFocus={addTaskFromLead}
+                autoFocus={addTaskFromDeal}
                 onKeyDown={async (e) => {
                   if (e.key === 'Enter') {
                     const t = addTaskTitle.trim()
@@ -1295,13 +1433,13 @@ export function DealPipeline({
           </DialogHeader>
           {editTask && (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4 scrollbar-hide create-list-form">
-              {editTask.task.parcelId ? (
+              {(editTask.task.dealId || editTask.task.parcelId) ? (
                 <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95 space-y-1">
                   {(() => {
-                    const lead = editTask.lead || displayLeads.find((l) => String(l.parcelId) === String(editTask.task.parcelId)) || loadLeads().find((l) => String(l.parcelId) === String(editTask.task.parcelId))
-                    const name = (lead?.owner || lead?.properties?.OWNER_NAME || '').toString().trim()
-                    const address = lead ? (getFullAddress(lead) || lead.address || getStreetAddress(lead) || '').toString().trim() : ''
-                    const fallback = getLeadLabel(editTask.task.parcelId) || editTask.task.parcelId || 'Unknown'
+                    const deal = editTask.deal || displayDeals.find((d) => d.id === editTask.task.dealId || String(d.parcelId) === String(editTask.task.parcelId))
+                    const name = (deal?.leadName || '').toString().trim()
+                    const address = (deal?.leadAddress || '').toString().trim()
+                    const fallback = getDealLabel(editTask.task.dealId, editTask.task.parcelId) || 'Unknown'
                     return (
                       <>
                         {(name || address) ? (
@@ -1319,7 +1457,7 @@ export function DealPipeline({
               ) : (
                 <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95">
                   <span className="text-[10px] uppercase text-white/70">Scope</span>
-                  <div className="truncate">Pipeline task (no lead)</div>
+                  <div className="truncate">Pipeline task (no deal)</div>
                 </div>
               )}
               <div>
@@ -1397,28 +1535,21 @@ export function DealPipeline({
               const pipe = pipelines.find((p) => p.id === sharePipelineId)
               const currentShared = pipe?.sharedWith || []
               const isShared = currentShared.length > 0
-              const currentTeamShares = pipe?.teamShares || []
-              const toggleTeam = async (teamId) => {
-                if (!onSharePipelineWithTeams) return
-                const next = currentTeamShares.includes(teamId)
-                  ? currentTeamShares.filter((id) => id !== teamId)
-                  : [...currentTeamShares, teamId]
-                try {
-                  await onSharePipelineWithTeams(sharePipelineId, next)
-                } catch (e) {
-                  showToast(e.message || 'Failed to update team share', 'error')
-                }
-              }
+              const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+              const activeTeam = teams?.[0] || null
+              const allowExternalSharing = teamMembership?.allowExternalSharing === true
               return (
                 <>
-                  {onSharePipelineWithTeams && (
-                    <TeamShareSection
-                      teams={teams}
-                      selectedTeamIds={currentTeamShares}
-                      onToggle={toggleTeam}
+                  {onSharePipelineWithTeams && activeTeam && (
+                    <ResourceSharePicker
+                      team={activeTeam}
+                      visibility={shareState.visibility}
+                      sharedMemberUids={shareState.sharedMemberUids}
+                      onChange={handlePipelineShareChange}
+                      allowExternalSharing={allowExternalSharing}
                     />
                   )}
-                  {isShared && (
+                  {allowExternalSharing && isShared && (
                     <div className="mb-4">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
                       <ul className="space-y-1.5">
@@ -1444,6 +1575,8 @@ export function DealPipeline({
                       </ul>
                     </div>
                   )}
+                  {allowExternalSharing && (
+                    <>
                   <Input
                     type="email"
                     placeholder="user@example.com"
@@ -1488,6 +1621,13 @@ export function DealPipeline({
                     </Button>
                     <Button variant="outline" onClick={() => { setSharePipelineId(null); setShareEmail(''); setShareEmailValid(null); setShareEmailError('') }} className="flex-1 min-w-0 share-dialog-btn">Cancel</Button>
                   </div>
+                    </>
+                  )}
+                  {!allowExternalSharing && (
+                    <div className="flex gap-2 flex-wrap mt-2">
+                      <Button variant="outline" onClick={() => { setSharePipelineId(null); setShareEmail(''); setShareEmailValid(null); setShareEmailError('') }} className="flex-1 min-w-0 share-dialog-btn">Done</Button>
+                    </div>
+                  )}
                 </>
               )
             })()}
@@ -1570,7 +1710,7 @@ export function DealPipeline({
                   {p.ownerId !== currentUser?.uid && (
                     <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                   )}
-                  <TeamBadge teamIds={p.teamShares} teams={teams} />
+                  <VisibilityBadge resource={p} />
                 </div>
               </button>
             ))}
@@ -1667,7 +1807,6 @@ export function DealPipeline({
                 type="button"
                 onClick={() => {
                   setTaskMenu(null)
-                  setSelectedLead(null)
                   onOpenScheduleAtDate(taskMenu.task.scheduledAt || taskMenu.task.dueAt)
                 }}
                 className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
@@ -1679,10 +1818,12 @@ export function DealPipeline({
             <button
               type="button"
               onClick={() => {
-                const lead = displayLeads.find((l) => String(l.parcelId) === String(taskMenu.task.parcelId))
+                const deal = taskMenu.task.dealId
+                  ? displayDeals.find((d) => d.id === taskMenu.task.dealId)
+                  : displayDeals.find((d) => String(d.parcelId) === String(taskMenu.task.parcelId))
                 setTaskMenu(null)
-                setSelectedLead(null)
-                setEditTask({ task: taskMenu.task, lead: lead || null })
+                setSelectedDeal(null)
+                setEditTask({ task: taskMenu.task, deal: deal || null })
                 setEditTaskTitle(taskMenu.task.title || '')
                 setEditTaskScheduledAt(
                   taskMenu.task.__source === 'team'
@@ -1705,7 +1846,7 @@ export function DealPipeline({
               type="button"
               onClick={() => {
                 setTaskMenu(null)
-                setSelectedLead(null)
+                setSelectedDeal(null)
                 showConfirm({
                   title: 'Delete task',
                   message: `Delete "${(taskMenu.task.title || '').trim() || '(untitled)'}"?`,

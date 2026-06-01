@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { X, CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
-import { Button } from './ui/button'
+import { PanelHeader } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 
 const hailDataCache = new Map()
@@ -117,18 +117,7 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
       >
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Hail history and storm data for this property</DialogDescription>
-          <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-xl font-semibold flex items-center gap-2 min-w-0 truncate">
-              <CloudRain className="h-5 w-5 shrink-0" />
-              <span className="truncate">Hail Data</span>
-            </DialogTitle>
-            <div className="map-panel-header-actions gap-1">
-              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <div className="text-xs opacity-50 mt-1 truncate">{address}</div>
+          <PanelHeader onBack={onClose} title="Hail Data" icon={CloudRain} subtitle={address} />
         </DialogHeader>
 
         <div className="px-5 py-4 overflow-y-auto scrollbar-hide flex-1 min-h-0 space-y-4">

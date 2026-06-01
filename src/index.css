@@ -252,6 +252,18 @@
   color: rgba(134, 239, 172, 1) !important;
 }
 
+.map-panel .deal-profit-positive,
+.map-panel [class*="font-semibold"].deal-profit-positive,
+.map-panel [class*="font-bold"].deal-profit-positive {
+  color: rgba(134, 239, 172, 1) !important;
+}
+
+.map-panel .deal-profit-negative,
+.map-panel [class*="font-semibold"].deal-profit-negative,
+.map-panel [class*="font-bold"].deal-profit-negative {
+  color: rgba(252, 165, 165, 1) !important;
+}
+
 .map-panel [class*="text-red"] {
   color: rgba(252, 165, 165, 1) !important;
 }
@@ -403,7 +415,7 @@
 
 /* Add task - lead autocomplete dropdown - liquid glass, readable */
 .add-task-lead-dropdown {
-  background: rgba(30, 35, 50, 0.85);
+  background: rgb(30, 35, 50);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -426,14 +438,20 @@
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
 }
+.pipeline-dropdown-menu {
+  background: rgb(30, 35, 50);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
 .pipeline-dropdown-item {
-  background: transparent !important;
+  background: rgb(30, 35, 50) !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 .pipeline-dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Parcel expanded dropdown (inside list) - liquid glass look */
@@ -469,10 +487,12 @@
   border-color: rgba(253, 230, 138, 0.3) !important;
 }
 
-.map-panel.lead-details-panel {
+.map-panel.lead-details-panel,
+.map-panel.deal-details-panel {
   background: rgba(0, 0, 0, 0.35) !important;
 }
-.map-panel.lead-details-panel > * {
+.map-panel.lead-details-panel > *,
+.map-panel.deal-details-panel > * {
   background: transparent !important;
 }
 
@@ -2299,7 +2319,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 /* Spaced, rounded list items in map panels: `map-panel-list-item` on each item (e.g. ListPanel, LeadsPanel). */
 
-/* Extra backdrop reset on lead rows in LeadsPanel only. */
+/* Extra backdrop reset on list rows in Leads / Deals panels. */
 .map-panel .leads-panel-list-item {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;

@@ -10,7 +10,17 @@
  */
 
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { getAllTeams } from './lib/teams.js'
+import {
+  buildAccessContext,
+  getResourceAccess,
+  filterVisibleResources,
+  canEdit,
+  canDelete,
+  canChangeVisibility,
+  applyResourceVisibilityPatch,
+  activityAudienceForResource,
+} from './lib/resourceContext.js'
 
 let kv = null
 let kvAvailable = false
@@ -108,8 +118,8 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const [all, allTeams] = await Promise.all([getAllPaths(), getAllTeams()])
-      const teamsIndex = fullTeamsIndex(allTeams)
-      const paths = all.filter((p) => resolveAccess(p, user, teamsIndex) !== null)
+      const ctx = buildAccessContext(allTeams, user)
+      const paths = filterVisibleResources(all, user, ctx)
       return res.status(200).json({ paths })
     }
 
@@ -133,6 +143,9 @@ export default async function handler(req, res) {
         ownerEmail: user.email,
         sharedWith: [],
         teamShares: [],
+        teamId: null,
+        visibility: 'private',
+        sharedMemberUids: [],
         createdAt: new Date().toISOString()
       }
       const all = await getAllPaths()
@@ -150,11 +163,23 @@ export default async function handler(req, res) {
       if (idx === -1) return res.status(404).json({ error: 'Path not found' })
 
       const path = all[idx]
-      if (path.ownerId !== user.uid) {
-        return res.status(403).json({ error: 'Only the path owner can update this path' })
+      const ctx = buildAccessContext(allTeams, user)
+      const access = getResourceAccess(path, user, ctx)
+      if (!canEdit(access) && access !== 'admin_view') {
+        return res.status(403).json({ error: 'No access to this path' })
+      }
+      if (access === 'admin_view') {
+        return res.status(403).json({ error: 'Admins can view but not edit private paths' })
       }
 
-      const teamsIndex = fullTeamsIndex(allTeams)
+      const canShare = canChangeVisibility(access)
+      if (!canShare && (sharedWith !== undefined || teamShares !== undefined || body.visibility !== undefined || body.sharedMemberUids !== undefined)) {
+        return res.status(403).json({ error: 'Only the path owner can change sharing' })
+      }
+      if (!canShare && name === undefined) {
+        return res.status(400).json({ error: 'No permitted updates' })
+      }
+
       const prevSharedSet = new Set(
         (path.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
@@ -166,7 +191,7 @@ export default async function handler(req, res) {
         path.name = name.trim()
       }
 
-      if (sharedWith !== undefined) {
+      if (canShare && sharedWith !== undefined) {
         const arr = Array.isArray(sharedWith) ? sharedWith : []
         const emails = arr.map(e => (e && String(e).trim()).toLowerCase()).filter(Boolean)
         const uniqueEmails = [...new Set(emails)]
@@ -175,11 +200,11 @@ export default async function handler(req, res) {
         path.sharedWith = uniqueEmails
       }
 
-      if (teamShares !== undefined) {
+      if (canShare && teamShares !== undefined) {
         const arr = Array.isArray(teamShares) ? teamShares : []
         const unique = [...new Set(arr.filter(Boolean))]
         for (const tid of unique) {
-          const team = teamsIndex[tid]
+          const team = ctx.teamsIndex[tid]
           if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
           const isMember =
             team.ownerId === user.uid ||
@@ -190,6 +215,18 @@ export default async function handler(req, res) {
         }
         newlyAddedTeamShares = unique.filter((tid) => !prevTeamShares.has(tid))
         path.teamShares = unique
+      }
+
+      if (canShare && (body.visibility !== undefined || body.sharedMemberUids !== undefined)) {
+        try {
+          const patched = applyResourceVisibilityPatch(path, body, ctx)
+          path.visibility = patched.visibility
+          path.teamId = patched.teamId
+          path.sharedMemberUids = patched.sharedMemberUids
+          if (patched.teamShares?.length) path.teamShares = patched.teamShares
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
       }
 
       path.updatedAt = new Date().toISOString()
@@ -222,6 +259,24 @@ export default async function handler(req, res) {
         }
       }
 
+      try {
+        const { logTeamActivity, actorLabel } = await import('./lib/activityLog.js')
+        const label = actorLabel(user)
+        for (const tid of newlyAddedTeamShares) {
+          await logTeamActivity({
+            teamIds: [tid],
+            actor: user,
+            type: 'path.shared',
+            summary: `${label} shared path "${path.name}" with the team`,
+            entity: { kind: 'path', pathId: path.id },
+            nav: { type: 'path', pathId: path.id },
+            audience: activityAudienceForResource(path),
+          })
+        }
+      } catch (e) {
+        console.warn('path activity log', e.message)
+      }
+
       return res.status(200).json({ path })
     }
 
@@ -229,10 +284,12 @@ export default async function handler(req, res) {
       const { pathId } = body
       if (!pathId) return res.status(400).json({ error: 'pathId is required' })
 
-      const all = await getAllPaths()
+      const [all, allTeams] = await Promise.all([getAllPaths(), getAllTeams()])
+      const ctx = buildAccessContext(allTeams, user)
       const idx = all.findIndex((p) => p.id === pathId)
       if (idx === -1) return res.status(404).json({ error: 'Path not found' })
-      if (all[idx].ownerId !== user.uid) {
+      const access = getResourceAccess(all[idx], user, ctx)
+      if (!canDelete(access)) {
         return res.status(403).json({ error: 'Only the path owner can delete this path' })
       }
       all.splice(idx, 1)

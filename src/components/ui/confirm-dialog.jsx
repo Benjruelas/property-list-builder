@@ -80,7 +80,14 @@ export const ConfirmDialog = () => {
         handleCancel()
       }
     }}>
-      <DialogContent className="map-panel confirm-dialog max-w-[320px] rounded-2xl" showCloseButton={false} focusOverlay>
+      <DialogContent
+        className="map-panel confirm-dialog max-w-[320px] rounded-2xl"
+        showCloseButton={false}
+        focusOverlay
+        topLayer
+        confirmLayer
+        data-confirm-dialog
+      >
         <DialogHeader>
           <DialogTitle>
             {currentConfirm.detailSubtitle
@@ -98,7 +105,7 @@ export const ConfirmDialog = () => {
             </DialogDescription>
           )}
         </DialogHeader>
-        <p className="text-sm text-gray-700 py-2 text-center">{currentConfirm.message}</p>
+        <p className="text-sm text-white/80 py-2 text-center">{currentConfirm.message}</p>
         {currentConfirm.detail && !currentConfirm.detailSubtitle && (
           <div className="mt-3 rounded-lg border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white/95">
             {currentConfirm.detail}

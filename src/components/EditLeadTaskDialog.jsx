@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -28,7 +29,7 @@ export function EditLeadTaskDialog({
   onSaved,
   getLeadLabel = (parcelId) => {
     if (!parcelId) return 'Pipeline task'
-    const lead = displayLeads.find((l) => l.parcelId === parcelId)
+    const lead = displayLeads.find((l) => l.parcelId === parcelId || l.id === parcelId)
     if (lead) return getStreetAddress(lead) || lead.address || lead.owner || parcelId
     return parcelId
   },
@@ -125,7 +126,7 @@ export function EditLeadTaskDialog({
         topLayer
       >
         <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-2 border-b border-white/20">
-          <DialogTitle className="text-xl font-semibold">Edit task</DialogTitle>
+          <PanelHeader onBack={() => onOpenChange(false)} title="Edit task" />
           <DialogDescription className="sr-only">Edit task details</DialogDescription>
         </DialogHeader>
         {task && (

@@ -67,8 +67,13 @@ export async function shareTemplate(getToken, templateId, sharedWith) {
   return updateTemplate(getToken, templateId, { sharedWith })
 }
 
-export async function shareTemplateWithTeams(getToken, templateId, teamShares) {
-  return updateTemplate(getToken, templateId, { teamShares })
+export async function shareTemplateWithTeams(getToken, templateId, sharePatch, teamId = null) {
+  return updateTemplate(getToken, templateId, {
+    visibility: sharePatch.visibility,
+    sharedMemberUids: sharePatch.sharedMemberUids || [],
+    teamId: sharePatch.visibility === 'team' ? teamId : null,
+    teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
+  })
 }
 
 export async function deleteTemplate(getToken, templateId) {

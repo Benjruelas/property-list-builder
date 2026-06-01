@@ -5,7 +5,8 @@
 import { splitOwnerName } from './ownerName'
 
 const COLUMNS_KEY = 'deal_pipeline_columns'
-const LEADS_KEY = 'deal_pipeline_leads'
+const DEALS_KEY = 'deal_pipeline_deals'
+const LEADS_KEY = 'deal_pipeline_leads' // legacy — cleared on migration
 const TITLE_KEY = 'deal_pipeline_title'
 const DEFAULT_TITLE = 'Pipes'
 
@@ -41,24 +42,33 @@ export const saveColumns = (columns) => {
   }
 }
 
-export const loadLeads = () => {
+export const loadDeals = () => {
   try {
-    const stored = localStorage.getItem(LEADS_KEY)
-    if (!stored) return []
-    const parsed = JSON.parse(stored)
-    return Array.isArray(parsed) ? parsed : []
+    const stored = localStorage.getItem(DEALS_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return Array.isArray(parsed) ? parsed : []
+    }
+    // Legacy fallback — do not auto-migrate leads to deals
+    return []
   } catch {
     return []
   }
 }
 
-export const saveLeads = (leads) => {
+export const saveDeals = (deals) => {
   try {
-    localStorage.setItem(LEADS_KEY, JSON.stringify(leads))
+    localStorage.setItem(DEALS_KEY, JSON.stringify(deals))
   } catch (e) {
-    console.error('Error saving deal pipeline leads:', e)
+    console.error('Error saving deal pipeline deals:', e)
   }
 }
+
+/** @deprecated use loadDeals */
+export const loadLeads = () => loadDeals()
+
+/** @deprecated use saveDeals */
+export const saveLeads = (deals) => saveDeals(deals)
 
 export const loadTitle = () => {
   try {
@@ -125,43 +135,12 @@ export function getStreetAddress(data) {
 }
 
 /**
- * Add a lead from parcel data. Uses first column as default status.
- * @param {Object} parcelData - { id, address, properties, lat, lng }
- * @param {Array} columns - current columns (from loadColumns)
- * @returns {Object|null} the created lead or null if parcel already a lead
+ * @deprecated Leads are no longer added directly to pipelines. Use createLead + buildDealFromLead.
  */
-export const addLead = (parcelData, columns) => {
-  if (!parcelData?.id) return null
-  const leads = loadLeads()
-  if (leads.some(l => l.parcelId === parcelData.id)) return null
-  const firstColId = columns?.[0]?.id || 'col-0'
-  const now = Date.now()
-  const rawOwner = parcelData.properties?.OWNER_NAME || null
-  const { firstName, lastName } = splitOwnerName(rawOwner)
-  const lead = {
-    id: `lead-${now}-${parcelData.id}`,
-    parcelId: parcelData.id,
-    address: getStreetAddress(parcelData),
-    owner: rawOwner,
-    firstName,
-    lastName,
-    lat: parcelData.lat ?? (parcelData.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
-    lng: parcelData.lng ?? (parcelData.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
-    status: firstColId,
-    createdAt: now,
-    statusEnteredAt: now,
-    cumulativeTimeByStatus: {}, // { [statusId]: ms } - total ms spent in each status across all visits
-    properties: parcelData.properties || null,
-  }
-  const updated = [...leads, lead]
-  saveLeads(updated)
-  return lead
-}
+export const addLead = () => null
 
-export const isParcelALead = (parcelId) => {
-  const leads = loadLeads()
-  return leads.some(l => l.parcelId === parcelId)
-}
+/** @deprecated check user_leads by parcelId instead */
+export const isParcelALead = () => false
 
 /**
  * Format a duration in milliseconds to human-readable string.

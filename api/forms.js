@@ -2,9 +2,17 @@ import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { resolveDevBypassUser, isDevBypassToken } from './lib/devBypassUsers.js'
 import {
   getAllTeams,
-  fullTeamsIndex,
-  resolveAccess
 } from './lib/teams.js'
+import {
+  buildAccessContext,
+  getResourceAccess,
+  filterVisibleResources,
+  canEdit,
+  canDelete,
+  canChangeVisibility,
+  applyResourceVisibilityPatch,
+  isTeamAdmin,
+} from './lib/resourceContext.js'
 
 /**
  * Vercel Serverless Function - form templates. Firebase Bearer auth.
@@ -167,8 +175,8 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const [all, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
-      const teamsIndex = fullTeamsIndex(allTeams)
-      const templates = all.filter((t) => resolveAccess(t, user, teamsIndex) !== null)
+      const ctx = buildAccessContext(allTeams, user)
+      const templates = filterVisibleResources(all, user, ctx)
       return res.status(200).json({ templates })
     }
 
@@ -189,6 +197,10 @@ export default async function handler(req, res) {
         fields: normalizeFields(fields),
         sharedWith: [],
         teamShares: [],
+        teamId: null,
+        visibility: 'private',
+        sharedMemberUids: [],
+        isTeamLibrary: body.isTeamLibrary === true,
         lastUsedAt: null,
         createdAt: now,
         updatedAt: now
@@ -218,17 +230,17 @@ export default async function handler(req, res) {
       if (idx === -1) return res.status(404).json({ error: 'Template not found' })
 
       const t = all[idx]
-      const teamsIndex = fullTeamsIndex(allTeams)
-      const access = resolveAccess(t, user, teamsIndex)
-      if (!access) {
+      const ctx = buildAccessContext(allTeams, user)
+      const teamsIndex = ctx.teamsIndex
+      const access = getResourceAccess(t, user, ctx)
+      if (!canEdit(access) && access !== 'admin_view' && lastUsedAt === undefined) {
         return res.status(403).json({ error: 'You do not have access to this template' })
       }
-      const isOwner = access === 'owner'
+      if (access === 'admin_view' && lastUsedAt === undefined) {
+        return res.status(403).json({ error: 'Admins can view but not edit private forms' })
+      }
+      const isOwner = canChangeVisibility(access)
 
-      // Collaborators (shared users / team members) get view+fill only.
-      // The only field they may update is `lastUsedAt` so the list UI can
-      // surface "last used" for everyone with access. Everything else is
-      // owner-only.
       if (!isOwner) {
         const touchedOwnerField =
           name !== undefined ||
@@ -237,7 +249,10 @@ export default async function handler(req, res) {
           originalPdfUrl !== undefined ||
           pageCount !== undefined ||
           sharedWith !== undefined ||
-          teamShares !== undefined
+          teamShares !== undefined ||
+          body.visibility !== undefined ||
+          body.sharedMemberUids !== undefined ||
+          body.isTeamLibrary !== undefined
         if (touchedOwnerField) {
           return res.status(403).json({ error: 'Only the template owner can edit this form' })
         }
@@ -320,6 +335,29 @@ export default async function handler(req, res) {
         }
       }
 
+      if (body.isTeamLibrary !== undefined && isOwner) {
+        if (body.isTeamLibrary === true && !isTeamAdmin(ctx.team, user.uid)) {
+          return res.status(403).json({ error: 'Only team admins can publish to team library' })
+        }
+        t.isTeamLibrary = body.isTeamLibrary === true
+        if (t.isTeamLibrary && ctx.team?.id) {
+          t.visibility = 'team'
+          t.teamId = ctx.team.id
+        }
+      }
+
+      if (isOwner && (body.visibility !== undefined || body.sharedMemberUids !== undefined)) {
+        try {
+          const patched = applyResourceVisibilityPatch(t, body, ctx)
+          t.visibility = patched.visibility
+          t.teamId = patched.teamId
+          t.sharedMemberUids = patched.sharedMemberUids
+          if (patched.teamShares?.length) t.teamShares = patched.teamShares
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+      }
+
       t.updatedAt = new Date().toISOString()
       all[idx] = t
       await saveAllTemplates(all)
@@ -330,10 +368,12 @@ export default async function handler(req, res) {
       const { templateId } = body
       if (!templateId) return res.status(400).json({ error: 'templateId is required' })
 
-      const all = await getAllTemplates()
+      const [all, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
+      const ctx = buildAccessContext(allTeams, user)
       const idx = all.findIndex((t) => t.id === templateId)
       if (idx === -1) return res.status(404).json({ error: 'Template not found' })
-      if (all[idx].ownerId !== user.uid) {
+      const access = getResourceAccess(all[idx], user, ctx)
+      if (!canDelete(access)) {
         return res.status(403).json({ error: 'Only the template owner can delete it' })
       }
       const removed = all[idx]

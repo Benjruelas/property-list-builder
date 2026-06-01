@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Eye, Trash2, Check, Mail, MoreVertical, FileDown, Share2, Users, Pencil, Phone } from 'lucide-react'
+import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { Input } from './ui/input'
-import { TeamShareSection } from './TeamShareSection'
+import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
+import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 
 const LIST_HIGHLIGHT_COLORS = [
   '#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626',
@@ -31,6 +33,7 @@ export function ListPanel({
   onShareList,
   onShareListWithTeams,
   teams = [],
+  teamMembership = null,
   onValidateShareEmail,
   onCreateList,
   onViewListContents,
@@ -74,7 +77,7 @@ export function ListPanel({
   const [isValidatingShare, setIsValidatingShare] = useState(false)
   const validateTimeoutRef = useRef(null)
   /** Optimistic team picks in Share dialog; avoids waiting for server to show checkmarks */
-  const [localTeamShareIds, setLocalTeamShareIds] = useState(null)
+  const [localShareState, setLocalShareState] = useState(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -267,30 +270,34 @@ export function ListPanel({
 
   useEffect(() => {
     if (!shareListId) {
-      setLocalTeamShareIds(null)
+      setLocalShareState(null)
       return
     }
     const list = allLists.find((l) => l.id === shareListId)
-    setLocalTeamShareIds([...(list?.teamShares || [])])
-  }, [shareListId])
+    const norm = normalizeResourceVisibility(list || {})
+    setLocalShareState({
+      visibility: norm.visibility || VISIBILITY.PRIVATE,
+      sharedMemberUids: norm.sharedMemberUids || [],
+    })
+  }, [shareListId, allLists])
 
-  const handleToggleShareTeam = useCallback(
-    (teamId) => {
+  const handleShareChange = useCallback(
+    (next) => {
       if (!onShareListWithTeams || !shareListId) return
-      setLocalTeamShareIds((prev) => {
-        const list = allLists.find((l) => l.id === shareListId)
-        const base = prev ?? (list?.teamShares || [])
-        const next = base.includes(teamId) ? base.filter((id) => id !== teamId) : [...base, teamId]
-        void (async () => {
-          try {
-            await onShareListWithTeams(shareListId, next)
-          } catch (e) {
-            setLocalTeamShareIds(base)
-            showToast(e.message || 'Failed to update team share', 'error')
-          }
-        })()
-        return next
-      })
+      setLocalShareState(next)
+      void (async () => {
+        try {
+          await onShareListWithTeams(shareListId, next)
+        } catch (e) {
+          const list = allLists.find((l) => l.id === shareListId)
+          const norm = normalizeResourceVisibility(list || {})
+          setLocalShareState({
+            visibility: norm.visibility || VISIBILITY.PRIVATE,
+            sharedMemberUids: norm.sharedMemberUids || [],
+          })
+          showToast(e.message || 'Failed to update sharing', 'error')
+        }
+      })()
     },
     [onShareListWithTeams, shareListId, allLists]
   )
@@ -323,23 +330,17 @@ export function ListPanel({
       >
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Manage your property lists, add parcels, and share lists</DialogDescription>
-          <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-left text-xl font-semibold truncate">Lists</DialogTitle>
-            <div className="map-panel-header-actions gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowCreateForm(true)}
-                className="create-new-list-btn"
-                title="Create new list"
-              >
-                <Plus className="h-4 w-4" style={{ color: parcelBoundaryColor }} />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <PanelHeader onBack={onClose} title="Lists">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowCreateForm(true)}
+              className="create-new-list-btn"
+              title="Create new list"
+            >
+              <Plus className="h-4 w-4" style={{ color: parcelBoundaryColor }} />
+            </Button>
+          </PanelHeader>
         </DialogHeader>
 
         <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
@@ -472,6 +473,7 @@ export function ListPanel({
                             {!isListOwnedByUser(list) && (
                               <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
                             )}
+                            <VisibilityBadge resource={list} />
                           </div>
                           <span className="text-xs text-gray-500">{list.parcels?.length ?? 0} parcels</span>
                         </div>
@@ -546,17 +548,21 @@ export function ListPanel({
             const list = allLists.find((l) => l.id === shareListId)
             const currentShared = list?.sharedWith || []
             const isShared = currentShared.length > 0
-            const selectedTeamIds = localTeamShareIds ?? list?.teamShares ?? []
+            const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+            const activeTeam = teams?.[0] || null
+            const allowExternalSharing = teamMembership?.allowExternalSharing === true
             return (
               <>
-                {onShareListWithTeams && (
-                  <TeamShareSection
-                    teams={teams}
-                    selectedTeamIds={selectedTeamIds}
-                    onToggle={handleToggleShareTeam}
+                {onShareListWithTeams && activeTeam && (
+                  <ResourceSharePicker
+                    team={activeTeam}
+                    visibility={shareState.visibility}
+                    sharedMemberUids={shareState.sharedMemberUids}
+                    onChange={handleShareChange}
+                    allowExternalSharing={allowExternalSharing}
                   />
                 )}
-                {isShared && (
+                {allowExternalSharing && isShared && (
                   <div className="mb-4">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
                     <ul className="space-y-1.5">
@@ -579,6 +585,8 @@ export function ListPanel({
                     </ul>
                   </div>
                 )}
+                {allowExternalSharing && (
+                  <>
                 <Input
                   type="email"
                   placeholder="user@example.com"
@@ -609,6 +617,13 @@ export function ListPanel({
                   </Button>
                   <Button variant="outline" onClick={() => { setShareListId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Cancel</Button>
                 </div>
+                  </>
+                )}
+                {!allowExternalSharing && (
+                  <div className="flex gap-2 flex-wrap mt-2">
+                    <Button variant="outline" onClick={() => { setShareListId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Done</Button>
+                  </div>
+                )}
               </>
             )
           })()}

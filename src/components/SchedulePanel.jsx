@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
+import { PanelBackButton, PanelHeader } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
-import { loadLeads, getStreetAddress, getFullAddress } from '@/utils/dealPipeline'
+import { getFullAddress } from '@/utils/dealPipeline'
+import { displayLeadName } from '@/utils/leads'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
 import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
 import { addTeamTask } from '@/utils/teamTasks'
 import { flattenTeamTasks } from '@/utils/teamTaskUtils'
+import { fetchTeamTasks } from '@/utils/tasks'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
@@ -45,8 +48,9 @@ function getSundayOfWeek(date) {
 }
 
 function getLeadLabel(lead, parcelId) {
-  if (!parcelId) return 'Standalone'
-  return getStreetAddress(lead) || lead?.address || lead?.owner || parcelId
+  if (!lead && !parcelId) return 'Standalone'
+  if (lead) return displayLeadName(lead) || lead.address || parcelId || 'Lead'
+  return parcelId || 'Lead'
 }
 
 function getTaskCalendarSubtitle(task, pipelines, displayLeads) {
@@ -219,14 +223,9 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [] }) {
+export function SchedulePanel({ isOpen, onClose, stacked = false, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null }) {
   const { scheduleSync } = useUserDataSync()
-  const displayLeads = useMemo(() => {
-    if (pipelines.length > 0) {
-      return pipelines.flatMap((p) => (p.leads || []).map((l) => ({ ...l, __pipelineId: p.id, __pipelineTitle: p.title })))
-    }
-    return onLeadsChange ? leads : loadLeads()
-  }, [pipelines, leads, onLeadsChange])
+  const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth())
@@ -248,21 +247,31 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
   const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
   const [editTaskContext, setEditTaskContext] = useState(null)
   const [leadDetailsTaskEpoch, setLeadDetailsTaskEpoch] = useState(0)
+  const [adminTeamView, setAdminTeamView] = useState(false)
 
   const apiMode = pipelines.length > 0
   const [pipePickerState, setPipePickerState] = useState(null)
+  const isTeamAdmin = teamMembership?.role === 'admin'
 
-  const refreshTasks = useCallback(() => {
+  const refreshTasks = useCallback(async () => {
     if (apiMode) {
-      setAllTasks([
+      let tasks = [
         ...getPersonalTasks(),
         ...flattenPipelineTasks(pipelines),
-        ...flattenTeamTasks(pipelines)
-      ])
+        ...flattenTeamTasks(pipelines),
+      ]
+      if (isTeamAdmin && adminTeamView && getToken) {
+        const { tasks: serverTasks } = await fetchTeamTasks(getToken)
+        const ids = new Set(tasks.map((t) => t.id))
+        for (const t of serverTasks) {
+          if (!ids.has(t.id)) tasks.push({ ...t, __serverTask: true })
+        }
+      }
+      setAllTasks(tasks)
     } else {
       setAllTasks(getAllTasks())
     }
-  }, [apiMode, pipelines])
+  }, [apiMode, pipelines, isTeamAdmin, adminTeamView, getToken])
 
   const selectedLeadPipelineId = useMemo(() => {
     if (!selectedLead) return null
@@ -604,12 +613,17 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
       <DialogContent
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         showCloseButton={false}
-        hideOverlay
+        hideOverlay={!stacked}
+        nestedOverlay={stacked}
+        topLayer={stacked}
       >
         <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))', boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.06)' }}>
           <DialogDescription className="sr-only">View and manage scheduled tasks</DialogDescription>
           <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-            <DialogTitle className="min-w-0 truncate text-left text-xl font-semibold">Schedule</DialogTitle>
+            <div className="flex min-w-0 items-center gap-2">
+              <PanelBackButton onClick={onClose} className="pipeline-icon-btn" />
+              <DialogTitle className="sr-only">Schedule</DialogTitle>
+            </div>
             <div className="schedule-view-seg" role="tablist">
               {[
                 { id: 'month', label: 'Month' },
@@ -641,10 +655,16 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
                 </button>
               ))}
             </div>
-            <div className="flex justify-end">
-              <Button variant="ghost" size="icon" className="pipeline-icon-btn shrink-0" onClick={onClose} title="Close">
-                <X className="h-5 w-5" />
-              </Button>
+            <div className="flex justify-end items-center gap-2">
+              {isTeamAdmin && (
+                <button
+                  type="button"
+                  className={`text-[11px] px-2 py-1 rounded-md border ${adminTeamView ? 'border-blue-400/50 bg-blue-500/15 text-blue-200' : 'border-white/15 text-white/60'}`}
+                  onClick={() => setAdminTeamView((v) => !v)}
+                >
+                  {adminTeamView ? 'All team' : 'My schedule'}
+                </button>
+              )}
             </div>
           </div>
         </DialogHeader>
@@ -937,14 +957,19 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
         <Dialog open={showAddTask} onOpenChange={setShowAddTask}>
           <DialogContent className="map-panel list-panel new-task-panel w-[min(92vw,22rem)] max-w-sm max-h-[80vh] p-0 rounded-2xl" showCloseButton={false} nestedOverlay>
             <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
-              <DialogTitle className="text-xl font-semibold">
-                New Task
-                {addTaskDate && (
-                  <span className="block text-sm font-normal text-white/80 mt-1">
-                    {addTaskDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                )}
-              </DialogTitle>
+            <PanelHeader
+              onBack={() => setShowAddTask(false)}
+              title={
+                <>
+                  <DialogTitle className="text-xl font-semibold">New Task</DialogTitle>
+                  {addTaskDate && (
+                    <span className="block text-sm font-normal text-white/80 mt-1">
+                      {addTaskDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  )}
+                </>
+              }
+            />
               <DialogDescription className="sr-only">Create a scheduled task; optionally assign to a lead or leave standalone</DialogDescription>
             </DialogHeader>
             <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-140px)] space-y-3 create-list-form">
@@ -1057,52 +1082,32 @@ export function SchedulePanel({ isOpen, onClose, onOpenParcelDetails, onEmailCli
           isOpen={!!selectedLead}
           onClose={() => setSelectedLead(null)}
           lead={selectedLead}
-          pipelineId={selectedLeadPipelineId}
-          pipelineTeamShares={selectedLeadPipelineId
-            ? (pipelines.find((p) => p.id === selectedLeadPipelineId)?.teamShares || [])
-            : []}
-          teams={teams}
-          parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
-          onPipelinesChange={onPipelinesChange}
-          onTeamTasksChange={onPipelinesChange}
+          pipelines={pipelines}
           getToken={getToken}
+          parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
-          onSkipTraceParcel={onSkipTraceParcel}
-          isSkipTracingInProgress={selectedLead && skipTracingInProgress?.has?.(selectedLead.parcelId)}
+          onGoToParcelOnMap={onGoToParcelOnMap}
           onLeadUpdate={(updated) => {
             setSelectedLead(updated)
-            if (onLeadsChange) onLeadsChange(loadLeads())
+            onLeadsChange?.()
           }}
-          onTasksChange={refreshTasks}
+          onCreateDeal={() => {}}
+          teams={teams}
+          teamMembership={teamMembership}
+          onPipelinesChange={onPipelinesChange}
+          onOpenScheduleAtDate={(ts) => {
+            if (!ts) return
+            setSelectedLead(null)
+            const d = new Date(ts)
+            setViewYear(d.getFullYear())
+            setViewMonth(d.getMonth())
+            setDayViewDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+            setViewMode('day')
+          }}
+          leads={displayLeads}
           taskListEpoch={leadDetailsTaskEpoch}
-          onViewTaskOnSchedule={(task) => {
-            if (task?.scheduledAt) {
-              const d = new Date(task.scheduledAt)
-              setViewYear(d.getFullYear())
-              setViewMonth(d.getMonth())
-              setWeekStart(getSundayOfWeek(d))
-              setDayViewDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
-              setViewMode('day')
-              setSelectedLead(null)
-            }
-          }}
-          onOpenEditTask={(t, l) => {
-            if (t) setEditTaskContext({ task: t, lead: l || null })
-          }}
-          pipelines={pipelines}
-          pipelineName={pipelines.length > 0 ? (pipelines.find(p => p.id === selectedLeadPipelineId)?.title || 'Pipes') : null}
-          onRequestMoveLead={onRequestMoveLead}
-          onRequestRemoveLead={onRequestRemoveLead}
-          onGoToParcelOnMap={onGoToParcelOnMap}
-          onOpenAddTask={onOpenAddTask ? (lead) => {
-            if (lead) {
-              const pid = selectedLeadPipelineId
-              setSelectedLead(null)
-              onOpenAddTask(lead, pid)
-            }
-          } : undefined}
         />
 
         <EditLeadTaskDialog

@@ -68,6 +68,7 @@ export function flattenTeamTasks(pipelines) {
           pipelineId: p.id,
           leadId: lead.id,
           parcelId: lead.parcelId || null,
+          dealId: t.dealId || null,
           __source: 'team',
           assignedUids: Array.isArray(t.assignedUids) ? t.assignedUids.filter(Boolean) : []
         })

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Phone, MessageSquare } from 'lucide-react'
+import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { getTextTemplates } from '@/utils/textTemplates'
@@ -51,17 +52,7 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData }) {
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent className="map-panel phone-action-panel w-full max-w-[320px] rounded-2xl p-0 overflow-hidden" showCloseButton={false} blurOverlay>
         <DialogHeader className="px-4 pt-4 pb-3 border-b">
-          <div className="map-panel-header-toolbar">
-            <DialogTitle className="map-panel-header-title-wrap text-lg font-semibold flex items-center gap-2 min-w-0 truncate">
-              <Phone className="h-5 w-5 shrink-0" />
-              <span className="truncate">{phone}</span>
-            </DialogTitle>
-            <div className="map-panel-header-actions">
-              <Button variant="ghost" size="icon" className="phone-action-nav-btn" onClick={onClose} title="Close">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <PanelHeader onBack={onClose} title={phone} icon={Phone} titleClassName="text-lg font-semibold" />
           <DialogDescription className="sr-only">
             Choose to text or call this number
           </DialogDescription>

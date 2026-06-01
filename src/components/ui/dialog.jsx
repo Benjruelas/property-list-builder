@@ -29,6 +29,10 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
   if (
     e.target?.closest?.('.schedule-picker-panel') ||
     e.target?.closest?.('[data-task-menu]') ||
+    e.target?.closest?.('[data-lead-details-menu]') ||
+    e.target?.closest?.('[data-deal-details-menu]') ||
+    e.target?.closest?.('[data-deal-line-items-menu]') ||
+    e.target?.closest?.('[data-confirm-dialog]') ||
     e.target?.closest?.('[data-pipe-menu]') ||
     e.target?.closest?.('[data-toast-container]') ||
     e.target?.closest?.('[data-toast-item]')
@@ -45,11 +49,11 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
  * open from inside LeadDetails (blurOverlay, z-10001) — without this they'd
  * render behind LeadDetails and be invisible.
  */
-const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, focusOverlay = false, blurOverlay = false, nestedOverlay = false, topLayer = false, onPointerDownOutside, onInteractOutside, ...props }, ref) => {
-  const zOverlay = topLayer ? 'z-[10020]' : 'z-[10000]'
-  const zContent = topLayer ? 'z-[10021]' : 'z-[10001]'
-  const zHideOverlay = topLayer ? 'z-[10020]' : 'z-[9998]'
-  const zDefaultContent = topLayer ? 'z-[10021]' : 'z-[9999]'
+const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, focusOverlay = false, blurOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, onPointerDownOutside, onInteractOutside, ...props }, ref) => {
+  const zOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[10000]'
+  const zContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[10001]'
+  const zHideOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]'
+  const zDefaultContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[9999]'
   return (
   <DialogPortal container={typeof document !== 'undefined' ? document.getElementById('modal-root') || document.body : undefined}>
     {nestedOverlay ? (
@@ -78,7 +82,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
     ) : hideOverlay ? (
       <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/60 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zHideOverlay)} />
     ) : focusOverlay ? (
-      <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/95 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", topLayer ? 'z-[10020]' : 'z-[9998]')} />
+      <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/95 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]')} />
     ) : blurOverlay ? (
       <>
         <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/40 backdrop-blur-lg pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zOverlay)} />
@@ -103,7 +107,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
         </DialogPrimitive.Content>
       </>
     ) : (
-      <DialogOverlay className={topLayer ? 'z-[10020]' : undefined} />
+      <DialogOverlay className={confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : undefined} />
     )}
     {!blurOverlay && !nestedOverlay && (
       <DialogPrimitive.Content

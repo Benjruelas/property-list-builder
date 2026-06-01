@@ -1,17 +1,11 @@
 /**
- * Vercel Serverless Function - Teams.
+ * Vercel Serverless Function - Teams v2
  *
- * - GET    /api/teams                    -> teams user owns or is a member of
- * - POST   /api/teams                    -> create team                        body: { name }
- * - PATCH  /api/teams                    -> team mutations                     body: { teamId, action, ... }
- *     action 'rename'          : { name }                (owner only)
- *     action 'add-member'      : { email }               (owner only, enforces seatLimit)
- *     action 'remove-member'   : { uid }                 (owner, OR self-remove)
- *     action 'transfer-owner'  : { toUid }               (owner only - Phase 2)
- * - DELETE /api/teams                    -> delete team, strip teamShares      body: { teamId }
- *                                          from all resources (owner only)
- *
- * Requires Firebase Auth Bearer token. Accepts dev-bypass on localhost.
+ * GET    -> teams + membership + pendingInvites for user
+ * POST   -> create team (admin, team pipe, settings)
+ * PATCH  -> invite-member | accept-invite | decline-invite | promote-admin |
+ *           demote-admin | update-settings | rename | remove-member | transfer-owner
+ * DELETE -> delete team (admin only)
  */
 
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
@@ -21,8 +15,18 @@ import {
   loadTeamsForUser,
   lookupFirebaseUidByEmail,
   verifyFirebaseToken,
-  DEFAULT_SEAT_LIMIT
+  DEFAULT_SEAT_LIMIT,
 } from './lib/teams.js'
+import { isTeamAdmin, getTeamMemberRole, userHasTeamMembership } from './lib/access.js'
+import {
+  createInvite,
+  findInviteById,
+  updateInviteStatus,
+  getInvitesForEmail,
+  getInvitesForTeam,
+  cancelInvitesForTeamEmail,
+} from './lib/teamInvites.js'
+import { createTeamPipeline } from './lib/teamPipeline.js'
 
 let kv = null
 let kvAvailable = false
@@ -46,10 +50,9 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
   }
 }
 
-/** When a team is deleted we strip its id from every resource's teamShares. */
 async function stripTeamIdFromAllResources(teamId) {
   if (!kvAvailable || !kv) return
-  for (const key of ['user_lists', 'user_pipelines', 'user_paths']) {
+  for (const key of ['user_lists', 'user_pipelines', 'user_paths', 'user_leads', 'user_form_templates']) {
     try {
       const d = await kv.get(key)
       const rows = typeof d === 'string' ? (d ? JSON.parse(d) : []) : d
@@ -58,6 +61,11 @@ async function stripTeamIdFromAllResources(teamId) {
       for (const r of arr) {
         if (Array.isArray(r.teamShares) && r.teamShares.includes(teamId)) {
           r.teamShares = r.teamShares.filter((id) => id !== teamId)
+          changed = true
+        }
+        if (r.teamId === teamId && r.visibility === 'team') {
+          r.visibility = 'private'
+          r.teamId = null
           changed = true
         }
       }
@@ -70,18 +78,37 @@ async function stripTeamIdFromAllResources(teamId) {
   }
 }
 
-function normalizeTeamForWire(team) {
+function normalizeMember(m) {
+  const role = m.role === 'owner' ? 'admin' : (m.role === 'admin' ? 'admin' : 'member')
+  return {
+    uid: m.uid,
+    email: m.email,
+    role,
+    joinedAt: m.joinedAt || m.addedAt,
+    addedBy: m.addedBy,
+  }
+}
+
+function normalizeTeamForWire(team, viewerUid) {
+  const members = (team.members || []).map(normalizeMember)
   return {
     id: team.id,
     name: team.name,
     ownerId: team.ownerId,
     ownerEmail: team.ownerEmail,
-    members: team.members || [],
+    members,
     plan: team.plan || 'pro',
     seatLimit: team.seatLimit || DEFAULT_SEAT_LIMIT,
+    allowExternalSharing: team.allowExternalSharing === true,
+    teamPipelineId: team.teamPipelineId || null,
     createdAt: team.createdAt,
-    updatedAt: team.updatedAt
+    updatedAt: team.updatedAt,
+    viewerRole: viewerUid ? getTeamMemberRole(team, viewerUid) : null,
   }
+}
+
+function requireAdmin(team, user) {
+  return isTeamAdmin(team, user.uid)
 }
 
 export default async function handler(req, res) {
@@ -111,8 +138,22 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const all = await getAllTeams()
-      const teams = loadTeamsForUser(all, user.uid).map(normalizeTeamForWire)
-      return res.status(200).json({ teams })
+      const teams = loadTeamsForUser(all, user.uid).map((t) => normalizeTeamForWire(t, user.uid))
+      const membership = userHasTeamMembership(all, user.uid)
+      const pendingInvites = await getInvitesForEmail(user.email)
+      return res.status(200).json({
+        teams,
+        membership: membership
+          ? {
+              teamId: membership.id,
+              teamName: membership.name,
+              role: getTeamMemberRole(membership, user.uid),
+              teamPipelineId: membership.teamPipelineId || null,
+              allowExternalSharing: membership.allowExternalSharing === true,
+            }
+          : null,
+        pendingInvites,
+      })
     }
 
     if (method === 'POST') {
@@ -120,6 +161,11 @@ export default async function handler(req, res) {
       const trimmed = (name || '').trim()
       if (!trimmed) return res.status(400).json({ error: 'Team name is required' })
       if (trimmed.length > 80) return res.status(400).json({ error: 'Team name is too long' })
+
+      const all = await getAllTeams()
+      if (userHasTeamMembership(all, user.uid)) {
+        return res.status(400).json({ error: 'You can only belong to one team. Leave your current team first.' })
+      }
 
       const now = new Date().toISOString()
       const newTeam = {
@@ -131,138 +177,233 @@ export default async function handler(req, res) {
           {
             uid: user.uid,
             email: user.email,
-            role: 'owner',
-            addedAt: now,
-            addedBy: user.uid
-          }
+            role: 'admin',
+            joinedAt: now,
+            addedBy: user.uid,
+          },
         ],
         plan: 'pro',
         seatLimit: DEFAULT_SEAT_LIMIT,
-        teamShares: undefined, // reserved; not used on team rows themselves
+        allowExternalSharing: false,
+        teamPipelineId: null,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       }
-      const all = await getAllTeams()
+
+      if (kvAvailable && kv) {
+        const pipe = await createTeamPipeline(kv, newTeam, user)
+        if (pipe?.id) newTeam.teamPipelineId = pipe.id
+      }
+
       all.push(newTeam)
       await saveAllTeams(all)
-      return res.status(201).json({ team: normalizeTeamForWire(newTeam) })
+      return res.status(201).json({ team: normalizeTeamForWire(newTeam, user.uid) })
     }
 
     if (method === 'PATCH') {
-      const { teamId, action } = body
-      if (!teamId) return res.status(400).json({ error: 'teamId is required' })
+      const { teamId, action, inviteId } = body
       if (!action) return res.status(400).json({ error: 'action is required' })
 
       const all = await getAllTeams()
-      const idx = all.findIndex((t) => t.id === teamId)
-      if (idx === -1) return res.status(404).json({ error: 'Team not found' })
-      const team = all[idx]
-      const isOwner = team.ownerId === user.uid
-      const selfMember = (team.members || []).find((m) => m.uid === user.uid)
 
-      if (action === 'rename') {
-        if (!isOwner) return res.status(403).json({ error: 'Only the team owner can rename the team' })
-        const newName = (body.name || '').trim()
-        if (!newName) return res.status(400).json({ error: 'Name cannot be empty' })
-        if (newName.length > 80) return res.status(400).json({ error: 'Team name is too long' })
-        team.name = newName
-        team.updatedAt = new Date().toISOString()
-        all[idx] = team
-        await saveAllTeams(all)
-        return res.status(200).json({ team: normalizeTeamForWire(team) })
-      }
-
-      if (action === 'add-member') {
-        if (!isOwner) return res.status(403).json({ error: 'Only the team owner can add members' })
-        const email = (body.email || '').toLowerCase().trim()
-        if (!email) return res.status(400).json({ error: 'email is required' })
-        if (/\s/.test(email) || !email.includes('@')) {
-          return res.status(400).json({ error: 'Invalid email' })
+      if (action === 'accept-invite') {
+        const inv = inviteId
+          ? await findInviteById(inviteId)
+          : (await getInvitesForEmail(user.email)).find((i) => i.teamId === teamId)
+        if (!inv || inv.status !== 'pending') {
+          return res.status(404).json({ error: 'Invite not found or expired' })
         }
-
+        if (inv.email !== (user.email || '').toLowerCase().trim()) {
+          return res.status(403).json({ error: 'This invite is for a different email' })
+        }
+        if (userHasTeamMembership(all, user.uid)) {
+          return res.status(400).json({ error: 'Leave your current team before accepting a new invite' })
+        }
+        const idx = all.findIndex((t) => t.id === inv.teamId)
+        if (idx === -1) return res.status(404).json({ error: 'Team not found' })
+        const team = all[idx]
         const seatLimit = team.seatLimit || DEFAULT_SEAT_LIMIT
         if ((team.members || []).length >= seatLimit) {
           return res.status(400).json({ error: `Seat limit reached (${seatLimit})` })
         }
-        if ((team.members || []).some((m) => (m.email || '').toLowerCase() === email)) {
-          return res.status(400).json({ error: 'That user is already on the team' })
-        }
-
-        const resolved = await lookupFirebaseUidByEmail(email, { allowDevBypass, idToken })
-        if (!resolved) {
-          return res.status(404).json({ error: 'User must sign up before being added to a team' })
-        }
-
         const now = new Date().toISOString()
         team.members = [
           ...(team.members || []),
-          {
-            uid: resolved.uid,
-            email: resolved.email,
-            role: 'member',
-            addedAt: now,
-            addedBy: user.uid
-          }
+          { uid: user.uid, email: user.email, role: 'member', joinedAt: now, addedBy: inv.invitedByUid },
         ]
         team.updatedAt = now
         all[idx] = team
         await saveAllTeams(all)
+        await updateInviteStatus(inv.id, 'accepted')
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
+      }
+
+      if (action === 'decline-invite') {
+        const inv = inviteId
+          ? await findInviteById(inviteId)
+          : (await getInvitesForEmail(user.email)).find((i) => i.teamId === teamId)
+        if (!inv) return res.status(404).json({ error: 'Invite not found' })
+        if (inv.email !== (user.email || '').toLowerCase().trim()) {
+          return res.status(403).json({ error: 'Not your invite' })
+        }
+        await updateInviteStatus(inv.id, 'declined')
+        return res.status(200).json({ message: 'Invite declined' })
+      }
+
+      if (!teamId) return res.status(400).json({ error: 'teamId is required' })
+
+      const idx = all.findIndex((t) => t.id === teamId)
+      if (idx === -1) return res.status(404).json({ error: 'Team not found' })
+      const team = all[idx]
+      const isAdmin = requireAdmin(team, user)
+      const selfMember = (team.members || []).find((m) => m.uid === user.uid)
+
+      if (action === 'rename') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can rename the team' })
+        const newName = (body.name || '').trim()
+        if (!newName) return res.status(400).json({ error: 'Name cannot be empty' })
+        team.name = newName
+        team.updatedAt = new Date().toISOString()
+        all[idx] = team
+        await saveAllTeams(all)
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
+      }
+
+      if (action === 'update-settings') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can update team settings' })
+        if (body.allowExternalSharing !== undefined) {
+          team.allowExternalSharing = body.allowExternalSharing === true
+        }
+        team.updatedAt = new Date().toISOString()
+        all[idx] = team
+        await saveAllTeams(all)
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
+      }
+
+      if (action === 'invite-member' || action === 'add-member') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can invite members' })
+        const email = (body.email || '').toLowerCase().trim()
+        if (!email || !email.includes('@')) {
+          return res.status(400).json({ error: 'Valid email is required' })
+        }
+        if ((team.members || []).some((m) => (m.email || '').toLowerCase() === email)) {
+          return res.status(400).json({ error: 'That user is already on the team' })
+        }
+        const resolved = await lookupFirebaseUidByEmail(email, { allowDevBypass, idToken })
+        if (resolved) {
+          const existingTeam = userHasTeamMembership(all, resolved.uid)
+          if (existingTeam && existingTeam.id !== teamId) {
+            return res.status(400).json({ error: 'User is already on another team' })
+          }
+        }
+        const invite = await createInvite({
+          teamId: team.id,
+          teamName: team.name,
+          email,
+          invitedByUid: user.uid,
+          invitedByEmail: user.email,
+        })
         try {
           const { notifyTeamMemberAdded } = await import('./push-utils.js')
-          await notifyTeamMemberAdded(resolved.email, {
+          await notifyTeamMemberAdded(email, {
             teamName: team.name,
             teamId: team.id,
-            actorEmail: user.email
+            actorEmail: user.email,
           })
-        } catch (e) {
-          console.warn('team member push notify', e.message)
+        } catch {
+          /* ignore */
         }
-        return res.status(200).json({ team: normalizeTeamForWire(team) })
+        const pending = await getInvitesForTeam(team.id)
+        return res.status(200).json({ invite, pendingInvites: pending, team: normalizeTeamForWire(team, user.uid) })
+      }
+
+      if (action === 'promote-admin') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can promote members' })
+        const targetUid = body.uid
+        if (!targetUid) return res.status(400).json({ error: 'uid is required' })
+        team.members = (team.members || []).map((m) =>
+          m.uid === targetUid ? { ...m, role: 'admin' } : m
+        )
+        team.updatedAt = new Date().toISOString()
+        all[idx] = team
+        await saveAllTeams(all)
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
+      }
+
+      if (action === 'demote-admin') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can demote members' })
+        const targetUid = body.uid
+        if (targetUid === team.ownerId) {
+          return res.status(400).json({ error: 'Cannot demote the team creator' })
+        }
+        if (targetUid === user.uid) {
+          return res.status(400).json({ error: 'Cannot demote yourself' })
+        }
+        team.members = (team.members || []).map((m) =>
+          m.uid === targetUid ? { ...m, role: 'member' } : m
+        )
+        team.updatedAt = new Date().toISOString()
+        all[idx] = team
+        await saveAllTeams(all)
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
       }
 
       if (action === 'remove-member') {
         const targetUid = body.uid
         if (!targetUid) return res.status(400).json({ error: 'uid is required' })
         const selfRemove = targetUid === user.uid
-        if (!isOwner && !selfRemove) {
-          return res.status(403).json({ error: 'Only the team owner can remove other members' })
+        if (!isAdmin && !selfRemove) {
+          return res.status(403).json({ error: 'Only admins can remove other members' })
         }
         if (targetUid === team.ownerId) {
-          return res.status(400).json({ error: 'Cannot remove the team owner. Delete the team or transfer ownership.' })
+          return res.status(400).json({ error: 'Cannot remove the team creator' })
         }
-        const before = (team.members || []).length
+        const removedMember = (team.members || []).find((m) => m.uid === targetUid)
+        if (!removedMember) return res.status(404).json({ error: 'Member not found' })
         team.members = (team.members || []).filter((m) => m.uid !== targetUid)
-        if (team.members.length === before) {
-          return res.status(404).json({ error: 'Member not found' })
-        }
         team.updatedAt = new Date().toISOString()
         all[idx] = team
         await saveAllTeams(all)
-        return res.status(200).json({ team: normalizeTeamForWire(team) })
+        if (removedMember?.email) {
+          await cancelInvitesForTeamEmail(team.id, removedMember.email)
+        }
+        try {
+          const { logTeamActivity, actorLabel } = await import('./lib/activityLog.js')
+          await logTeamActivity({
+            teamIds: [team.id],
+            actor: user,
+            type: 'team.member_removed',
+            summary: `${actorLabel(user)} removed ${removedMember?.email || 'a member'} from team "${team.name}"`,
+            entity: { kind: 'team', teamId: team.id },
+            nav: { type: 'team', teamId: team.id },
+            audience: 'resource_viewers',
+          })
+        } catch {
+          /* ignore */
+        }
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
       }
 
       if (action === 'transfer-owner') {
-        if (!isOwner) return res.status(403).json({ error: 'Only the team owner can transfer ownership' })
+        if (team.ownerId !== user.uid) {
+          return res.status(403).json({ error: 'Only the team creator can transfer ownership' })
+        }
         const toUid = body.toUid
-        if (!toUid) return res.status(400).json({ error: 'toUid is required' })
         const target = (team.members || []).find((m) => m.uid === toUid)
-        if (!target) return res.status(404).json({ error: 'New owner must already be a team member' })
-
+        if (!target) return res.status(404).json({ error: 'Member not found' })
         team.ownerId = target.uid
         team.ownerEmail = target.email
         team.members = (team.members || []).map((m) => {
-          if (m.uid === target.uid) return { ...m, role: 'owner' }
-          if (m.uid === user.uid) return { ...m, role: 'member' }
+          if (m.uid === target.uid) return { ...m, role: 'admin' }
           return m
         })
         team.updatedAt = new Date().toISOString()
         all[idx] = team
         await saveAllTeams(all)
-        return res.status(200).json({ team: normalizeTeamForWire(team) })
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
       }
 
-      // Must be a member at least for any action below (none yet; future-proof)
-      if (!selfMember && !isOwner) {
+      if (!selfMember && !isAdmin) {
         return res.status(403).json({ error: 'Not a team member' })
       }
       return res.status(400).json({ error: `Unknown action: ${action}` })
@@ -275,10 +416,9 @@ export default async function handler(req, res) {
       const idx = all.findIndex((t) => t.id === teamId)
       if (idx === -1) return res.status(404).json({ error: 'Team not found' })
       const team = all[idx]
-      if (team.ownerId !== user.uid) {
-        return res.status(403).json({ error: 'Only the team owner can delete this team' })
+      if (!requireAdmin(team, user)) {
+        return res.status(403).json({ error: 'Only admins can delete this team' })
       }
-      // Strip teamShares from resources first, then remove the team row.
       await stripTeamIdFromAllResources(team.id)
       all.splice(idx, 1)
       await saveAllTeams(all)
