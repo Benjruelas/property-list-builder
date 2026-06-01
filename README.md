@@ -187,7 +187,18 @@ TRACERFY_API_KEY=
 
 ```
 RESEND_API_KEY=                # Resend for transactional email
+FORMS_FROM_EMAIL=              # From address for form/quote emails
 ```
+
+### Quotes & Stripe (optional)
+
+```
+STRIPE_SECRET_KEY=             # Stripe Checkout for quote payments
+STRIPE_WEBHOOK_SECRET=         # Webhook signing secret (endpoint: /api/stripe-webhook)
+VITE_STRIPE_PUBLISHABLE_KEY=   # Client-side Stripe (future use; checkout is server-redirect)
+```
+
+Register the webhook in Stripe Dashboard for `checkout.session.completed` pointing to `https://your-domain/api/stripe-webhook`.
 
 ### Geocoding
 

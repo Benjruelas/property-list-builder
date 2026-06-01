@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Eye, Trash2, Check, Mail, MoreVertical, FileDown, Share2, Users, Pencil, Phone } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -21,7 +21,8 @@ const MAX_HIGHLIGHTED_LISTS = 20
 export function ListPanel({ 
   currentUser,
   isOpen, 
-  onClose, 
+  onClose,
+  onBackToParent,
   selectedListIds = [],
   onToggleListHighlight,
   onAddParcelsToList,
@@ -313,11 +314,19 @@ export function ListPanel({
     }
   }
 
+  const handlePanelBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    onClose()
+  }
+
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) {
-        onClose()
+        handlePanelBack()
       }
     }}>
       <DialogContent
@@ -328,18 +337,14 @@ export function ListPanel({
           if (e.target.closest?.('[data-list-panel-dropdown]')) e.preventDefault()
         }}
       >
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Manage your property lists, add parcels, and share lists</DialogDescription>
-          <PanelHeader onBack={onClose} title="Lists">
-            <Button
-              variant="outline"
-              size="icon"
+          <PanelHeader onBack={handlePanelBack} title="Lists">
+            <PanelCreateButton
               onClick={() => setShowCreateForm(true)}
-              className="create-new-list-btn"
               title="Create new list"
-            >
-              <Plus className="h-4 w-4" style={{ color: parcelBoundaryColor }} />
-            </Button>
+              iconColor={parcelBoundaryColor}
+            />
           </PanelHeader>
         </DialogHeader>
 

@@ -120,6 +120,66 @@ export async function getUnreadCount(uid) {
   return inbox.filter((n) => !n.read).length
 }
 
+const MAX_SEEN_ACTIVITY = 500
+const feedSeenFallback = new Map()
+
+function feedSeenKey(uid) {
+  return `feed_seen:${uid}`
+}
+
+async function loadFeedSeen(uid) {
+  if (!uid) return new Set()
+  await initKv()
+  if (kvAvailable && kv) {
+    try {
+      const raw = await kv.get(feedSeenKey(uid))
+      const parsed = typeof raw === 'string' ? (raw ? JSON.parse(raw) : []) : raw
+      const ids = Array.isArray(parsed) ? parsed : []
+      return new Set(ids.filter(Boolean))
+    } catch {
+      return new Set()
+    }
+  }
+  return new Set(feedSeenFallback.get(uid) || [])
+}
+
+async function saveFeedSeen(uid, idSet) {
+  if (!uid) return
+  const ids = [...idSet].slice(0, MAX_SEEN_ACTIVITY)
+  await initKv()
+  if (kvAvailable && kv) {
+    try {
+      await kv.set(feedSeenKey(uid), ids).catch(() => kv.set(feedSeenKey(uid), JSON.stringify(ids)))
+    } catch (e) {
+      console.warn('feed seen save failed', e.message)
+    }
+    return
+  }
+  feedSeenFallback.set(uid, ids)
+}
+
+export async function getSeenActivityIds(uid) {
+  return loadFeedSeen(uid)
+}
+
+export async function markActivitiesSeen(uid, activityIds = []) {
+  if (!uid || !activityIds.length) return loadFeedSeen(uid)
+  const seen = await loadFeedSeen(uid)
+  for (const id of activityIds) {
+    if (id) seen.add(id)
+  }
+  while (seen.size > MAX_SEEN_ACTIVITY) {
+    const first = seen.values().next().value
+    seen.delete(first)
+  }
+  await saveFeedSeen(uid, seen)
+  return seen
+}
+
+export async function markAllActivitiesSeen(uid, activityIds = []) {
+  return markActivitiesSeen(uid, activityIds)
+}
+
 export function isNotificationStoreAvailable() {
   return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) || !!process.env.REDIS_URL
 }

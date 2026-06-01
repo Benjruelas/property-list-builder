@@ -440,6 +440,64 @@ export function diffLeadStatusChanges(oldLeads, newLeads) {
   return changes
 }
 
+export async function notifyQuoteSent(ownerEmail, { quoteTitle, recipientEmail, quoteId }) {
+  await sendWebPushToEmail(
+    ownerEmail,
+    {
+      title: 'Quote sent',
+      body: `"${quoteTitle || 'Quote'}" sent to ${recipientEmail || 'client'}`,
+      tag: `quote-sent-${quoteId || Date.now()}`,
+      data: { type: 'quoteSent', quoteId },
+    },
+    'formSubmitted',
+    {}
+  )
+}
+
+export async function notifyQuoteViewed(ownerEmail, { quoteTitle, clientName, quoteId }) {
+  await sendWebPushToEmail(
+    ownerEmail,
+    {
+      title: 'Quote viewed',
+      body: `${clientName || 'Client'} opened "${quoteTitle || 'your quote'}"`,
+      tag: `quote-view-${quoteId || Date.now()}`,
+      data: { type: 'quoteViewed', quoteId },
+    },
+    'formSubmitted',
+    {}
+  )
+}
+
+export async function notifyQuoteResponded(ownerEmail, { quoteTitle, action, clientName, message, quoteId }) {
+  const actionLabel = String(action || '').replace('_', ' ')
+  await sendWebPushToEmail(
+    ownerEmail,
+    {
+      title: `Quote ${actionLabel}`,
+      body: `${clientName || 'Client'} ${actionLabel} "${quoteTitle || 'quote'}"${message ? `: ${message.slice(0, 80)}` : ''}`,
+      tag: `quote-respond-${quoteId || Date.now()}`,
+      data: { type: 'quoteResponded', quoteId, action },
+    },
+    'formSubmitted',
+    {}
+  )
+}
+
+export async function notifyQuotePaid(ownerEmail, { quoteTitle, clientName, amount, quoteId }) {
+  const amt = amount != null ? `$${Number(amount).toFixed(2)}` : ''
+  await sendWebPushToEmail(
+    ownerEmail,
+    {
+      title: 'Quote paid',
+      body: `${clientName || 'Client'} paid ${amt} for "${quoteTitle || 'quote'}"`,
+      tag: `quote-paid-${quoteId || Date.now()}`,
+      data: { type: 'quotePaid', quoteId },
+    },
+    'formSubmitted',
+    {}
+  )
+}
+
 export async function notifyTaskDeadline(uid, email, { taskTitle, scheduledAt, taskId }) {
   if (!uid && !email) return
   const e = (email || '').toLowerCase().trim()

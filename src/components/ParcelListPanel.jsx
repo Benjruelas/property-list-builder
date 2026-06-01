@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, ChevronRight, ChevronDown, Trash2, Download } from 'lucide-react'
-import { PanelBackButton } from './ui/panel-header'
+import { ChevronRight, ChevronDown, Trash2, Download } from 'lucide-react'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { ListParcelExpanded } from '@/components/parcel-list-expanded/ListParcelExpanded'
 
@@ -113,31 +113,23 @@ export function ParcelListPanel({
       }
     }}>
       <DialogContent className="map-panel list-panel parcel-list-panel fullscreen-panel max-w-2xl max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
-          <div className="map-panel-header-toolbar gap-3">
-            <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
-              <PanelBackButton onClick={onBack || onClose} title="Back to lists" />
-              <DialogTitle className="min-w-0 flex-1 truncate text-xl font-semibold">
-                {listName || 'Parcels'}
-              </DialogTitle>
-            </div>
-            <div className="map-panel-header-actions gap-1">
-              {onExportList && parcels.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-blue-600 hover:text-blue-700"
-                  onClick={() => onExportList(selectedListId)}
-                  title="Export list as CSV and email to you"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
+        <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">
             List of parcels in {listName || 'this list'}. Click on a parcel to view details.
           </DialogDescription>
+          <PanelHeader onBack={onBack || onClose} backTitle="Back to lists" title={listName || 'Parcels'}>
+            {onExportList && parcels.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-blue-600 hover:text-blue-700"
+                onClick={() => onExportList(selectedListId)}
+                title="Export list as CSV and email to you"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            )}
+          </PanelHeader>
         </DialogHeader>
 
         <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>

@@ -194,8 +194,8 @@ export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {
     parcelId: parcelData?.id || null,
     lat: parcelData?.lat ?? (parcelData?.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
     lng: parcelData?.lng ?? (parcelData?.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
-    phone: skipTrace?.phone || skipTrace?.phoneNumbers?.[0] || null,
-    email: skipTrace?.email || skipTrace?.emails?.[0] || null,
+    phone: skipTrace?.phone || skipTrace?.phoneNumbers?.[0] || '',
+    email: skipTrace?.email || skipTrace?.emails?.[0] || '',
     notes: '',
     properties: parcelData?.properties || null,
   }

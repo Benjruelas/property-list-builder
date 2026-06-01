@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
-import { PanelBackButton, PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
+import { cn } from '@/lib/utils'
 import { getFullAddress } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
@@ -223,7 +224,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, stacked = false, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null }) {
+export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
@@ -608,8 +609,39 @@ export function SchedulePanel({ isOpen, onClose, stacked = false, onOpenParcelDe
     }
   }
 
+  const handlePanelBack = () => {
+    setShowAddTask(false)
+    setEditTaskContext(null)
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    onClose?.()
+  }
+
+  const handleLeadDetailClose = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    setSelectedLead(null)
+  }
+
+  const switchViewMode = (mode) => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    setViewYear(today.getFullYear())
+    setViewMonth(today.getMonth())
+    if (mode === 'week') {
+      setWeekStart(getSundayOfWeek(today))
+    } else if (mode === 'day') {
+      setDayViewDate(today)
+    }
+    setViewMode(mode)
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setShowAddTask(false); setEditTaskContext(null); onClose?.() } }}>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) handlePanelBack() }}>
       <DialogContent
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         showCloseButton={false}
@@ -617,13 +649,26 @@ export function SchedulePanel({ isOpen, onClose, stacked = false, onOpenParcelDe
         nestedOverlay={stacked}
         topLayer={stacked}
       >
-        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))', boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.06)' }}>
+        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">View and manage scheduled tasks</DialogDescription>
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <PanelBackButton onClick={onClose} className="pipeline-icon-btn" />
-              <DialogTitle className="sr-only">Schedule</DialogTitle>
-            </div>
+          <PanelHeader onBack={handlePanelBack} title="Schedule">
+            {isTeamAdmin && (
+              <button
+                type="button"
+                className={`text-[11px] px-2 py-1 rounded-md border ${adminTeamView ? 'border-blue-400/50 bg-blue-500/15 text-blue-200' : 'border-white/15 text-white/60'}`}
+                onClick={() => setAdminTeamView((v) => !v)}
+              >
+                {adminTeamView ? 'All team' : 'My schedule'}
+              </button>
+            )}
+          </PanelHeader>
+        </DialogHeader>
+        <div
+          className={`flex-1 min-h-0 flex flex-col deal-pipeline-content schedule-panel-content overflow-hidden pt-2 px-4 max-md:px-0 max-md:pb-0 pb-4 ${
+            viewMode === 'month' ? 'schedule-panel-content--month-edge' : ''
+          }`}
+        >
+          <div className="flex justify-center mb-3 flex-shrink-0 max-md:px-4">
             <div className="schedule-view-seg" role="tablist">
               {[
                 { id: 'month', label: 'Month' },
@@ -636,43 +681,13 @@ export function SchedulePanel({ isOpen, onClose, stacked = false, onOpenParcelDe
                   role="tab"
                   aria-selected={viewMode === v.id}
                   className={viewMode === v.id ? 'schedule-view-seg-active' : ''}
-                  onClick={() => {
-                    // Always snap to today when switching view modes so the
-                    // new view opens on the current day.
-                    const now = new Date()
-                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-                    setViewYear(today.getFullYear())
-                    setViewMonth(today.getMonth())
-                    if (v.id === 'week') {
-                      setWeekStart(getSundayOfWeek(today))
-                    } else if (v.id === 'day') {
-                      setDayViewDate(today)
-                    }
-                    setViewMode(v.id)
-                  }}
+                  onClick={() => switchViewMode(v.id)}
                 >
                   {v.label}
                 </button>
               ))}
             </div>
-            <div className="flex justify-end items-center gap-2">
-              {isTeamAdmin && (
-                <button
-                  type="button"
-                  className={`text-[11px] px-2 py-1 rounded-md border ${adminTeamView ? 'border-blue-400/50 bg-blue-500/15 text-blue-200' : 'border-white/15 text-white/60'}`}
-                  onClick={() => setAdminTeamView((v) => !v)}
-                >
-                  {adminTeamView ? 'All team' : 'My schedule'}
-                </button>
-              )}
-            </div>
           </div>
-        </DialogHeader>
-        <div
-          className={`flex-1 min-h-0 flex flex-col deal-pipeline-content schedule-panel-content overflow-hidden pt-4 px-4 max-md:px-0 max-md:pb-0 pb-4 ${
-            viewMode === 'month' ? 'schedule-panel-content--month-edge' : ''
-          }`}
-        >
           {/* Navigation — keep side inset on mobile when month grid is full-bleed */}
           <div
             className="flex items-center justify-between mb-3 flex-shrink-0 gap-2 max-md:px-4"
@@ -1080,7 +1095,7 @@ export function SchedulePanel({ isOpen, onClose, stacked = false, onOpenParcelDe
 
         <LeadDetails
           isOpen={!!selectedLead}
-          onClose={() => setSelectedLead(null)}
+          onClose={handleLeadDetailClose}
           lead={selectedLead}
           pipelines={pipelines}
           getToken={getToken}

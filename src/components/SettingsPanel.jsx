@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { showToast } from './ui/toast'
@@ -336,9 +336,9 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Application settings</DialogDescription>
-          <PanelHeader onBack={onClose} title="Settings" icon={Settings} />
+          <PanelHeader onBack={onClose} title="Settings" />
         </DialogHeader>
 
         <div className="px-4 py-4 overflow-y-auto scrollbar-hide flex-1 space-y-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>

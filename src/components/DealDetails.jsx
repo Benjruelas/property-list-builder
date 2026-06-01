@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { createPortal } from 'react-dom'
-import { ChevronRight, Archive, ArrowRightLeft, Trash2, Upload, Download, FileText, Loader2, User, MoreVertical } from 'lucide-react'
+import { ChevronRight, Archive, ArrowRightLeft, Trash2, Upload, Download, FileText, Loader2, User, MoreVertical, FileSpreadsheet, Plus } from 'lucide-react'
 import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { formatTimeInState } from '@/utils/dealPipeline'
@@ -12,6 +12,9 @@ import { showConfirm } from './ui/confirm-dialog'
 import { DealTasksSection } from './DealTasksSection'
 import { DealFinancesPanel } from './DealLineItemsSection'
 import { normalizeDealLineItems } from '@/utils/dealFinances'
+import { fetchQuotes } from '@/utils/quotes'
+import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
+import { formatQuoteMoney } from '@/utils/quoteMath'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -19,7 +22,6 @@ function getColumnName(colId, columns) {
 }
 
 const MENU_WIDTH = 180
-const MENU_PADDING = 8
 
 export function DealDetails({
   deal,
@@ -42,6 +44,7 @@ export function DealDetails({
   onPipelinesChange,
   onOpenScheduleAtDate,
   taskListEpoch = 0,
+  onCreateQuoteForDeal,
 }) {
   const d = closedRecord?.deal || deal
   const pipelineMeta = closedRecord?.closedFrom || pipeline
@@ -67,8 +70,18 @@ export function DealDetails({
   }, [d?.id])
   const [uploading, setUploading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState(null)
+  const menuTriggerRef = useRef(null)
+  const [dealQuotes, setDealQuotes] = useState([])
   const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    if (!d?.id || !getToken) return
+    let cancelled = false
+    fetchQuotes(getToken, { dealId: d.id })
+      .then((list) => { if (!cancelled) setDealQuotes(list) })
+      .catch(() => { if (!cancelled) setDealQuotes([]) })
+    return () => { cancelled = true }
+  }, [d?.id, getToken, taskListEpoch])
 
   useEffect(() => {
     setMenuOpen(false)
@@ -84,23 +97,11 @@ export function DealDetails({
 
   const closeMenu = () => {
     setMenuOpen(false)
-    setMenuAnchor(null)
   }
 
   const openMenu = (event) => {
     event.stopPropagation()
-    const rect = event.currentTarget.getBoundingClientRect()
-    let top = rect.bottom + 4
-    let left = rect.right - MENU_WIDTH
-    if (left < MENU_PADDING) left = MENU_PADDING
-    if (left + MENU_WIDTH > window.innerWidth - MENU_PADDING) {
-      left = window.innerWidth - MENU_WIDTH - MENU_PADDING
-    }
-    const menuHeight = 132
-    if (top + menuHeight > window.innerHeight - MENU_PADDING) {
-      top = Math.max(MENU_PADDING, rect.top - menuHeight - 4)
-    }
-    setMenuAnchor({ top, left })
+    menuTriggerRef.current = event.currentTarget
     setMenuOpen(true)
   }
 
@@ -269,6 +270,31 @@ export function DealDetails({
             readOnly={readOnly || isClosed}
           />
 
+          {!readOnly && !isClosed && onCreateQuoteForDeal && (
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-semibold uppercase opacity-50">Quotes</h3>
+                <Button size="sm" variant="outline" onClick={() => onCreateQuoteForDeal({ deal: d, pipeline, lead })}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Create quote
+                </Button>
+              </div>
+              {dealQuotes.length === 0 ? (
+                <p className="text-xs opacity-40 py-1">No quotes linked to this deal</p>
+              ) : (
+                <ul className="space-y-1">
+                  {dealQuotes.map((q) => (
+                    <li key={q.id} className="flex items-center gap-2 py-2 px-2 rounded-lg bg-white/[0.04] text-sm">
+                      <FileSpreadsheet className="h-4 w-4 shrink-0 opacity-50" />
+                      <span className="flex-1 truncate">{q.title || 'Quote'}</span>
+                      <QuoteStatusBadge status={q.status} />
+                      <span className="text-xs opacity-50 shrink-0">{formatQuoteMoney(q.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           <DealTasksSection
             deal={d}
             lead={lead}
@@ -320,56 +346,36 @@ export function DealDetails({
         </div>
       </DialogContent>
 
-      {menuOpen && menuAnchor && typeof document !== 'undefined' && createPortal(
-        <div data-deal-details-menu className="pointer-events-auto fixed inset-0 z-[10030]">
-          <div className="fixed inset-0 z-[10031]" onClick={closeMenu} aria-hidden />
-          <div
-            className="map-panel list-panel fixed z-[10032] rounded-xl min-w-[180px] pt-1 overflow-hidden"
-            style={{ top: menuAnchor.top, left: menuAnchor.left }}
-            role="menu"
-            onClick={(e) => e.stopPropagation()}
+      <OptionsMenuDropdown
+        open={menuOpen}
+        onClose={closeMenu}
+        triggerRef={menuTriggerRef}
+        menuWidth={MENU_WIDTH}
+        dataAttr="data-deal-details-menu"
+      >
+        {onRequestMoveDeal && (
+          <OptionsMenuItem onClick={() => { closeMenu(); onRequestMoveDeal(d, pipeline?.id ?? pipeline) }}>
+            <ArrowRightLeft className="h-4 w-4 shrink-0" />
+            Move pipe
+          </OptionsMenuItem>
+        )}
+        {onRequestCloseDeal && (
+          <OptionsMenuItem onClick={() => { closeMenu(); onRequestCloseDeal(d, pipeline?.id ?? pipeline) }}>
+            <Archive className="h-4 w-4 shrink-0" />
+            Close
+          </OptionsMenuItem>
+        )}
+        {onRequestRemoveDeal && (
+          <OptionsMenuItem
+            destructive
+            className="list-panel-delete-btn rounded-b-xl pb-2 hover:bg-red-600/80"
+            onClick={() => { closeMenu(); onRequestRemoveDeal(d, pipeline?.id ?? pipeline) }}
           >
-            {onRequestMoveDeal && (
-              <button
-                type="button"
-                onClick={() => { closeMenu(); onRequestMoveDeal(d, pipeline?.id ?? pipeline) }}
-                className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-              >
-                <ArrowRightLeft className="h-4 w-4 shrink-0" />
-                Move pipe
-              </button>
-            )}
-            {onRequestCloseDeal && (
-              <button
-                type="button"
-                onClick={() => { closeMenu(); onRequestCloseDeal(d, pipeline?.id ?? pipeline) }}
-                className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-              >
-                <Archive className="h-4 w-4 shrink-0" />
-                Close
-              </button>
-            )}
-            {onRequestRemoveDeal && (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => { closeMenu(); onRequestRemoveDeal(d, pipeline?.id ?? pipeline) }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    closeMenu()
-                    onRequestRemoveDeal(d, pipeline?.id ?? pipeline)
-                  }
-                }}
-                className="list-panel-delete-btn w-full px-3 py-2 pb-2 rounded-b-xl text-left text-sm flex items-center gap-2 transition-colors text-red-400 hover:bg-red-600/80 cursor-pointer"
-              >
-                <Trash2 className="h-4 w-4 shrink-0" />
-                Remove
-              </div>
-            )}
-          </div>
-        </div>,
-        document.getElementById('modal-root') || document.body
-      )}
+            <Trash2 className="h-4 w-4 shrink-0" />
+            Remove
+          </OptionsMenuItem>
+        )}
+      </OptionsMenuDropdown>
     </Dialog>
   )
 }

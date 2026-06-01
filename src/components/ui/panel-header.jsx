@@ -1,7 +1,58 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2, MoreVertical, Plus } from 'lucide-react'
+import * as React from 'react'
 import { Button } from './button'
 import { DialogTitle } from './dialog'
 import { cn } from '@/lib/utils'
+
+/** Shared list-panel header chrome (Lists panel is the reference). */
+export const PANEL_LIST_HEADER_CLASS = 'px-6 pt-6 pb-4 border-b border-white/20 text-left'
+export const PANEL_LIST_HEADER_STYLE = { paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }
+
+export function PanelCreateButton({
+  onClick,
+  title = 'Create',
+  disabled = false,
+  loading = false,
+  className,
+  iconColor,
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={cn('create-new-list-btn shrink-0', className)}
+      title={title}
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Plus className="h-4 w-4" style={iconColor ? { color: iconColor } : undefined} />
+      )}
+    </Button>
+  )
+}
+
+export const PanelOptionsButton = React.forwardRef(function PanelOptionsButton(
+  { onClick, title = 'Options', className },
+  ref
+) {
+  return (
+    <Button
+      ref={ref}
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={cn('h-8 w-8 shrink-0', className)}
+      title={title}
+      onClick={onClick}
+    >
+      <MoreVertical className="h-4 w-4" />
+    </Button>
+  )
+})
 
 export function PanelBackButton({ onClick, title = 'Back', className }) {
   return (
@@ -9,7 +60,7 @@ export function PanelBackButton({ onClick, title = 'Back', className }) {
       type="button"
       variant="ghost"
       size="icon"
-      className={cn('shrink-0', className)}
+      className={cn('h-8 w-8 shrink-0', className)}
       onClick={onClick}
       title={title}
     >

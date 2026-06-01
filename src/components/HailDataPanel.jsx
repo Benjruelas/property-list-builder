@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { X, CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 
 const hailDataCache = new Map()
@@ -115,12 +115,12 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Hail history and storm data for this property</DialogDescription>
           <PanelHeader onBack={onClose} title="Hail Data" icon={CloudRain} subtitle={address} />
         </DialogHeader>
 
-        <div className="px-5 py-4 overflow-y-auto scrollbar-hide flex-1 min-h-0 space-y-4">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1 min-h-0 space-y-4">
 
           {loading ? (
             <div className="flex items-center justify-center py-12 opacity-50">

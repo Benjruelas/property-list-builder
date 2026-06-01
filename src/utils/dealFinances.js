@@ -31,12 +31,18 @@ export function createDealLineItem(name = '', amount = '') {
 export function normalizeDealLineItems(items) {
   if (!Array.isArray(items)) return []
   return items
-    .map((item) => ({
-      id: item?.id || createDealLineItem().id,
-      name: (item?.name ?? '').toString().trim(),
-      amount: parseDealAmount(item?.amount),
-      settled: !!item?.settled,
-    }))
+    .map((item) => {
+      const settled = !!item?.settled
+      const out = {
+        id: item?.id || createDealLineItem().id,
+        name: (item?.name ?? '').toString().trim(),
+        amount: parseDealAmount(item?.amount),
+        settled,
+      }
+      if (item?.settledAt) out.settledAt = String(item.settledAt)
+      if (item?.sourceQuoteId) out.sourceQuoteId = String(item.sourceQuoteId)
+      return out
+    })
     .filter((item) => item.name || item.amount !== 0)
 }
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Check, Users } from 'lucide-react'
 import { Button } from './ui/button'
-import { PanelBackButton, PanelHeader } from './ui/panel-header'
+import { PanelBackButton, PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
@@ -91,6 +91,7 @@ function leadToParcelData(lead) {
 export function DealPipeline({
   isOpen,
   onClose,
+  onBackToParent,
   onOpenParcelDetails,
   onEmailClick,
   onPhoneClick,
@@ -129,6 +130,7 @@ export function DealPipeline({
   onGoToParcelOnMap,
   onLeadsChange,
   onRefreshLeads,
+  onCreateQuoteForDeal,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
@@ -358,6 +360,13 @@ export function DealPipeline({
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, addTaskRequestKey, addTaskRequestParcelId, displayDeals])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedDeal(null)
+      setLeadOverlayId(null)
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (isOpen) {
@@ -758,8 +767,44 @@ export function DealPipeline({
     return results
   })()
 
+  const resetPipelineUi = () => {
+    setIsEditMode(false)
+    setEditingColumnId(null)
+    setShowAddColumn(false)
+    setTaskMenu(null)
+    setPipelineDropdownOpen(false)
+    setPipelineSwitcherOpen(false)
+    setSharePipelineId(null)
+  }
+
+  const handlePipelineBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    resetPipelineUi()
+    onClose?.()
+  }
+
+  const handleDealClose = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    setSelectedDeal(null)
+    setLeadOverlayId(null)
+  }
+
+  const handleLeadOverlayClose = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    setLeadOverlayId(null)
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setTaskMenu(null); setPipelineDropdownOpen(false); setPipelineSwitcherOpen(false); onClose?.() } }}>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) handlePipelineBack() }}>
       <DialogContent
         className="map-panel deal-pipeline-panel fullscreen-panel flex flex-col"
         showCloseButton={false}
@@ -768,15 +813,16 @@ export function DealPipeline({
           if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-pipeline-switcher]') || e.target?.closest?.('[data-share-pipeline-dialog]') || e.target?.closest?.('[data-create-pipeline-dialog]')) e.preventDefault()
         }}
       >
-        <DialogHeader className="deal-pipeline-header px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-3')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Manage deals in your pipe</DialogDescription>
           <div className="map-panel-header-toolbar">
             <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
               <PanelBackButton
-                onClick={() => { setIsEditMode(false); setEditingColumnId(null); setShowAddColumn(false); setPipelineDropdownOpen(false); setPipelineSwitcherOpen(false); setSharePipelineId(null); onClose?.() }}
+                onClick={handlePipelineBack}
                 className="pipeline-icon-btn"
               />
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
               {isEditMode ? (
                 <Input
                   value={pipelineTitle}
@@ -805,21 +851,21 @@ export function DealPipeline({
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               )}
+                </div>
+              </div>
+            </div>
+            <div className="map-panel-header-actions">
               {apiMode && onSharePipeline && isPipelineOwnedByUser(activePipeline) ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 shrink-0 pipeline-icon-btn ${pipelineDropdownOpen ? 'opacity-90' : ''}`}
+                <PanelOptionsButton
+                  className="pipeline-icon-btn"
+                  title="Pipeline options"
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect()
                     setPipelineDropdownAnchor(anchorMenuLeftAligned(rect, PIPELINE_OPTIONS_MENU_W))
                     setPipelineDropdownOpen(true)
                     setPipelineSwitcherOpen(false)
                   }}
-                  title="Pipeline options"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
+                />
               ) : (
                 <Button
                   variant="ghost"
@@ -832,26 +878,11 @@ export function DealPipeline({
                   <Settings className="h-4 w-4" />
                 </Button>
               )}
-              </div>
-            </div>
-            <div className="map-panel-header-actions">
-              {!isEditMode && canCollaboratePipeline && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="pipeline-icon-btn shrink-0"
-                  onClick={() => onOpenCreateDeal?.()}
-                  title="Add deal"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Deal
-                </Button>
-              )}
             </div>
           </div>
         </DialogHeader>
         <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden deal-pipeline-content">
-          <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-4 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns">
+          <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-6 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns">
           <div className="flex flex-col lg:flex-row gap-2 h-full min-w-0">
             {columns.map((col) => (
               <div
@@ -1213,7 +1244,7 @@ export function DealPipeline({
           onOpenScheduleAtDate={onOpenScheduleAtDate}
           onOpenLead={openLeadFromDeal}
           leadLinkActive={!!leadOverlayId && leadOverlayId === selectedDeal.leadId}
-          onClose={() => { setSelectedDeal(null); setLeadOverlayId(null) }}
+          onClose={handleDealClose}
           onDealUpdate={(updated) => {
             setSelectedDeal(updated)
             persistDeals(displayDeals.map(d => d.id === updated.id ? updated : d))
@@ -1234,13 +1265,14 @@ export function DealPipeline({
             }
           }}
           getToken={getToken}
+          onCreateQuoteForDeal={onCreateQuoteForDeal}
         />
       )}
 
       {leadOverlay && (
         <LeadDetails
           isOpen
-          onClose={() => setLeadOverlayId(null)}
+          onClose={handleLeadOverlayClose}
           lead={leadOverlay}
           pipelines={pipelines}
           getToken={getToken}

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState, useRef } from 'react'
 import { ChevronDown, CheckSquare, MoreVertical, Pencil, Plus, Square, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { cn } from '@/lib/utils'
 import {
   createDealLineItem,
@@ -13,7 +13,6 @@ import {
 } from '@/utils/dealFinances'
 
 const MENU_WIDTH = 180
-const MENU_PADDING = 8
 
 const FINANCES_ROW =
   'flex items-center gap-3 py-2.5 px-3 min-h-[44px] bg-white/[0.04]'
@@ -69,7 +68,7 @@ function DealFinancesGroup({
   const [mode, setMode] = useState(null)
   const [draft, setDraft] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState(null)
+  const menuTriggerRef = useRef(null)
   const [collapsed, setCollapsed] = useState(() => items.length > 0)
 
   const structureKey = items.map((item) => item.id).join(',')
@@ -78,7 +77,6 @@ function DealFinancesGroup({
     setMode(null)
     setDraft([])
     setMenuOpen(false)
-    setMenuAnchor(null)
   }, [structureKey])
 
   useEffect(() => {
@@ -87,23 +85,11 @@ function DealFinancesGroup({
 
   const closeMenu = () => {
     setMenuOpen(false)
-    setMenuAnchor(null)
   }
 
   const openMenu = (event) => {
     event.stopPropagation()
-    const rect = event.currentTarget.getBoundingClientRect()
-    let top = rect.bottom + 4
-    let left = rect.right - MENU_WIDTH
-    if (left < MENU_PADDING) left = MENU_PADDING
-    if (left + MENU_WIDTH > window.innerWidth - MENU_PADDING) {
-      left = window.innerWidth - MENU_WIDTH - MENU_PADDING
-    }
-    const menuHeight = 88
-    if (top + menuHeight > window.innerHeight - MENU_PADDING) {
-      top = Math.max(MENU_PADDING, rect.top - menuHeight - 4)
-    }
-    setMenuAnchor({ top, left })
+    menuTriggerRef.current = event.currentTarget
     setMenuOpen(true)
   }
 
@@ -248,10 +234,18 @@ function DealFinancesGroup({
                     </button>
                     <span className="text-sm truncate min-w-0 flex-1 font-medium text-white/95">
                       {item.name || 'Untitled'}
+                      {item.sourceQuoteId && (
+                        <span className="ml-1 text-[10px] text-green-500/90 font-normal">via quote</span>
+                      )}
                     </span>
                     <span className={cn('text-sm font-medium tabular-nums shrink-0 text-white/90', valueSettledClass)}>
                       {formatDealMoney(item.amount)}
                     </span>
+                    {item.settledAt && item.settled && (
+                      <span className="text-[10px] opacity-40 shrink-0 hidden sm:inline" title={item.settledAt}>
+                        {new Date(item.settledAt).toLocaleDateString()}
+                      </span>
+                    )}
                   </li>
                 )
               })}
@@ -325,37 +319,24 @@ function DealFinancesGroup({
         </div>
       )}
 
-      {menuOpen && menuAnchor && typeof document !== 'undefined' && createPortal(
-        <div data-deal-line-items-menu className="pointer-events-auto fixed inset-0 z-[10030]">
-          <div className="fixed inset-0 z-[10031]" onClick={closeMenu} aria-hidden />
-          <div
-            className="map-panel list-panel fixed z-[10032] rounded-xl min-w-[180px] pt-1 overflow-hidden"
-            style={{ top: menuAnchor.top, left: menuAnchor.left }}
-            role="menu"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={startAdd}
-              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-            >
-              <Plus className="h-4 w-4 shrink-0" />
-              {addMenuLabel}
-            </button>
-            {items.length > 0 && (
-              <button
-                type="button"
-                onClick={startEdit}
-                className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-              >
-                <Pencil className="h-4 w-4 shrink-0" />
-                {editMenuLabel}
-              </button>
-            )}
-          </div>
-        </div>,
-        document.body
-      )}
+      <OptionsMenuDropdown
+        open={menuOpen}
+        onClose={closeMenu}
+        triggerRef={menuTriggerRef}
+        menuWidth={MENU_WIDTH}
+        dataAttr="data-deal-line-items-menu"
+      >
+        <OptionsMenuItem onClick={startAdd}>
+          <Plus className="h-4 w-4 shrink-0" />
+          {addMenuLabel}
+        </OptionsMenuItem>
+        {items.length > 0 && (
+          <OptionsMenuItem onClick={startEdit}>
+            <Pencil className="h-4 w-4 shrink-0" />
+            {editMenuLabel}
+          </OptionsMenuItem>
+        )}
+      </OptionsMenuDropdown>
     </div>
   )
 }

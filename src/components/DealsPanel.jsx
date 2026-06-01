@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Search, Briefcase, ChevronDown, ChevronRight, Clock, Archive, Plus } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
-import { Button } from './ui/button'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { formatTimeInState } from '@/utils/dealPipeline'
@@ -37,6 +37,8 @@ function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
   return col?.name || colId
 }
+
+const DEALS_PANEL_MENU_W = 220
 
 function DealCard({ deal, columns, pipelineTitle, lead, onClick }) {
   const stageName = getColumnName(deal.status, columns)
@@ -109,6 +111,8 @@ export function DealsPanel({
   onRequestCloseDeal,
   onRequestRemoveDeal,
   onCreateDeal,
+  onCreateDealTemplate,
+  onManageDealTemplates,
   getToken,
   teams = [],
   teamMembership = null,
@@ -121,6 +125,7 @@ export function DealsPanel({
   onPhoneClick,
   onGoToParcelOnMap,
   currentUserId = null,
+  onCreateQuoteForDeal,
 }) {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('active')
@@ -129,6 +134,8 @@ export function DealsPanel({
   const [selectedPipelineId, setSelectedPipelineId] = useState(null)
   const [selectedClosed, setSelectedClosed] = useState(null)
   const [leadOverlayId, setLeadOverlayId] = useState(null)
+  const [dealsMenuOpen, setDealsMenuOpen] = useState(false)
+  const dealsMenuTriggerRef = useRef(null)
 
   const closedDeals = closedDealsProp ?? loadClosedDeals()
 
@@ -244,53 +251,65 @@ export function DealsPanel({
           onClose()
         }
       }}>
-        <DialogContent className="map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} hideOverlay>
-          <DialogHeader className="px-5 pt-5 pb-0 border-b-0 text-left" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogContent
+          className="map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          showCloseButton={false}
+          hideOverlay
+          onInteractOutside={(e) => {
+            if (e.target.closest?.('[data-deals-panel-menu]')) e.preventDefault()
+          }}
+        >
+          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'border-b-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">All deals across pipelines</DialogDescription>
-            <PanelHeader onBack={onClose} title="Deals" icon={Briefcase}>
-              <Button variant="default" size="sm" onClick={() => onCreateDeal?.()}>
-                <Plus className="h-4 w-4 mr-1" /> Create Deal
-              </Button>
+            <PanelHeader onBack={onClose} title="Deals">
+              <PanelCreateButton onClick={() => onCreateDeal?.()} title="Create deal" />
+              <PanelOptionsButton
+                ref={dealsMenuTriggerRef}
+                title="Deals options"
+                onClick={() => setDealsMenuOpen(true)}
+              />
             </PanelHeader>
 
-            <div className="mt-3 flex gap-4 border-b border-white/10">
-              <button
-                type="button"
-                onClick={() => setTab('active')}
-                className={cn(
-                  'pb-2 text-sm font-medium border-b-2 -mb-px transition-opacity',
-                  tab === 'active' ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
-                )}
-              >
-                Active <span className="text-xs opacity-60 ml-1">{totalDeals}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('closed')}
-                className={cn(
-                  'pb-2 text-sm font-medium border-b-2 -mb-px transition-opacity',
-                  tab === 'closed' ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
-                )}
-              >
-                Closed <span className="text-xs opacity-60 ml-1">{closedDeals.length}</span>
-              </button>
-            </div>
+            <div className="mt-2 space-y-2">
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setTab('active')}
+                  className={cn(
+                    'pb-1.5 text-sm font-medium border-b-2 transition-opacity',
+                    tab === 'active' ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
+                  )}
+                >
+                  Active <span className="text-xs opacity-60 ml-1">{totalDeals}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab('closed')}
+                  className={cn(
+                    'pb-1.5 text-sm font-medium border-b-2 transition-opacity',
+                    tab === 'closed' ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
+                  )}
+                >
+                  Closed <span className="text-xs opacity-60 ml-1">{closedDeals.length}</span>
+                </button>
+              </div>
 
-            <div className="relative mt-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search deals by title, lead, or pipe…"
-                className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
-                aria-label="Search deals"
-              />
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search deals by title, lead, or pipe…"
+                  className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+                  aria-label="Search deals"
+                />
+              </div>
             </div>
           </DialogHeader>
 
           <div
-            className="flex-1 overflow-y-auto scrollbar-hide px-4 py-3 space-y-1.5 min-h-0"
+            className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5 min-h-0"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           >
             {tab === 'active' ? (
@@ -367,6 +386,23 @@ export function DealsPanel({
         </DialogContent>
       </Dialog>
 
+      <OptionsMenuDropdown
+        open={dealsMenuOpen}
+        onClose={() => setDealsMenuOpen(false)}
+        triggerRef={dealsMenuTriggerRef}
+        menuWidth={DEALS_PANEL_MENU_W}
+        dataAttr="data-deals-panel-menu"
+      >
+        <OptionsMenuItem onClick={() => { setDealsMenuOpen(false); onCreateDealTemplate?.() }}>
+          <Plus className="h-4 w-4 flex-shrink-0" />
+          Create deal template
+        </OptionsMenuItem>
+        <OptionsMenuItem onClick={() => { setDealsMenuOpen(false); onManageDealTemplates?.() }}>
+          <Briefcase className="h-4 w-4 flex-shrink-0" />
+          Manage deal templates
+        </OptionsMenuItem>
+      </OptionsMenuDropdown>
+
       {selectedDeal && selectedPipeline && (
         <DealDetails
           deal={selectedDeal}
@@ -385,6 +421,7 @@ export function DealsPanel({
           onRequestCloseDeal={handleCloseDealFromPanel}
           onRequestRemoveDeal={handleRemoveDealFromPanel}
           getToken={getToken}
+          onCreateQuoteForDeal={onCreateQuoteForDeal}
         />
       )}
 

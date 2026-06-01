@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Edit2, Trash2, Mail, MessageSquare, Send, ArrowLeft, MoreVertical, Share2, Download, Upload } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -662,8 +662,8 @@ export function OutreachPanel({ isOpen, onClose, onSelectTemplate, isBulkMode = 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="map-panel list-panel outreach-panel fullscreen-panel" showCloseButton={false} hideOverlay topLayer>
-        <DialogHeader className="px-6 pt-6 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
-          <PanelHeader onBack={onClose} title="Outreach" icon={Send} />
+        <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
+          <PanelHeader onBack={onClose} title="Outreach" />
           <DialogDescription className="sr-only">Manage email and text message templates for outreach</DialogDescription>
           <div className="outreach-tabs inline-flex rounded-lg p-0.5 gap-0.5 mt-3 w-full">
             {TABS.map(tab => {

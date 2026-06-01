@@ -37,7 +37,9 @@ import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
 const FormsPanel = lazy(() => import('./components/forms/FormsPanel').then(m => ({ default: m.FormsPanel })))
+const QuotesPanel = lazy(() => import('./components/quotes/QuotesPanel').then(m => ({ default: m.QuotesPanel })))
 import { PublicFormPage } from './components/forms/PublicFormPage'
+import { PublicQuotePage } from './components/quotes/PublicQuotePage'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { TeamsPanel } from './components/TeamsPanel'
@@ -51,6 +53,10 @@ import { LeadsPanel } from './components/LeadsPanel'
 import { DealsPanel } from './components/DealsPanel'
 import { CreateLeadDialog } from './components/CreateLeadDialog'
 import { CreateDealDialog } from './components/CreateDealDialog'
+import { DealTemplatePickerDialog } from './components/DealTemplatePickerDialog'
+import { DealTemplateEditorDialog } from './components/DealTemplateEditorDialog'
+import { DealTemplatesManagerDialog } from './components/DealTemplatesManagerDialog'
+import { templateToCreateDealPrefill } from './utils/dealTemplates'
 import { HailDataPanel } from './components/HailDataPanel'
 import { HailStormOverlay, HailStormDismissPill } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
@@ -64,7 +70,7 @@ import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrat
 import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
-import { fetchLeads, buildLeadPrefillFromParcel, isParcelALead as isParcelInLeadsList } from './utils/leads'
+import { fetchLeads, buildLeadPrefillFromParcel, isParcelALead as isParcelInLeadsList, displayLeadName } from './utils/leads'
 import { buildDealFromLead, resolvePipelineId } from './utils/deals'
 import { createTasksForDeal } from './utils/dealTasks'
 import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeline'
@@ -228,6 +234,8 @@ function App() {
       setIsPathTrackingActive(false)
       setIsPathsPanelOpen(false)
       setIsFormsPanelOpen(false)
+      setIsQuotesPanelOpen(false)
+      setQuoteDealPrefill(null)
       setIsTeamsPanelOpen(false)
       setTeams([])
       setTeamMembership(null)
@@ -316,10 +324,18 @@ function App() {
   const [createDealOpen, setCreateDealOpen] = useState(false)
   const [createDealPrefill, setCreateDealPrefill] = useState(null)
   const [createDealSaving, setCreateDealSaving] = useState(false)
+  const [dealTemplatePickerOpen, setDealTemplatePickerOpen] = useState(false)
+  const [pendingCreateDealPrefill, setPendingCreateDealPrefill] = useState(null)
+  const [dealTemplateEditorOpen, setDealTemplateEditorOpen] = useState(false)
+  const [editingDealTemplateId, setEditingDealTemplateId] = useState(null)
+  const [dealTemplatesManagerOpen, setDealTemplatesManagerOpen] = useState(false)
+  const [dealTemplatesRefreshKey, setDealTemplatesRefreshKey] = useState(0)
   /** When set, user is choosing a target pipeline to move a deal into. */
   const [moveDealContext, setMoveDealContext] = useState(null)
   const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
   const [isTasksPanelOpen, setIsTasksPanelOpen] = useState(false)
+  const [isActivityPanelOpen, setIsActivityPanelOpen] = useState(false)
+  const [activityNavStackActive, setActivityNavStackActive] = useState(false)
   const [dealPipelineDealFocusKey, setDealPipelineDealFocusKey] = useState(0)
   const [dealPipelineFocusDealId, setDealPipelineFocusDealId] = useState(null)
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
@@ -329,6 +345,8 @@ function App() {
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
   const [isPathsPanelOpen, setIsPathsPanelOpen] = useState(false)
   const [isFormsPanelOpen, setIsFormsPanelOpen] = useState(false)
+  const [isQuotesPanelOpen, setIsQuotesPanelOpen] = useState(false)
+  const [quoteDealPrefill, setQuoteDealPrefill] = useState(null)
   const [paths, setPaths] = useState([])
   const [visiblePathIds, setVisiblePathIds] = useState([])
   const [isTeamsPanelOpen, setIsTeamsPanelOpen] = useState(false)
@@ -426,7 +444,7 @@ function App() {
   const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
     isSkipTracedListPanelOpen || isOutreachPanelOpen ||
     isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isTasksPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isDealsPanelOpen || isHailDataOpen
+    isSchedulePanelOpen || isTasksPanelOpen || isActivityPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isQuotesPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isDealsPanelOpen || isHailDataOpen
     // || isRoofInspectorOpen // roof inspector — restore later
   const hasPopup = clickedParcelId != null
 
@@ -1055,6 +1073,13 @@ function App() {
     showToast('Deal added to pipe', 'success')
   }, [activePipelineId, currentUser, getToken, pipelines, refreshPipelines, teams])
 
+  const dealTemplateNestedOverlay =
+    isDealPipelineOpen || isLeadsPanelOpen || isDealsPanelOpen
+
+  const bumpDealTemplatesRefresh = useCallback(() => {
+    setDealTemplatesRefreshKey((k) => k + 1)
+  }, [])
+
   const openCreateDealDialog = useCallback((prefill = {}) => {
     if (!currentUser?.uid) {
       setIsLoginOpen(true)
@@ -1065,9 +1090,29 @@ function App() {
       showToast('Create or open a pipeline first', 'warning')
       return
     }
-    setCreateDealPrefill(prefill)
-    setCreateDealOpen(true)
+    setPendingCreateDealPrefill(prefill)
+    setDealTemplatePickerOpen(true)
   }, [currentUser, pipelines, teams])
+
+  const handleDealTemplatePicked = useCallback((template) => {
+    const pending = pendingCreateDealPrefill || {}
+    const merged = template
+      ? templateToCreateDealPrefill(template, pending)
+      : pending
+    setCreateDealPrefill(merged)
+    setCreateDealOpen(true)
+    setDealTemplatePickerOpen(false)
+    setPendingCreateDealPrefill(null)
+  }, [pendingCreateDealPrefill])
+
+  const openCreateDealTemplateEditor = useCallback((templateId = null) => {
+    setEditingDealTemplateId(templateId)
+    setDealTemplateEditorOpen(true)
+  }, [])
+
+  const openManageDealTemplates = useCallback(() => {
+    setDealTemplatesManagerOpen(true)
+  }, [])
 
   const handleCreateDealRequest = useCallback((lead, preferredPipelineId) => {
     if (!lead) return
@@ -1807,6 +1852,7 @@ function App() {
     setIsDealPipelineOpen(false)
     setIsSchedulePanelOpen(false)
     setIsTasksPanelOpen(false)
+    setIsActivityPanelOpen(false)
     setScheduleInitialDate(null)
     scheduleNavStackRef.current = []
     setScheduleNavDepth(0)
@@ -2037,6 +2083,40 @@ function App() {
     if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
     setIsFormsPanelOpen(true)
   }, [authLoading, currentUser])
+  const openQuotesPanel = useCallback(() => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
+    setIsQuotesPanelOpen(true)
+  }, [authLoading, currentUser])
+  const handleCreateQuoteForDeal = useCallback(({ deal, pipeline, lead }) => {
+    setQuoteDealPrefill({
+      title: `Quote — ${deal.title || (lead ? displayLeadName(lead) : deal.leadName) || 'Deal'}`,
+      leadId: deal.leadId,
+      dealId: deal.id,
+      pipelineId: pipeline?.id || deal.pipelineId,
+      lineItems: (deal.payments || []).length
+        ? deal.payments.map((p, idx) => {
+            const costRow = (deal.costs || [])[idx]
+            const unitCost = costRow?.amount ?? 0
+            const sell = p.amount ?? 0
+            const markupPercent = unitCost > 0
+              ? Math.round(((sell - unitCost) / unitCost) * 10000) / 100
+              : 0
+            return {
+              name: p.name || 'Payment',
+              quantity: 1,
+              unitCost,
+              markupPercent,
+              unitPrice: sell,
+              amount: sell,
+              dealPaymentLineItemId: p.id,
+              dealCostLineItemId: costRow?.id || null,
+            }
+          })
+        : undefined,
+    })
+    setIsQuotesPanelOpen(true)
+  }, [])
   const openTeamsPanel = useCallback(() => {
     if (authLoading) return
     if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
@@ -2116,6 +2196,33 @@ function App() {
     }
   }, [leads, pipelines, lists])
 
+  const returnFromActivityDestination = useCallback(() => {
+    setActivityNavStackActive(false)
+    setIsLeadsPanelOpen(false)
+    setLeadsPanelFocusLeadId(null)
+    setIsDealPipelineOpen(false)
+    setDealPipelineFocusDealId(null)
+    setIsTasksPanelOpen(false)
+    setIsSchedulePanelOpen(false)
+    setScheduleInitialDate(null)
+    scheduleNavStackRef.current = []
+    setScheduleNavDepth(0)
+    setIsListPanelOpen(false)
+    setIsPathsPanelOpen(false)
+    setIsFormsPanelOpen(false)
+    setIsTeamsPanelOpen(false)
+    setIsQuotesPanelOpen(false)
+    setQuoteDealPrefill(null)
+    setIsActivityPanelOpen(true)
+  }, [])
+
+  const handleActivityNavigate = useCallback((data) => {
+    setActivityNavStackActive(true)
+    handleNotificationNavigate(data)
+  }, [handleNotificationNavigate])
+
+  const activityBackToParent = activityNavStackActive ? returnFromActivityDestination : undefined
+
   useTeamDataSync({
     enabled: !!currentUser?.uid && teams.length > 0,
     refreshPipelines,
@@ -2123,11 +2230,16 @@ function App() {
   })
 
   const notificationInbox = useNotificationInbox({
+    isOpen: isActivityPanelOpen,
+    onOpenChange: (open) => {
+      setIsActivityPanelOpen(open)
+      if (!open) setActivityNavStackActive(false)
+    },
     getToken,
     currentUser,
     teams,
     teamMembership,
-    onNavigate: handleNotificationNavigate,
+    onNavigate: handleActivityNavigate,
   })
 
   useEffect(() => {
@@ -2793,6 +2905,7 @@ function App() {
         onOpenLeads={openLeadsPanel}
         onOpenDeals={openDealsPanel}
         onOpenForms={openFormsPanel}
+        onOpenQuotes={openQuotesPanel}
         onOpenPipes={openDealPipeline}
         onOpenTasks={openTasks}
         onOpenSchedule={openSchedule}
@@ -2809,7 +2922,6 @@ function App() {
         }}
         NotificationMenuItem={notificationInbox.MenuItem}
       />
-      {notificationInbox.panel}
 
       <MobileActionBar
         activeId={
@@ -2831,12 +2943,15 @@ function App() {
         onOpenLeads={openLeadsPanel}
         onOpenDeals={openDealsPanel}
         onOpenForms={openFormsPanel}
+        onOpenQuotes={openQuotesPanel}
         onOpenTeamsPanel={openTeamsPanel}
         onOpenSettings={openSettingsPanel}
         currentUser={currentUser}
         onLogin={openLogin}
         NotificationMenuItem={notificationInbox.MenuItem}
       />
+
+      {notificationInbox.panel}
 
       <ListPanel
         currentUser={currentUser}
@@ -2848,6 +2963,7 @@ function App() {
             setClickedParcelData(null)
           }
         }}
+        onBackToParent={activityBackToParent}
         selectedListIds={selectedListIds}
         onToggleListHighlight={(listId) => {
           setSelectedListIds(prev => {
@@ -2970,6 +3086,7 @@ function App() {
       <DealPipeline
         isOpen={isDealPipelineOpen}
         onClose={() => setIsDealPipelineOpen(false)}
+        onBackToParent={activityBackToParent}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
         focusDealRequestKey={dealPipelineDealFocusKey}
@@ -3024,12 +3141,14 @@ function App() {
         onRequestMoveDeal={handleRequestMoveDeal}
         onLeadsChange={setLeads}
         onRefreshLeads={refreshLeads}
+        onCreateQuoteForDeal={handleCreateQuoteForDeal}
       />
 
       <SchedulePanel
         isOpen={isSchedulePanelOpen}
         stacked={scheduleStacked}
         onClose={closeSchedulePanel}
+        onBackToParent={activityBackToParent}
         initialDate={scheduleInitialDate}
         onInitialDateConsumed={() => setScheduleInitialDate(null)}
         leads={leads}
@@ -3054,6 +3173,7 @@ function App() {
       <TasksPanel
         isOpen={isTasksPanelOpen}
         onClose={() => setIsTasksPanelOpen(false)}
+        onBackToParent={activityBackToParent}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
         leads={leads}
@@ -3130,6 +3250,7 @@ function App() {
           <FormsPanel
             isOpen={isFormsPanelOpen}
             onClose={() => setIsFormsPanelOpen(false)}
+            onBackToParent={activityBackToParent}
             teams={teams}
             teamMembership={teamMembership}
             onShareForm={handleShareForm}
@@ -3139,9 +3260,24 @@ function App() {
         </Suspense>
       )}
 
+      {isQuotesPanelOpen && (
+        <Suspense fallback={null}>
+          <QuotesPanel
+            isOpen={isQuotesPanelOpen}
+            onClose={() => { setIsQuotesPanelOpen(false); setQuoteDealPrefill(null) }}
+            onBackToParent={activityBackToParent}
+            pipelines={pipelines}
+            leads={leads}
+            dealPrefill={quoteDealPrefill}
+            onDealPrefillConsumed={() => setQuoteDealPrefill(null)}
+          />
+        </Suspense>
+      )}
+
       <PathsPanel
         isOpen={isPathsPanelOpen}
         onClose={() => setIsPathsPanelOpen(false)}
+        onBackToParent={activityBackToParent}
         currentUser={currentUser}
         paths={paths}
         onPathsChange={refreshPaths}
@@ -3161,6 +3297,7 @@ function App() {
       <TeamsPanel
         isOpen={isTeamsPanelOpen}
         onClose={() => setIsTeamsPanelOpen(false)}
+        onBackToParent={activityBackToParent}
         currentUser={currentUser}
         getToken={getToken}
         teams={teams}
@@ -3186,6 +3323,7 @@ function App() {
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
         onClose={() => setIsLeadsPanelOpen(false)}
+        onBackToParent={activityBackToParent}
         leads={leads}
         pipelines={pipelines}
         onLeadsChange={setLeads}
@@ -3223,6 +3361,8 @@ function App() {
         onRequestCloseDeal={handleCloseDeal}
         onRequestRemoveDeal={handleRemoveDeal}
         onCreateDeal={() => openCreateDealDialog()}
+        onCreateDealTemplate={() => openCreateDealTemplateEditor(null)}
+        onManageDealTemplates={openManageDealTemplates}
         getToken={getToken}
         teams={teams}
         teamMembership={teamMembership}
@@ -3235,6 +3375,7 @@ function App() {
         onPhoneClick={handlePhoneClick}
         onGoToParcelOnMap={handleGoToParcelOnMap}
         currentUserId={currentUser?.uid}
+        onCreateQuoteForDeal={handleCreateQuoteForDeal}
       />
 
       <CreateLeadDialog
@@ -3249,6 +3390,41 @@ function App() {
         teamMembership={teamMembership}
       />
 
+      <DealTemplatePickerDialog
+        open={dealTemplatePickerOpen}
+        onOpenChange={(v) => {
+          setDealTemplatePickerOpen(v)
+          if (!v) setPendingCreateDealPrefill(null)
+        }}
+        onSelect={handleDealTemplatePicked}
+        nestedOverlay={dealTemplateNestedOverlay}
+      />
+
+      <DealTemplateEditorDialog
+        open={dealTemplateEditorOpen}
+        onOpenChange={(v) => {
+          setDealTemplateEditorOpen(v)
+          if (!v) setEditingDealTemplateId(null)
+        }}
+        templateId={editingDealTemplateId}
+        pipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
+        teams={teams}
+        onSaved={bumpDealTemplatesRefresh}
+        nestedOverlay={dealTemplateNestedOverlay || dealTemplatesManagerOpen}
+      />
+
+      <DealTemplatesManagerDialog
+        open={dealTemplatesManagerOpen}
+        onOpenChange={setDealTemplatesManagerOpen}
+        onCreateTemplate={() => openCreateDealTemplateEditor(null)}
+        onEditTemplate={(id) => {
+          setDealTemplatesManagerOpen(false)
+          openCreateDealTemplateEditor(id)
+        }}
+        refreshKey={dealTemplatesRefreshKey}
+        nestedOverlay={isDealsPanelOpen}
+      />
+
       <CreateDealDialog
         open={createDealOpen}
         onOpenChange={(v) => { setCreateDealOpen(v); if (!v) setCreateDealPrefill(null) }}
@@ -3258,7 +3434,7 @@ function App() {
         teams={teams}
         saving={createDealSaving}
         onSubmit={handleCreateDealSubmit}
-        nestedOverlay={isDealPipelineOpen || isLeadsPanelOpen || isDealsPanelOpen}
+        nestedOverlay={dealTemplateNestedOverlay || dealTemplatePickerOpen}
       />
 
       <HailDataPanel
@@ -3345,13 +3521,21 @@ function App() {
 export default App
 
 export function AppWithPublicFormRoute() {
-  const formToken = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('form')
-    : null
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const formToken = params?.get('form')
+  const quoteToken = params?.get('quote')
   if (formToken) {
     return (
       <div className="h-[100dvh] overflow-hidden">
         <PublicFormPage token={formToken} />
+        <ToastContainer />
+      </div>
+    )
+  }
+  if (quoteToken) {
+    return (
+      <div className="h-[100dvh] overflow-hidden">
+        <PublicQuotePage token={quoteToken} />
         <ToastContainer />
       </div>
     )

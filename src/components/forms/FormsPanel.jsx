@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
-import { X, FileText, Plus, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, Users, Link2 } from 'lucide-react'
+import { X, FileText, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, Users, Link2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
-import { PanelHeader } from '../ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
@@ -48,6 +48,7 @@ async function getPdfPageCount(arrayBuffer) {
 export function FormsPanel({
   isOpen,
   onClose,
+  onBackToParent,
   teams = [],
   teamMembership = null,
   onShareForm,
@@ -351,8 +352,25 @@ export function FormsPanel({
 
   if (!isOpen) return null
 
+  const handlePanelBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    onClose?.()
+  }
+
+  const handleSubViewBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    setView('list')
+    setActiveTemplateId(null)
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose?.() }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
       <DialogContent
         className={`map-panel fullscreen-panel p-0 flex flex-col max-w-none w-screen h-screen md:w-[95vw] md:h-[92vh] md:rounded-lg ${view === 'list' ? 'list-panel md:!w-auto md:!max-w-5xl' : ''}`}
         showCloseButton={false}
@@ -363,23 +381,15 @@ export function FormsPanel({
       >
         {view === 'list' && (
           <>
-            <DialogHeader
-              className="px-6 pt-6 pb-4 border-b border-white/20 text-left"
-              style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
-            >
+            <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
               <DialogDescription className="sr-only">Create, open, fill, or delete your form templates.</DialogDescription>
-              <PanelHeader onBack={onClose} title="Forms">
-                <Button onClick={handleNewForm} size="sm" disabled={uploading}>
-                  {uploading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading…
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" /> New Form
-                    </>
-                  )}
-                </Button>
+              <PanelHeader onBack={handlePanelBack} title="Forms">
+                <PanelCreateButton
+                  onClick={handleNewForm}
+                  title="New form"
+                  disabled={uploading}
+                  loading={uploading}
+                />
               </PanelHeader>
             </DialogHeader>
 
@@ -467,7 +477,7 @@ export function FormsPanel({
           <Suspense fallback={<LoadingScreen label="Loading form builder…" />}>
             <FormBuilderView
               template={activeTemplate}
-              onBack={() => { setView('list'); setActiveTemplateId(null) }}
+              onBack={handleSubViewBack}
               onTemplateUpdated={handleTemplateUpdated}
             />
           </Suspense>
@@ -477,7 +487,15 @@ export function FormsPanel({
           <Suspense fallback={<LoadingScreen label="Loading form…" />}>
             <FormFillView
               template={activeTemplate}
-              onBack={() => { setView('list'); setActiveTemplateId(null); refresh() }}
+              onBack={() => {
+                if (onBackToParent) {
+                  onBackToParent()
+                  return
+                }
+                setView('list')
+                setActiveTemplateId(null)
+                refresh()
+              }}
               onTemplateUpdated={handleTemplateUpdated}
               onRequestCompletion={(prefillValues) => {
                 setLinkTemplateId(activeTemplate.id)

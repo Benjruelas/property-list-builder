@@ -32,8 +32,12 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
     e.target?.closest?.('[data-lead-details-menu]') ||
     e.target?.closest?.('[data-deal-details-menu]') ||
     e.target?.closest?.('[data-deal-line-items-menu]') ||
+    e.target?.closest?.('[data-options-menu]') ||
     e.target?.closest?.('[data-confirm-dialog]') ||
     e.target?.closest?.('[data-pipe-menu]') ||
+    e.target?.closest?.('[data-deals-panel-menu]') ||
+    e.target?.closest?.('[data-quotes-panel-menu]') ||
+    e.target?.closest?.('[data-deal-template-menu]') ||
     e.target?.closest?.('[data-toast-container]') ||
     e.target?.closest?.('[data-toast-item]')
   ) {

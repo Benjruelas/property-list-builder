@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, RefreshCw, Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Users } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { X, Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Users } from 'lucide-react'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -18,6 +18,7 @@ const PATH_COLORS = [
 export function PathsPanel({
   isOpen,
   onClose,
+  onBackToParent,
   currentUser,
   paths = [],
   onPathsChange,
@@ -234,9 +235,17 @@ export function PathsPanel({
     return list
   }, [paths])
 
+  const handlePanelBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    onClose()
+  }
+
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
         <DialogContent
           className="map-panel list-panel fullscreen-panel"
           showCloseButton={false}
@@ -245,18 +254,9 @@ export function PathsPanel({
             if (e.target.closest?.('[data-paths-panel-dropdown]')) e.preventDefault()
           }}
         >
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
+          <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">View and manage your recorded GPS paths</DialogDescription>
-            <PanelHeader onBack={onClose} title="Paths">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onPathsChange?.()}
-                title="Refresh paths"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </PanelHeader>
+            <PanelHeader onBack={handlePanelBack} title="Paths" />
           </DialogHeader>
 
           <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>

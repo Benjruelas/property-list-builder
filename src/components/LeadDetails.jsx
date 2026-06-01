@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Phone, Mail, MapPin, Pencil, Trash2, Briefcase, ChevronRight, MoreVertical, Plus } from 'lucide-react'
 import { Button } from './ui/button'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { PanelBackButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
@@ -21,7 +21,6 @@ function getColumnName(colId, columns) {
 }
 
 const MENU_WIDTH = 180
-const MENU_PADDING = 8
 
 /**
  * Lead-only detail panel — contact info, notes, linked deals.
@@ -59,7 +58,7 @@ export function LeadDetails({
   const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
   const [savingShares, setSavingShares] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState(null)
+  const menuTriggerRef = useRef(null)
 
   useEffect(() => {
     if (lead) {
@@ -75,7 +74,6 @@ export function LeadDetails({
 
   useEffect(() => {
     setMenuOpen(false)
-    setMenuAnchor(null)
   }, [lead?.id, isOpen])
 
   const linkedDeals = useMemo(() => {
@@ -115,23 +113,11 @@ export function LeadDetails({
 
   const closeMenu = () => {
     setMenuOpen(false)
-    setMenuAnchor(null)
   }
 
   const openMenu = (event) => {
     event.stopPropagation()
-    const rect = event.currentTarget.getBoundingClientRect()
-    let top = rect.bottom + 4
-    let left = rect.right - MENU_WIDTH
-    if (left < MENU_PADDING) left = MENU_PADDING
-    if (left + MENU_WIDTH > window.innerWidth - MENU_PADDING) {
-      left = window.innerWidth - MENU_WIDTH - MENU_PADDING
-    }
-    const menuHeight = 140
-    if (top + menuHeight > window.innerHeight - MENU_PADDING) {
-      top = Math.max(MENU_PADDING, rect.top - menuHeight - 4)
-    }
-    setMenuAnchor({ top, left })
+    menuTriggerRef.current = event.currentTarget
     setMenuOpen(true)
   }
 
@@ -307,45 +293,30 @@ export function LeadDetails({
         </div>
       </DialogContent>
 
-      {menuOpen && menuAnchor && typeof document !== 'undefined' && createPortal(
-        <div data-lead-details-menu className="pointer-events-auto fixed inset-0 z-[10030]">
-          <div className="fixed inset-0 z-[10031]" onClick={closeMenu} aria-hidden />
-          <div
-            className="map-panel list-panel fixed z-[10032] rounded-xl min-w-[180px] pt-1 overflow-hidden"
-            style={{ top: menuAnchor.top, left: menuAnchor.left }}
-            role="menu"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => { closeMenu(); onEditLead?.(lead) }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-            >
-              <Pencil className="h-4 w-4 shrink-0" />
-              Edit lead
-            </button>
-            <button
-              type="button"
-              onClick={() => { closeMenu(); onCreateDeal?.(lead) }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-            >
-              <Plus className="h-4 w-4 shrink-0" />
-              Create deal
-            </button>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => { closeMenu(); handleDelete() }}
-              onKeyDown={(e) => e.key === 'Enter' && handleDelete()}
-              className="list-panel-delete-btn w-full px-3 py-2 pb-2 rounded-b-xl text-left text-sm flex items-center gap-2 transition-colors text-red-400 hover:bg-red-600/80 cursor-pointer"
-            >
-              <Trash2 className="h-4 w-4 shrink-0" />
-              Delete lead
-            </div>
-          </div>
-        </div>,
-        document.getElementById('modal-root') || document.body
-      )}
+      <OptionsMenuDropdown
+        open={menuOpen}
+        onClose={closeMenu}
+        triggerRef={menuTriggerRef}
+        menuWidth={MENU_WIDTH}
+        dataAttr="data-lead-details-menu"
+      >
+        <OptionsMenuItem onClick={() => { closeMenu(); onEditLead?.(lead) }}>
+          <Pencil className="h-4 w-4 shrink-0" />
+          Edit lead
+        </OptionsMenuItem>
+        <OptionsMenuItem onClick={() => { closeMenu(); onCreateDeal?.(lead) }}>
+          <Plus className="h-4 w-4 shrink-0" />
+          Create deal
+        </OptionsMenuItem>
+        <OptionsMenuItem
+          destructive
+          className="list-panel-delete-btn rounded-b-xl pb-2 hover:bg-red-600/80"
+          onClick={() => { closeMenu(); handleDelete() }}
+        >
+          <Trash2 className="h-4 w-4 shrink-0" />
+          Delete lead
+        </OptionsMenuItem>
+      </OptionsMenuDropdown>
     </Dialog>
   )
 }

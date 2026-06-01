@@ -22,6 +22,21 @@ const emptyForm = {
   properties: null,
 }
 
+function normalizeLeadForm(data = {}) {
+  return {
+    firstName: data.firstName ?? '',
+    lastName: data.lastName ?? '',
+    address: data.address ?? '',
+    phone: data.phone ?? '',
+    email: data.email ?? '',
+    notes: data.notes ?? '',
+    parcelId: data.parcelId ?? null,
+    lat: data.lat ?? null,
+    lng: data.lng ?? null,
+    properties: data.properties ?? null,
+  }
+}
+
 export function CreateLeadDialog({
   open,
   onOpenChange,
@@ -45,27 +60,19 @@ export function CreateLeadDialog({
   const isEdit = !!editLead?.id
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setForm(emptyForm)
+      return
+    }
     if (editLead) {
-      setForm({
-        firstName: editLead.firstName || '',
-        lastName: editLead.lastName || '',
-        address: editLead.address || '',
-        phone: editLead.phone || '',
-        email: editLead.email || '',
-        notes: editLead.notes || '',
-        parcelId: editLead.parcelId || null,
-        lat: editLead.lat ?? null,
-        lng: editLead.lng ?? null,
-        properties: editLead.properties || null,
-      })
+      setForm(normalizeLeadForm(editLead))
       const norm = normalizeResourceVisibility(editLead)
       setShareState({
         visibility: norm.visibility || VISIBILITY.PRIVATE,
         sharedMemberUids: norm.sharedMemberUids || [],
       })
     } else if (prefill) {
-      setForm({ ...emptyForm, ...prefill })
+      setForm(normalizeLeadForm({ ...emptyForm, ...prefill }))
       setShareState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
     } else {
       setForm(emptyForm)
@@ -73,7 +80,15 @@ export function CreateLeadDialog({
     }
   }, [open, prefill, editLead, teams])
 
-  const setField = (key, val) => setForm((f) => ({ ...f, [key]: val }))
+  const setField = (key, val) => {
+    setForm((f) => {
+      const next = { ...f, [key]: val }
+      if (key !== 'parcelId' && key !== 'lat' && key !== 'lng' && key !== 'properties') {
+        next[key] = val ?? ''
+      }
+      return next
+    })
+  }
 
   const resolveParcelAt = useCallback(async (lat, lng) => {
     if (!onResolveParcel || lat == null || lng == null) return null
@@ -96,7 +111,7 @@ export function CreateLeadDialog({
   }, [onResolveParcel])
 
   const handleAddressSelect = useCallback(async ({ address, latParsed, lngParsed }) => {
-    setField('address', address)
+    setField('address', address ?? '')
     if (latParsed != null && lngParsed != null) {
       setForm((f) => ({ ...f, lat: latParsed, lng: lngParsed }))
       await resolveParcelAt(latParsed, lngParsed)
@@ -105,9 +120,9 @@ export function CreateLeadDialog({
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const firstName = form.firstName.trim()
-    const lastName = form.lastName.trim()
-    const address = form.address.trim()
+    const firstName = (form.firstName ?? '').trim()
+    const lastName = (form.lastName ?? '').trim()
+    const address = (form.address ?? '').trim()
     if (!address) {
       showToast('Property address is required', 'error')
       return
@@ -127,9 +142,9 @@ export function CreateLeadDialog({
         firstName,
         lastName,
         address,
-        phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
-        notes: form.notes || '',
+        phone: (form.phone ?? '').trim() || null,
+        email: (form.email ?? '').trim() || null,
+        notes: (form.notes ?? '').trim(),
         parcelId: form.parcelId,
         lat: form.lat,
         lng: form.lng,
@@ -187,7 +202,7 @@ export function CreateLeadDialog({
               <label className="text-xs opacity-60 mb-1 block">First Name</label>
               <input
                 type="text"
-                value={form.firstName}
+                value={form.firstName ?? ''}
                 onChange={(e) => setField('firstName', e.target.value)}
                 className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
                 autoComplete="given-name"
@@ -197,7 +212,7 @@ export function CreateLeadDialog({
               <label className="text-xs opacity-60 mb-1 block">Last Name</label>
               <input
                 type="text"
-                value={form.lastName}
+                value={form.lastName ?? ''}
                 onChange={(e) => setField('lastName', e.target.value)}
                 className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
                 autoComplete="family-name"
@@ -208,7 +223,7 @@ export function CreateLeadDialog({
           <div>
             <label className="text-xs opacity-60 mb-1 block">Property Address</label>
             <AddressAutocompleteField
-              value={form.address}
+              value={form.address ?? ''}
               onChange={(v) => setField('address', v)}
               onSelectResult={handleAddressSelect}
             />
@@ -226,7 +241,7 @@ export function CreateLeadDialog({
             <label className="text-xs opacity-60 mb-1 block">Phone</label>
             <input
               type="tel"
-              value={form.phone}
+              value={form.phone ?? ''}
               onChange={(e) => setField('phone', e.target.value)}
               className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
               autoComplete="tel"
@@ -237,7 +252,7 @@ export function CreateLeadDialog({
             <label className="text-xs opacity-60 mb-1 block">Email</label>
             <input
               type="email"
-              value={form.email}
+              value={form.email ?? ''}
               onChange={(e) => setField('email', e.target.value)}
               className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
               autoComplete="email"
@@ -247,7 +262,7 @@ export function CreateLeadDialog({
           <div>
             <label className="text-xs opacity-60 mb-1 block">Notes</label>
             <textarea
-              value={form.notes}
+              value={form.notes ?? ''}
               onChange={(e) => setField('notes', e.target.value)}
               rows={3}
               className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none"

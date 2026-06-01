@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Users2, Shield, Mail, Check, X } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -20,6 +20,7 @@ const TEAM_LIST_ITEM_CLASS =
 export function TeamsPanel({
   isOpen,
   onClose,
+  onBackToParent,
   currentUser,
   getToken,
   teams,
@@ -114,13 +115,29 @@ export function TeamsPanel({
 
   const incomingInvites = pendingInvites.filter((i) => i.status === 'pending')
 
+  const handlePanelBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    onClose()
+  }
+
+  const handleTeamDetailClose = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    setOpenTeamId(null)
+  }
+
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
         <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay>
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
+          <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your teams and members</DialogDescription>
-            <PanelHeader onBack={onClose} title="Teams" />
+            <PanelHeader onBack={handlePanelBack} title="Teams" />
           </DialogHeader>
 
           <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
@@ -214,7 +231,7 @@ export function TeamsPanel({
           team={activeTeam}
           currentUser={currentUser}
           getToken={getToken}
-          onClose={() => setOpenTeamId(null)}
+          onClose={handleTeamDetailClose}
           onTeamsChange={onTeamsChange}
           pendingInvites={pendingInvites}
         />

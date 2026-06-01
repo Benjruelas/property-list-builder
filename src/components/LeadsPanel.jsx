@@ -1,11 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Search, UserSearch, Plus, Phone, Mail, Briefcase } from 'lucide-react'
-import { Button } from './ui/button'
-import { PanelHeader } from './ui/panel-header'
+import { Search, UserSearch, Phone, Mail, Briefcase } from 'lucide-react'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { displayLeadName, formatLeadAddress, updateLead } from '@/utils/leads'
+import { cn } from '@/lib/utils'
 import { VisibilityBadge } from './ResourceSharePicker'
 import { findDealsForLead } from '@/utils/deals'
 import { showToast } from './ui/toast'
@@ -45,6 +45,7 @@ function LeadRow({ lead, dealCount, teams, onClick }) {
 export function LeadsPanel({
   isOpen,
   onClose,
+  onBackToParent,
   leads = [],
   pipelines = [],
   onLeadsChange,
@@ -69,6 +70,10 @@ export function LeadsPanel({
   const [selectedLead, setSelectedLead] = useState(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [editLead, setEditLead] = useState(null)
+
+  useEffect(() => {
+    if (!isOpen) setSelectedLead(null)
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen || !focusLeadId) return
@@ -136,20 +141,34 @@ export function LeadsPanel({
     setEditLead(null)
   }
 
+  const handlePanelBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    onClose()
+  }
+
+  const handleDetailClose = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    setSelectedLead(null)
+  }
+
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); onClose() } }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); handlePanelBack() } }}>
         <DialogContent className="map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} hideOverlay>
-          <DialogHeader className="px-5 pt-5 pb-0 border-b-0 text-left" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
+          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your leads</DialogDescription>
-            <PanelHeader onBack={onClose} title="Leads" icon={UserSearch}>
-              <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" /> Create Lead
-              </Button>
+            <PanelHeader onBack={handlePanelBack} title="Leads">
+              <PanelCreateButton onClick={() => setCreateOpen(true)} title="Create lead" />
             </PanelHeader>
 
             <div className="relative mt-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
               <input
                 type="search"
                 value={search}
@@ -161,7 +180,7 @@ export function LeadsPanel({
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-3 space-y-1.5" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
             {leads.length === 0 ? (
               <div className="text-center py-16">
                 <UserSearch className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -204,7 +223,7 @@ export function LeadsPanel({
 
       <LeadDetails
         isOpen={!!selectedLead}
-        onClose={() => setSelectedLead(null)}
+        onClose={handleDetailClose}
         lead={selectedLead}
         pipelines={pipelines}
         getToken={getToken}

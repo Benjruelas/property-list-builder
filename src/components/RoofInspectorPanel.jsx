@@ -1,7 +1,7 @@
 // Paused: not mounted from App.jsx — re-enable import + <RoofInspectorPanel /> there.
 import { useMemo } from 'react'
 import { X, Telescope, MapPin, ExternalLink } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 
 function parseCoord(v) {
@@ -36,12 +36,12 @@ export function RoofInspectorPanel({ isOpen, onClose, parcelData }) {
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/20" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
+        <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Roof and aerial review for this property</DialogDescription>
           <PanelHeader onBack={onClose} title="Roof Inspector" icon={Telescope} subtitle={address} />
         </DialogHeader>
 
-        <div className="px-5 py-4 overflow-y-auto scrollbar-hide flex-1 min-h-0 space-y-4 text-sm text-white/80">
+        <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1 min-h-0 space-y-4 text-sm text-white/80">
           <p>
             Use aerial imagery to review the building footprint, roof condition, and site context. Open the location
             in Google Maps (switch to satellite for roof detail) or continue here as we add in-app roof tools.

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Bell, Check, ChevronDown, Loader2, X } from 'lucide-react'
-import { createPortal } from 'react-dom'
-import { Button } from './ui/button'
-import { fetchNotifications, markNotificationsRead } from '../utils/notifications'
-import { fetchActivity } from '../utils/activity'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Bell, ChevronDown, Loader2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
+import { fetchFeed, markFeedSeen, feedItemKey, collectUnseenKeys } from '../utils/feed'
 import { cn } from '@/lib/utils'
+
+const FEED_UNSEEN_COLOR = '#60a5fa'
 
 function formatWhen(iso) {
   try {
@@ -22,235 +23,248 @@ function actorInitial(email) {
   return e.charAt(0).toUpperCase()
 }
 
-function ActivityFeedSection({
-  activities,
-  loading,
-  teamFilter,
-  onTeamFilterChange,
-  teams,
-  onOpenActivity,
-  isAdmin = false,
-}) {
-  const filterTeams = teams?.length > 0 ? teams : []
+function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
+  const isActivity = item.source === 'activity'
+  const label = isActivity ? item.summary : item.title
+  const detail = !isActivity && item.body ? item.body : null
 
   return (
-    <div className="border-t border-white/15">
-      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-white/[0.02]">
-        <h4 className="text-xs font-semibold uppercase opacity-50 tracking-wide">Activity</h4>
-        {filterTeams.length > 1 && (
-          <div className="relative shrink-0">
-            <select
-              value={teamFilter || ''}
-              onChange={(e) => onTeamFilterChange(e.target.value || null)}
-              className="text-[11px] rounded-md pl-2 pr-6 py-1 bg-white/5 border border-white/15 appearance-none max-w-[140px] truncate"
-              aria-label="Filter activity by team"
-            >
-              <option value="">All teams</option>
-              {filterTeams.map((t) => (
-                <option key={t.id} value={t.id}>{t.name || 'Team'}</option>
-              ))}
-            </select>
-            <ChevronDown className="h-3 w-3 absolute right-1.5 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
-          </div>
+    <li className="min-w-0">
+      <button
+        type="button"
+        onClick={() => onOpen(item)}
+        className={cn(
+          'map-panel-list-item w-full max-w-full min-w-0 text-left transition-colors flex gap-2.5 items-start box-border p-3 rounded-lg border border-solid',
+          isSessionNew
+            ? 'bg-white/[0.08] hover:bg-white/[0.12]'
+            : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'
         )}
-      </div>
-      {loading && activities.length === 0 ? (
-        <div className="flex items-center justify-center py-8 text-sm opacity-70">
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
-        </div>
-      ) : activities.length === 0 ? (
-        <p className="text-center py-8 text-sm opacity-50 px-4">No team activity yet.</p>
-      ) : (
-        <ul>
-          {activities.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                onClick={() => onOpenActivity?.(a.nav || a.entity)}
-                className="w-full text-left px-4 py-3 border-b border-white/10 hover:bg-white/5 transition-colors flex gap-2.5"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold uppercase">
-                  {actorInitial(a.actorEmail)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <div className="text-sm leading-snug flex items-center gap-2 flex-wrap">
-                    {a.summary}
-                    {isAdmin && a.audience === 'admin_only' && (
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase">Admin</span>
-                    )}
-                  </div>
-                  <div className="text-[10px] opacity-50 mt-0.5">{formatWhen(a.createdAt)}</div>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+        style={isSessionNew ? { borderColor: `${FEED_UNSEEN_COLOR}cc` } : undefined}
+      >
+        {isSessionNew && (
+          <span
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5"
+            style={{ backgroundColor: FEED_UNSEEN_COLOR }}
+            aria-hidden
+          />
+        )}
+        {isActivity && (
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold uppercase mt-0.5">
+            {actorInitial(item.actorEmail)}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 overflow-hidden">
+          <div className="text-sm leading-snug flex items-center gap-2 min-w-0">
+            <span className={cn('truncate min-w-0', !isActivity && isSessionNew && 'font-medium')}>{label}</span>
+            {isActivity && isAdmin && item.audience === 'admin_only' && (
+              <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase shrink-0">Admin</span>
+            )}
+          </div>
+          {detail && <div className="text-xs opacity-75 mt-0.5 line-clamp-2 break-words">{detail}</div>}
+          <div className="text-[10px] opacity-50 mt-1">{formatWhen(item.createdAt)}</div>
+        </span>
+      </button>
+    </li>
   )
 }
 
-export function useNotificationInbox({ getToken, currentUser, teams = [], teamMembership = null, onNavigate }) {
-  const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [notifications, setNotifications] = useState([])
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [activities, setActivities] = useState([])
-  const [activityTeams, setActivityTeams] = useState([])
-  const [activityLoading, setActivityLoading] = useState(false)
-  const [teamFilter, setTeamFilter] = useState(null)
+export function ActivityPanel({
+  isOpen,
+  onClose,
+  items,
+  loading,
+  sessionNewKeys,
+  teamFilter,
+  onTeamFilterChange,
+  displayTeams,
+  isAdmin,
+  onOpenItem,
+}) {
+  return (
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose?.() }}>
+      <DialogContent
+        className="map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 p-0"
+        showCloseButton={false}
+        hideOverlay
+      >
+        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-3')} style={PANEL_LIST_HEADER_STYLE}>
+          <DialogDescription className="sr-only">Notifications and team activity</DialogDescription>
+          <PanelHeader onBack={onClose} title="Activity">
+            {displayTeams.length > 1 && (
+              <div className="relative shrink min-w-0 max-w-[9rem]">
+                <select
+                  value={teamFilter || ''}
+                  onChange={(e) => onTeamFilterChange?.(e.target.value || null)}
+                  className="text-[11px] rounded-md pl-2 pr-6 py-1.5 bg-white/5 border border-white/15 appearance-none w-full max-w-full truncate"
+                  aria-label="Filter by team"
+                >
+                  <option value="">All teams</option>
+                  {displayTeams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name || 'Team'}</option>
+                  ))}
+                </select>
+                <ChevronDown className="h-3 w-3 absolute right-1.5 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
+              </div>
+            )}
+          </PanelHeader>
+        </DialogHeader>
 
-  const refreshNotifications = useCallback(async () => {
+        <div
+          className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto scrollbar-hide px-3 py-1"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          {loading && items.length === 0 ? (
+            <div className="flex items-center justify-center py-10 text-sm opacity-70">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
+            </div>
+          ) : items.length === 0 ? (
+            <p className="text-center py-10 text-sm opacity-60 px-4">No activity yet.</p>
+          ) : (
+            <ul className="min-w-0 space-y-1.5 pb-1">
+              {items.map((item) => (
+                <FeedItemRow
+                  key={feedItemKey(item)}
+                  item={item}
+                  isSessionNew={sessionNewKeys.has(feedItemKey(item))}
+                  isAdmin={isAdmin}
+                  onOpen={onOpenItem}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function useNotificationInbox({
+  isOpen: controlledOpen,
+  onOpenChange,
+  getToken,
+  currentUser,
+  teams = [],
+  teamMembership = null,
+  onNavigate,
+}) {
+  const isControlled = controlledOpen !== undefined
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = isControlled ? controlledOpen : uncontrolledOpen
+  const setOpen = useCallback((value) => {
+    const next = typeof value === 'function' ? value(open) : value
+    if (isControlled) onOpenChange?.(next)
+    else setUncontrolledOpen(next)
+  }, [isControlled, onOpenChange, open])
+
+  const openRef = useRef(false)
+  const [loading, setLoading] = useState(false)
+  const [items, setItems] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [feedTeams, setFeedTeams] = useState([])
+  const [teamFilter, setTeamFilter] = useState(null)
+  const [sessionNewKeys, setSessionNewKeys] = useState(() => new Set())
+
+  useEffect(() => {
+    openRef.current = open
+    if (!open) {
+      setSessionNewKeys(new Set())
+    }
+  }, [open])
+
+  const loadFeed = useCallback(async ({ replaceSessionKeys = false } = {}) => {
     if (!currentUser || !getToken) return
+
+    const isPanelOpen = openRef.current
     setLoading(true)
     try {
-      const data = await fetchNotifications(getToken)
-      setNotifications(data.notifications || [])
-      setUnreadCount(data.unreadCount || 0)
+      const data = await fetchFeed(getToken, {
+        teamId: teamFilter,
+        limit: 50,
+        uid: currentUser.uid,
+      })
+      if (data.teams?.length) setFeedTeams(data.teams)
+
+      const unseenKeys = collectUnseenKeys(data.items)
+      let nextItems = data.items || []
+
+      if (isPanelOpen) {
+        setSessionNewKeys((prev) => {
+          if (replaceSessionKeys) return unseenKeys
+          const next = new Set(prev)
+          for (const key of unseenKeys) next.add(key)
+          return next
+        })
+
+        if (unseenKeys.size > 0 || data.unreadCount > 0) {
+          const marked = await markFeedSeen(getToken, {
+            markAllRead: true,
+            teamId: teamFilter,
+            uid: currentUser.uid,
+          })
+          nextItems = marked.items || []
+        }
+
+        setItems(nextItems)
+        setUnreadCount(0)
+      } else {
+        setItems(nextItems)
+        setUnreadCount(data.unreadCount || 0)
+      }
     } catch {
       /* ignore */
     } finally {
       setLoading(false)
     }
-  }, [currentUser, getToken])
-
-  const refreshActivity = useCallback(async () => {
-    if (!currentUser || !getToken) return
-    setActivityLoading(true)
-    try {
-      const data = await fetchActivity(getToken, { teamId: teamFilter, limit: 50 })
-      setActivities(data.activities || [])
-      if (data.teams?.length) setActivityTeams(data.teams)
-    } catch {
-      /* ignore */
-    } finally {
-      setActivityLoading(false)
-    }
   }, [currentUser, getToken, teamFilter])
 
-  const refresh = useCallback(async () => {
-    await Promise.all([refreshNotifications(), refreshActivity()])
-  }, [refreshNotifications, refreshActivity])
-
   useEffect(() => {
-    refreshNotifications()
-    const id = setInterval(refresh, 60000)
+    loadFeed({ replaceSessionKeys: false })
+    const id = setInterval(() => loadFeed({ replaceSessionKeys: false }), 60000)
     return () => clearInterval(id)
-  }, [refresh, refreshNotifications])
+  }, [loadFeed])
 
   useEffect(() => {
-    if (open) refresh()
-  }, [open, refresh])
-
-  useEffect(() => {
-    if (currentUser) refreshActivity()
-  }, [teamFilter, refreshActivity, currentUser])
+    if (open) loadFeed({ replaceSessionKeys: true })
+  }, [open, teamFilter, loadFeed])
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
     const onMessage = (ev) => {
       if (ev.data?.type === 'NOTIFICATION_CLICK') {
         onNavigate?.(ev.data.data)
-        refresh()
+        loadFeed({ replaceSessionKeys: openRef.current })
       }
     }
     navigator.serviceWorker.addEventListener('message', onMessage)
     return () => navigator.serviceWorker.removeEventListener('message', onMessage)
-  }, [onNavigate, refresh])
+  }, [onNavigate, loadFeed])
 
-  const handleOpenItem = async (n) => {
-    if (!n.read && getToken) {
-      try {
-        const data = await markNotificationsRead(getToken, { ids: [n.id] })
-        setNotifications(data.notifications || [])
-        setUnreadCount(data.unreadCount || 0)
-      } catch {
-        /* ignore */
-      }
-    }
-    setOpen(false)
-    onNavigate?.(n.data || { type: n.type })
-  }
+  const handleClose = useCallback(() => setOpen(false), [setOpen])
 
-  const handleOpenActivity = (nav) => {
-    if (!nav?.type) return
-    setOpen(false)
-    onNavigate?.(nav)
-  }
+  const handleOpenItem = useCallback((item) => {
+    const nav = item.nav || { type: item.type }
+    if (nav?.type) onNavigate?.(nav)
+  }, [onNavigate])
 
-  const handleMarkAllRead = async () => {
-    if (!getToken) return
-    try {
-      const data = await markNotificationsRead(getToken, { markAllRead: true })
-      setNotifications(data.notifications || [])
-      setUnreadCount(0)
-    } catch {
-      /* ignore */
-    }
-  }
+  const displayTeams = feedTeams.length > 0 ? feedTeams : (teams || []).map((t) => ({ id: t.id, name: t.name }))
+  const isAdmin = teamMembership?.role === 'admin'
 
-  const displayTeams = activityTeams.length > 0 ? activityTeams : (teams || []).map((t) => ({ id: t.id, name: t.name }))
-
-  const panel = open && currentUser && typeof document !== 'undefined' ? createPortal(
-    <div className="notification-inbox-overlay fixed inset-0 z-[10050]">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} aria-hidden />
-      <div className="notification-inbox-panel map-panel absolute right-4 top-14 w-[min(92vw,380px)] max-h-[70vh] overflow-hidden flex flex-col rounded-xl shadow-xl">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/15 shrink-0">
-          <h3 className="font-semibold text-sm">Notifications</h3>
-          <div className="flex items-center gap-1">
-            {unreadCount > 0 && (
-              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleMarkAllRead}>
-                <Check className="h-3.5 w-3.5 mr-1" /> Mark all read
-              </Button>
-            )}
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        <div className="overflow-y-auto flex-1 min-h-0">
-          {loading && notifications.length === 0 ? (
-            <div className="flex items-center justify-center py-10 text-sm opacity-70">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
-            </div>
-          ) : notifications.length === 0 ? (
-            <p className="text-center py-10 text-sm opacity-60 px-4">No notifications yet.</p>
-          ) : (
-            <ul>
-              {notifications.map((n) => (
-                <li key={n.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenItem(n)}
-                    className={cn(
-                      'w-full text-left px-4 py-3 border-b border-white/10 hover:bg-white/5 transition-colors',
-                      !n.read && 'bg-blue-500/10'
-                    )}
-                  >
-                    <div className="font-medium text-sm">{n.title}</div>
-                    {n.body && <div className="text-xs opacity-75 mt-0.5 line-clamp-2">{n.body}</div>}
-                    <div className="text-[10px] opacity-50 mt-1">{formatWhen(n.createdAt)}</div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <ActivityFeedSection
-            activities={activities}
-            loading={activityLoading}
-            teamFilter={teamFilter}
-            onTeamFilterChange={setTeamFilter}
-            teams={displayTeams}
-            onOpenActivity={handleOpenActivity}
-            isAdmin={teamMembership?.role === 'admin'}
-          />
-        </div>
-      </div>
-    </div>,
-    document.body
+  const panel = currentUser ? (
+    <ActivityPanel
+      isOpen={open}
+      onClose={handleClose}
+      items={items}
+      loading={loading}
+      sessionNewKeys={sessionNewKeys}
+      teamFilter={teamFilter}
+      onTeamFilterChange={setTeamFilter}
+      displayTeams={displayTeams}
+      isAdmin={isAdmin}
+      onOpenItem={handleOpenItem}
+    />
   ) : null
 
-  const openInbox = useCallback(() => setOpen(true), [])
+  const openInbox = useCallback(() => setOpen(true), [setOpen])
 
   const MenuItem = useCallback(({ onSelect }) => {
     if (!currentUser) return null
@@ -265,7 +279,7 @@ export function useNotificationInbox({ getToken, currentUser, teams = [], teamMe
         className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
       >
         <Bell className="h-4 w-4 flex-shrink-0" />
-        <span className="flex-1">Notifications</span>
+        <span className="flex-1">Activity</span>
         {unreadCount > 0 && (
           <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -273,7 +287,7 @@ export function useNotificationInbox({ getToken, currentUser, teams = [], teamMe
         )}
       </button>
     )
-  }, [currentUser, unreadCount])
+  }, [currentUser, unreadCount, setOpen])
 
   return {
     unreadCount,
@@ -295,8 +309,8 @@ export function NotificationInbox(props) {
         type="button"
         onClick={() => inbox.setOpen((v) => !v)}
         className="relative map-control-btn flex items-center justify-center"
-        title="Notifications"
-        aria-label={`Notifications${inbox.unreadCount ? `, ${inbox.unreadCount} unread` : ''}`}
+        title="Activity"
+        aria-label={`Activity${inbox.unreadCount ? `, ${inbox.unreadCount} unseen` : ''}`}
       >
         <Bell className="h-5 w-5" />
         {inbox.unreadCount > 0 && (

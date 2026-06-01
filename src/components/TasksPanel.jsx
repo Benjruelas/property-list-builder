@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
@@ -49,6 +49,7 @@ function getLeadLabel(lead, parcelId) {
 export function TasksPanel({
   isOpen,
   onClose,
+  onBackToParent,
   onOpenParcelDetails,
   pipelines = [],
   leads = [],
@@ -541,20 +542,25 @@ export function TasksPanel({
   const hasClosedContent = closedUnlabeled.length > 0 || closedGroups.length > 0
   const showEmptyOpen = !hasOpen && !(showClosedTasks && hasClosedContent)
 
+  const handlePanelBack = () => {
+    if (onBackToParent) {
+      onBackToParent()
+      return
+    }
+    onClose?.()
+  }
+
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose?.() }}>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) handlePanelBack() }}>
       <DialogContent
         className="map-panel list-panel fullscreen-panel flex flex-col min-h-0"
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader
-          className="px-6 pt-6 pb-4 border-b border-white/20 flex-shrink-0 text-left"
-          style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
-        >
+        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Tasks grouped by pipe</DialogDescription>
-          <PanelHeader onBack={onClose} title="Tasks">
+          <PanelHeader onBack={handlePanelBack} title="Tasks">
             {completedCount > 0 && (
               <Button
                 variant="ghost"

@@ -46,6 +46,9 @@ export const DEFAULT_SETTINGS = {
     companyWebsite: '',
     logoBase64: '',
   },
+
+  /** Default email/text templates when sending quotes */
+  quoteSendTemplates: null,
 }
 
 export function getSettings() {
@@ -59,6 +62,9 @@ export function getSettings() {
       }
       if (saved.reportBranding && typeof saved.reportBranding === 'object') {
         merged.reportBranding = { ...DEFAULT_SETTINGS.reportBranding, ...saved.reportBranding }
+      }
+      if (saved.quoteSendTemplates && typeof saved.quoteSendTemplates === 'object') {
+        merged.quoteSendTemplates = saved.quoteSendTemplates
       }
       return merged
     }
@@ -80,6 +86,9 @@ export function updateSettings(partial, getToken) {
       ...next,
       reportBranding: { ...current.reportBranding, ...partial.reportBranding }
     }
+  }
+  if (partial.quoteSendTemplates && typeof partial.quoteSendTemplates === 'object') {
+    next = { ...next, quoteSendTemplates: partial.quoteSendTemplates }
   }
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(next))
