@@ -72,14 +72,25 @@ function num(v) {
   return Number.isFinite(n) ? n : null
 }
 
-function collectAllowedMemberUids(pipeline, allTeams) {
-  const ids = Array.isArray(pipeline.teamShares) ? pipeline.teamShares : []
+function collectAllowedMemberUids(pipeline, allTeams, user) {
   const allowed = new Set()
-  for (const tid of ids) {
+  const shareIds = Array.isArray(pipeline.teamShares) ? pipeline.teamShares : []
+  for (const tid of shareIds) {
     const team = allTeams.find((t) => t.id === tid)
     if (!team || !Array.isArray(team.members)) continue
     for (const m of team.members) {
       if (m && m.uid) allowed.add(String(m.uid))
+    }
+  }
+  if (user?.uid) {
+    for (const team of allTeams) {
+      const isMember =
+        team?.ownerId === user.uid ||
+        (Array.isArray(team.members) && team.members.some((m) => m?.uid === user.uid))
+      if (!isMember) continue
+      for (const m of team.members || []) {
+        if (m?.uid) allowed.add(String(m.uid))
+      }
     }
   }
   return allowed
@@ -163,7 +174,7 @@ export default async function handler(req, res) {
     const access = resolveAccess(pipeline, user, teamsIndex)
     if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
 
-    const allowedMemberUids = collectAllowedMemberUids(pipeline, allTeams)
+    const allowedMemberUids = collectAllowedMemberUids(pipeline, allTeams, user)
 
     let leadIdx = (pipeline.leads || []).findIndex(
       (l) => l.id === leadId || l.parcelId === leadId
@@ -194,9 +205,23 @@ export default async function handler(req, res) {
       const normalized = normalizeTask(task, user, allowedMemberUids)
       lead.teamTasks.push(normalized)
       await logTeamTaskActivity(pipeline, user, 'task.created', { ...normalized, leadId }, `${actor} created task "${normalized.title}"`)
+      const newAssignees = normalized.assignedUids.filter((uid) => uid !== user.uid)
+      if (newAssignees.length) {
+        try {
+          const { notifyTaskAssigned } = await import('./push-utils.js')
+          await notifyTaskAssigned(newAssignees, {
+            taskTitle: normalized.title,
+            taskId: normalized.id,
+            actorEmail: user.email,
+          }, teamsIndex)
+        } catch {
+          /* ignore */
+        }
+      }
     } else if (action === 'update') {
       const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
       if (tIdx === -1) return res.status(404).json({ error: 'Task not found' })
+      const prevAssigned = new Set(lead.teamTasks[tIdx].assignedUids || [])
       lead.teamTasks[tIdx] = {
         ...lead.teamTasks[tIdx],
         ...(task.title !== undefined ? { title: String(task.title).trim() } : {}),
@@ -208,6 +233,24 @@ export default async function handler(req, res) {
         ...(task.dealId !== undefined
           ? { dealId: task.dealId && String(task.dealId).trim() ? String(task.dealId).trim() : null }
           : {})
+      }
+      if (task.assignedUids !== undefined) {
+        const updated = lead.teamTasks[tIdx]
+        const newlyAssigned = (updated.assignedUids || []).filter(
+          (uid) => uid !== user.uid && !prevAssigned.has(uid)
+        )
+        if (newlyAssigned.length) {
+          try {
+            const { notifyTaskAssigned } = await import('./push-utils.js')
+            await notifyTaskAssigned(newlyAssigned, {
+              taskTitle: updated.title,
+              taskId: updated.id,
+              actorEmail: user.email,
+            }, teamsIndex)
+          } catch {
+            /* ignore */
+          }
+        }
       }
     } else if (action === 'remove') {
       const removed = lead.teamTasks.find((t) => t.id === task.id)

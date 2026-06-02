@@ -23,10 +23,11 @@ import { ForgotPassword } from './components/ForgotPassword'
 import { ToastContainer, showToast } from './components/ui/toast'
 import { ConfirmDialog, showConfirm } from './components/ui/confirm-dialog'
 import { useAuth } from './contexts/AuthContext'
+import { useNavigation } from './navigation/NavigationContext'
 import { UserDataSyncProvider } from './contexts/UserDataSyncContext'
 import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
 import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
-import { fetchPipelines, createPipeline, updatePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline } from './utils/pipelines'
+import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
@@ -44,6 +45,7 @@ import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as dele
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { TeamsPanel } from './components/TeamsPanel'
 import { fetchTeamContext } from './utils/teams'
+import { resolveTeamMemberFeatures, canAccessTeamFeature, TEAM_FEATURE_ACCESS_DENIED_MESSAGE, featureIdForFeedNav } from './utils/teamFeatures'
 import { subscribeToWebPush } from './utils/pushNotifications'
 import { reverseGeocodeCity } from './utils/reverseGeocode'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
@@ -213,6 +215,71 @@ function LocationMarker({ position }) {
 
 function App() {
   const { currentUser, getToken, logout, loading: authLoading } = useAuth()
+  const nav = useNavigation()
+  const pp = nav.panelProps
+
+  const {
+    isActivityPanelOpen,
+    isListPanelOpen,
+    isParcelListPanelOpen,
+    viewingListId,
+    isLeadsPanelOpen,
+    leadsDetailLeadId,
+    isDealsPanelOpen,
+    dealsDetailDealId,
+    dealsDetailPipelineId,
+    dealsClosedRecordId,
+    dealsLeadOverlayId,
+    isDealPipelineOpen,
+    pipesPipelineId,
+    pipesDealId,
+    pipesLeadOverlayId,
+    isTasksPanelOpen,
+    isSchedulePanelOpen,
+    scheduleInitialDate,
+    scheduleLeadId,
+    scheduleStacked,
+    hasScheduleOpener,
+    isPathsPanelOpen,
+    isFormsPanelOpen,
+    formsView,
+    formsTemplateId,
+    isQuotesPanelOpen,
+    quotesEditorFrame,
+    quotesDetailQuoteId,
+    isTeamsPanelOpen,
+    teamsDetailTeamId,
+    isSettingsPanelOpen,
+    isSkipTracedListPanelOpen,
+    isOutreachPanelOpen,
+    outreachInitialTab,
+    isEmailComposerOpen,
+    isBulkEmailPreviewOpen,
+    bulkEmailListId: navBulkEmailListId,
+    isParcelDetailsOpen,
+    parcelDetailsSource,
+    isHailDataOpen,
+    hailDataParcel,
+    phoneActionPanel,
+    popupData,
+    clickedParcelId,
+    clickedParcelData,
+    fromActivity,
+    showMenu,
+    isLoginOpen,
+    isSignUpOpen,
+    isForgotPasswordOpen,
+    createLeadOpen,
+    createLeadPrefill,
+    createDealOpen,
+    createDealPrefill,
+    dealTemplatePickerOpen,
+    pendingCreateDealPrefill,
+    dealTemplateEditorOpen,
+    editingDealTemplateId,
+    dealTemplatesManagerOpen,
+    moveDealContext,
+  } = pp
   
   // Debug: Log current user state
   useEffect(() => {
@@ -221,60 +288,24 @@ function App() {
   // Handle logout - close all panels and clear state
   const handleLogout = useCallback(async () => {
     try {
-      // Close all panels before logout
-      setIsListPanelOpen(false)
-      setIsSkipTracedListPanelOpen(false)
-      setIsParcelListPanelOpen(false)
-      setIsParcelDetailsOpen(false)
-      setIsOutreachPanelOpen(false)
-      setPhoneActionPanel(null)
-      setIsEmailComposerOpen(false)
-      setIsBulkEmailPreviewOpen(false)
+      nav.resetToMapFullState()
       setIsMultiSelectActive(false)
       setIsPathTrackingActive(false)
-      setIsPathsPanelOpen(false)
-      setIsFormsPanelOpen(false)
-      setIsQuotesPanelOpen(false)
-      setQuoteDealPrefill(null)
-      setIsTeamsPanelOpen(false)
       setTeams([])
       setTeamMembership(null)
       setPendingTeamInvites([])
-      setIsSettingsPanelOpen(false)
-      setIsLeadsPanelOpen(false)
-      setIsHailDataOpen(false)
-      // setIsRoofInspectorOpen(false) // roof inspector — restore later
-      returnToParcelDetailsAfterHailRef.current = false
-      // returnToParcelDetailsAfterRoofRef.current = false // roof inspector — restore later
-      setPickPipelineForParcel(null)
       setPaths([])
       setVisiblePathIds([])
       setSelectedParcels(new Set())
       setSelectedParcelsData(new Map())
-      setClickedParcelId(null)
-      setClickedParcelData(null)
-      
-      // Call Firebase logout
       await logout()
     } catch (error) {
       console.error('Logout error:', error)
     }
-  }, [logout])
-  const [isLoginOpen, setIsLoginOpen] = useState(false)
-  const [isSignUpOpen, setIsSignUpOpen] = useState(false)
-  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
+  }, [logout, nav])
   const [permissionsReady, setPermissionsReady] = useState(() => hasGrantedPermissions())
   const [userLocation, setUserLocation] = useState(null)
 
-  const [isListPanelOpen, setIsListPanelOpen] = useState(false)
-  const [isSkipTracedListPanelOpen, setIsSkipTracedListPanelOpen] = useState(false)
-  const [isParcelListPanelOpen, setIsParcelListPanelOpen] = useState(false)
-  const [viewingListId, setViewingListId] = useState(null) // List ID being viewed in ParcelListPanel
-  const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false) // Parcel details panel
-  const [isOutreachPanelOpen, setIsOutreachPanelOpen] = useState(false)
-  const [outreachInitialTab, setOutreachInitialTab] = useState('email')
-  const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false)
-  const [isBulkEmailPreviewOpen, setIsBulkEmailPreviewOpen] = useState(false)
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
   const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
   const [emailComposerRecipient, setEmailComposerRecipient] = useState({ email: '', name: '' })
@@ -308,76 +339,39 @@ function App() {
   const [selectedListIds, setSelectedListIds] = useState([]) // Max 20 lists highlighted with different colors
   const [selectedParcels, setSelectedParcels] = useState(new Set())
   const [selectedParcelsData, setSelectedParcelsData] = useState(new Map()) // Store full parcel data
-  const [clickedParcelId, setClickedParcelId] = useState(null)
-  const [clickedParcelData, setClickedParcelData] = useState(null) // Store full parcel data for popup
   const [lists, setLists] = useState([])
   const [showListSelector, setShowListSelector] = useState(false) // Show list selector in popup
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
-  const [isDealPipelineOpen, setIsDealPipelineOpen] = useState(false)
   const [dealPipelineDeals, setDealPipelineDeals] = useState([])
   const [leads, setLeads] = useState([])
   const [closedDeals, setClosedDeals] = useState(() => loadClosedDeals())
   const [pipelines, setPipelines] = useState([])
   const [activePipelineId, setActivePipelineId] = useState(null)
-  const [createLeadOpen, setCreateLeadOpen] = useState(false)
-  const [createLeadPrefill, setCreateLeadPrefill] = useState(null)
-  const [createDealOpen, setCreateDealOpen] = useState(false)
-  const [createDealPrefill, setCreateDealPrefill] = useState(null)
   const [createDealSaving, setCreateDealSaving] = useState(false)
-  const [dealTemplatePickerOpen, setDealTemplatePickerOpen] = useState(false)
-  const [pendingCreateDealPrefill, setPendingCreateDealPrefill] = useState(null)
-  const [dealTemplateEditorOpen, setDealTemplateEditorOpen] = useState(false)
-  const [editingDealTemplateId, setEditingDealTemplateId] = useState(null)
-  const [dealTemplatesManagerOpen, setDealTemplatesManagerOpen] = useState(false)
   const [dealTemplatesRefreshKey, setDealTemplatesRefreshKey] = useState(0)
   /** When set, user is choosing a target pipeline to move a deal into. */
-  const [moveDealContext, setMoveDealContext] = useState(null)
-  const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false)
-  const [isTasksPanelOpen, setIsTasksPanelOpen] = useState(false)
-  const [isActivityPanelOpen, setIsActivityPanelOpen] = useState(false)
-  const [activityNavStackActive, setActivityNavStackActive] = useState(false)
-  const [dealPipelineDealFocusKey, setDealPipelineDealFocusKey] = useState(0)
-  const [dealPipelineFocusDealId, setDealPipelineFocusDealId] = useState(null)
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
-  const [scheduleInitialDate, setScheduleInitialDate] = useState(null)
-  const [phoneActionPanel, setPhoneActionPanel] = useState(null) // { phone, parcelData } | null
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
-  const [isPathsPanelOpen, setIsPathsPanelOpen] = useState(false)
-  const [isFormsPanelOpen, setIsFormsPanelOpen] = useState(false)
-  const [isQuotesPanelOpen, setIsQuotesPanelOpen] = useState(false)
-  const [quoteDealPrefill, setQuoteDealPrefill] = useState(null)
   const [paths, setPaths] = useState([])
   const [visiblePathIds, setVisiblePathIds] = useState([])
-  const [isTeamsPanelOpen, setIsTeamsPanelOpen] = useState(false)
   const [teams, setTeams] = useState([])
   const [teamMembership, setTeamMembership] = useState(null)
   const [pendingTeamInvites, setPendingTeamInvites] = useState([])
-  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false)
-  const [isLeadsPanelOpen, setIsLeadsPanelOpen] = useState(false)
-  const [leadsPanelFocusLeadId, setLeadsPanelFocusLeadId] = useState(null)
-  const [isDealsPanelOpen, setIsDealsPanelOpen] = useState(false)
-  /** Schedule opened from another panel — keep that panel mounted and stack schedule on top. */
-  const scheduleNavStackRef = useRef([])
-  const [isHailDataOpen, setIsHailDataOpen] = useState(false)
-  const [hailDataParcel, setHailDataParcel] = useState(null)
   const [selectedHailEvent, setSelectedHailEvent] = useState(null)
   // const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false) // roof inspector — restore later
   // const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
   const [settings, setSettings] = useState(() => getSettings())
-  const [showMenu, setShowMenu] = useState(false)
   const pathTrackerRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null)
   const currentPopupRef = useRef(null)
-  const parcelDetailsSourceRef = useRef('map')
   const programmaticMoveRef = useRef(false)
   const initialSetDoneRef = useRef(false)
   const prevFollowingRef = useRef(false)
   const lastAutoZoomRef = useRef(null)
   const [mapReady, setMapReady] = useState(false)
-  const [popupData, setPopupData] = useState(null)
   const [viewState, setViewState] = useState({
     longitude: -96.7970,
     latitude: 32.7767,
@@ -401,13 +395,15 @@ function App() {
 
   const handleSelectHailEvent = useCallback((evt) => {
     setSelectedHailEvent(evt)
-    setIsHailDataOpen(false)
-  }, [])
+    nav.popMapOverlay()
+  }, [nav])
 
   const handleDismissHailEvent = useCallback(() => {
     setSelectedHailEvent(null)
-    setIsHailDataOpen(true)
-  }, [])
+    if (clickedParcelData) {
+      nav.openHailOverlay({ type: 'hail', parcelId: clickedParcelData.id, parcelData: clickedParcelData })
+    }
+  }, [nav, clickedParcelData])
 
   const hailStormTimeline = useHailStormTimeline(selectedHailEvent)
 
@@ -732,6 +728,34 @@ function App() {
     }
   }, [currentUser, refreshTeams])
 
+  const teamMemberFeatures = useMemo(
+    () => resolveTeamMemberFeatures(teamMembership, teams, currentUser),
+    [teamMembership, teams, currentUser]
+  )
+
+  const canAccessFeature = useCallback(
+    (featureId) => canAccessTeamFeature(teamMembership, teamMemberFeatures, featureId),
+    [teamMembership, teamMemberFeatures]
+  )
+
+  const guardFeature = useCallback((featureId, action) => {
+    if (!featureId || canAccessFeature(featureId)) {
+      if (typeof action === 'function') action()
+      return true
+    }
+    showToast(TEAM_FEATURE_ACCESS_DENIED_MESSAGE, 'warning')
+    return false
+  }, [canAccessFeature])
+
+  const requireAuth = useCallback(() => {
+    if (authLoading) return false
+    if (!currentUser || !currentUser.uid) {
+      nav.openLogin()
+      return false
+    }
+    return true
+  }, [authLoading, currentUser, nav])
+
   const handleTogglePathTracking = useCallback(async () => {
     if (isPathTrackingActive) {
       const tracker = pathTrackerRef.current
@@ -769,10 +793,11 @@ function App() {
       tracker.reset()
       setIsPathTrackingActive(false)
     } else {
+      if (!guardFeature('paths')) return
       setIsPathTrackingActive(true)
       showToast('Recording path...', 'info')
     }
-  }, [isPathTrackingActive, getToken, refreshPaths, settings.distanceUnit, paths])
+  }, [isPathTrackingActive, getToken, refreshPaths, settings.distanceUnit, paths, guardFeature])
 
   const handleDeletePath = useCallback(async (path) => {
     const confirmed = await showConfirm({
@@ -991,28 +1016,29 @@ function App() {
 
   const handleConvertToLead = useCallback((parcelData) => {
     if (!currentUser?.uid) {
-      setIsLoginOpen(true)
+      nav.openLogin()
       showToast('Please sign in to create leads', 'info')
       return
     }
-    if (!parcelData?.id) {
-      showToast('Invalid parcel data', 'error')
-      return
-    }
-    if (isParcelALeadCheck(parcelData.id)) {
-      showToast('Parcel is already a lead', 'warning')
-      return
-    }
-    const skip = getSkipTracedParcel(parcelData.id)
-    setCreateLeadPrefill(buildLeadPrefillFromParcel(parcelData, skip))
-    setCreateLeadOpen(true)
-  }, [currentUser, isParcelALeadCheck])
+    guardFeature('leads', () => {
+      if (!parcelData?.id) {
+        showToast('Invalid parcel data', 'error')
+        return
+      }
+      if (isParcelALeadCheck(parcelData.id)) {
+        showToast('Parcel is already a lead', 'warning')
+        return
+      }
+      const skip = getSkipTracedParcel(parcelData.id)
+      nav.pushModal({ type: 'createLead', prefill: buildLeadPrefillFromParcel(parcelData, skip) })
+    })
+  }, [currentUser, isParcelALeadCheck, nav, guardFeature])
 
   const handleLeadCreated = useCallback((lead) => {
     setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
     refreshLeads()
-    setCreateLeadPrefill(null)
-  }, [refreshLeads])
+    nav.popModal()
+  }, [refreshLeads, nav])
 
   const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks } = {}) => {
     if (!lead?.id) return
@@ -1043,7 +1069,7 @@ function App() {
           }
         }
         setActivePipelineId(pid)
-        setIsDealPipelineOpen(true)
+        nav.openPipes(pid)
         showToast('Deal added to pipe', 'success')
       } catch (e) {
         showToast(e.message || 'Could not create deal', 'error')
@@ -1069,9 +1095,9 @@ function App() {
         scheduleUserDataSync()
       }
     }
-    setIsDealPipelineOpen(true)
+    nav.openPipes(activePipelineId)
     showToast('Deal added to pipe', 'success')
-  }, [activePipelineId, currentUser, getToken, pipelines, refreshPipelines, teams])
+  }, [activePipelineId, currentUser, getToken, pipelines, refreshPipelines, teams, nav])
 
   const dealTemplateNestedOverlay =
     isDealPipelineOpen || isLeadsPanelOpen || isDealsPanelOpen
@@ -1082,37 +1108,34 @@ function App() {
 
   const openCreateDealDialog = useCallback((prefill = {}) => {
     if (!currentUser?.uid) {
-      setIsLoginOpen(true)
+      nav.openLogin()
       return
     }
-    const eligible = pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))
-    if (pipelines.length > 0 && eligible.length === 0) {
-      showToast('Create or open a pipeline first', 'warning')
-      return
-    }
-    setPendingCreateDealPrefill(prefill)
-    setDealTemplatePickerOpen(true)
-  }, [currentUser, pipelines, teams])
+    guardFeature('deals', () => {
+      const eligible = pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))
+      if (pipelines.length > 0 && eligible.length === 0) {
+        showToast('Create or open a pipeline first', 'warning')
+        return
+      }
+      nav.pushModal({ type: 'dealTemplatePicker', prefill })
+    })
+  }, [currentUser, pipelines, teams, nav, guardFeature])
 
   const handleDealTemplatePicked = useCallback((template) => {
     const pending = pendingCreateDealPrefill || {}
     const merged = template
       ? templateToCreateDealPrefill(template, pending)
       : pending
-    setCreateDealPrefill(merged)
-    setCreateDealOpen(true)
-    setDealTemplatePickerOpen(false)
-    setPendingCreateDealPrefill(null)
-  }, [pendingCreateDealPrefill])
+    nav.replaceModals([{ type: 'createDeal', prefill: merged }])
+  }, [pendingCreateDealPrefill, nav])
 
   const openCreateDealTemplateEditor = useCallback((templateId = null) => {
-    setEditingDealTemplateId(templateId)
-    setDealTemplateEditorOpen(true)
-  }, [])
+    nav.pushModal({ type: 'dealTemplateEditor', templateId })
+  }, [nav])
 
   const openManageDealTemplates = useCallback(() => {
-    setDealTemplatesManagerOpen(true)
-  }, [])
+    nav.pushModal({ type: 'dealTemplatesManager' })
+  }, [nav])
 
   const handleCreateDealRequest = useCallback((lead, preferredPipelineId) => {
     if (!lead) return
@@ -1131,12 +1154,11 @@ function App() {
     setCreateDealSaving(true)
     try {
       await handleCreateDeal(lead, pipelineId, { title, notes, payments, costs, tasks })
-      setCreateDealOpen(false)
-      setCreateDealPrefill(null)
+      nav.popModal()
     } finally {
       setCreateDealSaving(false)
     }
-  }, [leads, handleCreateDeal])
+  }, [leads, handleCreateDeal, nav])
 
   const archiveAndRemoveDeal = useCallback(async (deal, pipelineOrId) => {
     if (!deal) return false
@@ -1233,7 +1255,7 @@ function App() {
       showToast('No other pipelines you can move this deal to', 'warning')
       return
     }
-    setMoveDealContext({ deal, sourcePipelineId, eligiblePipelines: eligible })
+    nav.pushModal({ type: 'moveDeal', context: { deal, sourcePipelineId, eligiblePipelines: eligible } })
   }, [pipelines, currentUser, teams])
 
   const handleMoveDeal = useCallback(async (deal, sourcePipelineId, targetPipelineId) => {
@@ -1550,6 +1572,40 @@ function App() {
     }
   }, [getToken, refreshPipelines, teams])
 
+  const handleDeletePipeline = useCallback(async (pipelineId) => {
+    const pipe = pipelines.find((p) => p.id === pipelineId)
+    if (!pipe) return
+    if (pipe.isTeamPipe) {
+      showToast('Team Pipe cannot be deleted', 'error')
+      return
+    }
+    if (pipe.ownerId !== currentUser?.uid) {
+      showToast('Only the owner can delete this pipeline', 'error')
+      return
+    }
+    try {
+      if (pipelines.length === 1) {
+        await updatePipeline(getToken, pipelineId, {
+          deals: [],
+          columns: loadColumns(),
+        })
+        await refreshPipelines()
+        showToast('Pipeline reset to default', 'success')
+      } else {
+        await deletePipeline(getToken, pipelineId)
+        await refreshPipelines()
+        const nextActive = pipelines.find((p) => p.id !== pipelineId)
+        if (nextActive && activePipelineId === pipelineId) {
+          setActivePipelineId(nextActive.id)
+          if (isDealPipelineOpen) nav.openPipes(nextActive.id)
+        }
+        showToast('Pipeline deleted', 'success')
+      }
+    } catch (e) {
+      showToast(e?.message || 'Failed to delete pipeline', 'error')
+    }
+  }, [getToken, refreshPipelines, pipelines, currentUser?.uid, activePipelineId, isDealPipelineOpen, nav])
+
   const handleShareList = useCallback(async (listId, sharedWith) => {
     try {
       await updateList(getToken, listId, { sharedWith })
@@ -1592,12 +1648,14 @@ function App() {
     const listName = typeof list === 'object' ? list?.name : 'this list'
     const parcelCount = typeof list === 'object' ? (list?.parcels?.length ?? 0) : 0
     const parcelText = parcelCount === 1 ? '1 parcel' : `${parcelCount} parcels`
-    setIsListPanelOpen(false)
+    setShowListSelector(false)
+    const wasListOpen = isListPanelOpen
+    if (wasListOpen) nav.pop()
     const confirmed = await showConfirm(
       `Are you sure you want to delete "${listName}" (${parcelText})? This cannot be undone.`,
       'Delete List'
     )
-    setIsListPanelOpen(true)
+    if (wasListOpen) nav.openLists()
     if (!confirmed) return
     try {
       await deleteList(getToken, listId)
@@ -1609,6 +1667,42 @@ function App() {
     }
   }, [getToken, refreshLists])
 
+  const buildPopupOverlay = useCallback((data) => {
+    if (!data) return null
+    const parcelId = data.id || data.parcelId || data.properties?.PROP_ID
+    const address = data.address || data.properties?.SITUS_ADDR || data.properties?.SITE_ADDR || data.properties?.ADDRESS || 'No address'
+    const properties = data.properties || {}
+    const lat = data.lat ?? data.latlng?.lat ?? properties.LATITUDE ?? properties.latitude
+    const lng = data.lng ?? data.latlng?.lng ?? properties.LONGITUDE ?? properties.longitude
+    if (lat == null || lng == null || !parcelId) return null
+    const currentYear = new Date().getFullYear()
+    const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
+    const age = yearBuilt ? currentYear - yearBuilt : null
+    const hasSkipTraced = isParcelSkipTraced(parcelId)
+    const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
+    const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
+    const parcelData = { id: parcelId, properties, address, lat, lng }
+    return {
+      type: 'popup',
+      parcelId,
+      lat,
+      lng,
+      parcelData,
+      popupData: {
+        parcelId, lat, lng, address,
+        ownerName: properties.OWNER_NAME || '', age,
+        ownerOccupied: computeOwnerOccupied(properties),
+        listNames: listsWithParcel.map(l => l.name),
+        hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
+      },
+    }
+  }, [lists, skipTracingInProgress])
+
+  const openParcelPopup = useCallback((data) => {
+    const overlay = buildPopupOverlay(data)
+    if (overlay) nav.showParcelPopup(overlay)
+  }, [buildPopupOverlay, nav])
+
   // Handle parcel click
   const handleParcelClick = useCallback((event) => {
     // Wait for auth to finish loading before checking
@@ -1618,7 +1712,7 @@ function App() {
     
     // Require authentication for parcel interactions
     if (!currentUser || !currentUser.uid) {
-      setIsLoginOpen(true)
+      nav.openLogin()
       showToast('Please sign in to interact with parcels', 'info')
       return
     }
@@ -1655,22 +1749,8 @@ function App() {
         return newSet
       })
     } else {
-      setClickedParcelId(parcelId)
-      const currentYear = new Date().getFullYear()
-      const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
-      const age = yearBuilt ? currentYear - yearBuilt : null
       const parcelData = { id: parcelId, properties, address, lat: latlng.lat, lng: latlng.lng }
-      setClickedParcelData(parcelData)
-      const hasSkipTraced = isParcelSkipTraced(parcelId)
-      const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
-      const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
-      setPopupData({
-        parcelId, lat: latlng.lat, lng: latlng.lng, address,
-        ownerName: properties.OWNER_NAME || '', age,
-        ownerOccupied: computeOwnerOccupied(properties),
-        listNames: listsWithParcel.map(l => l.name),
-        hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
-      })
+      openParcelPopup(parcelData)
       setTimeout(() => {
         if (mapInstanceRef.current) {
           mapInstanceRef.current.easeTo({ center: [latlng.lng, latlng.lat], duration: 500 })
@@ -1678,7 +1758,7 @@ function App() {
       }, 300)
     }
     
-  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, isParcelALeadCheck])
+  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, openParcelPopup, nav])
   
   // Add single parcel to list (called from popup button)
   const handleAddSingleParcelToList = useCallback(async (listId) => {
@@ -1708,15 +1788,13 @@ function App() {
       await updateList(getToken, listId, { parcels: [...(list.parcels || []), parcelToAdd] })
       await refreshLists()
       showToast(`Added parcel to ${list.name}`, 'success')
-      setPopupData(null)
-      setClickedParcelId(null)
-      setClickedParcelData(null)
+      nav.clearMapOverlays()
       setShowListSelector(false)
-      setIsListPanelOpen(false)
+      nav.pop()
     } catch (error) {
       showToast(error.message || 'Failed to add parcel', 'error')
     }
-  }, [clickedParcelData, lists, getToken, refreshLists])
+  }, [clickedParcelData, lists, getToken, refreshLists, nav])
 
   // Recenter map on user location and resume follow-mode
   const handleRecenter = useCallback(() => {
@@ -1750,17 +1828,15 @@ function App() {
     
     // Require authentication for multi-select
     if (!currentUser || !currentUser.uid) {
-      setIsLoginOpen(true)
+      nav.openLogin()
       showToast('Please sign in to use multi-select', 'info')
       return
     }
     setIsMultiSelectActive(prev => !prev)
-    setSelectedParcels(new Set()) // Clear selection when toggling mode
-    setSelectedParcelsData(new Map()) // Clear parcel data
-    setClickedParcelId(null) // Clear single click highlight
-    setClickedParcelData(null) // Prevent stale single-parcel add-to-list flow
-    setPopupData(null) // Close any open parcel popup
-  }, [currentUser])
+    setSelectedParcels(new Set())
+    setSelectedParcelsData(new Map())
+    nav.clearMapOverlays()
+  }, [currentUser, authLoading, nav])
 
   // Add selected parcels to list
   const handleAddParcelsToList = useCallback(async (listId) => {
@@ -1839,73 +1915,17 @@ function App() {
     }
   }, [lists, selectedListIds, getToken, refreshLists])
 
-  // Function to open parcel details (can accept parcel data or use clickedParcelData)
-  /**
-   * Close every overlay panel and return to the bare map.
-   */
+  const feedCtx = useMemo(() => ({ leads, pipelines, lists }), [leads, pipelines, lists])
+
+  useEffect(() => {
+    if (pipesPipelineId) setActivePipelineId(pipesPipelineId)
+  }, [pipesPipelineId])
+
   const closeAllPanelsForMap = useCallback(() => {
-    setIsListPanelOpen(false)
     setShowListSelector(false)
-    setIsSkipTracedListPanelOpen(false)
-    setIsParcelListPanelOpen(false)
-    setViewingListId(null)
-    setIsParcelDetailsOpen(false)
-    setIsOutreachPanelOpen(false)
-    setPhoneActionPanel(null)
-    setIsEmailComposerOpen(false)
-    setIsBulkEmailPreviewOpen(false)
-    setIsDealPipelineOpen(false)
-    setDealPipelineFocusDealId(null)
-    setIsSchedulePanelOpen(false)
-    setScheduleInitialDate(null)
-    scheduleNavStackRef.current = []
-    setScheduleNavDepth(0)
-    setIsTasksPanelOpen(false)
-    setIsActivityPanelOpen(false)
-    setActivityNavStackActive(false)
-    setIsPathsPanelOpen(false)
-    setIsFormsPanelOpen(false)
-    setIsQuotesPanelOpen(false)
-    setQuoteDealPrefill(null)
-    setIsTeamsPanelOpen(false)
-    setIsSettingsPanelOpen(false)
-    setIsLeadsPanelOpen(false)
-    setLeadsPanelFocusLeadId(null)
-    setIsDealsPanelOpen(false)
-    setIsHailDataOpen(false)
-    setShowMenu(false)
-    setPopupData(null)
-  }, [])
+    nav.resetToMapFullState()
+  }, [nav])
 
-  const openParcelPopup = useCallback((data) => {
-    if (!data) return
-    const parcelId = data.id || data.parcelId || data.properties?.PROP_ID
-    const address = data.address || data.properties?.SITUS_ADDR || data.properties?.SITE_ADDR || data.properties?.ADDRESS || 'No address'
-    const properties = data.properties || {}
-    const lat = data.lat ?? data.latlng?.lat ?? properties.LATITUDE ?? properties.latitude
-    const lng = data.lng ?? data.latlng?.lng ?? properties.LONGITUDE ?? properties.longitude
-    if (lat == null || lng == null || !parcelId) return
-    const currentYear = new Date().getFullYear()
-    const yearBuilt = properties.YEAR_BUILT ? parseInt(properties.YEAR_BUILT) : null
-    const age = yearBuilt ? currentYear - yearBuilt : null
-    const hasSkipTraced = isParcelSkipTraced(parcelId)
-    const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
-    const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
-    const parcelData = { id: parcelId, properties, address, lat, lng }
-    setClickedParcelId(parcelId)
-    setClickedParcelData(parcelData)
-    setPopupData({
-      parcelId, lat, lng, address,
-      ownerName: properties.OWNER_NAME || '', age,
-      ownerOccupied: computeOwnerOccupied(properties),
-      listNames: listsWithParcel.map(l => l.name),
-      hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
-    })
-  }, [lists, skipTracingInProgress])
-
-  /**
-   * Close any open panel, fly to the parcel, highlight it, and show the map popup.
-   */
   const handleGoToParcelOnMap = useCallback((raw) => {
     if (!raw) return
     const parcelId = raw.id || raw.parcelId || raw.properties?.PROP_ID || raw.PROP_ID
@@ -1924,42 +1944,35 @@ function App() {
       showToast('No map location for this parcel', 'error')
       return
     }
-    const normalized = {
+    openParcelPopup({
       id: parcelId,
       address,
       properties: { ...properties, PROP_ID: parcelId },
       lat,
       lng,
-    }
-    openParcelPopup(normalized)
+    })
     if (mapRef.current) {
       mapRef.current.flyTo({ center: [lng, lat], zoom: 17, duration: 500 })
     }
   }, [closeAllPanelsForMap, openParcelPopup, showToast])
 
   const handleOpenParcelDetails = useCallback((parcelData = null) => {
-    // Wait for auth to finish loading before checking
-    if (authLoading) {
-      return
-    }
-    
-    // Require authentication to view parcel details
+    if (authLoading) return
     if (!currentUser || !currentUser.uid) {
-      setIsLoginOpen(true)
+      nav.openLogin()
       showToast('Please sign in to view parcel details', 'info')
       return
     }
-    // Track source: from list (parcelData passed) vs map (popup)
-    parcelDetailsSourceRef.current = parcelData ? 'list' : 'map'
-    // If parcelData is provided (from list), use it; otherwise use clickedParcelData
-    if (parcelData) {
-      setClickedParcelData(parcelData)
-    }
-    suppressPopupCloseRef.current = true
-    setPopupData(null)
-    setIsParcelDetailsOpen(true)
-
+    const source = parcelData ? 'list' : 'map'
     const target = parcelData || clickedParcelData
+    if (!target?.id) return
+    suppressPopupCloseRef.current = true
+    nav.openParcelDetails({
+      type: 'parcelDetails',
+      parcelId: target.id,
+      source,
+      parcelData: parcelData || target,
+    })
     if (target && mapInstanceRef.current) {
       const lng = target.lng ?? target.properties?.longitude
       const lat = target.lat ?? target.properties?.latitude
@@ -1967,39 +1980,30 @@ function App() {
         mapInstanceRef.current.easeTo({ center: [lng, lat], duration: 500 })
       }
     }
-  }, [currentUser, authLoading, clickedParcelData])
-
-  const handleDealPipelineFocusHandled = useCallback(() => {
-    setDealPipelineFocusDealId(null)
-  }, [])
+  }, [currentUser, authLoading, clickedParcelData, nav])
 
   const handleDealPipelineAddTaskHandled = useCallback(() => {
     setDealPipelineAddTaskParcelId(null)
   }, [])
 
-  const handleOpenTaskInDealPipeline = useCallback(({ pipelineId, dealId, parcelId, mode }) => {
-    setIsTasksPanelOpen(false)
-    setDealPipelineFocusDealId(dealId ?? null)
-    if (mode === 'api' && pipelineId) {
-      setActivePipelineId(pipelineId)
-    }
-    setDealPipelineDealFocusKey((k) => k + 1)
-    setIsDealPipelineOpen(true)
-  }, [])
+  const handleOpenTaskInDealPipeline = useCallback(({ pipelineId, dealId, mode }) => {
+    if (!guardFeature('tasks')) return
+    if (mode === 'api' && pipelineId) setActivePipelineId(pipelineId)
+    nav.openTaskInPipes(pipelineId || activePipelineId, dealId)
+  }, [nav, activePipelineId, guardFeature])
 
-  const openDealsPanel = useCallback(() => setIsDealsPanelOpen(true), [])
+  const openDealsPanel = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('deals', () => nav.openDeals())
+  }, [requireAuth, guardFeature, nav])
 
   const handlePhoneClick = useCallback((phone, parcelData) => {
-    setPhoneActionPanel({ phone, parcelData: parcelData || null })
-  }, [])
+    nav.showPhoneOverlay({ type: 'phone', phone, parcelData: parcelData || null })
+  }, [nav])
 
   const suppressPopupCloseRef = useRef(false)
   const isParcelDetailsOpenRef = useRef(false)
-  /** When set, next handleParcelDetailsClose (from Radix onOpenChange) must not clear clickedParcelId/Data — e.g. Add to list from details keeps parcel data for the list picker. */
   const suppressParcelDetailsDataClearRef = useRef(false)
-  // const returnToParcelDetailsAfterRoofRef = useRef(false) // roof inspector — restore with RoofInspectorPanel
-  /** When true, closing HailDataPanel should reopen ParcelDetails (nav stack from More details). */
-  const returnToParcelDetailsAfterHailRef = useRef(false)
   const wasParcelDetailsOpenRef = useRef(false)
   useEffect(() => { isParcelDetailsOpenRef.current = isParcelDetailsOpen }, [isParcelDetailsOpen])
   useEffect(() => {
@@ -2008,271 +2012,182 @@ function App() {
     }
     wasParcelDetailsOpenRef.current = isParcelDetailsOpen
   }, [isParcelDetailsOpen])
+
   const handleCloseParcelPopup = useCallback(() => {
     if (suppressPopupCloseRef.current) {
       suppressPopupCloseRef.current = false
       return
     }
-    setPopupData(null)
-    // Never clear the selected parcel while the Details panel is open — the
-    // panel reads `clickedParcelData` to render and would unmount mid-flight,
-    // leaving Radix's dialog state out of sync with the React state.
     if (!isParcelDetailsOpenRef.current) {
-      setClickedParcelId(null)
-      setClickedParcelData(null)
+      nav.clearMapOverlays()
+    } else {
+      nav.patchTopOverlay({ popupData: null })
     }
-  }, [])
+  }, [nav])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
-    setIsParcelDetailsOpen(false)
+    nav.popMapOverlay()
     if (suppressParcelDetailsDataClearRef.current) {
       suppressParcelDetailsDataClearRef.current = false
       return
     }
-    const openedFromMap = parcelDetailsSourceRef.current === 'map'
+    const openedFromMap = parcelDetailsSource === 'map'
     if (options.reopenPopup && openedFromMap && clickedParcelData) {
       openParcelPopup(clickedParcelData)
     } else {
-      setPopupData(null)
-      setClickedParcelId(null)
-      setClickedParcelData(null)
+      nav.clearMapOverlays()
     }
-  }, [clickedParcelData, openParcelPopup])
+  }, [clickedParcelData, openParcelPopup, nav, parcelDetailsSource])
 
-  // Handle email click from parcel details
   const handleEmailClick = useCallback((email, parcelData) => {
-    // Wait for auth to finish loading before checking
-    if (authLoading) {
-      return
-    }
-    
-    // Require authentication for email features
+    if (authLoading) return
     if (!currentUser || !currentUser.uid) {
-      setIsLoginOpen(true)
+      nav.openLogin()
       showToast('Please sign in to send emails', 'info')
       return
     }
-    // Open email templates panel to select a template (single parcel mode)
-    setIsBulkEmailMode(false)
-    setEmailComposerParcelData(parcelData)
-    setEmailComposerRecipient({ email, name: parcelData?.properties?.OWNER_NAME || '' })
-    setOutreachInitialTab('email')
-    setIsOutreachPanelOpen(true)
-  }, [currentUser, authLoading])
+    guardFeature('outreach', () => {
+      setIsBulkEmailMode(false)
+      setEmailComposerParcelData(parcelData)
+      setEmailComposerRecipient({ email, name: parcelData?.properties?.OWNER_NAME || '' })
+      nav.openOutreach('email')
+    })
+  }, [currentUser, authLoading, nav, guardFeature])
 
   const handleOpenOutreach = useCallback(() => {
     if (authLoading) return
     if (!currentUser || !currentUser.uid) {
-      setIsLoginOpen(true)
+      nav.openLogin()
       return
     }
-    setIsBulkEmailMode(true)
-    setEmailComposerParcelData(null)
-    setEmailComposerRecipient({ email: '', name: '' })
-    setBulkEmailList(null)
-    setBulkEmailListId(null)
-    setOutreachInitialTab('email')
-    setIsOutreachPanelOpen(true)
-  }, [currentUser, authLoading])
+    guardFeature('outreach', () => {
+      setIsBulkEmailMode(false)
+      setEmailComposerParcelData(null)
+      setEmailComposerRecipient({ email: '', name: '' })
+      setBulkEmailList(null)
+      setBulkEmailListId(null)
+      nav.openOutreach('email')
+    })
+  }, [currentUser, authLoading, nav, guardFeature])
 
   const openDealPipeline = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    setIsDealPipelineOpen(true)
-  }, [authLoading, currentUser])
+    if (!requireAuth()) return
+    guardFeature('pipes', () => nav.openPipes(activePipelineId))
+  }, [requireAuth, guardFeature, nav, activePipelineId])
+
   const openTasks = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    setIsTasksPanelOpen(true)
-  }, [authLoading, currentUser])
+    if (!requireAuth()) return
+    guardFeature('tasks', () => nav.openTasks())
+  }, [requireAuth, guardFeature, nav])
+
   const openSchedule = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    setIsSchedulePanelOpen(true)
-  }, [authLoading, currentUser])
+    if (!requireAuth()) return
+    guardFeature('schedule', () => nav.openSchedule())
+  }, [requireAuth, guardFeature, nav])
 
-  const [scheduleNavDepth, setScheduleNavDepth] = useState(0)
-
-  const openScheduleAtDate = useCallback((ts, navFrom = null) => {
-    if (navFrom) {
-      scheduleNavStackRef.current.push(navFrom)
-      setScheduleNavDepth((d) => d + 1)
-    }
-    setScheduleInitialDate(ts)
-    setIsSchedulePanelOpen(true)
-  }, [])
+  const openScheduleAtDate = useCallback((ts) => {
+    guardFeature('schedule', () => nav.openScheduleAtDate(ts))
+  }, [guardFeature, nav])
 
   const closeSchedulePanel = useCallback(() => {
-    setIsSchedulePanelOpen(false)
-    setScheduleInitialDate(null)
-    if (scheduleNavStackRef.current.length > 0) {
-      scheduleNavStackRef.current.pop()
-      setScheduleNavDepth((d) => Math.max(0, d - 1))
-    }
-  }, [])
+    nav.pop()
+  }, [nav])
 
-  const scheduleStacked =
-    isSchedulePanelOpen &&
-    (scheduleNavDepth > 0 ||
-      isLeadsPanelOpen ||
-      isTasksPanelOpen ||
-      isDealPipelineOpen ||
-      isDealsPanelOpen)
   const openListPanel = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    if (isMultiSelectActive && selectedParcels.size > 0) setShowListSelector(true)
-    setIsListPanelOpen(true)
-  }, [authLoading, currentUser, isMultiSelectActive, selectedParcels])
-  const openPathsPanel = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    setIsPathsPanelOpen(true)
-  }, [authLoading, currentUser])
-  const openFormsPanel = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    setIsFormsPanelOpen(true)
-  }, [authLoading, currentUser])
-  const openQuotesPanel = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    setIsQuotesPanelOpen(true)
-  }, [authLoading, currentUser])
-  const handleCreateQuoteForDeal = useCallback(({ deal, pipeline, lead }) => {
-    setQuoteDealPrefill({
-      title: `Quote — ${deal.title || (lead ? displayLeadName(lead) : deal.leadName) || 'Deal'}`,
-      leadId: deal.leadId,
-      dealId: deal.id,
-      pipelineId: pipeline?.id || deal.pipelineId,
-      lineItems: (deal.payments || []).length
-        ? deal.payments.map((p, idx) => {
-            const costRow = (deal.costs || [])[idx]
-            const unitCost = costRow?.amount ?? 0
-            const sell = p.amount ?? 0
-            const markupPercent = unitCost > 0
-              ? Math.round(((sell - unitCost) / unitCost) * 10000) / 100
-              : 0
-            return {
-              name: p.name || 'Payment',
-              quantity: 1,
-              unitCost,
-              markupPercent,
-              unitPrice: sell,
-              amount: sell,
-              dealPaymentLineItemId: p.id,
-              dealCostLineItemId: costRow?.id || null,
-            }
-          })
-        : undefined,
+    if (!requireAuth()) return
+    guardFeature('lists', () => {
+      if (isMultiSelectActive && selectedParcels.size > 0) setShowListSelector(true)
+      nav.openLists()
     })
-    setIsQuotesPanelOpen(true)
-  }, [])
+  }, [requireAuth, guardFeature, isMultiSelectActive, selectedParcels, nav])
+
+  const openPathsPanel = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('paths', () => nav.openPaths())
+  }, [requireAuth, guardFeature, nav])
+
+  const openFormsPanel = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('forms', () => nav.openForms())
+  }, [requireAuth, guardFeature, nav])
+
+  const openQuotesPanel = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('quotes', () => nav.openQuotes())
+  }, [requireAuth, guardFeature, nav])
+
+  const handleCreateQuoteForDeal = useCallback(({ deal, pipeline, lead }) => {
+    guardFeature('quotes', () => {
+      const prefill = {
+        title: `Quote — ${deal.title || (lead ? displayLeadName(lead) : deal.leadName) || 'Deal'}`,
+        leadId: deal.leadId,
+        dealId: deal.id,
+        pipelineId: pipeline?.id || deal.pipelineId,
+        lineItems: (deal.payments || []).length
+          ? deal.payments.map((p, idx) => {
+              const costRow = (deal.costs || [])[idx]
+              const unitCost = costRow?.amount ?? 0
+              const sell = p.amount ?? 0
+              const markupPercent = unitCost > 0
+                ? Math.round(((sell - unitCost) / unitCost) * 10000) / 100
+                : 0
+              return {
+                name: p.name || 'Payment',
+                quantity: 1,
+                unitCost,
+                markupPercent,
+                unitPrice: sell,
+                amount: sell,
+                dealPaymentLineItemId: p.id,
+                dealCostLineItemId: costRow?.id || null,
+              }
+            })
+          : undefined,
+      }
+      nav.openQuoteEditorFromDeal(prefill)
+    })
+  }, [nav, guardFeature])
+
   const openTeamsPanel = useCallback(() => {
-    if (authLoading) return
-    if (!currentUser || !currentUser.uid) { setIsLoginOpen(true); return }
-    setIsTeamsPanelOpen(true)
-  }, [authLoading, currentUser])
+    if (!requireAuth()) return
+    nav.openTeams()
+  }, [requireAuth, nav])
 
   const handleNotificationNavigate = useCallback((data) => {
-    if (!data?.type) return
-    const type = data.type
-    if (type === 'lead' && data.leadId) {
-      if (!leads.some((l) => l.id === data.leadId)) {
-        showToast("You don't have access to this lead", 'warning')
-        return
-      }
-      setLeadsPanelFocusLeadId(data.leadId)
-      setIsLeadsPanelOpen(true)
+    const featureId = featureIdForFeedNav(data)
+    if (featureId && !canAccessFeature(featureId)) {
+      showToast(TEAM_FEATURE_ACCESS_DENIED_MESSAGE, 'warning')
       return
     }
-    if (type === 'deal' && data.dealId) {
-      if (data.pipelineId && !pipelines.some((p) => p.id === data.pipelineId)) {
-        showToast("You don't have access to this deal", 'warning')
-        return
-      }
-      if (data.pipelineId) setActivePipelineId(data.pipelineId)
-      setIsDealPipelineOpen(true)
-      setDealPipelineFocusDealId(data.dealId)
-      setDealPipelineDealFocusKey((k) => k + 1)
-      return
+    const result = nav.navigateFromFeed(data, feedCtx)
+    if (result?.toast) showToast(result.toast, 'warning')
+    if (result?.pipelineId) setActivePipelineId(result.pipelineId)
+    if (result?.listId) {
+      setSelectedListIds((prev) => (prev.includes(result.listId) ? prev : [...prev, result.listId].slice(0, 20)))
     }
-    if (type === 'pipeline' && data.pipelineId) {
-      if (!pipelines.some((p) => p.id === data.pipelineId)) {
-        showToast("You don't have access to this pipe", 'warning')
-        return
-      }
-      setActivePipelineId(data.pipelineId)
-      setIsDealPipelineOpen(true)
-      return
-    }
-    if (type === 'task' || type === 'taskDeadline') {
-      setIsTasksPanelOpen(true)
-      if (data.scheduledAt) setIsSchedulePanelOpen(true)
-      return
-    }
-    if (type === 'schedule') {
-      setIsSchedulePanelOpen(true)
-      return
-    }
-    if ((type === 'listShared' || type === 'list') && data.listId) {
-      if (!lists.some((l) => l.id === data.listId)) {
-        showToast("You don't have access to this list", 'warning')
-        return
-      }
-      setSelectedListIds((prev) => (prev.includes(data.listId) ? prev : [...prev, data.listId].slice(0, 20)))
-      setIsListPanelOpen(true)
-      return
-    }
-    if (type === 'pipelineShared' || type === 'pipelineLeadStage') {
-      if (data.pipelineId && !pipelines.some((p) => p.id === data.pipelineId)) {
-        showToast("You don't have access to this pipe", 'warning')
-        return
-      }
-      if (data.pipelineId) setActivePipelineId(data.pipelineId)
-      setIsDealPipelineOpen(true)
-      return
-    }
-    if (type === 'pathShared' || type === 'path') {
-      setIsPathsPanelOpen(true)
-      return
-    }
-    if (type === 'formSubmitted' || type === 'form') {
-      setIsFormsPanelOpen(true)
-      return
-    }
-    if (type === 'teamAdded' || type === 'team') {
-      setIsTeamsPanelOpen(true)
-      return
-    }
-  }, [leads, pipelines, lists])
-
-  const returnFromActivityDestination = useCallback(() => {
-    setActivityNavStackActive(false)
-    setIsLeadsPanelOpen(false)
-    setLeadsPanelFocusLeadId(null)
-    setIsDealPipelineOpen(false)
-    setDealPipelineFocusDealId(null)
-    setIsTasksPanelOpen(false)
-    setIsSchedulePanelOpen(false)
-    setScheduleInitialDate(null)
-    scheduleNavStackRef.current = []
-    setScheduleNavDepth(0)
-    setIsListPanelOpen(false)
-    setIsPathsPanelOpen(false)
-    setIsFormsPanelOpen(false)
-    setIsTeamsPanelOpen(false)
-    setIsQuotesPanelOpen(false)
-    setQuoteDealPrefill(null)
-    setIsActivityPanelOpen(true)
-  }, [])
+  }, [nav, feedCtx, canAccessFeature])
 
   const handleActivityNavigate = useCallback((data) => {
-    setActivityNavStackActive(true)
-    handleNotificationNavigate(data)
-  }, [handleNotificationNavigate])
+    const featureId = featureIdForFeedNav(data)
+    if (featureId && !canAccessFeature(featureId)) {
+      showToast(TEAM_FEATURE_ACCESS_DENIED_MESSAGE, 'warning')
+      return
+    }
+    const result = nav.navigateFromActivity(data, feedCtx)
+    if (result?.toast) showToast(result.toast, 'warning')
+    if (result?.pipelineId) setActivePipelineId(result.pipelineId)
+    if (result?.listId) {
+      setSelectedListIds((prev) => (prev.includes(result.listId) ? prev : [...prev, result.listId].slice(0, 20)))
+    }
+  }, [nav, feedCtx, canAccessFeature])
 
-  const activityBackToParent = activityNavStackActive ? returnFromActivityDestination : undefined
+  const handlePanelBack = useCallback(() => {
+    if (fromActivity && nav.state.navStack.length === 2 && nav.state.navStack[0]?.type === 'activity') {
+      nav.returnToActivity()
+    } else {
+      nav.pop()
+    }
+  }, [fromActivity, nav])
 
   useTeamDataSync({
     enabled: !!currentUser?.uid && teams.length > 0,
@@ -2283,8 +2198,8 @@ function App() {
   const notificationInbox = useNotificationInbox({
     isOpen: isActivityPanelOpen,
     onOpenChange: (open) => {
-      setIsActivityPanelOpen(open)
-      if (!open) setActivityNavStackActive(false)
+      if (open) guardFeature('activity', () => nav.setActivityOpen(true))
+      else nav.setActivityOpen(false)
     },
     getToken,
     currentUser,
@@ -2314,41 +2229,37 @@ function App() {
     window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`)
   }, [permissionsReady, handleNotificationNavigate])
 
-  const openLeadsPanel = useCallback(() => setIsLeadsPanelOpen(true), [])
+  const openLeadsPanel = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('leads', () => nav.openLeads())
+  }, [requireAuth, guardFeature, nav])
 
   const openLeadDetails = useCallback((lead) => {
     if (!lead?.id) return
-    setLeadsPanelFocusLeadId(lead.id)
-    setIsLeadsPanelOpen(true)
-  }, [])
+    guardFeature('leads', () => nav.openLeadDetails(lead.id))
+  }, [nav, guardFeature])
 
-  const handleLeadsPanelFocusHandled = useCallback(() => {
-    setLeadsPanelFocusLeadId(null)
-  }, [])
-  const openSettingsPanel = useCallback(() => setIsSettingsPanelOpen(true), [])
-  const openLogin = useCallback(() => setIsLoginOpen(true), [])
+  const openSettingsPanel = useCallback(() => nav.openSettings(), [nav])
+  const openLogin = useCallback(() => nav.openLogin(), [nav])
 
   // Handle email button click from list (opens template selection, then preview)
   const handleBulkEmailFromList = useCallback((listId) => {
-    setBulkEmailListId(listId)
-    setIsListPanelOpen(false)
-    setIsBulkEmailMode(true)
-    setEmailComposerParcelData(null)
-    setEmailComposerRecipient({ email: '', name: '' })
-    setOutreachInitialTab('email')
-    setIsOutreachPanelOpen(true)
-  }, [])
+    guardFeature('outreach', () => {
+      setBulkEmailListId(listId)
+      setIsBulkEmailMode(true)
+      setEmailComposerParcelData(null)
+      setEmailComposerRecipient({ email: '', name: '' })
+      nav.openOutreach('email')
+    })
+  }, [nav, guardFeature])
 
-  // Track if we're in bulk email mode
   const [isBulkEmailMode, setIsBulkEmailMode] = useState(false)
 
-  // Handle template selection from EmailTemplatesPanel
   const handleTemplateSelect = useCallback(async (template) => {
     if (isBulkEmailMode) {
       if (bulkEmailListId) {
         setSelectedEmailTemplate(template)
-        setIsOutreachPanelOpen(false)
-        setIsListPanelOpen(false)
+        nav.pop()
         try {
           const list = lists.find(l => l.id === bulkEmailListId)
           if (!list) {
@@ -2356,7 +2267,6 @@ function App() {
             return
           }
 
-          // Check if list has any parcels with emails
           const { getSkipTracedParcel } = await import('./utils/skipTrace')
           const parcelsWithEmails = list.parcels.filter(parcel => {
             const parcelId = parcel.id || parcel.properties?.PROP_ID || parcel
@@ -2370,25 +2280,26 @@ function App() {
           }
 
           setBulkEmailList(list)
-          setIsBulkEmailPreviewOpen(true)
+          nav.push({ type: 'bulkEmailPreview', listId: bulkEmailListId })
         } catch (error) {
           console.error('Error showing preview:', error)
           showToast('Error loading list preview', 'error')
         }
       } else {
-        // No list selected yet - prompt for list selection
         setSelectedEmailTemplate(template)
-        setIsOutreachPanelOpen(false)
-        setIsListPanelOpen(true)
-        setShowListSelector(true)
-        showToast('Select a list to email', 'info')
+        nav.pop()
+        guardFeature('lists', () => {
+          nav.openLists()
+          setShowListSelector(true)
+          showToast('Select a list to email', 'info')
+        })
       }
     } else {
       setSelectedEmailTemplate(template)
-      setIsOutreachPanelOpen(false)
-      setIsEmailComposerOpen(true)
+      nav.pop()
+      nav.push({ type: 'emailComposer' })
     }
-  }, [isBulkEmailMode, bulkEmailListId, lists])
+  }, [isBulkEmailMode, bulkEmailListId, lists, nav, guardFeature])
 
   // Handle list selection for bulk email (after template is selected)
   const handleBulkEmailListSelected = useCallback(async (listId) => {
@@ -2417,10 +2328,9 @@ function App() {
 
     setBulkEmailList(list)
     setBulkEmailListId(listId)
-    setIsListPanelOpen(false)
     setShowListSelector(false)
-    setIsBulkEmailPreviewOpen(true)
-  }, [selectedEmailTemplate, lists])
+    nav.replaceStack(nav.recipeClosePrimaryExcept(nav.state.navStack, { list: true }, [{ type: 'bulkEmailPreview', listId }]))
+  }, [selectedEmailTemplate, lists, nav])
 
   // Handle bulk email confirmation from preview panel
   const handleBulkEmailConfirm = useCallback(async ({ template, listId }) => {
@@ -2493,14 +2403,13 @@ function App() {
     
     // Reset state
     setSelectedEmailTemplate(null)
-    setIsListPanelOpen(false)
     setShowListSelector(false)
     setIsBulkEmailMode(false)
-    setIsBulkEmailPreviewOpen(false)
+    nav.pop()
     setBulkEmailList(null)
     setBulkEmailListId(null)
     setIsSendingBulkEmails(false)
-  }, [lists, settings.emailTestMode, settings.defaultEmail])
+  }, [lists, settings.emailTestMode, settings.defaultEmail, nav])
 
   // Handle export list as CSV and email to user
   const handleExportList = useCallback(async (listId) => {
@@ -2552,7 +2461,7 @@ function App() {
 
   const handleSkipTraceList = useCallback(async (listId) => {
     if (authLoading) return
-    if (!currentUser?.uid) { setIsLoginOpen(true); return }
+    if (!currentUser?.uid) { nav.openLogin(); return }
     const list = lists.find((l) => l.id === listId)
     if (!list?.parcels?.length) {
       showToast('List has no parcels to skip trace', 'error')
@@ -2737,19 +2646,16 @@ function App() {
       
       // Update clicked parcel data if it's the current parcel (for both map popup and list)
       if (clickedParcelData && clickedParcelData.id === parcelId) {
-        setClickedParcelData({
-          ...clickedParcelData,
-          skipTraced: getSkipTracedParcel(parcelId)
+        nav.patchTopOverlay({
+          parcelData: {
+            ...clickedParcelData,
+            skipTraced: getSkipTracedParcel(parcelId),
+          },
         })
       }
       
-      // Refresh the popup's status badges only if the popup is currently
-      // showing. If the More Details panel is open the popup is hidden
-      // intentionally; re-opening it here would stack it on top of the panel
-      // and its outside-click handler would clear `clickedParcelData`,
-      // unmounting the panel and breaking pointer events.
       if (clickedParcelId === parcelId && clickedParcelData && !isParcelDetailsOpen) {
-        openParcelPopup(clickedParcelData)
+        openParcelPopup({ ...clickedParcelData, id: parcelId })
       }
     } catch (error) {
       console.error('Skip trace error:', error)
@@ -2762,7 +2668,7 @@ function App() {
         return next
       })
     }
-  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup, isParcelDetailsOpen])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup, isParcelDetailsOpen, nav])
 
   return (
     <UserDataSyncProvider getToken={getToken}>
@@ -2783,7 +2689,7 @@ function App() {
       {currentUser && permissionsReady && !settings.tourCompleted && (
         <WelcomeTour
           onComplete={() => handleSettingsChange({ tourCompleted: true })}
-          setShowMenu={setShowMenu}
+          setShowMenu={nav.setShowMenu}
         />
       )}
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
@@ -2876,7 +2782,7 @@ function App() {
         mapRef={mapInstanceRef}
         onClose={handleCloseParcelPopup}
         onOpenDetails={() => handleOpenParcelDetails()}
-        onAddToList={() => { setShowListSelector(true); setIsListPanelOpen(true) }}
+        onAddToList={() => { setShowListSelector(true); openListPanel() }}
         onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
         isLead={popupData ? isParcelALeadCheck(popupData.parcelId) : false}
       />
@@ -2906,11 +2812,7 @@ function App() {
           }, 1500) // Wait 1.5 seconds for map to center and parcels to load
         }}
         mapInstanceRef={mapInstanceRef}
-        onCloseParcelPopup={() => {
-          setPopupData(null)
-          setClickedParcelId(null)
-          setClickedParcelData(null)
-        }}
+        onCloseParcelPopup={() => nav.clearMapOverlays()}
       />
 
       <MapControls
@@ -2924,27 +2826,23 @@ function App() {
           setIsMultiSelectActive(false)
           setSelectedParcels(new Set())
           setSelectedParcelsData(new Map())
-          setClickedParcelId(null)
+          nav.clearMapOverlays()
         }}
         onOpenListPanel={openListPanel}
         selectedListIds={selectedListIds}
         onOpenSkipTracedListPanel={() => {
-          // Wait for auth to finish loading before checking
-          if (authLoading) {
-            return
-          }
-          
+          if (authLoading) return
           if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
+            nav.openLogin()
             return
           }
-          setIsSkipTracedListPanelOpen(true)
+          nav.openSkipTraced()
         }}
         onOpenOutreach={handleOpenOutreach}
         onTogglePathTracking={() => {
           if (authLoading) return
           if (!currentUser || !currentUser.uid) {
-            setIsLoginOpen(true)
+            nav.openLogin()
             return
           }
           handleTogglePathTracking()
@@ -2964,13 +2862,9 @@ function App() {
         onLogin={openLogin}
         onLogout={logout}
         showMenu={showMenu}
-        setShowMenu={setShowMenu}
+        setShowMenu={nav.setShowMenu}
         hideMenuOnMobile={true}
-        onCloseParcelPopup={() => {
-          setPopupData(null)
-          setClickedParcelId(null)
-          setClickedParcelData(null)
-        }}
+        onCloseParcelPopup={() => nav.clearMapOverlays()}
         NotificationMenuItem={notificationInbox.MenuItem}
       />
 
@@ -2985,7 +2879,7 @@ function App() {
         onOpenTasks={openTasks}
         onOpenSchedule={openSchedule}
         showMenu={showMenu}
-        setShowMenu={setShowMenu}
+        setShowMenu={nav.setShowMenu}
         onOpenListPanel={openListPanel}
         selectedListIds={selectedListIds}
         onOpenPathsPanel={openPathsPanel}
@@ -3008,13 +2902,10 @@ function App() {
         currentUser={currentUser}
         isOpen={isListPanelOpen && !isParcelListPanelOpen}
         onClose={() => {
-          setIsListPanelOpen(false)
+          handlePanelBack()
           setShowListSelector(false)
-          if (!popupData) {
-            setClickedParcelData(null)
-          }
         }}
-        onBackToParent={activityBackToParent}
+        onBack={handlePanelBack}
         selectedListIds={selectedListIds}
         onToggleListHighlight={(listId) => {
           setSelectedListIds(prev => {
@@ -3042,13 +2933,8 @@ function App() {
           await createList(getToken, name, [])
           await refreshLists()
         }}
-        onViewListContents={(listId) => {
-          setViewingListId(listId)
-          setIsParcelListPanelOpen(true)
-        }}
-        onBulkEmail={handleBulkEmailFromList}
+        onViewListContents={(listId) => nav.viewListContents(listId)}
         onExportList={handleExportList}
-        onSkipTraceList={handleSkipTraceList}
         isAddingSingleParcel={showListSelector && !!clickedParcelData}
         isBulkEmailMode={showListSelector && !!selectedEmailTemplate}
         parcelBoundaryColor={settings.parcelBoundaryColor}
@@ -3056,10 +2942,7 @@ function App() {
 
       <ParcelListPanel
         isOpen={isParcelListPanelOpen}
-        onClose={() => {
-          setIsParcelListPanelOpen(false)
-          setViewingListId(null)
-        }}
+        onClose={() => nav.pop()}
         selectedListId={viewingListId}
         lists={lists}
         onCenterParcel={(location) => {
@@ -3067,10 +2950,7 @@ function App() {
             mapRef.current.flyTo({ center: [location.lng, location.lat], zoom: 17, duration: 500 })
           }
         }}
-        onBack={() => {
-          setIsParcelListPanelOpen(false)
-          setViewingListId(null)
-        }}
+        onBack={() => nav.pop()}
         onRemoveParcel={handleRemoveParcelFromList}
         onOpenParcelDetails={handleOpenParcelDetails}
         onPhoneClick={handlePhoneClick}
@@ -3101,18 +2981,15 @@ function App() {
           onAddToList={() => {
             suppressParcelDetailsDataClearRef.current = true
             setShowListSelector(true)
-            setIsListPanelOpen(true)
-            setIsParcelDetailsOpen(false)
+            nav.popMapOverlay()
+            openListPanel()
           }}
           onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
           onHailData={() => {
             if (!clickedParcelData) return
-            setHailDataParcel(clickedParcelData)
             setSelectedHailEvent(null)
             suppressParcelDetailsDataClearRef.current = true
-            returnToParcelDetailsAfterHailRef.current = true
-            setIsParcelDetailsOpen(false)
-            setIsHailDataOpen(true)
+            nav.openHailOverlay({ type: 'hail', parcelId: clickedParcelData.id, parcelData: clickedParcelData })
           }}
           /* roof inspector — restore later
           onRoofInspector={() => {
@@ -3130,19 +3007,22 @@ function App() {
 
       <SkipTracedListPanel
         isOpen={isSkipTracedListPanelOpen}
-        onClose={() => setIsSkipTracedListPanelOpen(false)}
+        onClose={() => nav.pop()}
         onOpenParcelDetails={handleOpenParcelDetails}
       />
 
       <DealPipeline
         isOpen={isDealPipelineOpen}
-        onClose={() => setIsDealPipelineOpen(false)}
-        onBackToParent={activityBackToParent}
+        onClose={handlePanelBack}
+        onBack={handlePanelBack}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
-        focusDealRequestKey={dealPipelineDealFocusKey}
-        focusDealId={dealPipelineFocusDealId}
-        onFocusDealHandled={handleDealPipelineFocusHandled}
+        focusDealId={pipesDealId}
+        pipesLeadOverlayId={pipesLeadOverlayId}
+        onOpenDeal={(dealId) => nav.pushPipesDeal(dealId)}
+        onOpenLeadOverlay={(leadId) => nav.pushPipesLead(leadId)}
+        onCloseDeal={() => nav.pop()}
+        onCloseLeadOverlay={() => nav.pop()}
         addTaskRequestKey={dealPipelineAddTaskKey}
         addTaskRequestParcelId={dealPipelineAddTaskParcelId}
         onAddTaskRequestHandled={handleDealPipelineAddTaskHandled}
@@ -3150,6 +3030,7 @@ function App() {
         onActivePipelineChange={setActivePipelineId}
         onSharePipeline={handleSharePipeline}
         onSharePipelineWithTeams={handleSharePipelineWithTeams}
+        onDeletePipeline={handleDeletePipeline}
         teams={teams}
         teamMembership={teamMembership}
         onValidateShareEmail={(email) => validatePipelineShareEmail(getToken, email)}
@@ -3185,7 +3066,7 @@ function App() {
         onPhoneClick={handlePhoneClick}
         onSkipTraceParcel={handleSkipTraceParcel}
         skipTracingInProgress={skipTracingInProgress}
-        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'dealPipeline' })}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts)}
         onGoToParcelOnMap={handleGoToParcelOnMap}
         onRequestCloseDeal={handleCloseDeal}
         onRequestRemoveDeal={handleRemoveDeal}
@@ -3199,9 +3080,13 @@ function App() {
         isOpen={isSchedulePanelOpen}
         stacked={scheduleStacked}
         onClose={closeSchedulePanel}
-        onBackToParent={activityBackToParent}
+        onBack={handlePanelBack}
+        hasScheduleOpener={hasScheduleOpener}
         initialDate={scheduleInitialDate}
-        onInitialDateConsumed={() => setScheduleInitialDate(null)}
+        onInitialDateConsumed={() => nav.consumeScheduleInitialDate()}
+        scheduleLeadId={scheduleLeadId}
+        onOpenScheduleLead={(leadId) => nav.pushScheduleLead(leadId)}
+        onCloseScheduleLead={() => nav.pop()}
         leads={leads}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
@@ -3223,8 +3108,8 @@ function App() {
 
       <TasksPanel
         isOpen={isTasksPanelOpen}
-        onClose={() => setIsTasksPanelOpen(false)}
-        onBackToParent={activityBackToParent}
+        onClose={handlePanelBack}
+        onBack={handlePanelBack}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
         leads={leads}
@@ -3236,13 +3121,13 @@ function App() {
         currentUser={currentUser}
         onPipelinesChange={refreshPipelines}
         teams={teams}
-        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'tasks' })}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts)}
         onOpenLead={openLeadDetails}
       />
 
       <PhoneActionPanel
         isOpen={!!phoneActionPanel}
-        onClose={() => setPhoneActionPanel(null)}
+        onClose={() => nav.popMapOverlay()}
         phone={phoneActionPanel?.phone}
         parcelData={phoneActionPanel?.parcelData}
       />
@@ -3250,19 +3135,22 @@ function App() {
       <OutreachPanel
         isOpen={isOutreachPanelOpen}
         onClose={() => {
-          setIsOutreachPanelOpen(false)
+          nav.pop()
           setSelectedEmailTemplate(null)
           setIsBulkEmailMode(false)
         }}
-        onSelectTemplate={handleTemplateSelect}
-        isBulkMode={isBulkEmailMode}
+        onUseTemplate={
+          isBulkEmailMode || emailComposerParcelData || emailComposerRecipient.email
+            ? handleTemplateSelect
+            : undefined
+        }
         initialTab={outreachInitialTab}
       />
 
       <EmailComposer
         isOpen={isEmailComposerOpen}
         onClose={() => {
-          setIsEmailComposerOpen(false)
+          nav.pop()
           setSelectedEmailTemplate(null)
           setEmailComposerParcelData(null)
           setEmailComposerRecipient({ email: '', name: '' })
@@ -3281,16 +3169,16 @@ function App() {
       <BulkEmailPreview
         isOpen={isBulkEmailPreviewOpen}
         onClose={() => {
-          setIsBulkEmailPreviewOpen(false)
+          nav.pop()
           setBulkEmailList(null)
           setBulkEmailListId(null)
         }}
         template={selectedEmailTemplate}
         list={bulkEmailList}
-        listId={bulkEmailListId}
+        listId={bulkEmailListId || navBulkEmailListId}
         onConfirm={handleBulkEmailConfirm}
         onCancel={() => {
-          setIsBulkEmailPreviewOpen(false)
+          nav.pop()
           setBulkEmailList(null)
           setBulkEmailListId(null)
         }}
@@ -3300,8 +3188,13 @@ function App() {
         <Suspense fallback={null}>
           <FormsPanel
             isOpen={isFormsPanelOpen}
-            onClose={() => setIsFormsPanelOpen(false)}
-            onBackToParent={activityBackToParent}
+            onClose={handlePanelBack}
+            onBack={handlePanelBack}
+            formsView={formsView}
+            formsTemplateId={formsTemplateId}
+            onOpenEdit={(templateId) => nav.pushFormsEdit(templateId)}
+            onOpenFill={(templateId) => nav.pushFormsFill(templateId)}
+            onCloseSubView={() => nav.popFormsSubView()}
             teams={teams}
             teamMembership={teamMembership}
             onShareForm={handleShareForm}
@@ -3315,20 +3208,24 @@ function App() {
         <Suspense fallback={null}>
           <QuotesPanel
             isOpen={isQuotesPanelOpen}
-            onClose={() => { setIsQuotesPanelOpen(false); setQuoteDealPrefill(null) }}
-            onBackToParent={activityBackToParent}
+            onClose={handlePanelBack}
+            onBack={handlePanelBack}
             pipelines={pipelines}
             leads={leads}
-            dealPrefill={quoteDealPrefill}
-            onDealPrefillConsumed={() => setQuoteDealPrefill(null)}
+            editorFrame={quotesEditorFrame}
+            detailQuoteId={quotesDetailQuoteId}
+            onOpenEditor={(frame) => nav.pushQuotesEditor(frame)}
+            onOpenDetail={(quoteId) => nav.pushQuotesDetail(quoteId)}
+            onCloseEditor={() => nav.pop()}
+            onCloseDetail={() => nav.pop()}
           />
         </Suspense>
       )}
 
       <PathsPanel
         isOpen={isPathsPanelOpen}
-        onClose={() => setIsPathsPanelOpen(false)}
-        onBackToParent={activityBackToParent}
+        onClose={handlePanelBack}
+        onBack={handlePanelBack}
         currentUser={currentUser}
         paths={paths}
         onPathsChange={refreshPaths}
@@ -3347,8 +3244,11 @@ function App() {
 
       <TeamsPanel
         isOpen={isTeamsPanelOpen}
-        onClose={() => setIsTeamsPanelOpen(false)}
-        onBackToParent={activityBackToParent}
+        onClose={handlePanelBack}
+        onBack={handlePanelBack}
+        detailTeamId={teamsDetailTeamId}
+        onOpenTeamDetail={(teamId) => nav.pushTeamsDetail(teamId)}
+        onCloseTeamDetail={() => nav.pop()}
         currentUser={currentUser}
         getToken={getToken}
         teams={teams}
@@ -3359,13 +3259,13 @@ function App() {
 
       <SettingsPanel
         isOpen={isSettingsPanelOpen}
-        onClose={() => setIsSettingsPanelOpen(false)}
+        onClose={() => nav.pop()}
         settings={settings}
         onSettingsChange={handleSettingsChange}
         getToken={getToken}
         onRestartTour={() => {
-          setIsSettingsPanelOpen(false)
-          setShowMenu(false)
+          nav.pop()
+          nav.setShowMenu(false)
           handleSettingsChange({ tourCompleted: false })
         }}
         onLogout={currentUser ? handleLogout : undefined}
@@ -3373,8 +3273,8 @@ function App() {
 
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
-        onClose={() => setIsLeadsPanelOpen(false)}
-        onBackToParent={activityBackToParent}
+        onClose={handlePanelBack}
+        onBack={handlePanelBack}
         leads={leads}
         pipelines={pipelines}
         onLeadsChange={setLeads}
@@ -3385,25 +3285,30 @@ function App() {
         onEmailClick={handleEmailClick}
         onPhoneClick={handlePhoneClick}
         onGoToParcelOnMap={handleGoToParcelOnMap}
-        onCreateDeal={handleCreateDealRequest}
+        createDealPipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
+        createDealSaving={createDealSaving}
+        onCreateDealSubmit={handleCreateDealSubmit}
+        pipelinesCount={pipelines.length}
         onOpenDeal={(deal, pipelineId) => {
-          if (pipelineId) setActivePipelineId(pipelineId)
-          setIsDealPipelineOpen(true)
-          setDealPipelineFocusDealId(deal.id)
-          setDealPipelineDealFocusKey((k) => k + 1)
+          guardFeature('deals', () => {
+            if (pipelineId) setActivePipelineId(pipelineId)
+            nav.openDealInPipes(pipelineId || activePipelineId, deal.id)
+          })
         }}
-        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'leads' })}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts)}
         onPipelinesChange={refreshPipelines}
         teams={teams}
         teamMembership={teamMembership}
-        focusLeadId={leadsPanelFocusLeadId}
-        onFocusLeadHandled={handleLeadsPanelFocusHandled}
+        detailLeadId={leadsDetailLeadId}
+        onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
+        onCloseLeadDetail={() => nav.pop()}
         currentUserId={currentUser?.uid}
       />
 
       <DealsPanel
         isOpen={isDealsPanelOpen}
-        onClose={() => setIsDealsPanelOpen(false)}
+        onClose={handlePanelBack}
+        onBack={handlePanelBack}
         pipelines={pipelines}
         leads={leads}
         closedDeals={closedDeals}
@@ -3418,7 +3323,7 @@ function App() {
         teams={teams}
         teamMembership={teamMembership}
         onPipelinesChange={refreshPipelines}
-        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts, { panel: 'deals' })}
+        onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts)}
         onLeadsChange={setLeads}
         onRefreshLeads={refreshLeads}
         onOpenParcelDetails={handleOpenParcelDetails}
@@ -3427,11 +3332,25 @@ function App() {
         onGoToParcelOnMap={handleGoToParcelOnMap}
         currentUserId={currentUser?.uid}
         onCreateQuoteForDeal={handleCreateQuoteForDeal}
+        dealsDetailDealId={dealsDetailDealId}
+        dealsDetailPipelineId={dealsDetailPipelineId}
+        dealsClosedRecordId={dealsClosedRecordId}
+        dealsLeadOverlayId={dealsLeadOverlayId}
+        onOpenDealDetail={(dealId, pipelineId) => nav.pushDealsDetail(dealId, pipelineId)}
+        onOpenClosedDeal={(closedRecordId) => nav.pushDealsClosed(closedRecordId)}
+        onOpenLeadOverlay={(leadId) => nav.pushDealsLead(leadId)}
+        onCloseDealDetail={() => nav.pop()}
+        onCloseLeadOverlay={() => nav.pop()}
+        onCloseClosedDeal={() => nav.pop()}
+        createDealPipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
+        createDealSaving={createDealSaving}
+        onCreateDealSubmit={handleCreateDealSubmit}
+        pipelinesCount={pipelines.length}
       />
 
       <CreateLeadDialog
         open={createLeadOpen}
-        onOpenChange={(v) => { setCreateLeadOpen(v); if (!v) setCreateLeadPrefill(null) }}
+        onOpenChange={(v) => { if (!v) nav.popModal() }}
         prefill={createLeadPrefill}
         getToken={getToken}
         onResolveParcel={handleResolveParcelForLead}
@@ -3443,20 +3362,14 @@ function App() {
 
       <DealTemplatePickerDialog
         open={dealTemplatePickerOpen}
-        onOpenChange={(v) => {
-          setDealTemplatePickerOpen(v)
-          if (!v) setPendingCreateDealPrefill(null)
-        }}
+        onOpenChange={(v) => { if (!v) nav.popModal() }}
         onSelect={handleDealTemplatePicked}
         nestedOverlay={dealTemplateNestedOverlay}
       />
 
       <DealTemplateEditorDialog
         open={dealTemplateEditorOpen}
-        onOpenChange={(v) => {
-          setDealTemplateEditorOpen(v)
-          if (!v) setEditingDealTemplateId(null)
-        }}
+        onOpenChange={(v) => { if (!v) nav.popModal() }}
         templateId={editingDealTemplateId}
         pipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
         teams={teams}
@@ -3466,10 +3379,10 @@ function App() {
 
       <DealTemplatesManagerDialog
         open={dealTemplatesManagerOpen}
-        onOpenChange={setDealTemplatesManagerOpen}
+        onOpenChange={(v) => { if (!v) nav.popModal() }}
         onCreateTemplate={() => openCreateDealTemplateEditor(null)}
         onEditTemplate={(id) => {
-          setDealTemplatesManagerOpen(false)
+          nav.popModal()
           openCreateDealTemplateEditor(id)
         }}
         refreshKey={dealTemplatesRefreshKey}
@@ -3478,7 +3391,7 @@ function App() {
 
       <CreateDealDialog
         open={createDealOpen}
-        onOpenChange={(v) => { setCreateDealOpen(v); if (!v) setCreateDealPrefill(null) }}
+        onOpenChange={(v) => { if (!v) nav.popModal() }}
         prefill={createDealPrefill}
         leads={leads}
         pipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
@@ -3491,12 +3404,8 @@ function App() {
       <HailDataPanel
         isOpen={isHailDataOpen}
         onClose={() => {
-          setIsHailDataOpen(false)
+          nav.popMapOverlay()
           setSelectedHailEvent(null)
-          if (returnToParcelDetailsAfterHailRef.current) {
-            returnToParcelDetailsAfterHailRef.current = false
-            setIsParcelDetailsOpen(true)
-          }
         }}
         parcelData={hailDataParcel}
         onSelectEvent={handleSelectHailEvent}
@@ -3519,43 +3428,31 @@ function App() {
       {/* Authentication Dialogs */}
       <Login
         isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onSwitchToSignUp={() => {
-          setIsLoginOpen(false)
-          setIsSignUpOpen(true)
-        }}
-        onSwitchToForgotPassword={() => {
-          setIsLoginOpen(false)
-          setIsForgotPasswordOpen(true)
-        }}
+        onClose={() => nav.closeAuthModals()}
+        onSwitchToSignUp={() => nav.openSignUp()}
+        onSwitchToForgotPassword={() => nav.openForgotPassword()}
       />
       <SignUp
         isOpen={isSignUpOpen}
-        onClose={() => setIsSignUpOpen(false)}
-        onSwitchToLogin={() => {
-          setIsSignUpOpen(false)
-          setIsLoginOpen(true)
-        }}
+        onClose={() => nav.closeAuthModals()}
+        onSwitchToLogin={() => nav.openLogin()}
       />
       <ForgotPassword
         isOpen={isForgotPasswordOpen}
-        onClose={() => setIsForgotPasswordOpen(false)}
-        onSwitchToLogin={() => {
-          setIsForgotPasswordOpen(false)
-          setIsLoginOpen(true)
-        }}
+        onClose={() => nav.closeAuthModals()}
+        onSwitchToLogin={() => nav.openLogin()}
       />
 
       <ConvertToLeadPipelineDialog
         open={!!moveDealContext}
-        onOpenChange={(o) => { if (!o) setMoveDealContext(null) }}
+        onOpenChange={(o) => { if (!o) nav.popModal() }}
         pipelines={moveDealContext?.eligiblePipelines ?? []}
         currentUser={currentUser}
         title="Move to which pipeline?"
         description="Choose a pipeline to move this deal into."
         onSelect={(targetPipelineId) => {
           const ctx = moveDealContext
-          setMoveDealContext(null)
+          nav.popModal()
           if (ctx?.deal && ctx?.sourcePipelineId) {
             handleMoveDeal(ctx.deal, ctx.sourcePipelineId, targetPipelineId)
           }

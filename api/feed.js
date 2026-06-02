@@ -55,6 +55,7 @@ function buildFeedItems(notifications, activities, seenActivityIds) {
       actorEmail: a.actorEmail,
       audience: a.audience,
       teamId: a.teamId,
+      entity: a.entity && typeof a.entity === 'object' ? a.entity : {},
       nav: a.nav && typeof a.nav === 'object' ? a.nav : {},
     })
   }

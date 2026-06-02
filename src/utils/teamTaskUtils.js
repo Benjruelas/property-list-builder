@@ -4,6 +4,24 @@
  */
 
 /**
+ * All distinct members (uid + email) across every team, sorted by email.
+ */
+export function getAllTeamMembers(teams) {
+  if (!Array.isArray(teams)) return []
+  const byUid = new Map()
+  for (const t of teams) {
+    if (!t) continue
+    for (const m of t.members || []) {
+      if (!m?.uid || byUid.has(m.uid)) continue
+      byUid.set(m.uid, { uid: m.uid, email: m.email || m.uid, role: m.role })
+    }
+  }
+  return [...byUid.values()].sort((a, b) =>
+    (a.email || '').localeCompare(b.email || '', undefined, { sensitivity: 'base' })
+  )
+}
+
+/**
  * All distinct members (uid + email) from teams whose ids appear in
  * `pipeline.teamShares`, sorted by email.
  */
@@ -81,6 +99,29 @@ export function flattenTeamTasks(pipelines) {
 /**
  * Resolves uids to emails using known teams; falls back to uid.
  */
+/** Resolve lead id for team task storage from deal, parcel, or explicit lead id. */
+export function resolveTeamTaskLeadId(pipeline, { parcelId, leadId, dealId, deals, displayLeads }) {
+  if (leadId) return leadId
+  if (dealId && Array.isArray(deals)) {
+    const deal = deals.find((d) => d.id === dealId)
+    if (deal?.leadId) return deal.leadId
+  }
+  if (parcelId) {
+    const inPipe = (pipeline?.leads || []).find((l) => String(l.parcelId) === String(parcelId))
+    if (inPipe?.id) return inPipe.id
+    const fromDisplay = (displayLeads || []).find((l) => String(l.parcelId) === String(parcelId))
+    if (fromDisplay?.id) return fromDisplay.id
+  }
+  return null
+}
+
+/** Team tasks support assignees and teammate notifications; pipeline tasks do not. */
+export function shouldStoreAsTeamTask(pipeline, { assignedUids = [], leadId }) {
+  if (!leadId) return false
+  if (Array.isArray(assignedUids) && assignedUids.length > 0) return true
+  return Array.isArray(pipeline?.teamShares) && pipeline.teamShares.length > 0
+}
+
 export function formatAssigneeList(assignedUids, teams) {
   if (!Array.isArray(assignedUids) || assignedUids.length === 0) return null
   const byUid = new Map()

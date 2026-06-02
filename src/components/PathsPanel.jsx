@@ -18,7 +18,7 @@ const PATH_COLORS = [
 export function PathsPanel({
   isOpen,
   onClose,
-  onBackToParent,
+  onBack,
   currentUser,
   paths = [],
   onPathsChange,
@@ -236,11 +236,7 @@ export function PathsPanel({
   }, [paths])
 
   const handlePanelBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
-      return
-    }
-    onClose()
+    onBack?.() ?? onClose?.()
   }
 
   return (

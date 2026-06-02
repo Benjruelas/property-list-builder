@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, X, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
+import { Plus, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -30,9 +30,11 @@ import {
   pipelinesContainingParcel
 } from '@/utils/pipelineTasks'
 import { addTeamTask, updateTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
-import { flattenTeamTasks, getMembersForTeamSharedPipeline, formatAssigneeList } from '@/utils/teamTaskUtils'
-import { TeamMemberAssignSection } from './TeamMemberAssignSection'
+import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline, formatAssigneeList, resolveTeamTaskLeadId, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { flattenDealsFromPipelines } from '@/utils/deals'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
+import { NewTaskDialog } from './NewTaskDialog'
+import { TeamMemberAssignSection } from './TeamMemberAssignSection'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 
@@ -49,7 +51,7 @@ function getLeadLabel(lead, parcelId) {
 export function TasksPanel({
   isOpen,
   onClose,
-  onBackToParent,
+  onBack,
   onOpenParcelDetails,
   pipelines = [],
   leads = [],
@@ -66,15 +68,6 @@ export function TasksPanel({
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
   const [showAddTask, setShowAddTask] = useState(false)
-  const [addTaskLeadId, setAddTaskLeadId] = useState('')
-  const [addTaskLeadSearch, setAddTaskLeadSearch] = useState('')
-  const [addTaskSuggestionsOpen, setAddTaskSuggestionsOpen] = useState(false)
-  const [addTaskHighlightIndex, setAddTaskHighlightIndex] = useState(-1)
-  const [addTaskTitle, setAddTaskTitle] = useState('')
-  const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
-  const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
-  const [addTaskDateTimeExpanded, setAddTaskDateTimeExpanded] = useState(false)
-  const [addTaskTeamAssignUids, setAddTaskTeamAssignUids] = useState([])
   const [editTeamAssignUids, setEditTeamAssignUids] = useState([])
 
   const [collapsedSections, setCollapsedSections] = useState({})
@@ -160,86 +153,57 @@ export function TasksPanel({
     setAssignHighlightIndex(-1)
   }, [editingTask, displayLeads])
 
-  const addTaskLeadSuggestions = useMemo(() => {
-    const q = (addTaskLeadSearch || '').trim().toLowerCase()
-    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
-    const results = []
-    for (const lead of displayLeads) {
-      const displayValue = getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId
-      if (tokens.length) {
-        const label = (getLeadLabel(lead, lead.parcelId) || '').toLowerCase()
-        const fullAddr = (getFullAddress(lead) || '').toLowerCase()
-        const owner = (lead.owner || '').toLowerCase()
-        const address = (lead.address || '').toLowerCase()
-        const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
-        if (!tokens.every((tok) => searchable.includes(tok))) continue
-      }
-      results.push({ lead, displayValue })
-    }
-    results.sort((a, b) => (a.displayValue || '').localeCompare(b.displayValue || '', undefined, { sensitivity: 'base' }))
-    return results
-  }, [addTaskLeadSearch, displayLeads])
+  const allDeals = useMemo(() => flattenDealsFromPipelines(pipelines), [pipelines])
 
   const openAddTask = () => {
-    setAddTaskLeadId('')
-    setAddTaskLeadSearch('')
-    setAddTaskSuggestionsOpen(false)
-    setAddTaskHighlightIndex(-1)
-    setAddTaskTitle('')
-    setAddTaskScheduledAt(null)
-    setAddTaskScheduledEndAt(null)
-    setAddTaskDateTimeExpanded(false)
-    setAddTaskTeamAssignUids([])
     setShowAddTask(true)
   }
 
-  const newTaskPipelineForAssign = useMemo(() => {
-    if (!addTaskLeadId) return null
-    const lead = displayLeads.find((l) => l.parcelId === addTaskLeadId)
-    const pid = lead?.__pipelineId
-    if (!pid) return null
-    return pipelines.find((p) => p.id === pid) || null
-  }, [addTaskLeadId, displayLeads, pipelines])
-  const newTaskMemberList = useMemo(
-    () =>
-      newTaskPipelineForAssign
-        ? getMembersForTeamSharedPipeline(newTaskPipelineForAssign, teams)
-        : [],
-    [newTaskPipelineForAssign, teams]
-  )
-  const newTaskIsTeamContext = newTaskMemberList.length > 0
+  const newTaskMemberList = useMemo(() => getAllTeamMembers(teams), [teams])
 
   const finalizeTaskCreate = useCallback(
-    async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+      if (assignedUids.length > 0 && !parcelId && !dealId) {
+        showToast('Assign a lead or deal to notify teammates', 'error')
+        return
+      }
       if (pipelineId) {
         const pipe = pipelines.find((p) => p.id === pipelineId)
-        const isTeamPipe = pipe && Array.isArray(pipe.teamShares) && pipe.teamShares.length > 0
-        if (isTeamPipe && parcelId) {
-          const lead = (pipe?.leads || []).find((l) => String(l.parcelId) === String(parcelId))
-          if (lead?.id) {
-            try {
-              await addTeamTask(getToken, pipelineId, lead.id, {
-                title,
-                dueAt: scheduledAt,
-                assignedUids
-              })
-              await onPipelinesChange?.()
-              showToast('Team task added', 'success')
-            } catch (err) {
-              showToast(err.message || 'Could not add team task', 'error')
-              return
-            }
-            setShowAddTask(false)
-            setAddTaskTeamAssignUids([])
+        const leadId = resolveTeamTaskLeadId(pipe, {
+          parcelId,
+          dealId,
+          deals: pipe?.deals || [],
+          displayLeads,
+        })
+        if (shouldStoreAsTeamTask(pipe, { assignedUids, leadId })) {
+          try {
+            await addTeamTask(getToken, pipelineId, leadId, {
+              title,
+              dueAt: scheduledAt,
+              assignedUids,
+              dealId: dealId || null,
+            })
+            await onPipelinesChange?.()
+            showToast('Task added', 'success')
+          } catch (err) {
+            showToast(err.message || 'Could not add task', 'error')
             return
           }
+          setShowAddTask(false)
+          refreshTasks()
+          return
+        }
+        if (assignedUids.length > 0 && !leadId) {
+          showToast('Assign a lead or deal to notify teammates', 'error')
+          return
         }
         try {
           await addPipelineTask(getToken, pipelineId, {
             title,
             parcelId: parcelId || null,
+            dealId: dealId || null,
             scheduledAt,
-            scheduledEndAt
+            scheduledEndAt,
           })
           await onPipelinesChange?.()
           showToast('Task added', 'success')
@@ -248,37 +212,52 @@ export function TasksPanel({
           return
         }
       } else {
-        addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
+        if (assignedUids.length > 0) {
+          showToast('Pick a pipe for this task to assign teammates', 'error')
+          return
+        }
+        addTask({ pipelineId: null, parcelId: parcelId || null, dealId: dealId || null, title, scheduledAt, scheduledEndAt })
         refreshTasks()
         scheduleSync()
         showToast('Task added', 'success')
       }
       setShowAddTask(false)
-      setAddTaskTeamAssignUids([])
+      refreshTasks()
     },
-    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipelines]
+    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipelines, displayLeads]
   )
 
-  const handleCreateTask = () => {
-    const trimmed = addTaskTitle.trim()
+  const handleCreateTask = ({
+    title,
+    scheduledAt,
+    scheduledEndAt,
+    assignedUids = [],
+    leadId: addTaskLeadId,
+    dealId: addTaskDealId,
+  }) => {
+    const trimmed = title.trim()
     if (!trimmed) {
       showToast('Enter a task title', 'error')
       return
     }
-    const endAt = addTaskScheduledEndAt && addTaskScheduledEndAt > (addTaskScheduledAt || 0) ? addTaskScheduledEndAt : null
-    if (!newTaskIsTeamContext) {
-      if (endAt && addTaskScheduledAt && endAt <= addTaskScheduledAt) {
+    const newTaskUsesTeamStorage = assignedUids.length > 0
+    const endAt = scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
+    if (!newTaskUsesTeamStorage) {
+      if (endAt && scheduledAt && endAt <= scheduledAt) {
         showToast('End time must be after start time', 'error')
         return
       }
     }
-    const parcelId = addTaskLeadId ? String(addTaskLeadId) : null
+    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
+    const parcelId = lead?.parcelId ? String(lead.parcelId) : null
+    const dealId = addTaskDealId || null
     const payload = {
       title: trimmed,
-      scheduledAt: addTaskScheduledAt,
+      scheduledAt,
       scheduledEndAt: endAt,
       parcelId,
-      assignedUids: addTaskTeamAssignUids
+      dealId,
+      assignedUids,
     }
 
     if (parcelId) {
@@ -300,6 +279,14 @@ export function TasksPanel({
       }
       finalizeTaskCreate({ ...payload, pipelineId: null })
       return
+    }
+
+    if (dealId && apiMode) {
+      const deal = allDeals.find((d) => d.id === dealId)
+      if (deal?.__pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId: deal.__pipelineId })
+        return
+      }
     }
 
     if (apiMode && pipelines.length > 0) {
@@ -543,11 +530,7 @@ export function TasksPanel({
   const showEmptyOpen = !hasOpen && !(showClosedTasks && hasClosedContent)
 
   const handlePanelBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
-      return
-    }
-    onClose?.()
+    onBack?.() ?? onClose?.()
   }
 
   return (
@@ -719,150 +702,17 @@ export function TasksPanel({
       </DialogContent>
     </Dialog>
 
-      <Dialog open={showAddTask} onOpenChange={setShowAddTask}>
-        <DialogContent className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} nestedOverlay>
-          <DialogHeader
-            className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
-            style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
-          >
-            <PanelHeader onBack={() => setShowAddTask(false)} title="New task" />
-            <DialogDescription className="sr-only">
-              Create a task. Title is required. Date, time, and lead assignment are optional.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-            <div>
-              <label className="text-xs font-medium block mb-1 opacity-90">
-                Task title{' '}
-                <span className="text-red-400" aria-label="required">
-                  *
-                </span>
-              </label>
-              <Input
-                value={addTaskTitle}
-                onChange={(e) => setAddTaskTitle(e.target.value)}
-                placeholder="e.g. Call back, Roof inspection"
-                className="text-sm"
-                autoFocus
-                aria-required="true"
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateTask()}
-              />
-            </div>
-            <div className="relative">
-              <label className="text-xs font-medium block mb-1 opacity-90">Assign to lead</label>
-              <Input
-                value={addTaskLeadSearch}
-                onChange={(e) => {
-                  setAddTaskLeadSearch(e.target.value)
-                  setAddTaskLeadId('')
-                  setAddTaskSuggestionsOpen(true)
-                  setAddTaskHighlightIndex(-1)
-                }}
-                onFocus={() => setAddTaskSuggestionsOpen(true)}
-                onBlur={() => setTimeout(() => setAddTaskSuggestionsOpen(false), 150)}
-                placeholder="Type address or name..."
-                className="text-sm"
-                onKeyDown={(e) => {
-                  if (!addTaskSuggestionsOpen || addTaskLeadSuggestions.length === 0) return
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    setAddTaskHighlightIndex((i) => Math.min(i + 1, addTaskLeadSuggestions.length - 1))
-                  } else if (e.key === 'ArrowUp') {
-                    e.preventDefault()
-                    setAddTaskHighlightIndex((i) => Math.max(i - 1, -1))
-                  } else if (e.key === 'Enter' && addTaskHighlightIndex >= 0 && addTaskLeadSuggestions[addTaskHighlightIndex]) {
-                    e.preventDefault()
-                    const item = addTaskLeadSuggestions[addTaskHighlightIndex]
-                    setAddTaskLeadId(item.lead.parcelId)
-                    setAddTaskLeadSearch(item.displayValue)
-                    setAddTaskSuggestionsOpen(false)
-                    setAddTaskHighlightIndex(-1)
-                  } else if (e.key === 'Escape') {
-                    setAddTaskSuggestionsOpen(false)
-                    setAddTaskHighlightIndex(-1)
-                  }
-                }}
-              />
-              {addTaskSuggestionsOpen && addTaskLeadSuggestions.length > 0 && (
-                <ul className="add-task-lead-dropdown absolute z-50 left-0 right-0 mt-0.5 max-h-40 overflow-y-auto rounded-lg border py-1 text-sm" role="listbox">
-                  {addTaskLeadSuggestions.map((item, idx) => (
-                    <li
-                      key={item.lead.parcelId ?? item.lead.id}
-                      role="option"
-                      aria-selected={addTaskHighlightIndex === idx}
-                      className={`px-3 py-2 cursor-pointer ${addTaskHighlightIndex === idx ? 'bg-white/10' : 'hover:bg-white/10'}`}
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        setAddTaskLeadId(item.lead.parcelId)
-                        setAddTaskLeadSearch(item.displayValue)
-                        setAddTaskSuggestionsOpen(false)
-                        setAddTaskHighlightIndex(-1)
-                      }}
-                    >
-                      <span className="truncate font-medium block">{item.displayValue}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setAddTaskDateTimeExpanded((open) => !open)}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-white/90 hover:bg-white/5 transition-colors"
-                aria-expanded={addTaskDateTimeExpanded}
-              >
-                {addTaskDateTimeExpanded ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
-                )}
-                <span>Date &amp; time</span>
-              </button>
-              {addTaskDateTimeExpanded && (
-                <div className="border-t border-white/15 px-3 pb-3 pt-2 space-y-1">
-                  <SchedulePicker
-                    inline
-                    hideLabel
-                    value={addTaskScheduledAt}
-                    onChange={setAddTaskScheduledAt}
-                    endValue={newTaskIsTeamContext ? null : addTaskScheduledEndAt}
-                    onEndChange={newTaskIsTeamContext ? undefined : setAddTaskScheduledEndAt}
-                    minDate={Date.now()}
-                  />
-                </div>
-              )}
-            </div>
-            {newTaskIsTeamContext && (
-              <TeamMemberAssignSection
-                members={newTaskMemberList}
-                selectedUids={addTaskTeamAssignUids}
-                onToggle={(uid) => {
-                  setAddTaskTeamAssignUids((prev) =>
-                    prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
-                  )
-                }}
-              />
-            )}
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={handleCreateTask}>
-                Create
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="create-list-btn flex-1"
-                onClick={() => {
-                  setAddTaskTeamAssignUids([])
-                  setShowAddTask(false)
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <NewTaskDialog
+        open={showAddTask}
+        onOpenChange={setShowAddTask}
+        leads={displayLeads}
+        deals={allDeals}
+        showDealPicker={apiMode}
+        showTeamAssign={newTaskMemberList.length > 0}
+        teamMembers={newTaskMemberList}
+        onSubmit={handleCreateTask}
+        nestedOverlay
+      />
 
       <Dialog open={!!editingTask} onOpenChange={(o) => { if (!o) setEditingTask(null) }}>
         <DialogContent className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} nestedOverlay>
@@ -879,7 +729,7 @@ export function TasksPanel({
               <Input
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
-                placeholder="Task title"
+                placeholder="e.g. Call back, Roof inspection"
                 className="text-sm"
               />
             </div>
@@ -904,7 +754,7 @@ export function TasksPanel({
               />
             )}
             <div className="relative">
-              <label className="text-xs font-medium block mb-1 opacity-90">Assign to lead (optional)</label>
+              <label className="text-xs font-medium block mb-1 opacity-90">Lead</label>
               {editingTask?.__source === 'team' ? (
                 <p className="text-sm text-white/80 py-2 rounded-md border border-white/15 px-2 bg-white/[0.04]">
                   {assignLeadSearch || (editingTask.parcelId ? 'Lead' : '')}

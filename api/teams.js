@@ -4,7 +4,7 @@
  * GET    -> teams + membership + pendingInvites for user
  * POST   -> create team (admin, team pipe, settings)
  * PATCH  -> invite-member | accept-invite | decline-invite | promote-admin |
- *           demote-admin | update-settings | rename | remove-member | transfer-owner
+ *           demote-admin | update-settings | update-member-features | rename | remove-member | transfer-owner
  * DELETE -> delete team (admin only)
  */
 
@@ -27,6 +27,11 @@ import {
   cancelInvitesForTeamEmail,
 } from './lib/teamInvites.js'
 import { createTeamPipeline } from './lib/teamPipeline.js'
+import {
+  normalizeMemberFeatures,
+  resolveMemberFeatures,
+  isTeamAdminMember,
+} from './lib/teamFeatures.js'
 
 let kv = null
 let kvAvailable = false
@@ -78,19 +83,23 @@ async function stripTeamIdFromAllResources(teamId) {
   }
 }
 
-function normalizeMember(m) {
+function normalizeMember(m, team) {
   const role = m.role === 'owner' ? 'admin' : (m.role === 'admin' ? 'admin' : 'member')
-  return {
+  const base = {
     uid: m.uid,
     email: m.email,
     role,
     joinedAt: m.joinedAt || m.addedAt,
     addedBy: m.addedBy,
   }
+  if (team && role === 'member') {
+    base.features = resolveMemberFeatures(m, team, m.uid)
+  }
+  return base
 }
 
 function normalizeTeamForWire(team, viewerUid) {
-  const members = (team.members || []).map(normalizeMember)
+  const members = (team.members || []).map((m) => normalizeMember(m, team))
   return {
     id: team.id,
     name: team.name,
@@ -141,15 +150,20 @@ export default async function handler(req, res) {
       const teams = loadTeamsForUser(all, user.uid).map((t) => normalizeTeamForWire(t, user.uid))
       const membership = userHasTeamMembership(all, user.uid)
       const pendingInvites = await getInvitesForEmail(user.email)
+      const memberRecord = membership
+        ? (membership.members || []).find((m) => m.uid === user.uid)
+        : null
+      const memberRole = membership ? getTeamMemberRole(membership, user.uid) : null
       return res.status(200).json({
         teams,
         membership: membership
           ? {
               teamId: membership.id,
               teamName: membership.name,
-              role: getTeamMemberRole(membership, user.uid),
+              role: memberRole,
               teamPipelineId: membership.teamPipelineId || null,
               allowExternalSharing: membership.allowExternalSharing === true,
+              features: resolveMemberFeatures(memberRecord, membership, user.uid),
             }
           : null,
         pendingInvites,
@@ -273,6 +287,26 @@ export default async function handler(req, res) {
         if (!isAdmin) return res.status(403).json({ error: 'Only admins can update team settings' })
         if (body.allowExternalSharing !== undefined) {
           team.allowExternalSharing = body.allowExternalSharing === true
+        }
+        team.updatedAt = new Date().toISOString()
+        all[idx] = team
+        await saveAllTeams(all)
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
+      }
+
+      if (action === 'update-member-features') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can update member features' })
+        const targetUid = body.uid
+        if (!targetUid) return res.status(400).json({ error: 'uid is required' })
+        const targetIdx = (team.members || []).findIndex((m) => m.uid === targetUid)
+        if (targetIdx === -1) return res.status(404).json({ error: 'Member not found' })
+        const target = team.members[targetIdx]
+        if (isTeamAdminMember(target, team, targetUid)) {
+          return res.status(400).json({ error: 'Admins always have full access' })
+        }
+        team.members[targetIdx] = {
+          ...target,
+          features: normalizeMemberFeatures(body.features),
         }
         team.updatedAt = new Date().toISOString()
         all[idx] = team

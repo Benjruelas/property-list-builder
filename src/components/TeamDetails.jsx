@@ -17,7 +17,9 @@ import {
   promoteTeamAdmin,
   demoteTeamAdmin,
   updateTeamSettings,
+  updateMemberFeatures,
 } from '@/utils/teams'
+import { TeamMemberFeaturesDialog } from './TeamMemberFeaturesDialog'
 
 export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChange, pendingInvites = [] }) {
   const [addEmail, setAddEmail] = useState('')
@@ -27,6 +29,7 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
   const [busy, setBusy] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [transferTarget, setTransferTarget] = useState(null)
+  const [featuresMember, setFeaturesMember] = useState(null)
 
   const role = teamRoleForUser(team, currentUser)
   const isAdmin = isTeamAdminRole(team, currentUser)
@@ -155,6 +158,21 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
     }
   }
 
+  const handleSaveFeatures = async (features) => {
+    if (!featuresMember) return
+    setBusy(true)
+    try {
+      await updateMemberFeatures(getToken, team.id, featuresMember.uid, features)
+      showToast('Feature access updated', 'success')
+      setFeaturesMember(null)
+      await refresh()
+    } catch (e) {
+      showToast(e.message || 'Failed to update features', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const members = team.members || []
   const seatCount = members.length
   const seatLimit = team.seatLimit || 10
@@ -277,6 +295,11 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {isAdmin && !isSelf && memberRole === 'member' && (
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFeaturesMember(m)} disabled={busy}>
+                          Features
+                        </Button>
+                      )}
+                      {isAdmin && !isSelf && memberRole === 'member' && (
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handlePromote(m.uid)} disabled={busy}>Promote</Button>
                       )}
                       {isAdmin && !isSelf && memberRole === 'admin' && !isTheCreator && (
@@ -336,6 +359,14 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
             </DialogContent>
           </Dialog>
         )}
+
+        <TeamMemberFeaturesDialog
+          open={!!featuresMember}
+          member={featuresMember}
+          onClose={() => setFeaturesMember(null)}
+          onSave={handleSaveFeatures}
+          saving={busy}
+        />
       </DialogContent>
     </Dialog>
   )

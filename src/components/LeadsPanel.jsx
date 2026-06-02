@@ -1,51 +1,22 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Search, UserSearch, Phone, Mail, Briefcase } from 'lucide-react'
+import { useState, useMemo, useCallback } from 'react'
+import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
+import { CreateDealDialog } from './CreateDealDialog'
+import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { displayLeadName, formatLeadAddress, updateLead } from '@/utils/leads'
+import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
-import { VisibilityBadge } from './ResourceSharePicker'
 import { findDealsForLead } from '@/utils/deals'
 import { showToast } from './ui/toast'
-
-const listRowClass =
-  'map-panel-list-item leads-panel-list-item flex flex-col gap-1 px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
-
-function LeadRow({ lead, dealCount, teams, onClick }) {
-  const name = displayLeadName(lead)
-  const address = formatLeadAddress(lead) || 'No address'
-  return (
-    <div
-      className={listRowClass}
-      onClick={() => onClick?.(lead)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick?.(lead)}
-    >
-      <div className="text-sm font-medium truncate">{name}</div>
-      <div className="text-xs opacity-60 truncate" title={lead.address || undefined}>{address}</div>
-      <div className="flex items-center gap-3 mt-0.5 flex-wrap text-[11px] opacity-50">
-        <VisibilityBadge resource={lead} className="normal-case tracking-normal" />
-        {lead.phone && (
-          <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{lead.phone}</span>
-        )}
-        {lead.email && (
-          <span className="inline-flex items-center gap-1 truncate max-w-[160px]"><Mail className="h-3 w-3" />{lead.email}</span>
-        )}
-        {dealCount > 0 && (
-          <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" />{dealCount} deal{dealCount !== 1 ? 's' : ''}</span>
-        )}
-      </div>
-    </div>
-  )
-}
+import { LeadRow } from './LeadRow'
 
 export function LeadsPanel({
   isOpen,
   onClose,
-  onBackToParent,
+  onBack,
   leads = [],
   pipelines = [],
   onLeadsChange,
@@ -62,25 +33,27 @@ export function LeadsPanel({
   onPipelinesChange,
   teams = [],
   teamMembership = null,
-  focusLeadId = null,
-  onFocusLeadHandled,
+  detailLeadId = null,
+  onOpenLeadDetail,
+  onCloseLeadDetail,
   currentUserId = null,
+  createDealPipelines = [],
+  createDealSaving = false,
+  onCreateDealSubmit,
+  pipelinesCount = 0,
 }) {
   const [search, setSearch] = useState('')
-  const [selectedLead, setSelectedLead] = useState(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [editLead, setEditLead] = useState(null)
+  const [dealPickerOpen, setDealPickerOpen] = useState(false)
+  const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
+  const [createDealOpen, setCreateDealOpen] = useState(false)
+  const [createDealPrefill, setCreateDealPrefill] = useState(null)
 
-  useEffect(() => {
-    if (!isOpen) setSelectedLead(null)
-  }, [isOpen])
-
-  useEffect(() => {
-    if (!isOpen || !focusLeadId) return
-    const lead = leads.find((l) => l.id === focusLeadId || l.parcelId === focusLeadId)
-    if (lead) setSelectedLead(lead)
-    onFocusLeadHandled?.()
-  }, [isOpen, focusLeadId, leads, onFocusLeadHandled])
+  const selectedLead = useMemo(
+    () => (detailLeadId ? leads.find((l) => l.id === detailLeadId || l.parcelId === detailLeadId) : null),
+    [detailLeadId, leads],
+  )
 
   const filteredLeads = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -123,7 +96,6 @@ export function LeadsPanel({
   const handleLeadUpdate = useCallback(async (updated) => {
     try {
       const saved = await updateLead(getToken, updated.id, updated)
-      setSelectedLead(saved)
       onLeadsChange?.(leads.map((l) => (l.id === saved.id ? saved : l)))
     } catch (e) {
       showToast(e.message || 'Could not update lead', 'error')
@@ -141,33 +113,52 @@ export function LeadsPanel({
     setEditLead(null)
   }
 
-  const handlePanelBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
+  const startCreateDeal = useCallback((lead) => {
+    if (!lead?.id) return
+    if (pipelinesCount > 0 && createDealPipelines.length === 0) {
+      showToast('Create or open a pipeline first', 'warning')
       return
     }
-    onClose()
-  }
+    setPendingDealPrefill({ leadId: lead.id })
+    setDealPickerOpen(true)
+  }, [pipelinesCount, createDealPipelines.length])
 
-  const handleDetailClose = () => {
-    if (onBackToParent) {
-      onBackToParent()
+  const handleDealTemplatePicked = useCallback((template) => {
+    const pending = pendingDealPrefill || {}
+    const merged = template ? templateToCreateDealPrefill(template, pending) : pending
+    setCreateDealPrefill(merged)
+    setCreateDealOpen(true)
+    setDealPickerOpen(false)
+    setPendingDealPrefill(null)
+  }, [pendingDealPrefill])
+
+  const handleCreateDealFormSubmit = useCallback(async (payload) => {
+    await onCreateDealSubmit?.(payload)
+    setCreateDealOpen(false)
+    setCreateDealPrefill(null)
+  }, [onCreateDealSubmit])
+
+  const handlePanelBack = () => {
+    if (selectedLead) {
+      onCloseLeadDetail?.()
       return
     }
-    setSelectedLead(null)
+    onBack?.() ?? onClose?.()
   }
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { setSelectedLead(null); handlePanelBack() } }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
         <DialogContent className="map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} hideOverlay>
           <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your leads</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Leads">
               <PanelCreateButton onClick={() => setCreateOpen(true)} title="Create lead" />
             </PanelHeader>
+          </DialogHeader>
 
-            <div className="relative mt-3">
+          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+            <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
               <input
                 type="search"
@@ -178,9 +169,6 @@ export function LeadsPanel({
                 aria-label="Search leads"
               />
             </div>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
             {leads.length === 0 ? (
               <div className="text-center py-16">
                 <UserSearch className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -198,8 +186,7 @@ export function LeadsPanel({
                   key={lead.id}
                   lead={lead}
                   dealCount={dealCountByLead.get(lead.id) || 0}
-                  teams={teams}
-                  onClick={setSelectedLead}
+                  onClick={(l) => onOpenLeadDetail?.(l.id)}
                 />
               ))
             )}
@@ -219,11 +206,37 @@ export function LeadsPanel({
         teams={teams}
         teamMembership={teamMembership}
         nestedOverlay
+        topLayer={!!editLead}
+      />
+
+      <DealTemplatePickerDialog
+        open={dealPickerOpen}
+        onOpenChange={(v) => {
+          setDealPickerOpen(v)
+          if (!v) setPendingDealPrefill(null)
+        }}
+        onSelect={handleDealTemplatePicked}
+        nestedOverlay
+      />
+
+      <CreateDealDialog
+        open={createDealOpen}
+        onOpenChange={(v) => {
+          setCreateDealOpen(v)
+          if (!v) setCreateDealPrefill(null)
+        }}
+        prefill={createDealPrefill}
+        leads={leads}
+        pipelines={createDealPipelines}
+        teams={teams}
+        saving={createDealSaving}
+        onSubmit={handleCreateDealFormSubmit}
+        nestedOverlay
       />
 
       <LeadDetails
-        isOpen={!!selectedLead}
-        onClose={handleDetailClose}
+        isOpen={isOpen && !!selectedLead}
+        onClose={() => onCloseLeadDetail?.()}
         lead={selectedLead}
         pipelines={pipelines}
         getToken={getToken}
@@ -233,10 +246,10 @@ export function LeadsPanel({
         onPhoneClick={onPhoneClick}
         onGoToParcelOnMap={onGoToParcelOnMap}
         onLeadUpdate={handleLeadUpdate}
-        onEditLead={(l) => { setSelectedLead(null); setEditLead(l) }}
-        onCreateDeal={onCreateDeal}
+        onEditLead={(l) => setEditLead(l)}
+        onCreateDeal={onCreateDeal ?? startCreateDeal}
         onOpenDeal={onOpenDeal}
-        onLeadDeleted={() => { setSelectedLead(null); onRefreshLeads?.() }}
+        onLeadDeleted={() => { onCloseLeadDetail?.(); onRefreshLeads?.() }}
         onOpenScheduleAtDate={onOpenScheduleAtDate}
         onPipelinesChange={onPipelinesChange}
         teams={teams}

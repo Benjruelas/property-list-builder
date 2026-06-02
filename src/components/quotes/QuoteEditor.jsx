@@ -408,7 +408,7 @@ export function QuoteEditor({
           />
 
           <label className="block space-y-1">
-            <span className="text-xs opacity-70">Terms (internal — not shown to client)</span>
+            <span className="text-xs opacity-70">Terms (shown to client on quote link)</span>
             <textarea className={FIELD + ' min-h-[80px]'} value={terms} onChange={(e) => setTerms(e.target.value)} />
           </label>
           <label className="block space-y-1">

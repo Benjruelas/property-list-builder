@@ -50,6 +50,7 @@ export function CreateLeadDialog({
   teams = [],
   teamMembership = null,
   nestedOverlay = false,
+  topLayer = false,
 }) {
   const activeTeam = teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
@@ -177,6 +178,7 @@ export function CreateLeadDialog({
         className="map-panel list-panel create-lead-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
+        topLayer={topLayer}
       >
         <DialogHeader
           className="px-5 pt-5 pb-3 border-b border-white/20 flex-shrink-0 text-left"

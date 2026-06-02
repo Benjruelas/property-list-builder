@@ -1,16 +1,17 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { Input } from './ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { getFullAddress } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
 import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
 import { addTeamTask } from '@/utils/teamTasks'
-import { flattenTeamTasks } from '@/utils/teamTaskUtils'
+import { flattenTeamTasks, getAllTeamMembers } from '@/utils/teamTaskUtils'
+import { flattenDealsFromPipelines } from '@/utils/deals'
+import { NewTaskDialog } from './NewTaskDialog'
 import { fetchTeamTasks } from '@/utils/tasks'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
@@ -69,136 +70,6 @@ function getTaskCalendarSubtitle(task, pipelines, displayLeads) {
   return bits.join(' · ') || 'Task'
 }
 
-const MINUTE_OPTS = [0, 15, 30, 45]
-const HOUR_OPTS_12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-
-function tsToHourMin(ts) {
-  if (!ts) return { hour12: 12, minute: 0, isPM: false }
-  const d = new Date(ts)
-  const h24 = d.getHours()
-  const m = d.getMinutes()
-  const hour12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
-  const isPM = h24 >= 12
-  const minute = MINUTE_OPTS.reduce((a, b) => (Math.abs(b - m) < Math.abs(a - m) ? b : a))
-  return { hour12, minute, isPM }
-}
-
-function hourMinToTs(date, hour12, minute, isPM) {
-  let h24 = hour12
-  if (isPM && hour12 !== 12) h24 = hour12 + 12
-  else if (!isPM && hour12 === 12) h24 = 0
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h24, minute).getTime()
-}
-
-const DROP_STYLE = { background: 'rgba(30, 30, 30, 0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
-
-function InlineTimeSelect({ ts, date, onChange }) {
-  const { hour12, minute, isPM } = tsToHourMin(ts)
-  const [openDrop, setOpenDrop] = useState(null) // 'hour' | 'min' | null
-  const dropRef = useRef(null)
-  const update = (h, m, pm) => {
-    onChange(hourMinToTs(date, h ?? hour12, m ?? minute, pm ?? isPM))
-  }
-
-  useEffect(() => {
-    if (!openDrop) return
-    const handle = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) setOpenDrop(null)
-    }
-    document.addEventListener('pointerdown', handle)
-    return () => document.removeEventListener('pointerdown', handle)
-  }, [openDrop])
-
-  return (
-    <div className="flex items-center gap-2">
-      <div className="relative" ref={openDrop === 'hour' ? dropRef : undefined}>
-        <button
-          type="button"
-          onClick={() => setOpenDrop(openDrop === 'hour' ? null : 'hour')}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3rem] justify-between"
-          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
-        >
-          {hour12}
-          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${openDrop === 'hour' ? 'rotate-180' : ''}`} />
-        </button>
-        {openDrop === 'hour' && (
-          <div
-            className="absolute left-0 bottom-full mb-1 z-[200] max-h-48 overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3rem]"
-            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
-          >
-            {HOUR_OPTS_12.map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() => { update(h, null, null); setOpenDrop(null) }}
-                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${hour12 === h ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
-              >
-                {h}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <span className="text-white/60">:</span>
-      <div className="relative" ref={openDrop === 'min' ? dropRef : undefined}>
-        <button
-          type="button"
-          onClick={() => setOpenDrop(openDrop === 'min' ? null : 'min')}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-sm rounded bg-white/10 text-white hover:bg-white/15 min-w-[3.5rem] justify-between"
-          style={{ border: '1px solid rgba(255,255,255,0.4)' }}
-        >
-          {String(minute).padStart(2, '0')}
-          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${openDrop === 'min' ? 'rotate-180' : ''}`} />
-        </button>
-        {openDrop === 'min' && (
-          <div
-            className="absolute left-0 bottom-full mb-1 z-[200] overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3.5rem]"
-            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
-          >
-            {MINUTE_OPTS.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => { update(null, m, null); setOpenDrop(null) }}
-                className={`block w-full px-2.5 py-2 text-sm text-left hover:bg-white/15 transition-colors ${minute === m ? 'bg-white/20 text-white font-medium' : 'text-white/90'}`}
-              >
-                {String(m).padStart(2, '0')}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div
-        className="schedule-time-meridiem-group flex rounded-md overflow-hidden bg-white/[0.06] ml-auto"
-        style={{ border: '1px solid rgba(255,255,255,0.4)' }}
-        role="group"
-        aria-label="AM or PM"
-      >
-        <button
-          type="button"
-          onClick={() => update(null, null, false)}
-          aria-pressed={!isPM}
-          className={`schedule-time-meridiem min-w-[2.75rem] px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-            !isPM ? 'schedule-time-meridiem--selected' : 'schedule-time-meridiem--unselected'
-          }`}
-        >
-          AM
-        </button>
-        <button
-          type="button"
-          onClick={() => update(null, null, true)}
-          aria-pressed={isPM}
-          className={`schedule-time-meridiem min-w-[2.75rem] px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-            isPM ? 'schedule-time-meridiem--selected' : 'schedule-time-meridiem--unselected'
-          }`}
-        >
-          PM
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   const [now, setNow] = useState(new Date())
   useEffect(() => {
@@ -224,7 +95,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null }) {
+export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
@@ -236,16 +107,12 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), n.getDate())
   })
-  const [selectedLead, setSelectedLead] = useState(null)
+  const selectedLead = useMemo(
+    () => (scheduleLeadId ? leads.find((l) => l.id === scheduleLeadId) : null),
+    [scheduleLeadId, leads],
+  )
   const [showAddTask, setShowAddTask] = useState(false)
-  const [addTaskDate, setAddTaskDate] = useState(null)
-  const [addTaskLeadId, setAddTaskLeadId] = useState('')
-  const [addTaskLeadSearch, setAddTaskLeadSearch] = useState('')
-  const [addTaskSuggestionsOpen, setAddTaskSuggestionsOpen] = useState(false)
-  const [addTaskHighlightIndex, setAddTaskHighlightIndex] = useState(-1)
-  const [addTaskTitle, setAddTaskTitle] = useState('')
-  const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
-  const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
+  const [addTaskPrefill, setAddTaskPrefill] = useState(null)
   const [editTaskContext, setEditTaskContext] = useState(null)
   const [leadDetailsTaskEpoch, setLeadDetailsTaskEpoch] = useState(0)
   const [adminTeamView, setAdminTeamView] = useState(false)
@@ -291,7 +158,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
   }, [isOpen, refreshTasks])
 
   useEffect(() => {
-    if (!isOpen) setSelectedLead(null)
+    if (!isOpen) { /* lead overlay driven by nav stack */ }
   }, [isOpen])
 
   useEffect(() => {
@@ -318,25 +185,23 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
     return map
   })()
 
-  const addTaskLeadSuggestions = (() => {
-    const q = (addTaskLeadSearch || '').trim().toLowerCase()
-    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
-    const results = []
-    for (const lead of displayLeads) {
-      const displayValue = getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId
-      if (tokens.length) {
-        const label = (getLeadLabel(lead, lead.parcelId) || '').toLowerCase()
-        const fullAddr = (getFullAddress(lead) || '').toLowerCase()
-        const owner = (lead.owner || '').toLowerCase()
-        const address = (lead.address || '').toLowerCase()
-        const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
-        if (!tokens.every((tok) => searchable.includes(tok))) continue
-      }
-      results.push({ lead, displayValue })
-    }
-    results.sort((a, b) => (a.displayValue || '').localeCompare(b.displayValue || '', undefined, { sensitivity: 'base' }))
-    return results
-  })()
+  const allDeals = useMemo(() => flattenDealsFromPipelines(pipelines), [pipelines])
+  const newTaskMemberList = useMemo(() => getAllTeamMembers(teams), [teams])
+
+  const openAddTaskWithSchedule = (d, finalAt, endAt) => {
+    setAddTaskPrefill({
+      scheduledAt: finalAt,
+      scheduledEndAt: endAt,
+      dateTimeExpanded: true,
+      headerSubtitle: d.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+    })
+    setShowAddTask(true)
+  }
 
   const handleDayClick = (d) => {
     if (!d) return
@@ -352,25 +217,13 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
       finalAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0).getTime()
     }
     const endAt = finalAt + 60 * 60 * 1000
-    setAddTaskDate(d)
-    setAddTaskScheduledAt(finalAt)
-    setAddTaskScheduledEndAt(endAt)
-    setAddTaskLeadId('')
-    setAddTaskLeadSearch('')
-    setAddTaskTitle('')
-    setShowAddTask(true)
+    openAddTaskWithSchedule(d, finalAt, endAt)
   }
 
   const handleHourCellClick = (dayDate, hour) => {
     const finalAt = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), hour, 0).getTime()
     const endAt = finalAt + 60 * 60 * 1000
-    setAddTaskDate(dayDate)
-    setAddTaskScheduledAt(finalAt)
-    setAddTaskScheduledEndAt(endAt)
-    setAddTaskLeadId('')
-    setAddTaskLeadSearch('')
-    setAddTaskTitle('')
-    setShowAddTask(true)
+    openAddTaskWithSchedule(dayDate, finalAt, endAt)
   }
 
   const formatHour = (h) => {
@@ -380,7 +233,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
   }
 
   const finalizeTaskCreate = useCallback(
-    async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
       if (pipelineId) {
         const pipe = pipelines.find((p) => p.id === pipelineId)
         const isTeamPipe = pipe && Array.isArray(pipe.teamShares) && pipe.teamShares.length > 0
@@ -391,7 +244,8 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
               await addTeamTask(getToken, pipelineId, lead.id, {
                 title,
                 dueAt: scheduledAt,
-                assignedUids
+                assignedUids,
+                dealId: dealId || null,
               })
               await onPipelinesChange?.()
               showToast('Team task scheduled', 'success')
@@ -401,7 +255,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
             }
             setShowAddTask(false)
             const l = displayLeads.find((x) => x.parcelId === parcelId)
-            if (l) setSelectedLead(l)
+            if (l) onOpenScheduleLead?.(l.id)
             return
           }
         }
@@ -409,8 +263,9 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
           await addPipelineTask(getToken, pipelineId, {
             title,
             parcelId: parcelId || null,
+            dealId: dealId || null,
             scheduledAt,
-            scheduledEndAt
+            scheduledEndAt,
           })
           await onPipelinesChange?.()
           showToast('Task scheduled', 'success')
@@ -426,20 +281,33 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
       }
       setShowAddTask(false)
       const lead = parcelId ? displayLeads.find((l) => l.parcelId === parcelId) : null
-      if (lead) setSelectedLead(lead)
+      if (lead) onOpenScheduleLead?.(lead.id)
     },
     [getToken, onPipelinesChange, refreshTasks, scheduleSync, displayLeads, pipelines]
   )
 
-  const handleCreateTask = () => {
-    const t = addTaskTitle.trim() || 'Task'
-    const endAt = addTaskScheduledEndAt && addTaskScheduledEndAt > (addTaskScheduledAt || 0) ? addTaskScheduledEndAt : null
-    if (endAt && addTaskScheduledAt && endAt <= addTaskScheduledAt) {
+  const handleCreateTask = ({
+    title,
+    scheduledAt,
+    scheduledEndAt,
+    assignedUids = [],
+    leadId: addTaskLeadId,
+    dealId: addTaskDealId,
+  }) => {
+    const trimmed = title.trim()
+    if (!trimmed) {
+      showToast('Enter a task title', 'error')
+      return
+    }
+    const endAt = scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
+    if (assignedUids.length === 0 && endAt && scheduledAt && endAt <= scheduledAt) {
       showToast('End time must be after start time', 'error')
       return
     }
-    const parcelId = addTaskLeadId ? String(addTaskLeadId) : null
-    const payload = { title: t, scheduledAt: addTaskScheduledAt, scheduledEndAt: endAt, parcelId }
+    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
+    const parcelId = lead?.parcelId ? String(lead.parcelId) : null
+    const dealId = addTaskDealId || null
+    const payload = { title: trimmed, scheduledAt, scheduledEndAt: endAt, parcelId, dealId, assignedUids }
 
     if (parcelId) {
       // Lead suggestion carries __pipelineId when picked from an API pipe
@@ -467,6 +335,14 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
       }
       finalizeTaskCreate({ ...payload, pipelineId: null })
       return
+    }
+
+    if (dealId && apiMode) {
+      const deal = allDeals.find((d) => d.id === dealId)
+      if (deal?.__pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId: deal.__pipelineId })
+        return
+      }
     }
 
     // No parcel selected
@@ -616,19 +492,19 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
   const handlePanelBack = () => {
     setShowAddTask(false)
     setEditTaskContext(null)
-    if (onBackToParent) {
-      onBackToParent()
+    if (scheduleLeadId) {
+      onCloseScheduleLead?.()
       return
     }
-    onClose?.()
+    if (hasScheduleOpener) {
+      onClose?.()
+      return
+    }
+    onBack?.() ?? onClose?.()
   }
 
   const handleLeadDetailClose = () => {
-    if (onBackToParent) {
-      onBackToParent()
-      return
-    }
-    setSelectedLead(null)
+    onCloseScheduleLead?.()
   }
 
   const switchViewMode = (mode) => {
@@ -775,7 +651,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
                               key={task.id}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                if (lead) setSelectedLead(lead)
+                                if (lead) onOpenScheduleLead?.(lead.id)
                               }}
                               className="schedule-task-pill"
                               title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
@@ -869,7 +745,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
                             }}
                             onClick={(e) => {
                               e.stopPropagation()
-                              if (lead) setSelectedLead(lead)
+                              if (lead) onOpenScheduleLead?.(lead.id)
                             }}
                             title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
                           >
@@ -954,7 +830,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
                             }}
                             onClick={(e) => {
                               e.stopPropagation()
-                              if (lead) setSelectedLead(lead)
+                              if (lead) onOpenScheduleLead?.(lead.id)
                             }}
                             title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
                           >
@@ -973,129 +849,24 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
         </div>
 
         {/* Add Task Dialog */}
-        <Dialog open={showAddTask} onOpenChange={setShowAddTask}>
-          <DialogContent className="map-panel list-panel new-task-panel w-[min(92vw,22rem)] max-w-sm max-h-[80vh] p-0 rounded-2xl" showCloseButton={false} nestedOverlay>
-            <DialogHeader className="px-6 pt-6 pb-2 border-b border-white/20">
-            <PanelHeader
-              onBack={() => setShowAddTask(false)}
-              title={
-                <>
-                  <DialogTitle className="text-xl font-semibold">New Task</DialogTitle>
-                  {addTaskDate && (
-                    <span className="block text-sm font-normal text-white/80 mt-1">
-                      {addTaskDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  )}
-                </>
-              }
-            />
-              <DialogDescription className="sr-only">Create a scheduled task; optionally assign to a lead or leave standalone</DialogDescription>
-            </DialogHeader>
-            <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(80vh-140px)] space-y-3 create-list-form">
-              <div>
-                <label className="text-xs font-medium block mb-1 opacity-90">Task title</label>
-                <Input
-                  value={addTaskTitle}
-                  onChange={(e) => setAddTaskTitle(e.target.value)}
-                  placeholder="e.g. Call back, Roof inspection"
-                  className="text-sm"
-                  autoFocus
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateTask()}
-                />
-              </div>
-              <div className="relative">
-                <label className="text-xs font-medium text-gray-500 block mb-1">Assign to lead (optional)</label>
-                <Input
-                  value={addTaskLeadSearch}
-                  onChange={(e) => {
-                    setAddTaskLeadSearch(e.target.value)
-                    setAddTaskLeadId('')
-                    setAddTaskSuggestionsOpen(true)
-                    setAddTaskHighlightIndex(-1)
-                  }}
-                  onFocus={() => setAddTaskSuggestionsOpen(true)}
-                  onBlur={() => setTimeout(() => setAddTaskSuggestionsOpen(false), 150)}
-                  placeholder="Type address or name..."
-                  className="text-sm"
-                  onKeyDown={(e) => {
-                    if (!addTaskSuggestionsOpen || addTaskLeadSuggestions.length === 0) return
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault()
-                      setAddTaskHighlightIndex((i) => Math.min(i + 1, addTaskLeadSuggestions.length - 1))
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault()
-                      setAddTaskHighlightIndex((i) => Math.max(i - 1, -1))
-                    } else if (e.key === 'Enter' && addTaskHighlightIndex >= 0 && addTaskLeadSuggestions[addTaskHighlightIndex]) {
-                      e.preventDefault()
-                      const item = addTaskLeadSuggestions[addTaskHighlightIndex]
-                      setAddTaskLeadId(item.lead.parcelId)
-                      setAddTaskLeadSearch(item.displayValue)
-                      setAddTaskSuggestionsOpen(false)
-                      setAddTaskHighlightIndex(-1)
-                    } else if (e.key === 'Escape') {
-                      setAddTaskSuggestionsOpen(false)
-                      setAddTaskHighlightIndex(-1)
-                    }
-                  }}
-                />
-                {addTaskSuggestionsOpen && addTaskLeadSuggestions.length > 0 && (
-                  <ul className="add-task-lead-dropdown absolute z-50 left-0 right-0 mt-0.5 max-h-40 overflow-y-auto rounded-lg border py-1 text-sm" role="listbox">
-                    {addTaskLeadSuggestions.map((item, idx) => (
-                      <li
-                        key={item.lead.id}
-                        role="option"
-                        aria-selected={addTaskHighlightIndex === idx}
-                        className={`px-3 py-2 cursor-pointer ${addTaskHighlightIndex === idx ? 'bg-white/10' : 'hover:bg-white/10'}`}
-                        onMouseDown={(e) => {
-                          e.preventDefault()
-                          setAddTaskLeadId(item.lead.parcelId)
-                          setAddTaskLeadSearch(item.displayValue)
-                          setAddTaskSuggestionsOpen(false)
-                          setAddTaskHighlightIndex(-1)
-                        }}
-                      >
-                        <span className="truncate font-medium block">{item.displayValue}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              {addTaskDate ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-medium block mb-1 opacity-90">Start time</label>
-                    <InlineTimeSelect
-                      ts={addTaskScheduledAt}
-                      date={addTaskDate}
-                      onChange={(ts) => {
-                        setAddTaskScheduledAt(ts)
-                        if (addTaskScheduledEndAt && addTaskScheduledEndAt <= ts) {
-                          setAddTaskScheduledEndAt(ts + 60 * 60 * 1000)
-                        }
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium block mb-1 opacity-90">End time</label>
-                    <InlineTimeSelect
-                      ts={addTaskScheduledEndAt}
-                      date={addTaskDate}
-                      onChange={setAddTaskScheduledEndAt}
-                    />
-                  </div>
-                </div>
-              ) : null}
-              <div className="flex gap-2 pt-1">
-                <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={handleCreateTask}>
-                  Create
-                </Button>
-                <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={() => setShowAddTask(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <NewTaskDialog
+          open={showAddTask}
+          onOpenChange={(open) => {
+            setShowAddTask(open)
+            if (!open) setAddTaskPrefill(null)
+          }}
+          leads={displayLeads}
+          deals={allDeals}
+          showDealPicker={apiMode}
+          showTeamAssign={newTaskMemberList.length > 0}
+          teamMembers={newTaskMemberList}
+          initialScheduledAt={addTaskPrefill?.scheduledAt ?? null}
+          initialScheduledEndAt={addTaskPrefill?.scheduledEndAt ?? null}
+          initialDateTimeExpanded={addTaskPrefill?.dateTimeExpanded ?? false}
+          headerSubtitle={addTaskPrefill?.headerSubtitle ?? null}
+          onSubmit={handleCreateTask}
+          nestedOverlay
+        />
 
         <LeadDetails
           isOpen={!!selectedLead}
@@ -1108,8 +879,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
           onGoToParcelOnMap={onGoToParcelOnMap}
-          onLeadUpdate={(updated) => {
-            setSelectedLead(updated)
+          onLeadUpdate={() => {
             onLeadsChange?.()
           }}
           onCreateDeal={() => {}}
@@ -1118,7 +888,7 @@ export function SchedulePanel({ isOpen, onClose, onBackToParent, stacked = false
           onPipelinesChange={onPipelinesChange}
           onOpenScheduleAtDate={(ts) => {
             if (!ts) return
-            setSelectedLead(null)
+            onCloseScheduleLead?.()
             const d = new Date(ts)
             setViewYear(d.getFullYear())
             setViewMonth(d.getMonth())

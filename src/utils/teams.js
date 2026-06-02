@@ -112,6 +112,16 @@ export async function updateTeamSettings(getToken, teamId, settings) {
   return data.team
 }
 
+export async function updateMemberFeatures(getToken, teamId, uid, features) {
+  const data = await apiCall(getToken, 'PATCH', {
+    teamId,
+    action: 'update-member-features',
+    uid,
+    features,
+  })
+  return data.team
+}
+
 export async function transferTeamOwnership(getToken, teamId, toUid) {
   const data = await apiCall(getToken, 'PATCH', { teamId, action: 'transfer-owner', toUid })
   return data.team

@@ -18,7 +18,7 @@ import {
   updatePipelineTask,
 } from '@/utils/pipelineTasks'
 import { addTeamTask, removeTeamTask, toggleTeamTask, updateTeamTask } from '@/utils/teamTasks'
-import { getMembersForTeamSharedPipeline } from '@/utils/teamTaskUtils'
+import { getAllTeamMembers, getMembersForTeamSharedPipeline, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
 import { collectTasksForDeal } from '@/utils/dealTaskMatching'
 import { TaskRow } from './TasksPanel'
 import { NewTaskDialog } from './NewTaskDialog'
@@ -57,6 +57,21 @@ export function DealTasksSection({
   const leadAddress = lead ? formatLeadAddress(lead) : (deal?.leadAddress || '')
   const dealLabel = (deal?.title || deal?.leadAddress || 'Deal').trim()
 
+  const taskLead = useMemo(() => {
+    if (lead) return lead
+    if (deal?.leadId) return displayLeads.find((l) => l.id === deal.leadId) || null
+    if (deal?.parcelId) {
+      return displayLeads.find((l) => String(l.parcelId) === String(deal.parcelId)) || null
+    }
+    return null
+  }, [lead, deal, displayLeads])
+
+  const dialogLeads = useMemo(() => {
+    if (!taskLead?.id) return displayLeads
+    if (displayLeads.some((l) => l.id === taskLead.id)) return displayLeads
+    return [taskLead, ...displayLeads]
+  }, [taskLead, displayLeads])
+
   const refreshTasks = useCallback(() => {
     if (!deal) {
       setTasks([])
@@ -84,26 +99,26 @@ export function DealTasksSection({
     return pipelines.find((p) => p.id === editingTask.pipelineId) || pipeline
   }, [editingTask, pipeline, pipelines])
 
-  const newTaskMemberList = useMemo(
-    () => (pipeline ? getMembersForTeamSharedPipeline(pipeline, teams) : []),
-    [pipeline, teams]
-  )
+  const newTaskMemberList = useMemo(() => getAllTeamMembers(teams), [teams])
   const editTaskMemberList = useMemo(
     () => (editTaskPipeline ? getMembersForTeamSharedPipeline(editTaskPipeline, teams) : []),
     [editTaskPipeline, teams]
   )
-  const newTaskIsTeamContext = !isEditMode && newTaskMemberList.length > 0
   const editIsTeamContext = isEditMode && editingTask?.__source === 'team' && editTaskMemberList.length > 0
-  const showTeamAssign = newTaskIsTeamContext || editIsTeamContext
+  const showTeamAssign = newTaskMemberList.length > 0 || editIsTeamContext
   const teamMemberList = editIsTeamContext ? editTaskMemberList : newTaskMemberList
-  const teamContextActive = editIsTeamContext || newTaskIsTeamContext
+  const teamContextActive =
+    editIsTeamContext || (!!pipeline?.teamShares?.length && pipeline.teamShares.length > 0)
 
   const finalizeTaskCreate = useCallback(
     async ({ title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
       const pipelineId = pipeline?.id
+      if (assignedUids.length > 0 && !deal?.leadId) {
+        showToast('This deal needs a linked lead to assign teammates', 'error')
+        return
+      }
       if (pipelineId) {
-        const isTeamPipe = Array.isArray(pipeline?.teamShares) && pipeline.teamShares.length > 0
-        if (isTeamPipe && deal?.leadId) {
+        if (shouldStoreAsTeamTask(pipeline, { assignedUids, leadId: deal?.leadId })) {
           try {
             await addTeamTask(getToken, pipelineId, deal.leadId, {
               title,
@@ -112,9 +127,9 @@ export function DealTasksSection({
               dealId: deal?.id || null,
             })
             await onPipelinesChange?.()
-            showToast('Team task added', 'success')
+            showToast('Task added', 'success')
           } catch (err) {
-            showToast(err.message || 'Could not add team task', 'error')
+            showToast(err.message || 'Could not add task', 'error')
             return
           }
         } else {
@@ -134,6 +149,10 @@ export function DealTasksSection({
           }
         }
       } else {
+        if (assignedUids.length > 0) {
+          showToast('Pick a pipe for this task to assign teammates', 'error')
+          return
+        }
         addTask({
           pipelineId: null,
           parcelId: deal?.parcelId || deal?.leadId || null,
@@ -327,10 +346,13 @@ export function DealTasksSection({
             if (!open) closeTaskDialog()
           }}
           isEditMode={isEditMode}
+          showContextCard={isEditMode}
           contextPrimary={dealLabel}
           contextSecondary={leadLabel && leadLabel !== dealLabel ? leadLabel : ''}
           contextTertiary={leadAddress}
           initialTitle={editingTask?.title || ''}
+          initialLeadId={isEditMode ? null : taskLead?.id || deal?.leadId || null}
+          initialDealId={isEditMode ? null : deal?.id || null}
           initialScheduledAt={
             editingTask
               ? editingTask.__source === 'team'
@@ -343,9 +365,14 @@ export function DealTasksSection({
           }
           initialTeamAssignUids={
             editingTask?.__source === 'team' && Array.isArray(editingTask.assignedUids)
-              ? editingTask.assignedUids
+              ? [...editingTask.assignedUids]
               : []
           }
+          leads={dialogLeads}
+          deals={deal ? [deal] : []}
+          showDealPicker={!isEditMode}
+          lockLead={!isEditMode}
+          disableDealClear={!isEditMode}
           showTeamAssign={showTeamAssign}
           teamMembers={teamMemberList}
           teamContextActive={teamContextActive}

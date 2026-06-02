@@ -72,6 +72,116 @@ export function collectUnseenKeys(items) {
   return keys
 }
 
+/** @typedef {'all' | 'leads' | 'deals' | 'tasks' | 'other'} FeedTabId */
+
+export const FEED_TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'leads', label: 'Leads' },
+  { id: 'deals', label: 'Deals' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'other', label: 'Other' },
+]
+
+/** @returns {Exclude<FeedTabId, 'all'>} */
+export function categorizeFeedItem(item) {
+  if (!item) return 'other'
+  const type = String(item.type || '').toLowerCase()
+  const navType = String(item.nav?.type || '').toLowerCase()
+  const entityKind = String(item.entity?.kind || '').toLowerCase()
+
+  if (
+    type.startsWith('lead') ||
+    navType === 'lead' ||
+    entityKind === 'lead' ||
+    navType === 'pipelineleadstage' ||
+    item.nav?.leadId
+  ) {
+    return 'leads'
+  }
+
+  if (
+    type.startsWith('deal') ||
+    navType === 'deal' ||
+    entityKind === 'deal' ||
+    navType === 'pipelinedealstage' ||
+    navType === 'pipeline' ||
+    type.startsWith('pipeline')
+  ) {
+    return 'deals'
+  }
+
+  if (
+    type.startsWith('task') ||
+    navType === 'task' ||
+    navType === 'taskdeadline' ||
+    navType === 'taskassigned' ||
+    entityKind === 'task'
+  ) {
+    return 'tasks'
+  }
+
+  return 'other'
+}
+
+export function feedItemCategoryLabel(item) {
+  const cat = categorizeFeedItem(item)
+  if (cat === 'leads') return 'Lead'
+  if (cat === 'deals') return 'Deal'
+  if (cat === 'tasks') return 'Task'
+  if (item?.source === 'notification') return 'Notification'
+  return 'Update'
+}
+
+/** @returns {'lead' | 'deal' | 'task' | 'list' | 'path' | 'form' | 'quote' | 'team' | 'notification' | 'activity'} */
+export function feedItemIconKind(item) {
+  const cat = categorizeFeedItem(item)
+  if (cat === 'leads') return 'lead'
+  if (cat === 'deals') return 'deal'
+  if (cat === 'tasks') return 'task'
+
+  const type = String(item?.type || '').toLowerCase()
+  const navType = String(item?.nav?.type || '').toLowerCase()
+
+  if (type.includes('list') || navType.includes('list')) return 'list'
+  if (type.includes('path') || navType.includes('path')) return 'path'
+  if (type.includes('form') || navType.includes('form')) return 'form'
+  if (type.includes('quote') || navType.includes('quote')) return 'quote'
+  if (type.includes('team') || navType.includes('team')) return 'team'
+  if (item?.source === 'notification') return 'notification'
+  return 'activity'
+}
+
+function feedItemSearchHaystack(item) {
+  return [
+    item?.summary,
+    item?.title,
+    item?.body,
+    item?.actorEmail,
+    item?.type,
+    item?.nav?.type,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
+export function filterFeedItems(items, { tab = 'all', query = '' } = {}) {
+  const q = query.trim().toLowerCase()
+  return (items || []).filter((item) => {
+    if (tab !== 'all' && categorizeFeedItem(item) !== tab) return false
+    if (!q) return true
+    return feedItemSearchHaystack(item).includes(q)
+  })
+}
+
+export function countFeedItemsByTab(items) {
+  const counts = { all: (items || []).length, leads: 0, deals: 0, tasks: 0, other: 0 }
+  for (const item of items || []) {
+    counts[categorizeFeedItem(item)] += 1
+  }
+  return counts
+}
+
 export async function fetchFeed(getToken, { teamId = null, limit = 50, uid = null } = {}) {
   const token = await getToken?.()
   if (!token) return { items: [], unreadCount: 0, teams: [] }

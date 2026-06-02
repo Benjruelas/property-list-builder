@@ -4,7 +4,7 @@
  */
 
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
-import { getAllTeams } from './lib/teams.js'
+import { getAllTeams, fullTeamsIndex } from './lib/teams.js'
 import { userHasTeamMembership } from './lib/access.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 
@@ -171,12 +171,13 @@ export default async function handler(req, res) {
       })
 
       try {
+        const allTeams = await getAllTeams()
         const { notifyTaskAssigned } = await import('./push-utils.js')
         await notifyTaskAssigned(assignedUids.filter((uid) => uid !== user.uid), {
           taskTitle: title,
           taskId: task.id,
           actorEmail: user.email,
-        })
+        }, fullTeamsIndex(allTeams))
       } catch {
         /* ignore */
       }
@@ -197,10 +198,27 @@ export default async function handler(req, res) {
       if (body.scheduledAt !== undefined) task.scheduledAt = body.scheduledAt
       if (body.scheduledEndAt !== undefined) task.scheduledEndAt = body.scheduledEndAt
       if (body.assignedUids !== undefined) {
+        const prevAssigned = new Set(task.assignedUids || [])
         try {
           task.assignedUids = normalizeAssignedUids(body, task, membership)
         } catch (e) {
           return res.status(400).json({ error: e.message })
+        }
+        const newlyAssigned = (task.assignedUids || []).filter(
+          (uid) => uid !== user.uid && !prevAssigned.has(uid)
+        )
+        if (newlyAssigned.length) {
+          try {
+            const allTeams = await getAllTeams()
+            const { notifyTaskAssigned } = await import('./push-utils.js')
+            await notifyTaskAssigned(newlyAssigned, {
+              taskTitle: task.title,
+              taskId: task.id,
+              actorEmail: user.email,
+            }, fullTeamsIndex(allTeams))
+          } catch {
+            /* ignore */
+          }
         }
       }
       if (body.completed !== undefined) {

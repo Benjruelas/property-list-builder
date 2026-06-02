@@ -498,6 +498,38 @@ export async function notifyQuotePaid(ownerEmail, { quoteTitle, clientName, amou
   )
 }
 
+function emailForUid(uid, teamsIndex) {
+  if (!uid) return null
+  for (const team of Object.values(teamsIndex || {})) {
+    for (const m of team?.members || []) {
+      if (m?.uid === uid && m.email) return String(m.email).toLowerCase().trim()
+    }
+  }
+  return null
+}
+
+/** Notify teammates when a task is assigned to them (by uid). */
+export async function notifyTaskAssigned(assignedUids, { taskTitle, taskId, actorEmail }, teamsIndex = {}) {
+  const title = 'Task assigned to you'
+  const label = (taskTitle || 'Task').slice(0, 80)
+  const actor = actorEmail || 'Someone'
+  for (const uid of assignedUids || []) {
+    const email = emailForUid(uid, teamsIndex)
+    if (!email) continue
+    await sendWebPushToEmail(
+      email,
+      {
+        title,
+        body: `${actor} assigned you "${label}"`,
+        tag: `task-assign-${taskId || Date.now()}-${uid}`,
+        data: { type: 'taskAssigned', taskId },
+      },
+      'taskDeadline',
+      { email: actorEmail }
+    )
+  }
+}
+
 export async function notifyTaskDeadline(uid, email, { taskTitle, scheduledAt, taskId }) {
   if (!uid && !email) return
   const e = (email || '').toLowerCase().trim()

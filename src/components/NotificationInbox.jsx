@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, ChevronDown, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Bell, ChevronDown, Loader2, Search, UserSearch, Briefcase, CheckSquare, List, Route, FileText, ScrollText, Users2, Activity } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
-import { fetchFeed, markFeedSeen, feedItemKey, collectUnseenKeys } from '../utils/feed'
+import { LEAD_LIST_ROW_CLASS } from './LeadRow'
+import {
+  fetchFeed,
+  markFeedSeen,
+  feedItemKey,
+  collectUnseenKeys,
+  FEED_TABS,
+  filterFeedItems,
+  countFeedItemsByTab,
+  feedItemCategoryLabel,
+  feedItemIconKind,
+} from '../utils/feed'
 import { cn } from '@/lib/utils'
 
 const FEED_UNSEEN_COLOR = '#60a5fa'
@@ -10,23 +21,73 @@ const FEED_UNSEEN_COLOR = '#60a5fa'
 function formatWhen(iso) {
   try {
     return new Date(iso).toLocaleString(undefined, {
-      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
     })
   } catch {
     return ''
   }
 }
 
-function actorInitial(email) {
-  const e = (email || '').trim()
-  if (!e) return '?'
-  return e.charAt(0).toUpperCase()
+function ActivityTabs({ activeTab, onChange, counts }) {
+  return (
+    <div className="flex gap-4 flex-wrap" role="tablist" aria-label="Activity type">
+      {FEED_TABS.map(({ id, label }) => {
+        const isActive = activeTab === id
+        const count = counts[id] ?? 0
+        return (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(id)}
+            className={cn(
+              'pb-1.5 text-sm font-medium border-b-2 transition-opacity',
+              isActive ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
+            )}
+          >
+            {label}
+            <span className="text-xs opacity-60 ml-1">{count}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+const FEED_ICON_MAP = {
+  lead: UserSearch,
+  deal: Briefcase,
+  task: CheckSquare,
+  list: List,
+  path: Route,
+  form: FileText,
+  quote: ScrollText,
+  team: Users2,
+  notification: Bell,
+  activity: Activity,
+}
+
+function FeedItemIcon({ kind }) {
+  const Icon = FEED_ICON_MAP[kind] || Activity
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 mt-0.5">
+      <Icon className="h-4 w-4 opacity-70" aria-hidden />
+    </span>
+  )
 }
 
 function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
   const isActivity = item.source === 'activity'
-  const label = isActivity ? item.summary : item.title
-  const detail = !isActivity && item.body ? item.body : null
+  const primary = isActivity ? item.summary : item.title
+  const secondary = !isActivity && item.body ? item.body : null
+  const category = feedItemCategoryLabel(item)
+  const iconKind = feedItemIconKind(item)
+  const MetaIcon = FEED_ICON_MAP[iconKind] || Activity
+  const when = formatWhen(item.createdAt)
 
   return (
     <li className="min-w-0">
@@ -34,35 +95,40 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
         type="button"
         onClick={() => onOpen(item)}
         className={cn(
-          'map-panel-list-item w-full max-w-full min-w-0 text-left transition-colors flex gap-2.5 items-start box-border p-3 rounded-lg border border-solid',
-          isSessionNew
-            ? 'bg-white/[0.08] hover:bg-white/[0.12]'
-            : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'
+          LEAD_LIST_ROW_CLASS,
+          'flex-row gap-3 items-start w-full text-left',
+          isSessionNew && 'border-[#60a5fa]/80 bg-white/[0.08] hover:bg-white/[0.12]'
         )}
-        style={isSessionNew ? { borderColor: `${FEED_UNSEEN_COLOR}cc` } : undefined}
       >
-        {isSessionNew && (
-          <span
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5"
-            style={{ backgroundColor: FEED_UNSEEN_COLOR }}
-            aria-hidden
-          />
-        )}
-        {isActivity && (
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold uppercase mt-0.5">
-            {actorInitial(item.actorEmail)}
-          </span>
-        )}
-        <span className="min-w-0 flex-1 overflow-hidden">
-          <div className="text-sm leading-snug flex items-center gap-2 min-w-0">
-            <span className={cn('truncate min-w-0', !isActivity && isSessionNew && 'font-medium')}>{label}</span>
+        <FeedItemIcon kind={iconKind} />
+        <div className="min-w-0 flex-1 flex flex-col gap-1">
+          <div className="text-sm font-medium truncate">{primary}</div>
+          {secondary ? (
+            <div className="text-xs opacity-60 truncate">{secondary}</div>
+          ) : (
+            <div className="text-xs opacity-60 truncate">{category}</div>
+          )}
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap text-[11px] opacity-50">
+            {secondary && (
+              <span className="inline-flex items-center gap-1">
+                <MetaIcon className="h-3 w-3 shrink-0" />
+                {category}
+              </span>
+            )}
+            {when && <span>{when}</span>}
             {isActivity && isAdmin && item.audience === 'admin_only' && (
-              <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase shrink-0">Admin</span>
+              <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase">
+                Admin
+              </span>
+            )}
+            {isSessionNew && (
+              <span className="inline-flex items-center gap-1" style={{ color: FEED_UNSEEN_COLOR }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: FEED_UNSEEN_COLOR }} aria-hidden />
+                New
+              </span>
             )}
           </div>
-          {detail && <div className="text-xs opacity-75 mt-0.5 line-clamp-2 break-words">{detail}</div>}
-          <div className="text-[10px] opacity-50 mt-1">{formatWhen(item.createdAt)}</div>
-        </span>
+        </div>
       </button>
     </li>
   )
@@ -80,6 +146,23 @@ export function ActivityPanel({
   isAdmin,
   onOpenItem,
 }) {
+  const [tab, setTab] = useState('all')
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (!isOpen) {
+      setTab('all')
+      setSearch('')
+    }
+  }, [isOpen])
+
+  const tabCounts = useMemo(() => countFeedItemsByTab(items), [items])
+
+  const filteredItems = useMemo(
+    () => filterFeedItems(items, { tab, query: search }),
+    [items, tab, search]
+  )
+
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose?.() }}>
       <DialogContent
@@ -87,7 +170,7 @@ export function ActivityPanel({
         showCloseButton={false}
         hideOverlay
       >
-        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-3')} style={PANEL_LIST_HEADER_STYLE}>
+        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Notifications and team activity</DialogDescription>
           <PanelHeader onBack={onClose} title="Activity">
             {displayTeams.length > 1 && (
@@ -110,18 +193,38 @@ export function ActivityPanel({
         </DialogHeader>
 
         <div
-          className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto scrollbar-hide px-3 py-1"
+          className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto scrollbar-hide px-6 py-3"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
+          <div className="mb-3 space-y-2">
+            <ActivityTabs activeTab={tab} onChange={setTab} counts={tabCounts} />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search activity…"
+                className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+                aria-label="Search activity"
+              />
+            </div>
+          </div>
+
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center py-10 text-sm opacity-70">
               <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
             </div>
           ) : items.length === 0 ? (
             <p className="text-center py-10 text-sm opacity-60 px-4">No activity yet.</p>
+          ) : filteredItems.length === 0 ? (
+            <div className="text-center py-12">
+              <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm opacity-60">No activity matches your filters.</p>
+            </div>
           ) : (
             <ul className="min-w-0 space-y-1.5 pb-1">
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <FeedItemRow
                   key={feedItemKey(item)}
                   item={item}

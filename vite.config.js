@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.js'],
+  },
   plugins: [
     react(),
     // Serve init.json and proxy auth for Firebase (fixes 404 that breaks sign-in)

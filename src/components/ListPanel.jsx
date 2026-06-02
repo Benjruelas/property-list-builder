@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Eye, Trash2, Check, Mail, MoreVertical, FileDown, Share2, Users, Pencil, Phone } from 'lucide-react'
+import { X, Plus, Eye, Trash2, Check, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -22,7 +22,7 @@ export function ListPanel({
   currentUser,
   isOpen, 
   onClose,
-  onBackToParent,
+  onBack,
   selectedListIds = [],
   onToggleListHighlight,
   onAddParcelsToList,
@@ -38,9 +38,7 @@ export function ListPanel({
   onValidateShareEmail,
   onCreateList,
   onViewListContents,
-  onBulkEmail,
   onExportList,
-  onSkipTraceList,
   isAddingSingleParcel = false,
   isBulkEmailMode = false,
   /** Matches Settings → Parcel boundary color (list add / multi-select prompts). */
@@ -315,11 +313,7 @@ export function ListPanel({
   }
 
   const handlePanelBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
-      return
-    }
-    onClose()
+    onBack?.() ?? onClose?.()
   }
 
   return (
@@ -649,22 +643,10 @@ export function ListPanel({
               role="menu"
               onClick={(e) => e.stopPropagation()}
             >
-              {onBulkEmail && list.parcels?.length > 0 && (
-                <button type="button" onClick={() => { closeDropdown(); onBulkEmail(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
-                  <Mail className="h-4 w-4 flex-shrink-0" />
-                  Email list
-                </button>
-              )}
               {onExportList && (
                 <button type="button" onClick={() => { closeDropdown(); onExportList(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
                   <FileDown className="h-4 w-4 flex-shrink-0" />
                   Export list
-                </button>
-              )}
-              {onSkipTraceList && list.parcels?.length > 0 && (
-                <button type="button" onClick={() => { closeDropdown(); onSkipTraceList(list.id) }} className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors">
-                  <Phone className="h-4 w-4 flex-shrink-0" />
-                  Skip trace list
                 </button>
               )}
               {onShareList && isListOwnedByUser(list) && (

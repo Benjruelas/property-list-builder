@@ -1,57 +1,108 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
 import { SchedulePicker } from './SchedulePicker'
 import { TeamMemberAssignSection } from './TeamMemberAssignSection'
+import { DealPickerField } from './pickers/DealPickerField'
+import { LeadPickerField } from './pickers/LeadPickerField'
 import { showToast } from './ui/toast'
 
 /**
- * Shared New task / Edit task panel used across Tasks, Leads, Deals, and Create Deal.
+ * Shared New task / Edit task panel — create mode matches Tasks panel (title, deal, lead, schedule, assign).
  */
 export function NewTaskDialog({
   open,
   onOpenChange,
   isEditMode = false,
-  showContextCard = true,
+  showContextCard = false,
   contextPrimary = '',
   contextSecondary = '',
   contextTertiary = '',
   initialTitle = '',
+  initialLeadId = null,
+  initialDealId = null,
   initialScheduledAt = null,
   initialScheduledEndAt = null,
+  initialDateTimeExpanded = false,
   initialTeamAssignUids = [],
+  leads = [],
+  deals = [],
+  showDealPicker = true,
+  lockLead = false,
+  disableDealClear = false,
   showTeamAssign = false,
   teamMembers = [],
   teamContextActive = false,
+  teamAssignTitle = 'Assign to:',
+  teamAssignDescription = '',
   leadName = '',
   leadAddress = '',
+  headerSubtitle = null,
   onSubmit,
   nestedOverlay = true,
   topLayer = false,
 }) {
   const [title, setTitle] = useState('')
+  const [leadId, setLeadId] = useState(null)
+  const [dealId, setDealId] = useState(null)
   const [scheduledAt, setScheduledAt] = useState(null)
   const [scheduledEndAt, setScheduledEndAt] = useState(null)
   const [dateTimeExpanded, setDateTimeExpanded] = useState(false)
   const [teamAssignUids, setTeamAssignUids] = useState([])
+  const wasOpenRef = useRef(false)
+  const [pickerSession, setPickerSession] = useState(0)
 
+  const resolveLeadFromDeal = (deal) => {
+    if (!deal) return null
+    if (deal.leadId) {
+      const byId = leads.find((l) => l.id === deal.leadId)
+      if (byId) return byId
+    }
+    if (deal.parcelId) {
+      return leads.find((l) => String(l.parcelId) === String(deal.parcelId)) || null
+    }
+    return null
+  }
+
+  const handleDealChange = (deal) => {
+    if (!deal) {
+      setDealId(null)
+      if (!lockLead) setLeadId(null)
+      return
+    }
+    setDealId(deal.id)
+    const lead = resolveLeadFromDeal(deal)
+    if (lead) setLeadId(lead.id)
+  }
+
+  // Reset form only when the dialog opens — not on every parent re-render (inline [] deps caused flicker).
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    if (wasOpenRef.current) return
+    wasOpenRef.current = true
+    setPickerSession((n) => n + 1)
     setTitle(initialTitle || '')
+    setLeadId(initialLeadId || null)
+    setDealId(initialDealId || null)
     setScheduledAt(initialScheduledAt ?? null)
     setScheduledEndAt(initialScheduledEndAt ?? null)
-    setDateTimeExpanded(!!(initialScheduledAt || initialScheduledEndAt))
+    setDateTimeExpanded(
+      initialDateTimeExpanded || !!(initialScheduledAt || initialScheduledEndAt)
+    )
     setTeamAssignUids(Array.isArray(initialTeamAssignUids) ? [...initialTeamAssignUids] : [])
-  }, [
-    open,
-    initialTitle,
-    initialScheduledAt,
-    initialScheduledEndAt,
-    initialTeamAssignUids,
-  ])
+  }, [open])
+
+  const minScheduleDate = useMemo(() => (open ? Date.now() : 0), [open])
+
+  const usesTeamStorage = teamAssignUids.length > 0
+  const isTeamContext = teamContextActive || usesTeamStorage
+  const showDealField = !isEditMode && showDealPicker
 
   const close = () => onOpenChange?.(false)
 
@@ -63,7 +114,7 @@ export function NewTaskDialog({
     }
     const endAt =
       scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
-    if (!teamContextActive && endAt && scheduledAt && endAt <= scheduledAt) {
+    if (!isTeamContext && endAt && scheduledAt && endAt <= scheduledAt) {
       showToast('End time must be after start time', 'error')
       return
     }
@@ -72,8 +123,12 @@ export function NewTaskDialog({
       scheduledAt,
       scheduledEndAt: endAt,
       assignedUids: teamAssignUids,
+      leadId: leadId || null,
+      dealId: dealId || null,
     })
   }
+
+  const panelTitle = isEditMode ? 'Edit task' : 'New task'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,16 +142,31 @@ export function NewTaskDialog({
           className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
           style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
         >
-          <PanelHeader onBack={close} title={isEditMode ? 'Edit task' : 'New task'} />
+          <PanelHeader
+            onBack={close}
+            title={
+              headerSubtitle ? (
+                <>
+                  {panelTitle}
+                  <span className="block text-sm font-normal text-white/80 mt-1">{headerSubtitle}</span>
+                </>
+              ) : (
+                panelTitle
+              )
+            }
+          />
+          <DialogTitle className="sr-only">{panelTitle}</DialogTitle>
           <DialogDescription className="sr-only">
-            {isEditMode ? 'Edit task details' : 'Create a new task'}
+            {isEditMode
+              ? 'Edit task details'
+              : 'Create a task. Title is required. Deal, lead, teammate, date, and time are optional.'}
           </DialogDescription>
         </DialogHeader>
         <div
           className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          {showContextCard && contextPrimary && (
+          {isEditMode && showContextCard && contextPrimary && (
             <div className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2.5">
               <div className="text-sm font-medium truncate">{contextPrimary}</div>
               {contextSecondary && (
@@ -109,10 +179,12 @@ export function NewTaskDialog({
           )}
           <div>
             <label className="text-xs font-medium block mb-1 opacity-90">
-              Task title{' '}
-              <span className="text-red-400" aria-label="required">
-                *
-              </span>
+              Title{' '}
+              {!isEditMode && (
+                <span className="text-red-400" aria-label="required">
+                  *
+                </span>
+              )}
             </label>
             <Input
               value={title}
@@ -120,9 +192,31 @@ export function NewTaskDialog({
               placeholder="e.g. Call back, Roof inspection"
               className="text-sm"
               autoFocus
+              aria-required={!isEditMode}
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
             />
           </div>
+          {!isEditMode && showDealField && (
+            <DealPickerField
+              key={`deal-${pickerSession}`}
+              deals={deals}
+              value={dealId}
+              onChange={handleDealChange}
+              disableClear={disableDealClear}
+            />
+          )}
+          {!isEditMode && (
+            <LeadPickerField
+              key={`lead-${pickerSession}`}
+              leads={leads}
+              value={leadId}
+              onChange={(l) => {
+                if (dealId) return
+                setLeadId(l?.id || null)
+              }}
+              readOnly={lockLead || !!dealId}
+            />
+          )}
           <div className="rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
             <button
               type="button"
@@ -144,9 +238,9 @@ export function NewTaskDialog({
                   hideLabel
                   value={scheduledAt}
                   onChange={setScheduledAt}
-                  endValue={teamContextActive ? null : scheduledEndAt}
-                  onEndChange={teamContextActive ? undefined : setScheduledEndAt}
-                  minDate={Date.now()}
+                  endValue={isTeamContext ? null : scheduledEndAt}
+                  onEndChange={isTeamContext ? undefined : setScheduledEndAt}
+                  minDate={minScheduleDate}
                   leadName={leadName || contextPrimary}
                   leadAddress={leadAddress || contextTertiary || contextSecondary}
                 />
@@ -157,6 +251,8 @@ export function NewTaskDialog({
             <TeamMemberAssignSection
               members={teamMembers}
               selectedUids={teamAssignUids}
+              title={teamAssignTitle}
+              description={teamAssignDescription}
               onToggle={(uid) => {
                 setTeamAssignUids((prev) =>
                   prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]

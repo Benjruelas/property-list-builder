@@ -89,7 +89,7 @@ export function QuoteDetails({
 
           {quote.terms && (
             <div>
-              <h3 className="text-xs uppercase tracking-wide opacity-60 mb-1">Internal terms</h3>
+              <h3 className="text-xs uppercase tracking-wide opacity-60 mb-1">Terms</h3>
               <p className="text-sm whitespace-pre-wrap opacity-90">{quote.terms}</p>
             </div>
           )}

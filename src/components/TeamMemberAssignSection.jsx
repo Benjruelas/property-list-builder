@@ -13,8 +13,8 @@ export function TeamMemberAssignSection({
   selectedUids = [],
   onToggle,
   disabled = false,
-  title = 'Assign',
-  description = 'Select who is responsible (optional).',
+  title = 'Assign to:',
+  description = '',
   className = ''
 }) {
   if (!Array.isArray(members) || members.length === 0) return null
@@ -23,8 +23,8 @@ export function TeamMemberAssignSection({
   return (
     <div className={className}>
       <p className="text-xs font-medium block mb-1 opacity-90">{title}</p>
-      <p className="text-[11px] text-white/50 mb-2">{description}</p>
-      <ul className="space-y-1.5 max-h-40 overflow-y-auto scrollbar-hide">
+      {description ? <p className="text-[11px] text-white/50 mb-2">{description}</p> : null}
+      <ul className="space-y-1.5">
         {members.map((m) => {
           const on = sel.has(m.uid)
           return (
@@ -65,8 +65,8 @@ export function TeamMemberAssignSectionLight({
   selectedUids = [],
   onToggle,
   disabled = false,
-  title = 'Assign',
-  description = 'Select who is responsible (optional).',
+  title = 'Assign to:',
+  description = '',
   className = ''
 }) {
   if (!Array.isArray(members) || members.length === 0) return null
@@ -75,8 +75,8 @@ export function TeamMemberAssignSectionLight({
   return (
     <div className={className}>
       <p className="text-xs font-medium text-gray-600 mb-1">{title}</p>
-      <p className="text-[11px] text-gray-500 mb-2">{description}</p>
-      <ul className="space-y-1.5 max-h-40 overflow-y-auto scrollbar-hide">
+      {description ? <p className="text-[11px] text-gray-500 mb-2">{description}</p> : null}
+      <ul className="space-y-1.5">
         {members.map((m) => {
           const on = sel.has(m.uid)
           return (

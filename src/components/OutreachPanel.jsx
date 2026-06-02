@@ -1,10 +1,23 @@
-import { useState, useEffect, useCallback } from 'react'
-import { createPortal } from 'react-dom'
-import { X, Plus, Edit2, Trash2, Mail, MessageSquare, Send, ArrowLeft, MoreVertical, Share2, Download, Upload } from 'lucide-react'
-import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react'
+import {
+  Trash2,
+  Share2,
+  Download,
+  Search,
+  Edit2,
+  FileText,
+} from 'lucide-react'
+import {
+  PanelHeader,
+  PanelCreateButton,
+  PanelOptionsButton,
+  PANEL_LIST_HEADER_CLASS,
+  PANEL_LIST_HEADER_STYLE,
+} from './ui/panel-header'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
@@ -15,7 +28,6 @@ import {
   deleteEmailTemplate,
   AVAILABLE_TAGS,
   serializeEmailTemplateForShare,
-  importEmailTemplateFromShareJson,
 } from '../utils/emailTemplates'
 import {
   getTextTemplates,
@@ -23,96 +35,84 @@ import {
   updateTextTemplate,
   deleteTextTemplate,
   serializeTextTemplateForShare,
-  importTextTemplateFromShareJson,
 } from '../utils/textTemplates'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 
-const MENU_WIDTH = 200
+const LIST_ROW_CLASS =
+  'map-panel-list-item leads-panel-list-item flex flex-col gap-0.5 w-full text-left px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
 
-function useOutreachMenu(isPanelOpen) {
-  const [openId, setOpenId] = useState(null)
-  const [menuAnchor, setMenuAnchor] = useState(null)
-  const closeMenu = useCallback(() => {
-    setOpenId(null)
-    setMenuAnchor(null)
-  }, [])
-  const openMenu = useCallback((id, e) => {
-    e.stopPropagation()
-    if (openId === id) {
-      closeMenu()
-      return
-    }
-    const rect = e.currentTarget.getBoundingClientRect()
-    const PADDING = 8
-    let top = rect.bottom + 4
-    let left = rect.right - MENU_WIDTH
-    if (left < PADDING) left = PADDING
-    if (left + MENU_WIDTH > window.innerWidth - PADDING) {
-      left = window.innerWidth - MENU_WIDTH - PADDING
-    }
-    const h = 180
-    if (top + h > window.innerHeight - PADDING) {
-      top = Math.max(PADDING, rect.top - h - 4)
-    }
-    setMenuAnchor({ top, left })
-    setOpenId(id)
-  }, [openId, closeMenu])
-  useEffect(() => {
-    if (!isPanelOpen) closeMenu()
-  }, [isPanelOpen, closeMenu])
-  useEffect(() => {
-    if (!openId) return
-    const onKey = (e) => {
-      if (e.key === 'Escape') closeMenu()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [openId, closeMenu])
-  return { openId, menuAnchor, openMenu, closeMenu }
+const TABS = [
+  { id: 'email', label: 'Email' },
+  { id: 'text', label: 'Text' },
+]
+
+const EMAIL_CONFIG = {
+  kind: 'email',
+  tabLabel: 'Email',
+  getTemplates: getEmailTemplates,
+  add: addEmailTemplate,
+  update: updateEmailTemplate,
+  remove: deleteEmailTemplate,
+  serialize: serializeEmailTemplateForShare,
 }
 
-function TemplateMenuDropdown({ openId, menuAnchor, templates, onClose, onEdit, onShare, onDelete }) {
-  const template = openId && Array.isArray(templates) ? templates.find((t) => t.id === openId) : null
-  if (!openId || !template || !menuAnchor) return null
-  if (typeof document === 'undefined') return null
-  return createPortal(
-    <div className="pointer-events-auto" data-outreach-template-menu>
-      <div className="fixed inset-0 z-[10000]" onClick={onClose} aria-hidden />
-      <div
-        className="map-panel list-panel hamburger-menu fixed z-[10001] min-w-[180px] max-w-[220px] rounded-xl py-1 overflow-hidden border border-white/15 bg-black/90 backdrop-blur-sm shadow-lg"
-        style={{ top: menuAnchor.top, left: menuAnchor.left }}
-        role="menu"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          onClick={() => { onEdit(template); onClose() }}
-          className="hamburger-menu-btn w-full px-3 py-2.5 text-left text-sm flex items-center gap-2"
-        >
-          <Edit2 className="h-4 w-4 flex-shrink-0" />
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={() => { onShare(template); onClose() }}
-          className="hamburger-menu-btn w-full px-3 py-2.5 text-left text-sm flex items-center gap-2"
-        >
-          <Share2 className="h-4 w-4 flex-shrink-0" />
-          Share
-        </button>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => { onDelete(template.id); onClose() }}
-          onKeyDown={(e) => { if (e.key === 'Enter') { onDelete(template.id); onClose() } }}
-          className="list-panel-delete-btn w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 cursor-pointer"
-        >
-          <Trash2 className="h-4 w-4 flex-shrink-0" />
-          Delete
-        </div>
+const TEXT_CONFIG = {
+  kind: 'text',
+  tabLabel: 'Text',
+  getTemplates: getTextTemplates,
+  add: addTextTemplate,
+  update: updateTextTemplate,
+  remove: deleteTextTemplate,
+  serialize: serializeTextTemplateForShare,
+}
+
+function OutreachTabs({ activeTab, onChange }) {
+  return (
+    <div className="flex gap-4" role="tablist" aria-label="Outreach template type">
+      {TABS.map((tab) => {
+        const isActive = activeTab === tab.id
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              'pb-1.5 text-sm font-medium border-b-2 transition-opacity',
+              isActive ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
+            )}
+          >
+            {tab.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function TagBar({ onInsertTag }) {
+  return (
+    <div className="mb-2">
+      <p className="text-xs mb-2 opacity-60">Insert tag</p>
+      <div className="flex flex-wrap gap-1.5">
+        {AVAILABLE_TAGS.map((tag) => (
+          <Button
+            key={tag}
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs create-list-btn px-2"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              onInsertTag(tag)
+            }}
+          >
+            {tag}
+          </Button>
+        ))}
       </div>
-    </div>,
-    document.getElementById('modal-root') || document.body
+    </div>
   )
 }
 
@@ -146,20 +146,21 @@ function ShareOutreachDialog({ open, onOpenChange, template, serialize, tabLabel
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="map-panel list-panel max-w-md" showCloseButton topLayer focusOverlay hideOverlay>
-        <DialogHeader>
-          <DialogTitle>Share template</DialogTitle>
-          <DialogDescription className="text-left text-sm text-white/70">
-            Copy the template data to send in chat or email. Recipients can open Outreach → {tabLabel} and use <span className="text-white/90">Import</span> to paste it. On a phone, use Share to open another app.
-          </DialogDescription>
+      <DialogContent className="map-panel list-panel max-w-md p-0" showCloseButton nestedOverlay topLayer>
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left">
+          <PanelHeader onBack={() => onOpenChange(false)} title="Share template" />
+          <DialogDescription className="sr-only">Share outreach template JSON</DialogDescription>
+          <p className="text-sm text-white/70 mt-2">
+            Copy the template data or share it with a teammate.
+          </p>
         </DialogHeader>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button type="button" variant="outline" onClick={copyPayload} className="create-list-btn border flex-1 min-h-[44px]">
+        <div className="px-6 py-4 flex flex-col gap-2 sm:flex-row">
+          <Button type="button" variant="outline" onClick={copyPayload} className="create-list-btn flex-1">
             <Download className="h-4 w-4 mr-2" />
             Copy to clipboard
           </Button>
           {canNativeShare && (
-            <Button type="button" variant="outline" onClick={nativeShare} className="create-list-btn border flex-1 min-h-[44px]">
+            <Button type="button" variant="outline" onClick={nativeShare} className="create-list-btn flex-1">
               <Share2 className="h-4 w-4 mr-2" />
               Share…
             </Button>
@@ -170,532 +171,547 @@ function ShareOutreachDialog({ open, onOpenChange, template, serialize, tabLabel
   )
 }
 
-function ImportOutreachDialog({ open, onOpenChange, kind, onImport }) {
-  const [value, setValue] = useState('')
-  useEffect(() => { if (open) setValue('') }, [open])
-
-  const fromClipboard = async () => {
-    try {
-      const t = await navigator.clipboard.readText()
-      if (t) setValue(t)
-      else showToast('Clipboard is empty', 'info')
-    } catch {
-      showToast('Allow clipboard access or paste below', 'info')
-    }
-  }
-
-  const submit = () => {
-    onImport((value || '').trim())
-  }
-
+function TemplateListRow({ template, kind, onOpen, onMenu }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="map-panel list-panel max-w-md" showCloseButton topLayer focusOverlay hideOverlay>
-        <DialogHeader>
-          <DialogTitle>Import {kind} template</DialogTitle>
-          <DialogDescription className="text-left text-sm text-white/70">
-            Paste the JSON a teammate sent you, or use Paste from clipboard.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2">
-          <Button type="button" variant="outline" size="sm" onClick={fromClipboard} className="w-full create-list-btn border">
-            Paste from clipboard
-          </Button>
-          <textarea
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            className="w-full min-h-[140px] p-3 text-sm rounded-lg border border-white/20 bg-white/5 text-white placeholder:text-white/40"
-            placeholder="Paste template JSON here…"
-            spellCheck={false}
-          />
-          <div className="flex gap-2">
-            <Button type="button" onClick={submit} className="create-list-btn flex-1 min-h-11">
-              Import
-            </Button>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="create-list-btn border flex-1 min-h-11">
-              Cancel
-            </Button>
+    <div className="relative">
+      <button type="button" className={cn(LIST_ROW_CLASS, 'pr-12 w-full')} onClick={onOpen}>
+        <div className="text-sm font-medium truncate">{template.name}</div>
+        {kind === 'email' && (
+          <div className="text-xs opacity-60 truncate">
+            {template.subject?.trim() ? template.subject : '(no subject)'}
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        )}
+        <div className="text-xs opacity-50 line-clamp-2 mt-0.5">{template.body?.trim() || '(no body)'}</div>
+      </button>
+      <div className="absolute right-1.5 top-1.5 z-10">
+        <PanelOptionsButton
+          title="Template options"
+          onClick={(e) => {
+            e.stopPropagation()
+            onMenu(e)
+          }}
+        />
+      </div>
+    </div>
   )
 }
 
-function EmailTab({ onSelectTemplate: _onSelectTemplate, isOpen }) {
+function TemplateDetail({ template, kind }) {
+  return (
+    <div className="rounded-lg border border-white/15 bg-white/[0.04] px-4 py-4 space-y-4">
+      {kind === 'email' && (
+        <div>
+          <p className="text-xs font-semibold uppercase opacity-50 mb-1">Subject</p>
+          <p className="text-sm">{template.subject?.trim() || '(no subject)'}</p>
+        </div>
+      )}
+      <div>
+        <p className="text-xs font-semibold uppercase opacity-50 mb-1">{kind === 'email' ? 'Body' : 'Message'}</p>
+        <p className="text-sm whitespace-pre-wrap leading-relaxed">{template.body?.trim() || '(no body)'}</p>
+      </div>
+    </div>
+  )
+}
+
+function TemplateEditor({
+  kind,
+  templateName,
+  setTemplateName,
+  templateSubject,
+  setTemplateSubject,
+  templateBody,
+  setTemplateBody,
+  focusedField,
+  setFocusedField,
+  onSave,
+  onCancel,
+  isEdit,
+  hasChanges,
+}) {
+  const blurHandler = () => {
+    setTimeout(() => {
+      const el = document.activeElement
+      if (el?.tagName !== 'TEXTAREA' && el?.tagName !== 'INPUT') setFocusedField(null)
+    }, 200)
+  }
+
+  const insertTag = (tag) => {
+    const token = `{${tag}}`
+    if (kind === 'email' && focusedField === 'subject') setTemplateSubject((p) => p + token)
+    else setTemplateBody((p) => p + token)
+  }
+
+  return (
+    <div className="space-y-3 create-list-form">
+      <div>
+        <label className="text-xs font-medium block mb-1 opacity-90">
+          Name <span className="text-red-400">*</span>
+        </label>
+        <Input
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          placeholder={kind === 'email' ? 'e.g. Initial contact' : 'e.g. Follow-up text'}
+          className="text-sm"
+          autoFocus
+        />
+      </div>
+      {kind === 'email' && (
+        <div>
+          <label className="text-xs font-medium block mb-1 opacity-90">Subject</label>
+          {focusedField === 'subject' && <TagBar onInsertTag={insertTag} />}
+          <Input
+            value={templateSubject}
+            onChange={(e) => setTemplateSubject(e.target.value)}
+            onFocus={() => setFocusedField('subject')}
+            onBlur={blurHandler}
+            placeholder="Email subject line"
+            className="text-sm"
+          />
+        </div>
+      )}
+      <div>
+        <label className="text-xs font-medium block mb-1 opacity-90">{kind === 'email' ? 'Body' : 'Message'}</label>
+        {focusedField === 'body' && <TagBar onInsertTag={insertTag} />}
+        <textarea
+          value={templateBody}
+          onChange={(e) => setTemplateBody(e.target.value)}
+          onFocus={() => setFocusedField('body')}
+          onBlur={blurHandler}
+          placeholder="Use {Owner Name}, {Address}, and other tags for dynamic fields."
+          className="w-full min-h-[200px] p-3 text-sm rounded-lg border border-white/15 bg-white/[0.04] resize-y scrollbar-hide focus:outline-none focus:ring-2 focus:ring-white/25"
+          rows={8}
+        />
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button
+          variant="outline"
+          className="create-list-btn flex-1"
+          onClick={onSave}
+          disabled={isEdit && !hasChanges}
+        >
+          {isEdit ? 'Save' : 'Create'}
+        </Button>
+        <Button variant="outline" className="create-list-btn flex-1" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function useTemplateTab(config) {
   const { scheduleSync } = useUserDataSync()
   const [templates, setTemplates] = useState([])
-  const [viewingTemplate, setViewingTemplate] = useState(null)
-  const [editingTemplate, setEditingTemplate] = useState(null)
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [screen, setScreen] = useState('list')
+  const [selected, setSelected] = useState(null)
+  const [editing, setEditing] = useState(null)
   const [templateName, setTemplateName] = useState('')
   const [templateSubject, setTemplateSubject] = useState('')
   const [templateBody, setTemplateBody] = useState('')
   const [focusedField, setFocusedField] = useState(null)
-  const { openId, menuAnchor, openMenu, closeMenu } = useOutreachMenu(isOpen)
+  const [search, setSearch] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuTemplate, setMenuTemplate] = useState(null)
+  const menuTriggerRef = useRef(null)
   const [shareFor, setShareFor] = useState(null)
-  const [importOpen, setImportOpen] = useState(false)
+
+  const reload = useCallback(() => setTemplates(config.getTemplates()), [config])
 
   useEffect(() => {
-    setTemplates(getEmailTemplates())
+    reload()
+  }, [reload])
+
+  const resetForm = useCallback(() => {
+    setTemplateName('')
+    setTemplateSubject('')
+    setTemplateBody('')
+    setFocusedField(null)
+    setEditing(null)
   }, [])
 
-  const reload = () => setTemplates(getEmailTemplates())
+  const goToList = useCallback(() => {
+    setScreen('list')
+    setSelected(null)
+    resetForm()
+  }, [resetForm])
 
-  const handleCreate = () => {
-    if (!templateName.trim()) { showToast('Please enter a template name', 'error'); return }
-    addEmailTemplate({ name: templateName.trim(), subject: templateSubject, body: templateBody })
-    scheduleSync(); reload()
-    setTemplateName(''); setTemplateSubject(''); setTemplateBody(''); setShowCreateForm(false)
-    showToast('Template created', 'success')
-  }
+  const openCreate = useCallback(() => {
+    resetForm()
+    setScreen('form')
+  }, [resetForm])
 
-  const handleEdit = (t) => {
-    setEditingTemplate(t); setTemplateName(t.name); setTemplateSubject(t.subject); setTemplateBody(t.body); setShowCreateForm(true)
-  }
+  const openDetail = useCallback((item) => {
+    setSelected(item)
+    setScreen('detail')
+  }, [])
 
-  const handleUpdate = () => {
-    if (!templateName.trim()) { showToast('Please enter a template name', 'error'); return }
-    updateEmailTemplate(editingTemplate.id, { name: templateName.trim(), subject: templateSubject, body: templateBody })
-    scheduleSync(); reload()
-    setEditingTemplate(null); setViewingTemplate(null); setTemplateName(''); setTemplateSubject(''); setTemplateBody(''); setShowCreateForm(false)
-    showToast('Template updated', 'success')
+  const openEdit = useCallback((item) => {
+    setEditing(item)
+    setTemplateName(item.name || '')
+    setTemplateSubject(item.subject ?? '')
+    setTemplateBody(item.body ?? '')
+    setScreen('form')
+  }, [])
+
+  const openMenu = useCallback((item, e) => {
+    menuTriggerRef.current = e.currentTarget
+    setMenuTemplate(item)
+    setMenuOpen(true)
+  }, [])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const sorted = [...templates].sort(
+      (a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
+    )
+    if (!q) return sorted
+    return sorted.filter((item) => {
+      const hay = [item.name, item.subject, item.body].filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  }, [templates, search])
+
+  const hasChanges = editing
+    ? templateName.trim() !== (editing.name || '').trim() ||
+      templateSubject !== (editing.subject ?? '') ||
+      templateBody !== (editing.body ?? '')
+    : false
+
+  const handleSave = () => {
+    if (!templateName.trim()) {
+      showToast('Enter a template name', 'error')
+      return
+    }
+    const payload = {
+      name: templateName.trim(),
+      body: templateBody,
+      ...(config.kind === 'email' ? { subject: templateSubject } : {}),
+    }
+    if (editing) config.update(editing.id, payload)
+    else config.add(payload)
+    scheduleSync()
+    reload()
+    goToList()
+    showToast(editing ? 'Template updated' : 'Template created', 'success')
   }
 
   const handleDelete = async (id) => {
-    if (!await showConfirm('Are you sure you want to delete this template?', 'Delete Template')) return
-    deleteEmailTemplate(id); scheduleSync(); reload()
-    setViewingTemplate(prev => prev?.id === id ? null : prev)
+    if (!(await showConfirm('Delete this template?', 'Delete template'))) return
+    config.remove(id)
+    scheduleSync()
+    reload()
+    if (selected?.id === id) goToList()
     showToast('Template deleted', 'success')
   }
 
-  const insertTag = (tag) => {
-    const t = `{${tag}}`
-    if (focusedField === 'subject') setTemplateSubject(p => p + t)
-    else if (focusedField === 'body') setTemplateBody(p => p + t)
+  return {
+    kind: config.kind,
+    tabLabel: config.tabLabel,
+    screen,
+    selected,
+    editing,
+    templateName,
+    setTemplateName,
+    templateSubject,
+    setTemplateSubject,
+    templateBody,
+    setTemplateBody,
+    focusedField,
+    setFocusedField,
+    search,
+    setSearch,
+    filtered,
+    menuOpen,
+    setMenuOpen,
+    menuTemplate,
+    menuTriggerRef,
+    shareFor,
+    setShareFor,
+    goToList,
+    openCreate,
+    openDetail,
+    openEdit,
+    openMenu,
+    handleSave,
+    handleDelete,
+    hasChanges,
+    serialize: config.serialize,
   }
+}
 
-  const cancelEdit = () => {
-    setEditingTemplate(null); setTemplateName(''); setTemplateSubject(''); setTemplateBody(''); setShowCreateForm(false); setFocusedField(null)
-  }
+const TemplateTabPane = forwardRef(function TemplateTabPane(
+  { tab, isActive, onUseTemplate, searchQuery, onNavChange },
+  ref
+) {
+  const config = tab === 'email' ? EMAIL_CONFIG : TEXT_CONFIG
+  const t = useTemplateTab(config)
+  const {
+    kind,
+    tabLabel,
+    screen,
+    selected,
+    editing,
+    templateName,
+    setTemplateName,
+    templateSubject,
+    setTemplateSubject,
+    templateBody,
+    setTemplateBody,
+    focusedField,
+    setFocusedField,
+    filtered,
+    search,
+    menuOpen,
+    setMenuOpen,
+    menuTemplate,
+    menuTriggerRef,
+    shareFor,
+    setShareFor,
+    goToList,
+    openCreate,
+    openDetail,
+    openEdit,
+    openMenu,
+    handleSave,
+    handleDelete,
+    hasChanges,
+    serialize,
+    setSearch,
+  } = t
 
-  const hasChanges = editingTemplate
-    ? templateName.trim() !== (editingTemplate.name || '').trim() ||
-      templateSubject !== (editingTemplate.subject ?? '') ||
-      templateBody !== (editingTemplate.body ?? '')
-    : false
+  useImperativeHandle(ref, () => ({ goToList }))
 
-  const blurHandler = () => {
-    setTimeout(() => {
-      const el = document.activeElement
-      if (el?.tagName !== 'TEXTAREA' && el?.tagName !== 'INPUT') setFocusedField(null)
-    }, 200)
-  }
+  useEffect(() => {
+    if (isActive) setSearch(searchQuery)
+  }, [isActive, searchQuery, setSearch])
 
-  const TagBar = () => (
-    <div className="mb-2">
-      <p className="text-xs mb-2 opacity-75">Available tags (click to insert):</p>
-      <div className="flex flex-wrap gap-2">
-        {AVAILABLE_TAGS.map(tag => (
-          <Button key={tag} type="button" variant="ghost" size="sm" onMouseDown={(e) => { e.preventDefault(); insertTag(tag) }} className="text-xs border border-white/30">
-            {tag}
-          </Button>
-        ))}
-      </div>
-    </div>
-  )
+  useEffect(() => {
+    if (!isActive) return
+    onNavChange({
+      screen,
+      title:
+        screen === 'list'
+          ? null
+          : screen === 'detail'
+            ? selected?.name || 'Template'
+            : editing
+              ? 'Edit template'
+              : 'New template',
+      onCreate: openCreate,
+      onDetailOptions: (e) => openMenu(selected, e),
+    })
+  }, [isActive, screen, selected, editing, onNavChange, openCreate, openMenu])
 
-  const onImportEmail = (raw) => {
-    if (!raw || !String(raw).trim()) {
-      showToast('Paste the template JSON first', 'error')
-      return
-    }
-    try {
-      importEmailTemplateFromShareJson(raw)
-      scheduleSync()
-      reload()
-      setImportOpen(false)
-      showToast('Template imported', 'success')
-    } catch (e) {
-      showToast(e?.message || 'Invalid template', 'error')
-    }
+  if (!isActive) return null
+
+  const handleOpen = (template) => {
+    openDetail(template)
   }
 
   return (
     <>
-      {showCreateForm && (
-        <div className="space-y-3 create-list-form">
-          <Button variant="ghost" size="sm" onClick={cancelEdit} className="mb-0 -mt-0.5 opacity-80 hover:opacity-100" title={editingTemplate ? 'Back to template' : 'Back to list'}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <label className="block text-sm font-medium mb-1 opacity-90">Template Name *</label>
-            <Input value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g., Initial Contact" className="w-full" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 opacity-90">Subject</label>
-            {focusedField === 'subject' && <TagBar />}
-            <Input value={templateSubject} onChange={(e) => setTemplateSubject(e.target.value)} onFocus={() => setFocusedField('subject')} onBlur={blurHandler} placeholder="Email subject line" className="w-full" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 opacity-90">Body</label>
-            {focusedField === 'body' && <TagBar />}
-            <textarea value={templateBody} onChange={(e) => setTemplateBody(e.target.value)} onFocus={() => setFocusedField('body')} onBlur={blurHandler} placeholder="Email body. Use {Owner Name}, {Address}, etc. to insert dynamic fields." className="w-full min-h-[200px] p-3 border border-white/20 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white/40 scrollbar-hide" rows={8} />
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={editingTemplate ? handleUpdate : handleCreate} disabled={editingTemplate && !hasChanges} className="flex-1 create-list-btn">{editingTemplate ? 'Update Template' : 'Create Template'}</Button>
-            <Button variant="outline" onClick={cancelEdit} className="flex-1 create-list-btn">Cancel</Button>
-          </div>
-        </div>
+      {screen === 'form' && (
+        <TemplateEditor
+          kind={kind}
+          templateName={templateName}
+          setTemplateName={setTemplateName}
+          templateSubject={templateSubject}
+          setTemplateSubject={setTemplateSubject}
+          templateBody={templateBody}
+          setTemplateBody={setTemplateBody}
+          focusedField={focusedField}
+          setFocusedField={setFocusedField}
+          onSave={handleSave}
+          onCancel={() => {
+            if (editing) openDetail(editing)
+            else goToList()
+          }}
+          isEdit={!!editing}
+          hasChanges={hasChanges}
+        />
       )}
 
-      {!showCreateForm && viewingTemplate && (
-        <div className="space-y-2">
-          <div className="relative min-h-9">
-            <Button variant="ghost" size="sm" onClick={() => setViewingTemplate(null)} className="mb-0 -mt-0.5 opacity-80 hover:opacity-100" title="Back to list">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0 h-8 w-8 border border-white/20 rounded-md text-white/90 hover:bg-white/10"
-              title="Template options"
-              onClick={(e) => openMenu(viewingTemplate.id, e)}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="border border-white/20 rounded-lg p-4 pr-3 bg-white/5 space-y-3">
-            <h3 className="font-semibold text-lg pr-8">{viewingTemplate.name}</h3>
-            <div><p className="text-xs font-medium mb-1 opacity-80">Subject</p><p className="text-sm">{viewingTemplate.subject || '(no subject)'}</p></div>
-            <div><p className="text-xs font-medium mb-1 opacity-80">Body</p><p className="text-sm whitespace-pre-wrap">{viewingTemplate.body || '(no body)'}</p></div>
-          </div>
-        </div>
-      )}
+      {screen === 'detail' && selected && <TemplateDetail template={selected} kind={kind} />}
 
-      {!showCreateForm && !viewingTemplate && (
+      {screen === 'list' && (
         <>
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" size="sm" onClick={() => { setShowCreateForm(true); setEditingTemplate(null); setTemplateName(''); setTemplateSubject(''); setTemplateBody('') }} className="w-full sm:flex-1 create-new-list-btn">
-              <Plus className="h-4 w-4 mr-2" />Create New Template
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="w-full sm:flex-1 create-new-list-btn border" title="Paste a template someone shared with you">
-              <Upload className="h-4 w-4 mr-2" />
-              Import
-            </Button>
-          </div>
-          {templates.length === 0 ? (
-            <p className="text-center py-8 text-sm opacity-80">No email templates yet. Create or import one to get started!</p>
-          ) : (
-            <div className="space-y-2">
-              {templates.map(t => (
-                <div
-                  key={t.id}
-                  className="relative p-4 pr-12 border border-white/20 rounded-lg transition-colors hover:bg-white/10 cursor-pointer"
-                  onClick={() => setViewingTemplate(t)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-sm mb-1">{t.name}</h3>
-                    <p className="text-xs mb-1 opacity-90"><span className="font-medium">Subject:</span> {t.subject || '(no subject)'}</p>
-                    <p className="text-xs line-clamp-2 opacity-80">{t.body || '(no body)'}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 border border-white/20 rounded-md text-white/90 hover:bg-white/10"
-                    title="Template options"
-                    onClick={(e) => openMenu(t.id, e)}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+          {filtered.length === 0 ? (
+            <div className="text-center py-16">
+              <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm opacity-60">
+                {search.trim() ? 'No templates match your search.' : `No ${kind} templates yet.`}
+              </p>
+              {!search.trim() && (
+                <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">
+                  Create your first template to get started.
+                </p>
+              )}
             </div>
+          ) : (
+            <ul className="space-y-1.5">
+              {filtered.map((template) => (
+                <li key={template.id}>
+                  <TemplateListRow
+                    template={template}
+                    kind={kind}
+                    onOpen={() => handleOpen(template)}
+                    onMenu={(e) => openMenu(template, e)}
+                  />
+                </li>
+              ))}
+            </ul>
           )}
         </>
       )}
 
-      <TemplateMenuDropdown
-        openId={openId}
-        menuAnchor={menuAnchor}
-        templates={templates}
-        onClose={closeMenu}
-        onEdit={handleEdit}
-        onShare={setShareFor}
-        onDelete={handleDelete}
-      />
-      <ShareOutreachDialog
-        open={!!shareFor}
-        onOpenChange={(v) => { if (!v) setShareFor(null) }}
-        template={shareFor}
-        serialize={serializeEmailTemplateForShare}
-        tabLabel="Email"
-      />
-      <ImportOutreachDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        kind="email"
-        onImport={onImportEmail}
-      />
-    </>
-  )
-}
-
-function TextTab({ isOpen }) {
-  const { scheduleSync } = useUserDataSync()
-  const [templates, setTemplates] = useState([])
-  const [viewingTemplate, setViewingTemplate] = useState(null)
-  const [editingTemplate, setEditingTemplate] = useState(null)
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [templateName, setTemplateName] = useState('')
-  const [templateBody, setTemplateBody] = useState('')
-  const [focusedField, setFocusedField] = useState(null)
-  const { openId, menuAnchor, openMenu, closeMenu } = useOutreachMenu(isOpen)
-  const [shareFor, setShareFor] = useState(null)
-  const [importOpen, setImportOpen] = useState(false)
-
-  useEffect(() => {
-    setTemplates(getTextTemplates())
-  }, [])
-
-  const reload = () => setTemplates(getTextTemplates())
-
-  const handleCreate = () => {
-    if (!templateName.trim()) { showToast('Please enter a template name', 'error'); return }
-    addTextTemplate({ name: templateName.trim(), body: templateBody })
-    scheduleSync(); reload()
-    setTemplateName(''); setTemplateBody(''); setShowCreateForm(false)
-    showToast('Template created', 'success')
-  }
-
-  const handleEdit = (t) => {
-    setEditingTemplate(t); setTemplateName(t.name); setTemplateBody(t.body); setShowCreateForm(true)
-  }
-
-  const handleUpdate = () => {
-    if (!templateName.trim()) { showToast('Please enter a template name', 'error'); return }
-    updateTextTemplate(editingTemplate.id, { name: templateName.trim(), body: templateBody })
-    scheduleSync(); reload()
-    setEditingTemplate(null); setViewingTemplate(null); setTemplateName(''); setTemplateBody(''); setShowCreateForm(false)
-    showToast('Template updated', 'success')
-  }
-
-  const handleDelete = async (id) => {
-    if (!await showConfirm('Are you sure you want to delete this template?', 'Delete Template')) return
-    deleteTextTemplate(id); scheduleSync(); reload()
-    setViewingTemplate(prev => prev?.id === id ? null : prev)
-    showToast('Template deleted', 'success')
-  }
-
-  const insertTag = (tag) => setTemplateBody(p => p + `{${tag}}`)
-
-  const cancelEdit = () => {
-    setEditingTemplate(null); setTemplateName(''); setTemplateBody(''); setShowCreateForm(false); setFocusedField(null)
-  }
-
-  const hasChanges = editingTemplate
-    ? templateName.trim() !== (editingTemplate.name || '').trim() ||
-      templateBody !== (editingTemplate.body ?? '')
-    : false
-
-  const blurHandler = () => {
-    setTimeout(() => {
-      const el = document.activeElement
-      if (el?.tagName !== 'TEXTAREA' && el?.tagName !== 'INPUT') setFocusedField(null)
-    }, 200)
-  }
-
-  const onImportText = (raw) => {
-    if (!raw || !String(raw).trim()) {
-      showToast('Paste the template JSON first', 'error')
-      return
-    }
-    try {
-      importTextTemplateFromShareJson(raw)
-      scheduleSync()
-      reload()
-      setImportOpen(false)
-      showToast('Template imported', 'success')
-    } catch (e) {
-      showToast(e?.message || 'Invalid template', 'error')
-    }
-  }
-
-  return (
-    <>
-      {showCreateForm && (
-        <div className="space-y-4 create-list-form">
-          <Button variant="ghost" size="sm" onClick={cancelEdit} className="mb-2 -mt-1 opacity-80 hover:opacity-100" title={editingTemplate ? 'Back to template' : 'Back to list'}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <label className="block text-sm font-medium mb-1 opacity-90">Template Name *</label>
-            <Input value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g., Follow-up Text" className="w-full" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 opacity-90">Message</label>
-            {focusedField === 'body' && (
-              <div className="mb-2">
-                <p className="text-xs mb-2 opacity-75">Available tags (click to insert):</p>
-                <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_TAGS.map(tag => (
-                    <Button key={tag} type="button" variant="ghost" size="sm" onMouseDown={(e) => { e.preventDefault(); insertTag(tag) }} className="text-xs border border-white/30">{tag}</Button>
-                  ))}
-                </div>
-              </div>
+      <OptionsMenuDropdown
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        anchorEl={menuTriggerRef.current}
+        menuWidth={180}
+      >
+        {menuTemplate && (
+          <>
+            {onUseTemplate && tab === 'email' && (
+              <OptionsMenuItem
+                onClick={() => {
+                  onUseTemplate(menuTemplate)
+                  setMenuOpen(false)
+                }}
+              >
+                <FileText className="h-4 w-4 shrink-0" />
+                Use template
+              </OptionsMenuItem>
             )}
-            <textarea value={templateBody} onChange={(e) => setTemplateBody(e.target.value)} onFocus={() => setFocusedField('body')} onBlur={blurHandler} placeholder="Message body. Use {Owner Name}, {Address}, etc. to insert dynamic fields." className="w-full min-h-[200px] p-3 border border-white/20 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white/40 scrollbar-hide" rows={8} />
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={editingTemplate ? handleUpdate : handleCreate} disabled={editingTemplate && !hasChanges} className="flex-1 create-list-btn">{editingTemplate ? 'Update Template' : 'Create Template'}</Button>
-            <Button variant="outline" onClick={cancelEdit} className="flex-1 create-list-btn">Cancel</Button>
-          </div>
-        </div>
-      )}
-
-      {!showCreateForm && viewingTemplate && (
-        <div className="space-y-2">
-          <div className="relative min-h-9">
-            <Button variant="ghost" size="sm" onClick={() => setViewingTemplate(null)} className="mb-0 -mt-0.5 opacity-80 hover:opacity-100" title="Back to list">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0 h-8 w-8 border border-white/20 rounded-md text-white/90 hover:bg-white/10"
-              title="Template options"
-              onClick={(e) => openMenu(viewingTemplate.id, e)}
+            <OptionsMenuItem
+              onClick={() => {
+                openEdit(menuTemplate)
+                setMenuOpen(false)
+              }}
             >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="border border-white/20 rounded-lg p-4 pr-3 bg-white/5 space-y-3">
-            <h3 className="font-semibold text-lg pr-8">{viewingTemplate.name}</h3>
-            <div><p className="text-xs font-medium mb-1 opacity-80">Message</p><p className="text-sm whitespace-pre-wrap">{viewingTemplate.body || '(no body)'}</p></div>
-          </div>
-        </div>
-      )}
+              <Edit2 className="h-4 w-4 shrink-0" />
+              Edit
+            </OptionsMenuItem>
+            <OptionsMenuItem
+              onClick={() => {
+                setShareFor(menuTemplate)
+                setMenuOpen(false)
+              }}
+            >
+              <Share2 className="h-4 w-4 shrink-0" />
+              Share
+            </OptionsMenuItem>
+            <OptionsMenuItem destructive onClick={() => { handleDelete(menuTemplate.id); setMenuOpen(false) }}>
+              <Trash2 className="h-4 w-4 shrink-0" />
+              Delete
+            </OptionsMenuItem>
+          </>
+        )}
+      </OptionsMenuDropdown>
 
-      {!showCreateForm && !viewingTemplate && (
-        <>
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" size="sm" onClick={() => { setShowCreateForm(true); setEditingTemplate(null); setTemplateName(''); setTemplateBody('') }} className="w-full sm:flex-1 create-new-list-btn">
-              <Plus className="h-4 w-4 mr-2" />Create New Template
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="w-full sm:flex-1 create-new-list-btn border" title="Paste a template someone shared with you">
-              <Upload className="h-4 w-4 mr-2" />
-              Import
-            </Button>
-          </div>
-          {templates.length === 0 ? (
-            <p className="text-center py-8 text-sm opacity-80">No text templates yet. Create or import one to get started!</p>
-          ) : (
-            <div className="space-y-2">
-              {templates.map(t => (
-                <div
-                  key={t.id}
-                  className="relative p-4 pr-12 border border-white/20 rounded-lg transition-colors hover:bg-white/10 cursor-pointer"
-                  onClick={() => setViewingTemplate(t)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-sm mb-1">{t.name}</h3>
-                    <p className="text-xs line-clamp-2 opacity-80">{t.body || '(no body)'}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 border border-white/20 rounded-md text-white/90 hover:bg-white/10"
-                    title="Template options"
-                    onClick={(e) => openMenu(t.id, e)}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      <TemplateMenuDropdown
-        openId={openId}
-        menuAnchor={menuAnchor}
-        templates={templates}
-        onClose={closeMenu}
-        onEdit={handleEdit}
-        onShare={setShareFor}
-        onDelete={handleDelete}
-      />
       <ShareOutreachDialog
         open={!!shareFor}
         onOpenChange={(v) => { if (!v) setShareFor(null) }}
         template={shareFor}
-        serialize={serializeTextTemplateForShare}
-        tabLabel="Text"
-      />
-      <ImportOutreachDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        kind="text"
-        onImport={onImportText}
+        serialize={serialize}
+        tabLabel={tabLabel}
       />
     </>
   )
-}
+})
 
-const TABS = [
-  { id: 'email', label: 'Email', icon: Mail },
-  { id: 'text', label: 'Text', icon: MessageSquare },
-]
-
-export function OutreachPanel({ isOpen, onClose, onSelectTemplate, isBulkMode = false, initialTab = 'email' }) {
+export function OutreachPanel({ isOpen, onClose, onUseTemplate, initialTab = 'email' }) {
   const [activeTab, setActiveTab] = useState(initialTab)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [nav, setNav] = useState({ screen: 'list', title: null })
+  const emailTabRef = useRef(null)
+  const textTabRef = useRef(null)
 
   useEffect(() => {
     if (isOpen) setActiveTab(initialTab)
   }, [isOpen, initialTab])
 
+  useEffect(() => {
+    setNav({ screen: 'list', title: null })
+    setSearchQuery('')
+  }, [activeTab])
+
+  const handleBack = () => {
+    if (nav.screen !== 'list') {
+      const ref = activeTab === 'email' ? emailTabRef : textTabRef
+      ref.current?.goToList?.()
+      return
+    }
+    onClose()
+  }
+
+  const showListChrome = nav.screen === 'list'
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="map-panel list-panel outreach-panel fullscreen-panel" showCloseButton={false} hideOverlay topLayer>
-        <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
-          <PanelHeader onBack={onClose} title="Outreach" />
-          <DialogDescription className="sr-only">Manage email and text message templates for outreach</DialogDescription>
-          <div className="outreach-tabs inline-flex rounded-lg p-0.5 gap-0.5 mt-3 w-full">
-            {TABS.map(tab => {
-              const Icon = tab.icon
-              const isActive = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "outreach-tab flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-1.5",
-                    isActive && "outreach-tab-active"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                </button>
-              )
-            })}
-          </div>
+      <DialogContent
+        className="map-panel list-panel outreach-panel fullscreen-panel flex flex-col min-h-0 p-0"
+        showCloseButton={false}
+        hideOverlay
+        topLayer
+      >
+        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
+          <DialogDescription className="sr-only">Manage email and text outreach templates</DialogDescription>
+          <PanelHeader
+            onBack={handleBack}
+            title={nav.title || 'Outreach'}
+          >
+            {showListChrome && (
+              <PanelCreateButton title="New template" onClick={() => nav.onCreate?.()} />
+            )}
+            {nav.screen === 'detail' && (
+              <PanelOptionsButton
+                title="Template options"
+                onClick={(e) => nav.onDetailOptions?.(e)}
+              />
+            )}
+          </PanelHeader>
         </DialogHeader>
 
-        <div className="px-6 pt-3 pb-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-          <div className={activeTab === 'email' ? '' : 'hidden'}>
-            <EmailTab onSelectTemplate={onSelectTemplate} isOpen={isOpen} />
-          </div>
-          <div className={activeTab === 'text' ? '' : 'hidden'}>
-            <TextTab isOpen={isOpen} />
-          </div>
+        <div
+          className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-6 py-3"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          {showListChrome && (
+            <div className="mb-3 space-y-3">
+              <OutreachTabs activeTab={activeTab} onChange={setActiveTab} />
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Search ${activeTab} templates…`}
+                  className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+                  aria-label="Search templates"
+                />
+              </div>
+            </div>
+          )}
+          <TemplateTabPane
+            ref={emailTabRef}
+            tab="email"
+            isActive={activeTab === 'email'}
+            onUseTemplate={onUseTemplate}
+            searchQuery={searchQuery}
+            onNavChange={setNav}
+          />
+          <TemplateTabPane
+            ref={textTabRef}
+            tab="text"
+            isActive={activeTab === 'text'}
+            searchQuery={searchQuery}
+            onNavChange={setNav}
+          />
         </div>
       </DialogContent>
     </Dialog>
   )
 }
+
+export default OutreachPanel

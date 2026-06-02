@@ -59,6 +59,18 @@ export function CreateDealTasksEditor({
 
   const displayLeads = useMemo(() => (lead ? [lead] : []), [lead])
 
+  const pendingDeal = useMemo(() => {
+    if (isEditMode) return null
+    return {
+      id: '__pending_deal__',
+      title: (dealTitle || leadLabel || 'New deal').trim(),
+      leadId: lead?.id ?? null,
+      leadName: leadLabel,
+      leadAddress,
+      parcelId: lead?.parcelId ?? null,
+    }
+  }, [isEditMode, dealTitle, leadLabel, leadAddress, lead])
+
   const countLabel = tasks.length === 1 ? '1 task' : `${tasks.length} tasks`
   const expanded = !collapsed
 
@@ -193,13 +205,21 @@ export function CreateDealTasksEditor({
           if (!open) closeTaskDialog()
         }}
         isEditMode={isEditMode}
+        showContextCard={isEditMode}
         contextPrimary={contextPrimary}
         contextSecondary={leadLabel && contextPrimary !== leadLabel ? leadLabel : ''}
         contextTertiary={leadAddress}
         initialTitle={editingTask?.title || ''}
+        initialLeadId={isEditMode ? null : lead?.id || null}
+        initialDealId={isEditMode ? null : pendingDeal?.id || null}
         initialScheduledAt={editingTask?.scheduledAt ?? null}
         initialScheduledEndAt={editingTask?.scheduledEndAt ?? null}
         initialTeamAssignUids={editingTask?.assignedUids || []}
+        leads={displayLeads}
+        deals={pendingDeal ? [pendingDeal] : []}
+        showDealPicker={!isEditMode}
+        lockLead={!isEditMode}
+        disableDealClear={!isEditMode}
         showTeamAssign={showTeamAssign}
         teamMembers={teamMembers}
         teamContextActive={teamContextActive}

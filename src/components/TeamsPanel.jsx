@@ -20,7 +20,10 @@ const TEAM_LIST_ITEM_CLASS =
 export function TeamsPanel({
   isOpen,
   onClose,
-  onBackToParent,
+  onBack,
+  detailTeamId = null,
+  onOpenTeamDetail,
+  onCloseTeamDetail,
   currentUser,
   getToken,
   teams,
@@ -31,14 +34,13 @@ export function TeamsPanel({
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [openTeamId, setOpenTeamId] = useState(null)
+  const openTeamId = detailTeamId
   const [inviteBusy, setInviteBusy] = useState(null)
 
   useEffect(() => {
     if (!isOpen) {
       setCreating(false)
       setNewName('')
-      setOpenTeamId(null)
     }
   }, [isOpen])
 
@@ -116,19 +118,15 @@ export function TeamsPanel({
   const incomingInvites = pendingInvites.filter((i) => i.status === 'pending')
 
   const handlePanelBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
+    if (openTeamId) {
+      onCloseTeamDetail?.()
       return
     }
-    onClose()
+    onBack?.() ?? onClose?.()
   }
 
   const handleTeamDetailClose = () => {
-    if (onBackToParent) {
-      onBackToParent()
-      return
-    }
-    setOpenTeamId(null)
+    onCloseTeamDetail?.()
   }
 
   return (
@@ -201,7 +199,7 @@ export function TeamsPanel({
                   const role = teamRoleForUser(team, currentUser)
                   const isAdmin = isTeamAdminRole(team, currentUser)
                   return (
-                    <button key={team.id} type="button" onClick={() => setOpenTeamId(team.id)} className={TEAM_LIST_ITEM_CLASS}>
+                    <button key={team.id} type="button" onClick={() => onOpenTeamDetail?.(team.id)} className={TEAM_LIST_ITEM_CLASS}>
                       <div className="flex items-center justify-between gap-2 min-w-0 w-full">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <span className="font-medium text-sm truncate">{team.name}</span>

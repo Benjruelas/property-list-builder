@@ -48,7 +48,12 @@ async function getPdfPageCount(arrayBuffer) {
 export function FormsPanel({
   isOpen,
   onClose,
-  onBackToParent,
+  onBack,
+  formsView = 'list',
+  formsTemplateId = null,
+  onOpenEdit,
+  onOpenFill,
+  onCloseSubView,
   teams = [],
   teamMembership = null,
   onShareForm,
@@ -56,8 +61,8 @@ export function FormsPanel({
   onValidateShareEmail
 }) {
   const { getToken, currentUser } = useAuth()
-  const [view, setView] = useState('list')
-  const [activeTemplateId, setActiveTemplateId] = useState(null)
+  const view = formsView
+  const activeTemplateId = formsTemplateId
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -116,8 +121,6 @@ export function FormsPanel({
 
   useEffect(() => {
     if (!isOpen) {
-      setView('list')
-      setActiveTemplateId(null)
       setShareTemplateId(null)
       setLocalShareState(null)
       setLinkTemplateId(null)
@@ -215,8 +218,7 @@ export function FormsPanel({
           pageCount
         })
         setTemplates((prev) => [...prev.filter((t) => t.id !== updated.id), updated])
-        setActiveTemplateId(updated.id)
-        setView('edit')
+        onOpenEdit?.(updated.id)
         showToast('Form created. Add fields, then save.', 'success')
       } catch (e) {
         showToast(e.message || 'Failed to create form', 'error')
@@ -353,20 +355,15 @@ export function FormsPanel({
   if (!isOpen) return null
 
   const handlePanelBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
+    if (view !== 'list') {
+      onCloseSubView?.()
       return
     }
-    onClose?.()
+    onBack?.() ?? onClose?.()
   }
 
   const handleSubViewBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
-      return
-    }
-    setView('list')
-    setActiveTemplateId(null)
+    onCloseSubView?.()
   }
 
   return (
@@ -420,7 +417,7 @@ export function FormsPanel({
                     return (
                       <div
                         key={t.id}
-                        onClick={() => { setActiveTemplateId(t.id); setView('fill') }}
+                        onClick={() => onOpenFill?.(t.id)}
                         className="map-panel-list-item relative w-full sm:w-auto rounded-lg p-4 transition-all cursor-pointer border border-white/10 bg-white/[0.06] hover:bg-white/[0.1]"
                       >
                         <div className="flex items-start gap-2">
@@ -488,12 +485,7 @@ export function FormsPanel({
             <FormFillView
               template={activeTemplate}
               onBack={() => {
-                if (onBackToParent) {
-                  onBackToParent()
-                  return
-                }
-                setView('list')
-                setActiveTemplateId(null)
+                onCloseSubView?.()
                 refresh()
               }}
               onTemplateUpdated={handleTemplateUpdated}
@@ -533,8 +525,7 @@ export function FormsPanel({
                     type="button"
                     onClick={() => {
                       closeMenu()
-                      setActiveTemplateId(t.id)
-                      setView('edit')
+                      onOpenEdit?.(t.id)
                     }}
                     className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
                   >

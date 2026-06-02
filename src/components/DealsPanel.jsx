@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { Search, Briefcase, ChevronDown, ChevronRight, Clock, Archive, Plus } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
@@ -10,7 +10,10 @@ import { flattenDealsFromPipelines } from '@/utils/deals'
 import { DealDetails } from './DealDetails'
 import { DealProfitBadge } from './DealLineItemsSection'
 import { LeadDetails } from './LeadDetails'
+import { CreateDealDialog } from './CreateDealDialog'
+import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { updateLead } from '@/utils/leads'
+import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { loadClosedDeals } from '@/utils/closedDeals'
 import { showToast } from './ui/toast'
 
@@ -103,6 +106,7 @@ function ClosedDealCard({ record, onClick }) {
 export function DealsPanel({
   isOpen,
   onClose,
+  onBack,
   pipelines = [],
   leads = [],
   closedDeals: closedDealsProp,
@@ -126,18 +130,50 @@ export function DealsPanel({
   onGoToParcelOnMap,
   currentUserId = null,
   onCreateQuoteForDeal,
+  dealsDetailDealId = null,
+  dealsDetailPipelineId = null,
+  dealsClosedRecordId = null,
+  dealsLeadOverlayId = null,
+  onOpenDealDetail,
+  onOpenClosedDeal,
+  onOpenLeadOverlay,
+  onCloseDealDetail,
+  onCloseLeadOverlay,
+  onCloseClosedDeal,
+  createDealPipelines = [],
+  createDealSaving = false,
+  onCreateDealSubmit,
+  pipelinesCount = 0,
 }) {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('active')
   const [collapsedPipelines, setCollapsedPipelines] = useState({})
-  const [selectedDeal, setSelectedDeal] = useState(null)
-  const [selectedPipelineId, setSelectedPipelineId] = useState(null)
-  const [selectedClosed, setSelectedClosed] = useState(null)
-  const [leadOverlayId, setLeadOverlayId] = useState(null)
   const [dealsMenuOpen, setDealsMenuOpen] = useState(false)
   const dealsMenuTriggerRef = useRef(null)
+  const [dealPickerOpen, setDealPickerOpen] = useState(false)
+  const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
+  const [createDealOpen, setCreateDealOpen] = useState(false)
+  const [createDealPrefill, setCreateDealPrefill] = useState(null)
 
   const closedDeals = closedDealsProp ?? loadClosedDeals()
+
+  const selectedDeal = useMemo(() => {
+    if (!dealsDetailDealId) return null
+    for (const p of pipelines) {
+      const deal = (p.deals || []).find((d) => d.id === dealsDetailDealId)
+      if (deal) return deal
+    }
+    return null
+  }, [dealsDetailDealId, pipelines])
+
+  const selectedPipelineId = dealsDetailPipelineId ?? (selectedDeal ? pipelines.find((p) => (p.deals || []).some((d) => d.id === selectedDeal.id))?.id : null)
+
+  const selectedClosed = useMemo(
+    () => (dealsClosedRecordId ? closedDeals.find((r) => r.id === dealsClosedRecordId) : null),
+    [dealsClosedRecordId, closedDeals],
+  )
+
+  const leadOverlayId = dealsLeadOverlayId
 
   const allPipelineData = useMemo(() => {
     return pipelines.map((p) => ({
@@ -194,26 +230,11 @@ export function DealsPanel({
       || (selectedLead?.id === leadOverlayId ? selectedLead : null))
     : null
 
-  useEffect(() => {
-    if (!selectedDeal) setLeadOverlayId(null)
-  }, [selectedDeal?.id])
-
-  useEffect(() => {
-    if (!isOpen) {
-      setSelectedDeal(null)
-      setSelectedPipelineId(null)
-      setSelectedClosed(null)
-      setLeadOverlayId(null)
-    }
-  }, [isOpen])
-
   const handleGoToParcelOnMap = useCallback((data) => {
-    setLeadOverlayId(null)
-    setSelectedDeal(null)
-    setSelectedPipelineId(null)
-    setSelectedClosed(null)
+    onCloseLeadOverlay?.()
+    onCloseDealDetail?.()
     onGoToParcelOnMap?.(data)
-  }, [onGoToParcelOnMap])
+  }, [onGoToParcelOnMap, onCloseLeadOverlay, onCloseDealDetail])
 
   const handleLeadUpdate = useCallback(async (updated) => {
     try {
@@ -227,47 +248,76 @@ export function DealsPanel({
   const openLeadFromDeal = useCallback((lead) => {
     if (!lead?.id) return
     if (leadOverlayId === lead.id) return
-    setLeadOverlayId(lead.id)
-  }, [leadOverlayId])
+    onOpenLeadOverlay?.(lead.id)
+  }, [leadOverlayId, onOpenLeadOverlay])
 
   const handleDealUpdate = useCallback((updated) => {
-    setSelectedDeal(updated)
     onDealUpdate?.(updated, selectedPipelineId)
   }, [onDealUpdate, selectedPipelineId])
 
   const handleCloseDealFromPanel = useCallback(async (deal, pipeline) => {
     const ok = await onRequestCloseDeal?.(deal, pipeline)
-    if (ok) {
-      setSelectedDeal(null)
-      setSelectedPipelineId(null)
-      setLeadOverlayId(null)
-    }
-  }, [onRequestCloseDeal])
+    if (ok) onCloseDealDetail?.()
+  }, [onRequestCloseDeal, onCloseDealDetail])
 
   const handleRemoveDealFromPanel = useCallback(async (deal, pipeline) => {
     const ok = await onRequestRemoveDeal?.(deal, pipeline)
-    if (ok) {
-      setSelectedDeal(null)
-      setSelectedPipelineId(null)
-      setLeadOverlayId(null)
+    if (ok) onCloseDealDetail?.()
+  }, [onRequestRemoveDeal, onCloseDealDetail])
+
+  const startCreateDeal = useCallback((prefill = null) => {
+    if (pipelinesCount > 0 && createDealPipelines.length === 0) {
+      showToast('Create or open a pipeline first', 'warning')
+      return
     }
-  }, [onRequestRemoveDeal])
+    setPendingDealPrefill(prefill)
+    setDealPickerOpen(true)
+  }, [pipelinesCount, createDealPipelines.length])
+
+  const startCreateDealFromLead = useCallback((lead) => {
+    if (!lead?.id) return
+    startCreateDeal({ leadId: lead.id })
+  }, [startCreateDeal])
+
+  const handleDealTemplatePicked = useCallback((template) => {
+    const pending = pendingDealPrefill || {}
+    const merged = template ? templateToCreateDealPrefill(template, pending) : pending
+    setCreateDealPrefill(merged)
+    setCreateDealOpen(true)
+    setDealPickerOpen(false)
+    setPendingDealPrefill(null)
+  }, [pendingDealPrefill])
+
+  const handleCreateDealFormSubmit = useCallback(async (payload) => {
+    await onCreateDealSubmit?.(payload)
+    setCreateDealOpen(false)
+    setCreateDealPrefill(null)
+  }, [onCreateDealSubmit])
 
   const activeDealCount = useMemo(
     () => filteredPipelines.reduce((s, p) => s + p.deals.length, 0),
     [filteredPipelines]
   )
 
+  const handlePanelBack = () => {
+    if (leadOverlayId) {
+      onCloseLeadOverlay?.()
+      return
+    }
+    if (selectedClosed) {
+      onCloseClosedDeal?.()
+      return
+    }
+    if (selectedDeal) {
+      onCloseDealDetail?.()
+      return
+    }
+    onBack?.() ?? onClose?.()
+  }
+
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => {
-        if (!open) {
-          setSelectedDeal(null)
-          setSelectedPipelineId(null)
-          setLeadOverlayId(null)
-          onClose()
-        }
-      }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
         <DialogContent
           className="map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0"
           showCloseButton={false}
@@ -276,18 +326,23 @@ export function DealsPanel({
             if (e.target.closest?.('[data-deals-panel-menu]')) e.preventDefault()
           }}
         >
-          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'border-b-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
+          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">All deals across pipelines</DialogDescription>
-            <PanelHeader onBack={onClose} title="Deals">
-              <PanelCreateButton onClick={() => onCreateDeal?.()} title="Create deal" />
+            <PanelHeader onBack={handlePanelBack} title="Deals">
+              <PanelCreateButton onClick={() => startCreateDeal()} title="Create deal" />
               <PanelOptionsButton
                 ref={dealsMenuTriggerRef}
                 title="Deals options"
                 onClick={() => setDealsMenuOpen(true)}
               />
             </PanelHeader>
+          </DialogHeader>
 
-            <div className="mt-2 space-y-2">
+          <div
+            className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5 min-h-0"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="mb-3 space-y-2">
               <div className="flex gap-4">
                 <button
                   type="button"
@@ -323,12 +378,6 @@ export function DealsPanel({
                 />
               </div>
             </div>
-          </DialogHeader>
-
-          <div
-            className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5 min-h-0"
-            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
-          >
             {tab === 'active' ? (
               totalDeals === 0 ? (
                 <div className="text-center py-16">
@@ -368,7 +417,7 @@ export function DealsPanel({
                               columns={pipeline.columns}
                               pipelineTitle={showHeader ? null : pipeline.title}
                               lead={deal.leadId ? leads.find((l) => l.id === deal.leadId) : null}
-                              onClick={(d) => { setSelectedDeal(d); setSelectedPipelineId(pipeline.id) }}
+                              onClick={(d) => onOpenDealDetail?.(d.id, pipeline.id)}
                             />
                           ))}
                         </div>
@@ -395,7 +444,7 @@ export function DealsPanel({
             ) : (
               <div className="space-y-1.5">
                 {filteredClosed.map((r) => (
-                  <ClosedDealCard key={r.id} record={r} onClick={setSelectedClosed} />
+                  <ClosedDealCard key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} />
                 ))}
               </div>
             )}
@@ -420,6 +469,31 @@ export function DealsPanel({
         </OptionsMenuItem>
       </OptionsMenuDropdown>
 
+      <DealTemplatePickerDialog
+        open={dealPickerOpen}
+        onOpenChange={(v) => {
+          setDealPickerOpen(v)
+          if (!v) setPendingDealPrefill(null)
+        }}
+        onSelect={handleDealTemplatePicked}
+        nestedOverlay
+      />
+
+      <CreateDealDialog
+        open={createDealOpen}
+        onOpenChange={(v) => {
+          setCreateDealOpen(v)
+          if (!v) setCreateDealPrefill(null)
+        }}
+        prefill={createDealPrefill}
+        leads={leads}
+        pipelines={createDealPipelines}
+        teams={teams}
+        saving={createDealSaving}
+        onSubmit={handleCreateDealFormSubmit}
+        nestedOverlay
+      />
+
       {isOpen && selectedDeal && selectedPipeline && (
         <DealDetails
           deal={selectedDeal}
@@ -430,7 +504,10 @@ export function DealsPanel({
           teams={teams}
           onPipelinesChange={onPipelinesChange}
           onOpenScheduleAtDate={onOpenScheduleAtDate}
-          onClose={() => { setSelectedDeal(null); setSelectedPipelineId(null); setLeadOverlayId(null) }}
+          onClose={() => {
+            if (leadOverlayId) onCloseLeadOverlay?.()
+            onCloseDealDetail?.()
+          }}
           onDealUpdate={handleDealUpdate}
           onOpenLead={openLeadFromDeal}
           leadLinkActive={!!leadOverlayId && leadOverlayId === selectedLead?.id}
@@ -445,7 +522,7 @@ export function DealsPanel({
       {isOpen && leadOverlay && (
         <LeadDetails
           isOpen
-          onClose={() => setLeadOverlayId(null)}
+          onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
           pipelines={pipelines}
           getToken={getToken}
@@ -455,14 +532,13 @@ export function DealsPanel({
           onPhoneClick={onPhoneClick}
           onGoToParcelOnMap={handleGoToParcelOnMap}
           onLeadUpdate={handleLeadUpdate}
-          onCreateDeal={onCreateDeal}
+          onCreateDeal={startCreateDealFromLead}
           onOpenDeal={(deal, pipelineId) => {
-            setLeadOverlayId(null)
-            setSelectedPipelineId(pipelineId || deal.__pipelineId || selectedPipelineId)
-            setSelectedDeal(deal)
+            onCloseLeadOverlay?.()
+            onOpenDealDetail?.(deal.id, pipelineId || deal.__pipelineId || selectedPipelineId)
           }}
           onLeadDeleted={() => {
-            setLeadOverlayId(null)
+            onCloseLeadOverlay?.()
             onRefreshLeads?.()
           }}
           onOpenScheduleAtDate={onOpenScheduleAtDate}
@@ -485,7 +561,10 @@ export function DealsPanel({
           leads={leads}
           closedRecord={selectedClosed}
           readOnly
-          onClose={() => { setSelectedClosed(null); setLeadOverlayId(null) }}
+          onClose={() => {
+            if (leadOverlayId) onCloseLeadOverlay?.()
+            onCloseClosedDeal?.()
+          }}
           onOpenLead={openLeadFromDeal}
           leadLinkActive={!!leadOverlayId && leadOverlayId === selectedClosedLead?.id}
           getToken={getToken}

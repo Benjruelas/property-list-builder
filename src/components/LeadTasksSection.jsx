@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, ChevronDown, ChevronRight } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
+import { Plus } from 'lucide-react'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { Input } from './ui/input'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import {
   getAllTasks,
@@ -23,12 +20,12 @@ import {
   pipelinesContainingParcel,
 } from '@/utils/pipelineTasks'
 import { addTeamTask, removeTeamTask, toggleTeamTask, updateTeamTask } from '@/utils/teamTasks'
-import { getMembersForTeamSharedPipeline } from '@/utils/teamTaskUtils'
+import { getAllTeamMembers, getMembersForTeamSharedPipeline, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { findDealsForLead } from '@/utils/deals'
 import { collectTasksForLead, groupLeadTasksByDeal } from '@/utils/dealTaskMatching'
-import { TeamMemberAssignSection } from './TeamMemberAssignSection'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
+import { NewTaskDialog } from './NewTaskDialog'
 import { TaskRow } from './TasksPanel'
-import { SchedulePicker } from './SchedulePicker'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 
@@ -79,11 +76,6 @@ export function LeadTasksSection({
   const [tasks, setTasks] = useState([])
   const [showAddTask, setShowAddTask] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
-  const [addTaskTitle, setAddTaskTitle] = useState('')
-  const [addTaskScheduledAt, setAddTaskScheduledAt] = useState(null)
-  const [addTaskScheduledEndAt, setAddTaskScheduledEndAt] = useState(null)
-  const [addTaskDateTimeExpanded, setAddTaskDateTimeExpanded] = useState(false)
-  const [addTaskTeamAssignUids, setAddTaskTeamAssignUids] = useState([])
   const [pipePickerState, setPipePickerState] = useState(null)
 
   const showTaskDialog = showAddTask || !!editingTask
@@ -113,39 +105,25 @@ export function LeadTasksSection({
   useEffect(() => {
     setShowAddTask(false)
     setEditingTask(null)
-    setAddTaskTitle('')
-    setAddTaskScheduledAt(null)
-    setAddTaskScheduledEndAt(null)
-    setAddTaskDateTimeExpanded(false)
-    setAddTaskTeamAssignUids([])
   }, [lead?.id])
-
-  const resetTaskForm = () => {
-    setAddTaskTitle('')
-    setAddTaskScheduledAt(null)
-    setAddTaskScheduledEndAt(null)
-    setAddTaskDateTimeExpanded(false)
-    setAddTaskTeamAssignUids([])
-  }
 
   const closeTaskDialog = () => {
     setShowAddTask(false)
     setEditingTask(null)
-    resetTaskForm()
   }
 
-  const newTaskPipelineForAssign = useMemo(() => {
-    if (!parcelKey) return null
-    const owning = pipelinesContainingParcel(pipelines, parcelKey)
-    if (owning.length === 1) return owning[0]
-    return null
-  }, [parcelKey, pipelines])
-
-  const newTaskMemberList = useMemo(
-    () => (newTaskPipelineForAssign ? getMembersForTeamSharedPipeline(newTaskPipelineForAssign, teams) : []),
-    [newTaskPipelineForAssign, teams]
-  )
-  const newTaskIsTeamContext = !isEditMode && newTaskMemberList.length > 0
+  const newTaskMemberList = useMemo(() => getAllTeamMembers(teams), [teams])
+  const leadDeals = useMemo(() => {
+    if (!lead) return []
+    if (lead.id) {
+      const byLeadId = findDealsForLead(pipelines, lead.id)
+      if (byLeadId.length > 0) return byLeadId
+    }
+    if (!lead.parcelId) return []
+    return pipelines.flatMap((p) => p.deals || []).filter(
+      (d) => String(d.parcelId) === String(lead.parcelId)
+    )
+  }, [lead, pipelines])
 
   const editTaskPipeline = useMemo(() => {
     if (!editingTask?.pipelineId) return null
@@ -157,41 +135,42 @@ export function LeadTasksSection({
     [editTaskPipeline, teams]
   )
   const editIsTeamContext = isEditMode && editingTask?.__source === 'team' && editTaskMemberList.length > 0
-  const showTeamAssign = newTaskIsTeamContext || editIsTeamContext
+  const showTeamAssign = newTaskMemberList.length > 0 || editIsTeamContext
   const teamMemberList = editIsTeamContext ? editTaskMemberList : newTaskMemberList
-  const teamContextActive = editIsTeamContext || newTaskIsTeamContext
+  const teamContextActive = editIsTeamContext
 
   const finalizeTaskCreate = useCallback(
-    async ({ pipelineId, parcelId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+      if (assignedUids.length > 0 && !lead?.id) {
+        showToast('Save this lead before assigning teammates', 'error')
+        return
+      }
       if (pipelineId) {
         const pipe = pipelines.find((p) => p.id === pipelineId)
-        const isTeamPipe = pipe && Array.isArray(pipe.teamShares) && pipe.teamShares.length > 0
-        if (isTeamPipe && parcelId) {
-          const pipeLead = (pipe?.leads || []).find((l) => String(l.parcelId) === String(parcelId))
-          const teamLeadId = pipeLead?.id || lead?.id
-          if (teamLeadId) {
-            try {
-              await addTeamTask(getToken, pipelineId, teamLeadId, {
-                title,
-                dueAt: scheduledAt,
-                assignedUids,
-              })
-              await onPipelinesChange?.()
-              showToast('Team task added', 'success')
-            } catch (err) {
-              showToast(err.message || 'Could not add team task', 'error')
-              return
-            }
-            setShowAddTask(false)
-            setAddTaskTeamAssignUids([])
-            refreshTasks()
+        const teamLeadId = lead?.id || null
+        if (shouldStoreAsTeamTask(pipe, { assignedUids, leadId: teamLeadId })) {
+          try {
+            await addTeamTask(getToken, pipelineId, teamLeadId, {
+              title,
+              dueAt: scheduledAt,
+              assignedUids,
+              dealId: dealId || null,
+            })
+            await onPipelinesChange?.()
+            showToast('Task added', 'success')
+          } catch (err) {
+            showToast(err.message || 'Could not add task', 'error')
             return
           }
+          setShowAddTask(false)
+          refreshTasks()
+          return
         }
         try {
           await addPipelineTask(getToken, pipelineId, {
             title,
             parcelId: parcelId || null,
+            dealId: dealId || null,
             scheduledAt,
             scheduledEndAt,
           })
@@ -202,19 +181,32 @@ export function LeadTasksSection({
           return
         }
       } else {
-        addTask({ pipelineId: null, parcelId: parcelId || null, title, scheduledAt, scheduledEndAt })
+        if (assignedUids.length > 0) {
+          showToast('Pick a pipe for this task to assign teammates', 'error')
+          return
+        }
+        addTask({ pipelineId: null, parcelId: parcelId || null, dealId: dealId || null, title, scheduledAt, scheduledEndAt })
         scheduleSync()
         showToast('Task added', 'success')
       }
       setShowAddTask(false)
-      setAddTaskTeamAssignUids([])
       refreshTasks()
     },
     [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipelines, lead?.id]
   )
 
-  const handleCreateTask = () => {
-    const trimmed = addTaskTitle.trim()
+  const handleDialogSubmit = ({
+    title,
+    scheduledAt,
+    scheduledEndAt,
+    assignedUids = [],
+    dealId = null,
+  }) => {
+    if (isEditMode) {
+      handleSaveEdit({ title, scheduledAt, scheduledEndAt, assignedUids })
+      return
+    }
+    const trimmed = title.trim()
     if (!trimmed) {
       showToast('Enter a task title', 'error')
       return
@@ -223,17 +215,19 @@ export function LeadTasksSection({
       showToast('Save this lead before adding tasks', 'error')
       return
     }
-    const endAt = addTaskScheduledEndAt && addTaskScheduledEndAt > (addTaskScheduledAt || 0) ? addTaskScheduledEndAt : null
-    if (!newTaskIsTeamContext && endAt && addTaskScheduledAt && endAt <= addTaskScheduledAt) {
+    const newTaskUsesTeamStorage = assignedUids.length > 0
+    const endAt = scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
+    if (!newTaskUsesTeamStorage && endAt && scheduledAt && endAt <= scheduledAt) {
       showToast('End time must be after start time', 'error')
       return
     }
     const payload = {
       title: trimmed,
-      scheduledAt: addTaskScheduledAt,
+      scheduledAt,
       scheduledEndAt: endAt,
       parcelId: String(parcelKey),
-      assignedUids: addTaskTeamAssignUids,
+      dealId,
+      assignedUids,
     }
     if (apiMode) {
       const owning = pipelinesContainingParcel(pipelines, parcelKey)
@@ -249,11 +243,11 @@ export function LeadTasksSection({
     finalizeTaskCreate({ ...payload, pipelineId: null })
   }
 
-  const handleSaveEdit = async () => {
-    const trimmed = addTaskTitle.trim()
+  const handleSaveEdit = async ({ title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+    const trimmed = title.trim()
     if (!trimmed || !editingTask) return
-    const endAt = addTaskScheduledEndAt && addTaskScheduledEndAt > (addTaskScheduledAt || 0) ? addTaskScheduledEndAt : null
-    if (!editIsTeamContext && endAt && addTaskScheduledAt && endAt <= addTaskScheduledAt) {
+    const endAt = scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
+    if (!editIsTeamContext && endAt && scheduledAt && endAt <= scheduledAt) {
       showToast('End time must be after start time', 'error')
       return
     }
@@ -264,21 +258,21 @@ export function LeadTasksSection({
         await updateTeamTask(getToken, task.pipelineId, task.leadId, {
           id: task.id,
           title: trimmed,
-          dueAt: addTaskScheduledAt,
-          assignedUids: addTaskTeamAssignUids,
+          dueAt: scheduledAt,
+          assignedUids,
         })
         await onPipelinesChange?.()
       } else if (task.__source === 'pipeline' && task.pipelineId) {
         await updatePipelineTask(getToken, task.pipelineId, {
           id: task.id,
           title: trimmed,
-          scheduledAt: addTaskScheduledAt,
+          scheduledAt,
           scheduledEndAt: endAt,
         })
         await onPipelinesChange?.()
       } else {
         updateLeadTaskTitle(task.parcelId, task.id, trimmed)
-        updateLeadTaskSchedule(task.parcelId, task.id, addTaskScheduledAt, endAt)
+        updateLeadTaskSchedule(task.parcelId, task.id, scheduledAt, endAt)
         scheduleSync()
       }
       showToast('Task updated', 'success')
@@ -287,11 +281,6 @@ export function LeadTasksSection({
     } catch (err) {
       showToast(err.message || 'Could not update task', 'error')
     }
-  }
-
-  const handleSaveTask = () => {
-    if (isEditMode) handleSaveEdit()
-    else handleCreateTask()
   }
 
   const handleToggle = async (e, task) => {
@@ -359,22 +348,12 @@ export function LeadTasksSection({
 
   const openAddTask = () => {
     setEditingTask(null)
-    resetTaskForm()
     setShowAddTask(true)
   }
 
   const openEditTask = (task) => {
     setShowAddTask(false)
     setEditingTask(task)
-    setAddTaskTitle(task.title || '')
-    setAddTaskScheduledAt(
-      task.__source === 'team' ? (task.dueAt ?? task.scheduledAt ?? null) : (task.scheduledAt ?? null)
-    )
-    setAddTaskScheduledEndAt(task.__source === 'team' ? null : (task.scheduledEndAt ?? null))
-    setAddTaskDateTimeExpanded(!!(task.scheduledAt || task.dueAt))
-    setAddTaskTeamAssignUids(
-      task.__source === 'team' && Array.isArray(task.assignedUids) ? [...task.assignedUids] : []
-    )
   }
 
   if (!lead) return null
@@ -443,91 +422,47 @@ export function LeadTasksSection({
         )}
       </section>
 
-      <Dialog open={showTaskDialog} onOpenChange={(open) => { if (!open) closeTaskDialog() }}>
-        <DialogContent className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} nestedOverlay topLayer>
-          <DialogHeader
-            className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
-            style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
-          >
-          <PanelHeader
-            onBack={closeTaskDialog}
-            title={isEditMode ? 'Edit task' : 'New task'}
-          />
-          <DialogDescription className="sr-only">
-            {isEditMode ? 'Edit task for this lead' : 'Create a task for this lead'}
-          </DialogDescription>
-          </DialogHeader>
-          <div className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-            <div className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2.5">
-              <div className="text-sm font-medium truncate">{leadLabel}</div>
-              {leadAddress && <div className="text-xs opacity-60 truncate mt-0.5">{leadAddress}</div>}
-            </div>
-            <div>
-              <label className="text-xs font-medium block mb-1 opacity-90">
-                Task title{' '}
-                <span className="text-red-400" aria-label="required">*</span>
-              </label>
-              <Input
-                value={addTaskTitle}
-                onChange={(e) => setAddTaskTitle(e.target.value)}
-                placeholder="e.g. Call back, Roof inspection"
-                className="text-sm"
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveTask()}
-              />
-            </div>
-            <div className="rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setAddTaskDateTimeExpanded((open) => !open)}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-white/90 hover:bg-white/5 transition-colors"
-                aria-expanded={addTaskDateTimeExpanded}
-              >
-                {addTaskDateTimeExpanded ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
-                )}
-                <span>Date &amp; time</span>
-              </button>
-              {addTaskDateTimeExpanded && (
-                <div className="border-t border-white/15 px-3 pb-3 pt-2 space-y-1">
-                  <SchedulePicker
-                    inline
-                    hideLabel
-                    value={addTaskScheduledAt}
-                    onChange={setAddTaskScheduledAt}
-                    endValue={teamContextActive ? null : addTaskScheduledEndAt}
-                    onEndChange={teamContextActive ? undefined : setAddTaskScheduledEndAt}
-                    minDate={Date.now()}
-                    leadName={leadLabel}
-                    leadAddress={leadAddress}
-                  />
-                </div>
-              )}
-            </div>
-            {showTeamAssign && (
-              <TeamMemberAssignSection
-                members={teamMemberList}
-                selectedUids={addTaskTeamAssignUids}
-                onToggle={(uid) => {
-                  setAddTaskTeamAssignUids((prev) =>
-                    prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
-                  )
-                }}
-              />
-            )}
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={handleSaveTask}>
-                {isEditMode ? 'Save' : 'Create'}
-              </Button>
-              <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={closeTaskDialog}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <NewTaskDialog
+        open={showTaskDialog}
+        onOpenChange={(open) => {
+          if (!open) closeTaskDialog()
+        }}
+        isEditMode={isEditMode}
+        showContextCard={isEditMode}
+        contextPrimary={leadLabel}
+        contextSecondary=""
+        contextTertiary={leadAddress}
+        initialTitle={editingTask?.title || ''}
+        initialLeadId={isEditMode ? null : lead?.id || null}
+        initialScheduledAt={
+          editingTask
+            ? editingTask.__source === 'team'
+              ? (editingTask.dueAt ?? editingTask.scheduledAt ?? null)
+              : (editingTask.scheduledAt ?? null)
+            : null
+        }
+        initialScheduledEndAt={
+          editingTask && editingTask.__source !== 'team' ? (editingTask.scheduledEndAt ?? null) : null
+        }
+        initialDateTimeExpanded={!!(editingTask?.scheduledAt || editingTask?.dueAt)}
+        initialTeamAssignUids={
+          editingTask?.__source === 'team' && Array.isArray(editingTask.assignedUids)
+            ? [...editingTask.assignedUids]
+            : []
+        }
+        leads={displayLeads}
+        deals={leadDeals}
+        showDealPicker={!isEditMode}
+        lockLead={!isEditMode}
+        showTeamAssign={showTeamAssign}
+        teamMembers={teamMemberList}
+        teamContextActive={teamContextActive}
+        leadName={leadLabel}
+        leadAddress={leadAddress}
+        onSubmit={handleDialogSubmit}
+        nestedOverlay
+        topLayer
+      />
 
       <ConvertToLeadPipelineDialog
         open={!!pipePickerState?.open}

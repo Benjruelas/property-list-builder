@@ -225,6 +225,13 @@ export function PublicQuotePage({ token }) {
           <p className="text-xs text-gray-500 mb-4">Valid until {data.validUntil.slice(0, 10)}</p>
         )}
 
+        {data.terms?.trim() && (
+          <div className="mb-6 bg-white rounded-xl border border-gray-200 p-4">
+            <h2 className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-2">Terms</h2>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.terms.trim()}</p>
+          </div>
+        )}
+
         {data.clientResponse && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm">
             <p className="font-medium capitalize">You {data.clientResponse.action?.replace('_', ' ')}</p>

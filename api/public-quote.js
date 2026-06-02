@@ -49,6 +49,7 @@ function publicQuotePayload(quote, invite, { selectedOptionalIds = [] } = {}) {
     requiredTotal: requiredOnly.total,
     optionalLineIds: optionalIds,
     validUntil: quote.validUntil,
+    terms: quote.terms || '',
     status: quote.status,
     paymentEnabled: !!quote.paymentEnabled,
     stripeConfigured: !!stripeKey,

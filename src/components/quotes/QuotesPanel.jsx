@@ -47,7 +47,19 @@ import { displayLeadName } from '../../utils/leads'
 
 const MENU_WIDTH = 180
 
-export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], leads = [], dealPrefill = null, onDealPrefillConsumed }) {
+export function QuotesPanel({
+  isOpen,
+  onClose,
+  onBack,
+  pipelines = [],
+  leads = [],
+  editorFrame = null,
+  detailQuoteId = null,
+  onOpenEditor,
+  onOpenDetail,
+  onCloseEditor,
+  onCloseDetail,
+}) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('quotes')
   const [quotes, setQuotes] = useState([])
@@ -58,11 +70,11 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
   const menuTriggerRef = useRef(null)
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
   const headerMenuTriggerRef = useRef(null)
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [editorQuote, setEditorQuote] = useState(null)
-  const [editorTemplate, setEditorTemplate] = useState(null)
-  const [editorMode, setEditorMode] = useState('quote')
-  const [detailsQuote, setDetailsQuote] = useState(null)
+  const editorOpen = !!editorFrame
+  const editorQuote = editorFrame?.prefill ?? editorFrame?.quote ?? null
+  const editorTemplate = editorFrame?.template ?? null
+  const editorMode = editorFrame?.mode ?? 'quote'
+  const detailsQuote = detailQuoteId ? quotes.find((q) => q.id === detailQuoteId) : null
   const [sendQuote, setSendQuote] = useState(null)
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
@@ -87,20 +99,8 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
   }, [isOpen, refresh])
 
   useEffect(() => {
-    if (isOpen && dealPrefill) {
-      setEditorQuote(dealPrefill)
-      setEditorTemplate(null)
-      setEditorMode('quote')
-      setEditorOpen(true)
-      onDealPrefillConsumed?.()
-    }
-  }, [isOpen, dealPrefill, onDealPrefillConsumed])
-
-  useEffect(() => {
     if (!isOpen) {
       setTab('quotes')
-      setEditorOpen(false)
-      setDetailsQuote(null)
       setSendQuote(null)
       setOpenMenuId(null)
       setHeaderMenuOpen(false)
@@ -135,10 +135,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
   })
 
   const openNewQuote = () => {
-    setEditorQuote(null)
-    setEditorTemplate(null)
-    setEditorMode('quote')
-    setEditorOpen(true)
+    onOpenEditor?.({ mode: 'quote' })
   }
 
   const openNewTemplate = async () => {
@@ -150,16 +147,13 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
         /* user can still create manually */
       }
     }
-    setEditorQuote(null)
-    setEditorTemplate(null)
-    setEditorMode('template')
-    setEditorOpen(true)
+    onOpenEditor?.({ mode: 'template' })
   }
 
   const handleDeleteQuote = async (q) => {
     try {
       await deleteQuote(getToken, q.id)
-      setDetailsQuote(null)
+      if (detailQuoteId === q.id) onCloseDetail?.()
       await refresh()
       showToast('Quote deleted', 'success')
     } catch (e) {
@@ -201,19 +195,19 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
   }
 
   const handlePanelBack = () => {
-    if (onBackToParent) {
-      onBackToParent()
+    if (editorOpen) {
+      onCloseEditor?.()
       return
     }
-    onClose?.()
+    if (detailsQuote) {
+      onCloseDetail?.()
+      return
+    }
+    onBack?.() ?? onClose?.()
   }
 
   const handleDetailsClose = () => {
-    if (onBackToParent) {
-      onBackToParent()
-      return
-    }
-    setDetailsQuote(null)
+    onCloseDetail?.()
   }
 
   return (
@@ -227,7 +221,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
             if (e.target.closest?.('[data-quotes-panel-menu]')) e.preventDefault()
           }}
         >
-          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'border-b-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
+          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Quotes</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Quotes">
               <PanelCreateButton onClick={openNewQuote} title="Create quote" />
@@ -237,8 +231,27 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
                 onClick={() => setHeaderMenuOpen(true)}
               />
             </PanelHeader>
+          </DialogHeader>
 
-            <div className="mt-2 space-y-2">
+          <OptionsMenuDropdown
+            open={headerMenuOpen}
+            onClose={() => setHeaderMenuOpen(false)}
+            triggerRef={headerMenuTriggerRef}
+            menuWidth={MENU_WIDTH}
+            dataAttr="data-quotes-panel-menu"
+          >
+            <OptionsMenuItem onClick={() => { setHeaderMenuOpen(false); openNewTemplate() }}>
+              <Plus className="h-4 w-4" />
+              Create quote template
+            </OptionsMenuItem>
+            <OptionsMenuItem onClick={() => { setHeaderMenuOpen(false); setTab('templates') }}>
+              <Copy className="h-4 w-4" />
+              Manage templates
+            </OptionsMenuItem>
+          </OptionsMenuDropdown>
+
+          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5 min-h-0" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+            <div className="mb-3 space-y-2">
               <div className="flex gap-4">
                 {[
                   { id: 'quotes', label: 'Quotes', count: quotes.length },
@@ -274,26 +287,6 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
                 </div>
               )}
             </div>
-          </DialogHeader>
-
-          <OptionsMenuDropdown
-            open={headerMenuOpen}
-            onClose={() => setHeaderMenuOpen(false)}
-            triggerRef={headerMenuTriggerRef}
-            menuWidth={MENU_WIDTH}
-            dataAttr="data-quotes-panel-menu"
-          >
-            <OptionsMenuItem onClick={() => { setHeaderMenuOpen(false); openNewTemplate() }}>
-              <Plus className="h-4 w-4" />
-              Create quote template
-            </OptionsMenuItem>
-            <OptionsMenuItem onClick={() => { setHeaderMenuOpen(false); setTab('templates') }}>
-              <Copy className="h-4 w-4" />
-              Manage templates
-            </OptionsMenuItem>
-          </OptionsMenuDropdown>
-
-          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5 min-h-0" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
             {loading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin opacity-60" />
@@ -316,7 +309,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
                     key={q.id}
                     type="button"
                     className="w-full text-left map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10"
-                    onClick={() => setDetailsQuote(q)}
+                    onClick={() => onOpenDetail?.(q.id)}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -358,7 +351,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
                       <p className="font-medium truncate">{t.name || t.title}</p>
                       <p className="text-sm opacity-50">{(t.lineItems || []).length} line items</p>
                     </div>
-                    <button type="button" className="p-2 opacity-60 hover:opacity-100" onClick={() => { setEditorTemplate(t); setEditorMode('template'); setEditorOpen(true) }}>
+                    <button type="button" className="p-2 opacity-60 hover:opacity-100" onClick={() => { onOpenEditor?.({ mode: 'template', template: t }); }}>
                       <Pencil className="h-4 w-4" />
                     </button>
                     <button type="button" className="p-2 opacity-60 hover:opacity-100 text-red-400" onClick={() => handleDeleteTemplate(t)}>
@@ -412,7 +405,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
               <OptionsMenuItem onClick={() => { setSendQuote(q); setOpenMenuId(null) }}>
                 <Send className="h-4 w-4" /> Send
               </OptionsMenuItem>
-              <OptionsMenuItem onClick={() => { setEditorQuote(q); setEditorMode('quote'); setEditorOpen(true); setOpenMenuId(null) }}>
+              <OptionsMenuItem onClick={() => { onOpenEditor?.({ mode: 'quote', quote: q }); setOpenMenuId(null) }}>
                 <Pencil className="h-4 w-4" /> Edit
               </OptionsMenuItem>
               <OptionsMenuItem destructive onClick={() => { handleDeleteQuote(q); setOpenMenuId(null) }}>
@@ -425,7 +418,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
 
       <QuoteEditor
         open={editorOpen}
-        onClose={() => setEditorOpen(false)}
+        onClose={() => onCloseEditor?.()}
         getToken={getToken}
         quote={editorMode === 'quote' ? editorQuote : null}
         template={editorMode === 'template' ? editorTemplate : null}
@@ -440,7 +433,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
         open={!!detailsQuote}
         onClose={handleDetailsClose}
         leads={leads}
-        onEdit={(q) => { setEditorQuote(q); setEditorMode('quote'); setEditorOpen(true); setDetailsQuote(null) }}
+        onEdit={(q) => { onOpenEditor?.({ mode: 'quote', quote: q }); onCloseDetail?.() }}
         onSend={(q) => setSendQuote(q)}
         onDelete={handleDeleteQuote}
       />
@@ -450,7 +443,7 @@ export function QuotesPanel({ isOpen, onClose, onBackToParent, pipelines = [], l
         quote={sendQuote}
         leads={leads}
         onClose={() => setSendQuote(null)}
-        onSent={(q) => { refresh(); setDetailsQuote((prev) => (prev?.id === q?.id ? q : prev)) }}
+        onSent={(q) => { refresh() }}
       />
     </>
   )
