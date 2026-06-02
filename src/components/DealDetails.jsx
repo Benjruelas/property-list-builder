@@ -46,6 +46,7 @@ export function DealDetails({
   onOpenScheduleAtDate,
   taskListEpoch = 0,
   onCreateQuoteForDeal,
+  canSeeDealAmounts = true,
 }) {
   const d = closedRecord?.deal || deal
   const pipelineMeta = closedRecord?.closedFrom || pipeline
@@ -268,6 +269,7 @@ export function DealDetails({
             onPaymentsCommit={handlePaymentsBlur}
             onCostsCommit={handleCostsBlur}
             readOnly={readOnly || isClosed}
+            canSeeDealAmounts={canSeeDealAmounts}
           />
 
           {!readOnly && !isClosed && onCreateQuoteForDeal && (
@@ -287,7 +289,9 @@ export function DealDetails({
                       <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
                       <span className="flex-1 truncate">{q.title || 'Quote'}</span>
                       <QuoteStatusBadge status={q.status} />
-                      <span className="text-xs opacity-50 shrink-0">{formatQuoteMoney(q.total)}</span>
+                      {canSeeDealAmounts && (
+                        <span className="text-xs opacity-50 shrink-0">{formatQuoteMoney(q.total)}</span>
+                      )}
                     </li>
                   ))}
                 </ul>

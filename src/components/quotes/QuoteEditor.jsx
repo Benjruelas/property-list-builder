@@ -132,6 +132,7 @@ export function QuoteEditor({
   leads = [],
   pipelines = [],
   onSaved,
+  canSeeDealAmounts = true,
 }) {
   const isTemplate = mode === 'template'
   const [saving, setSaving] = useState(false)
@@ -405,6 +406,8 @@ export function QuoteEditor({
             globalMarkupPercent={globalMarkupPercent}
             onChange={handleLineItemsChange}
             onGlobalMarkupChange={setGlobalMarkupPercent}
+            showAmounts={canSeeDealAmounts}
+            showProfit={canSeeDealAmounts}
           />
 
           <label className="block space-y-1">

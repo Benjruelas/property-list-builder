@@ -349,7 +349,9 @@ export function DealFinancesPanel({
   onPaymentsCommit,
   onCostsCommit,
   readOnly = false,
+  canSeeDealAmounts = true,
 }) {
+  if (!canSeeDealAmounts) return null
   const paymentsTotal = sumDealLineItems(payments)
   const costsTotal = sumDealLineItems(costs)
   const profit = paymentsTotal - costsTotal
@@ -424,8 +426,8 @@ export function DealFinancesSummary({ payments = [], costs = [] }) {
   )
 }
 
-export function DealProfitBadge({ deal, className = '' }) {
-  if (!dealHasFinancials(deal)) return null
+export function DealProfitBadge({ deal, className = '', canSeeDealAmounts = true }) {
+  if (!canSeeDealAmounts || !dealHasFinancials(deal)) return null
   const profit = computeDealProfit(deal)
   return (
     <span

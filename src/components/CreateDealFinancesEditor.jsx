@@ -235,7 +235,8 @@ function CreateFinancesSection({
   )
 }
 
-export function CreateDealFinancesEditor({ payments = [], costs = [], onPaymentsChange, onCostsChange }) {
+export function CreateDealFinancesEditor({ payments = [], costs = [], onPaymentsChange, onCostsChange, canSeeDealAmounts = true }) {
+  if (!canSeeDealAmounts) return null
   const savedPayments = financeRowsForSubmit(payments)
   const savedCosts = financeRowsForSubmit(costs)
   const paymentsTotal = sumDealLineItems(savedPayments)

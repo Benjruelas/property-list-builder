@@ -27,6 +27,7 @@ function LineItemRow({
   editing,
   onMenuClick,
   showOptionalBadge,
+  showAmounts = true,
 }) {
   const label = item.name?.trim() || 'Untitled line item'
   return (
@@ -46,7 +47,7 @@ function LineItemRow({
         )}
       </div>
       <span className="text-sm font-medium tabular-nums shrink-0 col-start-2 row-start-1 self-center leading-5">
-        {formatQuoteMoney(item.amount || 0)}
+        {showAmounts ? formatQuoteMoney(item.amount || 0) : null}
       </span>
       {!readOnly && !locked && !editing && (
         <button
@@ -172,13 +173,15 @@ export function QuoteLineItemsEditor({
   locked = false,
   showProfit = true,
   selectedOptionalIds = null,
+  showAmounts = true,
 }) {
+  const effectiveShowProfit = showProfit && showAmounts
   const [editingId, setEditingId] = useState(null)
   const [menuOpenId, setMenuOpenId] = useState(null)
   const menuTriggerRef = useRef(null)
 
   const totals = computeQuoteTotals(lineItems, taxRate, { selectedOptionalIds })
-  const profit = showProfit ? computeQuoteProfitSummary(totals.lineItems, { selectedOptionalIds }) : null
+  const profit = effectiveShowProfit ? computeQuoteProfitSummary(totals.lineItems, { selectedOptionalIds }) : null
 
   const emitChange = (items, rate = taxRate) => {
     onChange?.(items, rate)
@@ -242,7 +245,7 @@ export function QuoteLineItemsEditor({
 
   return (
     <div className="space-y-3 min-w-0">
-      {canEdit && onGlobalMarkupChange != null && (
+      {showAmounts && canEdit && onGlobalMarkupChange != null && (
         <div className="flex items-center justify-between gap-2 text-sm">
           <span className="opacity-70">Global markup %</span>
           <input
@@ -277,9 +280,10 @@ export function QuoteLineItemsEditor({
               locked={locked}
               editing={false}
               showOptionalBadge={readOnly || locked}
+              showAmounts={showAmounts}
               onMenuClick={openMenu}
             />
-            {showProfit && (readOnly || locked) && (
+            {effectiveShowProfit && (readOnly || locked) && (
               <div className="flex justify-between text-xs opacity-60 px-1">
                 <span>
                   Cost {formatQuoteMoney(costTotal)} · Margin {formatQuoteMoney(margin)} ({marginPercent}%)
@@ -318,6 +322,7 @@ export function QuoteLineItemsEditor({
         </OptionsMenuItem>
       </OptionsMenuDropdown>
 
+      {showAmounts && (
       <div className={cn('space-y-1 text-sm pt-2 border-t border-white/10')}>
         <div className="flex justify-between items-center opacity-80">
           <span>Subtotal</span>
@@ -342,7 +347,7 @@ export function QuoteLineItemsEditor({
           <span>Total</span>
           <span className="tabular-nums">{formatQuoteMoney(totals.total)}</span>
         </div>
-        {showProfit && profit && (
+        {effectiveShowProfit && profit && (
           <div className={cn(FINANCES_SUMMARY_ROW, 'rounded-lg border border-white/10 mt-2 items-center flex-wrap gap-y-1')}>
             <span className="text-sm font-medium flex-1">Quote profit</span>
             <span className={cn('text-sm font-medium tabular-nums shrink-0', profitValueClass(profit.profit))}>
@@ -352,6 +357,7 @@ export function QuoteLineItemsEditor({
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

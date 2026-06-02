@@ -18,6 +18,7 @@ export function CreateDealDialog({
   onSubmit,
   saving = false,
   nestedOverlay = true,
+  canSeeDealAmounts = true,
 }) {
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
@@ -170,6 +171,7 @@ export function CreateDealDialog({
               costs={costs}
               onPaymentsChange={setPayments}
               onCostsChange={setCosts}
+              canSeeDealAmounts={canSeeDealAmounts}
             />
 
             <CreateDealTasksEditor

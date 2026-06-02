@@ -59,6 +59,7 @@ export function QuotesPanel({
   onOpenDetail,
   onCloseEditor,
   onCloseDetail,
+  canSeeDealAmounts = true,
 }) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('quotes')
@@ -317,7 +318,9 @@ export function QuotesPanel({
                         <QuoteStatusBadge status={q.status} />
                       </div>
                       <p className="text-sm opacity-70 truncate">{leadLabel(q)}</p>
-                      <p className="text-sm opacity-50">{formatQuoteMoney(q.total)}</p>
+                      {canSeeDealAmounts && (
+                        <p className="text-sm opacity-50">{formatQuoteMoney(q.total)}</p>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -426,12 +429,14 @@ export function QuotesPanel({
         pipelines={pipelines}
         leads={leads}
         onSaved={() => refresh()}
+        canSeeDealAmounts={canSeeDealAmounts}
       />
 
       <QuoteDetails
         quote={detailsQuote}
         open={!!detailsQuote}
         onClose={handleDetailsClose}
+        canSeeDealAmounts={canSeeDealAmounts}
         leads={leads}
         onEdit={(q) => { onOpenEditor?.({ mode: 'quote', quote: q }); onCloseDetail?.() }}
         onSend={(q) => setSendQuote(q)}

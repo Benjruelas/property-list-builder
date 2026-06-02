@@ -109,6 +109,7 @@ function normalizeTeamForWire(team, viewerUid) {
     plan: team.plan || 'pro',
     seatLimit: team.seatLimit || DEFAULT_SEAT_LIMIT,
     allowExternalSharing: team.allowExternalSharing === true,
+    membersCanSeeDealAmounts: team.membersCanSeeDealAmounts !== false,
     teamPipelineId: team.teamPipelineId || null,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
@@ -163,6 +164,7 @@ export default async function handler(req, res) {
               role: memberRole,
               teamPipelineId: membership.teamPipelineId || null,
               allowExternalSharing: membership.allowExternalSharing === true,
+              membersCanSeeDealAmounts: membership.membersCanSeeDealAmounts !== false,
               features: resolveMemberFeatures(memberRecord, membership, user.uid),
             }
           : null,
@@ -199,6 +201,7 @@ export default async function handler(req, res) {
         plan: 'pro',
         seatLimit: DEFAULT_SEAT_LIMIT,
         allowExternalSharing: false,
+        membersCanSeeDealAmounts: true,
         teamPipelineId: null,
         createdAt: now,
         updatedAt: now,
@@ -287,6 +290,9 @@ export default async function handler(req, res) {
         if (!isAdmin) return res.status(403).json({ error: 'Only admins can update team settings' })
         if (body.allowExternalSharing !== undefined) {
           team.allowExternalSharing = body.allowExternalSharing === true
+        }
+        if (body.membersCanSeeDealAmounts !== undefined) {
+          team.membersCanSeeDealAmounts = body.membersCanSeeDealAmounts === true
         }
         team.updatedAt = new Date().toISOString()
         all[idx] = team

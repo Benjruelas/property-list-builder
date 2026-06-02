@@ -51,6 +51,7 @@ export function LeadDetails({
   leads = [],
   taskListEpoch = 0,
   currentUserId = null,
+  canSeeDealAmounts = true,
 }) {
   const activeTeam = teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
@@ -291,7 +292,7 @@ export function LeadDetails({
                           <span>{d.__pipelineTitle}</span>
                           <span>{getColumnName(d.status, d.__columns)}</span>
                           {formatTimeInState(d) && <span>{formatTimeInState(d)}</span>}
-                          <DealProfitBadge deal={d} className="text-[11px]" />
+                          <DealProfitBadge deal={d} className="text-[11px]" canSeeDealAmounts={canSeeDealAmounts} />
                         </div>
                       </div>
                       <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />

@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { UserPlus, Trash2, LogOut, Pencil, Shield, ArrowRightLeft, Mail, Settings } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { UserPlus, Trash2, LogOut, Pencil, Shield, ArrowRightLeft, Mail, Settings, MoreVertical, SlidersHorizontal } from 'lucide-react'
 import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Input } from './ui/input'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import {
@@ -21,6 +22,24 @@ import {
 } from '@/utils/teams'
 import { TeamMemberFeaturesDialog } from './TeamMemberFeaturesDialog'
 
+const MEMBER_MENU_WIDTH = 200
+
+function getMemberMeta(m, team, currentUser) {
+  const isSelf = m.uid === currentUser?.uid
+  const isTheCreator = m.uid === team.ownerId
+  const memberRole = m.role === 'admin' || m.role === 'owner' || isTheCreator ? 'admin' : 'member'
+  return { isSelf, isTheCreator, memberRole }
+}
+
+function memberHasMenuActions(m, team, currentUser, { isAdmin, isCreator }) {
+  const { isSelf, isTheCreator, memberRole } = getMemberMeta(m, team, currentUser)
+  if (isAdmin && !isSelf && memberRole === 'member') return true
+  if (isAdmin && !isSelf && memberRole === 'admin' && !isTheCreator) return true
+  if (isCreator && !isTheCreator) return true
+  if ((isAdmin && !isTheCreator) || (isSelf && !isTheCreator)) return true
+  return false
+}
+
 export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChange, pendingInvites = [] }) {
   const [addEmail, setAddEmail] = useState('')
   const [adding, setAdding] = useState(false)
@@ -30,6 +49,8 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [transferTarget, setTransferTarget] = useState(null)
   const [featuresMember, setFeaturesMember] = useState(null)
+  const [memberMenuUid, setMemberMenuUid] = useState(null)
+  const memberMenuTriggerRef = useRef(null)
 
   const role = teamRoleForUser(team, currentUser)
   const isAdmin = isTeamAdminRole(team, currentUser)
@@ -132,6 +153,45 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
     }
   }
 
+  const handleToggleDealAmounts = async () => {
+    setBusy(true)
+    try {
+      await updateTeamSettings(getToken, team.id, {
+        membersCanSeeDealAmounts: team.membersCanSeeDealAmounts === false,
+      })
+      showToast('Settings updated', 'success')
+      await refresh()
+    } catch (e) {
+      showToast(e.message || 'Failed to update settings', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const renderSettingsSwitch = (checked, onToggle, label, description) => (
+    <div>
+      <label className="flex items-center justify-between gap-3 cursor-pointer">
+        <span className="text-sm text-gray-300">{label}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          disabled={busy}
+          onClick={onToggle}
+          className="settings-toggle relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-all duration-200 disabled:opacity-50"
+        >
+          <span
+            className={cn(
+              'inline-block h-5 w-5 transform rounded-full transition-all duration-200',
+              checked ? 'translate-x-[24px] toggle-knob-on' : 'translate-x-[4px] toggle-knob-off'
+            )}
+          />
+        </button>
+      </label>
+      {description && <p className="text-[11px] text-gray-500 mt-1">{description}</p>}
+    </div>
+  )
+
   const handlePromote = async (uid) => {
     setBusy(true)
     try {
@@ -176,6 +236,8 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
   const members = team.members || []
   const seatCount = members.length
   const seatLimit = team.seatLimit || 10
+  const menuMember = memberMenuUid ? members.find((m) => m.uid === memberMenuUid) : null
+  const menuMemberMeta = menuMember ? getMemberMeta(menuMember, team, currentUser) : null
 
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose() }}>
@@ -224,15 +286,20 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
                 <Settings className="h-3.5 w-3.5 text-gray-400" />
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Team settings</p>
               </div>
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <span className="text-sm text-gray-300">Allow external email sharing</span>
-                <button type="button" role="switch" aria-checked={team.allowExternalSharing === true}
-                  disabled={busy} onClick={handleToggleExternalSharing}
-                  className={cn('relative h-5 w-9 rounded-full transition-colors', team.allowExternalSharing ? 'bg-blue-500' : 'bg-white/20')}>
-                  <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform', team.allowExternalSharing ? 'left-4' : 'left-0.5')} />
-                </button>
-              </label>
-              <p className="text-[11px] text-gray-500 mt-1">When off, resources can only be shared with team members.</p>
+              <div className="space-y-3">
+                {renderSettingsSwitch(
+                  team.allowExternalSharing === true,
+                  handleToggleExternalSharing,
+                  'Allow external email sharing',
+                  'When off, resources can only be shared with team members.'
+                )}
+                {renderSettingsSwitch(
+                  team.membersCanSeeDealAmounts !== false,
+                  handleToggleDealAmounts,
+                  'Members can see deal amounts',
+                  'When off, non-admin members won\'t see dollar amounts in Pipes, deals, or quotes.'
+                )}
+              </div>
             </div>
           )}
 
@@ -273,9 +340,8 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Members</p>
             <ul className="space-y-1.5">
               {members.map((m) => {
-                const isSelf = m.uid === currentUser?.uid
-                const memberRole = m.role === 'admin' || m.role === 'owner' || m.uid === team.ownerId ? 'admin' : 'member'
-                const isTheCreator = m.uid === team.ownerId
+                const { isSelf, isTheCreator, memberRole } = getMemberMeta(m, team, currentUser)
+                const showMenu = memberHasMenuActions(m, team, currentUser, { isAdmin, isCreator })
                 return (
                   <li key={m.uid} className="group flex items-center justify-between gap-2 py-2 px-3 rounded-md bg-black/10">
                     <div className="min-w-0 flex-1">
@@ -293,30 +359,22 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
                         <p className="text-[11px] text-gray-500">Joined {new Date(m.joinedAt || m.addedAt).toLocaleDateString()}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {isAdmin && !isSelf && memberRole === 'member' && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFeaturesMember(m)} disabled={busy}>
-                          Features
-                        </Button>
-                      )}
-                      {isAdmin && !isSelf && memberRole === 'member' && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handlePromote(m.uid)} disabled={busy}>Promote</Button>
-                      )}
-                      {isAdmin && !isSelf && memberRole === 'admin' && !isTheCreator && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleDemote(m.uid)} disabled={busy}>Demote</Button>
-                      )}
-                      {isCreator && !isTheCreator && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Transfer ownership" onClick={() => setTransferTarget(m)} disabled={busy}>
-                          <ArrowRightLeft className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {(isAdmin && !isTheCreator) || (isSelf && !isTheCreator) ? (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300"
-                          title={isSelf ? 'Leave team' : 'Remove member'} onClick={() => handleRemoveMember(m.uid, isSelf)} disabled={busy}>
-                          {isSelf ? <LogOut className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-                        </Button>
-                      ) : null}
-                    </div>
+                    {showMenu && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 opacity-60 hover:opacity-100"
+                        disabled={busy}
+                        aria-label="Member options"
+                        onClick={(e) => {
+                          memberMenuTriggerRef.current = e.currentTarget
+                          setMemberMenuUid(m.uid)
+                        }}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    )}
                   </li>
                 )
               })}
@@ -359,6 +417,84 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
             </DialogContent>
           </Dialog>
         )}
+
+        <OptionsMenuDropdown
+          open={!!menuMember}
+          onClose={() => setMemberMenuUid(null)}
+          triggerRef={memberMenuTriggerRef}
+          menuWidth={MEMBER_MENU_WIDTH}
+          dataAttr="data-team-member-menu"
+        >
+          {menuMember && menuMemberMeta && (
+            <>
+              {isAdmin && !menuMemberMeta.isSelf && menuMemberMeta.memberRole === 'member' && (
+                <>
+                  <OptionsMenuItem
+                    onClick={() => {
+                      setFeaturesMember(menuMember)
+                      setMemberMenuUid(null)
+                    }}
+                  >
+                    <SlidersHorizontal className="h-4 w-4 shrink-0" />
+                    Features
+                  </OptionsMenuItem>
+                  <OptionsMenuItem
+                    onClick={() => {
+                      handlePromote(menuMember.uid)
+                      setMemberMenuUid(null)
+                    }}
+                  >
+                    <Shield className="h-4 w-4 shrink-0" />
+                    Promote to admin
+                  </OptionsMenuItem>
+                </>
+              )}
+              {isAdmin && !menuMemberMeta.isSelf && menuMemberMeta.memberRole === 'admin' && !menuMemberMeta.isTheCreator && (
+                <OptionsMenuItem
+                  onClick={() => {
+                    handleDemote(menuMember.uid)
+                    setMemberMenuUid(null)
+                  }}
+                >
+                  <Shield className="h-4 w-4 shrink-0" />
+                  Demote to member
+                </OptionsMenuItem>
+              )}
+              {isCreator && !menuMemberMeta.isTheCreator && (
+                <OptionsMenuItem
+                  onClick={() => {
+                    setTransferTarget(menuMember)
+                    setMemberMenuUid(null)
+                  }}
+                >
+                  <ArrowRightLeft className="h-4 w-4 shrink-0" />
+                  Transfer ownership
+                </OptionsMenuItem>
+              )}
+              {((isAdmin && !menuMemberMeta.isTheCreator) || (menuMemberMeta.isSelf && !menuMemberMeta.isTheCreator)) && (
+                <OptionsMenuItem
+                  destructive
+                  onClick={() => {
+                    handleRemoveMember(menuMember.uid, menuMemberMeta.isSelf)
+                    setMemberMenuUid(null)
+                  }}
+                >
+                  {menuMemberMeta.isSelf ? (
+                    <>
+                      <LogOut className="h-4 w-4 shrink-0" />
+                      Leave team
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 shrink-0" />
+                      Remove member
+                    </>
+                  )}
+                </OptionsMenuItem>
+              )}
+            </>
+          )}
+        </OptionsMenuDropdown>
 
         <TeamMemberFeaturesDialog
           open={!!featuresMember}

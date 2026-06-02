@@ -45,7 +45,7 @@ import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as dele
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { TeamsPanel } from './components/TeamsPanel'
 import { fetchTeamContext } from './utils/teams'
-import { resolveTeamMemberFeatures, canAccessTeamFeature, TEAM_FEATURE_ACCESS_DENIED_MESSAGE, featureIdForFeedNav } from './utils/teamFeatures'
+import { resolveTeamMemberFeatures, canAccessTeamFeature, canSeeDealAmounts, TEAM_FEATURE_ACCESS_DENIED_MESSAGE, featureIdForFeedNav } from './utils/teamFeatures'
 import { subscribeToWebPush } from './utils/pushNotifications'
 import { reverseGeocodeCity } from './utils/reverseGeocode'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
@@ -736,6 +736,11 @@ function App() {
   const canAccessFeature = useCallback(
     (featureId) => canAccessTeamFeature(teamMembership, teamMemberFeatures, featureId),
     [teamMembership, teamMemberFeatures]
+  )
+
+  const showDealAmounts = useMemo(
+    () => canSeeDealAmounts(teamMembership, teamMemberFeatures, teams),
+    [teamMembership, teamMemberFeatures, teams]
   )
 
   const guardFeature = useCallback((featureId, action) => {
@@ -3074,6 +3079,7 @@ function App() {
         onLeadsChange={setLeads}
         onRefreshLeads={refreshLeads}
         onCreateQuoteForDeal={handleCreateQuoteForDeal}
+        canSeeDealAmounts={showDealAmounts}
       />
 
       <SchedulePanel
@@ -3218,6 +3224,7 @@ function App() {
             onOpenDetail={(quoteId) => nav.pushQuotesDetail(quoteId)}
             onCloseEditor={() => nav.pop()}
             onCloseDetail={() => nav.pop()}
+            canSeeDealAmounts={showDealAmounts}
           />
         </Suspense>
       )}
@@ -3303,6 +3310,7 @@ function App() {
         onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
         onCloseLeadDetail={() => nav.pop()}
         currentUserId={currentUser?.uid}
+        canSeeDealAmounts={showDealAmounts}
       />
 
       <DealsPanel
@@ -3346,6 +3354,7 @@ function App() {
         createDealSaving={createDealSaving}
         onCreateDealSubmit={handleCreateDealSubmit}
         pipelinesCount={pipelines.length}
+        canSeeDealAmounts={showDealAmounts}
       />
 
       <CreateLeadDialog
@@ -3375,6 +3384,7 @@ function App() {
         teams={teams}
         onSaved={bumpDealTemplatesRefresh}
         nestedOverlay={dealTemplateNestedOverlay || dealTemplatesManagerOpen}
+        canSeeDealAmounts={showDealAmounts}
       />
 
       <DealTemplatesManagerDialog
@@ -3399,6 +3409,7 @@ function App() {
         saving={createDealSaving}
         onSubmit={handleCreateDealSubmit}
         nestedOverlay={dealTemplateNestedOverlay || dealTemplatePickerOpen}
+        canSeeDealAmounts={showDealAmounts}
       />
 
       <HailDataPanel

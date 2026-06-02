@@ -133,6 +133,7 @@ export function DealPipeline({
   onLeadsChange,
   onRefreshLeads,
   onCreateQuoteForDeal,
+  canSeeDealAmounts = true,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
@@ -908,12 +909,12 @@ export function DealPipeline({
                         })()}
                         {(() => {
                           const duration = formatTimeInState(deal)
-                          const hasProfit = dealHasFinancials(deal)
+                          const hasProfit = canSeeDealAmounts && dealHasFinancials(deal)
                           if (!duration && !hasProfit) return null
                           return (
                             <div className="text-[10px] mt-0.5 text-white/75 flex items-center gap-2 flex-wrap">
                               {duration && <span title="Cumulative time in this stage">{duration}</span>}
-                              {hasProfit && <DealProfitBadge deal={deal} className="text-[10px]" />}
+                              {hasProfit && <DealProfitBadge deal={deal} className="text-[10px]" canSeeDealAmounts={canSeeDealAmounts} />}
                             </div>
                           )
                         })()}
@@ -1224,6 +1225,7 @@ export function DealPipeline({
           }}
           getToken={getToken}
           onCreateQuoteForDeal={onCreateQuoteForDeal}
+          canSeeDealAmounts={canSeeDealAmounts}
         />
       )}
 
@@ -1254,6 +1256,7 @@ export function DealPipeline({
           teams={teams}
           teamMembership={teamMembership}
           leads={leads}
+          canSeeDealAmounts={canSeeDealAmounts}
           nestedOverlay
           topLayer
         />

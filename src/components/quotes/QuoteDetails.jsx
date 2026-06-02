@@ -26,6 +26,7 @@ export function QuoteDetails({
   onDelete,
   onOpenDeal,
   leads = [],
+  canSeeDealAmounts = true,
 }) {
   if (!quote) return null
 
@@ -68,7 +69,8 @@ export function QuoteDetails({
             taxRate={quote.taxRate || 0}
             readOnly
             locked={isLocked}
-            showProfit
+            showProfit={canSeeDealAmounts}
+            showAmounts={canSeeDealAmounts}
             selectedOptionalIds={
               quote.status === 'accepted' || quote.status === 'paid'
                 ? acceptedOptionalIds
@@ -76,7 +78,7 @@ export function QuoteDetails({
             }
           />
 
-          {(quote.status === 'accepted' || quote.status === 'paid') && acceptedOptionalIds.length > 0 && (
+          {(quote.status === 'accepted' || quote.status === 'paid') && acceptedOptionalIds.length > 0 && canSeeDealAmounts && (
             <p className="text-xs opacity-60">Client selected {acceptedOptionalIds.length} optional add-on(s). Accepted total: {formatQuoteMoney(displayTotal)}</p>
           )}
 
@@ -101,7 +103,12 @@ export function QuoteDetails({
               {vt.firstViewedAt && <p>First viewed: {formatDateTime(vt.firstViewedAt)}</p>}
               {vt.lastViewedAt && <p>Last viewed: {formatDateTime(vt.lastViewedAt)}</p>}
               {vt.viewCount > 0 && <p>Views: {vt.viewCount}</p>}
-              {quote.paidAt && <p className="text-green-400">Paid: {formatDateTime(quote.paidAt)} ({formatQuoteMoney(displayTotal)})</p>}
+              {quote.paidAt && (
+                <p className="text-green-400">
+                  Paid: {formatDateTime(quote.paidAt)}
+                  {canSeeDealAmounts ? ` (${formatQuoteMoney(displayTotal)})` : ''}
+                </p>
+              )}
             </div>
           )}
 

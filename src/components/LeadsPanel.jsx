@@ -41,6 +41,7 @@ export function LeadsPanel({
   createDealSaving = false,
   onCreateDealSubmit,
   pipelinesCount = 0,
+  canSeeDealAmounts = true,
 }) {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
@@ -232,6 +233,7 @@ export function LeadsPanel({
         saving={createDealSaving}
         onSubmit={handleCreateDealFormSubmit}
         nestedOverlay
+        canSeeDealAmounts={canSeeDealAmounts}
       />
 
       <LeadDetails
@@ -255,6 +257,7 @@ export function LeadsPanel({
         teams={teams}
         teamMembership={teamMembership}
         leads={leads}
+        canSeeDealAmounts={canSeeDealAmounts}
         currentUserId={currentUserId}
       />
     </>

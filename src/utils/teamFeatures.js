@@ -34,10 +34,23 @@ export function defaultMemberFeatures() {
   return Object.fromEntries(TEAM_FEATURE_IDS.map((id) => [id, true]))
 }
 
+/** Per-member visibility flags (not panel access). */
+export const TEAM_MEMBER_VISIBILITY_IDS = ['dealAmounts']
+
+export const TEAM_MEMBER_VISIBILITY_LABELS = {
+  dealAmounts: 'Can see deal amounts',
+}
+
 export function normalizeMemberFeatures(raw) {
   const out = defaultMemberFeatures()
+  for (const id of TEAM_MEMBER_VISIBILITY_IDS) {
+    out[id] = true
+  }
   if (!raw || typeof raw !== 'object') return out
   for (const id of TEAM_FEATURE_IDS) {
+    if (typeof raw[id] === 'boolean') out[id] = raw[id]
+  }
+  for (const id of TEAM_MEMBER_VISIBILITY_IDS) {
     if (typeof raw[id] === 'boolean') out[id] = raw[id]
   }
   return out
@@ -58,6 +71,18 @@ export function canAccessTeamFeature(membership, features, featureId) {
   if (membership.role === 'admin') return true
   if (!features) return true
   return features[featureId] !== false
+}
+
+/** Admins always see amounts; members need team + personal permission. */
+export function canSeeDealAmounts(membership, features, teams) {
+  if (!membership) return true
+  if (membership.role === 'admin') return true
+  const team = (teams || []).find((t) => t.id === membership.teamId)
+  const teamAllows =
+    (team?.membersCanSeeDealAmounts ?? membership.membersCanSeeDealAmounts) !== false
+  if (!teamAllows) return false
+  if (features?.dealAmounts === false) return false
+  return true
 }
 
 export const TEAM_FEATURE_ACCESS_DENIED_MESSAGE = "Don't have access to this feature"

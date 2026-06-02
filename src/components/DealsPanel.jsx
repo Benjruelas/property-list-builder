@@ -43,7 +43,7 @@ function getColumnName(colId, columns) {
 
 const DEALS_PANEL_MENU_W = 220
 
-function DealCard({ deal, columns, pipelineTitle, lead, onClick }) {
+function DealCard({ deal, columns, pipelineTitle, lead, onClick, canSeeDealAmounts = true }) {
   const stageName = getColumnName(deal.status, columns)
   const timeStr = formatTimeInState(deal)
   const leadName = lead ? displayLeadName(lead) : (deal.leadName || '')
@@ -71,13 +71,13 @@ function DealCard({ deal, columns, pipelineTitle, lead, onClick }) {
         {pipelineTitle && (
           <span className="truncate max-w-[140px]">{pipelineTitle}</span>
         )}
-        <DealProfitBadge deal={deal} className="text-[11px] ml-auto" />
+        <DealProfitBadge deal={deal} className="text-[11px] ml-auto" canSeeDealAmounts={canSeeDealAmounts} />
       </div>
     </div>
   )
 }
 
-function ClosedDealCard({ record, onClick }) {
+function ClosedDealCard({ record, onClick, canSeeDealAmounts = true }) {
   const d = record.deal
   const closedDate = record.closedAt
     ? new Date(record.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -97,7 +97,7 @@ function ClosedDealCard({ record, onClick }) {
         {record.closedFrom?.title && (
           <span className="truncate max-w-[140px]">{record.closedFrom.title}</span>
         )}
-        <DealProfitBadge deal={d} className="text-[11px] ml-auto" />
+        <DealProfitBadge deal={d} className="text-[11px] ml-auto" canSeeDealAmounts={canSeeDealAmounts} />
       </div>
     </div>
   )
@@ -144,6 +144,7 @@ export function DealsPanel({
   createDealSaving = false,
   onCreateDealSubmit,
   pipelinesCount = 0,
+  canSeeDealAmounts = true,
 }) {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('active')
@@ -418,6 +419,7 @@ export function DealsPanel({
                               pipelineTitle={showHeader ? null : pipeline.title}
                               lead={deal.leadId ? leads.find((l) => l.id === deal.leadId) : null}
                               onClick={(d) => onOpenDealDetail?.(d.id, pipeline.id)}
+                              canSeeDealAmounts={canSeeDealAmounts}
                             />
                           ))}
                         </div>
@@ -444,7 +446,7 @@ export function DealsPanel({
             ) : (
               <div className="space-y-1.5">
                 {filteredClosed.map((r) => (
-                  <ClosedDealCard key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} />
+                  <ClosedDealCard key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} canSeeDealAmounts={canSeeDealAmounts} />
                 ))}
               </div>
             )}
@@ -492,6 +494,7 @@ export function DealsPanel({
         saving={createDealSaving}
         onSubmit={handleCreateDealFormSubmit}
         nestedOverlay
+        canSeeDealAmounts={canSeeDealAmounts}
       />
 
       {isOpen && selectedDeal && selectedPipeline && (
@@ -516,6 +519,7 @@ export function DealsPanel({
           onRequestRemoveDeal={handleRemoveDealFromPanel}
           getToken={getToken}
           onCreateQuoteForDeal={onCreateQuoteForDeal}
+          canSeeDealAmounts={canSeeDealAmounts}
         />
       )}
 
@@ -546,6 +550,7 @@ export function DealsPanel({
           teams={teams}
           teamMembership={teamMembership}
           leads={leads}
+          canSeeDealAmounts={canSeeDealAmounts}
           nestedOverlay
           topLayer
           currentUserId={currentUserId}
@@ -568,6 +573,7 @@ export function DealsPanel({
           onOpenLead={openLeadFromDeal}
           leadLinkActive={!!leadOverlayId && leadOverlayId === selectedClosedLead?.id}
           getToken={getToken}
+          canSeeDealAmounts={canSeeDealAmounts}
         />
       )}
     </>

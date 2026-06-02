@@ -20,6 +20,7 @@ export function DealTemplateEditorDialog({
   teams = [],
   onSaved,
   nestedOverlay = true,
+  canSeeDealAmounts = true,
 }) {
   const { scheduleSync } = useUserDataSync()
   const [name, setName] = useState('')
@@ -157,6 +158,7 @@ export function DealTemplateEditorDialog({
               costs={costs}
               onPaymentsChange={setPayments}
               onCostsChange={setCosts}
+              canSeeDealAmounts={canSeeDealAmounts}
             />
 
             <CreateDealTasksEditor
