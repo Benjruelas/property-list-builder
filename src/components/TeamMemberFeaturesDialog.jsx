@@ -35,7 +35,7 @@ export function TeamMemberFeaturesDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose?.() }}>
-      <DialogContent className="map-panel list-panel max-w-md p-0" showCloseButton nestedOverlay topLayer>
+      <DialogContent className="map-panel list-panel share-list-dialog max-w-md p-0" showCloseButton nestedOverlay topLayer>
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left">
           <PanelHeader onBack={onClose} title="Feature access" />
           <DialogDescription className="sr-only">Configure team member feature access</DialogDescription>
@@ -61,16 +61,16 @@ export function TeamMemberFeaturesDialog({
                       type="button"
                       role="switch"
                       aria-checked={on}
-                      onClick={() => toggle(id)}
-                      className={cn(
-                        'relative h-5 w-9 rounded-full transition-colors shrink-0',
-                        on ? 'bg-blue-500' : 'bg-white/20'
-                      )}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        toggle(id)
+                      }}
+                      className="settings-toggle relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-all duration-200"
                     >
                       <span
                         className={cn(
-                          'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform',
-                          on ? 'left-4' : 'left-0.5'
+                          'inline-block h-5 w-5 transform rounded-full transition-all duration-200',
+                          on ? 'translate-x-[24px] toggle-knob-on' : 'translate-x-[4px] toggle-knob-off'
                         )}
                       />
                     </button>
@@ -85,7 +85,7 @@ export function TeamMemberFeaturesDialog({
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save
             </Button>
-            <Button variant="outline" className="create-list-btn flex-1" onClick={onClose} disabled={saving}>
+            <Button variant="outline" className="flex-1 share-dialog-btn" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
           </div>
