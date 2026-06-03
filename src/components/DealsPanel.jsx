@@ -3,6 +3,7 @@ import { Search, Briefcase, ChevronDown, ChevronRight, Clock, Archive, Plus } fr
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { formatTimeInState } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
@@ -105,6 +106,7 @@ function ClosedDealCard({ record, onClick, canSeeDealAmounts = true }) {
 
 export function DealsPanel({
   isOpen,
+  instantDismiss = false,
   onClose,
   onBack,
   pipelines = [],
@@ -300,6 +302,8 @@ export function DealsPanel({
     [filteredPipelines]
   )
 
+  const hasNestedDetail = !!(dealsDetailDealId || dealsClosedRecordId || dealsLeadOverlayId)
+
   const handlePanelBack = () => {
     if (leadOverlayId) {
       onCloseLeadOverlay?.()
@@ -318,11 +322,13 @@ export function DealsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
+      <Dialog open={isOpen} modal={!hasNestedDetail} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack)}>
         <DialogContent
           className="map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0"
           showCloseButton={false}
           hideOverlay
+          suppressBackdrop={hasNestedDetail}
+          instantDismiss={instantDismiss && !isOpen}
           onInteractOutside={(e) => {
             if (e.target.closest?.('[data-deals-panel-menu]')) e.preventDefault()
           }}
@@ -499,6 +505,7 @@ export function DealsPanel({
 
       {isOpen && selectedDeal && selectedPipeline && (
         <DealDetails
+          instantDismiss={instantDismiss}
           deal={selectedDeal}
           pipeline={selectedPipeline}
           lead={selectedLead}
@@ -526,6 +533,7 @@ export function DealsPanel({
       {isOpen && leadOverlay && (
         <LeadDetails
           isOpen
+          instantDismiss={instantDismiss}
           onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
           pipelines={pipelines}
@@ -559,6 +567,7 @@ export function DealsPanel({
 
       {isOpen && selectedClosed && (
         <DealDetails
+          instantDismiss={instantDismiss}
           deal={selectedClosed.deal}
           pipeline={{ columns: selectedClosed.closedFrom?.columns, id: selectedClosed.closedFrom?.id, title: selectedClosed.closedFrom?.title }}
           lead={selectedClosedLead}

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { QuoteIcon } from '../icons/QuoteIcon'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
+import { handlePanelDialogOpenChange } from '../ui/panelDialogUtils'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -213,11 +214,12 @@ export function QuotesPanel({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(o) => { if (!o) handlePanelBack() }}>
+      <Dialog open={isOpen} modal={!(editorOpen || detailsQuote)} onOpenChange={(o) => handlePanelDialogOpenChange(o, editorOpen || !!detailsQuote, handlePanelBack)}>
         <DialogContent
           className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0"
           showCloseButton={false}
           hideOverlay
+          suppressBackdrop={editorOpen || !!detailsQuote}
           onInteractOutside={(e) => {
             if (e.target.closest?.('[data-quotes-panel-menu]')) e.preventDefault()
           }}

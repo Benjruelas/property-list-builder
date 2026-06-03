@@ -59,8 +59,9 @@ import { DealTemplatePickerDialog } from './components/DealTemplatePickerDialog'
 import { DealTemplateEditorDialog } from './components/DealTemplateEditorDialog'
 import { DealTemplatesManagerDialog } from './components/DealTemplatesManagerDialog'
 import { templateToCreateDealPrefill } from './utils/dealTemplates'
+import { AppLoadingScreen } from './components/AppLoadingScreen'
 import { HailDataPanel } from './components/HailDataPanel'
-import { HailStormOverlay, HailStormDismissPill } from './components/HailStormOverlay'
+import { HailStormOverlay, HailStormDismissPill, HailStormMapMarkers } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
 // import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
 import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
@@ -220,6 +221,8 @@ function App() {
 
   const {
     isActivityPanelOpen,
+    isActivityPanelFocused,
+    skipPanelExitAnimation,
     isListPanelOpen,
     isParcelListPanelOpen,
     viewingListId,
@@ -359,6 +362,9 @@ function App() {
   const [teamMembership, setTeamMembership] = useState(null)
   const [pendingTeamInvites, setPendingTeamInvites] = useState([])
   const [selectedHailEvent, setSelectedHailEvent] = useState(null)
+  /** Parcel context for storm map view after hail/parcel panels are dismissed */
+  const [hailStormParcel, setHailStormParcel] = useState(null)
+  const [hailOpening, setHailOpening] = useState(false)
   // const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false) // roof inspector — restore later
   // const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
   const [settings, setSettings] = useState(() => getSettings())
@@ -368,10 +374,13 @@ function App() {
   const parcelLayerRef = useRef(null)
   const currentPopupRef = useRef(null)
   const programmaticMoveRef = useRef(false)
+  /** Viewport to restore after closing Hail Data / storm map (saved before storm zoom). */
+  const hailViewportRestoreRef = useRef(null)
   const initialSetDoneRef = useRef(false)
   const prevFollowingRef = useRef(false)
   const lastAutoZoomRef = useRef(null)
   const [mapReady, setMapReady] = useState(false)
+  const showAppLoading = authLoading || (permissionsReady && !mapReady)
   const [viewState, setViewState] = useState({
     longitude: -96.7970,
     latitude: 32.7767,
@@ -382,30 +391,79 @@ function App() {
 
   const memoizedMapStyle = useMemo(() => getMapStyle(settings.mapStyle), [settings.mapStyle])
 
+  const captureMapViewportForHailRestore = useCallback(() => {
+    if (hailViewportRestoreRef.current) return
+    const map = mapInstanceRef.current
+    if (!map) return
+    const center = map.getCenter()
+    hailViewportRestoreRef.current = {
+      center: [center.lng, center.lat],
+      zoom: map.getZoom(),
+      bearing: map.getBearing(),
+      pitch: map.getPitch(),
+    }
+  }, [])
+
+  const restoreMapViewportAfterHail = useCallback(() => {
+    const snap = hailViewportRestoreRef.current
+    hailViewportRestoreRef.current = null
+    const map = mapInstanceRef.current
+    if (!snap || !map) return
+    programmaticMoveRef.current = true
+    map.easeTo({
+      center: snap.center,
+      zoom: snap.zoom,
+      bearing: snap.bearing,
+      pitch: snap.pitch,
+      duration: 650,
+    })
+    setTimeout(() => { programmaticMoveRef.current = false }, 750)
+  }, [])
+
+  const handleCloseHailData = useCallback(() => {
+    restoreMapViewportAfterHail()
+    setSelectedHailEvent(null)
+    setHailStormParcel(null)
+    nav.popMapOverlay()
+  }, [nav, restoreMapViewportAfterHail])
+
   const hailParcelCoords = useMemo(() => {
-    if (!hailDataParcel) return null
-    const lat = hailDataParcel.lat ?? hailDataParcel.properties?.LATITUDE
-    const lng = hailDataParcel.lng ?? hailDataParcel.properties?.LONGITUDE
+    const parcel = hailStormParcel ?? hailDataParcel
+    if (!parcel) return null
+    const lat = parcel.lat ?? parcel.properties?.LATITUDE
+    const lng = parcel.lng ?? parcel.properties?.LONGITUDE
     if (lat == null || lng == null) return null
     const latN = Number(lat)
     const lngN = Number(lng)
     if (Number.isNaN(latN) || Number.isNaN(lngN)) return null
     return { lat: latN, lng: lngN }
-  }, [hailDataParcel])
+  }, [hailStormParcel, hailDataParcel])
 
   const handleSelectHailEvent = useCallback((evt) => {
+    captureMapViewportForHailRestore()
+    const parcel = clickedParcelData ?? hailDataParcel
+    if (parcel) setHailStormParcel(parcel)
     setSelectedHailEvent(evt)
-    nav.popMapOverlay()
-  }, [nav])
+    setHailOpening(false)
+    nav.dismissParcelAndHailPanels()
+  }, [nav, clickedParcelData, hailDataParcel, captureMapViewportForHailRestore])
 
   const handleDismissHailEvent = useCallback(() => {
     setSelectedHailEvent(null)
-    if (clickedParcelData) {
-      nav.openHailOverlay({ type: 'hail', parcelId: clickedParcelData.id, parcelData: clickedParcelData })
+    const parcel = hailStormParcel ?? clickedParcelData ?? hailDataParcel
+    if (parcel) {
+      nav.openHailOverlay({ type: 'hail', parcelId: parcel.id, parcelData: parcel })
     }
-  }, [nav, clickedParcelData])
+  }, [nav, hailStormParcel, clickedParcelData, hailDataParcel])
 
   const hailStormTimeline = useHailStormTimeline(selectedHailEvent)
+
+  useEffect(() => {
+    if (isHailDataOpen) {
+      setHailOpening(false)
+      captureMapViewportForHailRestore()
+    }
+  }, [isHailDataOpen, captureMapViewportForHailRestore])
 
   useEffect(() => {
     if (!selectedHailEvent || !mapRef.current) return
@@ -424,12 +482,12 @@ function App() {
           [minLng - lngPad, minLat - latPad],
           [maxLng + lngPad, maxLat + latPad],
         ],
-        { padding: 72, maxZoom: 10, duration: 700 }
+        { padding: 72, maxZoom: 13, duration: 700 }
       )
-    } else {
+    } else if (selectedHailEvent.lng != null && selectedHailEvent.lat != null) {
       map.easeTo({
         center: [selectedHailEvent.lng, selectedHailEvent.lat],
-        zoom: 8,
+        zoom: 11,
         duration: 700,
       })
     }
@@ -2031,6 +2089,11 @@ function App() {
   }, [nav])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
+    if (isHailDataOpen || hailOpening) return
+    if (selectedHailEvent) {
+      nav.popMapOverlay()
+      return
+    }
     nav.popMapOverlay()
     if (suppressParcelDetailsDataClearRef.current) {
       suppressParcelDetailsDataClearRef.current = false
@@ -2042,7 +2105,7 @@ function App() {
     } else {
       nav.clearMapOverlays()
     }
-  }, [clickedParcelData, openParcelPopup, nav, parcelDetailsSource])
+  }, [clickedParcelData, openParcelPopup, nav, parcelDetailsSource, isHailDataOpen, hailOpening, selectedHailEvent])
 
   const handleEmailClick = useCallback((email, parcelData) => {
     if (authLoading) return
@@ -2202,6 +2265,7 @@ function App() {
 
   const notificationInbox = useNotificationInbox({
     isOpen: isActivityPanelOpen,
+    isFeedActive: isActivityPanelFocused,
     onOpenChange: (open) => {
       if (open) guardFeature('activity', () => nav.setActivityOpen(true))
       else nav.setActivityOpen(false)
@@ -2677,6 +2741,7 @@ function App() {
 
   return (
     <UserDataSyncProvider getToken={getToken}>
+    <AppLoadingScreen active={showAppLoading} />
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
         <PermissionPrompt onComplete={(orientationGranted) => {
@@ -2750,7 +2815,11 @@ function App() {
             mapRef={mapInstanceRef}
             mapReady={mapReady}
             onParcelClick={handleParcelClick}
-            clickedParcelId={clickedParcelId}
+            clickedParcelId={
+              selectedHailEvent
+                ? (hailStormParcel?.id ?? hailDataParcel?.id ?? clickedParcelId)
+                : clickedParcelId
+            }
             selectedParcels={selectedParcels}
             isMultiSelectActive={isMultiSelectActive}
             selectedListIds={selectedListIds}
@@ -2773,6 +2842,18 @@ function App() {
             <LocationMarker position={userLocation} />
           )}
           <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
+          {selectedHailEvent && hailParcelCoords ? (
+            <HailStormMapMarkers
+              parcel={hailParcelCoords}
+              event={selectedHailEvent}
+              address={
+                hailStormParcel?.address
+                ?? hailStormParcel?.properties?.SITUS_ADDR
+                ?? hailDataParcel?.address
+                ?? hailDataParcel?.properties?.SITUS_ADDR
+              }
+            />
+          ) : null}
         </MapGL>
         <HailStormDismissPill
           event={selectedHailEvent}
@@ -2901,8 +2982,6 @@ function App() {
         NotificationMenuItem={notificationInbox.MenuItem}
       />
 
-      {notificationInbox.panel}
-
       <ListPanel
         currentUser={currentUser}
         isOpen={isListPanelOpen && !isParcelListPanelOpen}
@@ -2969,6 +3048,7 @@ function App() {
       {createPortal(
         <ParcelDetails
           isOpen={isParcelDetailsOpen}
+          suspendClose={isHailDataOpen || hailOpening}
           onClose={handleParcelDetailsClose}
           parcelData={clickedParcelData}
           onEmailClick={handleEmailClick}
@@ -2993,6 +3073,7 @@ function App() {
           onHailData={() => {
             if (!clickedParcelData) return
             setSelectedHailEvent(null)
+            setHailOpening(true)
             suppressParcelDetailsDataClearRef.current = true
             nav.openHailOverlay({ type: 'hail', parcelId: clickedParcelData.id, parcelData: clickedParcelData })
           }}
@@ -3018,6 +3099,7 @@ function App() {
 
       <DealPipeline
         isOpen={isDealPipelineOpen}
+        instantDismiss={skipPanelExitAnimation}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         pipelines={pipelines}
@@ -3278,8 +3360,11 @@ function App() {
         onLogout={currentUser ? handleLogout : undefined}
       />
 
+      {notificationInbox.panel}
+
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
+        instantDismiss={skipPanelExitAnimation}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         leads={leads}
@@ -3315,6 +3400,7 @@ function App() {
 
       <DealsPanel
         isOpen={isDealsPanelOpen}
+        instantDismiss={skipPanelExitAnimation}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         pipelines={pipelines}
@@ -3414,10 +3500,7 @@ function App() {
 
       <HailDataPanel
         isOpen={isHailDataOpen}
-        onClose={() => {
-          nav.popMapOverlay()
-          setSelectedHailEvent(null)
-        }}
+        onClose={handleCloseHailData}
         parcelData={hailDataParcel}
         onSelectEvent={handleSelectHailEvent}
       />

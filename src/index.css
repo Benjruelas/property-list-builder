@@ -178,6 +178,22 @@
   }
 }
 
+/* Map panel dialogs: fade-only motion (avoids zoom/slide vs fullscreen-panel transform) */
+.map-panel-dialog {
+  will-change: opacity;
+}
+.map-panel-dialog[data-state='open'],
+.map-panel-dialog[data-state='closed'] {
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-panel-dialog,
+  [data-app-dialog-backdrop] {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Map panels - satellite liquid glass styling (only display mode) */
 .map-panel {
   background: rgba(255, 255, 255, 0.05);
@@ -1456,6 +1472,131 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 /* MapLibre attribution hidden for cleaner look */
 .maplibregl-ctrl-attrib {
   display: none !important;
+}
+
+/* App boot splash — portaled in AppLoadingScreen (framer-motion); below permission prompt */
+.app-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10045;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0c;
+  overflow: hidden;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+.app-loading-screen__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.app-loading-screen__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(72px);
+  opacity: 0.55;
+}
+.app-loading-screen__orb--a {
+  width: min(70vw, 320px);
+  height: min(70vw, 320px);
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.55) 0%, transparent 70%);
+}
+.app-loading-screen__orb--b {
+  width: min(55vw, 260px);
+  height: min(55vw, 260px);
+  bottom: 12%;
+  right: 8%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.4) 0%, transparent 72%);
+}
+.app-loading-screen__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 75%);
+}
+.app-loading-screen__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 2rem;
+}
+.app-loading-screen__logo-wrap {
+  position: relative;
+  width: 7.5rem;
+  height: 7.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.app-loading-screen__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(96, 165, 250, 0.85);
+  border-right-color: rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 24px rgba(59, 130, 246, 0.2);
+}
+.app-loading-screen__ring--inner {
+  inset: 0.5rem;
+  border-top-color: rgba(147, 197, 253, 0.5);
+  border-right-color: transparent;
+  box-shadow: none;
+}
+.app-loading-screen__logo {
+  position: relative;
+  z-index: 1;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 1.125rem;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 48px rgba(59, 130, 246, 0.15);
+}
+.app-loading-screen__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  text-align: center;
+}
+.app-loading-screen__name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #f8fafc;
+  text-shadow: 0 2px 20px rgba(59, 130, 246, 0.35);
+}
+.app-loading-screen__tagline {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(148, 163, 184, 0.95);
+  letter-spacing: 0.02em;
+}
+.app-loading-screen__progress {
+  width: min(12rem, 56vw);
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.app-loading-screen__progress-fill {
+  width: 45%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, transparent);
 }
 
 /* Permission prompt overlay — must be body-level (see PermissionPrompt portal) so it
@@ -2760,106 +2901,319 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   color: #64748b;
 }
 
-/* Hail storm radar overlay */
-.hail-storm-dismiss-wrap {
-  position: absolute;
-  top: calc(0.6rem + env(safe-area-inset-top, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
+/* Hail storm map panel — docked above mobile action bar */
+.hail-storm-panel-wrap {
+  --hail-storm-action-bar-offset: calc(env(safe-area-inset-bottom, 0px) + 12px + 68px + 12px);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--hail-storm-action-bar-offset);
+  z-index: 999;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
+  padding: 0 4vw;
   pointer-events: none;
 }
-.hail-storm-dismiss-btn {
-  pointer-events: auto;
-  display: inline-flex !important;
-  gap: 0.4rem !important;
-  padding: 0.5rem 0.9rem !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.6) !important;
-  background: rgba(0, 0, 0, 0.55) !important;
-  background-color: rgba(0, 0, 0, 0.55) !important;
-  color: #fff !important;
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  box-shadow: none !important;
+@media (min-width: 768px) {
+  .hail-storm-panel-wrap {
+    position: absolute;
+    --hail-storm-action-bar-offset: 1.25rem;
+    padding: 0 1rem;
+    z-index: 30;
+  }
 }
-.hail-storm-dismiss-btn:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.7) !important;
-  background-color: rgba(0, 0, 0, 0.7) !important;
-  border-color: rgba(255, 255, 255, 0.8) !important;
-}
-.hail-storm-dismiss-note {
+.hail-storm-panel {
   pointer-events: auto;
-  font-size: 0.7rem;
+  width: min(92vw, 26rem);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   color: #fff;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 2px 8px;
-  border-radius: 999px;
+  overflow: hidden;
 }
-.hail-storm-timeline {
-  pointer-events: auto;
-  display: flex;
+.hail-storm-panel-header {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr 2.5rem;
   align-items: center;
-  gap: 0.35rem;
-  max-width: min(92vw, 22rem);
-  padding: 0.35rem 0.45rem;
-  border-radius: 999px;
-  border: 1.5px solid rgba(255, 255, 255, 0.45);
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  gap: 0.5rem;
+  padding: 0.65rem 0.7rem;
+  min-height: 3.75rem;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
-.hail-storm-timeline-btn {
+.hail-storm-exit-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
   cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
-.hail-storm-timeline-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+.hail-storm-exit-btn:hover {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(252, 165, 165, 0.55);
 }
-.hail-storm-timeline-btn:disabled {
+.hail-storm-exit-btn:active {
+  transform: scale(0.96);
+}
+.hail-storm-summary {
+  margin: 0;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+}
+.hail-storm-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  justify-self: end;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.22);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  color: #93c5fd;
+}
+.hail-storm-panel-radar {
+  padding: 0.5rem 0.65rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.hail-storm-panel-timeline {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.hail-storm-step-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.85rem;
+  height: 2.85rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.hail-storm-step-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.hail-storm-step-btn:disabled {
   opacity: 0.35;
   cursor: default;
 }
-.hail-storm-timeline-label {
+.hail-storm-frame-info {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
+  justify-content: center;
   text-align: center;
-  color: #fff;
-  font-size: 0.7rem;
-  line-height: 1.25;
+  padding: 0 0.1rem;
 }
-.hail-storm-timeline-time {
-  font-weight: 600;
+.hail-storm-frame-time {
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.88);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.hail-storm-timeline-count {
-  opacity: 0.85;
-  font-size: 0.65rem;
-}
-.hail-storm-timeline-loading {
+.hail-storm-frame-loading {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
 }
+.hail-storm-progress {
+  width: 100%;
+  padding: 0 0.15rem;
+}
+.hail-storm-progress-track {
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: visible;
+}
+.hail-storm-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.55), rgba(147, 197, 253, 0.95));
+  transition: width 220ms ease;
+  pointer-events: none;
+}
+.hail-storm-progress-report {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: rgba(250, 204, 21, 0.95);
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.65);
+  pointer-events: none;
+}
+.hail-storm-progress-thumb {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid rgba(147, 197, 253, 0.95);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  transition: left 220ms ease;
+  pointer-events: none;
+}
+.hail-storm-panel-status {
+  margin: 0;
+  padding: 0 0.75rem 0.6rem;
+  font-size: 0.7rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+/* Hail storm map markers */
+.hail-storm-parcel-marker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+}
+.hail-storm-parcel-marker-pin-wrap {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.hail-storm-parcel-marker-pulse {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-left: -1.25rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.35);
+  animation: hail-storm-parcel-pulse 2s ease-out infinite;
+}
+@keyframes hail-storm-parcel-pulse {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.85;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+.hail-storm-parcel-marker-pin {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px 999px 999px 0;
+  transform: rotate(-45deg);
+  background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  color: #fff;
+}
+.hail-storm-parcel-marker-pin svg {
+  transform: rotate(45deg);
+}
+.hail-storm-parcel-marker-label {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 0.35rem;
+  max-width: 11rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hail-storm-event-marker {
+  position: relative;
+  width: 1.25rem;
+  height: 1.25rem;
+  pointer-events: none;
+}
+.hail-storm-event-marker-core {
+  position: absolute;
+  inset: 0.3rem;
+  border-radius: 999px;
+  background: #fbbf24;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.85);
+}
+.hail-storm-event-marker-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(251, 191, 36, 0.65);
+  animation: hail-storm-event-ring 2s ease-out infinite;
+}
+@keyframes hail-storm-event-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
 .hail-event-row {
   border: none !important;
   backdrop-filter: none !important;

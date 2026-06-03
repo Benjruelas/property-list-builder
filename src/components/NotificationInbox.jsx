@@ -136,6 +136,7 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
 
 export function ActivityPanel({
   isOpen,
+  isFocused = true,
   onClose,
   items,
   loading,
@@ -156,6 +157,8 @@ export function ActivityPanel({
     }
   }, [isOpen])
 
+  const obscured = isOpen && !isFocused
+
   const tabCounts = useMemo(() => countFeedItemsByTab(items), [items])
 
   const filteredItems = useMemo(
@@ -166,9 +169,15 @@ export function ActivityPanel({
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose?.() }}>
       <DialogContent
-        className="map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 p-0"
+        className={cn(
+          'map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 p-0',
+          obscured && 'z-[9990] !opacity-0 pointer-events-none',
+          !obscured && isOpen && 'transition-opacity duration-150 ease-out'
+        )}
         showCloseButton={false}
         hideOverlay
+        topLayer={isFocused}
+        aria-hidden={obscured || undefined}
       >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Notifications and team activity</DialogDescription>
@@ -243,6 +252,7 @@ export function ActivityPanel({
 
 export function useNotificationInbox({
   isOpen: controlledOpen,
+  isFeedActive: controlledFeedActive,
   onOpenChange,
   getToken,
   currentUser,
@@ -253,6 +263,7 @@ export function useNotificationInbox({
   const isControlled = controlledOpen !== undefined
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const open = isControlled ? controlledOpen : uncontrolledOpen
+  const feedActive = controlledFeedActive !== undefined ? controlledFeedActive : open
   const setOpen = useCallback((value) => {
     const next = typeof value === 'function' ? value(open) : value
     if (isControlled) onOpenChange?.(next)
@@ -268,11 +279,11 @@ export function useNotificationInbox({
   const [sessionNewKeys, setSessionNewKeys] = useState(() => new Set())
 
   useEffect(() => {
-    openRef.current = open
+    openRef.current = feedActive
     if (!open) {
       setSessionNewKeys(new Set())
     }
-  }, [open])
+  }, [open, feedActive])
 
   const loadFeed = useCallback(async ({ replaceSessionKeys = false } = {}) => {
     if (!currentUser || !getToken) return
@@ -327,8 +338,8 @@ export function useNotificationInbox({
   }, [loadFeed])
 
   useEffect(() => {
-    if (open) loadFeed({ replaceSessionKeys: true })
-  }, [open, teamFilter, loadFeed])
+    if (feedActive) loadFeed({ replaceSessionKeys: true })
+  }, [feedActive, teamFilter, loadFeed])
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
@@ -355,6 +366,7 @@ export function useNotificationInbox({
   const panel = currentUser ? (
     <ActivityPanel
       isOpen={open}
+      isFocused={feedActive}
       onClose={handleClose}
       items={items}
       loading={loading}

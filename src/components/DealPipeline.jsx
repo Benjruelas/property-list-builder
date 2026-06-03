@@ -4,6 +4,7 @@ import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, S
 import { Button } from './ui/button'
 import { PanelBackButton, PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle, formatTimeInState } from '@/utils/dealPipeline'
@@ -91,6 +92,7 @@ function leadToParcelData(lead) {
 
 export function DealPipeline({
   isOpen,
+  instantDismiss = false,
   onClose,
   onBack,
   onOpenParcelDetails,
@@ -736,6 +738,8 @@ export function DealPipeline({
     setSharePipelineId(null)
   }
 
+  const hasNestedDetail = !!(focusDealId || leadOverlayId)
+
   const handlePipelineBack = () => {
     if (leadOverlayId) {
       onCloseLeadOverlay?.()
@@ -758,11 +762,13 @@ export function DealPipeline({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) handlePipelineBack() }}>
+    <Dialog open={isOpen} modal={!hasNestedDetail} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedDetail, handlePipelineBack)}>
       <DialogContent
         className="map-panel deal-pipeline-panel fullscreen-panel flex flex-col"
         showCloseButton={false}
         hideOverlay
+        suppressBackdrop={hasNestedDetail}
+        instantDismiss={instantDismiss && !isOpen}
         onInteractOutside={(e) => {
           if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-pipeline-switcher]') || e.target?.closest?.('[data-share-pipeline-dialog]') || e.target?.closest?.('[data-create-pipeline-dialog]')) e.preventDefault()
         }}
@@ -1194,6 +1200,7 @@ export function DealPipeline({
 
       {isOpen && selectedDeal && (
         <DealDetails
+          instantDismiss={instantDismiss}
           deal={selectedDeal}
           pipeline={activePipeline}
           lead={leads.find((l) => l.id === selectedDeal.leadId) || null}
@@ -1232,6 +1239,7 @@ export function DealPipeline({
       {isOpen && leadOverlay && (
         <LeadDetails
           isOpen
+          instantDismiss={instantDismiss}
           onClose={handleLeadOverlayClose}
           lead={leadOverlay}
           pipelines={pipelines}

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useReducer } from 'react'
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useReducer } from 'react'
 import {
   createInitialState,
   navigationReducer,
@@ -38,6 +38,12 @@ const NavigationContext = createContext(null)
 
 export function NavigationProvider({ children }) {
   const [state, dispatch] = useReducer(navigationReducer, undefined, createInitialState)
+
+  useLayoutEffect(() => {
+    if (state.meta.skipPanelExitAnimation) {
+      dispatch({ type: NAV_ACTIONS.SET_META, payload: { skipPanelExitAnimation: false } })
+    }
+  }, [state.navStack, state.meta.skipPanelExitAnimation])
 
   const panelProps = useMemo(() => selectPanelProps(state), [state])
   const topFrame = useMemo(() => selectTopFrame(state), [state])
@@ -265,6 +271,10 @@ export function NavigationProvider({ children }) {
     dispatch({ type: NAV_ACTIONS.PUSH_OVERLAY, payload: overlay })
   }, [])
 
+  const dismissParcelAndHailPanels = useCallback(() => {
+    dispatch({ type: NAV_ACTIONS.DISMISS_PARCEL_HAIL_PANELS })
+  }, [])
+
   const showPhoneOverlay = useCallback((overlay) => {
     dispatch({ type: NAV_ACTIONS.REPLACE_OVERLAY, payload: overlay })
   }, [])
@@ -354,6 +364,7 @@ export function NavigationProvider({ children }) {
     clearMapOverlays,
     openParcelDetails,
     openHailOverlay,
+    dismissParcelAndHailPanels,
     showPhoneOverlay,
     pushModal,
     popModal,
@@ -421,6 +432,7 @@ export function NavigationProvider({ children }) {
     clearMapOverlays,
     openParcelDetails,
     openHailOverlay,
+    dismissParcelAndHailPanels,
     showPhoneOverlay,
     pushModal,
     popModal,

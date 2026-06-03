@@ -112,7 +112,10 @@ export function selectPanelProps(state) {
   const topOverlay = selectTopOverlay(state)
 
   return {
-    isActivityPanelOpen: !!activityFrame && top?.type === 'activity',
+    /** Activity dialog stays mounted while activity remains in the stack (avoids reopen flicker on back). */
+    isActivityPanelOpen: !!activityFrame,
+    isActivityPanelFocused: !!activityFrame && top?.type === 'activity',
+    skipPanelExitAnimation: !!state.meta.skipPanelExitAnimation,
     isListPanelOpen: hasFrameRoot(state, 'lists'),
     isParcelListPanelOpen: !!listsParcels,
     viewingListId: listsParcels?.listId ?? null,
@@ -149,7 +152,8 @@ export function selectPanelProps(state) {
     isEmailComposerOpen: !!emailComposerFrame,
     isBulkEmailPreviewOpen: !!bulkEmailFrame,
     bulkEmailListId: bulkEmailFrame?.listId ?? null,
-    isParcelDetailsOpen: topOverlay?.type === 'parcelDetails',
+    /** True while parcel details remain on the overlay stack (including under hail). */
+    isParcelDetailsOpen: !!detailsOverlay,
     parcelDetailsSource: detailsOverlay?.source ?? 'map',
     isHailDataOpen: topOverlay?.type === 'hail',
     hailDataParcel: hailOverlay?.parcelData ?? detailsOverlay?.parcelData ?? popupOverlay?.parcelData ?? null,

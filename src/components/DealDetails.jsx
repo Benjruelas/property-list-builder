@@ -29,6 +29,7 @@ export function DealDetails({
   pipeline,
   lead,
   closedRecord = null,
+  instantDismiss = false,
   onClose,
   onDealUpdate,
   onOpenLead,
@@ -38,6 +39,7 @@ export function DealDetails({
   getToken,
   readOnly = false,
   nestedOverlay = true,
+  topLayer = true,
   leadLinkActive = false,
   pipelines = [],
   leads = [],
@@ -182,6 +184,8 @@ export function DealDetails({
         className="map-panel list-panel deal-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
+        topLayer={topLayer}
+        instantDismiss={instantDismiss}
       >
         <DialogHeader
           className="shrink-0 border-b border-white/10 px-5 pt-5 pb-3 text-left"

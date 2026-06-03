@@ -67,23 +67,25 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
     if (!lat || !lng) return
     const cacheKey = `${lat},${lng}`
     const cached = hailDataCache.get(cacheKey)
-    if (cached && Date.now() - cached.fetchedAt < HAIL_CACHE_TTL_MS) {
+    const cacheFresh = cached && Date.now() - cached.fetchedAt < HAIL_CACHE_TTL_MS
+    if (cacheFresh) {
       setHailData(cached.data)
       setError(null)
       setLoading(false)
-      return
+    } else {
+      setLoading(true)
+      setError(null)
     }
 
-    setLoading(true)
-    setError(null)
     try {
       const res = await fetch(`/api/hail-events?lat=${lat}&lng=${lng}&radius_miles=10&from_year=2010`)
       if (!res.ok) throw new Error(`Hail API: ${res.status}`)
       const data = await res.json()
       hailDataCache.set(cacheKey, { data, fetchedAt: Date.now() })
       setHailData(data)
+      setError(null)
     } catch (e) {
-      setError(e.message)
+      if (!cacheFresh) setError(e.message)
     } finally {
       setLoading(false)
     }
@@ -111,9 +113,11 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
-        className="map-panel list-panel fullscreen-panel flex flex-col min-h-0"
+        className="map-panel hail-data-panel list-panel fullscreen-panel flex flex-col min-h-0"
         showCloseButton={false}
         hideOverlay
+        topLayer
+        onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Hail history and storm data for this property</DialogDescription>

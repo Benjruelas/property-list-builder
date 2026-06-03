@@ -241,7 +241,7 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
 
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay>
+      <DialogContent className="map-panel list-panel team-details-panel fullscreen-panel" showCloseButton={false} hideOverlay nestedOverlay topLayer>
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Team details, members, and settings</DialogDescription>
           <div className="map-panel-header-toolbar">

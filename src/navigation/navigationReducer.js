@@ -21,7 +21,20 @@ export function navigationReducer(state, action) {
     }
     case NAV_ACTIONS.REPLACE_STACK: {
       const frames = /** @type {import('./types.js').NavFrame[]} */ (action.payload)
-      return { ...state, navStack: frames, meta: { ...state.meta, showMenu: false } }
+      const returningToActivity =
+        frames.length === 1 &&
+        frames[0].type === 'activity' &&
+        state.navStack[0]?.type === 'activity' &&
+        state.navStack.length > 1
+      return {
+        ...state,
+        navStack: frames,
+        meta: {
+          ...state.meta,
+          showMenu: false,
+          ...(returningToActivity ? { skipPanelExitAnimation: true } : {}),
+        },
+      }
     }
     case NAV_ACTIONS.POP:
       return popNavStack(state)
@@ -50,6 +63,13 @@ export function navigationReducer(state, action) {
     }
     case NAV_ACTIONS.CLEAR_OVERLAYS:
       return { ...state, mapOverlayStack: [] }
+    case NAV_ACTIONS.DISMISS_PARCEL_HAIL_PANELS:
+      return {
+        ...state,
+        mapOverlayStack: state.mapOverlayStack.filter(
+          (o) => o.type !== 'parcelDetails' && o.type !== 'hail'
+        ),
+      }
     case NAV_ACTIONS.PUSH_MODAL: {
       const modal = /** @type {import('./types.js').ModalFrame} */ (action.payload)
       return { ...state, modalStack: [...state.modalStack, modal] }
@@ -91,6 +111,18 @@ export function navigationReducer(state, action) {
 }
 
 /**
+ * Activity → destination → detail (e.g. activity, leads, leads.detail): back from detail
+ * returns to Activity, not the intermediate list/pipe panel.
+ */
+function shouldReturnToActivityOnDetailPop(navStack, topType) {
+  if (navStack.length !== 3 || navStack[0].type !== 'activity') return false
+  const destination = navStack[1]
+  const destRoot = frameRoot(destination.type)
+  if (!ROOT_PANEL_TYPES.has(destRoot) || destRoot === 'activity') return false
+  return frameRoot(topType) === destRoot
+}
+
+/**
  * Back resolution matching legacy panel back behavior.
  * @param {ReturnType<typeof createInitialState>} state
  */
@@ -103,11 +135,17 @@ function popNavStack(state) {
 
   // 1. Nested child frames (leads.detail, pipes.deal, forms.edit, etc.)
   if (isNestedChildFrame(topType) && topType !== 'schedule') {
+    if (shouldReturnToActivityOnDetailPop(navStack, topType)) {
+      return stateWithReturnToActivity(state)
+    }
     return { ...state, navStack: navStack.slice(0, -1) }
   }
 
-  // schedule.lead → schedule
+  // schedule.lead → schedule (or Activity when opened from activity feed)
   if (topType === 'schedule.lead') {
+    if (shouldReturnToActivityOnDetailPop(navStack, topType)) {
+      return stateWithReturnToActivity(state)
+    }
     return { ...state, navStack: navStack.slice(0, -1) }
   }
 
@@ -192,4 +230,12 @@ function filterStackForKeep(stack, keep) {
 /** Return to activity from any activity-origin destination. */
 export function returnToActivityStack() {
   return [{ type: 'activity' }]
+}
+
+function stateWithReturnToActivity(state) {
+  return {
+    ...state,
+    navStack: returnToActivityStack(),
+    meta: { ...state.meta, skipPanelExitAnimation: true },
+  }
 }

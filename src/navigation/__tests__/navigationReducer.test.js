@@ -65,14 +65,49 @@ describe('navigationReducer', () => {
     expect(state.navStack).toEqual([{ type: 'activity' }])
   })
 
-  it('activity stack: nested pipes.deal pops before pipes', () => {
+  it('activity panel stays mounted under activity-origin destination', () => {
+    const state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'leads' },
+      { type: 'leads.detail', leadId: 'l1' },
+    ])
+    const props = selectPanelProps(state)
+    expect(props.isActivityPanelOpen).toBe(true)
+    expect(props.isActivityPanelFocused).toBe(false)
+    expect(props.isLeadsPanelOpen).toBe(true)
+  })
+
+  it('activity stack: back from nested detail returns to activity', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'leads' },
+      { type: 'leads.detail', leadId: 'l1' },
+    ])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity'])
+    const props = selectPanelProps(state)
+    expect(props.isActivityPanelOpen).toBe(true)
+    expect(props.isActivityPanelFocused).toBe(true)
+    expect(props.skipPanelExitAnimation).toBe(true)
+    expect(props.isLeadsPanelOpen).toBe(false)
+    expect(props.leadsDetailLeadId).toBe(null)
+  })
+
+  it('activity stack: nested pipes.deal back returns to activity', () => {
     let state = replaceStack(createInitialState(), [
       { type: 'activity' },
       { type: 'pipes', pipelineId: 'p1' },
       { type: 'pipes.deal', dealId: 'd1' },
     ])
     state = pop(state)
-    expect(state.navStack.map((f) => f.type)).toEqual(['activity', 'pipes'])
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity'])
+  })
+
+  it('activity stack: back from pipes root returns to activity', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'pipes', pipelineId: 'p1' },
+    ])
     state = pop(state)
     expect(state.navStack.map((f) => f.type)).toEqual(['activity'])
   })
@@ -123,6 +158,49 @@ describe('navigationReducer', () => {
     })
     state = reduce(state, NAV_ACTIONS.POP_OVERLAY)
     expect(state.mapOverlayStack.map((o) => o.type)).toEqual(['parcelDetails'])
+  })
+
+  it('DISMISS_PARCEL_HAIL_PANELS removes hail and parcel details but keeps popup', () => {
+    let state = createInitialState()
+    state = reduce(state, NAV_ACTIONS.PUSH_OVERLAY, {
+      type: 'popup',
+      parcelId: 'p1',
+      lat: 1,
+      lng: 2,
+      popupData: {},
+    })
+    state = reduce(state, NAV_ACTIONS.PUSH_OVERLAY, {
+      type: 'parcelDetails',
+      parcelId: 'p1',
+      source: 'map',
+      parcelData: { id: 'p1' },
+    })
+    state = reduce(state, NAV_ACTIONS.PUSH_OVERLAY, {
+      type: 'hail',
+      parcelId: 'p1',
+      parcelData: { id: 'p1' },
+    })
+    state = reduce(state, NAV_ACTIONS.DISMISS_PARCEL_HAIL_PANELS)
+    expect(state.mapOverlayStack.map((o) => o.type)).toEqual(['popup'])
+  })
+
+  it('selectPanelProps keeps parcel details open while hail is on top', () => {
+    let state = createInitialState()
+    state = reduce(state, NAV_ACTIONS.PUSH_OVERLAY, {
+      type: 'parcelDetails',
+      parcelId: 'p1',
+      source: 'map',
+      parcelData: { id: 'p1', lat: 1, lng: 2 },
+    })
+    state = reduce(state, NAV_ACTIONS.PUSH_OVERLAY, {
+      type: 'hail',
+      parcelId: 'p1',
+      parcelData: { id: 'p1', lat: 1, lng: 2 },
+    })
+    const props = selectPanelProps(state)
+    expect(props.isHailDataOpen).toBe(true)
+    expect(props.isParcelDetailsOpen).toBe(true)
+    expect(props.hailDataParcel?.id).toBe('p1')
   })
 })
 

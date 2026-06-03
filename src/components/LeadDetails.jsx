@@ -28,6 +28,7 @@ const MENU_WIDTH = 180
  */
 export function LeadDetails({
   isOpen,
+  instantDismiss = false,
   onClose,
   lead,
   pipelines = [],
@@ -43,7 +44,7 @@ export function LeadDetails({
   onOpenDeal,
   onLeadDeleted,
   nestedOverlay = true,
-  topLayer = false,
+  topLayer = true,
   teams = [],
   teamMembership = null,
   onPipelinesChange,
@@ -158,6 +159,7 @@ export function LeadDetails({
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
+        instantDismiss={instantDismiss && !isOpen}
       >
         <DialogHeader
           className="px-5 pt-5 pb-3 border-b border-white/20 flex-shrink-0 text-left"

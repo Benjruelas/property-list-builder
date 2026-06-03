@@ -3,6 +3,7 @@ import { Plus, Users2, Shield, Mail, Check, X } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { showToast } from './ui/toast'
 import {
@@ -131,8 +132,8 @@ export function TeamsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
-        <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay>
+      <Dialog open={isOpen} modal={!openTeamId} onOpenChange={(open) => handlePanelDialogOpenChange(open, !!openTeamId, handlePanelBack)}>
+        <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay suppressBackdrop={!!openTeamId}>
           <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your teams and members</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Teams" />

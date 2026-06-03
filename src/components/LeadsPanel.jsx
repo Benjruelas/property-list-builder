@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
@@ -15,6 +16,7 @@ import { LeadRow } from './LeadRow'
 
 export function LeadsPanel({
   isOpen,
+  instantDismiss = false,
   onClose,
   onBack,
   leads = [],
@@ -149,8 +151,14 @@ export function LeadsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
-        <DialogContent className="map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} hideOverlay>
+      <Dialog open={isOpen} modal={!detailLeadId} onOpenChange={(open) => handlePanelDialogOpenChange(open, !!detailLeadId, handlePanelBack)}>
+        <DialogContent
+          className="map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          showCloseButton={false}
+          hideOverlay
+          suppressBackdrop={!!detailLeadId}
+          instantDismiss={instantDismiss && !isOpen}
+        >
           <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your leads</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Leads">
@@ -238,6 +246,7 @@ export function LeadsPanel({
 
       <LeadDetails
         isOpen={isOpen && !!selectedLead}
+        instantDismiss={instantDismiss}
         onClose={() => onCloseLeadDetail?.()}
         lead={selectedLead}
         pipelines={pipelines}

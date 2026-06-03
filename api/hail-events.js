@@ -1,8 +1,13 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 
 const CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000
+const RESPONSE_CACHE_TTL_MS = 6 * 60 * 60 * 1000
+const RECENT_BUNDLE_TTL_MS = 24 * 60 * 60 * 1000
+const RECENT_FETCH_TIMEOUT_MS = 5000
 const SPC_HAIL_URL = 'https://www.spc.noaa.gov/wcm/data/1955-2024_hail.csv.zip'
 const SPC_COMPILED_MAX_YEAR = 2024
+/** v2 added time_utc; read v1 grid cells so existing R2 cache stays warm after deploy. */
+const GRID_CACHE_PREFIXES = ['hail/grid/v2', 'hail/grid']
 
 let _s3
 function getS3() {
@@ -18,20 +23,30 @@ function getS3() {
   return _s3
 }
 
-async function getFromR2(key) {
+async function getFromR2(key, maxAgeMs = CACHE_TTL_MS) {
   try {
     const res = await getS3().send(new GetObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
     }))
     const age = Date.now() - (res.LastModified?.getTime() ?? 0)
-    if (age > CACHE_TTL_MS) return null
+    if (age > maxAgeMs) return null
     const chunks = []
     for await (const chunk of res.Body) chunks.push(chunk)
     return Buffer.concat(chunks)
   } catch (e) {
     if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return null
     throw e
+  }
+}
+
+async function getJsonFromR2(key, maxAgeMs = CACHE_TTL_MS) {
+  const buf = await getFromR2(key, maxAgeMs)
+  if (!buf) return null
+  try {
+    return JSON.parse(buf.toString('utf-8'))
+  } catch {
+    return null
   }
 }
 
@@ -287,7 +302,14 @@ async function fetchMonthEvents(year, month, lat, lng, isCurrentMonth) {
   return nearby
 }
 
-async function fetchRecentHailEvents(lat, lng, radius) {
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(null), ms)),
+  ])
+}
+
+async function fetchRecentHailEvents(lat, lng) {
   const now = new Date()
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth() + 1
@@ -314,19 +336,42 @@ async function fetchRecentHailEvents(lat, lng, radius) {
   return recentEvents
 }
 
+async function readGridCell(gLat, gLng) {
+  for (const prefix of GRID_CACHE_PREFIXES) {
+    const data = await getJsonFromR2(`${prefix}/${gLat}/${gLng}.json`)
+    if (data) return data
+  }
+  return null
+}
+
+async function loadNeighborGridCells(latF, lngF) {
+  const centerLatGrid = Math.floor(latF)
+  const centerLngGrid = Math.floor(lngF)
+  const coords = []
+  for (let dLat = -1; dLat <= 1; dLat++) {
+    for (let dLng = -1; dLng <= 1; dLng++) {
+      coords.push([centerLatGrid + dLat, centerLngGrid + dLng])
+    }
+  }
+  return Promise.all(coords.map(([gLat, gLng]) => readGridCell(gLat, gLng)))
+}
+
+async function getRecentHailBundle(lat, lng) {
+  const key = `hail/recent-bundle/v1/${Math.floor(lat)}/${Math.floor(lng)}.json`
+  return getJsonFromR2(key, RECENT_BUNDLE_TTL_MS)
+}
+
+async function storeRecentHailBundle(lat, lng, events) {
+  const key = `hail/recent-bundle/v1/${Math.floor(lat)}/${Math.floor(lng)}.json`
+  putToR2(key, Buffer.from(JSON.stringify(events))).catch(() => {})
+}
+
 async function getGridCell(lat, lng) {
   const key = gridKey(lat, lng)
   const r2Key = `${HAIL_GRID_CACHE_PREFIX}/${key}.json`
 
-  // Check R2 cache
-  try {
-    const cached = await getFromR2(r2Key)
-    if (cached) {
-      return JSON.parse(cached.toString('utf-8'))
-    }
-  } catch {
-    // fall through
-  }
+  const cached = await getJsonFromR2(r2Key)
+  if (cached) return cached
 
   // Need to build the grid — download SPC dataset
   const res = await fetch(SPC_HAIL_URL)
@@ -353,77 +398,12 @@ async function getGridCell(lat, lng) {
   return grid[key] || []
 }
 
-export default async function handler(req, res) {
-  const { lat, lng, radius_miles, from_year } = req.query
-  if (!lat || !lng) {
-    return res.status(400).json({ error: 'lat and lng required' })
-  }
+function buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents) {
+  const allNearbyEvents = []
 
-  const latF = parseFloat(lat)
-  const lngF = parseFloat(lng)
-  const radius = parseFloat(radius_miles) || 5
-  const startYear = parseInt(from_year, 10) || 2010
-
-  try {
-    // Fetch surrounding grid cells (center + 8 neighbors to handle border cases)
-    const centerLatGrid = Math.floor(latF)
-    const centerLngGrid = Math.floor(lngF)
-    const cellPromises = []
-
-    for (let dLat = -1; dLat <= 1; dLat++) {
-      for (let dLng = -1; dLng <= 1; dLng++) {
-        const gLat = centerLatGrid + dLat
-        const gLng = centerLngGrid + dLng
-        const r2Key = `${HAIL_GRID_CACHE_PREFIX}/${gLat}/${gLng}.json`
-        cellPromises.push(
-          getFromR2(r2Key)
-            .then(buf => buf ? JSON.parse(buf.toString('utf-8')) : null)
-            .catch(() => null)
-        )
-      }
-    }
-
-    let cells = await Promise.all(cellPromises)
-    const hasCachedData = cells.some(c => c !== null)
-
-    if (!hasCachedData) {
-      // No cached grid data — trigger full download + index build
-      const allEvents = await getGridCell(latF, lngF)
-      cells = [allEvents]
-    }
-
-    // Also fetch recent years (2025+) from SPC daily reports
-    let recentEvents = []
-    try {
-      recentEvents = await fetchRecentHailEvents(latF, lngF, radius)
-    } catch (e) {
-      console.error('Recent hail fetch error:', e.message)
-    }
-
-    const allNearbyEvents = []
-
-    // Process compiled grid data (through 2024)
-    for (const cell of cells) {
-      if (!cell) continue
-      for (const evt of cell) {
-        if (evt.year < startYear) continue
-        const dist = haversineDistance(latF, lngF, evt.lat, evt.lng)
-        if (dist <= radius) {
-          allNearbyEvents.push({
-            date: evt.date,
-            lat: evt.lat,
-            lng: evt.lng,
-            distance_mi: Math.round(dist * 10) / 10,
-            hail_size_inches: evt.size_inches,
-            year: evt.year,
-            time_utc: evt.time_utc || null,
-          })
-        }
-      }
-    }
-
-    // Process recent daily report data (2025+)
-    for (const evt of recentEvents) {
+  for (const cell of cells) {
+    if (!cell) continue
+    for (const evt of cell) {
       if (evt.year < startYear) continue
       const dist = haversineDistance(latF, lngF, evt.lat, evt.lng)
       if (dist <= radius) {
@@ -438,23 +418,91 @@ export default async function handler(req, res) {
         })
       }
     }
+  }
 
-    allNearbyEvents.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  for (const evt of recentEvents) {
+    if (evt.year < startYear) continue
+    const dist = haversineDistance(latF, lngF, evt.lat, evt.lng)
+    if (dist <= radius) {
+      allNearbyEvents.push({
+        date: evt.date,
+        lat: evt.lat,
+        lng: evt.lng,
+        distance_mi: Math.round(dist * 10) / 10,
+        hail_size_inches: evt.size_inches,
+        year: evt.year,
+        time_utc: evt.time_utc || null,
+      })
+    }
+  }
 
-    const summary = {
+  allNearbyEvents.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+
+  return {
+    lat: latF,
+    lng: lngF,
+    radius_miles: radius,
+    summary: {
       total_events: allNearbyEvents.length,
       max_hail_size: allNearbyEvents.reduce((max, e) => Math.max(max, e.hail_size_inches || 0), 0),
       years_with_hail: [...new Set(allNearbyEvents.map(e => e.year))].sort(),
+    },
+    events: allNearbyEvents.slice(0, 200),
+  }
+}
+
+export default async function handler(req, res) {
+  const { lat, lng, radius_miles, from_year } = req.query
+  if (!lat || !lng) {
+    return res.status(400).json({ error: 'lat and lng required' })
+  }
+
+  const latF = parseFloat(lat)
+  const lngF = parseFloat(lng)
+  const radius = parseFloat(radius_miles) || 5
+  const startYear = parseInt(from_year, 10) || 2010
+
+  try {
+    const responseCacheKey =
+      `hail/response/v1/${Math.floor(latF)}/${Math.floor(lngF)}/${radius}/${startYear}.json`
+    const cachedResponse = await getJsonFromR2(responseCacheKey, RESPONSE_CACHE_TTL_MS)
+    if (cachedResponse) {
+      res.setHeader('Cache-Control', 'public, max-age=3600')
+      return res.status(200).json(cachedResponse)
     }
 
+    let cells = await loadNeighborGridCells(latF, lngF)
+    const hasCachedData = cells.some(c => c !== null)
+
+    if (!hasCachedData) {
+      await getGridCell(latF, lngF)
+      cells = await loadNeighborGridCells(latF, lngF)
+    }
+
+    let recentEvents = await getRecentHailBundle(latF, lngF)
+    if (!recentEvents) {
+      try {
+        const fetchRecent = fetchRecentHailEvents(latF, lngF)
+        const fetched = hasCachedData
+          ? await withTimeout(fetchRecent, RECENT_FETCH_TIMEOUT_MS)
+          : await fetchRecent
+        if (fetched) {
+          recentEvents = fetched
+          storeRecentHailBundle(latF, lngF, recentEvents)
+        } else if (hasCachedData) {
+          recentEvents = []
+        }
+      } catch (e) {
+        console.error('Recent hail fetch error:', e.message)
+        recentEvents = []
+      }
+    }
+
+    const payload = buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents || [])
+    putToR2(responseCacheKey, Buffer.from(JSON.stringify(payload))).catch(() => {})
+
     res.setHeader('Cache-Control', 'public, max-age=3600')
-    return res.status(200).json({
-      lat: latF,
-      lng: lngF,
-      radius_miles: radius,
-      summary,
-      events: allNearbyEvents.slice(0, 200),
-    })
+    return res.status(200).json(payload)
   } catch (e) {
     console.error('Hail events error:', e)
     return res.status(500).json({ error: e.message || 'Internal server error' })

@@ -21,7 +21,7 @@ const TABS = [
  * Option 3: Tabbed Card
  * Horizontal tabs to switch between focused views, no scroll needed per tab.
  */
-export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, /* onRoofInspector, */ isLead, popupData }) {
+export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false }) {
   const data = useParcelDetailsData({ isOpen, parcelData, lists, enableAutoClose, onClose })
   const [activeTab, setActiveTab] = useState('overview')
 
@@ -66,8 +66,17 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
   )
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(false) }}>
-      <DialogContent className="map-panel parcel-details-panel list-panel fullscreen-panel max-w-2xl max-h-[80vh] p-0 gap-0" showCloseButton={false} hideOverlay onInteractOutside={(e) => { e.preventDefault(); handleClose(false) }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !suspendClose) handleClose(false) }}>
+      <DialogContent
+        className="map-panel parcel-details-panel list-panel fullscreen-panel max-w-2xl max-h-[80vh] p-0 gap-0"
+        showCloseButton={false}
+        hideOverlay
+        onInteractOutside={(e) => {
+          e.preventDefault()
+          if (suspendClose || e.target?.closest?.('.hail-data-panel')) return
+          handleClose(false)
+        }}
+      >
         <div ref={containerRef} className="contents">
           {/* Header: Address + Close */}
           <DialogHeader className="px-6 pt-5 pb-3 border-b-0 text-left" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
@@ -128,7 +137,16 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
             <DirectionsPicker lat={normalized.lat} lng={normalized.lng} iconSize={22} className="p-3.5 rounded-xl" />
             {onAddToList && <button onClick={() => onAddToList()} className="p-3.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white transition-colors" title="Add to List"><ListPlus size={22} /></button>}
             {!isLead && onConvertToLead && <button onClick={() => onConvertToLead()} className="p-3.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white transition-colors" title="Convert to Lead"><UserPlus size={22} /></button>}
-            {onHailData && <button onClick={() => onHailData()} className="p-3.5 rounded-xl bg-orange-600/80 hover:bg-orange-600 text-white transition-colors" title="Hail Data"><CloudRain size={22} /></button>}
+            {onHailData && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onHailData() }}
+                className="p-3.5 rounded-xl bg-orange-600/80 hover:bg-orange-600 text-white transition-colors"
+                title="Hail Data"
+              >
+                <CloudRain size={22} />
+              </button>
+            )}
             {/* roof inspector — restore onRoofInspector prop + Telescope import
             {onRoofInspector && <button onClick={() => onRoofInspector()} className="p-3.5 rounded-xl bg-sky-600/80 hover:bg-sky-600 text-white transition-colors" title="Roof Inspector"><Telescope size={22} /></button>}
             */}

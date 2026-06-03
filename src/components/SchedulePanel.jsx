@@ -3,6 +3,7 @@ import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { getFullAddress } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
@@ -521,13 +522,14 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) handlePanelBack() }}>
+    <Dialog open={isOpen} modal={!scheduleLeadId} onOpenChange={(o) => handlePanelDialogOpenChange(o, !!scheduleLeadId, handlePanelBack)}>
       <DialogContent
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         showCloseButton={false}
         hideOverlay={!stacked}
         nestedOverlay={stacked}
         topLayer={stacked}
+        suppressBackdrop={!!scheduleLeadId}
       >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">View and manage scheduled tasks</DialogDescription>

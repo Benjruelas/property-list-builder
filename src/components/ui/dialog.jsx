@@ -24,6 +24,18 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
+/** Map/fullscreen panels: fade only (zoom/slide fight fullscreen-panel transform overrides and cause flicker). */
+const PANEL_CONTENT_MOTION =
+  'map-panel-dialog pointer-events-auto duration-200 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:duration-150'
+const PANEL_OVERLAY_MOTION =
+  'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-150 ease-out'
+const DEFAULT_CONTENT_MOTION =
+  'pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]'
+
+function isMapPanelClassName(className) {
+  return typeof className === 'string' && /\bmap-panel\b/.test(className)
+}
+
 /** Prevents Radix Dialog from closing when the user interacts inside portaled UI (schedule picker, lead task/pipe menus, toasts). */
 const preventCloseWhenNestedOverlay = (e, existing) => {
   if (
@@ -39,7 +51,13 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
     e.target?.closest?.('[data-quotes-panel-menu]') ||
     e.target?.closest?.('[data-deal-template-menu]') ||
     e.target?.closest?.('[data-toast-container]') ||
-    e.target?.closest?.('[data-toast-item]')
+    e.target?.closest?.('[data-toast-item]') ||
+    e.target?.closest?.('.hail-data-panel') ||
+    e.target?.closest?.('.parcel-details-panel') ||
+    e.target?.closest?.('.lead-details-panel') ||
+    e.target?.closest?.('.deal-details-panel') ||
+    e.target?.closest?.('.team-details-panel') ||
+    e.target?.closest?.('.activity-panel')
   ) {
     e.preventDefault()
   }
@@ -53,25 +71,43 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
  * open from inside LeadDetails (blurOverlay, z-10001) — without this they'd
  * render behind LeadDetails and be invisible.
  */
-const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, focusOverlay = false, blurOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, onPointerDownOutside, onInteractOutside, ...props }, ref) => {
+const INSTANT_PANEL_MOTION =
+  'data-[state=open]:!duration-0 data-[state=closed]:!duration-0 data-[state=open]:animate-none data-[state=closed]:animate-none'
+
+const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, suppressBackdrop = false, focusOverlay = false, blurOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, panelMode, instantDismiss = false, onPointerDownOutside, onInteractOutside, onCloseAutoFocus, ...props }, ref) => {
+  const useStackedDetailLayer = topLayer && nestedOverlay
+  const effectiveNestedOverlay = nestedOverlay && !useStackedDetailLayer
+  const effectiveHideOverlay = hideOverlay || useStackedDetailLayer
+  const isPanel = panelMode ?? isMapPanelClassName(className)
+  const contentMotion = cn(
+    isPanel ? PANEL_CONTENT_MOTION : DEFAULT_CONTENT_MOTION,
+    instantDismiss && INSTANT_PANEL_MOTION
+  )
+  const overlayMotion = cn(
+    isPanel ? PANEL_OVERLAY_MOTION : 'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+    instantDismiss && INSTANT_PANEL_MOTION
+  )
   const zOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[10000]'
   const zContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[10001]'
   const zHideOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]'
   const zDefaultContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[9999]'
+  const contentPosition =
+    'fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg'
+  const suppressCloseAutoFocus = (e) => {
+    e.preventDefault()
+    onCloseAutoFocus?.(e)
+  }
   return (
   <DialogPortal container={typeof document !== 'undefined' ? document.getElementById('modal-root') || document.body : undefined}>
-    {nestedOverlay ? (
+    {effectiveNestedOverlay ? (
       <>
-        <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zOverlay)} />
+        <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto", overlayMotion, zOverlay)} />
         <DialogPrimitive.Content
           ref={ref}
-          className={cn(
-            "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
-            zContent,
-            className
-          )}
+          className={cn(contentPosition, contentMotion, zContent, className)}
           onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
           onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
+          onCloseAutoFocus={isPanel ? suppressCloseAutoFocus : onCloseAutoFocus}
           {...props}
         >
           {children}
@@ -83,22 +119,19 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
           )}
         </DialogPrimitive.Content>
       </>
-    ) : hideOverlay ? (
-      <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/60 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zHideOverlay)} />
+    ) : effectiveHideOverlay && !suppressBackdrop ? (
+      <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/60 pointer-events-auto", overlayMotion, zHideOverlay)} />
     ) : focusOverlay ? (
       <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/95 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]')} />
     ) : blurOverlay ? (
       <>
-        <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/40 backdrop-blur-lg pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zOverlay)} />
+        <DialogPrimitive.Overlay data-app-dialog-backdrop className={cn("fixed inset-0 bg-black/40 backdrop-blur-lg pointer-events-auto", overlayMotion, zOverlay)} />
         <DialogPrimitive.Content
           ref={ref}
-          className={cn(
-            "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
-            zContent,
-            className
-          )}
+          className={cn(contentPosition, contentMotion, zContent, className)}
           onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
           onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
+          onCloseAutoFocus={isPanel ? suppressCloseAutoFocus : onCloseAutoFocus}
           {...props}
         >
           {children}
@@ -113,16 +146,13 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
     ) : (
       <DialogOverlay className={confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : undefined} />
     )}
-    {!blurOverlay && !nestedOverlay && (
+    {!blurOverlay && !effectiveNestedOverlay && (
       <DialogPrimitive.Content
         ref={ref}
-        className={cn(
-          "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
-          zDefaultContent,
-          className
-        )}
+        className={cn(contentPosition, contentMotion, zDefaultContent, className)}
         onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
         onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
+        onCloseAutoFocus={isPanel ? suppressCloseAutoFocus : onCloseAutoFocus}
         {...props}
       >
         {children}

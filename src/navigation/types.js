@@ -322,6 +322,8 @@ export const NAV_ACTIONS = {
   SET_META: 'SET_META',
   PATCH_TOP_OVERLAY: 'PATCH_TOP_OVERLAY',
   PATCH_NAV_FRAME: 'PATCH_NAV_FRAME',
+  /** Close parcel details + hail panels; keep popup / other overlays (storm map view). */
+  DISMISS_PARCEL_HAIL_PANELS: 'DISMISS_PARCEL_HAIL_PANELS',
 }
 
 export function createInitialState() {
@@ -329,6 +331,6 @@ export function createInitialState() {
     navStack: [],
     mapOverlayStack: [],
     modalStack: [],
-    meta: { showMenu: false },
+    meta: { showMenu: false, skipPanelExitAnimation: false },
   }
 }
