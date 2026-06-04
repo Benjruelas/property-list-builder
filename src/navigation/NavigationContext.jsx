@@ -19,6 +19,7 @@ import {
   recipeOpenForms,
   recipeOpenPipes,
   recipeOpenQuoteEditorFromDeal,
+  recipeOpenQuoteDetailFromDeal,
   recipeOpenQuotes,
   recipeOpenSchedule,
   recipeOpenScheduleAtDate,
@@ -143,6 +144,10 @@ export function NavigationProvider({ children }) {
 
   const openQuoteEditorFromDeal = useCallback((prefill) => {
     replaceStack(recipeOpenQuoteEditorFromDeal(state.navStack, prefill))
+  }, [state.navStack, replaceStack])
+
+  const openQuoteDetailFromDeal = useCallback((quoteId, quote = null) => {
+    replaceStack(recipeOpenQuoteDetailFromDeal(state.navStack, quoteId, quote))
   }, [state.navStack, replaceStack])
 
   const viewListContents = useCallback((listId) => {
@@ -335,6 +340,7 @@ export function NavigationProvider({ children }) {
     openDealInPipes,
     openScheduleAtDate,
     openQuoteEditorFromDeal,
+    openQuoteDetailFromDeal,
     viewListContents,
     openSkipTraced,
     openOutreach,
@@ -403,6 +409,7 @@ export function NavigationProvider({ children }) {
     openDealInPipes,
     openScheduleAtDate,
     openQuoteEditorFromDeal,
+    openQuoteDetailFromDeal,
     viewListContents,
     openSkipTraced,
     openOutreach,

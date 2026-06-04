@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Loader2, Search, X, Calendar, ChevronDown } from 'lucide-react'
+import { PipelineDropdown } from '../PipelineDropdown'
+import { InlineDropdown } from '../InlineDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { PanelHeader } from '../ui/panel-header'
 import { Button } from '../ui/button'
@@ -96,23 +98,6 @@ function DateField({ value, onChange }) {
   )
 }
 
-function SelectField({ value, onChange, children }) {
-  return (
-    <div className="relative">
-      <select
-        className={cn(FIELD_TRAILING, 'appearance-none cursor-pointer')}
-        value={value}
-        onChange={onChange}
-      >
-        {children}
-      </select>
-      <div className={cn(TRAILING_SLOT, 'pointer-events-none')}>
-        <ChevronDown className="h-4 w-4" aria-hidden />
-      </div>
-    </div>
-  )
-}
-
 function leadClientFields(lead) {
   if (!lead) return { clientName: '', clientEmail: '', clientPhone: '' }
   return {
@@ -192,6 +177,14 @@ export function QuoteEditor({
 
   const selectedPipeline = pipelines.find((p) => p.id === pipelineId)
   const selectedDeal = selectedPipeline?.deals?.find((d) => d.id === dealId)
+  const dealOptions = useMemo(
+    () =>
+      (selectedPipeline?.deals || []).map((d) => ({
+        id: d.id,
+        label: d.title || d.leadName || d.id,
+      })),
+    [selectedPipeline]
+  )
 
   useEffect(() => {
     if (selectedDeal?.leadId && !leadId) {
@@ -260,7 +253,7 @@ export function QuoteEditor({
       }
       showToast(isTemplate ? 'Template saved' : 'Quote saved', 'success')
       onSaved?.(saved)
-      onClose?.()
+      if (!onSaved) onClose?.()
     } catch (e) {
       showToast(e.message || 'Save failed', 'error')
     } finally {
@@ -301,6 +294,7 @@ export function QuoteEditor({
         showCloseButton={false}
         nestedOverlay
         topLayer
+        instantDismiss
       >
         <DialogHeader
           className="flex-shrink-0 px-4 pb-3 border-b border-white/20 text-left"
@@ -382,19 +376,27 @@ export function QuoteEditor({
 
               <div className="space-y-2 pt-1 border-t border-white/10">
                 <span className="text-xs opacity-70">Link to deal (optional)</span>
-                <SelectField value={pipelineId} onChange={(e) => { setPipelineId(e.target.value); setDealId('') }}>
-                  <option value="">No pipeline</option>
-                  {pipelines.map((p) => (
-                    <option key={p.id} value={p.id}>{p.title || 'Pipeline'}</option>
-                  ))}
-                </SelectField>
+                <PipelineDropdown
+                  showLabel={false}
+                  allowEmpty
+                  value={pipelineId}
+                  onChange={(id) => {
+                    setPipelineId(id)
+                    setDealId('')
+                  }}
+                  pipelines={pipelines}
+                  placeholder="No pipeline"
+                />
                 {selectedPipeline && (
-                  <SelectField value={dealId} onChange={(e) => setDealId(e.target.value)}>
-                    <option value="">No deal</option>
-                    {(selectedPipeline.deals || []).map((d) => (
-                      <option key={d.id} value={d.id}>{d.title || d.leadName || d.id}</option>
-                    ))}
-                  </SelectField>
+                  <InlineDropdown
+                    showLabel={false}
+                    allowEmpty
+                    value={dealId}
+                    onChange={setDealId}
+                    options={dealOptions}
+                    placeholder="No deal"
+                    emptyLabel="No deal"
+                  />
                 )}
               </div>
             </>

@@ -21,11 +21,12 @@ import {
 } from '../../utils/quoteSendTemplates'
 import { formatQuoteMoney } from '../../utils/quoteMath'
 import { getSettings, updateSettings } from '../../utils/settings'
+import { getSenderDisplayName, getCompanyNameForSends } from '../../utils/profile'
 import { cn } from '@/lib/utils'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [] }) {
+export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], teams = [], teamMembership = null }) {
   const { getToken, currentUser } = useAuth()
   const [tab, setTab] = useState('email')
   const [recipient, setRecipient] = useState('')
@@ -50,11 +51,11 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [] }) {
     quoteTitle: quote?.title || 'Quote',
     quoteTotal: quote?.total,
     quoteLink: lastLink || '[link will appear after send]',
-    senderName: currentUser?.email?.split('@')[0] || 'Your rep',
+    senderName: getSenderDisplayName(currentUser),
     senderEmail: currentUser?.email,
     validUntil: quote?.validUntil?.slice(0, 10) || '',
-    companyName: getSettings().reportBranding?.companyName || 'KnockScout',
-  }), [quote, linkedLead, recipient, lastLink, currentUser?.email])
+    companyName: getCompanyNameForSends(teams, teamMembership),
+  }), [quote, linkedLead, recipient, lastLink, currentUser, teams, teamMembership])
 
   useEffect(() => {
     if (!open || !quote) return
@@ -171,7 +172,13 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [] }) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose() }}>
-      <DialogContent className="map-panel list-panel share-list-dialog w-[min(92vw,24rem)] max-w-md max-h-[min(88vh,680px)] overflow-y-auto rounded-xl p-6 gap-4" focusOverlay>
+      <DialogContent
+        className="map-panel list-panel share-list-dialog w-[min(92vw,24rem)] max-w-md max-h-[min(88vh,680px)] overflow-y-auto rounded-xl p-6 gap-4"
+        focusOverlay
+        topLayer
+        confirmLayer
+        data-send-quote-dialog
+      >
         {sentTo ? (
           <>
             <DialogHeader>

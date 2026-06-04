@@ -217,8 +217,9 @@ export function CreateDealTasksEditor({
         initialTeamAssignUids={editingTask?.assignedUids || []}
         leads={displayLeads}
         deals={pendingDeal ? [pendingDeal] : []}
-        showDealPicker={!isEditMode}
-        lockLead={!isEditMode}
+        showDealPicker={!!lead && !isEditMode}
+        showLeadPicker={!!lead}
+        lockLead={!!lead && !isEditMode}
         disableDealClear={!isEditMode}
         showTeamAssign={showTeamAssign}
         teamMembers={teamMembers}

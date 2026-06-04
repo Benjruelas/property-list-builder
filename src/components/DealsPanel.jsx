@@ -132,6 +132,8 @@ export function DealsPanel({
   onGoToParcelOnMap,
   currentUserId = null,
   onCreateQuoteForDeal,
+  onOpenQuoteFromDeal,
+  quotesRefreshKey = 0,
   dealsDetailDealId = null,
   dealsDetailPipelineId = null,
   dealsClosedRecordId = null,
@@ -147,6 +149,7 @@ export function DealsPanel({
   onCreateDealSubmit,
   pipelinesCount = 0,
   canSeeDealAmounts = true,
+  onEditLead,
 }) {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('active')
@@ -322,12 +325,15 @@ export function DealsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={!hasNestedDetail} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack)}>
         <DialogContent
-          className="map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            hasNestedDetail && 'invisible pointer-events-none'
+          )}
           showCloseButton={false}
           hideOverlay
-          suppressBackdrop={hasNestedDetail}
+          suppressBackdrop
           instantDismiss={instantDismiss && !isOpen}
           onInteractOutside={(e) => {
             if (e.target.closest?.('[data-deals-panel-menu]')) e.preventDefault()
@@ -505,7 +511,6 @@ export function DealsPanel({
 
       {isOpen && selectedDeal && selectedPipeline && (
         <DealDetails
-          instantDismiss={instantDismiss}
           deal={selectedDeal}
           pipeline={selectedPipeline}
           lead={selectedLead}
@@ -526,6 +531,8 @@ export function DealsPanel({
           onRequestRemoveDeal={handleRemoveDealFromPanel}
           getToken={getToken}
           onCreateQuoteForDeal={onCreateQuoteForDeal}
+          onOpenQuote={onOpenQuoteFromDeal}
+          quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
         />
       )}
@@ -562,12 +569,12 @@ export function DealsPanel({
           nestedOverlay
           topLayer
           currentUserId={currentUserId}
+          onEditLead={onEditLead}
         />
       )}
 
       {isOpen && selectedClosed && (
         <DealDetails
-          instantDismiss={instantDismiss}
           deal={selectedClosed.deal}
           pipeline={{ columns: selectedClosed.closedFrom?.columns, id: selectedClosed.closedFrom?.id, title: selectedClosed.closedFrom?.title }}
           lead={selectedClosedLead}
@@ -582,6 +589,8 @@ export function DealsPanel({
           onOpenLead={openLeadFromDeal}
           leadLinkActive={!!leadOverlayId && leadOverlayId === selectedClosedLead?.id}
           getToken={getToken}
+          onOpenQuote={onOpenQuoteFromDeal}
+          quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
         />
       )}

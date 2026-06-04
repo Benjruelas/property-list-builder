@@ -44,10 +44,10 @@ export function LeadsPanel({
   onCreateDealSubmit,
   pipelinesCount = 0,
   canSeeDealAmounts = true,
+  onEditLead,
 }) {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
-  const [editLead, setEditLead] = useState(null)
   const [dealPickerOpen, setDealPickerOpen] = useState(false)
   const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
   const [createDealOpen, setCreateDealOpen] = useState(false)
@@ -110,12 +110,6 @@ export function LeadsPanel({
     onLeadsChange?.([...leads, lead])
   }
 
-  const handleUpdated = (lead) => {
-    onRefreshLeads?.()
-    handleLeadUpdate(lead)
-    setEditLead(null)
-  }
-
   const startCreateDeal = useCallback((lead) => {
     if (!lead?.id) return
     if (pipelinesCount > 0 && createDealPipelines.length === 0) {
@@ -141,6 +135,8 @@ export function LeadsPanel({
     setCreateDealPrefill(null)
   }, [onCreateDealSubmit])
 
+  const hasNestedDetail = !!detailLeadId
+
   const handlePanelBack = () => {
     if (selectedLead) {
       onCloseLeadDetail?.()
@@ -151,12 +147,15 @@ export function LeadsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={!detailLeadId} onOpenChange={(open) => handlePanelDialogOpenChange(open, !!detailLeadId, handlePanelBack)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack)}>
         <DialogContent
-          className="map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            hasNestedDetail && 'invisible pointer-events-none'
+          )}
           showCloseButton={false}
           hideOverlay
-          suppressBackdrop={!!detailLeadId}
+          suppressBackdrop
           instantDismiss={instantDismiss && !isOpen}
         >
           <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
@@ -204,18 +203,15 @@ export function LeadsPanel({
       </Dialog>
 
       <CreateLeadDialog
-        open={createOpen || !!editLead}
-        onOpenChange={(v) => { if (!v) { setCreateOpen(false); setEditLead(null) } }}
-        editLead={editLead}
+        open={createOpen}
+        onOpenChange={(v) => { if (!v) setCreateOpen(false) }}
         getToken={getToken}
         onResolveParcel={onResolveParcel}
         onCreated={handleCreated}
-        onUpdated={handleUpdated}
         existingLeads={leads}
         teams={teams}
         teamMembership={teamMembership}
         nestedOverlay
-        topLayer={!!editLead}
       />
 
       <DealTemplatePickerDialog
@@ -257,7 +253,7 @@ export function LeadsPanel({
         onPhoneClick={onPhoneClick}
         onGoToParcelOnMap={onGoToParcelOnMap}
         onLeadUpdate={handleLeadUpdate}
-        onEditLead={(l) => setEditLead(l)}
+        onEditLead={onEditLead}
         onCreateDeal={onCreateDeal ?? startCreateDeal}
         onOpenDeal={onOpenDeal}
         onLeadDeleted={() => { onCloseLeadDetail?.(); onRefreshLeads?.() }}

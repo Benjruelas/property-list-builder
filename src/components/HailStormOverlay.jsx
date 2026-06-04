@@ -141,7 +141,7 @@ export function HailStormDismissPill({
                 title="One hour earlier"
                 aria-label="Earlier radar frame"
               >
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronLeft aria-hidden />
               </button>
               <div className="hail-storm-frame-info" aria-live="polite">
                 {loading ? (
@@ -161,7 +161,7 @@ export function HailStormDismissPill({
                 title="One hour later"
                 aria-label="Later radar frame"
               >
-                <ChevronRight className="h-5 w-5" />
+                <ChevronRight aria-hidden />
               </button>
             </div>
             {!loading && frameCount > 0 ? (

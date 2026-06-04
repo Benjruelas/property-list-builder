@@ -46,6 +46,7 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
     e.target?.closest?.('[data-deal-line-items-menu]') ||
     e.target?.closest?.('[data-options-menu]') ||
     e.target?.closest?.('[data-confirm-dialog]') ||
+    e.target?.closest?.('[data-send-quote-dialog]') ||
     e.target?.closest?.('[data-pipe-menu]') ||
     e.target?.closest?.('[data-deals-panel-menu]') ||
     e.target?.closest?.('[data-quotes-panel-menu]') ||
@@ -78,7 +79,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
   const useStackedDetailLayer = topLayer && nestedOverlay
   const effectiveNestedOverlay = nestedOverlay && !useStackedDetailLayer
   const effectiveHideOverlay = hideOverlay || useStackedDetailLayer
-  const isPanel = panelMode ?? isMapPanelClassName(className)
+  const isPanel = (panelMode ?? isMapPanelClassName(className)) && !confirmLayer
   const contentMotion = cn(
     isPanel ? PANEL_CONTENT_MOTION : DEFAULT_CONTENT_MOTION,
     instantDismiss && INSTANT_PANEL_MOTION
@@ -91,8 +92,12 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
   const zContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[10001]'
   const zHideOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]'
   const zDefaultContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[9999]'
-  const contentPosition =
-    'fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg'
+  const contentPosition = cn(
+    'fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4',
+    isPanel
+      ? 'border-0 bg-transparent p-0 shadow-none sm:rounded-lg'
+      : 'border bg-background p-6 shadow-lg sm:rounded-lg'
+  )
   const suppressCloseAutoFocus = (e) => {
     e.preventDefault()
     onCloseAutoFocus?.(e)

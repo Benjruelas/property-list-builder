@@ -4,12 +4,30 @@ import { flattenTeamTasks } from './teamTaskUtils'
 import { findDealsForLead } from './deals'
 import { loadDeals } from './dealPipeline'
 
+/** Open tasks first — used where completed/incomplete are in separate sections. */
 export function sortTasks(a, b) {
   if (a.completed !== b.completed) return a.completed ? 1 : -1
   const aSched = a.scheduledAt ?? a.dueAt ?? 0
   const bSched = b.scheduledAt ?? b.dueAt ?? 0
   if (aSched && bSched) return aSched - bSched
   return (b.createdAt || 0) - (b.createdAt || 0)
+}
+
+/** Stable order for deal-scoped lists — toggling complete does not move rows. */
+function compareTasksStable(a, b) {
+  const aSched = a.scheduledAt ?? a.dueAt ?? 0
+  const bSched = b.scheduledAt ?? b.dueAt ?? 0
+  if (aSched && bSched && aSched !== bSched) return aSched - bSched
+  if (aSched && !bSched) return -1
+  if (!aSched && bSched) return 1
+  const aCreated = a.createdAt || 0
+  const bCreated = b.createdAt || 0
+  if (aCreated !== bCreated) return aCreated - bCreated
+  return String(a.id).localeCompare(String(b.id))
+}
+
+export function sortTasksStable(a, b) {
+  return compareTasksStable(a, b)
 }
 
 /** All deals for a lead (API pipelines or local storage). */
@@ -59,7 +77,7 @@ export function collectTasksForDeal(deal, pipelines, getters) {
   if (!deal?.id) return []
   return collectAllTasks(pipelines, getters)
     .filter((t) => (t.title ?? '').toString().trim() && taskMatchesDeal(t, deal))
-    .sort(sortTasks)
+    .sort(compareTasksStable)
 }
 
 export function collectTasksForLead(lead, pipelines, getters) {
@@ -81,7 +99,7 @@ export function groupLeadTasksByDeal(tasks, leadId, pipelines = []) {
   const groups = deals.map((deal) => ({
     deal,
     label: (deal.title || deal.leadName || 'Untitled deal').trim(),
-    tasks: tasks.filter((t) => t.dealId === deal.id).sort(sortTasks),
+    tasks: tasks.filter((t) => t.dealId === deal.id).sort(compareTasksStable),
   }))
 
   const knownDealIds = new Set(deals.map((d) => d.id))
@@ -97,13 +115,13 @@ export function groupLeadTasksByDeal(tasks, leadId, pipelines = []) {
     groups.push({
       deal: { id: dealId, title: 'Deal' },
       label: 'Deal',
-      tasks: orphanTasks.sort(sortTasks),
+      tasks: orphanTasks.sort(compareTasksStable),
     })
   }
 
   const unassigned = tasks
     .filter((t) => !t.dealId)
-    .sort(sortTasks)
+    .sort(compareTasksStable)
 
   return {
     groups: groups.filter((g) => g.tasks.length > 0),

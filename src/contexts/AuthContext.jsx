@@ -192,6 +192,17 @@ export const AuthProvider = ({ children }) => {
   const getToken = () =>
     isDev ? Promise.resolve('dev-bypass') : (auth.currentUser?.getIdToken?.() ?? Promise.resolve(null))
 
+  const updateDisplayName = async (displayName) => {
+    const trimmed = (displayName || '').trim()
+    if (isDev) {
+      setCurrentUser((prev) => (prev ? { ...prev, displayName: trimmed } : prev))
+      return
+    }
+    if (!auth.currentUser) throw new Error('Sign in required')
+    await updateProfile(auth.currentUser, { displayName: trimmed || null })
+    setCurrentUser({ ...auth.currentUser, displayName: trimmed })
+  }
+
   const value = {
     currentUser,
     getToken,
@@ -200,6 +211,7 @@ export const AuthProvider = ({ children }) => {
     signInWithGoogle,
     logout,
     resetPassword,
+    updateDisplayName,
     loading
   }
 

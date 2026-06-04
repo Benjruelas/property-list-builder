@@ -68,6 +68,8 @@ export function teamIdsFromResource(resource) {
 
 /** Format actor name for summaries. */
 export function actorLabel(actor) {
+  const name = (actor?.displayName || '').trim()
+  if (name) return name
   const email = (actor?.email || '').trim()
   if (email) return email.split('@')[0]
   return 'Someone'

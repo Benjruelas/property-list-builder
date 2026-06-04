@@ -157,9 +157,11 @@ export function LeadDetails({
       <DialogContent
         className="map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
         showCloseButton={false}
+        hideOverlay
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
-        instantDismiss={instantDismiss && !isOpen}
+        suppressBackdrop
+        instantDismiss={instantDismiss}
       >
         <DialogHeader
           className="px-5 pt-5 pb-3 border-b border-white/20 flex-shrink-0 text-left"

@@ -19,18 +19,19 @@ function HailSizeIndicator({ inches }) {
 function HailYearGroup({ year, events, defaultOpen, onSelectEvent }) {
   const [open, setOpen] = useState(defaultOpen)
   const maxSize = events.reduce((m, e) => Math.max(m, e.hail_size_inches || 0), 0)
-  const severityColor = maxSize >= 2 ? 'text-red-400' : maxSize >= 1 ? 'text-orange-400' : 'text-yellow-400'
+  const severityClass =
+    maxSize >= 2 ? 'hail-data-severity-high' : maxSize >= 1 ? 'hail-data-severity-mid' : 'hail-data-severity-low'
 
   return (
-    <div className="border-b border-white/5 last:border-0">
+    <div className="hail-data-year-group">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2 py-2 text-left bg-transparent"
       >
-        <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${open ? '' : '-rotate-90'}`} />
+        <ChevronDown className={`h-3.5 w-3.5 hail-data-muted transition-transform ${open ? '' : '-rotate-90'}`} />
         <span className="text-xs font-semibold flex-1">{year}</span>
-        <span className={`text-[10px] font-medium ${severityColor}`}>{events.length} event{events.length !== 1 ? 's' : ''}</span>
+        <span className={`text-[10px] font-medium ${severityClass}`}>{events.length} event{events.length !== 1 ? 's' : ''}</span>
         {maxSize > 0 && <HailSizeIndicator inches={maxSize} />}
       </button>
       {open && (
@@ -40,12 +41,12 @@ function HailYearGroup({ year, events, defaultOpen, onSelectEvent }) {
               key={i}
               type="button"
               onClick={() => onSelectEvent?.(evt)}
-              className="hail-event-row w-full flex items-center gap-2 text-xs py-1.5 px-2 -mx-2 rounded-md text-left bg-transparent hover:bg-white/10 transition-colors"
+              className="hail-event-row w-full flex items-center gap-2 text-xs py-1.5 px-2 -mx-2 rounded-md text-left bg-transparent transition-colors"
               title="View storm on map"
             >
-              <span className="opacity-50 w-20 shrink-0">{evt.date || year}</span>
+              <span className="hail-data-muted w-20 shrink-0">{evt.date || year}</span>
               <HailSizeIndicator inches={evt.hail_size_inches} />
-              <span className="opacity-40 ml-auto shrink-0">{evt.distance_mi} mi</span>
+              <span className="hail-data-muted ml-auto shrink-0">{evt.distance_mi} mi</span>
             </button>
           ))}
         </div>
@@ -127,20 +128,20 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
         <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1 min-h-0 space-y-4">
 
           {loading ? (
-            <div className="flex items-center justify-center py-12 opacity-50">
+            <div className="flex items-center justify-center py-12 hail-data-muted">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
               <span className="text-sm">Loading hail history...</span>
             </div>
           ) : error ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 py-4 text-sm text-red-400">
+              <div className="flex items-center gap-2 py-4 text-sm hail-data-error-text">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>Could not load hail data: {error}</span>
               </div>
               <button
                 type="button"
                 onClick={loadHail}
-                className="w-full flex items-center justify-center gap-2 text-sm font-medium px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                className="hail-data-retry-btn w-full flex items-center justify-center gap-2 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
               >
                 <CloudRain className="h-4 w-4" />
                 Retry
@@ -149,17 +150,17 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
           ) : hailData ? (
             <div>
               <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="rounded-lg bg-white/5 px-3 py-2 text-center">
+                <div className="hail-data-stat-card rounded-lg px-3 py-2 text-center">
                   <div className="text-lg font-bold">{hailData.summary?.total_events ?? 0}</div>
-                  <div className="text-[10px] opacity-50">Events</div>
+                  <div className="text-[10px] hail-data-stat-label">Events</div>
                 </div>
-                <div className="rounded-lg bg-white/5 px-3 py-2 text-center">
+                <div className="hail-data-stat-card rounded-lg px-3 py-2 text-center">
                   <div className="text-lg font-bold">{hailData.summary?.max_hail_size ? `${hailData.summary.max_hail_size}"` : '--'}</div>
-                  <div className="text-[10px] opacity-50">Max Size</div>
+                  <div className="text-[10px] hail-data-stat-label">Max Size</div>
                 </div>
-                <div className="rounded-lg bg-white/5 px-3 py-2 text-center">
+                <div className="hail-data-stat-card rounded-lg px-3 py-2 text-center">
                   <div className="text-lg font-bold">{hailData.summary?.years_with_hail?.length ?? 0}</div>
-                  <div className="text-[10px] opacity-50">Years</div>
+                  <div className="text-[10px] hail-data-stat-label">Years</div>
                 </div>
               </div>
 
@@ -176,10 +177,10 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
                   ))}
                 </div>
               ) : (
-                <div className="text-sm opacity-40 text-center py-4">No hail events found within 5 miles</div>
+                <div className="text-sm hail-data-muted text-center py-4">No hail events found within 5 miles</div>
               )}
 
-              <div className="text-[10px] opacity-30 text-center mt-4">
+              <div className="text-[10px] hail-data-muted text-center mt-4">
                 NOAA Storm Prediction Center · Within {hailData.radius_miles} miles · Since {Math.min(...(hailData.summary?.years_with_hail || [new Date().getFullYear()]))}
               </div>
             </div>

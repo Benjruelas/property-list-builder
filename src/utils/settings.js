@@ -1,8 +1,12 @@
 import { scheduleUserDataSync } from './userDataSync'
+import { DEFAULT_UI_THEME, normalizeUiTheme } from './uiTheme'
 
 const LS_KEY = 'app_settings'
 
 export const DEFAULT_SETTINGS = {
+  /** 'dark' | 'light' | 'glass' — panel chrome and map control colors (default: dark) */
+  uiTheme: DEFAULT_UI_THEME,
+
   mapStyle: 'satellite',       // 'satellite' | 'street' | 'hybrid'
   defaultZoom: 17,             // 14–19
   compassDefault: false,
@@ -20,6 +24,11 @@ export const DEFAULT_SETTINGS = {
   emailSignature: '',
 
   tourCompleted: false,
+
+  /** Your name on outbound quote/form emails (synced to server for email templates). */
+  profile: {
+    displayName: '',
+  },
 
   /** Push (server) + local notification preferences; synced in appSettings blob */
   notifications: {
@@ -60,11 +69,19 @@ export function getSettings() {
       if (saved.notifications && typeof saved.notifications === 'object') {
         merged.notifications = { ...DEFAULT_SETTINGS.notifications, ...saved.notifications }
       }
+      if (saved.profile && typeof saved.profile === 'object') {
+        merged.profile = { ...DEFAULT_SETTINGS.profile, ...saved.profile }
+      }
       if (saved.reportBranding && typeof saved.reportBranding === 'object') {
         merged.reportBranding = { ...DEFAULT_SETTINGS.reportBranding, ...saved.reportBranding }
       }
       if (saved.quoteSendTemplates && typeof saved.quoteSendTemplates === 'object') {
         merged.quoteSendTemplates = saved.quoteSendTemplates
+      }
+      if (!Object.prototype.hasOwnProperty.call(saved, 'uiTheme')) {
+        merged.uiTheme = DEFAULT_UI_THEME
+      } else {
+        merged.uiTheme = normalizeUiTheme(merged.uiTheme)
       }
       return merged
     }
@@ -81,6 +98,12 @@ export function updateSettings(partial, getToken) {
       notifications: { ...current.notifications, ...partial.notifications }
     }
   }
+  if (partial.profile && typeof partial.profile === 'object') {
+    next = {
+      ...next,
+      profile: { ...current.profile, ...partial.profile },
+    }
+  }
   if (partial.reportBranding && typeof partial.reportBranding === 'object') {
     next = {
       ...next,
@@ -90,6 +113,7 @@ export function updateSettings(partial, getToken) {
   if (partial.quoteSendTemplates && typeof partial.quoteSendTemplates === 'object') {
     next = { ...next, quoteSendTemplates: partial.quoteSendTemplates }
   }
+  next.uiTheme = normalizeUiTheme(next.uiTheme)
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(next))
   } catch { /* ignore */ }

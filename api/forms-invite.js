@@ -13,6 +13,11 @@ import {
   hasPriorInviteForRecipient,
   sanitizePrefillValues,
 } from './lib/formInvites.js'
+import {
+  resolveSenderBranding,
+  buildBrandedEmailHtml,
+  buildFromAddress,
+} from './lib/senderBranding.js'
 
 /**
  * Vercel Serverless Function - create a single-use public form invite link
@@ -143,25 +148,30 @@ export default async function handler(req, res) {
     const appOrigin = resolveOrigin(req)
     const formLink = `${appOrigin}/?form=${encodeURIComponent(token)}`
 
-    const senderLabel = user.email || template.ownerEmail || 'Someone'
-    const htmlBody = `
+    const branding = await resolveSenderBranding(user)
+    const senderLabel = branding.senderName
+    const innerHtml = `
       <p>${escapeHtml(senderLabel)} has asked you to complete a form: <strong>${escapeHtml(templateName)}</strong>.</p>
       ${isResend ? '<p><strong>This is a new link.</strong> Any previous link sent to this address for this form is no longer valid.</p>' : ''}
       ${prefillCount > 0 ? `<p>Some fields have already been filled in. Please complete the remaining fields.</p>` : ''}
       ${safeMessage ? `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>` : ''}
-      <p><a href="${escapeHtml(formLink)}">Open form</a></p>
+      <p><a href="${escapeHtml(formLink)}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Open form</a></p>
       <p style="color:#666;font-size:13px;">This link is for ${escapeHtml(trimmedRecipient)} and expires in ${INVITE_EXPIRY_DAYS} days. It can only be used once.</p>
     `
+    const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const userEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
       ? user.email.trim()
       : null
+    const replyTo = (branding.companyEmail && EMAIL_RE.test(branding.companyEmail.trim()))
+      ? branding.companyEmail.trim()
+      : userEmail
 
     const { error } = await resend.emails.send({
-      from: FROM_ADDRESS,
+      from: buildFromAddress(FROM_ADDRESS, branding.businessName),
       to: [trimmedRecipient],
-      ...(userEmail ? { replyTo: userEmail } : {}),
+      ...(replyTo ? { replyTo } : {}),
       subject: safeSubject,
       html: htmlBody,
       headers: {

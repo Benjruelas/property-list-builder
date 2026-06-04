@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
-import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users, User, Palette } from 'lucide-react'
+import { UI_THEME_OPTIONS, getUiThemeFromSettings } from '../utils/uiTheme'
+import { Input } from './ui/input'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -218,7 +220,9 @@ const LS_DATA_KEYS = [
 ]
 
 export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, parcelBoundaryColor, onBoundaryColorChange, onBoundaryOpacityChange, getToken, onRestartTour, onLogout, onOpenParcelDetails }) {
-  const { devPersona, switchDevPersona, DEV_PERSONA_A, DEV_PERSONA_B, currentUser } = useAuth()
+  const { devPersona, switchDevPersona, DEV_PERSONA_A, DEV_PERSONA_B, currentUser, updateDisplayName } = useAuth()
+  const [displayNameDraft, setDisplayNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const showDevPersonaSwitcher = import.meta.env.DEV && typeof switchDevPersona === 'function'
   const [syncing, setSyncing] = useState(false)
   const [skipTracedList, setSkipTracedList] = useState(null)
@@ -226,12 +230,14 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
 
   useEffect(() => {
     if (isOpen) {
+      const s = settings || DEFAULT_SETTINGS
+      setDisplayNameDraft((s.profile?.displayName || currentUser?.displayName || '').trim())
       setSkipTracedList(getSkipTracedList())
     } else {
       setSkipTracedList(null)
       setExpandedSkipTracedLists(new Set())
     }
-  }, [isOpen])
+  }, [isOpen, settings, currentUser?.displayName])
 
   useEffect(() => {
     if (!isOpen) return
@@ -242,6 +248,24 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
   const update = useCallback((partial) => {
     if (onSettingsChange) onSettingsChange(partial)
   }, [onSettingsChange])
+
+  const handleSaveDisplayName = useCallback(async () => {
+    const trimmed = displayNameDraft.trim()
+    if (!trimmed) {
+      showToast('Enter your name', 'error')
+      return
+    }
+    setSavingName(true)
+    try {
+      if (updateDisplayName) await updateDisplayName(trimmed)
+      update({ profile: { displayName: trimmed } })
+      showToast('Name saved', 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to save name', 'error')
+    } finally {
+      setSavingName(false)
+    }
+  }, [displayNameDraft, update, updateDisplayName])
 
   const s = settings || DEFAULT_SETTINGS
   const n = { ...DEFAULT_SETTINGS.notifications, ...(s.notifications || {}) }
@@ -342,6 +366,40 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
         </DialogHeader>
 
         <div className="px-4 py-4 overflow-y-auto scrollbar-hide flex-1 space-y-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+          {currentUser && (
+            <Section icon={User} title="Your profile">
+              <SettingRow
+                label="Your name"
+                description="Used when you send quotes and forms to clients (instead of your email)"
+                stacked
+              >
+                <div className="flex gap-2">
+                  <Input
+                    value={displayNameDraft}
+                    onChange={(e) => setDisplayNameDraft(e.target.value)}
+                    placeholder="e.g. Alex Johnson"
+                    maxLength={80}
+                    disabled={savingName}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveDisplayName() }}
+                  />
+                  <Button type="button" size="sm" className="shrink-0" disabled={savingName} onClick={handleSaveDisplayName}>
+                    {savingName ? 'Saving…' : 'Save'}
+                  </Button>
+                </div>
+              </SettingRow>
+            </Section>
+          )}
+
+          <Section icon={Palette} title="Appearance">
+            <SettingRow label="Theme" description="Dark panels, light panels, or translucent glass over the map" stacked>
+              <SegmentedControl
+                value={getUiThemeFromSettings(s)}
+                onChange={(v) => update({ uiTheme: v })}
+                options={UI_THEME_OPTIONS}
+              />
+            </SettingRow>
+          </Section>
+
           {/* ---- Map ---- */}
           <Section icon={Map} title="Map">
             <SettingRow label="Map Style" description="Base map tile layer" stacked>

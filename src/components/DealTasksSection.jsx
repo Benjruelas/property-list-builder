@@ -5,7 +5,6 @@ import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import {
   getAllTasks,
   getPersonalTasks,
-  toggleLeadTask,
   deleteLeadTask,
   addTask,
   updateLeadTaskTitle,
@@ -13,11 +12,11 @@ import {
 } from '@/utils/leadTasks'
 import {
   addPipelineTask,
-  togglePipelineTask,
   removePipelineTask,
   updatePipelineTask,
 } from '@/utils/pipelineTasks'
-import { addTeamTask, removeTeamTask, toggleTeamTask, updateTeamTask } from '@/utils/teamTasks'
+import { addTeamTask, removeTeamTask, updateTeamTask } from '@/utils/teamTasks'
+import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { getAllTeamMembers, getMembersForTeamSharedPipeline, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
 import { collectTasksForDeal } from '@/utils/dealTaskMatching'
 import { TaskRow } from './TasksPanel'
@@ -77,7 +76,7 @@ export function DealTasksSection({
       setTasks([])
       return
     }
-    setTasks(collectTasksForDeal(deal, pipelines, taskGetters))
+    setTasksWithPendingMerge(setTasks, collectTasksForDeal(deal, pipelines, taskGetters))
   }, [deal, pipelines])
 
   useEffect(() => {
@@ -218,32 +217,17 @@ export function DealTasksSection({
     }
   }
 
-  const handleToggle = async (e, task) => {
-    e.stopPropagation()
-    if (task.__source === 'team' && task.pipelineId && task.leadId) {
-      try {
-        await toggleTeamTask(getToken, task.pipelineId, task.leadId, task.id)
-        await onPipelinesChange?.()
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
-      refreshTasks()
-      return
-    }
-    if (task.__source === 'pipeline' && task.pipelineId) {
-      try {
-        await togglePipelineTask(getToken, task.pipelineId, task.id)
-        await onPipelinesChange?.()
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
-      refreshTasks()
-      return
-    }
-    toggleLeadTask(task.parcelId, task.id)
-    scheduleSync()
-    refreshTasks()
-  }
+  const handleToggle = useCallback(
+    createOptimisticTaskToggleHandler({
+      setTaskList: setTasks,
+      getToken,
+      onPipelinesChange,
+      scheduleSync,
+      onAfterLocalToggle: refreshTasks,
+      onError: (err) => showToast(err.message || 'Could not update task', 'error'),
+    }),
+    [getToken, onPipelinesChange, scheduleSync, refreshTasks]
+  )
 
   const handleDeleteTask = async (task) => {
     if (task.__source === 'team' && task.pipelineId && task.leadId) {

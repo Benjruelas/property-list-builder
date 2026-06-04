@@ -38,7 +38,8 @@ import { TasksPanel } from './components/TasksPanel'
 import PathTracker from './components/PathTracker'
 import { PathsPanel } from './components/PathsPanel'
 const FormsPanel = lazy(() => import('./components/forms/FormsPanel').then(m => ({ default: m.FormsPanel })))
-const QuotesPanel = lazy(() => import('./components/quotes/QuotesPanel').then(m => ({ default: m.QuotesPanel })))
+import { QuotesPanel } from './components/quotes/QuotesPanel'
+import { setCachedDealQuotes, getCachedDealQuotes } from './utils/quotes'
 import { PublicFormPage } from './components/forms/PublicFormPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
@@ -69,6 +70,7 @@ import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
 import { useTeamDataSync } from './hooks/useTeamDataSync'
 import { getSettings, updateSettings } from './utils/settings'
+import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
 import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
@@ -250,6 +252,8 @@ function App() {
     isQuotesPanelOpen,
     quotesEditorFrame,
     quotesDetailQuoteId,
+    quotesDetailQuote,
+    quotesDetailReturnToDeal,
     isTeamsPanelOpen,
     teamsDetailTeamId,
     isSettingsPanelOpen,
@@ -347,11 +351,13 @@ function App() {
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const [dealPipelineDeals, setDealPipelineDeals] = useState([])
   const [leads, setLeads] = useState([])
+  const [editLead, setEditLead] = useState(null)
   const [closedDeals, setClosedDeals] = useState(() => loadClosedDeals())
   const [pipelines, setPipelines] = useState([])
   const [activePipelineId, setActivePipelineId] = useState(null)
   const [createDealSaving, setCreateDealSaving] = useState(false)
   const [dealTemplatesRefreshKey, setDealTemplatesRefreshKey] = useState(0)
+  const [quotesRefreshEpoch, setQuotesRefreshEpoch] = useState(0)
   /** When set, user is choosing a target pipeline to move a deal into. */
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
@@ -368,6 +374,10 @@ function App() {
   // const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false) // roof inspector — restore later
   // const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
   const [settings, setSettings] = useState(() => getSettings())
+
+  useEffect(() => {
+    applyUiTheme(getUiThemeFromSettings(settings))
+  }, [settings.uiTheme])
   const pathTrackerRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const mapRef = useRef(null)
@@ -569,6 +579,9 @@ function App() {
   const handleSettingsChange = useCallback((partial) => {
     const next = updateSettings(partial, getToken)
     setSettings(next)
+    if (partial.uiTheme != null) {
+      applyUiTheme(getUiThemeFromSettings(next))
+    }
   }, [getToken])
 
   // Task deadline local notifications (while app runs)
@@ -1102,6 +1115,16 @@ function App() {
     refreshLeads()
     nav.popModal()
   }, [refreshLeads, nav])
+
+  const handleLeadUpdated = useCallback((lead) => {
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)))
+    refreshLeads()
+    setEditLead(null)
+  }, [refreshLeads])
+
+  const handleEditLead = useCallback((lead) => {
+    if (lead?.id) setEditLead(lead)
+  }, [])
 
   const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks } = {}) => {
     if (!lead?.id) return
@@ -2184,6 +2207,37 @@ function App() {
     guardFeature('quotes', () => nav.openQuotes())
   }, [requireAuth, guardFeature, nav])
 
+  const handleCloseQuoteEditor = useCallback((saved) => {
+    const prefill = quotesEditorFrame?.prefill
+    nav.pop()
+    // Create-from-deal opens editor only (no detail frame) — close quotes panel too
+    if (prefill?.dealId && saved?.dealId) {
+      nav.pop()
+    }
+    if (saved?.dealId) {
+      const dealId = saved.dealId
+      const prev = getCachedDealQuotes(dealId) || []
+      setCachedDealQuotes(
+        dealId,
+        [...prev.filter((q) => q.id !== saved.id), saved]
+      )
+      setQuotesRefreshEpoch((n) => n + 1)
+    }
+  }, [quotesEditorFrame, nav])
+
+  const handleCloseQuoteDetail = useCallback(() => {
+    nav.pop()
+    if (quotesDetailReturnToDeal) {
+      nav.pop()
+      setQuotesRefreshEpoch((n) => n + 1)
+    }
+  }, [nav, quotesDetailReturnToDeal])
+
+  const handleOpenQuoteFromDeal = useCallback((quote) => {
+    if (!quote?.id) return
+    guardFeature('quotes', () => nav.openQuoteDetailFromDeal(quote.id, quote))
+  }, [nav, guardFeature])
+
   const handleCreateQuoteForDeal = useCallback(({ deal, pipeline, lead }) => {
     guardFeature('quotes', () => {
       const prefill = {
@@ -3161,7 +3215,10 @@ function App() {
         onLeadsChange={setLeads}
         onRefreshLeads={refreshLeads}
         onCreateQuoteForDeal={handleCreateQuoteForDeal}
+        onOpenQuoteFromDeal={handleOpenQuoteFromDeal}
+        quotesRefreshKey={quotesRefreshEpoch}
         canSeeDealAmounts={showDealAmounts}
+        onEditLead={handleEditLead}
       />
 
       <SchedulePanel
@@ -3192,6 +3249,7 @@ function App() {
         onPipelinesChange={refreshPipelines}
         teams={teams}
         teamMembership={teamMembership}
+        onEditLead={handleEditLead}
       />
 
       <TasksPanel
@@ -3293,7 +3351,6 @@ function App() {
       )}
 
       {isQuotesPanelOpen && (
-        <Suspense fallback={null}>
           <QuotesPanel
             isOpen={isQuotesPanelOpen}
             onClose={handlePanelBack}
@@ -3302,13 +3359,16 @@ function App() {
             leads={leads}
             editorFrame={quotesEditorFrame}
             detailQuoteId={quotesDetailQuoteId}
+            detailQuote={quotesDetailQuote}
+            quotesDetailReturnToDeal={quotesDetailReturnToDeal}
             onOpenEditor={(frame) => nav.pushQuotesEditor(frame)}
             onOpenDetail={(quoteId) => nav.pushQuotesDetail(quoteId)}
-            onCloseEditor={() => nav.pop()}
-            onCloseDetail={() => nav.pop()}
+            onCloseEditor={handleCloseQuoteEditor}
+            onCloseDetail={handleCloseQuoteDetail}
             canSeeDealAmounts={showDealAmounts}
+            teams={teams}
+            teamMembership={teamMembership}
           />
-        </Suspense>
       )}
 
       <PathsPanel
@@ -3396,6 +3456,7 @@ function App() {
         onCloseLeadDetail={() => nav.pop()}
         currentUserId={currentUser?.uid}
         canSeeDealAmounts={showDealAmounts}
+        onEditLead={handleEditLead}
       />
 
       <DealsPanel
@@ -3426,6 +3487,8 @@ function App() {
         onGoToParcelOnMap={handleGoToParcelOnMap}
         currentUserId={currentUser?.uid}
         onCreateQuoteForDeal={handleCreateQuoteForDeal}
+        onOpenQuoteFromDeal={handleOpenQuoteFromDeal}
+        quotesRefreshKey={quotesRefreshEpoch}
         dealsDetailDealId={dealsDetailDealId}
         dealsDetailPipelineId={dealsDetailPipelineId}
         dealsClosedRecordId={dealsClosedRecordId}
@@ -3441,18 +3504,29 @@ function App() {
         onCreateDealSubmit={handleCreateDealSubmit}
         pipelinesCount={pipelines.length}
         canSeeDealAmounts={showDealAmounts}
+        onEditLead={handleEditLead}
       />
 
       <CreateLeadDialog
-        open={createLeadOpen}
-        onOpenChange={(v) => { if (!v) nav.popModal() }}
+        open={createLeadOpen || !!editLead}
+        onOpenChange={(v) => {
+          if (!v) {
+            setEditLead(null)
+            if (createLeadOpen) nav.popModal()
+          }
+        }}
         prefill={createLeadPrefill}
+        editLead={editLead}
         getToken={getToken}
         onResolveParcel={handleResolveParcelForLead}
         onCreated={handleLeadCreated}
+        onUpdated={handleLeadUpdated}
         existingLeads={leads}
         teams={teams}
         teamMembership={teamMembership}
+        nestedOverlay={!!editLead || createLeadOpen}
+        topLayer={!!editLead}
+        confirmLayer={!!editLead}
       />
 
       <DealTemplatePickerDialog

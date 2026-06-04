@@ -173,6 +173,11 @@ export const QUOTE_STATUS_LABELS = {
   expired: 'Expired',
 }
 
+/** Quotes the owner can open in the editor (not accepted, declined, or paid). */
+export function isQuoteEditable(status) {
+  return !['accepted', 'paid', 'declined'].includes(status)
+}
+
 export function quoteStatusClass(status) {
   switch (status) {
     case 'paid':

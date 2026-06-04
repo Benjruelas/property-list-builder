@@ -51,6 +51,7 @@ export function CreateLeadDialog({
   teamMembership = null,
   nestedOverlay = false,
   topLayer = false,
+  confirmLayer = false,
 }) {
   const activeTeam = teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
@@ -179,6 +180,7 @@ export function CreateLeadDialog({
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
+        confirmLayer={confirmLayer}
       >
         <DialogHeader
           className="px-5 pt-5 pb-3 border-b border-white/20 flex-shrink-0 text-left"

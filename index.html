@@ -1,6 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-ui-theme="dark">
   <head>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('app_settings');
+          if (raw) {
+            var s = JSON.parse(raw);
+            var t = s.uiTheme;
+            document.documentElement.dataset.uiTheme =
+              t === 'light' ? 'light' : t === 'glass' ? 'glass' : 'dark';
+            return;
+          }
+        } catch (e) { /* ignore */ }
+        document.documentElement.dataset.uiTheme = 'dark';
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

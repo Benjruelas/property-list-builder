@@ -108,8 +108,19 @@ export function recipeOpenQuoteEditorFromDeal(currentStack, prefill) {
   const hasQuotes = kept.some((f) => f.type === 'quotes')
   const stack = hasQuotes ? kept : [...kept, { type: 'quotes' }]
   return [
-    ...stack.filter((f) => f.type !== 'quotes.editor'),
+    ...stack.filter((f) => f.type !== 'quotes.editor' && f.type !== 'quotes.detail'),
     { type: 'quotes.editor', prefill },
+  ]
+}
+
+/** Open quote details from deal/pipes while keeping deal visible underneath */
+export function recipeOpenQuoteDetailFromDeal(currentStack, quoteId, quote = null) {
+  const kept = recipeClosePrimaryExcept(currentStack, { quotes: true, pipes: true, deals: true }, [])
+  const hasQuotes = kept.some((f) => f.type === 'quotes')
+  const stack = hasQuotes ? kept : [...kept, { type: 'quotes' }]
+  return [
+    ...stack.filter((f) => f.type !== 'quotes.detail' && f.type !== 'quotes.editor'),
+    { type: 'quotes.detail', quoteId, quote: quote || undefined, returnToDeal: true },
   ]
 }
 

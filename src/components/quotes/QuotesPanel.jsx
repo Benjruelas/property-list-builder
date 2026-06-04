@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Plus,
   Loader2,
@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '@/lib/utils'
 import {
   fetchQuotes,
+  fetchQuote,
   fetchQuoteTemplates,
   deleteQuote,
   deleteQuoteTemplate,
@@ -56,11 +57,15 @@ export function QuotesPanel({
   leads = [],
   editorFrame = null,
   detailQuoteId = null,
+  detailQuote: detailQuoteProp = null,
+  quotesDetailReturnToDeal = false,
   onOpenEditor,
   onOpenDetail,
   onCloseEditor,
   onCloseDetail,
   canSeeDealAmounts = true,
+  teams = [],
+  teamMembership = null,
 }) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('quotes')
@@ -73,32 +78,74 @@ export function QuotesPanel({
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
   const headerMenuTriggerRef = useRef(null)
   const editorOpen = !!editorFrame
+  const hasNestedQuoteView = editorOpen || !!detailQuoteId
+  const [fetchedDetailQuote, setFetchedDetailQuote] = useState(null)
   const editorQuote = editorFrame?.prefill ?? editorFrame?.quote ?? null
   const editorTemplate = editorFrame?.template ?? null
   const editorMode = editorFrame?.mode ?? 'quote'
-  const detailsQuote = detailQuoteId ? quotes.find((q) => q.id === detailQuoteId) : null
   const [sendQuote, setSendQuote] = useState(null)
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
   const [msgTextBody, setMsgTextBody] = useState('')
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ silent = false } = {}) => {
     if (!getToken) return
-    setLoading(true)
+    if (!silent) setLoading(true)
     try {
       const [q, t] = await Promise.all([fetchQuotes(getToken), fetchQuoteTemplates(getToken)])
       setQuotes(q)
       setTemplates(t)
     } catch (e) {
-      showToast(e.message || 'Failed to load quotes', 'error')
+      if (!silent) showToast(e.message || 'Failed to load quotes', 'error')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [getToken])
 
+  const detailsQuote = useMemo(() => {
+    if (!detailQuoteId) return null
+    if (detailQuoteProp?.id === detailQuoteId) return detailQuoteProp
+    const fromList = quotes.find((q) => q.id === detailQuoteId)
+    if (fromList) return fromList
+    if (fetchedDetailQuote?.id === detailQuoteId) return fetchedDetailQuote
+    return null
+  }, [detailQuoteId, detailQuoteProp, quotes, fetchedDetailQuote])
+
   useEffect(() => {
-    if (isOpen) refresh()
-  }, [isOpen, refresh])
+    if (!isOpen || !getToken) return
+    if (detailQuoteId) {
+      refresh({ silent: true })
+      return
+    }
+    refresh()
+  }, [isOpen, getToken, detailQuoteId, refresh])
+
+  useEffect(() => {
+    if (!detailQuoteId || !getToken) {
+      setFetchedDetailQuote(null)
+      return
+    }
+    if (detailQuoteProp?.id === detailQuoteId) {
+      setFetchedDetailQuote(detailQuoteProp)
+      return
+    }
+    const fromList = quotes.find((q) => q.id === detailQuoteId)
+    if (fromList) {
+      setFetchedDetailQuote(fromList)
+      return
+    }
+    let cancelled = false
+    fetchQuote(getToken, detailQuoteId)
+      .then((q) => {
+        if (!cancelled) setFetchedDetailQuote(q || null)
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedDetailQuote(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [detailQuoteId, detailQuoteProp, quotes, getToken])
 
   useEffect(() => {
     if (!isOpen) {
@@ -140,16 +187,18 @@ export function QuotesPanel({
     onOpenEditor?.({ mode: 'quote' })
   }
 
-  const openNewTemplate = async () => {
-    if (templates.length === 0) {
-      try {
-        await createQuoteTemplate(getToken, DEFAULT_QUOTE_TEMPLATE)
-        await refresh()
-      } catch {
-        /* user can still create manually */
-      }
-    }
+  const openNewTemplate = () => {
     onOpenEditor?.({ mode: 'template' })
+    if (templates.length === 0) {
+      void (async () => {
+        try {
+          await createQuoteTemplate(getToken, DEFAULT_QUOTE_TEMPLATE)
+          await refresh()
+        } catch {
+          /* user can still create manually */
+        }
+      })()
+    }
   }
 
   const handleDeleteQuote = async (q) => {
@@ -164,7 +213,12 @@ export function QuotesPanel({
   }
 
   const handleDeleteTemplate = async (t) => {
-    const ok = await showConfirm({ title: 'Delete template?', destructive: true, confirmLabel: 'Delete' })
+    const ok = await showConfirm({
+      title: 'Delete template?',
+      message: 'This template will be removed. Existing quotes are not affected.',
+      destructive: true,
+      confirmLabel: 'Delete',
+    })
     if (!ok) return
     try {
       await deleteQuoteTemplate(getToken, t.id)
@@ -201,7 +255,7 @@ export function QuotesPanel({
       onCloseEditor?.()
       return
     }
-    if (detailsQuote) {
+    if (detailQuoteId) {
       onCloseDetail?.()
       return
     }
@@ -214,12 +268,15 @@ export function QuotesPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={!(editorOpen || detailsQuote)} onOpenChange={(o) => handlePanelDialogOpenChange(o, editorOpen || !!detailsQuote, handlePanelBack)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedQuoteView, handlePanelBack)}>
         <DialogContent
-          className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            hasNestedQuoteView && 'invisible pointer-events-none'
+          )}
           showCloseButton={false}
           hideOverlay
-          suppressBackdrop={editorOpen || !!detailsQuote}
+          suppressBackdrop
           onInteractOutside={(e) => {
             if (e.target.closest?.('[data-quotes-panel-menu]')) e.preventDefault()
           }}
@@ -308,11 +365,18 @@ export function QuotesPanel({
                 </div>
               ) : (
                 filteredQuotes.map((q) => (
-                  <button
+                  <div
                     key={q.id}
-                    type="button"
-                    className="w-full text-left map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10"
+                    role="button"
+                    tabIndex={0}
+                    className="w-full text-left map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 cursor-pointer"
                     onClick={() => onOpenDetail?.(q.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpenDetail?.(q.id)
+                      }
+                    }}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -328,10 +392,11 @@ export function QuotesPanel({
                       type="button"
                       className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md opacity-50 hover:opacity-90 hover:bg-white/10"
                       onClick={(e) => openMenu(`q-${q.id}`, e)}
+                      aria-label={`Options for ${q.title || 'quote'}`}
                     >
                       <MoreVertical className="h-4 w-4" />
                     </button>
-                  </button>
+                  </div>
                 ))
               )
             ) : tab === 'templates' ? (
@@ -367,7 +432,7 @@ export function QuotesPanel({
               )
             ) : (
               <div className="space-y-4 pb-4">
-                <p className="text-sm opacity-70">Default templates used when sending quotes via email or text.</p>
+                <p className="text-sm opacity-70">Default templates used when sending quotes via email or text. Your name comes from Settings; company name from team branding (Teams → your team).</p>
                 <div className="flex flex-wrap gap-1">
                   {QUOTE_SEND_TAGS.map(({ tag, label }) => (
                     <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10" title={label}>{tag}</span>
@@ -430,7 +495,10 @@ export function QuotesPanel({
         mode={editorMode}
         pipelines={pipelines}
         leads={leads}
-        onSaved={() => refresh()}
+        onSaved={(saved) => {
+          refresh()
+          onCloseEditor?.(saved)
+        }}
         canSeeDealAmounts={canSeeDealAmounts}
       />
 
@@ -440,7 +508,13 @@ export function QuotesPanel({
         onClose={handleDetailsClose}
         canSeeDealAmounts={canSeeDealAmounts}
         leads={leads}
-        onEdit={(q) => { onOpenEditor?.({ mode: 'quote', quote: q }); onCloseDetail?.() }}
+        onEdit={(q) => {
+          onOpenEditor?.({
+            mode: 'quote',
+            quote: q,
+            returnToDeal: quotesDetailReturnToDeal,
+          })
+        }}
         onSend={(q) => setSendQuote(q)}
         onDelete={handleDeleteQuote}
       />
@@ -449,8 +523,10 @@ export function QuotesPanel({
         open={!!sendQuote}
         quote={sendQuote}
         leads={leads}
+        teams={teams}
+        teamMembership={teamMembership}
         onClose={() => setSendQuote(null)}
-        onSent={(q) => { refresh() }}
+        onSent={() => { refresh() }}
       />
     </>
   )

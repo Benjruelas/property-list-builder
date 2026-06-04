@@ -13,7 +13,7 @@ import { showConfirm } from './ui/confirm-dialog'
 import { DealTasksSection } from './DealTasksSection'
 import { DealFinancesPanel } from './DealLineItemsSection'
 import { normalizeDealLineItems } from '@/utils/dealFinances'
-import { fetchQuotes } from '@/utils/quotes'
+import { fetchQuotes, getCachedDealQuotes, setCachedDealQuotes } from '@/utils/quotes'
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatQuoteMoney } from '@/utils/quoteMath'
 
@@ -29,7 +29,6 @@ export function DealDetails({
   pipeline,
   lead,
   closedRecord = null,
-  instantDismiss = false,
   onClose,
   onDealUpdate,
   onOpenLead,
@@ -47,7 +46,9 @@ export function DealDetails({
   onPipelinesChange,
   onOpenScheduleAtDate,
   taskListEpoch = 0,
+  quotesRefreshKey = 0,
   onCreateQuoteForDeal,
+  onOpenQuote,
   canSeeDealAmounts = true,
 }) {
   const d = closedRecord?.deal || deal
@@ -75,17 +76,38 @@ export function DealDetails({
   const [uploading, setUploading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuTriggerRef = useRef(null)
-  const [dealQuotes, setDealQuotes] = useState([])
+  const [dealQuotes, setDealQuotes] = useState(() =>
+    d?.id ? getCachedDealQuotes(d.id) || [] : []
+  )
+  const [dealQuotesLoading, setDealQuotesLoading] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
-    if (!d?.id || !getToken) return
+    if (!d?.id || !getToken) {
+      setDealQuotes([])
+      setDealQuotesLoading(false)
+      return
+    }
+    const cached = getCachedDealQuotes(d.id)
+    if (cached) setDealQuotes(cached)
+    setDealQuotesLoading(!cached)
     let cancelled = false
-    fetchQuotes(getToken, { dealId: d.id })
-      .then((list) => { if (!cancelled) setDealQuotes(list) })
-      .catch(() => { if (!cancelled) setDealQuotes([]) })
-    return () => { cancelled = true }
-  }, [d?.id, getToken, taskListEpoch])
+    fetchQuotes(getToken, { dealId: d.id, skipCache: true })
+      .then((list) => {
+        if (cancelled) return
+        setCachedDealQuotes(d.id, list)
+        setDealQuotes(list)
+      })
+      .catch(() => {
+        if (!cancelled && !cached) setDealQuotes([])
+      })
+      .finally(() => {
+        if (!cancelled) setDealQuotesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [d?.id, getToken, quotesRefreshKey])
 
   useEffect(() => {
     setMenuOpen(false)
@@ -185,7 +207,8 @@ export function DealDetails({
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
-        instantDismiss={instantDismiss}
+        suppressBackdrop
+        instantDismiss
       >
         <DialogHeader
           className="shrink-0 border-b border-white/10 px-5 pt-5 pb-3 text-left"
@@ -276,26 +299,40 @@ export function DealDetails({
             canSeeDealAmounts={canSeeDealAmounts}
           />
 
-          {!readOnly && !isClosed && onCreateQuoteForDeal && (
+          {(onOpenQuote || (!readOnly && !isClosed && onCreateQuoteForDeal)) && (
             <section>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-semibold uppercase opacity-50">Quotes</h3>
-                <Button size="sm" variant="outline" onClick={() => onCreateQuoteForDeal({ deal: d, pipeline, lead })}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Create quote
-                </Button>
+                {!readOnly && !isClosed && onCreateQuoteForDeal && (
+                  <Button size="sm" variant="outline" onClick={() => onCreateQuoteForDeal({ deal: d, pipeline, lead })}>
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Create quote
+                  </Button>
+                )}
               </div>
-              {dealQuotes.length === 0 ? (
+              {dealQuotesLoading ? (
+                <div className="flex items-center gap-2 py-2 text-xs opacity-50">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  Loading quotes…
+                </div>
+              ) : dealQuotes.length === 0 ? (
                 <p className="text-xs opacity-40 py-1">No quotes linked to this deal</p>
               ) : (
                 <ul className="space-y-1">
                   {dealQuotes.map((q) => (
-                    <li key={q.id} className="flex items-center gap-2 py-2 px-2 rounded-lg bg-white/[0.04] text-sm">
-                      <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
-                      <span className="flex-1 truncate">{q.title || 'Quote'}</span>
-                      <QuoteStatusBadge status={q.status} />
-                      {canSeeDealAmounts && (
-                        <span className="text-xs opacity-50 shrink-0">{formatQuoteMoney(q.total)}</span>
-                      )}
+                    <li key={q.id}>
+                      <button
+                        type="button"
+                        disabled={!onOpenQuote}
+                        onClick={() => onOpenQuote?.(q)}
+                        className="w-full flex items-center gap-2 py-2 px-2 rounded-lg bg-white/[0.04] text-sm text-left hover:bg-white/[0.08] transition-colors disabled:opacity-60 disabled:pointer-events-none"
+                      >
+                        <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
+                        <span className="flex-1 truncate">{q.title || 'Quote'}</span>
+                        <QuoteStatusBadge status={q.status} />
+                        {canSeeDealAmounts && (
+                          <span className="text-xs opacity-50 shrink-0">{formatQuoteMoney(q.total)}</span>
+                        )}
+                      </button>
                     </li>
                   ))}
                 </ul>

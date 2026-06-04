@@ -143,6 +143,8 @@ export function selectPanelProps(state) {
     isQuotesPanelOpen: hasFrameRoot(state, 'quotes'),
     quotesEditorFrame: quotesEditor ?? null,
     quotesDetailQuoteId: quotesDetail?.quoteId ?? null,
+    quotesDetailQuote: quotesDetail?.quote ?? null,
+    quotesDetailReturnToDeal: !!quotesDetail?.returnToDeal,
     isTeamsPanelOpen: hasFrameRoot(state, 'teams'),
     teamsDetailTeamId: teamsDetail?.teamId ?? null,
     isSettingsPanelOpen: hasFrameRoot(state, 'settings'),

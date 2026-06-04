@@ -1,5 +1,11 @@
 import { Resend } from 'resend'
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import {
+  resolveSenderBranding,
+  buildBrandedEmailHtml,
+  buildFromAddress,
+  escapeHtml,
+} from './lib/senderBranding.js'
 
 /**
  * Vercel Serverless Function - emails a flattened form PDF and records the submission.
@@ -91,14 +97,6 @@ function isValidEmail(e) {
   return typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())
 }
 
-function escapeHtml(s) {
-  return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 export const config = {
   api: { bodyParser: { sizeLimit: '10mb' } }
 }
@@ -159,11 +157,13 @@ export default async function handler(req, res) {
     const safeMessage = String(message || '').slice(0, 4000)
     const filename = `${sanitizeFilename(templateName || templateId)}_${Date.now()}.pdf`
 
-    const htmlBody = `
-      <p>${escapeHtml(user.email)} has sent you a completed form.</p>
+    const branding = await resolveSenderBranding(user)
+    const innerHtml = `
+      <p>${escapeHtml(branding.senderName)} has sent you a completed form.</p>
       ${safeMessage ? `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>` : ''}
       <p>The completed PDF is attached.</p>
     `
+    const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
     // Only include `replyTo` / `bcc` when we actually have a well-formed
     // email address — Resend rejects empty strings / missing local-parts.
@@ -171,6 +171,9 @@ export default async function handler(req, res) {
     const userEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
       ? user.email.trim()
       : null
+    const replyTo = (branding.companyEmail && EMAIL_RE.test(branding.companyEmail.trim()))
+      ? branding.companyEmail.trim()
+      : userEmail
 
     // "Send me a copy" — BCC the signed-in user on the same message. Skip it
     // when the user is also the recipient (avoids a duplicate in their inbox).
@@ -179,9 +182,9 @@ export default async function handler(req, res) {
       : null
 
     const { data, error } = await resend.emails.send({
-      from: FROM_ADDRESS,
+      from: buildFromAddress(FROM_ADDRESS, branding.businessName),
       to: [recipientEmail.trim()],
-      ...(userEmail ? { replyTo: userEmail } : {}),
+      ...(replyTo ? { replyTo } : {}),
       ...(bccList ? { bcc: bccList } : {}),
       subject: safeSubject,
       html: htmlBody,

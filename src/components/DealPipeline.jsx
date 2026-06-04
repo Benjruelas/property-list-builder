@@ -12,6 +12,7 @@ import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskS
 import { addPipelineTask, updatePipelineTask, togglePipelineTask, removePipelineTask, flattenPipelineTasks } from '@/utils/pipelineTasks'
 import { addTeamTask, updateTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
 import { getAllTeamMembers, flattenTeamTasks, formatAssigneeList, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { TeamMemberAssignSectionLight } from './TeamMemberAssignSection'
 import { NewTaskDialog } from './NewTaskDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
@@ -135,7 +136,10 @@ export function DealPipeline({
   onLeadsChange,
   onRefreshLeads,
   onCreateQuoteForDeal,
+  onOpenQuoteFromDeal,
+  quotesRefreshKey = 0,
   canSeeDealAmounts = true,
+  onEditLead,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
@@ -285,12 +289,24 @@ export function DealPipeline({
     const personal = apiMode ? getPersonalTasks() : getAllTasks()
     const pipeScoped = apiMode ? flattenPipelineTasks(pipelines) : []
     const teamScoped = apiMode ? flattenTeamTasks(pipelines) : []
-    setAllTasks([...personal, ...pipeScoped, ...teamScoped])
+    setTasksWithPendingMerge(setAllTasks, [...personal, ...pipeScoped, ...teamScoped])
   }, [apiMode, pipelines])
 
   useEffect(() => {
     if (!focusDealId) refreshAllTasks()
   }, [focusDealId, refreshAllTasks])
+
+  const handleToggleTask = useCallback(
+    createOptimisticTaskToggleHandler({
+      setTaskList: setAllTasks,
+      getToken,
+      onPipelinesChange,
+      scheduleSync,
+      onAfterLocalToggle: refreshAllTasks,
+      onError: (err) => showToast(err.message || 'Failed to update task', 'error'),
+    }),
+    [getToken, onPipelinesChange, scheduleSync, refreshAllTasks]
+  )
 
   const leadOverlay = leadOverlayId ? leads.find((l) => l.id === leadOverlayId) : null
 
@@ -762,12 +778,15 @@ export function DealPipeline({
   }
 
   return (
-    <Dialog open={isOpen} modal={!hasNestedDetail} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedDetail, handlePipelineBack)}>
+    <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedDetail, handlePipelineBack)}>
       <DialogContent
-        className="map-panel deal-pipeline-panel fullscreen-panel flex flex-col"
+        className={cn(
+          'map-panel deal-pipeline-panel fullscreen-panel flex flex-col',
+          hasNestedDetail && 'invisible pointer-events-none'
+        )}
         showCloseButton={false}
         hideOverlay
-        suppressBackdrop={hasNestedDetail}
+        suppressBackdrop
         instantDismiss={instantDismiss && !isOpen}
         onInteractOutside={(e) => {
           if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-pipeline-switcher]') || e.target?.closest?.('[data-share-pipeline-dialog]') || e.target?.closest?.('[data-create-pipeline-dialog]')) e.preventDefault()
@@ -895,7 +914,6 @@ export function DealPipeline({
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && handleDealClick(deal)}
                       className={`deal-pipeline-lead-card map-panel-list-item px-2 py-1.5 rounded-md border border-white/10 text-white text-xs group flex items-center gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedDealId === deal.id ? 'opacity-50' : ''}`}
-                      style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }}
                     >
                       <div className="flex-1 min-w-0">
                         {(() => {
@@ -1072,28 +1090,7 @@ export function DealPipeline({
                     <div className="flex items-start gap-2">
                       <button
                         type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation()
-                          if (task.__source === 'team' && task.pipelineId && task.leadId) {
-                            try {
-                              await toggleTeamTask(getToken, task.pipelineId, task.leadId, task.id)
-                              onPipelinesChange?.()
-                            } catch (err) {
-                              showToast(err.message || 'Failed to update task', 'error')
-                            }
-                          } else if (task.__source === 'pipeline' && task.pipelineId) {
-                            try {
-                              await togglePipelineTask(getToken, task.pipelineId, task.id)
-                              onPipelinesChange?.()
-                            } catch (err) {
-                              showToast(err.message || 'Failed to update task', 'error')
-                            }
-                          } else {
-                            toggleLeadTask(task.parcelId, task.id)
-                            refreshAllTasks()
-                            scheduleSync()
-                          }
-                        }}
+                        onClick={(e) => handleToggleTask(e, task)}
                         className="flex-shrink-0 mt-0.5 text-gray-600 hover:text-gray-900"
                         title={task.completed ? 'Mark incomplete' : 'Mark done'}
                       >
@@ -1200,7 +1197,6 @@ export function DealPipeline({
 
       {isOpen && selectedDeal && (
         <DealDetails
-          instantDismiss={instantDismiss}
           deal={selectedDeal}
           pipeline={activePipeline}
           lead={leads.find((l) => l.id === selectedDeal.leadId) || null}
@@ -1232,6 +1228,8 @@ export function DealPipeline({
           }}
           getToken={getToken}
           onCreateQuoteForDeal={onCreateQuoteForDeal}
+          onOpenQuote={onOpenQuoteFromDeal}
+          quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
         />
       )}
@@ -1267,6 +1265,7 @@ export function DealPipeline({
           canSeeDealAmounts={canSeeDealAmounts}
           nestedOverlay
           topLayer
+          onEditLead={onEditLead}
         />
       )}
 

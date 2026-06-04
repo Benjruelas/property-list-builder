@@ -80,12 +80,36 @@ export async function deleteQuoteTemplate(getToken, templateId) {
 
 // --- Quotes ---
 
-export async function fetchQuotes(getToken, { dealId } = {}) {
+const dealQuotesCache = new Map()
+
+export function getCachedDealQuotes(dealId) {
+  if (!dealId) return null
+  const entry = dealQuotesCache.get(dealId)
+  return entry?.quotes ?? null
+}
+
+export function setCachedDealQuotes(dealId, quotes) {
+  if (!dealId) return
+  dealQuotesCache.set(dealId, { quotes, at: Date.now() })
+}
+
+export function invalidateDealQuotesCache(dealId) {
+  if (dealId) dealQuotesCache.delete(dealId)
+  else dealQuotesCache.clear()
+}
+
+export async function fetchQuotes(getToken, { dealId, skipCache = false } = {}) {
+  if (dealId && !skipCache) {
+    const cached = getCachedDealQuotes(dealId)
+    if (cached) return cached
+  }
   const qs = dealId ? `?dealId=${encodeURIComponent(dealId)}` : ''
   const res = await authFetch(getToken, `/quotes${qs}`)
   if (!res.ok) throw new Error('Failed to fetch quotes')
   const data = await parseJsonSafe(res)
-  return data.quotes || []
+  const quotes = data.quotes || []
+  if (dealId) setCachedDealQuotes(dealId, quotes)
+  return quotes
 }
 
 export async function fetchQuote(getToken, quoteId) {

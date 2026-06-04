@@ -1,10 +1,9 @@
 import { Send, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { PanelHeader } from '../ui/panel-header'
-import { Button } from '../ui/button'
 import { QuoteStatusBadge } from './QuoteStatusBadge'
 import { QuoteLineItemsEditor } from './QuoteLineItemsEditor'
-import { formatQuoteMoney } from '@/utils/quoteMath'
+import { formatQuoteMoney, isQuoteEditable } from '@/utils/quoteMath'
 import { displayLeadName } from '@/utils/leads'
 import { showConfirm } from '../ui/confirm-dialog'
 
@@ -35,15 +34,17 @@ export function QuoteDetails({
   const displayTotal = quote.acceptedTotal ?? quote.total
   const lead = quote.leadId ? leads.find((l) => l.id === quote.leadId) : null
   const leadName = lead ? displayLeadName(lead) : (quote.clientName || null)
-  const isLocked = ['accepted', 'paid', 'declined'].includes(quote.status)
+  const isLocked = !isQuoteEditable(quote.status)
+  const canEditQuote = isQuoteEditable(quote.status)
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.() }}>
       <DialogContent
-        className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
+        className="map-panel quotes-panel quote-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
         showCloseButton={false}
         nestedOverlay
         topLayer
+        instantDismiss
       >
         <DialogHeader
           className="flex-shrink-0 px-4 pb-3 border-b border-white/20 text-left"
@@ -121,34 +122,35 @@ export function QuoteDetails({
             </div>
           )}
 
-          <div className="flex flex-col gap-2 pt-2">
+          <div className="quote-details-actions flex flex-col gap-2.5 pt-2">
             {quote.status !== 'paid' && (
               <>
-                <Button className="create-list-btn w-full" onClick={() => onSend?.(quote)}>
-                  <Send className="h-4 w-4 mr-2" /> Send quote
-                </Button>
-                {quote.status === 'draft' && (
-                  <Button variant="outline" className="w-full" onClick={() => onEdit?.(quote)}>
-                    <Pencil className="h-4 w-4 mr-2" /> Edit
-                  </Button>
+                <button type="button" data-panel-action className="panel-action-btn" onClick={() => onSend?.(quote)}>
+                  <Send className="h-4 w-4 mr-2 shrink-0" /> Send quote
+                </button>
+                {canEditQuote && (
+                  <button type="button" data-panel-action className="panel-action-btn" onClick={() => onEdit?.(quote)}>
+                    <Pencil className="h-4 w-4 mr-2 shrink-0" /> Edit
+                  </button>
                 )}
               </>
             )}
             {quote.dealId && onOpenDeal && (
-              <Button variant="outline" className="w-full" onClick={() => onOpenDeal(quote)}>
-                <ExternalLink className="h-4 w-4 mr-2" /> Open linked deal
-              </Button>
+              <button type="button" data-panel-action className="panel-action-btn" onClick={() => onOpenDeal(quote)}>
+                <ExternalLink className="h-4 w-4 mr-2 shrink-0" /> Open linked deal
+              </button>
             )}
-            <Button
-              variant="ghost"
-              className="w-full text-red-400 hover:text-red-300"
+            <button
+              type="button"
+              data-panel-action
+              className="panel-action-btn panel-action-btn--danger"
               onClick={async () => {
                 const ok = await showConfirm({ title: 'Delete quote?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })
                 if (ok) onDelete?.(quote)
               }}
             >
-              <Trash2 className="h-4 w-4 mr-2" /> Delete
-            </Button>
+              <Trash2 className="h-4 w-4 mr-2 shrink-0" /> Delete
+            </button>
           </div>
         </div>
       </DialogContent>

@@ -12,6 +12,11 @@ import {
 } from './lib/quoteInvites.js'
 import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
+import {
+  resolveSenderBranding,
+  buildBrandedEmailHtml,
+  buildFromAddress,
+} from './lib/senderBranding.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
@@ -138,21 +143,26 @@ export default async function handler(req, res) {
       })
     }
 
-    const senderLabel = user.email || quote.ownerEmail || 'Someone'
+    const branding = await resolveSenderBranding(user)
+    const senderLabel = branding.senderName
     const totalStr = quote.total != null ? `$${Number(quote.total).toFixed(2)}` : ''
-    const htmlBody = `
+    const innerHtml = `
       <p>${escapeHtml(senderLabel)} has sent you a quote${quoteTitle ? `: <strong>${escapeHtml(quoteTitle)}</strong>` : ''}${totalStr ? ` (${escapeHtml(totalStr)})` : ''}.</p>
       ${isResend ? '<p><strong>This is a new link.</strong> Any previous link for this quote is no longer valid.</p>' : ''}
       ${safeMessage ? `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>` : ''}
       <p><a href="${escapeHtml(quoteLink)}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">View quote</a></p>
       <p style="color:#666;font-size:13px;">This link is for ${escapeHtml(trimmedRecipient)} and expires in ${INVITE_EXPIRY_DAYS} days.</p>
     `
+    const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
     const userEmail = typeof user.email === 'string' && isValidEmail(user.email) ? user.email.trim() : null
+    const replyTo = (branding.companyEmail && isValidEmail(branding.companyEmail))
+      ? branding.companyEmail.trim()
+      : userEmail
     const { error } = await resend.emails.send({
-      from: FROM_ADDRESS,
+      from: buildFromAddress(FROM_ADDRESS, branding.businessName),
       to: [trimmedRecipient],
-      ...(userEmail ? { replyTo: userEmail } : {}),
+      ...(replyTo ? { replyTo } : {}),
       subject: safeSubject,
       html: htmlBody,
       headers: { 'X-Entity-Ref-ID': invite.id },
@@ -178,7 +188,7 @@ export default async function handler(req, res) {
         teamIds: [],
         actor: user,
         type: 'quote.sent',
-        summary: `${actorLabel(user)} sent quote "${quoteTitle}" to ${trimmedRecipient}`,
+        summary: `${actorLabel({ ...user, displayName: branding.senderName })} sent quote "${quoteTitle}" to ${trimmedRecipient}`,
         entity: { quoteId: quote.id },
         nav: { panel: 'quotes', quoteId: quote.id },
       })

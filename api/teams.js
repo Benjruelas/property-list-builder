@@ -9,6 +9,7 @@
  */
 
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import { normalizeEmailBranding } from './lib/senderBranding.js'
 import {
   getAllTeams,
   saveAllTeams,
@@ -110,6 +111,7 @@ function normalizeTeamForWire(team, viewerUid) {
     seatLimit: team.seatLimit || DEFAULT_SEAT_LIMIT,
     allowExternalSharing: team.allowExternalSharing === true,
     membersCanSeeDealAmounts: team.membersCanSeeDealAmounts !== false,
+    emailBranding: normalizeEmailBranding(team.emailBranding || {}),
     teamPipelineId: team.teamPipelineId || null,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
@@ -293,6 +295,9 @@ export default async function handler(req, res) {
         }
         if (body.membersCanSeeDealAmounts !== undefined) {
           team.membersCanSeeDealAmounts = body.membersCanSeeDealAmounts === true
+        }
+        if (body.emailBranding !== undefined) {
+          team.emailBranding = normalizeEmailBranding(body.emailBranding)
         }
         team.updatedAt = new Date().toISOString()
         all[idx] = team

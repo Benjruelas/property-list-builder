@@ -19,17 +19,19 @@ export function PanelCreateButton({
   return (
     <Button
       type="button"
-      variant="outline"
-      size="icon"
+      variant="ghost"
       onClick={onClick}
       disabled={disabled || loading}
-      className={cn('create-new-list-btn shrink-0', className)}
+      className={cn(
+        'create-new-list-btn h-11 w-11 min-h-[2.75rem] min-w-[2.75rem] shrink-0 p-0',
+        className
+      )}
       title={title}
     >
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 className="h-5 w-5 animate-spin" />
       ) : (
-        <Plus className="h-4 w-4" style={iconColor ? { color: iconColor } : undefined} />
+        <Plus className="h-5 w-5" style={iconColor ? { color: iconColor } : undefined} />
       )}
     </Button>
   )

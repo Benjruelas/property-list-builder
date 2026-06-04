@@ -14,6 +14,7 @@ import {
   declineTeamInvite,
 } from '@/utils/teams'
 import { TeamDetails } from './TeamDetails'
+import { cn } from '@/lib/utils'
 
 const TEAM_LIST_ITEM_CLASS =
   'teams-panel-list-item map-panel-list-item w-full flex flex-col items-stretch p-3 rounded-lg transition-all cursor-pointer text-left border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98]'
@@ -132,8 +133,16 @@ export function TeamsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={!openTeamId} onOpenChange={(open) => handlePanelDialogOpenChange(open, !!openTeamId, handlePanelBack)}>
-        <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay suppressBackdrop={!!openTeamId}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, !!openTeamId, handlePanelBack)}>
+        <DialogContent
+          className={cn(
+            'map-panel list-panel fullscreen-panel',
+            openTeamId && 'invisible pointer-events-none'
+          )}
+          showCloseButton={false}
+          hideOverlay
+          suppressBackdrop
+        >
           <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your teams and members</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Teams" />

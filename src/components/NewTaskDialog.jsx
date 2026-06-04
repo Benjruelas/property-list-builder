@@ -31,6 +31,7 @@ export function NewTaskDialog({
   leads = [],
   deals = [],
   showDealPicker = true,
+  showLeadPicker = true,
   lockLead = false,
   disableDealClear = false,
   showTeamAssign = false,
@@ -88,7 +89,9 @@ export function NewTaskDialog({
     wasOpenRef.current = true
     setPickerSession((n) => n + 1)
     setTitle(initialTitle || '')
-    setLeadId(initialLeadId || null)
+    const deal = initialDealId ? deals.find((d) => d.id === initialDealId) : null
+    const leadFromDeal = deal ? resolveLeadFromDeal(deal) : null
+    setLeadId(initialLeadId || leadFromDeal?.id || null)
     setDealId(initialDealId || null)
     setScheduledAt(initialScheduledAt ?? null)
     setScheduledEndAt(initialScheduledEndAt ?? null)
@@ -205,7 +208,7 @@ export function NewTaskDialog({
               disableClear={disableDealClear}
             />
           )}
-          {!isEditMode && (
+          {!isEditMode && showLeadPicker && (
             <LeadPickerField
               key={`lead-${pickerSession}`}
               leads={leads}

@@ -96,7 +96,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null }) {
+export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
@@ -899,6 +899,7 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
           }}
           leads={displayLeads}
           taskListEpoch={leadDetailsTaskEpoch}
+          onEditLead={onEditLead}
         />
 
         <EditLeadTaskDialog
