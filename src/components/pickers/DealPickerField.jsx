@@ -7,6 +7,7 @@ import {
   filterDeals,
   dealPrimaryLabel,
   dealSecondaryLabel,
+  dealPipelineLabel,
 } from './entityPickerShared'
 
 function SelectedDealCard({ deal, onClear }) {
@@ -142,6 +143,7 @@ export function DealPickerField({
             ) : (
               filteredDeals.map((d, idx) => {
                 const secondary = dealSecondaryLabel(d)
+                const pipeline = dealPipelineLabel(d)
                 return (
                   <li key={d.id} role="option" aria-selected={highlightIndex === idx}>
                     <button
@@ -158,6 +160,11 @@ export function DealPickerField({
                       {secondary && (
                         <div className="text-xs opacity-60 truncate" title={secondary}>
                           {secondary}
+                        </div>
+                      )}
+                      {pipeline && (
+                        <div className="text-[11px] opacity-45 truncate" title={pipeline}>
+                          Pipe: {pipeline}
                         </div>
                       )}
                     </button>

@@ -20,13 +20,36 @@ export async function fetchLists(getToken) {
   return data.lists || []
 }
 
-export async function createList(getToken, name, parcels = []) {
+export async function createList(getToken, input, parcels = []) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to create lists')
+
+  const opts = typeof input === 'string' ? { name: input, parcels } : { parcels: [], ...input }
+  const {
+    name,
+    parcels: parcelList = parcels,
+    tagIds,
+    tagMeta,
+    visibility,
+    sharedMemberUids,
+    teamShares,
+    teamId,
+    sharedWith,
+  } = opts
+
+  const body = { name: String(name || '').trim(), parcels: parcelList }
+  if (tagIds !== undefined) body.tagIds = tagIds
+  if (tagMeta !== undefined) body.tagMeta = tagMeta
+  if (visibility !== undefined) body.visibility = visibility
+  if (sharedMemberUids !== undefined) body.sharedMemberUids = sharedMemberUids
+  if (teamShares !== undefined) body.teamShares = teamShares
+  if (teamId !== undefined) body.teamId = teamId
+  if (sharedWith !== undefined) body.sharedWith = sharedWith
+
   const res = await fetch(`${getApiBase()}/lists`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name: name.trim(), parcels })
+    body: JSON.stringify(body)
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -37,7 +60,18 @@ export async function createList(getToken, name, parcels = []) {
 }
 
 export async function updateList(getToken, listId, updates = {}) {
-  const { parcels, removeParcels, sharedWith, teamShares, name } = updates
+  const {
+    parcels,
+    removeParcels,
+    sharedWith,
+    teamShares,
+    teamId,
+    visibility,
+    sharedMemberUids,
+    name,
+    tagIds,
+    tagMeta,
+  } = updates
   const token = await getToken()
   if (!token) throw new Error('Sign in to update lists')
   if (listId == null || String(listId).trim() === '') {
@@ -48,7 +82,12 @@ export async function updateList(getToken, listId, updates = {}) {
   if (removeParcels !== undefined) body.removeParcels = removeParcels
   if (sharedWith !== undefined) body.sharedWith = sharedWith
   if (teamShares !== undefined) body.teamShares = teamShares
+  if (teamId !== undefined) body.teamId = teamId
+  if (visibility !== undefined) body.visibility = visibility
+  if (sharedMemberUids !== undefined) body.sharedMemberUids = sharedMemberUids
   if (name !== undefined) body.name = name
+  if (tagIds !== undefined) body.tagIds = tagIds
+  if (tagMeta !== undefined) body.tagMeta = tagMeta
   let res
   try {
     res = await fetch(`${getApiBase()}/lists`, {

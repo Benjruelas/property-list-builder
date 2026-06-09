@@ -613,7 +613,7 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
           </Section>
 
           {/* ---- Notifications ---- */}
-          <Section icon={Bell} title="Notifications" defaultOpen>
+          <Section icon={Bell} title="Notifications" defaultOpen dataTour="settings-notifications-section">
             <p className="text-xs opacity-50 -mt-1 mb-2">
               Collaboration alerts use server push (sign in required). Device alerts work on this browser when permission is granted.
             </p>
@@ -624,14 +624,8 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
             </SettingRow>
             {n.pushEnabled && (
               <>
-                <SettingRow label="List shared with you" description="When someone adds you to a list">
-                  <Toggle checked={n.listShared} onChange={(v) => update({ notifications: { ...n, listShared: v } })} disabled={!getToken} />
-                </SettingRow>
-                <SettingRow label="Pipeline shared with you" description="When someone adds you to a pipeline">
-                  <Toggle checked={n.pipelineShared} onChange={(v) => update({ notifications: { ...n, pipelineShared: v } })} disabled={!getToken} />
-                </SettingRow>
-                <SettingRow label="Path shared with you" description="When someone shares a path with you">
-                  <Toggle checked={n.pathShared} onChange={(v) => update({ notifications: { ...n, pathShared: v } })} disabled={!getToken} />
+                <SettingRow label="Shared item" description="When someone shares a list, pipe, or path with you">
+                  <Toggle checked={n.itemShared !== false} onChange={(v) => update({ notifications: { ...n, itemShared: v } })} disabled={!getToken} />
                 </SettingRow>
                 <SettingRow label="Lead stage changes" description="When a lead moves columns in a shared pipeline">
                   <Toggle checked={n.pipelineLeadStage} onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })} disabled={!getToken} />

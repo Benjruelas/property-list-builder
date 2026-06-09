@@ -106,6 +106,8 @@ export function NewTaskDialog({
   const usesTeamStorage = teamAssignUids.length > 0
   const isTeamContext = teamContextActive || usesTeamStorage
   const showDealField = !isEditMode && showDealPicker
+  const selectedDeal = dealId ? deals.find((d) => d.id === dealId) : null
+  const selectedDealPipeline = selectedDeal?.__pipelineTitle || null
 
   const close = () => onOpenChange?.(false)
 
@@ -207,6 +209,14 @@ export function NewTaskDialog({
               onChange={handleDealChange}
               disableClear={disableDealClear}
             />
+          )}
+          {!isEditMode && selectedDealPipeline && (
+            <div>
+              <label className="text-xs font-medium block mb-1 opacity-90">Pipe</label>
+              <p className="text-sm text-white/75 py-2 px-3 rounded-lg border border-white/15 bg-white/[0.04] truncate">
+                {selectedDealPipeline}
+              </p>
+            </div>
           )}
           {!isEditMode && showLeadPicker && (
             <LeadPickerField

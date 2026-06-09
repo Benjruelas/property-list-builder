@@ -45,4 +45,8 @@ export function dealSecondaryLabel(deal) {
   return leadAddress || leadName || ''
 }
 
+export function dealPipelineLabel(deal) {
+  return (deal?.__pipelineTitle || '').trim() || null
+}
+
 export { displayLeadName, formatLeadAddress }

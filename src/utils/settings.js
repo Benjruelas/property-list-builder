@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS = {
   notifications: {
     pushEnabled: false,
     deviceAlertsEnabled: true,
+    itemShared: true,
     listShared: true,
     pipelineShared: true,
     pipelineLeadStage: true,

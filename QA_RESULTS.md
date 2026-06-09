@@ -142,9 +142,22 @@ Manual run required for: debounce timing (~1.5s) in browser devtools, cross-devi
 
 ## 11. Settings, permissions, onboarding — MANUAL
 
-Static: references confirmed for `DEV_PERSONA_STORAGE_KEY`, `WelcomeTour`, `appSettings` in [src/utils/devPersona.js](src/utils/devPersona.js), [src/components/WelcomeTour.jsx](src/components/WelcomeTour.jsx), [src/utils/settings.js](src/utils/settings.js), [src/components/SettingsPanel.jsx](src/components/SettingsPanel.jsx).
+Static: single linear `WelcomeTour` in [src/components/WelcomeTour.jsx](src/components/WelcomeTour.jsx) — map controls (search → zoom → recenter → compass → multi-select → path) → parcel demo (card, details, add to list, convert to lead) → Pipes / Tasks / Schedule → menu button → menu items top-to-bottom. Wired from [src/App.jsx](src/App.jsx) with `setShowMenu`, `canAccessFeature`. `tourCompleted` in [src/utils/settings.js](src/utils/settings.js). Restart via Settings → **Restart Welcome Tour**.
 
-Manual run required for: first-run tour, permission prompt on iOS, dev persona switch reload behavior, map style / distance unit / reminder offsets.
+`data-tour` hooks: map controls, parcel demo, `menu-pipes` / `action-bar-*`, parcel popup actions.
+
+Manual checklist — **desktop (≥768px)**:
+- [ ] Fresh user (or Settings → Restart Tour): spotlight follows search → zoom → recenter → compass → multi-select → path → parcel demo substeps
+- [ ] Pipes / Tasks / Schedule open hamburger and highlight each item; Menu step closes menu and spotlights hamburger button
+- [ ] Menu tour walks dropdown top-to-bottom (Pipes through Settings); Done on last step sets `tourCompleted`
+- [ ] Team-gated member: steps for disabled features (e.g. Deals, Quotes) are skipped without blank overlay
+
+Manual checklist — **mobile (<768px)**:
+- [ ] Pipes / Tasks / Schedule use `action-bar-pipes`, `action-bar-tasks`, `action-bar-schedule` (menu closed)
+- [ ] Menu step spotlights bottom-bar Menu (`action-bar-menu`); menu tour starts at Activity (desktop-only menu Pipes/Tasks/Schedule steps skipped)
+- [ ] Tooltips clear bottom action bar; orientation change re-measures spotlight
+
+Other manual: permission prompt on iOS, dev persona switch reload, map style / distance unit / reminder offsets.
 
 ---
 

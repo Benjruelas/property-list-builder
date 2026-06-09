@@ -57,18 +57,37 @@ function userInSharedMembers(resource, uid) {
   return ids.includes(uid)
 }
 
-function resourceSharedWithUser(resource, user, team) {
+function isMemberOfTeam(team, uid) {
+  if (!team || !uid) return false
+  return (
+    team.ownerId === uid ||
+    (Array.isArray(team.members) && team.members.some((m) => m.uid === uid))
+  )
+}
+
+function resourceSharedWithUser(resource, user, team, teamsIndex = {}) {
   const r = normalizeResourceVisibility(resource, team?.id)
   if (r.ownerId === user.uid) return true
   if (r.visibility === VISIBILITY.PRIVATE) return false
-  if (!team || r.teamId !== team.id) {
-    if (r.visibility === VISIBILITY.TEAM && Array.isArray(r.teamShares) && r.teamShares.length > 0) {
-      return legacyResolveAccess(r, user, team ? { [team.id]: team } : {}) === 'collaborator'
-    }
-    return false
+
+  if (r.visibility === VISIBILITY.MEMBERS && userInSharedMembers(r, user.uid)) {
+    return true
   }
-  if (r.visibility === VISIBILITY.TEAM) return true
-  if (r.visibility === VISIBILITY.MEMBERS) return userInSharedMembers(r, user.uid)
+
+  const resourceTeam = r.teamId ? teamsIndex[r.teamId] : null
+  if (r.visibility === VISIBILITY.TEAM && resourceTeam && isMemberOfTeam(resourceTeam, user.uid)) {
+    return true
+  }
+
+  if (team && r.teamId === team.id) {
+    if (r.visibility === VISIBILITY.TEAM) return true
+    if (r.visibility === VISIBILITY.MEMBERS) return userInSharedMembers(r, user.uid)
+  }
+
+  if (r.visibility === VISIBILITY.TEAM && Array.isArray(r.teamShares) && r.teamShares.length > 0) {
+    return legacyResolveAccess(r, user, teamsIndex) === 'collaborator'
+  }
+
   return false
 }
 
@@ -92,7 +111,7 @@ export function resolveResourceAccess(resource, user, { team = null, teamsIndex 
     if (r.visibility === VISIBILITY.PRIVATE) return 'admin_view'
   }
 
-  if (resourceSharedWithUser(r, user, team)) return 'collaborator'
+  if (resourceSharedWithUser(r, user, team, teamsIndex)) return 'collaborator'
 
   const legacy = legacyResolveAccess(r, user, teamsIndex)
   if (legacy === 'collaborator') return 'collaborator'

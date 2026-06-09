@@ -16,6 +16,7 @@ import { normalizeDealLineItems } from '@/utils/dealFinances'
 import { fetchQuotes, getCachedDealQuotes, setCachedDealQuotes } from '@/utils/quotes'
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatQuoteMoney } from '@/utils/quoteMath'
+import { TagPicker } from './tags/TagPicker'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -50,6 +51,8 @@ export function DealDetails({
   onCreateQuoteForDeal,
   onOpenQuote,
   canSeeDealAmounts = true,
+  tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
+  onRefreshTags,
 }) {
   const d = closedRecord?.deal || deal
   const pipelineMeta = closedRecord?.closedFrom || pipeline
@@ -285,6 +288,24 @@ export function DealDetails({
               rows={4}
               className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none"
               placeholder="Deal notes…"
+            />
+          </section>
+
+          <section>
+            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Tags</h3>
+            <TagPicker
+              type="deals"
+              entity={d}
+              tagRegistry={tagRegistry}
+              getToken={getToken}
+              onRegistryChange={onRefreshTags}
+              disabled={readOnly || isClosed || !onDealUpdate}
+              hideWhenEmpty={false}
+              showAddTrigger={!readOnly && !isClosed && !!onDealUpdate}
+              inline
+              onTagsChange={({ tagIds, tagMeta }) => {
+                persist({ tagIds, tagMeta })
+              }}
             />
           </section>
 

@@ -16,6 +16,9 @@ import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { updateLead } from '@/utils/leads'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { loadClosedDeals } from '@/utils/closedDeals'
+import { filterByTags, resolveTagMeta } from '@/utils/tags'
+import { PanelFilterMenu } from './tags/PanelFilterMenu'
+import { TagChip } from './tags/TagChip'
 import { showToast } from './ui/toast'
 
 function leadToParcelData(lead) {
@@ -44,7 +47,8 @@ function getColumnName(colId, columns) {
 
 const DEALS_PANEL_MENU_W = 220
 
-function DealCard({ deal, columns, pipelineTitle, lead, onClick, canSeeDealAmounts = true }) {
+function DealCard({ deal, columns, pipelineTitle, lead, onClick, canSeeDealAmounts = true, tagRegistry }) {
+  const tags = resolveTagMeta(deal, tagRegistry, 'deals')
   const stageName = getColumnName(deal.status, columns)
   const timeStr = formatTimeInState(deal)
   const leadName = lead ? displayLeadName(lead) : (deal.leadName || '')
@@ -74,11 +78,19 @@ function DealCard({ deal, columns, pipelineTitle, lead, onClick, canSeeDealAmoun
         )}
         <DealProfitBadge deal={deal} className="text-[11px] ml-auto" canSeeDealAmounts={canSeeDealAmounts} />
       </div>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-0.5">
+          {tags.map((tag) => (
+            <TagChip key={tag.id} tag={tag} size="sm" />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-function ClosedDealCard({ record, onClick, canSeeDealAmounts = true }) {
+function ClosedDealCard({ record, onClick, canSeeDealAmounts = true, tagRegistry }) {
+  const tags = resolveTagMeta(record.deal, tagRegistry, 'deals')
   const d = record.deal
   const closedDate = record.closedAt
     ? new Date(record.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -100,6 +112,13 @@ function ClosedDealCard({ record, onClick, canSeeDealAmounts = true }) {
         )}
         <DealProfitBadge deal={d} className="text-[11px] ml-auto" canSeeDealAmounts={canSeeDealAmounts} />
       </div>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-0.5">
+          {tags.map((tag) => (
+            <TagChip key={tag.id} tag={tag} size="sm" />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -150,8 +169,11 @@ export function DealsPanel({
   pipelinesCount = 0,
   canSeeDealAmounts = true,
   onEditLead,
+  tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
+  onRefreshTags,
 }) {
   const [search, setSearch] = useState('')
+  const [selectedTagIds, setSelectedTagIds] = useState([])
   const [tab, setTab] = useState('active')
   const [collapsedPipelines, setCollapsedPipelines] = useState({})
   const [dealsMenuOpen, setDealsMenuOpen] = useState(false)
@@ -196,6 +218,7 @@ export function DealsPanel({
     const q = search.toLowerCase().trim()
     return allPipelineData.map((p) => {
       let deals = [...p.deals].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      deals = filterByTags(deals, selectedTagIds)
       if (q) {
         deals = deals.filter((d) =>
           (d.title || '').toLowerCase().includes(q) ||
@@ -204,19 +227,23 @@ export function DealsPanel({
         )
       }
       return { ...p, deals }
-    }).filter((p) => p.deals.length > 0 || !search.trim())
-  }, [allPipelineData, search])
+    }).filter((p) => p.deals.length > 0 || (!search.trim() && selectedTagIds.length === 0))
+  }, [allPipelineData, search, selectedTagIds])
 
   const filteredClosed = useMemo(() => {
     const q = search.toLowerCase().trim()
-    const sorted = [...closedDeals].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0))
+    let sorted = [...closedDeals].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0))
+    sorted = filterByTags(
+      sorted.map((r) => ({ ...r, tagIds: r.deal?.tagIds || [] })),
+      selectedTagIds
+    )
     if (!q) return sorted
     return sorted.filter((r) =>
       (r.deal?.title || '').toLowerCase().includes(q) ||
       (r.deal?.leadAddress || '').toLowerCase().includes(q) ||
       (r.closedFrom?.title || '').toLowerCase().includes(q)
     )
-  }, [closedDeals, search])
+  }, [closedDeals, search, selectedTagIds])
 
   const toggleCollapse = (pid) => setCollapsedPipelines((prev) => ({ ...prev, [pid]: !prev[pid] }))
 
@@ -243,13 +270,14 @@ export function DealsPanel({
   }, [onGoToParcelOnMap, onCloseLeadOverlay, onCloseDealDetail])
 
   const handleLeadUpdate = useCallback(async (updated) => {
+    onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
     try {
       const saved = await updateLead(getToken, updated.id, updated)
-      onLeadsChange?.(leads.map((l) => (l.id === saved.id ? saved : l)))
+      onLeadsChange?.((prev) => prev.map((l) => (l.id === saved.id ? saved : l)))
     } catch (e) {
       showToast(e.message || 'Could not update lead', 'error')
     }
-  }, [getToken, leads, onLeadsChange])
+  }, [getToken, onLeadsChange])
 
   const openLeadFromDeal = useCallback((lead) => {
     if (!lead?.id) return
@@ -337,6 +365,7 @@ export function DealsPanel({
           instantDismiss={instantDismiss && !isOpen}
           onInteractOutside={(e) => {
             if (e.target.closest?.('[data-deals-panel-menu]')) e.preventDefault()
+            if (e.target.closest?.('[data-panel-filter-menu]')) e.preventDefault()
           }}
         >
           <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
@@ -379,15 +408,22 @@ export function DealsPanel({
                 </button>
               </div>
 
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search deals by title, lead, or pipe…"
-                  className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
-                  aria-label="Search deals"
+              <div className="flex gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search deals by title, lead, or pipe…"
+                    className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+                    aria-label="Search deals"
+                  />
+                </div>
+                <PanelFilterMenu
+                  tags={tagRegistry.deals || []}
+                  selectedTagIds={selectedTagIds}
+                  onTagIdsChange={setSelectedTagIds}
                 />
               </div>
             </div>
@@ -401,7 +437,9 @@ export function DealsPanel({
               ) : activeDealCount === 0 ? (
                 <div className="text-center py-12">
                   <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm opacity-60">No deals match your search.</p>
+                  <p className="text-sm opacity-60">
+                    {selectedTagIds.length > 0 ? 'No deals match the selected tags.' : 'No deals match your search.'}
+                  </p>
                 </div>
               ) : (
                 filteredPipelines.map((pipeline) => {
@@ -432,6 +470,7 @@ export function DealsPanel({
                               lead={deal.leadId ? leads.find((l) => l.id === deal.leadId) : null}
                               onClick={(d) => onOpenDealDetail?.(d.id, pipeline.id)}
                               canSeeDealAmounts={canSeeDealAmounts}
+                              tagRegistry={tagRegistry}
                             />
                           ))}
                         </div>
@@ -451,14 +490,16 @@ export function DealsPanel({
                 ) : (
                   <>
                     <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm opacity-60">No closed deals match your search.</p>
+                    <p className="text-sm opacity-60">
+                      {selectedTagIds.length > 0 ? 'No closed deals match the selected tags.' : 'No closed deals match your search.'}
+                    </p>
                   </>
                 )}
               </div>
             ) : (
               <div className="space-y-1.5">
                 {filteredClosed.map((r) => (
-                  <ClosedDealCard key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} canSeeDealAmounts={canSeeDealAmounts} />
+                  <ClosedDealCard key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} canSeeDealAmounts={canSeeDealAmounts} tagRegistry={tagRegistry} />
                 ))}
               </div>
             )}
@@ -534,6 +575,8 @@ export function DealsPanel({
           onOpenQuote={onOpenQuoteFromDeal}
           quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
+          tagRegistry={tagRegistry}
+          onRefreshTags={onRefreshTags}
         />
       )}
 
@@ -570,6 +613,8 @@ export function DealsPanel({
           topLayer
           currentUserId={currentUserId}
           onEditLead={onEditLead}
+          tagRegistry={tagRegistry}
+          onRefreshTags={onRefreshTags}
         />
       )}
 

@@ -11,7 +11,7 @@ import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
 import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
 import { addTeamTask } from '@/utils/teamTasks'
 import { flattenTeamTasks, getAllTeamMembers } from '@/utils/teamTaskUtils'
-import { flattenDealsFromPipelines } from '@/utils/deals'
+import { flattenDealsFromPipelines, findDealInPipelines } from '@/utils/deals'
 import { NewTaskDialog } from './NewTaskDialog'
 import { fetchTeamTasks } from '@/utils/tasks'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
@@ -305,19 +305,28 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
       showToast('End time must be after start time', 'error')
       return
     }
-    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
-    const parcelId = lead?.parcelId ? String(lead.parcelId) : null
     const dealId = addTaskDealId || null
+    const deal = dealId ? allDeals.find((d) => d.id === dealId) : null
+    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
+    const parcelId = deal?.parcelId
+      ? String(deal.parcelId)
+      : (lead?.parcelId ? String(lead.parcelId) : null)
     const payload = { title: trimmed, scheduledAt, scheduledEndAt: endAt, parcelId, dealId, assignedUids }
 
-    if (parcelId) {
-      // Lead suggestion carries __pipelineId when picked from an API pipe
-      const lead = displayLeads.find((l) => l.parcelId === parcelId)
-      if (lead?.__pipelineId) {
-        finalizeTaskCreate({ ...payload, pipelineId: lead.__pipelineId })
+    if (dealId && apiMode) {
+      const pipelineId = deal?.__pipelineId || findDealInPipelines(pipelines, dealId).pipeline?.id
+      if (pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId })
         return
       }
-      // API mode but __pipelineId missing — look up all pipes containing this parcel
+    }
+
+    if (parcelId) {
+      const leadForParcel = displayLeads.find((l) => l.parcelId === parcelId)
+      if (leadForParcel?.__pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId: leadForParcel.__pipelineId })
+        return
+      }
       if (apiMode) {
         const owning = pipelinesContainingParcel(pipelines, parcelId)
         if (owning.length === 1) {
@@ -336,14 +345,6 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
       }
       finalizeTaskCreate({ ...payload, pipelineId: null })
       return
-    }
-
-    if (dealId && apiMode) {
-      const deal = allDeals.find((d) => d.id === dealId)
-      if (deal?.__pipelineId) {
-        finalizeTaskCreate({ ...payload, pipelineId: deal.__pipelineId })
-        return
-      }
     }
 
     // No parcel selected

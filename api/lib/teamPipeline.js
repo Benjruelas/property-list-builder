@@ -2,18 +2,7 @@
  * Create team Pipe in user_pipelines KV (shared helper for teams API).
  */
 
-const DEFAULT_COLUMNS = [
-  'Make Contact',
-  'Roof Inspection',
-  'File Claim',
-  'Service Agreement',
-  "Adjuster's Meeting",
-  'Scope of Loss',
-  'Appraisal',
-  'Ready for Install',
-  'Install Scheduled',
-  'Installed',
-]
+const DEFAULT_COLUMNS = ['Open', 'Pending', 'Closed']
 
 function normalizeColumns(cols) {
   if (!Array.isArray(cols) || cols.length === 0) {

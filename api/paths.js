@@ -21,6 +21,7 @@ import {
   applyResourceVisibilityPatch,
   activityAudienceForResource,
 } from './lib/resourceContext.js'
+import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
 
 let kv = null
 let kvAvailable = false
@@ -133,12 +134,26 @@ export default async function handler(req, res) {
       }
       const city =
         typeof cityRaw === 'string' ? cityRaw.trim().slice(0, 160) : ''
-      const newPath = {
+      const tagRegistry = (body.tagIds !== undefined || body.tagMeta !== undefined)
+        ? await loadTagRegistry(kv, user.uid)
+        : null
+      let tags = { tagIds: [], tagMeta: [] }
+      try {
+        tags = mergeEntityTags(body, null, tagRegistry, 'paths')
+      } catch (e) {
+        return res.status(400).json({ error: e.message })
+      }
+      const [all, allTeams] = await Promise.all([getAllPaths(), getAllTeams()])
+      const ctx = buildAccessContext(allTeams, user)
+
+      let newPath = {
         id: `path_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
         name: name.trim(),
         points,
         distanceMiles: typeof distanceMiles === 'number' ? distanceMiles : 0,
         city,
+        tagIds: tags.tagIds,
+        tagMeta: tags.tagMeta,
         ownerId: user.uid,
         ownerEmail: user.email,
         sharedWith: [],
@@ -148,9 +163,60 @@ export default async function handler(req, res) {
         sharedMemberUids: [],
         createdAt: new Date().toISOString()
       }
-      const all = await getAllPaths()
+
+      if (body.sharedWith !== undefined) {
+        const arr = Array.isArray(body.sharedWith) ? body.sharedWith : []
+        const emails = arr.map((e) => (e && String(e).trim()).toLowerCase()).filter(Boolean)
+        newPath.sharedWith = [...new Set(emails)]
+      }
+
+      if (body.teamShares !== undefined) {
+        const arr = Array.isArray(body.teamShares) ? body.teamShares : []
+        const unique = [...new Set(arr.filter(Boolean))]
+        for (const tid of unique) {
+          const team = ctx.teamsIndex[tid]
+          if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
+          const isMember =
+            team.ownerId === user.uid ||
+            (Array.isArray(team.members) && team.members.some((m) => m.uid === user.uid))
+          if (!isMember) {
+            return res.status(403).json({ error: 'You must be a member of each team you share with' })
+          }
+        }
+        newPath.teamShares = unique
+      }
+
+      if (body.visibility !== undefined || body.sharedMemberUids !== undefined) {
+        try {
+          const patched = applyResourceVisibilityPatch(newPath, body, ctx)
+          newPath.visibility = patched.visibility
+          newPath.teamId = patched.teamId
+          newPath.sharedMemberUids = patched.sharedMemberUids
+          if (patched.teamShares?.length) newPath.teamShares = patched.teamShares
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+      }
+
       all.push(newPath)
       await saveAllPaths(all)
+
+      try {
+        const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+        await runResourceShareNotifications({
+          resource: newPath,
+          resourceType: 'path',
+          nameField: 'name',
+          newlyAddedEmails: newPath.sharedWith || [],
+          newlyAddedTeamShares: newPath.teamShares || [],
+          team: ctx.team,
+          teamsIndex: ctx.teamsIndex,
+          actor: user,
+        })
+      } catch (e) {
+        console.warn('path create share notify', e.message)
+      }
+
       return res.status(201).json({ path: newPath })
     }
 
@@ -180,6 +246,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'No permitted updates' })
       }
 
+      const prevSharedMemberUids = [...(path.sharedMemberUids || [])]
       const prevSharedSet = new Set(
         (path.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
@@ -224,6 +291,24 @@ export default async function handler(req, res) {
           path.teamId = patched.teamId
           path.sharedMemberUids = patched.sharedMemberUids
           if (patched.teamShares?.length) path.teamShares = patched.teamShares
+          if (patched.visibility === 'team' && ctx.team?.id) {
+            const { teamShareAddedOnVisibility } = await import('./lib/shareNotifications.js')
+            newlyAddedTeamShares = [
+              ...newlyAddedTeamShares,
+              ...teamShareAddedOnVisibility(prevTeamShares, ctx.team.id),
+            ]
+          }
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+      }
+
+      if (body.tagIds !== undefined || body.tagMeta !== undefined) {
+        const tagRegistry = await loadTagRegistry(kv, user.uid)
+        try {
+          const tags = mergeEntityTags(body, path, tagRegistry, 'paths')
+          path.tagIds = tags.tagIds
+          path.tagMeta = tags.tagMeta
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }
@@ -233,29 +318,22 @@ export default async function handler(req, res) {
       all[idx] = path
       await saveAllPaths(all)
 
-      if (newlyAddedPathShares.length > 0) {
+      if (canShare) {
         try {
-          const { notifyNewPathShares } = await import('./push-utils.js')
-          await notifyNewPathShares(newlyAddedPathShares, {
-            pathName: path.name,
-            pathId: path.id,
-            actorEmail: user.email
+          const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+          await runResourceShareNotifications({
+            resource: path,
+            resourceType: 'path',
+            nameField: 'name',
+            prevSharedMemberUids,
+            newlyAddedEmails: newlyAddedPathShares,
+            newlyAddedTeamShares,
+            team: ctx.team,
+            teamsIndex: ctx.teamsIndex,
+            actor: user,
           })
         } catch (e) {
           console.warn('path push notify', e.message)
-        }
-      }
-      if (newlyAddedTeamShares.length > 0) {
-        try {
-          const { notifyTeamResourceShare } = await import('./push-utils.js')
-          await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
-            resourceType: 'path',
-            resourceName: path.name,
-            resourceId: path.id,
-            actorEmail: user.email
-          })
-        } catch (e) {
-          console.warn('path team push notify', e.message)
         }
       }
 

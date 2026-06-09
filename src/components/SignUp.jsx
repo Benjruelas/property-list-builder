@@ -83,7 +83,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
         onClose()
       }
     }}>
-      <DialogContent className="map-panel max-w-md" showCloseButton={false}>
+      <DialogContent className="map-panel auth-dialog max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold flex items-center gap-2">
             <UserPlus className="h-6 w-6" />

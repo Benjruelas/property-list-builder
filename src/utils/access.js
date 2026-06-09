@@ -38,19 +38,49 @@ export function isTeamAdmin(team, uid) {
   return getTeamMemberRole(team, uid) === 'admin'
 }
 
-function sharedWithUser(resource, uid, teamId) {
+function teamById(teams, teamId) {
+  if (!teamId || !Array.isArray(teams)) return null
+  return teams.find((t) => t.id === teamId) || null
+}
+
+function isMemberOfTeam(team, uid) {
+  if (!team || !uid) return false
+  return (
+    team.ownerId === uid ||
+    (team.members || []).some((m) => m.uid === uid)
+  )
+}
+
+function sharedWithUser(resource, uid, activeTeam, teams = []) {
   const r = normalizeResourceVisibility(resource)
   if (r.ownerId === uid) return true
   if (r.visibility === VISIBILITY.PRIVATE) return false
-  if (r.teamId && teamId && r.teamId !== teamId) return false
-  if (r.visibility === VISIBILITY.TEAM) return true
-  if (r.visibility === VISIBILITY.MEMBERS) {
-    return (r.sharedMemberUids || []).includes(uid)
+
+  if (r.visibility === VISIBILITY.MEMBERS && (r.sharedMemberUids || []).includes(uid)) {
+    return true
   }
+
+  const resourceTeam = teamById(teams, r.teamId)
+  if (r.visibility === VISIBILITY.TEAM && resourceTeam && isMemberOfTeam(resourceTeam, uid)) {
+    return true
+  }
+
+  if (activeTeam && r.teamId === activeTeam.id) {
+    if (r.visibility === VISIBILITY.TEAM) return true
+    if (r.visibility === VISIBILITY.MEMBERS) return (r.sharedMemberUids || []).includes(uid)
+  }
+
+  if (Array.isArray(r.teamShares) && r.teamShares.length > 0) {
+    for (const tid of r.teamShares) {
+      const t = teamById(teams, tid)
+      if (t && isMemberOfTeam(t, uid)) return true
+    }
+  }
+
   return false
 }
 
-export function resolveResourceAccess(resource, user, team = null) {
+export function resolveResourceAccess(resource, user, team = null, teams = []) {
   if (!resource || !user?.uid) return null
   const r = normalizeResourceVisibility(resource)
   if (r.ownerId === user.uid) return 'owner'
@@ -63,10 +93,12 @@ export function resolveResourceAccess(resource, user, team = null) {
     return 'admin'
   }
 
-  if (sharedWithUser(r, user.uid, team?.id)) return 'collaborator'
+  if (sharedWithUser(r, user.uid, team, teams)) return 'collaborator'
 
-  if (Array.isArray(r.teamShares) && r.teamShares.length > 0 && team) {
-    if (r.teamShares.includes(team.id)) return 'collaborator'
+  const email = (user.email || '').toLowerCase().trim()
+  if (email && Array.isArray(r.sharedWith)) {
+    const hit = r.sharedWith.some((e) => (e || '').toLowerCase().trim() === email)
+    if (hit) return 'collaborator'
   }
 
   return null

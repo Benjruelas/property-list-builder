@@ -1,14 +1,21 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Eye, Trash2, Check, MoreVertical, FileDown, Share2, Users, Pencil } from 'lucide-react'
+import { X, Plus, Eye, Trash2, Check, MoreVertical, FileDown, Share2, Users, Pencil, Tag } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { Input } from './ui/input'
-import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
+import { VisibilityBadge } from './ResourceSharePicker'
+import { ShareResourceDialog } from './ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
+import { filterByTags } from '@/utils/tags'
+import { updateList } from '@/utils/lists'
+import { PanelFilterMenu } from './tags/PanelFilterMenu'
+import { EntityTagPills } from './tags/EntityTagPills'
+import { TagPicker } from './tags/TagPicker'
+import { CreateListDialog } from './CreateListDialog'
 
 const LIST_HIGHLIGHT_COLORS = [
   '#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626',
@@ -29,6 +36,7 @@ export function ListPanel({
   selectedParcelsCount,
   lists = [],
   onListsChange,
+  onListPatch,
   onDeleteList,
   onRenameList,
   onShareList,
@@ -36,14 +44,22 @@ export function ListPanel({
   teams = [],
   teamMembership = null,
   onValidateShareEmail,
-  onCreateList,
   onViewListContents,
   onExportList,
   isAddingSingleParcel = false,
   isBulkEmailMode = false,
   /** Matches Settings → Parcel boundary color (list add / multi-select prompts). */
   parcelBoundaryColor = '#2563eb',
+  getToken,
+  tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
+  onRefreshTags,
 }) {
+  const [selectedTagIds, setSelectedTagIds] = useState([])
+  const [tagEditListId, setTagEditListId] = useState(null)
+  const [tagPickerOpen, setTagPickerOpen] = useState(false)
+  const [tagPickerAnchorPosition, setTagPickerAnchorPosition] = useState(null)
+  const tagPickerAnchorRef = useRef(null)
+  const tagPickerPortalRef = useRef(null)
   const parcelPromptBannerStyle =
     typeof parcelBoundaryColor === 'string' && /^#[0-9A-Fa-f]{6}$/i.test(parcelBoundaryColor)
       ? {
@@ -61,9 +77,7 @@ export function ListPanel({
   const addParcelsBtnHoverLeave = (e) => {
     e.currentTarget.style.backgroundColor = 'transparent'
   }
-  const [newListName, setNewListName] = useState('')
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [openDropdownListId, setOpenDropdownListId] = useState(null)
   const [dropdownAnchor, setDropdownAnchor] = useState(null)
   const [renamingListId, setRenamingListId] = useState(null)
@@ -159,6 +173,7 @@ export function ListPanel({
   const openDropdown = (listId, event) => {
     event.stopPropagation()
     const el = event.currentTarget
+    tagPickerAnchorRef.current = el
     const rect = el.getBoundingClientRect()
     let top = rect.bottom + 4
     let left = rect.right - MENU_WIDTH
@@ -178,24 +193,6 @@ export function ListPanel({
   useEffect(() => {
     if (isOpen && onListsChange) onListsChange()
   }, [isOpen, onListsChange])
-
-  const handleCreateList = async () => {
-    if (!newListName.trim()) {
-      showToast('Please enter a list name', 'error')
-      return
-    }
-    setIsCreating(true)
-    try {
-      if (onCreateList) await onCreateList(newListName.trim())
-      setNewListName('')
-      setShowCreateForm(false)
-      showToast('List created', 'success')
-    } catch (error) {
-      showToast(error.message || 'Failed to create list', 'error')
-    } finally {
-      setIsCreating(false)
-    }
-  }
 
   const handleRenameSubmit = async (listId) => {
     const trimmed = renameValue.trim()
@@ -265,7 +262,28 @@ export function ListPanel({
   }
 
   const allLists = lists || []
+  const filteredLists = useMemo(
+    () => filterByTags(allLists, selectedTagIds),
+    [allLists, selectedTagIds]
+  )
   const isListOwnedByUser = (list) => list?.ownerId === currentUser?.uid
+
+  const handleListTagsChange = useCallback(async (listId, { tagIds, tagMeta }) => {
+    if (!getToken) return
+    const previous = allLists.find((l) => l.id === listId)
+    onListPatch?.(listId, { tagIds, tagMeta })
+    try {
+      const saved = await updateList(getToken, listId, { tagIds, tagMeta })
+      onListPatch?.(listId, { tagIds: saved.tagIds, tagMeta: saved.tagMeta })
+      return saved
+    } catch (e) {
+      if (previous) {
+        onListPatch?.(listId, { tagIds: previous.tagIds, tagMeta: previous.tagMeta })
+      }
+      showToast(e.message || 'Could not update tags', 'error')
+      throw e
+    }
+  }, [getToken, allLists, onListPatch])
 
   useEffect(() => {
     if (!shareListId) {
@@ -278,7 +296,7 @@ export function ListPanel({
       visibility: norm.visibility || VISIBILITY.PRIVATE,
       sharedMemberUids: norm.sharedMemberUids || [],
     })
-  }, [shareListId, allLists])
+  }, [shareListId])
 
   const handleShareChange = useCallback(
     (next) => {
@@ -329,13 +347,23 @@ export function ListPanel({
         hideOverlay
         onInteractOutside={(e) => {
           if (e.target.closest?.('[data-list-panel-dropdown]')) e.preventDefault()
+          if (e.target.closest?.('[data-tag-picker-menu]')) e.preventDefault()
+          if (e.target.closest?.('[data-tag-picker-trigger]')) e.preventDefault()
+          if (e.target.closest?.('[data-panel-filter-menu]')) e.preventDefault()
         }}
       >
         <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Manage your property lists, add parcels, and share lists</DialogDescription>
           <PanelHeader onBack={handlePanelBack} title="Lists">
+            {allLists.length > 0 && (
+              <PanelFilterMenu
+                tags={tagRegistry.lists || []}
+                selectedTagIds={selectedTagIds}
+                onTagIdsChange={setSelectedTagIds}
+              />
+            )}
             <PanelCreateButton
-              onClick={() => setShowCreateForm(true)}
+              onClick={() => setShowCreateDialog(true)}
               title="Create new list"
               iconColor={parcelBoundaryColor}
             />
@@ -358,49 +386,14 @@ export function ListPanel({
               Select a list to send emails to
             </div>
           )}
-          {showCreateForm && (
-            <div className="mb-4 space-y-3 create-list-form">
-              <input
-                type="text"
-                placeholder="List name"
-                value={newListName}
-                onChange={(e) => setNewListName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleCreateList()}
-                autoFocus
-                disabled={isCreating}
-                className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-              />
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline"
-                  onClick={handleCreateList}
-                  disabled={isCreating}
-                  className="flex-1 create-list-btn"
-                >
-                  {isCreating ? 'Creating...' : 'Create'}
-                </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => {
-                    setShowCreateForm(false)
-                    setNewListName('')
-                  }}
-                  disabled={isCreating}
-                  className="flex-1 create-list-btn"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {!showCreateForm && (
           <div className="space-y-4">
             {allLists.length === 0 ? (
               <p className="text-center text-gray-500 py-8 text-sm">No lists yet. Create one to get started!</p>
+            ) : filteredLists.length === 0 ? (
+              <p className="text-center text-gray-500 py-8 text-sm">No lists match the selected tags.</p>
             ) : (
               <div className="space-y-2">
-                {allLists.map(list => {
+                {filteredLists.map(list => {
                       const isSelected = selectedListIds.includes(list.id)
                       const listColorIndex = isSelected ? selectedListIds.indexOf(list.id) : -1
                       const listColor = listColorIndex >= 0 ? LIST_HIGHLIGHT_COLORS[listColorIndex] : undefined
@@ -475,6 +468,12 @@ export function ListPanel({
                             <VisibilityBadge resource={list} />
                           </div>
                           <span className="text-xs text-gray-500">{list.parcels?.length ?? 0} parcels</span>
+                          <EntityTagPills
+                            entity={list}
+                            tagRegistry={tagRegistry}
+                            type="lists"
+                            className="mt-1"
+                          />
                         </div>
                         {selectedParcelsCount > 0 && (
                           <button
@@ -531,104 +530,55 @@ export function ListPanel({
                   </div>
                 )}
               </div>
-          )}
         </div>
+        <div ref={tagPickerPortalRef} className="contents" aria-hidden />
       </DialogContent>
     </Dialog>
 
-    {shareListId && (
-      <Dialog open={!!shareListId} onOpenChange={(open) => { if (!open) { setShareListId(null); setShareEmail('') } }}>
-        <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay>
-          <DialogHeader>
-            <DialogTitle>Share list</DialogTitle>
-            <DialogDescription className="sr-only">Enter an email address to share this list</DialogDescription>
-          </DialogHeader>
-          {(() => {
-            const list = allLists.find((l) => l.id === shareListId)
-            const currentShared = list?.sharedWith || []
-            const isShared = currentShared.length > 0
-            const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
-            const activeTeam = teams?.[0] || null
-            const allowExternalSharing = teamMembership?.allowExternalSharing === true
-            return (
-              <>
-                {onShareListWithTeams && activeTeam && (
-                  <ResourceSharePicker
-                    team={activeTeam}
-                    visibility={shareState.visibility}
-                    sharedMemberUids={shareState.sharedMemberUids}
-                    onChange={handleShareChange}
-                    allowExternalSharing={allowExternalSharing}
-                  />
-                )}
-                {allowExternalSharing && isShared && (
-                  <div className="mb-4">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
-                    <ul className="space-y-1.5">
-                      {currentShared.map((email) => (
-                        <li
-                          key={email}
-                          className="group flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-md bg-black/10 hover:bg-black/15 transition-colors"
-                        >
-                          <span className="text-sm text-gray-200 truncate">{email}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSharedEmail(email)}
-                            className="opacity-40 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-red-500/30 text-gray-400 hover:text-red-400 transition-opacity"
-                            title="Remove from share list"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {allowExternalSharing && (
-                  <>
-                <Input
-                  type="email"
-                  placeholder="user@example.com"
-                  value={shareEmail}
-                  onChange={(e) => setShareEmail(e.target.value)}
-                  className={cn(
-                    'mb-1',
-                    shareEmailValid === true && 'border-green-600 ring-green-500/50',
-                    shareEmailValid === false && shareEmail.trim() && 'border-red-500'
-                  )}
-                />
-                {shareEmailError && (
-                  <p className="text-sm text-red-500 mb-3">{shareEmailError}</p>
-                )}
-                {!shareEmailError && shareEmail.trim() && isValidatingShare && (
-                  <p className="text-sm text-gray-500 mb-3">Checking...</p>
-                )}
-                <div className="flex gap-2 flex-wrap">
-                  <Button
-                    onClick={handleShareSave}
-                    disabled={!!(shareEmail.trim() && shareEmailValid === false)}
-                    className={cn(
-                      'flex-1 min-w-0 share-dialog-btn',
-                      shareEmailValid === true && 'share-save-valid'
-                    )}
-                  >
-                    {isValidatingShare ? 'Checking...' : 'Share'}
-                  </Button>
-                  <Button variant="outline" onClick={() => { setShareListId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Cancel</Button>
-                </div>
-                  </>
-                )}
-                {!allowExternalSharing && (
-                  <div className="flex gap-2 flex-wrap mt-2">
-                    <Button variant="outline" onClick={() => { setShareListId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Done</Button>
-                  </div>
-                )}
-              </>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
-    )}
+    <CreateListDialog
+      open={showCreateDialog}
+      onOpenChange={setShowCreateDialog}
+      getToken={getToken}
+      onCreated={() => onListsChange?.()}
+      teams={teams}
+      teamMembership={teamMembership}
+      tagRegistry={tagRegistry}
+      onRefreshTags={onRefreshTags}
+      nestedOverlay
+    />
+
+    {shareListId && (() => {
+      const list = allLists.find((l) => l.id === shareListId)
+      const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+      const activeTeam = teams?.[0] || null
+      const allowExternalSharing = teamMembership?.allowExternalSharing === true
+      const closeShareList = () => {
+        setShareListId(null)
+        setShareEmail('')
+        setShareEmailValid(null)
+        setShareEmailError('')
+      }
+      return (
+        <ShareResourceDialog
+          open={!!shareListId}
+          onOpenChange={(open) => { if (!open) closeShareList() }}
+          title="Share list"
+          team={activeTeam}
+          showTeamPicker={Boolean(onShareListWithTeams && activeTeam)}
+          shareState={shareState}
+          onShareStateChange={handleShareChange}
+          allowExternalSharing={allowExternalSharing}
+          sharedWithEmails={list?.sharedWith || []}
+          onRemoveSharedEmail={handleRemoveSharedEmail}
+          shareEmail={shareEmail}
+          onShareEmailChange={setShareEmail}
+          shareEmailValid={shareEmailValid}
+          shareEmailError={shareEmailError}
+          isValidatingShare={isValidatingShare}
+          onShareEmailSave={handleShareSave}
+        />
+      )
+    })()}
 
     {openDropdownListId && dropdownAnchor && typeof document !== 'undefined' && createPortal(
       (() => {
@@ -665,6 +615,31 @@ export function ListPanel({
                   Rename list
                 </button>
               )}
+              {getToken && isListOwnedByUser(list) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = tagPickerAnchorRef.current
+                    if (el) {
+                      const rect = el.getBoundingClientRect()
+                      setTagPickerAnchorPosition({
+                        top: rect.bottom + 4,
+                        left: Math.max(MENU_PADDING, rect.right - 220),
+                        minWidth: 220,
+                      })
+                    } else {
+                      setTagPickerAnchorPosition({ top: 80, left: 24, minWidth: 220 })
+                    }
+                    setTagEditListId(list.id)
+                    closeDropdown()
+                    requestAnimationFrame(() => setTagPickerOpen(true))
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
+                >
+                  <Tag className="h-4 w-4 flex-shrink-0" />
+                  Tags
+                </button>
+              )}
               {isListOwnedByUser(list) && (
                 <div
                   role="button"
@@ -682,6 +657,28 @@ export function ListPanel({
         )
       })(),
       document.getElementById('modal-root') || document.body
+    )}
+
+    {tagEditListId && tagPickerOpen && (
+      <TagPicker
+        type="lists"
+        entity={allLists.find((l) => l.id === tagEditListId)}
+        tagRegistry={tagRegistry}
+        getToken={getToken}
+        onRegistryChange={onRefreshTags}
+        hideWhenEmpty={false}
+        open={tagPickerOpen}
+        onOpenChange={(open) => {
+          setTagPickerOpen(open)
+          if (!open) {
+            setTagEditListId(null)
+            setTagPickerAnchorPosition(null)
+          }
+        }}
+        anchorPosition={tagPickerAnchorPosition}
+        portalContainerRef={tagPickerPortalRef}
+        onTagsChange={(tags) => handleListTagsChange(tagEditListId, tags)}
+      />
     )}
     </>
   )

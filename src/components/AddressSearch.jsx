@@ -127,30 +127,32 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
         </div>
       )}
 
-      <Button
-        onClick={() => {
-          onCloseParcelPopup?.()
-          mapInstanceRef?.current?.zoomIn()
-        }}
-        size="icon"
-        variant="glass-outline"
-        className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
-        title="Zoom in"
-      >
-        <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
-      </Button>
-      <Button
-        onClick={() => {
-          onCloseParcelPopup?.()
-          mapInstanceRef?.current?.zoomOut()
-        }}
-        size="icon"
-        variant="glass-outline"
-        className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
-        title="Zoom out"
-      >
-        <Minus className="h-6 w-6 sm:h-5 sm:w-5" />
-      </Button>
+      <div className="flex flex-col gap-2" data-tour="zoom-controls">
+        <Button
+          onClick={() => {
+            onCloseParcelPopup?.()
+            mapInstanceRef?.current?.zoomIn()
+          }}
+          size="icon"
+          variant="glass-outline"
+          className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+          title="Zoom in"
+        >
+          <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
+        </Button>
+        <Button
+          onClick={() => {
+            onCloseParcelPopup?.()
+            mapInstanceRef?.current?.zoomOut()
+          }}
+          size="icon"
+          variant="glass-outline"
+          className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+          title="Zoom out"
+        >
+          <Minus className="h-6 w-6 sm:h-5 sm:w-5" />
+        </Button>
+      </div>
 
       {showResultsPanel && (
         <div

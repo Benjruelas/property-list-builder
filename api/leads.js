@@ -15,6 +15,7 @@ import {
   actorLabel,
   teamIdsFromResource,
 } from './lib/activityLog.js'
+import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
 
 /**
  * User-scoped leads CRM with team sharing v2. Firebase Bearer auth.
@@ -97,7 +98,7 @@ function leadDisplayName(lead) {
   return (lead?.address || 'Lead').trim()
 }
 
-function normalizeLeadInput(body, user, existing = null, ctx = null) {
+function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry = null) {
   const now = new Date().toISOString()
   const firstName = String(body.firstName ?? existing?.firstName ?? '').trim()
   const lastName = String(body.lastName ?? existing?.lastName ?? '').trim()
@@ -127,6 +128,10 @@ function normalizeLeadInput(body, user, existing = null, ctx = null) {
     createdAt: existing?.createdAt || now,
     updatedAt: now,
   }
+
+  const tags = mergeEntityTags(body, existing, tagRegistry, 'leads')
+  base.tagIds = tags.tagIds
+  base.tagMeta = tags.tagMeta
 
   if (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined) {
     return applyResourceVisibilityPatch(base, body, ctx)
@@ -180,9 +185,12 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
+      const tagRegistry = (body.tagIds !== undefined || body.tagMeta !== undefined)
+        ? await loadTagRegistry(kv, user.uid)
+        : null
       let lead
       try {
-        lead = normalizeLeadInput(body, user, null, ctx)
+        lead = normalizeLeadInput(body, user, null, ctx, tagRegistry)
       } catch (e) {
         return res.status(400).json({ error: e.message })
       }
@@ -228,9 +236,12 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Only the lead owner can change sharing' })
       }
 
+      const tagRegistry = (body.tagIds !== undefined || body.tagMeta !== undefined)
+        ? await loadTagRegistry(kv, user.uid)
+        : null
       let lead
       try {
-        lead = normalizeLeadInput(body, user, existing, ctx)
+        lead = normalizeLeadInput(body, user, existing, ctx, tagRegistry)
       } catch (e) {
         return res.status(400).json({ error: e.message })
       }

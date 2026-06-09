@@ -36,29 +36,41 @@ function isMapPanelClassName(className) {
   return typeof className === 'string' && /\bmap-panel\b/.test(className)
 }
 
+function interactionTarget(e) {
+  const target = e?.target
+  if (target?.closest) return target
+  return e?.detail?.originalEvent?.target ?? target
+}
+
 /** Prevents Radix Dialog from closing when the user interacts inside portaled UI (schedule picker, lead task/pipe menus, toasts). */
 const preventCloseWhenNestedOverlay = (e, existing) => {
+  const target = interactionTarget(e)
   if (
-    e.target?.closest?.('.schedule-picker-panel') ||
-    e.target?.closest?.('[data-task-menu]') ||
-    e.target?.closest?.('[data-lead-details-menu]') ||
-    e.target?.closest?.('[data-deal-details-menu]') ||
-    e.target?.closest?.('[data-deal-line-items-menu]') ||
-    e.target?.closest?.('[data-options-menu]') ||
-    e.target?.closest?.('[data-confirm-dialog]') ||
-    e.target?.closest?.('[data-send-quote-dialog]') ||
-    e.target?.closest?.('[data-pipe-menu]') ||
-    e.target?.closest?.('[data-deals-panel-menu]') ||
-    e.target?.closest?.('[data-quotes-panel-menu]') ||
-    e.target?.closest?.('[data-deal-template-menu]') ||
-    e.target?.closest?.('[data-toast-container]') ||
-    e.target?.closest?.('[data-toast-item]') ||
-    e.target?.closest?.('.hail-data-panel') ||
-    e.target?.closest?.('.parcel-details-panel') ||
-    e.target?.closest?.('.lead-details-panel') ||
-    e.target?.closest?.('.deal-details-panel') ||
-    e.target?.closest?.('.team-details-panel') ||
-    e.target?.closest?.('.activity-panel')
+    target?.closest?.('.schedule-picker-panel') ||
+    target?.closest?.('[data-task-menu]') ||
+    target?.closest?.('[data-lead-details-menu]') ||
+    target?.closest?.('[data-deal-details-menu]') ||
+    target?.closest?.('[data-deal-line-items-menu]') ||
+    target?.closest?.('[data-options-menu]') ||
+    target?.closest?.('[data-confirm-dialog]') ||
+    target?.closest?.('[data-send-quote-dialog]') ||
+    target?.closest?.('[data-pipe-menu]') ||
+    target?.closest?.('[data-deals-panel-menu]') ||
+    target?.closest?.('[data-quotes-panel-menu]') ||
+    target?.closest?.('[data-deal-template-menu]') ||
+    target?.closest?.('[data-tag-picker-menu]') ||
+    target?.closest?.('[data-tag-picker-trigger]') ||
+    target?.closest?.('[data-create-pipeline-dialog]') ||
+    target?.closest?.('[data-panel-filter-menu]') ||
+    target?.closest?.('[data-toast-container]') ||
+    target?.closest?.('[data-toast-item]') ||
+    target?.closest?.('.hail-data-panel') ||
+    target?.closest?.('.parcel-popup-card') ||
+    target?.closest?.('.parcel-details-panel') ||
+    target?.closest?.('.lead-details-panel') ||
+    target?.closest?.('.deal-details-panel') ||
+    target?.closest?.('.team-details-panel') ||
+    target?.closest?.('.activity-panel')
   ) {
     e.preventDefault()
   }
@@ -75,7 +87,7 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
 const INSTANT_PANEL_MOTION =
   'data-[state=open]:!duration-0 data-[state=closed]:!duration-0 data-[state=open]:animate-none data-[state=closed]:animate-none'
 
-const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, suppressBackdrop = false, focusOverlay = false, blurOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, panelMode, instantDismiss = false, onPointerDownOutside, onInteractOutside, onCloseAutoFocus, ...props }, ref) => {
+const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, suppressBackdrop = false, focusOverlay = false, blurOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, panelMode, instantDismiss = false, onPointerDownOutside, onInteractOutside, onFocusOutside, onCloseAutoFocus, ...props }, ref) => {
   const useStackedDetailLayer = topLayer && nestedOverlay
   const effectiveNestedOverlay = nestedOverlay && !useStackedDetailLayer
   const effectiveHideOverlay = hideOverlay || useStackedDetailLayer
@@ -112,6 +124,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
           className={cn(contentPosition, contentMotion, zContent, className)}
           onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
           onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
+          onFocusOutside={(e) => preventCloseWhenNestedOverlay(e, onFocusOutside)}
           onCloseAutoFocus={isPanel ? suppressCloseAutoFocus : onCloseAutoFocus}
           {...props}
         >
@@ -136,6 +149,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
           className={cn(contentPosition, contentMotion, zContent, className)}
           onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
           onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
+          onFocusOutside={(e) => preventCloseWhenNestedOverlay(e, onFocusOutside)}
           onCloseAutoFocus={isPanel ? suppressCloseAutoFocus : onCloseAutoFocus}
           {...props}
         >
@@ -157,6 +171,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
         className={cn(contentPosition, contentMotion, zDefaultContent, className)}
         onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
         onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
+        onFocusOutside={(e) => preventCloseWhenNestedOverlay(e, onFocusOutside)}
         onCloseAutoFocus={isPanel ? suppressCloseAutoFocus : onCloseAutoFocus}
         {...props}
       >

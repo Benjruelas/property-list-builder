@@ -8,6 +8,8 @@ import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { displayLeadName, formatLeadAddress, updateLead } from '@/utils/leads'
+import { filterByTags } from '@/utils/tags'
+import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
 import { findDealsForLead } from '@/utils/deals'
@@ -45,8 +47,11 @@ export function LeadsPanel({
   pipelinesCount = 0,
   canSeeDealAmounts = true,
   onEditLead,
+  tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
+  onRefreshTags,
 }) {
   const [search, setSearch] = useState('')
+  const [selectedTagIds, setSelectedTagIds] = useState([])
   const [createOpen, setCreateOpen] = useState(false)
   const [dealPickerOpen, setDealPickerOpen] = useState(false)
   const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
@@ -63,8 +68,9 @@ export function LeadsPanel({
     const sorted = [...leads].sort((a, b) =>
       (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
     )
-    if (!q) return sorted
-    return sorted.filter((l) => {
+    const byTags = filterByTags(sorted, selectedTagIds)
+    if (!q) return byTags
+    return byTags.filter((l) => {
       const name = displayLeadName(l).toLowerCase()
       return (
         name.includes(q) ||
@@ -73,7 +79,7 @@ export function LeadsPanel({
         (l.email || '').toLowerCase().includes(q)
       )
     })
-  }, [leads, search])
+  }, [leads, search, selectedTagIds])
 
   const dealCountByLead = useMemo(() => {
     const m = new Map()
@@ -97,13 +103,14 @@ export function LeadsPanel({
   })
 
   const handleLeadUpdate = useCallback(async (updated) => {
+    onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
     try {
       const saved = await updateLead(getToken, updated.id, updated)
-      onLeadsChange?.(leads.map((l) => (l.id === saved.id ? saved : l)))
+      onLeadsChange?.((prev) => prev.map((l) => (l.id === saved.id ? saved : l)))
     } catch (e) {
       showToast(e.message || 'Could not update lead', 'error')
     }
-  }, [getToken, leads, onLeadsChange])
+  }, [getToken, onLeadsChange])
 
   const handleCreated = (lead) => {
     onRefreshLeads?.()
@@ -166,15 +173,22 @@ export function LeadsPanel({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search leads by name, address, phone, or email…"
-                className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
-                aria-label="Search leads"
+            <div className="flex gap-2 mb-2">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search leads by name, address, phone, or email…"
+                  className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+                  aria-label="Search leads"
+                />
+              </div>
+              <PanelFilterMenu
+                tags={tagRegistry.leads || []}
+                selectedTagIds={selectedTagIds}
+                onTagIdsChange={setSelectedTagIds}
               />
             </div>
             {leads.length === 0 ? (
@@ -186,7 +200,9 @@ export function LeadsPanel({
             ) : filteredLeads.length === 0 ? (
               <div className="text-center py-12">
                 <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm opacity-60">No leads match your search.</p>
+                <p className="text-sm opacity-60">
+                  {selectedTagIds.length > 0 ? 'No leads match the selected tags.' : 'No leads match your search.'}
+                </p>
               </div>
             ) : (
               filteredLeads.map((lead) => (
@@ -194,6 +210,7 @@ export function LeadsPanel({
                   key={lead.id}
                   lead={lead}
                   dealCount={dealCountByLead.get(lead.id) || 0}
+                  tagRegistry={tagRegistry}
                   onClick={(l) => onOpenLeadDetail?.(l.id)}
                 />
               ))
@@ -264,6 +281,8 @@ export function LeadsPanel({
         leads={leads}
         canSeeDealAmounts={canSeeDealAmounts}
         currentUserId={currentUserId}
+        tagRegistry={tagRegistry}
+        onRefreshTags={onRefreshTags}
       />
     </>
   )

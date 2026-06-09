@@ -36,6 +36,22 @@ export async function createPath(getToken, name, points, distanceMiles, city = '
   return data.path
 }
 
+export async function updatePathTags(getToken, pathId, { tagIds, tagMeta }) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to update paths')
+  const res = await fetch(`${getApiBase()}/paths`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ pathId, tagIds, tagMeta }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Failed to update path tags')
+  }
+  const data = await res.json()
+  return data.path
+}
+
 export async function renamePath(getToken, pathId, name) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to rename paths')

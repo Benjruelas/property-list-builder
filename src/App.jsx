@@ -26,8 +26,8 @@ import { useAuth } from './contexts/AuthContext'
 import { useNavigation } from './navigation/NavigationContext'
 import { UserDataSyncProvider } from './contexts/UserDataSyncContext'
 import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
-import { fetchLists, createList, updateList, deleteList, validateShareEmail } from './utils/lists'
-import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline } from './utils/pipelines'
+import { fetchLists, updateList, deleteList, validateShareEmail } from './utils/lists'
+import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline, localPipelineMigrationKey, pipelinesUserCanWorkIn } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
@@ -48,7 +48,8 @@ import { TeamsPanel } from './components/TeamsPanel'
 import { fetchTeamContext } from './utils/teams'
 import { resolveTeamMemberFeatures, canAccessTeamFeature, canSeeDealAmounts, TEAM_FEATURE_ACCESS_DENIED_MESSAGE, featureIdForFeedNav } from './utils/teamFeatures'
 import { subscribeToWebPush } from './utils/pushNotifications'
-import { reverseGeocodeCity } from './utils/reverseGeocode'
+import { reverseGeocodeCity, addressFromProperties, resolveParcelDisplayAddress } from './utils/reverseGeocode'
+import { fetchLandRecordsParcel } from './utils/fetchLandRecordsParcel'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
@@ -76,6 +77,7 @@ import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
 import { fetchLeads, buildLeadPrefillFromParcel, isParcelALead as isParcelInLeadsList, displayLeadName } from './utils/leads'
+import { fetchTagRegistry, upsertTagInRegistry } from './utils/tags'
 import { buildDealFromLead, resolvePipelineId } from './utils/deals'
 import { createTasksForDeal } from './utils/dealTasks'
 import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeline'
@@ -351,6 +353,7 @@ function App() {
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const [dealPipelineDeals, setDealPipelineDeals] = useState([])
   const [leads, setLeads] = useState([])
+  const [tagRegistry, setTagRegistry] = useState({ leads: [], deals: [], paths: [], lists: [] })
   const [editLead, setEditLead] = useState(null)
   const [closedDeals, setClosedDeals] = useState(() => loadClosedDeals())
   const [pipelines, setPipelines] = useState([])
@@ -383,6 +386,9 @@ function App() {
   const mapRef = useRef(null)
   const parcelLayerRef = useRef(null)
   const currentPopupRef = useRef(null)
+  const isParcelDetailsOpenRef = useRef(false)
+  isParcelDetailsOpenRef.current = isParcelDetailsOpen
+  const parcelFetchAbortRef = useRef(null)
   const programmaticMoveRef = useRef(false)
   /** Viewport to restore after closing Hail Data / storm map (saved before storm zoom). */
   const hailViewportRestoreRef = useRef(null)
@@ -809,6 +815,11 @@ function App() {
     [teamMembership, teamMemberFeatures]
   )
 
+  const setTourSettingsOpen = useCallback((open) => {
+    if (open) nav.openSettings()
+    else nav.pop()
+  }, [nav])
+
   const showDealAmounts = useMemo(
     () => canSeeDealAmounts(teamMembership, teamMemberFeatures, teams),
     [teamMembership, teamMemberFeatures, teams]
@@ -929,7 +940,6 @@ function App() {
     try {
       const teamId = teams[0]?.id
       const updated = await shareTemplateWithTeamsApi(getToken, templateId, sharePatch, teamId)
-      showToast('Sharing updated', 'success')
       return updated
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
@@ -942,7 +952,6 @@ function App() {
       const teamId = teams[0]?.id
       await sharePathWithTeamsApi(getToken, pathId, sharePatch, teamId)
       await refreshPaths()
-      showToast('Sharing updated', 'success')
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
     }
@@ -975,55 +984,122 @@ function App() {
     }
   }, [currentUser, getToken])
 
+  const refreshTags = useCallback(async () => {
+    if (!currentUser) {
+      setTagRegistry({ leads: [], deals: [], paths: [], lists: [] })
+      return
+    }
+    try {
+      const registry = await fetchTagRegistry(getToken)
+      setTagRegistry(registry)
+    } catch (error) {
+      console.error('Error loading tags:', error)
+    }
+  }, [currentUser, getToken])
+
+  const upsertRegistryTag = useCallback((type, tag) => {
+    if (!tag?.id) {
+      refreshTags()
+      return
+    }
+    setTagRegistry((prev) => upsertTagInRegistry(prev, type, tag))
+  }, [refreshTags])
+
+  const patchList = useCallback((listId, patch) => {
+    setLists((prev) => prev.map((l) => (l.id === listId ? { ...l, ...patch } : l)))
+  }, [])
+
+  const patchPath = useCallback((pathId, patch) => {
+    setPaths((prev) => prev.map((p) => (p.id === pathId ? { ...p, ...patch } : p)))
+  }, [])
+
+  const localPipelineMigrationRef = useRef(null)
+
   const refreshPipelines = useCallback(async () => {
     if (!currentUser) return
+    const migrationKey = localPipelineMigrationKey(currentUser.uid)
     try {
       const next = await fetchPipelines(getToken)
       if (next.length > 0) {
-        setPipelines(next.map((p) => ({ ...p, deals: p.deals || [], leads: undefined })))
+        setPipelines(next)
         setActivePipelineId((prev) => {
-          if (prev && next.some((p) => p.id === prev)) return prev
-          const first = next.find((p) => p.ownerId === currentUser.uid) || next[0]
+          const editable = pipelinesUserCanWorkIn(currentUser, next, teams)
+          const prevPipe = prev ? next.find((p) => p.id === prev) : null
+          if (prevPipe && canAddDealsToPipeline(currentUser, prevPipe, teams)) return prev
+          const first = editable.find((p) => p.ownerId === currentUser.uid) || editable[0] || next[0]
           return first?.id ?? null
         })
-      } else {
-        const cols = loadColumns()
-        const deals = loadDeals()
-        const title = loadTitle()
-        if (deals.length > 0 || cols.some((c) => (c?.name || '').trim())) {
-          try {
-            const created = await createPipeline(getToken, { title, columns: cols, deals })
-            setPipelines([created])
-            setActivePipelineId(created.id)
-            setDealPipelineDeals(created.deals || [])
-          } catch (e) {
-            console.warn('Pipeline migration failed:', e.message)
-            setPipelines([])
-            setActivePipelineId(null)
-          }
-        } else {
-          setPipelines([])
-          setActivePipelineId(null)
+        return
+      }
+
+      if (localPipelineMigrationRef.current) {
+        try {
+          const created = await localPipelineMigrationRef.current
+          setPipelines([created])
+          setActivePipelineId(created.id)
+          setDealPipelineDeals(created.deals || [])
+        } catch (e) {
+          console.warn('Pipeline migration failed:', e.message)
         }
+        return
+      }
+
+      let migrationDone = false
+      try { migrationDone = localStorage.getItem(migrationKey) === '1' } catch { /* ignore */ }
+      if (migrationDone) {
+        setPipelines([])
+        setActivePipelineId(null)
+        return
+      }
+
+      const cols = loadColumns()
+      const deals = loadDeals()
+      const title = loadTitle()
+      const hasLocalData = deals.length > 0 || cols.some((c) => (c?.name || '').trim())
+
+      if (!hasLocalData) {
+        try { localStorage.setItem(migrationKey, '1') } catch { /* ignore */ }
+        setPipelines([])
+        setActivePipelineId(null)
+        return
+      }
+
+      try { localStorage.setItem(migrationKey, '1') } catch { /* ignore */ }
+      const migrationPromise = createPipeline(getToken, { title, columns: cols, deals })
+      localPipelineMigrationRef.current = migrationPromise
+      try {
+        const created = await migrationPromise
+        setPipelines([created])
+        setActivePipelineId(created.id)
+        setDealPipelineDeals(created.deals || [])
+      } catch (e) {
+        try { localStorage.removeItem(migrationKey) } catch { /* ignore */ }
+        console.warn('Pipeline migration failed:', e.message)
+        setPipelines([])
+        setActivePipelineId(null)
+      } finally {
+        localPipelineMigrationRef.current = null
       }
     } catch (error) {
       console.error('Error loading pipelines:', error)
       setPipelines([])
       setActivePipelineId(null)
     }
-  }, [currentUser, getToken])
+  }, [currentUser, getToken, teams])
 
   useEffect(() => {
     if (currentUser) {
       runLeadsDealsFreshStartMigration()
       refreshPipelines()
       refreshLeads()
+      refreshTags()
     } else {
       setPipelines([])
       setActivePipelineId(null)
       setLeads([])
+      setTagRegistry({ leads: [], deals: [], paths: [], lists: [] })
     }
-  }, [currentUser, refreshPipelines, refreshLeads])
+  }, [currentUser, refreshPipelines, refreshLeads, refreshTags])
 
   useEffect(() => {
     if (!currentUser || pipelines.length === 0) return
@@ -1118,9 +1194,8 @@ function App() {
 
   const handleLeadUpdated = useCallback((lead) => {
     setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)))
-    refreshLeads()
     setEditLead(null)
-  }, [refreshLeads])
+  }, [])
 
   const handleEditLead = useCallback((lead) => {
     if (lead?.id) setEditLead(lead)
@@ -1652,7 +1727,6 @@ function App() {
         teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
       })
       await refreshPipelines()
-      showToast('Sharing updated', 'success')
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
     }
@@ -1712,7 +1786,6 @@ function App() {
         teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
       })
       await refreshLists()
-      showToast('Sharing updated', 'success')
     } catch (error) {
       showToast(error.message || 'Failed to update sharing', 'error')
     }
@@ -1756,8 +1829,12 @@ function App() {
   const buildPopupOverlay = useCallback((data) => {
     if (!data) return null
     const parcelId = data.id || data.parcelId || data.properties?.PROP_ID
-    const address = data.address || data.properties?.SITUS_ADDR || data.properties?.SITE_ADDR || data.properties?.ADDRESS || 'No address'
     const properties = data.properties || {}
+    const isLoading = data.address === 'Loading…'
+    const display = isLoading
+      ? { title: 'Loading…', subtitle: '', fullAddress: '', hasStreetAddress: false }
+      : (data.addressDisplay || resolveParcelDisplayAddress(properties))
+    const address = isLoading ? 'Loading…' : (data.address || display.title || 'No address')
     const lat = data.lat ?? data.latlng?.lat ?? properties.LATITUDE ?? properties.latitude
     const lng = data.lng ?? data.latlng?.lng ?? properties.LONGITUDE ?? properties.longitude
     if (lat == null || lng == null || !parcelId) return null
@@ -1767,7 +1844,7 @@ function App() {
     const hasSkipTraced = isParcelSkipTraced(parcelId)
     const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
     const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
-    const parcelData = { id: parcelId, properties, address, lat, lng }
+    const parcelData = { id: parcelId, properties, address: display.fullAddress || address, lat, lng }
     return {
       type: 'popup',
       parcelId,
@@ -1776,6 +1853,8 @@ function App() {
       parcelData,
       popupData: {
         parcelId, lat, lng, address,
+        addressSubtitle: display.subtitle || '',
+        assessorDataLimited: !isLoading && !display.hasStreetAddress,
         ownerName: properties.OWNER_NAME || '', age,
         ownerOccupied: computeOwnerOccupied(properties),
         listNames: listsWithParcel.map(l => l.name),
@@ -1788,6 +1867,21 @@ function App() {
     const overlay = buildPopupOverlay(data)
     if (overlay) nav.showParcelPopup(overlay)
   }, [buildPopupOverlay, nav])
+
+  /** Show popup or refresh details — stay in details when user is already there. */
+  const presentParcelOnMap = useCallback((data) => {
+    if (!data?.id) return
+    if (isParcelDetailsOpenRef.current) {
+      nav.openParcelDetails({
+        type: 'parcelDetails',
+        parcelId: data.id,
+        source: 'map',
+        parcelData: data,
+      })
+    } else {
+      openParcelPopup(data)
+    }
+  }, [nav, openParcelPopup])
 
   // Handle parcel click
   const handleParcelClick = useCallback((event) => {
@@ -1803,40 +1897,106 @@ function App() {
       return
     }
 
-    const { latlng, properties, parcelId: eventParcelId } = event
-    // Use parcelId from event if available, otherwise generate from properties or latlng
-    const parcelId = eventParcelId || properties.PROP_ID || `${latlng.lat.toFixed(6)}-${latlng.lng.toFixed(6)}`
-    const address = properties.SITUS_ADDR || properties.SITE_ADDR || properties.ADDRESS || 'No address'
-    
+    const { latlng, properties: tileProperties = {}, parcelId: eventParcelId } = event
+    const tileParcelId = eventParcelId || tileProperties.PROP_ID || `${latlng.lat.toFixed(6)}-${latlng.lng.toFixed(6)}`
+    const requestId = tileParcelId
+    currentPopupRef.current = requestId
+
+    const tileDisplay = resolveParcelDisplayAddress(tileProperties)
+    const hasTileData = tileDisplay.hasStreetAddress || !!(tileProperties.OWNER_NAME || '').trim()
+    const buildTileParcelData = () => ({
+      id: tileParcelId,
+      properties: tileProperties,
+      address: hasTileData ? tileDisplay.title : 'Loading…',
+      addressDisplay: hasTileData ? tileDisplay : undefined,
+      lat: latlng.lat,
+      lng: latlng.lng,
+    })
+
+    const applyLandRecordsParcel = (result) => {
+      if (!result) return
+      const { properties: apiProperties, parcelId: apiParcelId } = result
+      const resolvedId = apiParcelId || tileParcelId
+      const display = resolveParcelDisplayAddress(apiProperties)
+      return {
+        id: resolvedId,
+        properties: apiProperties,
+        address: display.title,
+        addressDisplay: display,
+        lat: latlng.lat,
+        lng: latlng.lng,
+      }
+    }
+
+    const loadLandRecordsParcel = () => {
+      parcelFetchAbortRef.current?.abort()
+      const controller = new AbortController()
+      parcelFetchAbortRef.current = controller
+      fetchLandRecordsParcel({
+        lat: latlng.lat,
+        lng: latlng.lng,
+        lrid: event.lrid || '',
+        signal: controller.signal,
+      }).then((result) => {
+        if (controller.signal.aborted || currentPopupRef.current !== requestId) return
+        const parcelData = applyLandRecordsParcel(result)
+        if (!parcelData) {
+          if (!hasTileData) showToast('Could not load parcel details', 'error')
+          return
+        }
+        if (isMultiSelectActive) {
+          setSelectedParcelsData((prevData) => {
+            if (!prevData.has(tileParcelId) && !prevData.has(parcelData.id)) return prevData
+            const newMap = new Map(prevData)
+            const key = prevData.has(tileParcelId) ? tileParcelId : parcelData.id
+            newMap.set(key, {
+              id: parcelData.id,
+              properties: parcelData.properties,
+              latlng,
+              address: parcelData.address,
+            })
+            return newMap
+          })
+        } else {
+          presentParcelOnMap(parcelData)
+        }
+      }).catch((err) => {
+        if (err?.name === 'AbortError') return
+        if (!hasTileData) showToast('Could not load parcel details', 'error')
+      })
+    }
+
     if (isMultiSelectActive) {
       // Multi-select mode: toggle selection
       setSelectedParcels(prev => {
         const newSet = new Set(prev)
-        if (newSet.has(parcelId)) {
-          newSet.delete(parcelId)
+        if (newSet.has(tileParcelId)) {
+          newSet.delete(tileParcelId)
           setSelectedParcelsData(prevData => {
             const newMap = new Map(prevData)
-            newMap.delete(parcelId)
+            newMap.delete(tileParcelId)
             return newMap
           })
         } else {
-          newSet.add(parcelId)
+          newSet.add(tileParcelId)
           setSelectedParcelsData(prevData => {
             const newMap = new Map(prevData)
-            newMap.set(parcelId, {
-              id: parcelId,
-              properties: properties,
+            const initial = buildTileParcelData()
+            newMap.set(tileParcelId, {
+              id: tileParcelId,
+              properties: initial.properties,
               latlng: latlng,
-              address: address
+              address: initial.address,
             })
             return newMap
           })
+          loadLandRecordsParcel()
         }
         return newSet
       })
     } else {
-      const parcelData = { id: parcelId, properties, address, lat: latlng.lat, lng: latlng.lng }
-      openParcelPopup(parcelData)
+      presentParcelOnMap(buildTileParcelData())
+      loadLandRecordsParcel()
       setTimeout(() => {
         if (mapInstanceRef.current) {
           mapInstanceRef.current.easeTo({ center: [latlng.lng, latlng.lat], duration: 500 })
@@ -1844,7 +2004,7 @@ function App() {
       }, 300)
     }
     
-  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, openParcelPopup, nav])
+  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, presentParcelOnMap, nav])
   
   // Add single parcel to list (called from popup button)
   const handleAddSingleParcelToList = useCallback(async (listId) => {
@@ -2088,10 +2248,8 @@ function App() {
   }, [nav])
 
   const suppressPopupCloseRef = useRef(false)
-  const isParcelDetailsOpenRef = useRef(false)
   const suppressParcelDetailsDataClearRef = useRef(false)
   const wasParcelDetailsOpenRef = useRef(false)
-  useEffect(() => { isParcelDetailsOpenRef.current = isParcelDetailsOpen }, [isParcelDetailsOpen])
   useEffect(() => {
     if (isParcelDetailsOpen && !wasParcelDetailsOpenRef.current) {
       suppressParcelDetailsDataClearRef.current = false
@@ -2117,6 +2275,8 @@ function App() {
       nav.popMapOverlay()
       return
     }
+    // Overlay may already be replaced (e.g. new parcel popup) — don't pop the stack again.
+    if (!isParcelDetailsOpenRef.current) return
     nav.popMapOverlay()
     if (suppressParcelDetailsDataClearRef.current) {
       suppressParcelDetailsDataClearRef.current = false
@@ -2814,6 +2974,9 @@ function App() {
         <WelcomeTour
           onComplete={() => handleSettingsChange({ tourCompleted: true })}
           setShowMenu={nav.setShowMenu}
+          setSettingsOpen={setTourSettingsOpen}
+          canAccessFeature={canAccessFeature}
+          showMenu={showMenu}
         />
       )}
       {/* Map layer - explicitly at z-index 0 so dialogs/panels appear above */}
@@ -3060,6 +3223,7 @@ function App() {
         selectedParcelsCount={showListSelector && clickedParcelData ? 1 : selectedParcels.size}
         lists={lists}
         onListsChange={refreshLists}
+        onListPatch={patchList}
         onDeleteList={handleDeleteList}
         onRenameList={handleRenameList}
         onShareList={handleShareList}
@@ -3067,15 +3231,14 @@ function App() {
         teams={teams}
         teamMembership={teamMembership}
         onValidateShareEmail={(email) => validateShareEmail(getToken, email)}
-        onCreateList={async (name) => {
-          await createList(getToken, name, [])
-          await refreshLists()
-        }}
         onViewListContents={(listId) => nav.viewListContents(listId)}
         onExportList={handleExportList}
         isAddingSingleParcel={showListSelector && !!clickedParcelData}
         isBulkEmailMode={showListSelector && !!selectedEmailTemplate}
         parcelBoundaryColor={settings.parcelBoundaryColor}
+        getToken={getToken}
+        tagRegistry={tagRegistry}
+        onRefreshTags={(tag) => upsertRegistryTag('lists', tag)}
       />
 
       <ParcelListPanel
@@ -3183,10 +3346,9 @@ function App() {
           if (!activePipelineId) return
           try {
             await updatePipeline(getToken, activePipelineId, { deals: newDeals })
-            setPipelines((prev) => prev.map((p) => p.id === activePipelineId
+            setPipelines((prev) => prev.map((p) => (p.id === activePipelineId
               ? { ...p, deals: newDeals }
-              : p))
-            await refreshPipelines()
+              : p)))
           } catch (e) { showToast(e.message || 'Failed to update', 'error') }
         } : setDealPipelineDeals}
         onOpenCreateDeal={(prefill) => openCreateDealDialog({ pipelineId: activePipelineId, ...prefill })}
@@ -3219,6 +3381,8 @@ function App() {
         quotesRefreshKey={quotesRefreshEpoch}
         canSeeDealAmounts={showDealAmounts}
         onEditLead={handleEditLead}
+        tagRegistry={tagRegistry}
+        onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
       />
 
       <SchedulePanel
@@ -3378,6 +3542,7 @@ function App() {
         currentUser={currentUser}
         paths={paths}
         onPathsChange={refreshPaths}
+        onPathPatch={patchPath}
         onDeletePath={handleDeletePath}
         onRenamePath={handleRenamePath}
         onSharePath={handleSharePath}
@@ -3389,6 +3554,9 @@ function App() {
         visiblePathIds={visiblePathIds}
         onTogglePathVisibility={handleTogglePathVisibility}
         distanceUnit={settings.distanceUnit}
+        getToken={getToken}
+        tagRegistry={tagRegistry}
+        onRefreshTags={(tag) => upsertRegistryTag('paths', tag)}
       />
 
       <TeamsPanel
@@ -3457,6 +3625,8 @@ function App() {
         currentUserId={currentUser?.uid}
         canSeeDealAmounts={showDealAmounts}
         onEditLead={handleEditLead}
+        tagRegistry={tagRegistry}
+        onRefreshTags={(tag) => upsertRegistryTag('leads', tag)}
       />
 
       <DealsPanel
@@ -3505,6 +3675,8 @@ function App() {
         pipelinesCount={pipelines.length}
         canSeeDealAmounts={showDealAmounts}
         onEditLead={handleEditLead}
+        tagRegistry={tagRegistry}
+        onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
       />
 
       <CreateLeadDialog

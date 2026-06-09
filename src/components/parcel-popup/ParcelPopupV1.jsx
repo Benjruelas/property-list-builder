@@ -34,6 +34,9 @@ export function ParcelPopupV1({
             '.parcel-popup-card',
             '.map-controls-stack',
             '.map-search-stack',
+            '.tour-parcel-intro-stack',
+            '.tour-demo-parcel-anchor',
+            '.tour-tooltip',
             '[data-app-dialog-backdrop]',
             '[role="dialog"]',
           ].join(', ')
@@ -69,6 +72,9 @@ export function ParcelPopupV1({
                 <Loader2 size={14} className="parcel-popup-card__icon-pending animate-spin shrink-0" />
               )}
             </div>
+            {popupData.addressSubtitle && (
+              <p className="parcel-popup-card__muted text-xs truncate mt-0.5">{popupData.addressSubtitle}</p>
+            )}
             {popupData.ownerName && (
               <p className="parcel-popup-card__muted text-xs truncate mt-0.5">{popupData.ownerName}</p>
             )}
@@ -84,6 +90,11 @@ export function ParcelPopupV1({
         </div>
 
         <div className="px-3 flex flex-wrap gap-1.5">
+          {popupData.assessorDataLimited && (
+            <span className="parcel-popup-card__chip inline-flex items-center px-2 py-0.5 rounded-full text-[10px] opacity-80">
+              Limited assessor data
+            </span>
+          )}
           <OwnerOccupiedBadge ownerOccupied={popupData.ownerOccupied} inParcelPopup />
           {popupData.age !== null && popupData.age !== undefined && (
             <span className="parcel-popup-card__chip inline-flex items-center px-2 py-0.5 rounded-full text-[10px]">
@@ -99,7 +110,13 @@ export function ParcelPopupV1({
         >
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onOpenDetails?.() }}
+            data-tour="parcel-details"
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              const open = onOpenDetails
+              if (open) queueMicrotask(() => open())
+            }}
             className="parcel-popup-card__btn-secondary flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors"
             title="More Details"
           >
@@ -108,6 +125,7 @@ export function ParcelPopupV1({
           </button>
           <button
             type="button"
+            data-tour="parcel-add-to-list"
             onClick={(e) => { e.stopPropagation(); onAddToList?.() }}
             className="parcel-popup-card__btn-list p-2 rounded-lg transition-colors"
             title="Add to List"
@@ -117,6 +135,7 @@ export function ParcelPopupV1({
           {!isLead && (
             <button
               type="button"
+              data-tour="parcel-convert-lead"
               onClick={(e) => { e.stopPropagation(); onConvertToLead?.() }}
               className="parcel-popup-card__btn-pipeline p-2 rounded-lg transition-colors"
               title="Add to Pipeline"

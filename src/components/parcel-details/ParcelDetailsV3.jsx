@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Phone, ListPlus, UserPlus, CloudRain, /* Telescope, */ CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { PanelBackButton } from '../ui/panel-header'
@@ -21,9 +21,30 @@ const TABS = [
  * Option 3: Tabbed Card
  * Horizontal tabs to switch between focused views, no scroll needed per tab.
  */
+const OUTSIDE_CLOSE_GRACE_MS = 500
+
 export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false }) {
   const data = useParcelDetailsData({ isOpen, parcelData, lists, enableAutoClose, onClose })
   const [activeTab, setActiveTab] = useState('overview')
+  const openedAtRef = useRef(0)
+
+  useEffect(() => {
+    if (isOpen) openedAtRef.current = performance.now()
+  }, [isOpen])
+
+  const closeDetails = useCallback((reopenPopup = false) => {
+    onClose?.({ reopenPopup })
+  }, [onClose])
+
+  const handleOutsideClose = useCallback((e) => {
+    e.preventDefault()
+    if (suspendClose) return
+    if (e.target?.closest?.('.hail-data-panel')) return
+    // Ignore the click that opened this panel (Radix treats it as "outside").
+    if (performance.now() - openedAtRef.current < OUTSIDE_CLOSE_GRACE_MS) return
+    if (e.target?.closest?.('.parcel-popup-card')) return
+    closeDetails(false)
+  }, [suspendClose, closeDetails])
 
   if (!data) return null
   const { normalized, address, ownerName, ownerOccupied, quickStats, categorizedProps, handleClose, containerRef, scrollContainerRef } = data
@@ -66,16 +87,13 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
   )
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !suspendClose) handleClose(false) }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && isOpen && !suspendClose) handleClose(false) }}>
       <DialogContent
         className="map-panel parcel-details-panel list-panel fullscreen-panel max-w-2xl max-h-[80vh] p-0 gap-0"
         showCloseButton={false}
         hideOverlay
-        onInteractOutside={(e) => {
-          e.preventDefault()
-          if (suspendClose || e.target?.closest?.('.hail-data-panel')) return
-          handleClose(false)
-        }}
+        onPointerDownOutside={handleOutsideClose}
+        onInteractOutside={handleOutsideClose}
       >
         <div ref={containerRef} className="contents">
           {/* Header: Address + Close */}
@@ -100,55 +118,80 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
                       Opportunity Zone
                     </span>
                   )}
-                  {quickStats.value && <span className="text-sm font-semibold ml-auto">{quickStats.value}</span>}
                 </div>
+                {quickStats.value && (
+                  <p className="text-lg font-semibold mt-1.5 leading-tight">{quickStats.value}</p>
+                )}
               </div>
             </div>
           </DialogHeader>
 
           {/* Action Buttons */}
-          <div className="px-6 pb-3 flex items-center gap-2">
+          <div className="parcel-details-actions px-6 pb-3 flex items-center justify-evenly w-full">
             {onSkipTrace && (
-              <button
-                onClick={() => { if (!popupData?.isSkipTracing) onSkipTrace() }}
-                disabled={popupData?.isSkipTracing}
-                className={`p-3.5 rounded-xl text-white transition-colors ${
-                  popupData?.isSkipTracing
-                    ? 'bg-amber-600/30 text-amber-300 cursor-wait'
+              <div className="flex flex-1 justify-center min-w-0">
+                <button
+                  type="button"
+                  onClick={() => { if (!popupData?.isSkipTracing) onSkipTrace() }}
+                  disabled={popupData?.isSkipTracing}
+                  className={`parcel-details-action-btn p-3.5 rounded-xl text-white transition-colors ${
+                    popupData?.isSkipTracing
+                      ? 'bg-amber-600/30 text-amber-300 cursor-wait'
+                      : popupData?.hasSkipTraced
+                        ? 'bg-green-600/40 hover:bg-green-600/60 text-green-200'
+                        : 'bg-green-600/80 hover:bg-green-600'
+                  }`}
+                  title={
+                    popupData?.isSkipTracing
+                      ? 'Skip Tracing...'
+                      : popupData?.hasSkipTraced
+                        ? 'Refresh Contact Info'
+                        : 'Get Contact Info'
+                  }
+                >
+                  {popupData?.isSkipTracing
+                    ? <Loader2 size={22} className="animate-spin" />
                     : popupData?.hasSkipTraced
-                      ? 'bg-green-600/40 hover:bg-green-600/60 text-green-200'
-                      : 'bg-green-600/80 hover:bg-green-600'
-                }`}
-                title={
-                  popupData?.isSkipTracing
-                    ? 'Skip Tracing...'
-                    : popupData?.hasSkipTraced
-                      ? 'Refresh Contact Info'
-                      : 'Get Contact Info'
-                }
-              >
-                {popupData?.isSkipTracing
-                  ? <Loader2 size={22} className="animate-spin" />
-                  : popupData?.hasSkipTraced
-                    ? <CheckCircle2 size={22} />
-                    : <Phone size={22} />}
-              </button>
+                      ? <CheckCircle2 size={22} />
+                      : <Phone size={22} />}
+                </button>
+              </div>
             )}
-            <DirectionsPicker lat={normalized.lat} lng={normalized.lng} iconSize={22} className="p-3.5 rounded-xl" />
-            {onAddToList && <button onClick={() => onAddToList()} className="p-3.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white transition-colors" title="Add to List"><ListPlus size={22} /></button>}
-            {!isLead && onConvertToLead && <button onClick={() => onConvertToLead()} className="p-3.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white transition-colors" title="Convert to Lead"><UserPlus size={22} /></button>}
+            <div className="flex flex-1 justify-center min-w-0">
+              <DirectionsPicker lat={normalized.lat} lng={normalized.lng} iconSize={22} className="parcel-details-action-btn p-3.5 rounded-xl" />
+            </div>
+            {onAddToList && (
+              <div className="flex flex-1 justify-center min-w-0">
+                <button type="button" onClick={() => onAddToList()} className="parcel-details-action-btn p-3.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white transition-colors" title="Add to List">
+                  <ListPlus size={22} />
+                </button>
+              </div>
+            )}
+            {!isLead && onConvertToLead && (
+              <div className="flex flex-1 justify-center min-w-0">
+                <button type="button" onClick={() => onConvertToLead()} className="parcel-details-action-btn p-3.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white transition-colors" title="Convert to Lead">
+                  <UserPlus size={22} />
+                </button>
+              </div>
+            )}
             {onHailData && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onHailData() }}
-                className="p-3.5 rounded-xl bg-orange-600/80 hover:bg-orange-600 text-white transition-colors"
-                title="Hail Data"
-              >
-                <CloudRain size={22} />
-              </button>
+              <div className="flex flex-1 justify-center min-w-0">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onHailData() }}
+                  className="parcel-details-action-btn p-3.5 rounded-xl bg-orange-600/80 hover:bg-orange-600 text-white transition-colors"
+                  title="Hail Data"
+                >
+                  <CloudRain size={22} />
+                </button>
+              </div>
             )}
             {/* roof inspector — restore onRoofInspector prop + Telescope import
-            {onRoofInspector && <button onClick={() => onRoofInspector()} className="p-3.5 rounded-xl bg-sky-600/80 hover:bg-sky-600 text-white transition-colors" title="Roof Inspector"><Telescope size={22} /></button>}
+            {onRoofInspector && (
+              <div className="flex flex-1 justify-center min-w-0">
+                <button type="button" onClick={() => onRoofInspector()} className="parcel-details-action-btn p-3.5 rounded-xl bg-sky-600/80 hover:bg-sky-600 text-white transition-colors" title="Roof Inspector"><Telescope size={22} /></button>
+              </div>
+            )}
             */}
           </div>
 

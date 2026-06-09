@@ -23,9 +23,12 @@ import { LeadDetails } from './LeadDetails'
 import { DealProfitBadge } from './DealLineItemsSection'
 import { dealHasFinancials } from '@/utils/dealFinances'
 import { SchedulePicker } from './SchedulePicker'
-import { createPipeline, canCollaborateOnPipeline } from '@/utils/pipelines'
+import { canCollaborateOnPipeline, pipelinesUserCanWorkIn } from '@/utils/pipelines'
+import { CreatePipelineDialog } from './CreatePipelineDialog'
 import { displayLeadName, updateLead } from '@/utils/leads'
-import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
+import { VisibilityBadge } from './ResourceSharePicker'
+import { ShareResourceDialog } from './ShareResourceDialog'
+import { EntityTagPills } from './tags/EntityTagPills'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 
 const MAX_COLUMNS = 10
@@ -140,10 +143,19 @@ export function DealPipeline({
   quotesRefreshKey = 0,
   canSeeDealAmounts = true,
   onEditLead,
+  tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
+  onRefreshTags,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
-  const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0]
+  const switcherPipelines = useMemo(
+    () => pipelinesUserCanWorkIn(currentUser, pipelines, teams),
+    [currentUser, pipelines, teams]
+  )
+  const activePipeline =
+    pipelines.find((p) => p.id === activePipelineId)
+    || switcherPipelines[0]
+    || pipelines[0]
   const [columns, setColumns] = useState([])
   const [localDeals, setLocalDeals] = useState([])
   const [optimisticDeals, setOptimisticDeals] = useState(null)
@@ -180,7 +192,6 @@ export function DealPipeline({
   const [pipelineSwitcherOpen, setPipelineSwitcherOpen] = useState(false)
   const [pipelineSwitcherAnchor, setPipelineSwitcherAnchor] = useState(null)
   const [createPipelineDialogOpen, setCreatePipelineDialogOpen] = useState(false)
-  const [newPipelineTitle, setNewPipelineTitle] = useState('')
   const [sharePipelineId, setSharePipelineId] = useState(null)
   const [localShareState, setLocalShareState] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
@@ -196,8 +207,8 @@ export function DealPipeline({
   const canCollaboratePipeline = useMemo(() => {
     if (!apiMode) return true
     if (!activePipeline) return false
-    return canCollaborateOnPipeline(currentUser, activePipeline)
-  }, [apiMode, activePipeline, currentUser])
+    return canCollaborateOnPipeline(currentUser, activePipeline, teams)
+  }, [apiMode, activePipeline, currentUser, teams])
 
   const runShareValidation = useCallback(async (email) => {
     const trimmed = (email || '').trim().toLowerCase()
@@ -258,7 +269,8 @@ export function DealPipeline({
       visibility: norm.visibility || VISIBILITY.PRIVATE,
       sharedMemberUids: norm.sharedMemberUids || [],
     })
-  }, [sharePipelineId, pipelines])
+  // Only seed local state when the share dialog opens — not on every pipelines refresh.
+  }, [sharePipelineId])
 
   const handlePipelineShareChange = useCallback(
     (next) => {
@@ -280,6 +292,29 @@ export function DealPipeline({
     },
     [onSharePipelineWithTeams, sharePipelineId, pipelines]
   )
+
+  const closeSharePipeline = useCallback(() => {
+    setSharePipelineId(null)
+    setShareEmail('')
+    setShareEmailValid(null)
+    setShareEmailError('')
+  }, [])
+
+  const handlePipelineShareEmailSave = useCallback(() => {
+    if (!sharePipelineId || !onSharePipeline) return
+    const email = shareEmail.trim().toLowerCase()
+    if (!email) { showToast('Please enter an email', 'error'); return }
+    if (shareEmailValid === false) { showToast('No user found with this email', 'error'); return }
+    if (shareEmailValid !== true && onValidateShareEmail) { showToast('Please wait for email validation', 'error'); return }
+    const pipe = pipelines.find((p) => p.id === sharePipelineId)
+    const current = pipe?.sharedWith || []
+    if (current.some((e) => (e || '').toLowerCase() === email)) { showToast('This email is already in the share list', 'error'); return }
+    onSharePipeline(sharePipelineId, [...current, email])
+    setShareEmail('')
+    setShareEmailValid(null)
+    setShareEmailError('')
+    showToast('Email added to share list', 'success')
+  }, [sharePipelineId, onSharePipeline, shareEmail, shareEmailValid, onValidateShareEmail, pipelines])
 
   const refreshAllTasks = useCallback(() => {
     // Personal tasks = local leadTasks store with no pipelineId (tasks with a
@@ -323,13 +358,14 @@ export function DealPipeline({
   }, [onGoToParcelOnMap, onCloseLeadOverlay, onCloseDeal])
 
   const handleLeadUpdate = useCallback(async (updated) => {
+    onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
     try {
       const saved = await updateLead(getToken, updated.id, updated)
-      onLeadsChange?.(leads.map((l) => (l.id === saved.id ? saved : l)))
+      onLeadsChange?.((prev) => prev.map((l) => (l.id === saved.id ? saved : l)))
     } catch (e) {
       showToast(e.message || 'Could not update lead', 'error')
     }
-  }, [getToken, leads, onLeadsChange])
+  }, [getToken, onLeadsChange])
 
   // External callers (Leads list, Schedule) request the in-board New Task
   // dialog prefilled for a specific lead. Mirror the focus-lead pattern so
@@ -814,7 +850,7 @@ export function DealPipeline({
               ) : (
                 <DialogTitle className="min-w-0 truncate text-xl font-semibold">{pipelineTitle}</DialogTitle>
               )}
-              {apiMode && pipelines.length > 0 && (
+              {apiMode && switcherPipelines.length > 0 && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -913,7 +949,7 @@ export function DealPipeline({
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && handleDealClick(deal)}
-                      className={`deal-pipeline-lead-card map-panel-list-item px-2 py-1.5 rounded-md border border-white/10 text-white text-xs group flex items-center gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedDealId === deal.id ? 'opacity-50' : ''}`}
+                      className={`deal-pipeline-lead-card map-panel-list-item px-2 py-1.5 rounded-md border border-white/10 text-white text-xs group flex items-start gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedDealId === deal.id ? 'opacity-50' : ''}`}
                     >
                       <div className="flex-1 min-w-0">
                         {(() => {
@@ -931,6 +967,7 @@ export function DealPipeline({
                             </>
                           )
                         })()}
+                        <EntityTagPills entity={deal} tagRegistry={tagRegistry} type="deals" className="mt-0.5" />
                         {(() => {
                           const duration = formatTimeInState(deal)
                           const hasProfit = canSeeDealAmounts && dealHasFinancials(deal)
@@ -943,7 +980,7 @@ export function DealPipeline({
                           )
                         })()}
                       </div>
-                      <div className="flex items-center gap-0.5 flex-shrink-0 text-white/90">
+                      <div className="flex items-center gap-0.5 flex-shrink-0 text-white/90 pt-0.5">
                         {isEditMode ? (
                           <button type="button" className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 text-red-400 hover:text-red-300" onClick={(e) => handleDeleteDeal(deal.id, e)} title="Remove deal">
                             <Trash2 className="h-3.5 w-3.5" />
@@ -1231,6 +1268,8 @@ export function DealPipeline({
           onOpenQuote={onOpenQuoteFromDeal}
           quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
+          tagRegistry={tagRegistry}
+          onRefreshTags={onRefreshTags}
         />
       )}
 
@@ -1266,6 +1305,8 @@ export function DealPipeline({
           nestedOverlay
           topLayer
           onEditLead={onEditLead}
+          tagRegistry={tagRegistry}
+          onRefreshTags={onRefreshTags}
         />
       )}
 
@@ -1394,173 +1435,59 @@ export function DealPipeline({
         </DialogContent>
       </Dialog>
 
-      {sharePipelineId && onSharePipeline && (
-        <Dialog open={!!sharePipelineId} onOpenChange={(open) => { if (!open) { setSharePipelineId(null); setShareEmail(''); setShareEmailValid(null); setShareEmailError('') } }}>
-          <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay data-share-pipeline-dialog>
-            <DialogHeader>
-              <DialogTitle>Share pipeline</DialogTitle>
-              <DialogDescription className="sr-only">Enter an email address to share this pipeline</DialogDescription>
-            </DialogHeader>
-            {(() => {
-              const pipe = pipelines.find((p) => p.id === sharePipelineId)
-              const currentShared = pipe?.sharedWith || []
-              const isShared = currentShared.length > 0
-              const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
-              const activeTeam = teams?.[0] || null
-              const allowExternalSharing = teamMembership?.allowExternalSharing === true
-              return (
-                <>
-                  {onSharePipelineWithTeams && activeTeam && (
-                    <ResourceSharePicker
-                      team={activeTeam}
-                      visibility={shareState.visibility}
-                      sharedMemberUids={shareState.sharedMemberUids}
-                      onChange={handlePipelineShareChange}
-                      allowExternalSharing={allowExternalSharing}
-                    />
-                  )}
-                  {allowExternalSharing && isShared && (
-                    <div className="mb-4">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
-                      <ul className="space-y-1.5">
-                        {currentShared.map((email) => (
-                          <li
-                            key={email}
-                            className="group flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-md bg-black/10 hover:bg-black/15 transition-colors"
-                          >
-                            <span className="text-sm text-gray-200 truncate">{email}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = currentShared.filter((e) => (e || '').toLowerCase() !== (email || '').toLowerCase())
-                                onSharePipeline(sharePipelineId, updated)
-                              }}
-                              className="opacity-40 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-red-500/30 text-gray-400 hover:text-red-400 transition-opacity"
-                              title="Remove from share list"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {allowExternalSharing && (
-                    <>
-                  <Input
-                    type="email"
-                    placeholder="user@example.com"
-                    value={shareEmail}
-                    onChange={(e) => setShareEmail(e.target.value)}
-                    className={cn(
-                      'mb-1',
-                      shareEmailValid === true && 'border-green-600 ring-green-500/50',
-                      shareEmailValid === false && shareEmail.trim() && 'border-red-500'
-                    )}
-                  />
-                  {shareEmailError && (
-                    <p className="text-sm text-red-500 mb-3">{shareEmailError}</p>
-                  )}
-                  {!shareEmailError && shareEmail.trim() && isValidatingShare && (
-                    <p className="text-sm text-gray-500 mb-3">Checking...</p>
-                  )}
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      onClick={async () => {
-                        if (!sharePipelineId || !onSharePipeline) return
-                        const email = shareEmail.trim().toLowerCase()
-                        if (!email) { showToast('Please enter an email', 'error'); return }
-                        if (shareEmailValid === false) { showToast('No user found with this email', 'error'); return }
-                        if (shareEmailValid !== true && onValidateShareEmail) { showToast('Please wait for email validation', 'error'); return }
-                        const pipe2 = pipelines.find((p) => p.id === sharePipelineId)
-                        const current = pipe2?.sharedWith || []
-                        if (current.some((e) => (e || '').toLowerCase() === email)) { showToast('This email is already in the share list', 'error'); return }
-                        onSharePipeline(sharePipelineId, [...current, email])
-                        setShareEmail('')
-                        setShareEmailValid(null)
-                        setShareEmailError('')
-                        showToast('Email added to share list', 'success')
-                      }}
-                      disabled={!!(shareEmail.trim() && shareEmailValid === false)}
-                      className={cn(
-                        'flex-1 min-w-0 share-dialog-btn',
-                        shareEmailValid === true && 'share-save-valid'
-                      )}
-                    >
-                      {isValidatingShare ? 'Checking...' : 'Share'}
-                    </Button>
-                    <Button variant="outline" onClick={() => { setSharePipelineId(null); setShareEmail(''); setShareEmailValid(null); setShareEmailError('') }} className="flex-1 min-w-0 share-dialog-btn">Cancel</Button>
-                  </div>
-                    </>
-                  )}
-                  {!allowExternalSharing && (
-                    <div className="flex gap-2 flex-wrap mt-2">
-                      <Button variant="outline" onClick={() => { setSharePipelineId(null); setShareEmail(''); setShareEmailValid(null); setShareEmailError('') }} className="flex-1 min-w-0 share-dialog-btn">Done</Button>
-                    </div>
-                  )}
-                </>
-              )
-            })()}
-          </DialogContent>
-        </Dialog>
-      )}
+      {sharePipelineId && onSharePipeline && (() => {
+        const pipe = pipelines.find((p) => p.id === sharePipelineId)
+        const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+        const activeTeam = teams?.[0] || null
+        const allowExternalSharing = teamMembership?.allowExternalSharing === true
+        return (
+          <ShareResourceDialog
+            open={!!sharePipelineId}
+            onOpenChange={(open) => { if (!open) closeSharePipeline() }}
+            title="Share pipeline"
+            pipelineDialog
+            team={activeTeam}
+            showTeamPicker={Boolean(onSharePipelineWithTeams && activeTeam)}
+            shareState={shareState}
+            onShareStateChange={handlePipelineShareChange}
+            allowExternalSharing={allowExternalSharing}
+            sharedWithEmails={pipe?.sharedWith || []}
+            onRemoveSharedEmail={(email) => {
+              const updated = (pipe?.sharedWith || []).filter((e) => (e || '').toLowerCase() !== (email || '').toLowerCase())
+              onSharePipeline(sharePipelineId, updated)
+            }}
+            shareEmail={shareEmail}
+            onShareEmailChange={setShareEmail}
+            shareEmailValid={shareEmailValid}
+            shareEmailError={shareEmailError}
+            isValidatingShare={isValidatingShare}
+            onShareEmailSave={handlePipelineShareEmailSave}
+          />
+        )
+      })()}
 
-      {createPipelineDialogOpen && (
-        <Dialog open={createPipelineDialogOpen} onOpenChange={(open) => { if (!open) { setCreatePipelineDialogOpen(false); setNewPipelineTitle('') } }}>
-          <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay data-create-pipeline-dialog>
-            <DialogHeader>
-              <DialogTitle>New pipeline</DialogTitle>
-              <DialogDescription className="sr-only">Name your new pipe</DialogDescription>
-            </DialogHeader>
-            <Input
-              value={newPipelineTitle}
-              onChange={(e) => setNewPipelineTitle(e.target.value)}
-              placeholder="Pipeline name"
-              className="mb-4"
-              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <Button
-                className="flex-1 share-dialog-btn"
-                onClick={async () => {
-                  try {
-                    const title = newPipelineTitle.trim() || 'Pipes'
-                    const created = await createPipeline(getToken, { title })
-                    if (onPipelinesChange) await onPipelinesChange()
-                    onActivePipelineChange?.(created.id)
-                    setCreatePipelineDialogOpen(false)
-                    setNewPipelineTitle('')
-                    showToast('Pipeline created', 'success')
-                  } catch (err) {
-                    showToast(err.message || 'Could not create pipeline', 'error')
-                  }
-                }}
-              >
-                Create
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1 share-dialog-btn"
-                onClick={() => { setCreatePipelineDialogOpen(false); setNewPipelineTitle('') }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+      <CreatePipelineDialog
+        open={createPipelineDialogOpen}
+        onOpenChange={setCreatePipelineDialogOpen}
+        getToken={getToken}
+        onPipelinesChange={onPipelinesChange}
+        onActivePipelineChange={onActivePipelineChange}
+        teams={teams}
+        teamMembership={teamMembership}
+        nestedOverlay
+        topLayer
+      />
 
       {pipelineSwitcherOpen && pipelineSwitcherAnchor && apiMode && typeof document !== 'undefined' && createPortal(
         <div data-pipeline-switcher className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10010 }}>
           <div className="fixed inset-0 z-[10011]" onClick={() => setPipelineSwitcherOpen(false)} aria-hidden />
           <div
-            className="map-panel list-panel fixed z-[10012] rounded-xl min-w-[220px] max-w-[min(90vw,320px)] max-h-[min(50vh,280px)] overflow-y-auto py-1 shadow-xl border border-white/15"
+            className="map-panel list-panel fixed z-[10012] rounded-xl min-w-[220px] max-w-[min(90vw,320px)] max-h-[min(50vh,280px)] overflow-y-auto scrollbar-hide py-1 shadow-xl border border-white/15"
             style={{ top: pipelineSwitcherAnchor.top, left: pipelineSwitcherAnchor.left }}
             role="menu"
             onClick={(e) => e.stopPropagation()}
           >
-            {pipelines.map((p) => (
+            {switcherPipelines.map((p) => (
               <button
                 key={p.id}
                 type="button"
@@ -1589,7 +1516,6 @@ export function DealPipeline({
                 type="button"
                 onClick={() => {
                   setPipelineSwitcherOpen(false)
-                  setNewPipelineTitle('')
                   setCreatePipelineDialogOpen(true)
                 }}
                 className="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors text-white/95"

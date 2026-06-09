@@ -82,7 +82,7 @@ export function MobileActionBar({
       >
         {NotificationMenuItem && <NotificationMenuItem onSelect={closeMenu} />}
 
-        {NotificationMenuItem && <div className="my-1 border-t border-gray-200" />}
+        {NotificationMenuItem && <div className="my-1 border-t hamburger-menu-divider" />}
 
         <button
           data-tour="menu-lists"
@@ -162,11 +162,11 @@ export function MobileActionBar({
           <span>Teams</span>
         </button>
 
-        <div className="my-1 border-t border-gray-200" />
+        <div className="my-1 border-t hamburger-menu-divider" />
 
         {currentUser ? (
           <>
-            <div className="px-4 py-2 border-b border-gray-200">
+            <div className="px-4 py-2 border-b hamburger-menu-user">
               <p className="text-sm font-semibold text-gray-900 truncate">
                 {currentUser.displayName || 'User'}
               </p>

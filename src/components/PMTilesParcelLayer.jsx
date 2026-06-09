@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { mapProperties, canonicalParcelId } from '@/utils/parcelPropertyMap'
 
 const PARCEL_MIN_ZOOM = 15
 const PARCEL_TILE_MAXZOOM = 16
@@ -9,16 +10,26 @@ const LINE_LAYER = 'parcels-line'
 const LABEL_SOURCE = 'parcels-label-pts'
 const LABEL_LAYER = 'parcels-label'
 
+/** Leading house number from situs; skips assessor placeholders like "0" / "00". */
 function extractHouseNumber(addr) {
   if (!addr) return ''
-  const idx = addr.indexOf(' ')
-  return idx > 0 ? addr.slice(0, idx) : ''
+  const trimmed = String(addr).trim()
+  if (!trimmed) return ''
+  const match = trimmed.match(/^(\d{1,5}[A-Za-z]?)\b/)
+  if (!match) return ''
+  const num = match[1]
+  const digits = num.replace(/[A-Za-z]/g, '')
+  if (!digits || /^0+$/.test(digits)) return ''
+  return num
 }
+
+const MAX_LABEL_FEATURES = 500
 
 function buildLabelGeoJSON(features) {
   const seen = new Set()
   const pts = []
   for (const f of features) {
+    if (pts.length >= MAX_LABEL_FEATURES) break
     const p = f.properties
     const id = p.lrid || p.parcelid
     if (!id || seen.has(id)) continue
@@ -31,6 +42,21 @@ function buildLabelGeoJSON(features) {
     pts.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [cx, cy] }, properties: { _label: num } })
   }
   return { type: 'FeatureCollection', features: pts }
+}
+
+function labelGeoJSONKey(geo) {
+  const feats = geo.features
+  if (!feats.length) return 'empty'
+  const first = feats[0]
+  const last = feats[feats.length - 1]
+  return [
+    feats.length,
+    first.properties?._label,
+    last.properties?._label,
+    first.geometry?.coordinates?.[0],
+    first.geometry?.coordinates?.[1],
+    last.geometry?.coordinates?.[0],
+  ].join('|')
 }
 
 const LIST_HIGHLIGHT_COLORS = [
@@ -70,176 +96,6 @@ function pickBestFeature(features) {
   if (!features?.length) return null
   if (features.length === 1) return features[0]
   return [...features].sort((a, b) => approxBBoxArea(a.geometry) - approxBBoxArea(b.geometry))[0]
-}
-
-/** Single canonical id for app state + paint (must match pidMatch in expressions). */
-function canonicalParcelId(raw) {
-  const id = raw?.parcelid ?? raw?.lrid
-  return id != null && id !== '' ? String(id).trim() : ''
-}
-
-function splitCityState(ownercity, ownerstate) {
-  if (ownerstate) return { city: ownercity || '', state: ownerstate }
-  if (!ownercity) return { city: '', state: '' }
-  const parts = ownercity.trim().split(/\s+/)
-  if (parts.length >= 2) {
-    const last = parts[parts.length - 1]
-    if (last.length === 2 || last.length <= 8) {
-      return { city: parts.slice(0, -1).join(' '), state: last }
-    }
-  }
-  return { city: ownercity, state: '' }
-}
-
-// Raw-field keys that the canonical mapping below explicitly consumes. Anything
-// NOT in this set is forwarded through the pass-through loop below using an
-// uppercased key, so newly-discovered or rarely-populated Regrid/LandRecords
-// fields never get silently dropped before the parcel-details panel.
-const CANONICAL_CONSUMED = new Set([
-  // Identification
-  'parcelid', 'lrid', 'parcelid2', 'll_uuid', 'll_stable_id', 'taxacctnum',
-  // Address (situs)
-  'parceladdr', 'placename', 'parcelcity', 'parcelstate', 'parcelzip',
-  // Owner / mailing
-  'ownername', 'owneraddr', 'ownercity', 'ownerstate', 'ownerzip',
-  // Valuation
-  'totalvalue', 'landvalue', 'imprvalue', 'agvalue',
-  'saleamt', 'saledate', 'prior_sale_amount', 'prior_sale_date',
-  'taxyear',
-  // Property characteristics
-  'taxacres', 'assdacres', 'calcarea', 'll_gisacre', 'll_gissqft',
-  'yearbuilt', 'bldgsqft', 'numbldgs', 'numunits', 'numfloors',
-  'bedrooms', 'fullbaths', 'halfbaths',
-  'll_bldg_count', 'll_bldg_footprint_sqft',
-  // Use / zoning / classification
-  'usecode', 'usedesc', 'zoningcode', 'zoningdesc',
-  'lbcs_activity_desc', 'lbcs_function_desc', 'lbcs_structure_desc',
-  'lbcs_site_desc', 'lbcs_ownership_desc',
-  // Legal / lot
-  'legaldesc', 'lot', 'block', 'book', 'page', 'plssdesc',
-  'township', 'section', 'qtrsection', 'range',
-  // Location / geography
-  'countyname', 'geoid', 'tractname', 'centroidy', 'centroidx', 'lat', 'lon',
-  'census_block', 'census_blockgroup', 'census_zcta',
-  'cong_dist', 'state_house_dist', 'state_senate_dist',
-  'school_district', 'school_dist_id', 'path',
-  // Tax exemptions / incentives
-  'homestead_exemption', 'qoz', 'qoz_tract',
-  // Deliverability
-  'dpv_match_code', 'dpv_notes',
-  // Provenance
-  'updated', 'address_source', 'parval_source', 'improv_source', 'landval_source',
-])
-
-function mapProperties(raw) {
-  const { city: mailCity, state: mailState } = splitCityState(raw.ownercity, raw.ownerstate)
-
-  const canonical = {
-    PROP_ID:        canonicalParcelId(raw) || '',
-    PARCEL_ID_ALT:  raw.parcelid2  || '',
-    LL_UUID:        raw.ll_uuid    || '',
-    LL_STABLE_ID:   raw.ll_stable_id || '',
-    SITUS_ADDR:     raw.parceladdr || '',
-    // Prefer Census Designated Place (placename) over assessor's parcelcity:
-    // in split-ZIP / ETJ areas the assessor field often reports the taxing
-    // jurisdiction (e.g. "Fort Worth" for a 76028 parcel that everyone —
-    // USPS, Mapbox, and residents — calls Burleson). cousubname (Census
-    // county subdivision, e.g. "Fort Worth CCD") is intentionally excluded
-    // here because it covers whole swaths of a county and isn't a city.
-    SITUS_CITY:     raw.placename || raw.parcelcity || '',
-    SITUS_STATE:    raw.parcelstate || '',
-    SITUS_ZIP:      raw.parcelzip  || '',
-    OWNER_NAME:     raw.ownername  || '',
-    MAIL_ADDR:      raw.owneraddr  || '',
-    MAIL_CITY:      mailCity,
-    MAIL_STATE:     mailState,
-    MAIL_ZIP:       raw.ownerzip   || '',
-    DPV_MATCH:      raw.dpv_match_code || '',
-    DPV_NOTES:      raw.dpv_notes  || '',
-    MKT_VAL:        raw.totalvalue ?? '',
-    LAND_VAL:       raw.landvalue  ?? '',
-    IMPR_VAL:       raw.imprvalue  ?? '',
-    AG_VAL:         raw.agvalue    ?? '',
-    SALE_PRICE:     raw.saleamt    ?? '',
-    SALE_DATE:      raw.saledate   || '',
-    PRIOR_SALE_PRICE: raw.prior_sale_amount ?? '',
-    PRIOR_SALE_DATE:  raw.prior_sale_date   || '',
-    GIS_ACRES:      raw.taxacres   ?? raw.assdacres ?? '',
-    LL_GIS_ACRES:   raw.ll_gisacre ?? '',
-    LL_GIS_SQFT:    raw.ll_gissqft ?? '',
-    CALC_AREA_SQM:  raw.calcarea   ?? '',
-    YEAR_BUILT:     raw.yearbuilt  || '',
-    BLDG_SQFT:      raw.bldgsqft   || '',
-    NUM_BLDGS:      raw.numbldgs   || '',
-    NUM_UNITS:      raw.numunits   || '',
-    NUM_FLOORS:     raw.numfloors  || '',
-    BLDG_COUNT:     raw.ll_bldg_count ?? '',
-    BLDG_FOOTPRINT_SQFT: raw.ll_bldg_footprint_sqft ?? '',
-    BEDROOMS:       raw.bedrooms   ?? '',
-    BATHROOMS:      raw.fullbaths  ?? '',
-    HALF_BATHS:     raw.halfbaths  ?? '',
-    LEGAL_DESC:     raw.legaldesc  || '',
-    USE_CODE:       raw.usecode    || '',
-    USE_DESC:       raw.usedesc    || '',
-    ZONING_CODE:    raw.zoningcode || '',
-    ZONING:         raw.zoningdesc || raw.zoningcode || '',
-    LBCS_ACTIVITY:  raw.lbcs_activity_desc  || '',
-    LBCS_FUNCTION:  raw.lbcs_function_desc  || '',
-    LBCS_STRUCTURE: raw.lbcs_structure_desc || '',
-    LBCS_SITE:      raw.lbcs_site_desc      || '',
-    LBCS_OWNERSHIP: raw.lbcs_ownership_desc || '',
-    HOMESTEAD_EXEMPTION: raw.homestead_exemption ?? '',
-    QOZ:            raw.qoz        || '',
-    QOZ_TRACT:      raw.qoz_tract  || '',
-    SCHOOL_DISTRICT: raw.school_district || '',
-    SCHOOL_DIST_ID: raw.school_dist_id || '',
-    TAX_ACCT:       raw.taxacctnum || '',
-    TAX_YEAR:       raw.taxyear    ?? '',
-    LOT:            raw.lot        || '',
-    BLOCK:          raw.block      || '',
-    BOOK:           raw.book       || '',
-    PAGE:           raw.page       || '',
-    SUBDIVISION:    raw.plssdesc   || '',
-    TOWNSHIP:       raw.township   || '',
-    SECTION:        raw.section    || '',
-    QTR_SECTION:    raw.qtrsection || '',
-    RANGE:          raw.range      || '',
-    COUNTY:         raw.countyname || '',
-    COUNTY_FIPS:    raw.geoid      || '',
-    CITY:           raw.placename  || raw.parcelcity || '',
-    CENSUS_TRACT:   raw.tractname  || '',
-    CENSUS_BLOCK:   raw.census_block      || '',
-    CENSUS_BLOCKGROUP: raw.census_blockgroup || '',
-    CENSUS_ZCTA:    raw.census_zcta || '',
-    CONG_DIST:      raw.cong_dist        || '',
-    STATE_HOUSE_DIST:  raw.state_house_dist  || '',
-    STATE_SENATE_DIST: raw.state_senate_dist || '',
-    PLACE_NAME:     raw.placename  || '',
-    JURISDICTION_PATH: raw.path    || '',
-    // Prefer the explicit `lat`/`lon` ("representative point" — guaranteed to
-    // sit inside the parcel) when provided; fall back to the polygon centroid
-    // (`centroidy`/`centroidx`) which can land outside L-shaped parcels.
-    LATITUDE:       raw.lat        ?? raw.centroidy ?? '',
-    LONGITUDE:      raw.lon        ?? raw.centroidx ?? '',
-    LAST_UPDATED:   raw.updated    || '',
-    ADDRESS_SOURCE: raw.address_source || '',
-    PARVAL_SOURCE:  raw.parval_source  || '',
-    IMPROV_SOURCE:  raw.improv_source  || '',
-    LANDVAL_SOURCE: raw.landval_source || '',
-  }
-
-  // Pass-through: any raw key not explicitly consumed above is forwarded with
-  // an uppercased key. This guarantees no field is silently dropped before
-  // the panel, and the categorizer in useParcelDetailsData routes unknown
-  // keys to "Other" within the Property tab.
-  for (const [k, v] of Object.entries(raw || {})) {
-    if (CANONICAL_CONSUMED.has(k)) continue
-    if (v === '' || v === null || v === undefined) continue
-    const key = String(k).toUpperCase().replace(/[^A-Z0-9_]/g, '_')
-    if (!(key in canonical)) canonical[key] = v
-  }
-
-  return canonical
 }
 
 function pidMatch(pid) {
@@ -403,42 +259,47 @@ export function PMTilesParcelLayer({
     if (!map || !mapReady) return
     let cancelled = false
     let labelUpdateTimer = null
-    // Signature of the last GeoJSON we pushed into LABEL_SOURCE. Used to short-circuit
-    // redundant setData() calls — every setData fires a sourcedata event, which would
-    // otherwise re-enter this handler and produce a continuous label-refresh loop.
     let lastLabelKey = ''
+    let lastLabelRefreshAt = 0
+    const LABEL_DEBOUNCE_MS = 200
+    const LABEL_MIN_INTERVAL_MS = 400
 
     const tileUrl = window.location.origin + '/api/tiles?z={z}&x={x}&y={y}'
     const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
-    const EMPTY_LABEL_KEY = 'empty'
 
     function refreshLabels() {
       if (cancelled) return
       if (labelUpdateTimer) clearTimeout(labelUpdateTimer)
       labelUpdateTimer = setTimeout(() => {
         if (cancelled) return
+        const now = Date.now()
+        if (now - lastLabelRefreshAt < LABEL_MIN_INTERVAL_MS) return
         try {
           const zoom = map.getZoom()
           const src = map.getSource(LABEL_SOURCE)
           if (!src) return
           if (zoom < 17) {
-            if (lastLabelKey !== EMPTY_LABEL_KEY) {
+            if (lastLabelKey !== 'empty') {
               src.setData(emptyGeoJSON)
-              lastLabelKey = EMPTY_LABEL_KEY
+              lastLabelKey = 'empty'
+              lastLabelRefreshAt = now
             }
             return
           }
           const features = map.queryRenderedFeatures({ layers: [FILL_LAYER] })
           const geo = buildLabelGeoJSON(features)
-          // Cheap content fingerprint: feature count + concatenated labels. If
-          // nothing visibly changed, skip setData entirely — every setData emits
-          // a sourcedata event, which would otherwise re-enter this handler.
-          const key = geo.features.length + '|' + geo.features.map(f => f.properties._label).join(',')
+          const key = labelGeoJSONKey(geo)
           if (key === lastLabelKey) return
           lastLabelKey = key
+          lastLabelRefreshAt = now
           src.setData(geo)
         } catch { /* ignore */ }
-      }, 80)
+      }, LABEL_DEBOUNCE_MS)
+    }
+
+    function scheduleLabelRefreshAfterMove() {
+      refreshLabels()
+      map.once('idle', refreshLabels)
     }
 
     function ensureLayers() {
@@ -534,17 +395,11 @@ export function PMTilesParcelLayer({
     }
     map.on('styledata', onStyleData)
 
-    map.on('moveend', refreshLabels)
-    // Only react to sourcedata events for the parcels vector source. Reacting to
-    // every source (basemap rasters, our own LABEL_SOURCE setData, terrain DEM,
-    // etc.) previously produced a self-sustaining refresh loop running at ~12 Hz
-    // forever, rebuilding the label GeoJSON and re-uploading GPU buffers.
-    const onSourceData = (e) => {
-      if (e.sourceId !== SOURCE_ID) return
-      if (!e.isSourceLoaded && !e.tile) return
-      refreshLabels()
-    }
-    map.on('sourcedata', onSourceData)
+    // Refresh labels when the viewport settles — not on every parcel tile load.
+    // Nationwide panning loads hundreds of vector tiles; per-tile label rebuilds
+    // were pegging CPU/memory and could freeze the tab.
+    map.on('moveend', scheduleLabelRefreshAfterMove)
+    map.on('zoomend', scheduleLabelRefreshAfterMove)
 
     const onClick = (e) => {
       const features = e.features?.length ? e.features : (() => {
@@ -582,6 +437,7 @@ export function PMTilesParcelLayer({
         properties,
         geometry: feature.geometry,
         parcelId,
+        lrid: raw.lrid || '',
       })
     }
 
@@ -595,8 +451,8 @@ export function PMTilesParcelLayer({
     return () => {
       cancelled = true
       if (labelUpdateTimer) clearTimeout(labelUpdateTimer)
-      map.off('moveend', refreshLabels)
-      map.off('sourcedata', onSourceData)
+      map.off('moveend', scheduleLabelRefreshAfterMove)
+      map.off('zoomend', scheduleLabelRefreshAfterMove)
       map.off('click', FILL_LAYER, onClick)
       map.off('mouseenter', FILL_LAYER, onEnter)
       map.off('mouseleave', FILL_LAYER, onLeave)

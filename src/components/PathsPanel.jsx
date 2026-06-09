@@ -1,14 +1,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Users } from 'lucide-react'
+import { X, Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Users, Tag } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
-import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
+import { VisibilityBadge } from './ResourceSharePicker'
+import { ShareResourceDialog } from './ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
+import { filterByTags } from '@/utils/tags'
+import { updatePathTags } from '@/utils/paths'
+import { PanelFilterMenu } from './tags/PanelFilterMenu'
+import { EntityTagPills } from './tags/EntityTagPills'
+import { TagPicker } from './tags/TagPicker'
 
 const PATH_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
@@ -22,6 +27,7 @@ export function PathsPanel({
   currentUser,
   paths = [],
   onPathsChange,
+  onPathPatch,
   onDeletePath,
   onRenamePath,
   onSharePath,
@@ -32,8 +38,17 @@ export function PathsPanel({
   onCenterOnPath,
   visiblePathIds = [],
   onTogglePathVisibility,
-  distanceUnit = 'miles'
+  distanceUnit = 'miles',
+  getToken,
+  tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
+  onRefreshTags,
 }) {
+  const [selectedTagIds, setSelectedTagIds] = useState([])
+  const [tagEditPathId, setTagEditPathId] = useState(null)
+  const [tagPickerOpen, setTagPickerOpen] = useState(false)
+  const [tagPickerAnchorPosition, setTagPickerAnchorPosition] = useState(null)
+  const tagPickerAnchorRef = useRef(null)
+  const tagPickerPortalRef = useRef(null)
   const [openDropdownPathId, setOpenDropdownPathId] = useState(null)
   const [dropdownAnchor, setDropdownAnchor] = useState(null)
   const [renamingPathId, setRenamingPathId] = useState(null)
@@ -122,7 +137,7 @@ export function PathsPanel({
       visibility: norm.visibility || VISIBILITY.PRIVATE,
       sharedMemberUids: norm.sharedMemberUids || [],
     })
-  }, [sharePathId, paths])
+  }, [sharePathId])
 
   const handleShareChange = useCallback(
     (next) => {
@@ -174,6 +189,7 @@ export function PathsPanel({
   const openDropdown = (pathId, event) => {
     event.stopPropagation()
     const el = event.currentTarget
+    tagPickerAnchorRef.current = el
     const rect = el.getBoundingClientRect()
     let top = rect.bottom + 4
     let left = rect.right - MENU_WIDTH
@@ -235,6 +251,27 @@ export function PathsPanel({
     return list
   }, [paths])
 
+  const filteredPaths = useMemo(
+    () => filterByTags(allPaths, selectedTagIds),
+    [allPaths, selectedTagIds]
+  )
+
+  const handlePathTagsChange = useCallback(async (pathId, { tagIds, tagMeta }) => {
+    if (!getToken) return
+    const previous = allPaths.find((p) => p.id === pathId)
+    onPathPatch?.(pathId, { tagIds, tagMeta })
+    try {
+      const saved = await updatePathTags(getToken, pathId, { tagIds, tagMeta })
+      onPathPatch?.(pathId, { tagIds: saved.tagIds, tagMeta: saved.tagMeta })
+    } catch (e) {
+      if (previous) {
+        onPathPatch?.(pathId, { tagIds: previous.tagIds, tagMeta: previous.tagMeta })
+      }
+      showToast(e.message || 'Could not update tags', 'error')
+      throw e
+    }
+  }, [getToken, allPaths, onPathPatch])
+
   const handlePanelBack = () => {
     onBack?.() ?? onClose?.()
   }
@@ -248,11 +285,22 @@ export function PathsPanel({
           hideOverlay
           onInteractOutside={(e) => {
             if (e.target.closest?.('[data-paths-panel-dropdown]')) e.preventDefault()
+            if (e.target.closest?.('[data-tag-picker-menu]')) e.preventDefault()
+            if (e.target.closest?.('[data-tag-picker-trigger]')) e.preventDefault()
+            if (e.target.closest?.('[data-panel-filter-menu]')) e.preventDefault()
           }}
         >
           <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">View and manage your recorded GPS paths</DialogDescription>
-            <PanelHeader onBack={handlePanelBack} title="Paths" />
+            <PanelHeader onBack={handlePanelBack} title="Paths">
+              {allPaths.length > 0 && (
+                <PanelFilterMenu
+                  tags={tagRegistry.paths || []}
+                  selectedTagIds={selectedTagIds}
+                  onTagIdsChange={setSelectedTagIds}
+                />
+              )}
+            </PanelHeader>
           </DialogHeader>
 
           <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
@@ -263,9 +311,13 @@ export function PathsPanel({
                   <p className="text-gray-500 text-sm">No paths recorded yet.</p>
                   <p className="text-gray-400 text-xs mt-1">Tap the record button on the map to start tracking.</p>
                 </div>
+              ) : filteredPaths.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 text-sm">No paths match the selected tags.</p>
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {allPaths.map((path, idx) => {
+                  {filteredPaths.map((path, idx) => {
                     const isVisible = visiblePathIds.includes(path.id)
                     const color = PATH_COLORS[idx % PATH_COLORS.length]
                     const isRenaming = renamingPathId === path.id
@@ -334,6 +386,12 @@ export function PathsPanel({
                             <p className="text-xs text-gray-400 mt-0.5 tabular-nums">
                               {formatDate(path.createdAt) || '—'}
                             </p>
+                            <EntityTagPills
+                              entity={path}
+                              tagRegistry={tagRegistry}
+                              type="paths"
+                              className="mt-1"
+                            />
                           </div>
                         </div>
 
@@ -370,6 +428,7 @@ export function PathsPanel({
               )}
             </div>
           </div>
+          <div ref={tagPickerPortalRef} className="contents" aria-hidden />
         </DialogContent>
       </Dialog>
 
@@ -394,6 +453,31 @@ export function PathsPanel({
                   <Pencil className="h-4 w-4 flex-shrink-0" />
                   Rename
                 </button>
+                {getToken && isPathOwnedByUser(path) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = tagPickerAnchorRef.current
+                      if (el) {
+                        const rect = el.getBoundingClientRect()
+                        setTagPickerAnchorPosition({
+                          top: rect.bottom + 4,
+                          left: Math.max(MENU_PADDING, rect.right - 220),
+                          minWidth: 220,
+                        })
+                      } else {
+                        setTagPickerAnchorPosition({ top: 80, left: 24, minWidth: 220 })
+                      }
+                      setTagEditPathId(path.id)
+                      closeDropdown()
+                      requestAnimationFrame(() => setTagPickerOpen(true))
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
+                  >
+                    <Tag className="h-4 w-4 flex-shrink-0" />
+                    Tags
+                  </button>
+                )}
                 {onSharePath && (
                   <button
                     type="button"
@@ -421,98 +505,59 @@ export function PathsPanel({
         document.getElementById('modal-root') || document.body
       )}
 
-      {sharePathId && (
-        <Dialog open={!!sharePathId} onOpenChange={(open) => { if (!open) { setSharePathId(null); setShareEmail('') } }}>
-          <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay>
-            <DialogHeader>
-              <DialogTitle>Share path</DialogTitle>
-              <DialogDescription className="sr-only">Enter an email address to share this path</DialogDescription>
-            </DialogHeader>
-            {(() => {
-              const path = allPaths.find(p => p.id === sharePathId)
-              const currentShared = path?.sharedWith || []
-              const isShared = currentShared.length > 0
-              const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
-              const activeTeam = teams?.[0] || null
-              const allowExternalSharing = teamMembership?.allowExternalSharing === true
-              return (
-                <>
-                  {onSharePathWithTeams && activeTeam && (
-                    <ResourceSharePicker
-                      team={activeTeam}
-                      visibility={shareState.visibility}
-                      sharedMemberUids={shareState.sharedMemberUids}
-                      onChange={handleShareChange}
-                      allowExternalSharing={allowExternalSharing}
-                    />
-                  )}
-                  {allowExternalSharing && isShared && (
-                    <div className="mb-4">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Shared with</p>
-                      <ul className="space-y-1.5">
-                        {currentShared.map((email) => (
-                          <li
-                            key={email}
-                            className="group flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-md bg-black/10 hover:bg-black/15 transition-colors"
-                          >
-                            <span className="text-sm text-gray-200 truncate">{email}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveSharedEmail(email)}
-                              className="opacity-40 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-red-500/30 text-gray-400 hover:text-red-400 transition-opacity"
-                              title="Remove from share list"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {allowExternalSharing && (
-                    <>
-                  <Input
-                    type="email"
-                    placeholder="user@example.com"
-                    value={shareEmail}
-                    onChange={(e) => setShareEmail(e.target.value)}
-                    className={cn(
-                      'mb-1',
-                      shareEmailValid === true && 'border-green-600 ring-green-500/50',
-                      shareEmailValid === false && shareEmail.trim() && 'border-red-500'
-                    )}
-                  />
-                  {shareEmailError && (
-                    <p className="text-sm text-red-500 mb-3">{shareEmailError}</p>
-                  )}
-                  {!shareEmailError && shareEmail.trim() && isValidatingShare && (
-                    <p className="text-sm text-gray-500 mb-3">Checking...</p>
-                  )}
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      onClick={handleShareSave}
-                      disabled={!!(shareEmail.trim() && shareEmailValid === false)}
-                      className={cn(
-                        'flex-1 min-w-0 share-dialog-btn',
-                        shareEmailValid === true && 'share-save-valid'
-                      )}
-                    >
-                      {isValidatingShare ? 'Checking...' : 'Share'}
-                    </Button>
-                    <Button variant="outline" onClick={() => { setSharePathId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Cancel</Button>
-                  </div>
-                    </>
-                  )}
-                  {!allowExternalSharing && (
-                    <div className="flex gap-2 flex-wrap mt-2">
-                      <Button variant="outline" onClick={() => { setSharePathId(null); setShareEmail('') }} className="flex-1 min-w-0 share-dialog-btn">Done</Button>
-                    </div>
-                  )}
-                </>
-              )
-            })()}
-          </DialogContent>
-        </Dialog>
+      {sharePathId && (() => {
+        const path = allPaths.find((p) => p.id === sharePathId)
+        const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+        const activeTeam = teams?.[0] || null
+        const allowExternalSharing = teamMembership?.allowExternalSharing === true
+        const closeSharePath = () => {
+          setSharePathId(null)
+          setShareEmail('')
+          setShareEmailValid(null)
+          setShareEmailError('')
+        }
+        return (
+          <ShareResourceDialog
+            open={!!sharePathId}
+            onOpenChange={(open) => { if (!open) closeSharePath() }}
+            title="Share path"
+            team={activeTeam}
+            showTeamPicker={Boolean(onSharePathWithTeams && activeTeam)}
+            shareState={shareState}
+            onShareStateChange={handleShareChange}
+            allowExternalSharing={allowExternalSharing}
+            sharedWithEmails={path?.sharedWith || []}
+            onRemoveSharedEmail={handleRemoveSharedEmail}
+            shareEmail={shareEmail}
+            onShareEmailChange={setShareEmail}
+            shareEmailValid={shareEmailValid}
+            shareEmailError={shareEmailError}
+            isValidatingShare={isValidatingShare}
+            onShareEmailSave={handleShareSave}
+          />
+        )
+      })()}
+
+      {tagEditPathId && tagPickerOpen && (
+        <TagPicker
+          type="paths"
+          entity={allPaths.find((p) => p.id === tagEditPathId)}
+          tagRegistry={tagRegistry}
+          getToken={getToken}
+          onRegistryChange={onRefreshTags}
+          hideWhenEmpty={false}
+          open={tagPickerOpen}
+          onOpenChange={(open) => {
+            setTagPickerOpen(open)
+            if (!open) {
+              setTagEditPathId(null)
+              setTagPickerAnchorPosition(null)
+            }
+          }}
+          anchorPosition={tagPickerAnchorPosition}
+          portalContainerRef={tagPickerPortalRef}
+          onTagsChange={(tags) => handlePathTagsChange(tagEditPathId, tags)}
+        />
       )}
     </>
   )

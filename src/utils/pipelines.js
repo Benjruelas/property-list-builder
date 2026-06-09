@@ -2,6 +2,37 @@
  * User-scoped pipelines API. All methods require an async getToken() that returns Firebase ID token.
  */
 
+import { canEdit, resolveResourceAccess, userActiveTeam } from './access'
+
+const LOCAL_PIPELINE_MIGRATION_PREFIX = 'knockscout_local_pipeline_migrated:'
+
+export function localPipelineMigrationKey(uid) {
+  return `${LOCAL_PIPELINE_MIGRATION_PREFIX}${uid || 'anon'}`
+}
+
+/** Keep team-task carriers (`leads[].teamTasks`) when hydrating client state. */
+export function normalizePipelineForClient(pipeline) {
+  if (!pipeline || typeof pipeline !== 'object') return pipeline
+  return {
+    ...pipeline,
+    deals: Array.isArray(pipeline.deals) ? pipeline.deals : [],
+    leads: Array.isArray(pipeline.leads) ? pipeline.leads : [],
+  }
+}
+
+export function dedupePipelinesById(pipelines) {
+  if (!Array.isArray(pipelines)) return []
+  const byId = new Map()
+  for (const p of pipelines) {
+    if (!p?.id) continue
+    const existing = byId.get(p.id)
+    const ts = p.updatedAt || p.createdAt || ''
+    const existingTs = existing?.updatedAt || existing?.createdAt || ''
+    if (!existing || ts > existingTs) byId.set(p.id, p)
+  }
+  return [...byId.values()]
+}
+
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
   if (typeof window !== 'undefined') return `${window.location.origin}/api`
@@ -9,25 +40,19 @@ const getApiBase = () => {
 }
 
 /**
- * Owner or collaborator may add/move deals on a pipeline.
+ * Owner or collaborator may add/move deals on a pipeline (matches server canEdit).
  */
 export function canAddDealsToPipeline(user, pipeline, teams = []) {
   if (!user?.uid || !pipeline) return false
-  if (pipeline.ownerId === user.uid) return true
-  const email = (user.email || '').toLowerCase().trim()
-  const shared = Array.isArray(pipeline.sharedWith) ? pipeline.sharedWith : []
-  if (email && shared.some((e) => (e || '').toLowerCase().trim() === email)) return true
-  const teamShares = Array.isArray(pipeline.teamShares) ? pipeline.teamShares : []
-  if (teamShares.length && Array.isArray(teams) && teams.length) {
-    const ids = new Set(teamShares)
-    return teams.some(
-      (t) =>
-        ids.has(t.id) &&
-        (t.ownerId === user.uid ||
-          (Array.isArray(t.members) && t.members.some((m) => m.uid === user.uid)))
-    )
-  }
-  return false
+  const team = userActiveTeam(teams, user.uid)
+  const access = resolveResourceAccess(pipeline, user, team, teams)
+  return canEdit(access)
+}
+
+/** Pipes the user can work in (owner/collaborator) — excludes team-admin view-only copies. */
+export function pipelinesUserCanWorkIn(user, pipelines, teams = []) {
+  if (!user?.uid || !Array.isArray(pipelines)) return []
+  return dedupePipelinesById(pipelines).filter((p) => canAddDealsToPipeline(user, p, teams))
 }
 
 /** @deprecated use canAddDealsToPipeline */
@@ -48,16 +73,33 @@ export async function fetchPipelines(getToken) {
   })
   if (!res.ok) throw new Error('Failed to fetch pipelines')
   const data = await res.json()
-  return data.pipelines || []
+  return dedupePipelinesById(data.pipelines || []).map(normalizePipelineForClient)
 }
 
-export async function createPipeline(getToken, { title = 'Pipes', columns, deals = [] } = {}) {
+export async function createPipeline(getToken, input = {}) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to create pipelines')
+  const opts = typeof input === 'string' ? { title: input } : input
+  const {
+    title = 'Pipes',
+    columns,
+    deals = [],
+    visibility,
+    sharedMemberUids,
+    teamShares,
+    teamId,
+    sharedWith,
+  } = opts
+  const body = { title: String(title || '').trim() || 'Pipes', columns, deals }
+  if (visibility !== undefined) body.visibility = visibility
+  if (sharedMemberUids !== undefined) body.sharedMemberUids = sharedMemberUids
+  if (teamShares !== undefined) body.teamShares = teamShares
+  if (teamId !== undefined) body.teamId = teamId
+  if (sharedWith !== undefined) body.sharedWith = sharedWith
   const res = await fetch(`${getApiBase()}/pipelines`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ title: title.trim() || 'Pipes', columns, deals })
+    body: JSON.stringify(body)
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -67,7 +109,18 @@ export async function createPipeline(getToken, { title = 'Pipes', columns, deals
   return data.pipeline
 }
 
-export async function updatePipeline(getToken, pipelineId, { title, columns, deals, leads, sharedWith, teamShares }) {
+export async function updatePipeline(getToken, pipelineId, updates = {}) {
+  const {
+    title,
+    columns,
+    deals,
+    leads,
+    sharedWith,
+    teamShares,
+    teamId,
+    visibility,
+    sharedMemberUids,
+  } = updates
   const token = await getToken()
   if (!token) throw new Error('Sign in to update pipelines')
   const body = { pipelineId }
@@ -77,6 +130,9 @@ export async function updatePipeline(getToken, pipelineId, { title, columns, dea
   if (leads !== undefined) body.deals = leads
   if (sharedWith !== undefined) body.sharedWith = sharedWith
   if (teamShares !== undefined) body.teamShares = teamShares
+  if (teamId !== undefined) body.teamId = teamId
+  if (visibility !== undefined) body.visibility = visibility
+  if (sharedMemberUids !== undefined) body.sharedMemberUids = sharedMemberUids
   const res = await fetch(`${getApiBase()}/pipelines`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

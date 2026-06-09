@@ -51,9 +51,12 @@ async function getUserData(uid) {
   }
 }
 
+const SHARE_NOTIFICATION_KINDS = new Set(['listShared', 'pipelineShared', 'pathShared', 'itemShared'])
+
 function normalizePrefs(prefs) {
   const d = {
     pushEnabled: false,
+    itemShared: true,
     listShared: true,
     pipelineShared: true,
     pipelineLeadStage: true,
@@ -66,6 +69,7 @@ function normalizePrefs(prefs) {
   if (!prefs || typeof prefs !== 'object') return d
   return {
     pushEnabled: prefs.pushEnabled === true,
+    itemShared: prefs.itemShared !== false,
     listShared: prefs.listShared !== false,
     pipelineShared: prefs.pipelineShared !== false,
     pipelineLeadStage: prefs.pipelineLeadStage !== false,
@@ -122,13 +126,23 @@ async function getPushSubscriptions(uid) {
   return subs
 }
 
-function prefAllows(kind, prefs) {
-  if (!prefs.pushEnabled) return false
-  const map = {
+function shareAlertsEnabled(kind, prefs) {
+  if (prefs.itemShared !== undefined) return prefs.itemShared !== false
+  const legacy = {
     listShared: 'listShared',
     pipelineShared: 'pipelineShared',
-    pipelineLeadStage: 'pipelineLeadStage',
     pathShared: 'pathShared',
+    itemShared: 'itemShared',
+  }
+  const key = legacy[kind]
+  return key ? prefs[key] !== false : true
+}
+
+function prefAllows(kind, prefs) {
+  if (!prefs.pushEnabled) return false
+  if (SHARE_NOTIFICATION_KINDS.has(kind)) return shareAlertsEnabled(kind, prefs)
+  const map = {
+    pipelineLeadStage: 'pipelineLeadStage',
     formSubmitted: 'formSubmitted',
     teamAdded: 'teamAdded',
     taskDeadline: 'taskDeadline',
@@ -222,21 +236,76 @@ export function getTeamMemberEmails(team) {
   return [...emails]
 }
 
+function shareKindForResourceType(resourceType) {
+  if (resourceType === 'pipeline') return 'pipelineShared'
+  if (resourceType === 'path') return 'pathShared'
+  return 'listShared'
+}
+
+function shareNavData(resourceType, resourceId) {
+  if (resourceType === 'pipeline') return { type: 'pipelineShared', pipelineId: resourceId }
+  if (resourceType === 'path') return { type: 'pathShared', pathId: resourceId }
+  return { type: 'listShared', listId: resourceId }
+}
+
+export function memberEmailsForUids(team, uids, excludeUid) {
+  const wanted = new Set(uids || [])
+  const emails = []
+  const seen = new Set()
+  if (team?.ownerId && wanted.has(team.ownerId) && team.ownerId !== excludeUid) {
+    const em = (team.ownerEmail || '').toLowerCase().trim()
+    if (em && !seen.has(em)) {
+      seen.add(em)
+      emails.push(em)
+    }
+  }
+  for (const m of team?.members || []) {
+    if (!m?.uid || !wanted.has(m.uid) || m.uid === excludeUid) continue
+    const em = (m.email || '').toLowerCase().trim()
+    if (em && !seen.has(em)) {
+      seen.add(em)
+      emails.push(em)
+    }
+  }
+  return emails
+}
+
+/** Notify teammates when added via sharedMemberUids (ResourceSharePicker). */
+export async function notifyNewMemberShares(newMemberUids, team, { resourceType, resourceName, resourceId, actorEmail, actorUid }) {
+  const emails = memberEmailsForUids(team, newMemberUids, actorUid)
+  const kind = shareKindForResourceType(resourceType)
+  const data = shareNavData(resourceType, resourceId)
+  for (const email of emails) {
+    await sendWebPushToEmail(
+      email,
+      {
+        title: 'Item shared with you',
+        body: `${actorEmail || 'Someone'} shared "${resourceName || 'an item'}" with you`,
+        tag: `member-share-${resourceType}-${resourceId}-${email}`,
+        data,
+      },
+      kind,
+      { email: actorEmail }
+    )
+  }
+}
+
 export async function notifyTeamResourceShare(newTeamIds, teamsIndex, { resourceType, resourceName, resourceId, actorEmail }) {
+  const kind = shareKindForResourceType(resourceType)
   for (const tid of newTeamIds || []) {
     const team = teamsIndex[tid]
     if (!team) continue
-    const title = `${resourceType} shared with your team`
+    const data = { ...shareNavData(resourceType, resourceId), teamId: tid }
     for (const email of getTeamMemberEmails(team)) {
       await sendWebPushToEmail(
         email,
         {
-          title,
-          body: `${actorEmail || 'Someone'} shared "${resourceName || resourceType}" with team ${team.name || ''}`.trim(),
+          title: 'Item shared with you',
+          body: `${actorEmail || 'Someone'} shared "${resourceName || 'an item'}" with team ${team.name || ''}`.trim(),
           tag: `team-share-${resourceType}-${resourceId}-${tid}`,
-          data: { type: `${resourceType}Shared`, [`${resourceType}Id`]: resourceId, teamId: tid },
+          data,
         },
-        resourceType === 'list' ? 'listShared' : resourceType === 'pipeline' ? 'pipelineShared' : resourceType === 'path' ? 'pathShared' : 'listShared',
+        kind,
         { email: actorEmail }
       )
     }
@@ -244,12 +313,11 @@ export async function notifyTeamResourceShare(newTeamIds, teamsIndex, { resource
 }
 
 export async function notifyNewListShares(newEmails, { listName, listId, actorEmail }) {
-  const title = 'List shared with you'
   for (const email of newEmails) {
     await sendWebPushToEmail(
       email,
       {
-        title,
+        title: 'Item shared with you',
         body: `${actorEmail || 'Someone'} shared "${listName || 'a list'}" with you`,
         tag: `list-share-${listId || Date.now()}`,
         data: { type: 'listShared', listId },
@@ -261,12 +329,11 @@ export async function notifyNewListShares(newEmails, { listName, listId, actorEm
 }
 
 export async function notifyNewPipelineShares(newEmails, { pipelineTitle, pipelineId, actorEmail }) {
-  const title = 'Pipeline shared with you'
   for (const email of newEmails) {
     await sendWebPushToEmail(
       email,
       {
-        title,
+        title: 'Item shared with you',
         body: `${actorEmail || 'Someone'} shared "${pipelineTitle || 'a pipeline'}" with you`,
         tag: `pipe-share-${pipelineId || Date.now()}`,
         data: { type: 'pipelineShared', pipelineId },
@@ -278,12 +345,11 @@ export async function notifyNewPipelineShares(newEmails, { pipelineTitle, pipeli
 }
 
 export async function notifyNewPathShares(newEmails, { pathName, pathId, actorEmail }) {
-  const title = 'Path shared with you'
   for (const email of newEmails) {
     await sendWebPushToEmail(
       email,
       {
-        title,
+        title: 'Item shared with you',
         body: `${actorEmail || 'Someone'} shared "${pathName || 'a path'}" with you`,
         tag: `path-share-${pathId || Date.now()}`,
         data: { type: 'pathShared', pathId },

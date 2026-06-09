@@ -3,6 +3,9 @@
     "api/tiles.js": {
       "maxDuration": 30
     },
+    "api/parcel.js": {
+      "maxDuration": 30
+    },
     "api/cron-task-reminders.js": {
       "maxDuration": 60
     },
@@ -54,7 +57,7 @@
         },
         {
           "key": "Access-Control-Allow-Methods",
-          "value": "GET, OPTIONS, POST"
+          "value": "GET, OPTIONS, POST, PATCH, DELETE"
         },
         {
           "key": "Access-Control-Allow-Headers",

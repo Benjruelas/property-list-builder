@@ -10,6 +10,7 @@ import {
   applyResourceVisibilityPatch,
   activityAudienceForResource,
 } from './lib/resourceContext.js'
+import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
 
 /**
  * Vercel Serverless Function - property lists. Firebase Bearer auth.
@@ -142,10 +143,25 @@ export default async function handler(req, res) {
       if (!name || !name.trim()) {
         return res.status(400).json({ error: 'List name is required' })
       }
-      const newList = {
+      const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
+      const ctx = buildAccessContext(allTeams, user)
+
+      const tagRegistry = (body.tagIds !== undefined || body.tagMeta !== undefined)
+        ? await loadTagRegistry(kv, user.uid)
+        : null
+      let tags = { tagIds: [], tagMeta: [] }
+      try {
+        tags = mergeEntityTags(body, null, tagRegistry, 'lists')
+      } catch (e) {
+        return res.status(400).json({ error: e.message })
+      }
+
+      let newList = {
         id: `list_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
         name: name.trim(),
         parcels: parcels.map(normalizeParcel).filter(Boolean),
+        tagIds: tags.tagIds,
+        tagMeta: tags.tagMeta,
         ownerId: user.uid,
         ownerEmail: user.email,
         sharedWith: [],
@@ -156,9 +172,62 @@ export default async function handler(req, res) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
-      const all = await getAllLists()
+
+      if (body.sharedWith !== undefined) {
+        const arr = Array.isArray(body.sharedWith) ? body.sharedWith : []
+        const emails = arr.map((e) => (e && String(e).trim()).toLowerCase()).filter(Boolean)
+        const uniqueEmails = [...new Set(emails)]
+        if (uniqueEmails.length > 50) return res.status(400).json({ error: 'Maximum 50 share emails allowed' })
+        newList.sharedWith = uniqueEmails
+      }
+
+      if (body.teamShares !== undefined) {
+        const arr = Array.isArray(body.teamShares) ? body.teamShares : []
+        const unique = [...new Set(arr.filter(Boolean))]
+        for (const tid of unique) {
+          const team = ctx.teamsIndex[tid]
+          if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
+          const isMember =
+            team.ownerId === user.uid ||
+            (Array.isArray(team.members) && team.members.some((m) => m.uid === user.uid))
+          if (!isMember) {
+            return res.status(403).json({ error: 'You must be a member of each team you share with' })
+          }
+        }
+        newList.teamShares = unique
+      }
+
+      if (body.visibility !== undefined || body.sharedMemberUids !== undefined) {
+        try {
+          const patched = applyResourceVisibilityPatch(newList, body, ctx)
+          newList.visibility = patched.visibility
+          newList.teamId = patched.teamId
+          newList.sharedMemberUids = patched.sharedMemberUids
+          if (patched.teamShares?.length) newList.teamShares = patched.teamShares
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+      }
+
       all.push(newList)
       await saveAllLists(all)
+
+      try {
+        const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+        await runResourceShareNotifications({
+          resource: newList,
+          resourceType: 'list',
+          nameField: 'name',
+          newlyAddedEmails: newList.sharedWith || [],
+          newlyAddedTeamShares: newList.teamShares || [],
+          team: ctx.team,
+          teamsIndex: ctx.teamsIndex,
+          actor: user,
+        })
+      } catch (e) {
+        console.warn('list create share notify', e.message)
+      }
+
       return res.status(201).json({ list: newList })
     }
 
@@ -190,6 +259,7 @@ export default async function handler(req, res) {
         }
       }
 
+      const prevSharedMemberUids = [...(list.sharedMemberUids || [])]
       const prevSharedSet = new Set(
         (list.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
@@ -273,34 +343,37 @@ export default async function handler(req, res) {
         list.parcels = [...(list.parcels || []), ...toAdd]
       }
 
+      if (body.tagIds !== undefined || body.tagMeta !== undefined) {
+        const tagRegistry = await loadTagRegistry(kv, user.uid)
+        try {
+          const tags = mergeEntityTags(body, list, tagRegistry, 'lists')
+          list.tagIds = tags.tagIds
+          list.tagMeta = tags.tagMeta
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+      }
+
       list.updatedAt = new Date().toISOString()
       all[idx] = list
       await saveAllLists(all)
 
-      if (isOwner && sharedWith !== undefined && newlyAddedListShares.length > 0) {
+      if (isOwner) {
         try {
-          const { notifyNewListShares } = await import('./push-utils.js')
-          await notifyNewListShares(newlyAddedListShares, {
-            listName: list.name,
-            listId: list.id,
-            actorEmail: user.email
+          const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+          await runResourceShareNotifications({
+            resource: list,
+            resourceType: 'list',
+            nameField: 'name',
+            prevSharedMemberUids,
+            newlyAddedEmails: newlyAddedListShares,
+            newlyAddedTeamShares,
+            team: ctx.team,
+            teamsIndex: ctx.teamsIndex,
+            actor: user,
           })
         } catch (e) {
           console.warn('list push notify', e.message)
-        }
-      }
-
-      if (isOwner && teamShares !== undefined && newlyAddedTeamShares.length > 0) {
-        try {
-          const { notifyTeamResourceShare } = await import('./push-utils.js')
-          await notifyTeamResourceShare(newlyAddedTeamShares, ctx.teamsIndex, {
-            resourceType: 'list',
-            resourceName: list.name,
-            resourceId: list.id,
-            actorEmail: user.email
-          })
-        } catch (e) {
-          console.warn('list team push notify', e.message)
         }
       }
 

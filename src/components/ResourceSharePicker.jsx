@@ -29,16 +29,20 @@ export function ResourceSharePicker({
 
   if (!team) {
     return (
-      <div className={cn('mb-4', className)}>
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Sharing</p>
-        <p className="text-xs text-gray-500">Join or create a team to share with teammates.</p>
+      <div className={cn('share-picker', className)}>
+        <p className="share-picker-section-label">Sharing</p>
+        <p className="share-picker-empty">Join or create a team to share with teammates.</p>
       </div>
     )
   }
 
   const members = (team.members || []).filter((m) => m.uid !== team.ownerId || true)
   const selected = new Set(sharedMemberUids || [])
-  const shareSummary = visibilityLabel({ visibility, sharedMemberUids, teamShares: visibility === VISIBILITY.TEAM ? [team.id] : [] })
+  const shareSummary = visibilityLabel({
+    visibility,
+    sharedMemberUids,
+    teamShares: visibility === VISIBILITY.TEAM ? [team.id] : [],
+  })
 
   const setVisibility = (v) => {
     onChange?.({
@@ -56,35 +60,28 @@ export function ResourceSharePicker({
 
   const pickerBody = (
     <>
-      <p className="text-xs text-gray-500 mb-2">Control who on {team.name} can access this.</p>
-      <ul className="space-y-1.5 mb-3">
+      <p className="share-picker-hint">Control who on {team.name} can access this.</p>
+      <ul className="share-picker-options" role="radiogroup" aria-label="Sharing visibility">
         {OPTIONS.map(({ value, label, icon: Icon, desc }) => {
           const on = visibility === value
           return (
             <li key={value}>
               <button
                 type="button"
+                role="radio"
+                aria-checked={on}
                 disabled={disabled}
                 onClick={() => setVisibility(value)}
-                className={cn(
-                  'w-full flex items-start gap-2 py-2 px-2.5 rounded-md border transition-colors text-left',
-                  on ? 'bg-blue-500/15 border-blue-500/40' : 'bg-black/10 border-transparent hover:bg-black/15',
-                  disabled && 'opacity-60 cursor-not-allowed'
-                )}
+                className={cn('share-picker-option', on && 'share-picker-option--selected')}
               >
-                <div
-                  className={cn(
-                    'h-4 w-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0',
-                    on ? 'border-blue-400 bg-blue-500/80 text-white' : 'border-white/40'
-                  )}
-                >
-                  {on && <Check className="h-3 w-3" strokeWidth={3} />}
-                </div>
-                <Icon className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm text-gray-200 block">{label}</span>
-                  <span className="text-[11px] text-gray-500 block">{desc}</span>
-                </div>
+                <span className={cn('share-picker-radio', on && 'share-picker-radio--on')} aria-hidden>
+                  {on && <span className="share-picker-radio-dot" />}
+                </span>
+                <Icon className="share-picker-option-icon" aria-hidden />
+                <span className="share-picker-option-text">
+                  <span className="share-picker-option-label">{label}</span>
+                  <span className="share-picker-option-desc">{desc}</span>
+                </span>
               </button>
             </li>
           )
@@ -92,9 +89,9 @@ export function ResourceSharePicker({
       </ul>
 
       {visibility === VISIBILITY.MEMBERS && (
-        <div className="mb-3 pl-1">
-          <p className="text-[11px] text-gray-500 mb-1.5">Select members</p>
-          <ul className="space-y-1 max-h-40 overflow-y-auto scrollbar-hide">
+        <div className="share-picker-members">
+          <p className="share-picker-members-label">Select members</p>
+          <ul className="share-picker-members-list">
             {members.map((m) => {
               const on = selected.has(m.uid)
               return (
@@ -103,19 +100,11 @@ export function ResourceSharePicker({
                     type="button"
                     disabled={disabled}
                     onClick={() => toggleMember(m.uid)}
-                    className={cn(
-                      'w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-left text-sm',
-                      on ? 'bg-blue-500/10 text-blue-200' : 'text-gray-300 hover:bg-black/10'
-                    )}
+                    className={cn('share-picker-member', on && 'share-picker-member--selected')}
                   >
-                    <div
-                      className={cn(
-                        'h-3.5 w-3.5 rounded border flex items-center justify-center',
-                        on ? 'border-blue-400 bg-blue-500/80' : 'border-white/30'
-                      )}
-                    >
-                      {on && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
-                    </div>
+                    <span className={cn('share-picker-member-check', on && 'share-picker-member-check--on')}>
+                      {on && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                    </span>
                     <span className="truncate">{m.email || m.uid}</span>
                   </button>
                 </li>
@@ -126,8 +115,8 @@ export function ResourceSharePicker({
       )}
 
       {allowExternalSharing && onSharedWithChange && (
-        <div>
-          <p className="text-[11px] text-gray-500 mb-1">External emails (optional)</p>
+        <div className="share-picker-external">
+          <p className="share-picker-members-label">External emails (optional)</p>
           <input
             type="text"
             disabled={disabled}
@@ -140,7 +129,7 @@ export function ResourceSharePicker({
               onSharedWithChange(emails)
             }}
             placeholder="user@example.com"
-            className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
+            className="share-dialog-input"
           />
         </div>
       )}
@@ -148,26 +137,26 @@ export function ResourceSharePicker({
   )
 
   return (
-    <div className={cn('mb-4', className)}>
+    <div className={cn('share-picker', className)}>
       {collapsible ? (
         <>
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="w-full flex items-center justify-between gap-2 py-2 text-left rounded-lg hover:bg-white/[0.04] transition-colors"
+            className="share-picker-collapse-trigger"
             aria-expanded={expanded}
           >
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase opacity-50 tracking-wide">Sharing</p>
-              <p className="text-xs opacity-60 truncate mt-0.5">{shareSummary}</p>
+              <p className="share-picker-section-label">Sharing</p>
+              <p className="share-picker-summary">{shareSummary}</p>
             </div>
-            <ChevronDown className={cn('h-4 w-4 shrink-0 opacity-50 transition-transform', expanded && 'rotate-180')} />
+            <ChevronDown className={cn('share-picker-chevron', expanded && 'share-picker-chevron--open')} />
           </button>
-          {expanded && <div className="pt-2">{pickerBody}</div>}
+          {expanded && <div className="share-picker-collapse-body">{pickerBody}</div>}
         </>
       ) : (
         <>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Sharing</p>
+          <p className="share-picker-section-label">Sharing</p>
           {pickerBody}
         </>
       )}

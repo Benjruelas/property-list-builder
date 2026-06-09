@@ -4,12 +4,11 @@ import { X, FileText, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, User
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
-import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
 import { showConfirm } from '../ui/confirm-dialog'
 import { useAuth } from '../../contexts/AuthContext'
-import { cn } from '@/lib/utils'
-import { ResourceSharePicker, VisibilityBadge } from '../ResourceSharePicker'
+import { VisibilityBadge } from '../ResourceSharePicker'
+import { ShareResourceDialog } from '../ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 import {
   fetchTemplates,
@@ -336,7 +335,7 @@ export function FormsPanel({
       visibility: norm.visibility || VISIBILITY.PRIVATE,
       sharedMemberUids: norm.sharedMemberUids || [],
     })
-  }, [shareTemplateId, templates])
+  }, [shareTemplateId])
 
   const activeTemplate = useMemo(
     () => templates.find((t) => t.id === activeTemplateId) || null,
@@ -581,121 +580,40 @@ export function FormsPanel({
         document.getElementById('modal-root') || document.body
       )}
 
-      {shareTemplateId && (
-        <Dialog
-          open={!!shareTemplateId}
-          onOpenChange={(open) => { if (!open) { setShareTemplateId(null); setShareEmail('') } }}
-        >
-          <DialogContent className="map-panel list-panel share-list-dialog max-w-sm" focusOverlay>
-            <DialogHeader>
-              <DialogTitle>Share form</DialogTitle>
-              <DialogDescription className="sr-only">
-                Share this form template with teammates or entire teams. Recipients can view and fill the form.
-              </DialogDescription>
-            </DialogHeader>
-            {(() => {
-              const template = templates.find((t) => t.id === shareTemplateId)
-              const currentShared = template?.sharedWith || []
-              const isShared = currentShared.length > 0
-              const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
-              const activeTeam = teams?.[0] || null
-              const allowExternalSharing = teamMembership?.allowExternalSharing === true
-              return (
-                <>
-                  <p className="text-xs text-gray-400 mb-3">
-                    Recipients can view and fill this form. Only you can edit or delete it.
-                  </p>
-                  {onShareFormWithTeams && activeTeam && (
-                    <ResourceSharePicker
-                      team={activeTeam}
-                      visibility={shareState.visibility}
-                      sharedMemberUids={shareState.sharedMemberUids}
-                      onChange={handleToggleTeamShare}
-                      allowExternalSharing={allowExternalSharing}
-                    />
-                  )}
-                  {allowExternalSharing && isShared && (
-                    <div className="mb-4">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                        Shared with
-                      </p>
-                      <ul className="space-y-1.5">
-                        {currentShared.map((email) => (
-                          <li
-                            key={email}
-                            className="group flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-md bg-black/10 hover:bg-black/15 transition-colors"
-                          >
-                            <span className="text-sm text-gray-200 truncate">{email}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveSharedEmail(email)}
-                              className="opacity-40 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-red-500/30 text-gray-400 hover:text-red-400 transition-opacity"
-                              title="Remove from share list"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {allowExternalSharing && (
-                    <>
-                  <Input
-                    type="email"
-                    placeholder="user@example.com"
-                    value={shareEmail}
-                    onChange={(e) => setShareEmail(e.target.value)}
-                    className={cn(
-                      'mb-1',
-                      shareEmailValid === true && 'border-green-600 ring-green-500/50',
-                      shareEmailValid === false && shareEmail.trim() && 'border-red-500'
-                    )}
-                  />
-                  {shareEmailError && (
-                    <p className="text-sm text-red-500 mb-3">{shareEmailError}</p>
-                  )}
-                  {!shareEmailError && shareEmail.trim() && isValidatingShare && (
-                    <p className="text-sm text-gray-500 mb-3">Checking...</p>
-                  )}
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      onClick={handleShareSave}
-                      disabled={!!(shareEmail.trim() && shareEmailValid === false)}
-                      className={cn(
-                        'flex-1 min-w-0 share-dialog-btn',
-                        shareEmailValid === true && 'share-save-valid'
-                      )}
-                    >
-                      {isValidatingShare ? 'Checking...' : 'Share'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => { setShareTemplateId(null); setShareEmail('') }}
-                      className="flex-1 min-w-0 share-dialog-btn"
-                    >
-                      Close
-                    </Button>
-                  </div>
-                    </>
-                  )}
-                  {!allowExternalSharing && (
-                    <div className="flex gap-2 flex-wrap mt-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => { setShareTemplateId(null); setShareEmail('') }}
-                        className="flex-1 min-w-0 share-dialog-btn"
-                      >
-                        Done
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )
-            })()}
-          </DialogContent>
-        </Dialog>
-      )}
+      {shareTemplateId && (() => {
+        const template = templates.find((t) => t.id === shareTemplateId)
+        const shareState = localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+        const activeTeam = teams?.[0] || null
+        const allowExternalSharing = teamMembership?.allowExternalSharing === true
+        const closeShareForm = () => {
+          setShareTemplateId(null)
+          setShareEmail('')
+          setShareEmailValid(null)
+          setShareEmailError('')
+        }
+        return (
+          <ShareResourceDialog
+            open={!!shareTemplateId}
+            onOpenChange={(open) => { if (!open) closeShareForm() }}
+            title="Share form"
+            intro="Recipients can view and fill this form. Only you can edit or delete it."
+            team={activeTeam}
+            showTeamPicker={Boolean(onShareFormWithTeams && activeTeam)}
+            shareState={shareState}
+            onShareStateChange={handleToggleTeamShare}
+            allowExternalSharing={allowExternalSharing}
+            sharedWithEmails={template?.sharedWith || []}
+            onRemoveSharedEmail={handleRemoveSharedEmail}
+            shareEmail={shareEmail}
+            onShareEmailChange={setShareEmail}
+            shareEmailValid={shareEmailValid}
+            shareEmailError={shareEmailError}
+            isValidatingShare={isValidatingShare}
+            onShareEmailSave={handleShareSave}
+            secondaryLabel="Close"
+          />
+        )
+      })()}
 
       <SendFormLinkDialog
         open={!!linkTemplateId}

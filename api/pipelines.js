@@ -10,6 +10,8 @@ import {
   applyResourceVisibilityPatch,
   isTeamAdmin,
 } from './lib/resourceContext.js'
+import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
+import { normalizePipelineStore } from './lib/pipelineStore.js'
 
 /**
  * Vercel Serverless Function
@@ -48,23 +50,34 @@ const KV_KEY = 'user_pipelines'
 let fallbackStore = []
 
 async function getAllPipelines() {
-  if (!kvAvailable || !kv) return fallbackStore
+  if (!kvAvailable || !kv) return normalizePipelineStore(fallbackStore)
   try {
     const data = await kv.get(KV_KEY)
     const pipelines = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    const result = Array.isArray(pipelines) ? pipelines : []
-    fallbackStore = result
+    const raw = Array.isArray(pipelines) ? pipelines : []
+    const result = normalizePipelineStore(raw)
+    if (result.length !== raw.length) {
+      fallbackStore = result
+      try {
+        await kv.set(KV_KEY, result).catch(() => kv.set(KV_KEY, JSON.stringify(result)))
+      } catch (e) {
+        console.warn('Pipeline dedupe save failed', e.message)
+      }
+    } else {
+      fallbackStore = result
+    }
     return result
   } catch (e) {
-    return fallbackStore
+    return normalizePipelineStore(fallbackStore)
   }
 }
 
 async function saveAllPipelines(pipelines) {
-  fallbackStore = pipelines
+  const normalized = normalizePipelineStore(Array.isArray(pipelines) ? pipelines : [])
+  fallbackStore = normalized
   if (!kvAvailable || !kv) return
   try {
-    await kv.set(KV_KEY, pipelines).catch(() => kv.set(KV_KEY, JSON.stringify(pipelines)))
+    await kv.set(KV_KEY, normalized).catch(() => kv.set(KV_KEY, JSON.stringify(normalized)))
   } catch (e) {
     console.warn('KV save failed', e.message)
   }
@@ -94,18 +107,7 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
-const DEFAULT_COLUMNS = [
-  'Make Contact',
-  'Roof Inspection',
-  'File Claim',
-  'Service Agreement',
-  "Adjuster's Meeting",
-  'Scope of Loss',
-  'Appraisal',
-  'Ready for Install',
-  'Install Scheduled',
-  'Installed',
-]
+const DEFAULT_COLUMNS = ['Open', 'Pending', 'Closed']
 
 function normalizeColumns(cols) {
   if (!Array.isArray(cols) || cols.length === 0) {
@@ -118,12 +120,20 @@ function normalizeColumns(cols) {
 }
 
 function normalizePipelineDeals(pipeline) {
-  if (!pipeline.deals && Array.isArray(pipeline.leads)) {
-    pipeline.deals = []
-    delete pipeline.leads
+  const p = { ...pipeline }
+  if (!p.deals && Array.isArray(p.leads)) {
+    const hasTeamTasks = p.leads.some(
+      (l) => Array.isArray(l?.teamTasks) && l.teamTasks.length > 0
+    )
+    if (!hasTeamTasks) {
+      p.deals = []
+      delete p.leads
+    } else {
+      p.deals = []
+    }
   }
-  if (!Array.isArray(pipeline.deals)) pipeline.deals = []
-  return pipeline
+  if (!Array.isArray(p.deals)) p.deals = []
+  return p
 }
 
 async function runPipelinePushNotifications({
@@ -133,31 +143,27 @@ async function runPipelinePushNotifications({
   isOwner,
   pipeline,
   prevDealsSnapshot,
+  prevSharedMemberUids,
   newlyAddedPipelineShares,
   newlyAddedTeamShares,
   teamsIndex,
+  team,
   user
 }) {
   try {
-    const {
-      notifyNewPipelineShares,
-      notifyPipelineDealStatusChanges,
-      notifyTeamResourceShare,
-      diffDealStatusChanges
-    } = await import('./push-utils.js')
-    if (sharedWith !== undefined && isOwner && newlyAddedPipelineShares.length > 0) {
-      await notifyNewPipelineShares(newlyAddedPipelineShares, {
-        pipelineTitle: pipeline.title,
-        pipelineId: pipeline.id,
-        actorEmail: user.email
-      })
-    }
-    if (teamShares !== undefined && isOwner && newlyAddedTeamShares?.length > 0) {
-      await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
+    const { notifyPipelineDealStatusChanges, diffDealStatusChanges } = await import('./push-utils.js')
+    if (isOwner) {
+      const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+      await runResourceShareNotifications({
+        resource: pipeline,
         resourceType: 'pipeline',
-        resourceName: pipeline.title,
-        resourceId: pipeline.id,
-        actorEmail: user.email
+        nameField: 'title',
+        prevSharedMemberUids,
+        newlyAddedEmails: newlyAddedPipelineShares,
+        newlyAddedTeamShares,
+        team,
+        teamsIndex,
+        actor: user,
       })
     }
     if (deals !== undefined && Array.isArray(deals)) {
@@ -292,7 +298,10 @@ export default async function handler(req, res) {
       const { title = 'Deal Pipeline', columns, deals } = body
       const cols = normalizeColumns(columns)
       const dealsArr = Array.isArray(deals) ? deals : []
-      const newPipeline = {
+      const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
+      const ctx = buildAccessContext(allTeams, user)
+
+      let newPipeline = {
         id: `pipe_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
         title: (title || 'Deal Pipeline').trim() || 'Deal Pipeline',
         columns: cols,
@@ -308,9 +317,62 @@ export default async function handler(req, res) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
-      const all = await getAllPipelines()
+
+      if (body.sharedWith !== undefined) {
+        const arr = Array.isArray(body.sharedWith) ? body.sharedWith : []
+        const emails = arr.map((e) => (e && String(e).trim()).toLowerCase()).filter(Boolean)
+        const uniqueEmails = [...new Set(emails)]
+        if (uniqueEmails.length > 50) return res.status(400).json({ error: 'Maximum 50 share emails allowed' })
+        newPipeline.sharedWith = uniqueEmails
+      }
+
+      if (body.teamShares !== undefined) {
+        const arr = Array.isArray(body.teamShares) ? body.teamShares : []
+        const unique = [...new Set(arr.filter(Boolean))]
+        for (const tid of unique) {
+          const team = ctx.teamsIndex[tid]
+          if (!team) return res.status(400).json({ error: `Team not found: ${tid}` })
+          const isMember =
+            team.ownerId === user.uid ||
+            (Array.isArray(team.members) && team.members.some((m) => m.uid === user.uid))
+          if (!isMember) {
+            return res.status(403).json({ error: 'You must be a member of each team you share with' })
+          }
+        }
+        newPipeline.teamShares = unique
+      }
+
+      if (body.visibility !== undefined || body.sharedMemberUids !== undefined) {
+        try {
+          const patched = applyResourceVisibilityPatch(newPipeline, body, ctx)
+          newPipeline.visibility = patched.visibility
+          newPipeline.teamId = patched.teamId
+          newPipeline.sharedMemberUids = patched.sharedMemberUids
+          if (patched.teamShares?.length) newPipeline.teamShares = patched.teamShares
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+      }
+
       all.push(newPipeline)
       await saveAllPipelines(all)
+
+      try {
+        const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+        await runResourceShareNotifications({
+          resource: newPipeline,
+          resourceType: 'pipeline',
+          nameField: 'title',
+          newlyAddedEmails: newPipeline.sharedWith || [],
+          newlyAddedTeamShares: newPipeline.teamShares || [],
+          team: ctx.team,
+          teamsIndex: ctx.teamsIndex,
+          actor: user,
+        })
+      } catch (e) {
+        console.warn('pipeline create share notify', e.message)
+      }
+
       return res.status(201).json({ pipeline: newPipeline })
     }
 
@@ -324,6 +386,7 @@ export default async function handler(req, res) {
 
       const pipeline = normalizePipelineDeals(all[idx])
       const prevDealsSnapshot = JSON.parse(JSON.stringify(pipeline.deals || []))
+      const prevSharedMemberUids = [...(pipeline.sharedMemberUids || [])]
       const prevSharedSet = new Set(
         (pipeline.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
@@ -359,10 +422,17 @@ export default async function handler(req, res) {
         pipeline.columns = normalizeColumns(columns)
       }
       if (deals !== undefined && Array.isArray(deals)) {
-        pipeline.deals = deals
+        const tagRegistry = await loadTagRegistry(kv, user.uid)
+        try {
+          pipeline.deals = deals.map((incoming) => {
+            const prevDeal = prevDealsSnapshot.find((d) => d.id === incoming.id) || {}
+            const tags = mergeEntityTags(incoming, prevDeal, tagRegistry, 'deals')
+            return { ...incoming, tagIds: tags.tagIds, tagMeta: tags.tagMeta }
+          })
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
       }
-      delete pipeline.leads
-
       if (sharedWith !== undefined && canManageMeta) {
         const arr = Array.isArray(sharedWith) ? sharedWith : []
         const emails = arr.map((e) => (e && String(e).trim()).toLowerCase()).filter(Boolean)
@@ -423,6 +493,13 @@ export default async function handler(req, res) {
           pipeline.teamId = patched.teamId
           pipeline.sharedMemberUids = patched.sharedMemberUids
           if (patched.teamShares?.length) pipeline.teamShares = patched.teamShares
+          if (patched.visibility === 'team' && ctx.team?.id) {
+            const { teamShareAddedOnVisibility } = await import('./lib/shareNotifications.js')
+            newlyAddedTeamShares = [
+              ...newlyAddedTeamShares,
+              ...teamShareAddedOnVisibility(prevTeamShares, ctx.team.id),
+            ]
+          }
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }
@@ -439,9 +516,11 @@ export default async function handler(req, res) {
         isOwner: canManageMeta,
         pipeline,
         prevDealsSnapshot,
+        prevSharedMemberUids,
         newlyAddedPipelineShares,
         newlyAddedTeamShares,
         teamsIndex,
+        team: ctx.team,
         user
       })
 

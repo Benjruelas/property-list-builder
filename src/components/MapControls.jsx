@@ -173,7 +173,7 @@ export function MapControls({
               className="fixed inset-0 z-[999]" 
               onClick={() => setShowMenu(false)}
             />
-            <div className="map-panel hamburger-menu absolute right-full top-0 mr-2 rounded-xl min-w-[200px] z-[1000] py-2">
+            <div className="map-panel hamburger-menu hamburger-menu-dropdown absolute right-full top-0 mr-2 z-[1000]">
               {/* Pipes / Tasks / Schedule — surfaced here on desktop since the
                   MobileActionBar is hidden at md+. Keep them at the top so
                   primary deal-flow actions are one menu-open away. */}
@@ -224,7 +224,7 @@ export function MapControls({
               )}
 
               {(onOpenPipes || onOpenTasks || onOpenSchedule || NotificationMenuItem) && (
-                <div className="my-1 border-t border-gray-200" />
+                <div className="my-1 border-t hamburger-menu-divider" />
               )}
 
               {/* Lists Button */}
@@ -337,12 +337,12 @@ export function MapControls({
               </button>
 
               {/* Divider */}
-              <div className="my-1 border-t border-gray-200" />
+              <div className="my-1 border-t hamburger-menu-divider" />
 
               {/* User Section */}
               {currentUser ? (
                 <>
-                  <div className="px-4 py-2 border-b border-gray-200">
+                  <div className="px-4 py-2 border-b hamburger-menu-user">
                     <p className="text-sm font-semibold text-gray-900 truncate">
                       {currentUser.displayName || 'User'}
                     </p>

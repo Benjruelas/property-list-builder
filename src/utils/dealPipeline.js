@@ -10,18 +10,14 @@ const LEADS_KEY = 'deal_pipeline_leads' // legacy — cleared on migration
 const TITLE_KEY = 'deal_pipeline_title'
 const DEFAULT_TITLE = 'Pipes'
 
-const DEFAULT_COLUMNS = [
-  'Make Contact',
-  'Roof Inspection',
-  'File Claim',
-  'Service Agreement',
-  "Adjuster's Meeting",
-  'Scope of Loss',
-  'Appraisal',
-  'Ready for Install',
-  'Install Scheduled',
-  'Installed',
-]
+export const DEFAULT_PIPELINE_STAGES = ['Open', 'Pending', 'Closed']
+
+const DEFAULT_COLUMNS = DEFAULT_PIPELINE_STAGES
+
+/** Default pipeline columns for new pipes (stable col-N ids). */
+export function createDefaultPipelineColumns() {
+  return DEFAULT_PIPELINE_STAGES.map((name, i) => ({ id: `col-${i}`, name }))
+}
 
 export const loadColumns = () => {
   try {

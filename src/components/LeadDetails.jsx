@@ -15,6 +15,7 @@ import { LeadTasksSection } from './LeadTasksSection'
 import { DealProfitBadge } from './DealLineItemsSection'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
+import { TagPicker } from './tags/TagPicker'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -53,6 +54,8 @@ export function LeadDetails({
   taskListEpoch = 0,
   currentUserId = null,
   canSeeDealAmounts = true,
+  tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
+  onRefreshTags,
 }) {
   const activeTeam = teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
@@ -252,6 +255,24 @@ export function LeadDetails({
               )}
             </section>
           )}
+
+          <section>
+            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Tags</h3>
+            <TagPicker
+              type="leads"
+              entity={lead}
+              tagRegistry={tagRegistry}
+              getToken={getToken}
+              onRegistryChange={onRefreshTags}
+              disabled={!onLeadUpdate}
+              hideWhenEmpty={false}
+              showAddTrigger={!!onLeadUpdate}
+              inline
+              onTagsChange={({ tagIds, tagMeta }) => {
+                onLeadUpdate?.({ id: lead.id, tagIds, tagMeta })
+              }}
+            />
+          </section>
 
           <section>
             <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Notes</h3>

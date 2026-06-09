@@ -120,7 +120,7 @@
 }
 
 /* Glass: frosted map controls — keep glass fill, white icons */
-[data-ui-theme='glass'] .map-controls-stack button:not(.path-tracking-active):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']),
+[data-ui-theme='glass'] .map-controls-stack button:not(.path-tracking-active):not(.hamburger-menu-btn):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']),
 [data-ui-theme='glass'] .map-search-stack button {
   color: rgba(255, 255, 255, 0.95) !important;
 }
@@ -148,7 +148,7 @@
 }
 
 /* ---- Map chrome: controls, search, mobile action bar (dark + light only) ---- */
-[data-ui-theme='dark'] .map-controls-stack button:not(.path-tracking-active):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']),
+[data-ui-theme='dark'] .map-controls-stack button:not(.path-tracking-active):not(.hamburger-menu-btn):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']),
 [data-ui-theme='dark'] .map-search-stack button {
   background: var(--map-chrome-bg) !important;
   border: 1px solid var(--map-chrome-border) !important;
@@ -156,14 +156,14 @@
   backdrop-filter: blur(12px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
 }
-[data-ui-theme='dark'] .map-controls-stack button:not(.path-tracking-active):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']):hover:not(:disabled),
+[data-ui-theme='dark'] .map-controls-stack button:not(.path-tracking-active):not(.hamburger-menu-btn):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']):hover:not(:disabled),
 [data-ui-theme='dark'] .map-search-stack button:hover:not(:disabled) {
   background: var(--map-chrome-bg-hover) !important;
   border-color: rgba(255, 255, 255, 0.28) !important;
 }
 
 /* Light: solid white map control buttons (recenter, compass, menu, search, etc.) */
-[data-ui-theme='light'] .map-controls-stack button:not(.path-tracking-active):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']),
+[data-ui-theme='light'] .map-controls-stack button:not(.path-tracking-active):not(.hamburger-menu-btn):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']),
 [data-ui-theme='light'] .map-search-stack button {
   background: #ffffff !important;
   border: 1px solid var(--map-chrome-border) !important;
@@ -172,7 +172,7 @@
   -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
   box-shadow: var(--map-chrome-shadow) !important;
 }
-[data-ui-theme='light'] .map-controls-stack button:not(.path-tracking-active):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']):hover:not(:disabled),
+[data-ui-theme='light'] .map-controls-stack button:not(.path-tracking-active):not(.hamburger-menu-btn):not([class*='bg-red-']):not([class*='bg-green-']):not([class*='bg-blue-']):not([class*='bg-amber-']):hover:not(:disabled),
 [data-ui-theme='light'] .map-search-stack button:hover:not(:disabled) {
   background: #ffffff !important;
   border-color: rgba(0, 0, 0, 0.18) !important;

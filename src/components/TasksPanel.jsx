@@ -30,7 +30,7 @@ import {
 import { addTeamTask, updateTeamTask, removeTeamTask } from '@/utils/teamTasks'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline, formatAssigneeList, resolveTeamTaskLeadId, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
-import { flattenDealsFromPipelines } from '@/utils/deals'
+import { flattenDealsFromPipelines, findDealInPipelines } from '@/utils/deals'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { NewTaskDialog } from './NewTaskDialog'
 import { TeamMemberAssignSection } from './TeamMemberAssignSection'
@@ -247,9 +247,12 @@ export function TasksPanel({
         return
       }
     }
-    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
-    const parcelId = lead?.parcelId ? String(lead.parcelId) : null
     const dealId = addTaskDealId || null
+    const deal = dealId ? allDeals.find((d) => d.id === dealId) : null
+    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
+    const parcelId = deal?.parcelId
+      ? String(deal.parcelId)
+      : (lead?.parcelId ? String(lead.parcelId) : null)
     const payload = {
       title: trimmed,
       scheduledAt,
@@ -259,10 +262,19 @@ export function TasksPanel({
       assignedUids,
     }
 
+    // Deal selection implies its pipe — check before parcel/lead routing (deal auto-fills lead).
+    if (dealId && apiMode) {
+      const pipelineId = deal?.__pipelineId || findDealInPipelines(pipelines, dealId).pipeline?.id
+      if (pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId })
+        return
+      }
+    }
+
     if (parcelId) {
-      const lead = displayLeads.find((l) => l.parcelId === parcelId)
-      if (lead?.__pipelineId) {
-        finalizeTaskCreate({ ...payload, pipelineId: lead.__pipelineId })
+      const leadForParcel = displayLeads.find((l) => l.parcelId === parcelId)
+      if (leadForParcel?.__pipelineId) {
+        finalizeTaskCreate({ ...payload, pipelineId: leadForParcel.__pipelineId })
         return
       }
       if (apiMode) {
@@ -278,14 +290,6 @@ export function TasksPanel({
       }
       finalizeTaskCreate({ ...payload, pipelineId: null })
       return
-    }
-
-    if (dealId && apiMode) {
-      const deal = allDeals.find((d) => d.id === dealId)
-      if (deal?.__pipelineId) {
-        finalizeTaskCreate({ ...payload, pipelineId: deal.__pipelineId })
-        return
-      }
     }
 
     if (apiMode && pipelines.length > 0) {

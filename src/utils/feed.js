@@ -105,7 +105,8 @@ export function categorizeFeedItem(item) {
     entityKind === 'deal' ||
     navType === 'pipelinedealstage' ||
     navType === 'pipeline' ||
-    type.startsWith('pipeline')
+    type.startsWith('pipeline') ||
+    type === 'pipelineshared'
   ) {
     return 'deals'
   }
@@ -128,7 +129,11 @@ export function feedItemCategoryLabel(item) {
   if (cat === 'leads') return 'Lead'
   if (cat === 'deals') return 'Deal'
   if (cat === 'tasks') return 'Task'
-  if (item?.source === 'notification') return 'Notification'
+  if (item?.source === 'notification') {
+    const t = String(item?.type || '').toLowerCase()
+    if (t.includes('shared')) return 'Shared item'
+    return 'Notification'
+  }
   return 'Update'
 }
 
@@ -142,7 +147,7 @@ export function feedItemIconKind(item) {
   const type = String(item?.type || '').toLowerCase()
   const navType = String(item?.nav?.type || '').toLowerCase()
 
-  if (type.includes('list') || navType.includes('list')) return 'list'
+  if (type.includes('list') || navType.includes('list') || type === 'itemshared') return 'list'
   if (type.includes('path') || navType.includes('path')) return 'path'
   if (type.includes('form') || navType.includes('form')) return 'form'
   if (type.includes('quote') || navType.includes('quote')) return 'quote'
