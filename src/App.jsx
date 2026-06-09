@@ -461,7 +461,8 @@ function App() {
     if (parcel) setHailStormParcel(parcel)
     setSelectedHailEvent(evt)
     setHailOpening(false)
-    nav.dismissParcelAndHailPanels()
+    setShowListSelector(false)
+    nav.resetToMapFullState()
   }, [nav, clickedParcelData, hailDataParcel, captureMapViewportForHailRestore])
 
   const handleDismissHailEvent = useCallback(() => {
