@@ -8,20 +8,21 @@ import { replaceTemplateTags } from '@/utils/emailTemplates'
 
 const normalizePhone = (p) => (p || '').replace(/[^\d+]/g, '')
 
-export function PhoneActionPanel({ isOpen, onClose, phone, parcelData }) {
+export function PhoneActionPanel({ isOpen, onClose, phone, parcelData, leadId = null, onOutreach, initialStep = 1 }) {
   const [step, setStep] = useState(1) // 1: Text/Call, 2: Template selection (only for Text)
   const [templates, setTemplates] = useState([])
 
   useEffect(() => {
     if (isOpen) {
-      setStep(1)
+      setStep(initialStep === 2 ? 2 : 1)
       setTemplates(getTextTemplates())
     }
-  }, [isOpen])
+  }, [isOpen, initialStep])
 
   const handleCall = () => {
     const tel = normalizePhone(phone)
     if (tel) {
+      if (leadId && onOutreach) onOutreach('call')
       window.location.href = `tel:${tel}`
     }
     onClose()
@@ -30,6 +31,7 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData }) {
   const handleText = (body = '') => {
     const tel = normalizePhone(phone)
     if (!tel) return
+    if (leadId && onOutreach) onOutreach('text')
     const url = body
       ? `sms:${tel}?body=${encodeURIComponent(body)}`
       : `sms:${tel}`
@@ -50,7 +52,7 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="map-panel phone-action-panel w-full max-w-[320px] rounded-2xl p-0 overflow-hidden" showCloseButton={false} blurOverlay>
+      <DialogContent className="map-panel phone-action-panel w-full max-w-[320px] rounded-2xl p-0 overflow-hidden" showCloseButton={false} blurOverlay topLayer>
         <DialogHeader className="px-4 pt-4 pb-3 border-b">
           <PanelHeader onBack={onClose} title={phone} icon={Phone} titleClassName="text-lg font-semibold" />
           <DialogDescription className="sr-only">

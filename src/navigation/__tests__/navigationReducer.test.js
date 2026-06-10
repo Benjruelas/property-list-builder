@@ -12,6 +12,10 @@ import {
   recipeOpenScheduleAtDate,
   recipeNavigateFromActivity,
   recipeOpenQuoteEditorFromDeal,
+  recipeOpenDealInPipes,
+  recipeOpenLeadDetails,
+  recipePushDealsClosed,
+  recipePushDealsDetail,
 } from '../recipes.js'
 
 function reduce(state, type, payload) {
@@ -88,7 +92,6 @@ describe('navigationReducer', () => {
     const props = selectPanelProps(state)
     expect(props.isActivityPanelOpen).toBe(true)
     expect(props.isActivityPanelFocused).toBe(true)
-    expect(props.skipPanelExitAnimation).toBe(true)
     expect(props.isLeadsPanelOpen).toBe(false)
     expect(props.leadsDetailLeadId).toBe(null)
   })
@@ -263,6 +266,58 @@ describe('recipes', () => {
     )
     expect(stack.some((f) => f.type === 'pipes')).toBe(true)
     expect(stack.some((f) => f.type === 'quotes.editor')).toBe(true)
+  })
+
+  it('recipeOpenDealInPipes preserves activity prefix', () => {
+    const stack = recipeOpenDealInPipes(
+      [{ type: 'activity' }, { type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }],
+      'p1',
+      'd1',
+    )
+    expect(stack.map((f) => f.type)).toEqual(['activity', 'pipes', 'pipes.deal'])
+  })
+
+  it('recipeOpenDealInPipes without activity replaces destination', () => {
+    const stack = recipeOpenDealInPipes([{ type: 'leads' }], 'p1', 'd1')
+    expect(stack.map((f) => f.type)).toEqual(['pipes', 'pipes.deal'])
+  })
+
+  it('recipeOpenLeadDetails preserves activity prefix', () => {
+    const stack = recipeOpenLeadDetails(
+      [{ type: 'activity' }, { type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }],
+      'l2',
+    )
+    expect(stack.map((f) => f.type)).toEqual(['activity', 'leads', 'leads.detail'])
+    expect(stack[2].leadId).toBe('l2')
+  })
+
+  it('recipePushDealsClosed replaces active deal detail', () => {
+    const stack = recipePushDealsClosed(
+      [{ type: 'deals' }, { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' }],
+      'c1',
+    )
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.closed'])
+  })
+
+  it('recipePushDealsDetail replaces closed deal view', () => {
+    const stack = recipePushDealsDetail(
+      [{ type: 'deals' }, { type: 'deals.closed', closedRecordId: 'c1' }],
+      'd1',
+      'p1',
+    )
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.detail'])
+  })
+
+  it('activity stack: schedule.lead back returns to schedule', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'schedule' },
+      { type: 'schedule.lead', leadId: 'l1' },
+    ])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity', 'schedule'])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity'])
   })
 
   it('PATCH_NAV_FRAME clears schedule initialDate', () => {

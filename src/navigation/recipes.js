@@ -94,12 +94,19 @@ export function recipeOpenSettings(currentStack) {
   return [...currentStack, { type: 'settings' }]
 }
 
+function activityPrefix(currentStack) {
+  return currentStack[0]?.type === 'activity' ? [currentStack[0]] : []
+}
+
 /** Legacy: openLeadDetails */
 export function recipeOpenLeadDetails(currentStack, leadId) {
-  const base = recipeClosePrimaryExcept(currentStack, { leads: true }, [{ type: 'leads' }])
+  const fromActivity = currentStack[0]?.type === 'activity'
+  const keep = { leads: true, ...(fromActivity ? { activity: true } : {}) }
+  const withoutDetail = currentStack.filter((f) => f.type !== 'leads.detail')
+  const base = recipeClosePrimaryExcept(withoutDetail, keep, [])
   const hasLeads = base.some((f) => f.type === 'leads')
   const stack = hasLeads ? base : [...base, { type: 'leads' }]
-  return [...stack.filter((f) => f.type !== 'leads.detail'), { type: 'leads.detail', leadId }]
+  return [...stack, { type: 'leads.detail', leadId }]
 }
 
 /** Legacy: handleCreateQuoteForDeal */
@@ -130,17 +137,35 @@ export function recipeOpenScheduleAtDate(currentStack, initialDate) {
   return [...withoutSchedule, { type: 'schedule', initialDate: initialDate ?? undefined }]
 }
 
+/** Push active deal detail — replaces any competing closed/lead overlays. */
+export function recipePushDealsDetail(currentStack, dealId, pipelineId) {
+  const filtered = currentStack.filter(
+    (f) => f.type !== 'deals.closed' && f.type !== 'deals.lead' && f.type !== 'deals.detail',
+  )
+  return [...filtered, { type: 'deals.detail', dealId, pipelineId }]
+}
+
+/** Push closed deal view — replaces any competing active deal/lead overlays. */
+export function recipePushDealsClosed(currentStack, closedRecordId) {
+  const filtered = currentStack.filter(
+    (f) => f.type !== 'deals.detail' && f.type !== 'deals.lead' && f.type !== 'deals.closed',
+  )
+  return [...filtered, { type: 'deals.closed', closedRecordId }]
+}
+
 /** Legacy: Leads → open deal in pipes */
-export function recipeOpenDealInPipes(pipelineId, dealId) {
+export function recipeOpenDealInPipes(currentStack, pipelineId, dealId) {
   return [
+    ...activityPrefix(currentStack),
     { type: 'pipes', pipelineId },
     { type: 'pipes.deal', dealId },
   ]
 }
 
 /** Legacy: handleOpenTaskInDealPipeline */
-export function recipeOpenTaskInPipes(pipelineId, dealId) {
+export function recipeOpenTaskInPipes(currentStack, pipelineId, dealId) {
   return [
+    ...activityPrefix(currentStack),
     { type: 'pipes', pipelineId },
     { type: 'pipes.deal', dealId },
   ]

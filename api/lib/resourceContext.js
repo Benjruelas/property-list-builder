@@ -23,11 +23,15 @@ export function buildAccessContext(allTeams, user) {
   }
 }
 
+/** Prefer the resource's team for role checks (multi-team users). */
+export function accessContextForResource(ctx, resource) {
+  const tid = resource?.teamId
+  const team = tid && ctx.teamsIndex?.[tid] ? ctx.teamsIndex[tid] : ctx.team
+  return { team, teamsIndex: ctx.teamsIndex }
+}
+
 export function getResourceAccess(resource, user, ctx) {
-  return resolveResourceAccess(resource, user, {
-    team: ctx.team,
-    teamsIndex: ctx.teamsIndex,
-  })
+  return resolveResourceAccess(resource, user, accessContextForResource(ctx, resource))
 }
 
 export function filterVisibleResources(resources, user, ctx) {

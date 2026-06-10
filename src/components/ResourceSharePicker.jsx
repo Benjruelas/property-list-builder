@@ -1,7 +1,7 @@
 import { Lock, Users, UserCheck, Check, ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { VISIBILITY, visibilityLabel } from '@/utils/access'
+import { VISIBILITY, visibilityLabel, normalizeResourceVisibility } from '@/utils/access'
 
 const OPTIONS = [
   { value: VISIBILITY.PRIVATE, label: 'Private', icon: Lock, desc: 'Only you can see and edit' },
@@ -164,19 +164,47 @@ export function ResourceSharePicker({
   )
 }
 
-export function VisibilityBadge({ resource, className = '' }) {
-  const label = visibilityLabel(resource)
-  const r = resource || {}
-  const isPrivate = !r.visibility || r.visibility === VISIBILITY.PRIVATE
-  if (isPrivate && !(r.teamShares?.length)) return null
+/** Two-people icon used for team / shared items (matches list rows, paths, etc.). */
+export function TeamSharedIcon({
+  title = 'Shared with team',
+  className = '',
+  size = 'sm',
+  icon: Icon = Users,
+}) {
+  const dim = size === 'xs' ? 'h-3 w-3' : 'h-3.5 w-3.5'
   return (
     <span
-      className={cn(
-        'text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/40 uppercase tracking-wide',
-        className
-      )}
+      className={cn('inline-flex shrink-0 items-center', className)}
+      title={title}
+      aria-label={title}
     >
-      {label}
+      <Icon className={cn(dim, 'flex-shrink-0 text-white/70')} strokeWidth={2} aria-hidden />
     </span>
+  )
+}
+
+export function VisibilityBadge({ resource, className = '' }) {
+  return <LeadSharingIcon resource={resource} className={className} />
+}
+
+/** Compact list-row indicator — icon only, label in tooltip */
+export function LeadSharingIcon({ resource, className = '', collaboratorHint = false }) {
+  const r = normalizeResourceVisibility(resource || {})
+  const isPrivate = !r.visibility || r.visibility === VISIBILITY.PRIVATE
+  const hasTeamShare = (r.teamShares?.length ?? 0) > 0
+  if (isPrivate && !hasTeamShare) {
+    if (collaboratorHint) {
+      return <TeamSharedIcon title="Shared with you" className={className} />
+    }
+    return null
+  }
+  const label = visibilityLabel(r)
+  const Icon = r.visibility === VISIBILITY.MEMBERS ? UserCheck : Users
+  return (
+    <TeamSharedIcon
+      title={`Shared: ${label}`}
+      className={className}
+      icon={Icon}
+    />
   )
 }

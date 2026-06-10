@@ -115,7 +115,7 @@
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Full-screen panel override — mobile: all menu panels go full screen */
+/* Full-screen panel override — mobile: edge-to-edge but anchored at viewport center for fade-in */
 @media (max-width: 767px) {
   .fullscreen-panel {
     width: 100% !important;
@@ -126,11 +126,10 @@
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
-    transform: none !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
     padding: 0 !important;
     display: flex !important;
     flex-direction: column !important;
@@ -143,24 +142,15 @@
   }
 }
 
-/* Desktop: deal pipeline + schedule stay full screen */
-@media (min-width: 768px) {
-  .deal-pipeline-panel.fullscreen-panel {
-    width: 100% !important;
-    max-width: none !important;
-    height: 100% !important;
-    max-height: none !important;
-    border-radius: 0 !important;
-    border: none !important;
-    box-shadow: none !important;
-    transform: none !important;
-    top: 0 !important;
-    left: 0 !important;
-    padding: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-  }
+/* Hide list panel while a nested detail is open (Tailwind hidden loses to display:flex !important on panels) */
+.map-panel.fullscreen-panel.crm-panel-obscured,
+.list-panel.fullscreen-panel.crm-panel-obscured {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
 
+@media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content, capped at viewport */
   .list-panel.fullscreen-panel {
     width: auto !important;
@@ -177,18 +167,125 @@
     width: 480px !important;
     min-width: 480px !important;
   }
+
+  /* Desktop: Leads, Deals, Quotes, Pipes & Schedule — same width as floating action bar */
+  .leads-panel.fullscreen-panel,
+  .deals-panel.fullscreen-panel,
+  .quotes-panel.fullscreen-panel:not(.quote-details-panel):not(.quote-editor-panel),
+  .deal-pipeline-panel.fullscreen-panel {
+    width: var(--action-bar-width) !important;
+    min-width: 0 !important;
+    max-width: var(--action-bar-width) !important;
+    height: min(88vh, 820px) !important;
+    min-height: min(65vh, 520px) !important;
+    max-height: 90vh !important;
+  }
+
+  /* Pipes: tasks live in the Tasks panel on desktop */
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-tasks {
+    display: none !important;
+  }
+
+  /* Pipes: horizontal kanban scroll on desktop */
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-columns {
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    overscroll-behavior-x: contain;
+  }
+
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-columns-row {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    min-width: 100% !important;
+    width: max-content !important;
+  }
+
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-column {
+    flex: 1 1 0 !important;
+    min-width: 9.25rem !important;
+    max-width: none !important;
+    width: auto !important;
+  }
+
+  /* Desktop: Activity — compact feed width (not action-bar width on large screens) */
+  .activity-panel.fullscreen-panel {
+    width: min(400px, 92vw) !important;
+    min-width: 320px !important;
+    max-width: min(400px, 92vw) !important;
+    height: min(88vh, 820px) !important;
+    min-height: min(65vh, 520px) !important;
+    max-height: 90vh !important;
+  }
+
+  /* Activity feed rows stay card layout — never use CRM table grid */
+  .activity-panel .map-panel-list-item {
+    display: flex !important;
+    flex-direction: row !important;
+    grid-template-columns: unset !important;
+    align-items: flex-start !important;
+  }
+
+  /* Desktop: CRM detail panels — readable width, same height as list panels */
+  .lead-details-panel.fullscreen-panel,
+  .deal-details-panel.fullscreen-panel {
+    width: min(720px, 46vw) !important;
+    min-width: 420px !important;
+    max-width: min(780px, 48vw) !important;
+    height: min(88vh, 820px) !important;
+    min-height: min(65vh, 520px) !important;
+    max-height: 90vh !important;
+  }
 }
 
-/* Map panel dialogs: fade-only motion (avoids zoom/slide vs fullscreen-panel transform) */
-.map-panel-dialog {
-  will-change: opacity;
+/* Map panel dialogs: viewport-centered entrance (fade + subtle scale from center) */
+@keyframes map-panel-center-in {
+  from {
+    transform: translate3d(-50%, -50%, 0) scale(0.985);
+  }
+  to {
+    transform: translate3d(-50%, -50%, 0) scale(1);
+  }
 }
-/* Only full-bleed pipeline/schedule panels reset transform; other panels stay viewport-centered */
-.map-panel-dialog[data-state='open'].deal-pipeline-panel,
-.map-panel-dialog[data-state='closed'].deal-pipeline-panel,
-.map-panel-dialog[data-state='open'].schedule-panel,
-.map-panel-dialog[data-state='closed'].schedule-panel {
-  transform: none !important;
+@keyframes map-panel-center-out {
+  from {
+    transform: translate3d(-50%, -50%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-50%, -50%, 0) scale(0.985);
+  }
+}
+.map-panel-dialog {
+  transform-origin: center center;
+  outline: none !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  opacity: 1;
+}
+.map-panel-dialog:focus,
+.map-panel-dialog:focus-visible {
+  outline: none !important;
+}
+.map-panel-dialog[data-state='open'] {
+  animation: map-panel-center-in 160ms ease-out forwards;
+}
+.map-panel-dialog[data-state='closed'] {
+  animation: map-panel-center-out 120ms ease-in forwards;
+}
+.map-panel-dialog.animate-none[data-state='open'],
+.map-panel-dialog.animate-none[data-state='closed'] {
+  animation: none !important;
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0) scale(1);
+}
+
+/* Dialog panels: solid surface — backdrop-filter + transform blurs text in Chrome */
+.map-panel.map-panel-dialog {
+  background: var(--map-panel-detail-surface, rgb(18, 22, 34)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-ui-theme='light'] .map-panel.map-panel-dialog {
+  background: #ffffff !important;
 }
 
 /* Compact centered dialogs — auth, confirm, share popups (fade-in animation otherwise drops translate on mobile) */
@@ -202,7 +299,7 @@
   top: 50% !important;
   right: auto !important;
   bottom: auto !important;
-  transform: translate(-50%, -50%) !important;
+  transform: translate3d(-50%, -50%, 0) !important;
 }
 .confirm-dialog.map-panel-dialog,
 .map-panel.confirm-dialog {
@@ -220,13 +317,21 @@
   padding: 1.5rem !important;
 }
 
-/* Non-fullscreen map dialogs: keep viewport center at all breakpoints */
-.map-panel-dialog:not(.deal-pipeline-panel):not(.schedule-panel):not(.fullscreen-panel),
-.map-panel-dialog[data-state='open']:not(.deal-pipeline-panel):not(.schedule-panel):not(.fullscreen-panel),
-.map-panel-dialog[data-state='closed']:not(.deal-pipeline-panel):not(.schedule-panel):not(.fullscreen-panel) {
-  transform: translate(-50%, -50%) !important;
+/* All map panels: anchor at viewport center (base translate; keyframes add scale on enter/exit) */
+.map-panel-dialog:not(.confirm-dialog):not(.login-panel):not(.auth-dialog) {
+  left: 50% !important;
+  top: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translate3d(-50%, -50%, 0);
 }
 @media (prefers-reduced-motion: reduce) {
+  .map-panel-dialog[data-state='open'],
+  .map-panel-dialog[data-state='closed'] {
+    animation: none !important;
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0) scale(1);
+  }
   .map-panel-dialog,
   [data-app-dialog-backdrop] {
     animation-duration: 0.01ms !important;
@@ -618,6 +723,15 @@
   border-color: rgba(253, 230, 138, 0.3) !important;
 }
 
+/* Detail overlays — solid surface, no backdrop blur (keeps text/lines sharp vs list panels) */
+.map-panel.lead-details-panel,
+.map-panel.deal-details-panel,
+.map-panel.team-details-panel {
+  background: var(--map-panel-detail-surface, var(--map-panel-surface)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 .map-panel.lead-details-panel > *,
 .map-panel.deal-details-panel > * {
   background: transparent !important;
@@ -638,30 +752,134 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
-/* LeadDetails - no fills on any fields, buttons, or links */
-.map-panel.lead-details-panel button,
-.map-panel.lead-details-panel [role="button"],
-.map-panel.lead-details-panel input,
-.map-panel.lead-details-panel a {
+/* Lead/Deal details — flat text links; outlined tiles, status chips, and fields keep borders */
+.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn),
+.map-panel.lead-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-deal-card),
+.map-panel.lead-details-panel a,
+.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn),
+.map-panel.deal-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-deal-card),
+.map-panel.deal-details-panel a {
   background: none !important;
   background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: none !important;
 }
-.map-panel.lead-details-panel button:hover:not(:disabled),
-.map-panel.lead-details-panel [role="button"]:hover:not(:disabled),
-.map-panel.lead-details-panel a:hover {
+.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn):hover:not(:disabled),
+.map-panel.lead-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-deal-card):hover:not(:disabled),
+.map-panel.lead-details-panel a:hover,
+.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn):hover:not(:disabled),
+.map-panel.deal-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-deal-card):hover:not(:disabled),
+.map-panel.deal-details-panel a:hover {
   background: none !important;
   background-color: transparent !important;
 }
-.map-panel.lead-details-panel input {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
-  border-radius: 0 !important;
+
+.lead-detail-section {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.875rem 1rem;
 }
-.map-panel.lead-details-panel input:focus {
+
+.lead-detail-section-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.lead-detail-actions-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.lead-detail-actions-row > * {
+  min-width: 0;
+  width: 100%;
+}
+
+.lead-detail-columns-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .lead-detail-columns-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: start;
+  }
+}
+
+.lead-detail-action-tile {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.25rem !important;
+  border-radius: 0.625rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.lead-detail-action-label {
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1.15;
+  width: 100%;
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.lead-detail-action-tile:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.lead-detail-deal-card {
+  display: flex !important;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.75rem !important;
+  border-radius: 0.625rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  text-align: left;
+  transition: background-color 0.15s;
+}
+
+.lead-detail-deal-card:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-field,
+.map-panel.lead-details-panel textarea.lead-detail-field,
+.map-panel.deal-details-panel .lead-detail-field,
+.map-panel.deal-details-panel textarea.lead-detail-field {
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 0.5rem !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-field:focus,
+.map-panel.deal-details-panel .lead-detail-field:focus {
   outline: none;
-  border-bottom-color: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
 }
 
 .map-panel .deal-pipeline-settings-btn.deal-pipeline-edit-active {
@@ -680,16 +898,15 @@
 /* Deal Pipeline panel - mobile: fit to screen, safe-area aware */
 @media (max-width: 767px) {
   .deal-pipeline-panel {
-    left: 0 !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
     width: 100% !important;
     max-width: none !important;
     height: 100% !important;
     max-height: 100% !important;
     min-height: var(--vw-height, 100vh) !important;
-    transform: none !important;
     border-radius: 0 !important;
     padding: 0 !important;
     box-sizing: border-box !important;
@@ -992,17 +1209,17 @@
 }
 
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
-/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle, form-fill buttons - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action) {
+/* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle, form-fill buttons - those use transparent/no fill */
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action) {
   background: var(--map-panel-btn-bg) !important;
   border-color: var(--map-panel-btn-border) !important;
   color: var(--map-panel-text) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled) {
   background: var(--map-panel-btn-hover-bg) !important;
   border-color: var(--map-panel-btn-border) !important;
 }
@@ -1060,15 +1277,15 @@
 
 /* List panel - no fills on buttons (except delete, create form actions) */
 /* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams) */
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):hover:not(:disabled) {
   background: transparent !important;
 }
 
@@ -1982,8 +2199,43 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   display: none !important;
 }
 
-/* App boot splash — portaled in AppLoadingScreen (framer-motion); below permission prompt */
-.app-loading-screen {
+/* App boot splash — index.html #initial-loader + portaled AppLoadingScreen */
+@keyframes app-loader-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes app-loader-logo-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+@keyframes app-loader-tagline-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.85; }
+}
+@keyframes app-loader-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(120%); }
+}
+@keyframes app-loader-orb-a {
+  0%, 100% { transform: translateX(-50%) translate(0, 0) scale(1); }
+  33% { transform: translateX(-50%) translate(28px, -20px) scale(1.12); }
+  66% { transform: translateX(-50%) translate(-12px, 14px) scale(0.95); }
+}
+@keyframes app-loader-orb-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-24px, 22px) scale(0.92); }
+  66% { transform: translate(18px, -10px) scale(1.08); }
+}
+@keyframes app-loader-grid-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.55; }
+}
+@keyframes app-loader-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.app-loading-screen,
+#initial-loader {
   position: fixed;
   inset: 0;
   z-index: 10045;
@@ -1993,6 +2245,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   background: #0a0a0c;
   overflow: hidden;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+.app-loading-screen--visible {
+  animation: app-loader-fade-in 0.35s ease-out both;
 }
 .app-loading-screen__bg {
   position: absolute;
@@ -2005,22 +2260,27 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   filter: blur(72px);
   opacity: 0.55;
 }
-.app-loading-screen__orb--a {
+.app-loading-screen__orb--a,
+#initial-loader .app-loading-screen__orb--a {
   width: min(70vw, 320px);
   height: min(70vw, 320px);
   top: 18%;
   left: 50%;
   transform: translateX(-50%);
   background: radial-gradient(circle, rgba(59, 130, 246, 0.55) 0%, transparent 70%);
+  animation: app-loader-orb-a 9s ease-in-out infinite;
 }
-.app-loading-screen__orb--b {
+.app-loading-screen__orb--b,
+#initial-loader .app-loading-screen__orb--b {
   width: min(55vw, 260px);
   height: min(55vw, 260px);
   bottom: 12%;
   right: 8%;
   background: radial-gradient(circle, rgba(37, 99, 235, 0.4) 0%, transparent 72%);
+  animation: app-loader-orb-b 11s ease-in-out infinite;
 }
-.app-loading-screen__grid {
+.app-loading-screen__grid,
+#initial-loader .app-loading-screen__grid {
   position: absolute;
   inset: 0;
   background-image:
@@ -2029,6 +2289,12 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 75%);
   -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 75%);
+  animation: app-loader-grid-pulse 4s ease-in-out infinite;
+}
+#initial-loader .app-loading-screen__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 .app-loading-screen__content {
   position: relative;
@@ -2055,12 +2321,14 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   border-top-color: rgba(96, 165, 250, 0.85);
   border-right-color: rgba(59, 130, 246, 0.25);
   box-shadow: 0 0 24px rgba(59, 130, 246, 0.2);
+  animation: app-loader-spin 2.8s linear infinite;
 }
 .app-loading-screen__ring--inner {
   inset: 0.5rem;
   border-top-color: rgba(147, 197, 253, 0.5);
   border-right-color: transparent;
   box-shadow: none;
+  animation: app-loader-spin 4.2s linear infinite reverse;
 }
 .app-loading-screen__logo {
   position: relative;
@@ -2072,6 +2340,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     0 0 0 1px rgba(255, 255, 255, 0.12),
     0 12px 40px rgba(0, 0, 0, 0.45),
     0 0 48px rgba(59, 130, 246, 0.15);
+  animation: app-loader-logo-pulse 2.2s ease-in-out infinite;
 }
 .app-loading-screen__brand {
   display: flex;
@@ -2092,6 +2361,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   font-weight: 500;
   color: rgba(148, 163, 184, 0.95);
   letter-spacing: 0.02em;
+  animation: app-loader-tagline-pulse 2.5s ease-in-out infinite;
 }
 .app-loading-screen__progress {
   width: min(12rem, 56vw);
@@ -2105,6 +2375,43 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, transparent);
+  animation: app-loader-progress 1.35s ease-in-out infinite;
+}
+
+.basemap-error-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 10020;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+.basemap-error-banner__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.basemap-error-banner__retry:hover {
+  background: rgba(127, 29, 29, 0.55);
 }
 
 /* Permission prompt overlay — must be body-level (see PermissionPrompt portal) so it
@@ -2252,12 +2559,12 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .tour-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10040;
+  z-index: 10055;
 }
 
 .tour-spotlight {
   position: fixed;
-  z-index: 10044;
+  z-index: 10059;
   border-radius: 12px;
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.45),
@@ -2279,7 +2586,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 .tour-tooltip {
   position: fixed;
-  z-index: 10045;
+  z-index: 10060;
   max-width: 280px;
   width: max-content;
   background: rgba(30, 30, 30, 0.92);
@@ -2329,7 +2636,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   left: 50%;
   top: 28%;
   transform: translate(-50%, -50%);
-  z-index: 10045;
+  z-index: 10060;
   width: min(320px, calc(100vw - 24px));
   pointer-events: auto;
 }
@@ -2351,7 +2658,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   left: 50%;
   top: 54%;
   transform: translate(-50%, -50%);
-  z-index: 10040;
+  z-index: 10055;
   pointer-events: none;
 }
 .tour-demo-parcel-anchor--enter {
@@ -3137,11 +3444,368 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* Leads panel — focused summary (action → pipeline → outcomes) */
+.leads-analytics {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.leads-analytics-hero {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%);
+}
+
+.leads-analytics-hero-value {
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: rgb(253 224 71);
+  text-align: center;
+}
+
+.leads-analytics-hero-copy {
+  min-width: 0;
+}
+
+.leads-analytics-hero-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.leads-analytics-hero-hint {
+  margin-top: 0.2rem;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.leads-analytics-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.leads-analytics-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.625rem 0.375rem;
+  border-radius: 0.625rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  text-align: center;
+}
+
+.leads-analytics-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.leads-analytics-stat-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.leads-analytics-stat:last-child .leads-analytics-stat-value {
+  color: rgb(187 247 208);
+}
+
+.leads-analytics-row--financial {
+  margin-top: 0.125rem;
+}
+
+.leads-analytics-stat-value--money {
+  font-size: 1.0625rem;
+  letter-spacing: -0.01em;
+}
+
+.leads-analytics-row--financial .leads-analytics-stat:last-child .leads-analytics-stat-value:not(.deal-profit-positive):not(.deal-profit-negative) {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.leads-analytics-total {
+  margin: 0;
+  text-align: center;
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.leads-analytics-total strong {
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .leads-analytics-hero-value {
+    font-size: 2.75rem;
+    min-width: 3rem;
+  }
+
+  .leads-analytics-stat-value {
+    font-size: 1.625rem;
+  }
+
+  .leads-analytics-stat-value--money {
+    font-size: 1.1875rem;
+  }
+
+  /* Deals analytics — hero beside stat rows on desktop */
+  .deals-analytics {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+
+  .deals-analytics .leads-analytics-hero {
+    height: 100%;
+    margin: 0;
+  }
+
+  .deals-analytics-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .deals-analytics-side .leads-analytics-row--financial {
+    margin-top: 0;
+  }
+}
+
+/* CRM panels — summary bar, column headers, desktop grid rows */
+.crm-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.85rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.crm-summary-bar strong {
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 600;
+}
+
+.crm-summary-divider {
+  width: 1px;
+  height: 0.75rem;
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.crm-column-headers {
+  display: none;
+}
+
+.crm-list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Panel filter menu — outlined toggle buttons (excluded from list-panel transparent button reset) */
+.panel-filter-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.2;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.panel-filter-option:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.32);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.panel-filter-option--active {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.panel-filter-option--active:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.panel-filter-option--status-active {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+@media (min-width: 768px) {
+  .crm-column-headers {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.25rem 0.875rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.32);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 0.125rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: inherit;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .crm-lead-headers {
+    grid-template-columns: 1.05fr 0.58fr 0.62fr 1.15fr 1fr 0.72fr;
+  }
+
+  .crm-deal-headers {
+    grid-template-columns: 1fr 0.55fr 0.58fr 0.82fr 1fr 0.65fr 0.52fr;
+  }
+
+  .crm-lead-row {
+    display: grid !important;
+    flex-direction: unset !important;
+    grid-template-columns: 1.05fr 0.58fr 0.62fr 1.15fr 1fr 0.72fr;
+    gap: 0.375rem 0.5rem;
+    align-items: center;
+    padding-top: 0.625rem !important;
+    padding-bottom: 0.625rem !important;
+  }
+
+  .crm-deal-row {
+    display: grid !important;
+    flex-direction: unset !important;
+    grid-template-columns: 1fr 0.55fr 0.58fr 0.82fr 1fr 0.65fr 0.52fr;
+    gap: 0.375rem 0.5rem;
+    align-items: center;
+    padding-top: 0.625rem !important;
+    padding-bottom: 0.625rem !important;
+  }
+
+  .crm-lead-row .crm-col-tags,
+  .crm-deal-row .crm-col-tags {
+    font-size: 0.625rem;
+    line-height: 1.3;
+    overflow: hidden;
+  }
+
+  .crm-lead-row .crm-col-tags .flex,
+  .crm-deal-row .crm-col-tags .flex {
+    max-height: 2.6rem;
+    overflow: hidden;
+  }
+
+  .crm-lead-row .crm-col-status,
+  .crm-deal-row .crm-col-stage {
+    font-size: 0.6875rem;
+  }
+
+  .crm-lead-row .crm-col-property,
+  .crm-deal-row .crm-col-property {
+    font-size: 0.75rem;
+    opacity: 0.65;
+  }
+
+  .crm-lead-row .crm-col-contact {
+    font-size: 0.6875rem;
+    opacity: 0.55;
+    line-height: 1.4;
+  }
+
+  .crm-lead-row .crm-col-meta,
+  .crm-deal-row .crm-col-meta {
+    font-size: 0.6875rem;
+    opacity: 0.55;
+    line-height: 1.4;
+  }
+
+  .crm-deal-row .crm-col-amount {
+    font-size: 0.75rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .crm-deal-headers span:last-child {
+    text-align: right;
+  }
+}
 /* =========================================================================
-   Mobile Action Bar (Pipes / Tasks / Schedule / Menu)
-   macOS-dock-style floating pill, phone-only, anchored above the home
-   indicator via safe-area insets.
+   Floating Action Bar — responsive bottom dock (phone → wide desktop).
    ========================================================================= */
+
+:root {
+  --action-bar-width: min(92vw, 400px);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --action-bar-width: min(94vw, 520px);
+  }
+}
+
+@media (min-width: 1100px) {
+  :root {
+    --action-bar-width: min(96vw, 640px);
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --action-bar-width: min(96vw, 760px);
+  }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --action-bar-width: min(96vw, 920px);
+  }
+}
 
 .mobile-action-bar {
   position: fixed;
@@ -3167,9 +3831,31 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 12px;
   padding: 6px;
-  gap: 6px;
-  width: min(92vw, 400px);
+  gap: 4px;
+  width: var(--action-bar-width);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+@media (min-width: 768px) {
+  .mobile-action-bar-inner {
+    gap: 6px;
+    padding: 8px;
+  }
+  .mobile-action-bar-btn {
+    min-width: 3.25rem;
+  }
+  .mobile-action-bar-label {
+    font-size: 10px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .mobile-action-bar-inner {
+    border-radius: 14px;
+  }
+  .mobile-action-bar-label {
+    font-size: 11px;
+  }
 }
 
 .mobile-action-bar-btn {
@@ -3207,20 +3893,39 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   transform: scale(0.96);
 }
 
+.mobile-action-bar-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-action-bar-badge {
+  position: absolute;
+  top: -5px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
 .mobile-action-bar-label {
   font-size: 10px;
   line-height: 1;
   font-weight: 500;
   letter-spacing: 0.02em;
-}
-
-/* Hide on tablets and up. The bar is intended for phone-sized screens. */
-@media (min-width: 768px) {
-  .mobile-action-bar,
-  .mobile-action-bar-menu,
-  .mobile-action-bar-menu-backdrop {
-    display: none !important;
-  }
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- Action Bar: Menu popup ---- */
@@ -3240,21 +3945,19 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 /* Keep open menus above the tour dim layer so spotlight cutouts reveal real items */
 .hamburger-menu-dropdown {
-  z-index: 10043 !important;
+  z-index: 10058 !important;
 }
 .mobile-action-bar-menu {
-  z-index: 10043 !important;
+  z-index: 10058 !important;
 }
 .mobile-action-bar-menu-backdrop {
-  z-index: 10042 !important;
+  z-index: 10057 !important;
 }
 
 .mobile-action-bar-menu {
   position: fixed;
-  right: calc(12px + env(safe-area-inset-right, 0px));
-  /* Floating bar pads 12px below itself plus ~68px height. Add a small gap. */
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
-  max-width: calc(100vw - 24px);
+  /* right + bottom set inline from Menu button anchor */
+  max-width: min(320px, calc(100vw - 24px));
   z-index: 1001;
   transform-origin: bottom right;
   animation: mobile-action-bar-menu-pop 140ms ease-out;
@@ -3269,11 +3972,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 @keyframes mobile-action-bar-menu-pop {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Hide the top-right hamburger button on mobile when the action bar is
-   rendering its own menu, to avoid two menu buttons. */
+/* Legacy: map-controls hamburger removed; keep rule harmless if class lingers */
 @media (max-width: 767px) {
   .map-controls-menu--hide-mobile {
     display: none !important;
@@ -3641,10 +4343,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 @media (min-width: 768px) {
   .hail-storm-panel-wrap {
-    position: absolute;
-    --hail-storm-action-bar-offset: 1.25rem;
+    position: fixed;
+    --hail-storm-action-bar-offset: calc(env(safe-area-inset-bottom, 0px) + 12px + 76px + 12px);
     padding: 0 1rem;
-    z-index: 30;
+    z-index: 997;
   }
 }
 .hail-storm-panel {

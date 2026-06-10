@@ -1,9 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
+import { TeamSharedIcon } from './ResourceSharePicker'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { getFullAddress } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
@@ -523,13 +525,35 @@ export function TasksPanel({
     onBack?.() ?? onClose?.()
   }
 
+  const hasNestedOverlay = showAddTask || !!editingTask || !!pipePickerState?.open
+  const suppressParentDismissRef = useRef(false)
+  const hadNestedOverlayRef = useRef(false)
+
+  useEffect(() => {
+    if (hadNestedOverlayRef.current && !hasNestedOverlay) {
+      suppressParentDismissRef.current = true
+      const id = requestAnimationFrame(() => {
+        suppressParentDismissRef.current = false
+      })
+      hadNestedOverlayRef.current = hasNestedOverlay
+      return () => cancelAnimationFrame(id)
+    }
+    hadNestedOverlayRef.current = hasNestedOverlay
+  }, [hasNestedOverlay])
+
+  const handleTasksPanelOpenChange = (open) => {
+    if (!open && suppressParentDismissRef.current) return
+    handlePanelDialogOpenChange(open, hasNestedOverlay, handlePanelBack, isOpen)
+  }
+
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) handlePanelBack() }}>
+    <Dialog open={isOpen} modal={false} onOpenChange={handleTasksPanelOpenChange}>
       <DialogContent
         className="map-panel list-panel fullscreen-panel flex flex-col min-h-0"
         showCloseButton={false}
         hideOverlay
+        suppressBackdrop
       >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Tasks grouped by pipe</DialogDescription>
@@ -704,7 +728,7 @@ export function TasksPanel({
         nestedOverlay
       />
 
-      <Dialog open={!!editingTask} onOpenChange={(o) => { if (!o) setEditingTask(null) }}>
+      <Dialog open={!!editingTask} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, false, () => setEditingTask(null), !!editingTask)}>
         <DialogContent className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} nestedOverlay>
           <DialogHeader
             className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
@@ -971,9 +995,7 @@ export function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, 
               {task.title || '(untitled)'}
             </span>
             {task.__source === 'team' && (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/25 text-blue-200 border border-blue-400/40 uppercase tracking-wide shrink-0">
-                Team
-              </span>
+              <TeamSharedIcon title="Team task" />
             )}
           </div>
           {leadLine && (

@@ -81,6 +81,7 @@ export function CreateDealDialog({
   return (
     <Dialog
       open={open}
+      modal={false}
       onOpenChange={(v) => {
         onOpenChange(v)
       }}

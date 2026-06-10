@@ -21,19 +21,10 @@ export function navigationReducer(state, action) {
     }
     case NAV_ACTIONS.REPLACE_STACK: {
       const frames = /** @type {import('./types.js').NavFrame[]} */ (action.payload)
-      const returningToActivity =
-        frames.length === 1 &&
-        frames[0].type === 'activity' &&
-        state.navStack[0]?.type === 'activity' &&
-        state.navStack.length > 1
       return {
         ...state,
         navStack: frames,
-        meta: {
-          ...state.meta,
-          showMenu: false,
-          ...(returningToActivity ? { skipPanelExitAnimation: true } : {}),
-        },
+        meta: { ...state.meta, showMenu: false },
       }
     }
     case NAV_ACTIONS.POP:
@@ -118,7 +109,7 @@ function shouldReturnToActivityOnDetailPop(navStack, topType) {
   if (navStack.length !== 3 || navStack[0].type !== 'activity') return false
   const destination = navStack[1]
   const destRoot = frameRoot(destination.type)
-  if (!ROOT_PANEL_TYPES.has(destRoot) || destRoot === 'activity') return false
+  if (!ROOT_PANEL_TYPES.has(destRoot) || destRoot === 'activity' || destRoot === 'schedule') return false
   return frameRoot(topType) === destRoot
 }
 
@@ -236,6 +227,5 @@ function stateWithReturnToActivity(state) {
   return {
     ...state,
     navStack: returnToActivityStack(),
-    meta: { ...state.meta, skipPanelExitAnimation: true },
   }
 }

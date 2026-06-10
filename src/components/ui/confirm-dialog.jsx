@@ -75,7 +75,7 @@ export const ConfirmDialog = () => {
   if (!currentConfirm) return null
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
+    <Dialog open={open} modal onOpenChange={(isOpen) => {
       if (!isOpen) {
         handleCancel()
       }

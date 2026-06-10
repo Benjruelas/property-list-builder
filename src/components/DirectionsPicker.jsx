@@ -1,11 +1,18 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Navigation } from 'lucide-react'
 import { Button } from './ui/button'
+import {
+  computeOptionsMenuPosition,
+  getOptionsMenuPortalContainer,
+  resolveOptionsMenuZIndex,
+} from '@/utils/optionsMenuPortal'
 
-const DROPDOWN_CLASS = "absolute z-[10000] rounded-xl min-w-[220px] py-1 overflow-hidden shadow-xl border border-white/20 whitespace-nowrap"
+const MENU_WIDTH = 220
+const DROPDOWN_CLASS = 'rounded-xl min-w-[220px] py-1 overflow-hidden shadow-xl border border-white/20 whitespace-nowrap'
 const DROPDOWN_STYLE = { background: 'rgba(30, 30, 30, 0.92)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
 
-const ICON_WRAP = "flex-shrink-0 h-5 w-5 flex items-center justify-center"
+const ICON_WRAP = 'flex-shrink-0 h-5 w-5 flex items-center justify-center'
 
 function GoogleIcon() {
   return (
@@ -35,15 +42,57 @@ function openDirections(lat, lng, provider) {
   window.open(url, '_blank')
 }
 
+function DirectionsMenu({ onSelect }) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onSelect('google')}
+        className="w-full px-3 py-2.5 text-left text-sm text-white/90 flex items-center gap-3 hover:bg-white/10 transition-colors"
+      >
+        <GoogleIcon />
+        Open with Google Maps
+      </button>
+      <button
+        type="button"
+        onClick={() => onSelect('apple')}
+        className="w-full px-3 py-2.5 text-left text-sm text-white/90 flex items-center gap-3 hover:bg-white/10 transition-colors"
+      >
+        <AppleIcon />
+        Open with Apple Maps
+      </button>
+    </>
+  )
+}
+
 export function DirectionsPicker({ lat, lng, variant = 'icon', className = '', iconSize }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
+  const triggerRef = useRef(null)
+  const menuRef = useRef(null)
+  const [position, setPosition] = useState(null)
+  const [zIndex, setZIndex] = useState({ panel: 10032, scrim: 10031, wrapper: 10030 })
   const disabled = lat == null || lng == null
 
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) {
+      setPosition(null)
+      return undefined
+    }
+    const place = () => {
+      setZIndex(resolveOptionsMenuZIndex(triggerRef.current))
+      setPosition(computeOptionsMenuPosition(triggerRef.current, menuRef.current, MENU_WIDTH))
+    }
+    place()
+    const id = requestAnimationFrame(place)
+    return () => cancelAnimationFrame(id)
+  }, [open])
+
   useEffect(() => {
-    if (!open) return
+    if (!open) return undefined
     const handleOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      const t = e.target
+      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('pointerdown', handleOutside)
     return () => document.removeEventListener('pointerdown', handleOutside)
@@ -54,93 +103,126 @@ export function DirectionsPicker({ lat, lng, variant = 'icon', className = '', i
     openDirections(lat, lng, provider)
   }
 
-  const dropdown = (
-    <div className={DROPDOWN_CLASS} style={{ ...DROPDOWN_STYLE, ...(variant === 'button' || variant === 'row' || iconSize ? { left: 0 } : { right: 0 }), top: '100%', marginTop: 4, position: 'absolute' }}>
-      <button
-        type="button"
-        onClick={() => handleSelect('google')}
-        className="w-full px-3 py-2.5 text-left text-sm text-white/90 flex items-center gap-3 hover:bg-white/10 transition-colors"
+  const container = getOptionsMenuPortalContainer()
+  const portaledMenu = open && position && container && createPortal(
+    <div
+      data-directions-picker-menu
+      className="pointer-events-auto fixed inset-0"
+      style={{ zIndex: zIndex.wrapper }}
+    >
+      <div
+        className="fixed inset-0"
+        style={{ zIndex: zIndex.scrim }}
+        onClick={() => setOpen(false)}
+        aria-hidden
+      />
+      <div
+        ref={menuRef}
+        className={DROPDOWN_CLASS}
+        style={{
+          ...DROPDOWN_STYLE,
+          position: 'fixed',
+          top: position.top,
+          left: position.left,
+          width: MENU_WIDTH,
+          zIndex: zIndex.panel,
+        }}
       >
-        <GoogleIcon />
-        Open with Google Maps
-      </button>
-      <button
-        type="button"
-        onClick={() => handleSelect('apple')}
-        className="w-full px-3 py-2.5 text-left text-sm text-white/90 flex items-center gap-3 hover:bg-white/10 transition-colors"
-      >
-        <AppleIcon />
-        Open with Apple Maps
-      </button>
-    </div>
+        <DirectionsMenu onSelect={handleSelect} />
+      </div>
+    </div>,
+    container
   )
 
-  if (variant === 'row') {
+  const toggle = (e) => {
+    e.stopPropagation()
+    setOpen((p) => !p)
+  }
+
+  if (variant === 'tile') {
     return (
-      <div ref={ref} className={`relative w-full ${className}`}>
+      <div ref={triggerRef} className={`relative min-w-0 w-full ${className}`}>
         <button
           type="button"
           disabled={disabled}
-          onClick={(e) => { e.stopPropagation(); setOpen((p) => !p) }}
+          onClick={toggle}
+          title="Open in maps"
+          className="lead-detail-action-tile w-full"
+        >
+          <Navigation className="h-4 w-4 shrink-0 opacity-80" />
+          <span className="lead-detail-action-label">Directions</span>
+        </button>
+        {portaledMenu}
+      </div>
+    )
+  }
+
+  if (variant === 'row') {
+    return (
+      <div ref={triggerRef} className={`relative w-full ${className}`}>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={toggle}
           className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80 disabled:opacity-40"
         >
           <Navigation className="h-4 w-4 opacity-50 shrink-0" />
           <span>Directions</span>
         </button>
-        {open && dropdown}
+        {portaledMenu}
       </div>
     )
   }
 
   if (variant === 'button') {
     return (
-      <div ref={ref} className={`relative ${className}`}>
+      <div ref={triggerRef} className={`relative ${className}`}>
         <Button
           variant="outline"
           size="sm"
           className="parcel-dropdown-btn flex-1 min-w-[120px]"
           disabled={disabled}
-          onClick={(e) => { e.stopPropagation(); setOpen(p => !p) }}
+          onClick={toggle}
         >
           <Navigation className="h-4 w-4 mr-2" />
           Directions
         </Button>
-        {open && dropdown}
+        {portaledMenu}
       </div>
     )
   }
 
   if (iconSize) {
     return (
-      <div ref={ref} className={`relative ${className}`}>
+      <div ref={triggerRef} className={`relative ${className}`}>
         <button
           type="button"
           disabled={disabled}
-          onClick={(e) => { e.stopPropagation(); setOpen(p => !p) }}
+          onClick={toggle}
           title="Get directions"
           className="pipeline-icon-btn bg-sky-600/80 hover:bg-sky-600 text-white transition-colors disabled:opacity-40"
           style={{ padding: 'inherit', borderRadius: 'inherit' }}
         >
           <Navigation size={iconSize} />
         </button>
-        {open && dropdown}
+        {portaledMenu}
       </div>
     )
   }
 
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <div ref={triggerRef} className={`relative ${className}`}>
       <Button
         variant="ghost"
         size="icon"
         disabled={disabled}
-        onClick={(e) => { e.stopPropagation(); setOpen(p => !p) }}
+        onClick={toggle}
         title="Get directions"
         className="parcel-details-link-btn"
       >
         <Navigation className="h-4 w-4" />
       </Button>
-      {open && dropdown}
+      {portaledMenu}
     </div>
   )
 }

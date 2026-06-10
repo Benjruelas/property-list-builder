@@ -1,5 +1,6 @@
 import { UsersRound, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TeamSharedIcon } from './ResourceSharePicker'
 
 /**
  * Compact multi-select team picker for share dialogs. Shows every team the
@@ -85,15 +86,6 @@ export function TeamBadge({ teamIds = [], teams = [], className = '' }) {
   if (names.length === 0) return null
   const label = names.length === 1 ? `Team: ${names[0]}` : `Teams: ${names.length}`
   return (
-    <span
-      className={cn(
-        'text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/40 uppercase tracking-wide flex items-center gap-1',
-        className
-      )}
-      title={names.join(', ')}
-    >
-      <UsersRound className="h-2.5 w-2.5" />
-      {label}
-    </span>
+    <TeamSharedIcon title={label} className={className} />
   )
 }

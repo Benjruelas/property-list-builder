@@ -12,6 +12,56 @@ const getApiBase = () => {
 }
 
 const LOCAL_LEADS_KEY = 'user_leads_local'
+const MAX_LEAD_ACTIVITY = 200
+
+export const LEAD_STATUSES = [
+  { id: 'new', label: 'New', color: 'bg-slate-500/25 text-slate-200 border-slate-400/40' },
+  { id: 'contacted', label: 'Contacted', color: 'bg-blue-500/20 text-blue-200 border-blue-400/40' },
+  { id: 'qualified', label: 'Qualified', color: 'bg-amber-500/20 text-amber-200 border-amber-400/40' },
+  { id: 'converted', label: 'Converted', color: 'bg-green-500/20 text-green-200 border-green-400/40' },
+  { id: 'lost', label: 'Lost', color: 'bg-red-500/20 text-red-200 border-red-400/40' },
+]
+
+const LEAD_STATUS_IDS = new Set(LEAD_STATUSES.map((s) => s.id))
+const OUTREACH_ACTIVITY_TYPES = new Set(['call', 'text', 'email'])
+
+export function getLeadStatusMeta(statusId) {
+  return LEAD_STATUSES.find((s) => s.id === statusId) || LEAD_STATUSES[0]
+}
+
+/** Effective status — derives converted when lead has deals unless explicitly lost. */
+export function getLeadStatus(lead, dealCount = 0) {
+  if (!lead) return 'new'
+  if (lead.status === 'lost') return 'lost'
+  if (dealCount > 0) return 'converted'
+  const raw = lead.status || 'new'
+  return LEAD_STATUS_IDS.has(raw) ? raw : 'new'
+}
+
+export function lastContactedAt(lead) {
+  const activities = Array.isArray(lead?.activity) ? lead.activity : []
+  let latest = null
+  for (const entry of activities) {
+    if (!OUTREACH_ACTIVITY_TYPES.has(entry?.type) || !entry?.at) continue
+    if (!latest || entry.at > latest) latest = entry.at
+  }
+  return latest
+}
+
+export function formatLastContacted(iso) {
+  if (!iso) return null
+  try {
+    const then = new Date(iso).getTime()
+    const now = Date.now()
+    const diffMs = Math.max(0, now - then)
+    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000))
+    if (diffDays === 0) return 'Contacted today'
+    if (diffDays === 1) return 'Contacted yesterday'
+    return `Contacted ${diffDays}d ago`
+  } catch {
+    return null
+  }
+}
 
 export function loadLocalLeads() {
   try {
@@ -54,6 +104,9 @@ export async function createLead(getToken, leadData) {
     const now = new Date().toISOString()
     const lead = {
       id: `lead_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+      status: 'new',
+      statusUpdatedAt: now,
+      activity: [],
       ...leadData,
       createdAt: now,
       updatedAt: now,

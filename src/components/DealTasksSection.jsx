@@ -279,9 +279,9 @@ export function DealTasksSection({
 
   return (
     <>
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold uppercase opacity-50">Tasks</h3>
+      <section className="lead-detail-section">
+        <div className="flex items-center justify-between mb-2.5">
+          <h3 className="lead-detail-section-title">Tasks</h3>
           {canMutate && (
             <Button
               type="button"
@@ -296,7 +296,7 @@ export function DealTasksSection({
           )}
         </div>
         {tasks.length === 0 ? (
-          <p className="text-xs opacity-40 py-2">No tasks yet.</p>
+          <p className="text-xs text-white/40 py-2">No tasks yet.</p>
         ) : (
           <ul className="space-y-2">
             {tasks.map((task) => (

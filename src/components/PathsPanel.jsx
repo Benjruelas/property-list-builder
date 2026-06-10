@@ -6,7 +6,7 @@ import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
-import { VisibilityBadge } from './ResourceSharePicker'
+import { LeadSharingIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 import { filterByTags } from '@/utils/tags'
@@ -375,10 +375,10 @@ export function PathsPanel({
                               ) : (
                                 <span className="font-medium text-sm truncate">{path.name}</span>
                               )}
-                              {(!isPathOwnedByUser(path) || (path.sharedWith && path.sharedWith.length > 0)) && (
-                                <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title={isPathOwnedByUser(path) ? 'Shared with others' : 'Shared with you'} aria-hidden />
-                              )}
-                              <VisibilityBadge resource={path} />
+                              <LeadSharingIcon
+                                resource={path}
+                                collaboratorHint={!isPathOwnedByUser(path)}
+                              />
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5 leading-snug line-clamp-2">
                               {metaLine}

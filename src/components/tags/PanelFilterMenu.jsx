@@ -12,13 +12,29 @@ import {
 
 const MENU_WIDTH = 280
 
+const filterOptionClass = (active, extra = '') =>
+  cn(
+    'panel-filter-option',
+    active && 'panel-filter-option--active',
+    extra
+  )
+
 /**
- * Filter icon that opens a portaled menu. Tags are the first filter section.
+ * Filter icon that opens a portaled menu. Tags are the default section;
+ * optional status and sort sections extend the same menu for list panels.
  */
 export function PanelFilterMenu({
   tags = [],
   selectedTagIds = [],
   onTagIdsChange,
+  statusOptions = null,
+  statusFilter = null,
+  onStatusFilterChange,
+  statusCounts = null,
+  sortOptions = null,
+  sortMode = null,
+  onSortModeChange,
+  defaultSortMode = 'recent',
   className,
   disabled = false,
 }) {
@@ -28,7 +44,18 @@ export function PanelFilterMenu({
   const [position, setPosition] = useState(null)
   const [zIndex, setZIndex] = useState({ panel: 10032, scrim: 10031, wrapper: 10030 })
 
-  const activeCount = selectedTagIds.length
+  const hasStatus = Array.isArray(statusOptions) && statusOptions.length > 0 && onStatusFilterChange
+  const hasSort = Array.isArray(sortOptions) && sortOptions.length > 0 && onSortModeChange
+  const activeCount =
+    selectedTagIds.length
+    + (hasStatus && statusFilter ? 1 : 0)
+    + (hasSort && sortMode && sortMode !== defaultSortMode ? 1 : 0)
+
+  const handleClearAll = () => {
+    onTagIdsChange?.([])
+    if (hasStatus) onStatusFilterChange(null)
+    if (hasSort) onSortModeChange(defaultSortMode)
+  }
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) {
@@ -73,7 +100,7 @@ export function PanelFilterMenu({
         )}
         title={
           activeCount > 0
-            ? `Filters (${activeCount} tag${activeCount !== 1 ? 's' : ''})`
+            ? `Filters (${activeCount} active)`
             : 'Filter'
         }
         onClick={() => setOpen((v) => !v)}
@@ -117,25 +144,79 @@ export function PanelFilterMenu({
                 <button
                   type="button"
                   className="text-xs text-white/50 hover:text-white/80 transition-colors"
-                  onClick={() => onTagIdsChange?.([])}
+                  onClick={handleClearAll}
                 >
                   Clear all
                 </button>
               )}
             </div>
-            <div className="px-3 py-3 space-y-2 max-h-[min(320px,50vh)] overflow-y-auto scrollbar-hide">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Tags</p>
-              {tags.length === 0 ? (
-                <p className="text-xs text-white/45 leading-relaxed">
-                  No tags yet. Add tags from an item&apos;s options menu.
-                </p>
-              ) : (
-                <TagFilterBar
-                  tags={tags}
-                  selectedIds={selectedTagIds}
-                  onChange={onTagIdsChange}
-                />
+            <div className="px-3 py-3 space-y-4 max-h-[min(420px,55vh)] overflow-y-auto scrollbar-hide">
+              {hasStatus && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Status</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onStatusFilterChange(null)}
+                      className={filterOptionClass(statusFilter === null)}
+                      aria-pressed={statusFilter === null}
+                    >
+                      All
+                    </button>
+                    {statusOptions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => onStatusFilterChange(statusFilter === s.id ? null : s.id)}
+                        className={cn(
+                          'panel-filter-option',
+                          statusFilter === s.id
+                            ? cn(s.color, 'panel-filter-option--status-active')
+                            : ''
+                        )}
+                        aria-pressed={statusFilter === s.id}
+                      >
+                        {s.label}
+                        {statusCounts?.[s.id] > 0 && (
+                          <span className="opacity-60 ml-0.5">{statusCounts[s.id]}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
+              {hasSort && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Sort</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sortOptions.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => onSortModeChange(opt.id)}
+                        className={filterOptionClass(sortMode === opt.id)}
+                        aria-pressed={sortMode === opt.id}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Tags</p>
+                {tags.length === 0 ? (
+                  <p className="text-xs text-white/45 leading-relaxed">
+                    No tags yet. Add tags from an item&apos;s options menu.
+                  </p>
+                ) : (
+                  <TagFilterBar
+                    tags={tags}
+                    selectedIds={selectedTagIds}
+                    onChange={onTagIdsChange}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>,

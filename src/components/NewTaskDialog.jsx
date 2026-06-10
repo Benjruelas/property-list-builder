@@ -136,7 +136,7 @@ export function NewTaskDialog({
   const panelTitle = isEditMode ? 'Edit task' : 'New task'
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} modal={false} onOpenChange={onOpenChange}>
       <DialogContent
         className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}

@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { Input } from './ui/input'
-import { VisibilityBadge } from './ResourceSharePicker'
+import { LeadSharingIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 import { filterByTags } from '@/utils/tags'
@@ -16,6 +16,7 @@ import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { EntityTagPills } from './tags/EntityTagPills'
 import { TagPicker } from './tags/TagPicker'
 import { CreateListDialog } from './CreateListDialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 
 const LIST_HIGHLIGHT_COLORS = [
   '#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626',
@@ -336,11 +337,7 @@ export function ListPanel({
 
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) {
-        handlePanelBack()
-      }
-    }}>
+    <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, false, handlePanelBack, isOpen)}>
       <DialogContent
         className="map-panel list-panel fullscreen-panel"
         showCloseButton={false}
@@ -462,10 +459,7 @@ export function ListPanel({
                                 {list.name}
                               </span>
                             )}
-                            {!isListOwnedByUser(list) && (
-                              <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
-                            )}
-                            <VisibilityBadge resource={list} />
+                            <LeadSharingIcon resource={list} collaboratorHint={!isListOwnedByUser(list)} />
                           </div>
                           <span className="text-xs text-gray-500">{list.parcels?.length ?? 0} parcels</span>
                           <EntityTagPills

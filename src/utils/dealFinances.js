@@ -57,3 +57,31 @@ export function computeDealProfit(deal) {
 export function dealHasFinancials(deal) {
   return (deal?.payments?.length || 0) > 0 || (deal?.costs?.length || 0) > 0
 }
+
+/** Sum payment line items; pass `settled: true|false` to filter by received status. */
+export function sumDealPayments(deal, { settled } = {}) {
+  let items = deal?.payments || []
+  if (settled === true) items = items.filter((item) => item?.settled)
+  if (settled === false) items = items.filter((item) => !item?.settled)
+  return sumDealLineItems(items)
+}
+
+/** Roll up payments, costs, and profit across a list of deals. */
+export function aggregateDealFinancials(deals) {
+  let profit = 0
+  let collected = 0
+  let outstanding = 0
+  let costs = 0
+  let withFinancials = 0
+
+  for (const deal of deals) {
+    if (!dealHasFinancials(deal)) continue
+    withFinancials++
+    profit += computeDealProfit(deal)
+    collected += sumDealPayments(deal, { settled: true })
+    outstanding += sumDealPayments(deal, { settled: false })
+    costs += sumDealLineItems(deal?.costs)
+  }
+
+  return { profit, collected, outstanding, costs, withFinancials }
+}

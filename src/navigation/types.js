@@ -331,6 +331,6 @@ export function createInitialState() {
     navStack: [],
     mapOverlayStack: [],
     modalStack: [],
-    meta: { showMenu: false, skipPanelExitAnimation: false },
+    meta: { showMenu: false },
   }
 }

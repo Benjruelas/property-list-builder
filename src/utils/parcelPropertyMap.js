@@ -4,6 +4,51 @@ export function canonicalParcelId(raw) {
   return id != null && id !== '' ? String(id).trim() : ''
 }
 
+function isSyntheticListParcelId(id) {
+  return typeof id === 'string' && /^parcel-\d/.test(id.trim())
+}
+
+/** All plausible ids for a parcel-shaped object (list row, map click, skip-trace record). */
+export function collectParcelIdCandidates(parcel) {
+  if (!parcel) return []
+  if (typeof parcel === 'string' || typeof parcel === 'number') {
+    const s = String(parcel).trim()
+    return s ? [s] : []
+  }
+  const props = parcel.properties || {}
+  const raw = [
+    props.PROP_ID,
+    props.PROPID,
+    props.PARCEL_ID,
+    props.LL_UUID,
+    props.LL_STABLE_ID,
+    canonicalParcelId(props),
+    canonicalParcelId(parcel),
+    parcel.parcelId,
+    parcel.id,
+  ]
+  const seen = new Set()
+  const out = []
+  for (const id of raw) {
+    if (id == null || id === '') continue
+    const s = String(id).trim()
+    if (!s || seen.has(s)) continue
+    seen.add(s)
+    out.push(s)
+  }
+  return out
+}
+
+/**
+ * Best id for skip-trace, notes, and map overlays — prefer stable property ids over
+ * list-only fallbacks (e.g. tile lat-lng keys or `parcel-<timestamp>` placeholders).
+ */
+export function resolveParcelId(parcel) {
+  const candidates = collectParcelIdCandidates(parcel)
+  const stable = candidates.filter((id) => !isSyntheticListParcelId(id))
+  return stable[0] || candidates[0] || ''
+}
+
 function splitCityState(ownercity, ownerstate) {
   if (ownerstate) return { city: ownercity || '', state: ownerstate }
   if (!ownercity) return { city: '', state: '' }

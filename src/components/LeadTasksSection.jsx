@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from './ui/button'
+import { cn } from '@/lib/utils'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import {
   getAllTasks,
@@ -62,6 +63,7 @@ function renderTaskRow(task, {
  * Lead-scoped tasks using the same TaskRow and task dialog as Tasks / Schedule.
  */
 export function LeadTasksSection({
+  className,
   lead,
   leads = [],
   pipelines = [],
@@ -356,9 +358,9 @@ export function LeadTasksSection({
 
   return (
     <>
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold uppercase opacity-50">Tasks</h3>
+      <section className={cn('lead-detail-section', className)}>
+        <div className="flex items-center justify-between mb-2.5">
+          <h3 className="lead-detail-section-title">Tasks</h3>
           <Button
             type="button"
             size="icon"

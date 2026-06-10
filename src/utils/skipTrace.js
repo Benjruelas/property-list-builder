@@ -1,3 +1,5 @@
+import { collectParcelIdCandidates, resolveParcelId } from './parcelPropertyMap'
+
 /**
  * Skip tracing via Trestle IQ (Reverse Address API).
  *
@@ -121,7 +123,7 @@ const parseFullAddress = (addressStr) => {
 export const buildSkipTraceRequest = (parcelData, opts = {}) => {
   if (!parcelData) return { payload: null, error: 'No parcel selected' }
   const { previousFullAddress = '' } = opts
-  const parcelId = parcelData.id
+  const parcelId = resolveParcelId(parcelData) || parcelData.id
   const p = parcelData.properties || {}
 
   const pickField = (...keys) => {
@@ -283,29 +285,42 @@ export const skipTraceParcels = async (parcels) => {
 export const pollSkipTraceJob = async () => ({ status: 'completed', results: [] })
 export const pollSkipTraceJobUntilComplete = async () => []
 
-/**
- * Get skip traced parcel data from storage (migrates old format to phoneDetails/emailDetails)
- */
-export const getSkipTracedParcel = (parcelId) => {
+function migrateSkipTracedRecord(data) {
+  if (!data) return null
+  if (!data.phoneDetails && (data.phoneNumbers?.length || data.phone)) {
+    data.phoneDetails = toPhoneDetails(data.phoneNumbers || (data.phone ? [data.phone] : []), null)
+  }
+  if (!data.emailDetails && (data.emails?.length || data.email)) {
+    data.emailDetails = toEmailDetails(data.emails || (data.email ? [data.email] : []), null)
+  }
+  return data
+}
+
+function getSkipTracedParcelById(parcelId) {
   try {
     const stored = localStorage.getItem('skip_traced_parcels')
-    if (!stored) return null
+    if (!stored || !parcelId) return null
 
     const skipTracedParcels = JSON.parse(stored)
-    const data = skipTracedParcels[parcelId]
-    if (!data) return null
-
-    if (!data.phoneDetails && (data.phoneNumbers?.length || data.phone)) {
-      data.phoneDetails = toPhoneDetails(data.phoneNumbers || (data.phone ? [data.phone] : []), null)
-    }
-    if (!data.emailDetails && (data.emails?.length || data.email)) {
-      data.emailDetails = toEmailDetails(data.emails || (data.email ? [data.email] : []), null)
-    }
-    return data
+    return migrateSkipTracedRecord(skipTracedParcels[parcelId]) || null
   } catch (error) {
     console.error('Error getting skip traced parcel:', error)
     return null
   }
+}
+
+/**
+ * Get skip traced parcel data from storage (migrates old format to phoneDetails/emailDetails).
+ * Accepts a parcel id string or a parcel-shaped object — tries all known id fields so list
+ * rows still match records saved from the map.
+ */
+export const getSkipTracedParcel = (parcelOrId) => {
+  const candidates = collectParcelIdCandidates(parcelOrId)
+  for (const id of candidates) {
+    const data = getSkipTracedParcelById(id)
+    if (data) return data
+  }
+  return null
 }
 
 /** Normalize contact info into details arrays with verified/callerId/primary/matchConfidence/grade. */

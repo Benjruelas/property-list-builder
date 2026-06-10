@@ -34,6 +34,7 @@ VITE_FIREBASE_API_KEY=your_key
 # ... other VITE_* variables
 
 # Server-side (Serverless Functions) - loaded by vercel dev
+GOOGLE_MAPS_TILES_KEY=your_google_map_tiles_key
 SKIPSHERPA_API_KEY=your_api_key
 TRACERFY_API_KEY=your_api_key
 REDIS_URL=your_redis_url
@@ -45,10 +46,17 @@ Add all environment variables in Vercel Dashboard:
 1. Go to your project settings
 2. Navigate to **Environment Variables**
 3. Add:
+   - `GOOGLE_MAPS_TILES_KEY` = Google Cloud API key with **Map Tiles API** enabled (primary basemap)
+   - `VITE_MAPBOX_ACCESS_TOKEN` = Mapbox token (geocoding + basemap fallback)
    - `SKIPSHERPA_API_KEY` = your API key
    - `VITE_FIREBASE_API_KEY` = your Firebase key
-   - `VITE_MAPBOX_ACCESS_TOKEN` = your Mapbox token
    - Any other variables you need
+
+4. Verify Google basemap session on production:
+   ```bash
+   curl -s "https://YOUR_DOMAIN/api/google-tiles-session?mapType=satellite" | head -c 200
+   ```
+   Expect JSON with `tileUrl` and `expiry`. If you see `GOOGLE_MAPS_TILES_KEY not configured`, add the key in Vercel and redeploy.
 
 ## Quick Start
 

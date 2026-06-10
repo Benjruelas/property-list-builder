@@ -73,8 +73,9 @@ External Services
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18, Vite, Tailwind CSS 3 |
-| Map | Leaflet + react-leaflet + leaflet-rotate |
-| Parcel tiles | PMTiles, @mapbox/vector-tile, pbf |
+| Map | MapLibre GL + react-map-gl |
+| Basemap tiles | Google Map Tiles API (primary), Mapbox raster (fallback) |
+| Parcel tiles | LandRecords vector PBF via `/api/tiles` (R2 cache) |
 | UI primitives | Radix UI (Dialog), Lucide React icons, CVA (class-variance-authority) |
 | Auth | Firebase Authentication (email/password + Google OAuth) |
 | Backend | Vercel Serverless Functions (Node.js) |
@@ -332,18 +333,20 @@ property_list_builder/
 
 **Files:** `src/App.jsx`, `src/components/PMTilesParcelLayer.jsx`, `src/components/MapControls.jsx`, `src/components/AddressSearch.jsx`, `api/tiles.js`
 
-The map uses **Leaflet** with the **leaflet-rotate** plugin for compass-based rotation. Parcel boundaries are rendered from **vector tiles** (PBF format) sourced from LandRecords.us, proxied through `api/tiles.js` which caches tiles in Cloudflare R2 for zero-egress re-serving.
+The map uses **MapLibre GL** (via `react-map-gl`) with compass-based rotation. Basemap imagery is loaded through **`/api/google-tiles-session`** (Google Map Tiles API — satellite, street, hybrid) with **Mapbox raster** as fallback when the Google key is missing or session creation fails.
 
-`PMTilesParcelLayer` decodes vector tiles using `@mapbox/vector-tile` and `pbf`, converts them to Leaflet polygons, and handles hit-testing, selection highlighting, and list-color overlays. Tiles are loaded on demand based on the current viewport and zoom level.
+Parcel boundaries are rendered from **vector tiles** (PBF) sourced from LandRecords.us, proxied through `api/tiles.js` which caches tiles in Cloudflare R2 for zero-egress re-serving. `PMTilesParcelLayer` adds the vector source same-origin (`/api/tiles`) for PWA reliability and handles hit-testing, selection highlighting, and list-color overlays.
 
 **Map layers:**
-- **Street view:** CARTO Voyager raster tiles
-- **Satellite view:** Esri World Imagery + optional label overlays
-- **Parcels:** Vector tile polygons with click interaction
+- **Satellite / street / hybrid:** Google Map Tiles API (2x high-DPI), Mapbox fallback
+- **Parcels:** Same-origin vector tile polygons with click interaction (zoom 15+)
+- **Hail storm:** IEM NEXRAD radar overlay (feature-specific)
 - **GPS paths:** Recorded polylines with glow effects
 - **User location:** Custom arrow marker showing heading direction
 
-**Address search** uses the Mapbox Geocoding API to fly the map to searched locations.
+**Address search** uses the Mapbox Geocoding API (`VITE_MAPBOX_ACCESS_TOKEN`) to fly the map to searched locations.
+
+**Key files:** `src/hooks/useBasemapStyle.js`, `src/config/buildMapStyle.js`, `api/google-tiles-session.js`, `api/tiles.js`
 
 ### Property Lists
 

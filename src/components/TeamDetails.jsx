@@ -241,15 +241,14 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
   const menuMemberMeta = menuMember ? getMemberMeta(menuMember, team, currentUser) : null
 
   return (
-    <Dialog open={true} onOpenChange={(open) => { if (!open) onClose() }}>
+    <Dialog open={true} modal={false} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
-        className="map-panel list-panel team-details-panel fullscreen-panel"
+        className="map-panel list-panel team-details-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}
         hideOverlay
         nestedOverlay
         topLayer
         suppressBackdrop
-        instantDismiss
       >
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}>
           <DialogDescription className="sr-only">Team details, members, and settings</DialogDescription>

@@ -85,15 +85,16 @@ export function resolveResourceAccess(resource, user, team = null, teams = []) {
   const r = normalizeResourceVisibility(resource)
   if (r.ownerId === user.uid) return 'owner'
 
-  const role = team ? getTeamMemberRole(team, user.uid) : null
+  const contextTeam = teamById(teams, r.teamId) || team
+  const role = contextTeam ? getTeamMemberRole(contextTeam, user.uid) : null
   const isAdmin = role === 'admin'
 
-  if (team && r.teamId === team.id && isAdmin) {
+  if (contextTeam && r.teamId === contextTeam.id && isAdmin) {
     if (r.visibility === VISIBILITY.PRIVATE) return 'admin_view'
     return 'admin'
   }
 
-  if (sharedWithUser(r, user.uid, team, teams)) return 'collaborator'
+  if (sharedWithUser(r, user.uid, contextTeam, teams)) return 'collaborator'
 
   const email = (user.email || '').toLowerCase().trim()
   if (email && Array.isArray(r.sharedWith)) {

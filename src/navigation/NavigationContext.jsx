@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useReducer } from 'react'
+import { createContext, useCallback, useContext, useMemo, useReducer } from 'react'
 import {
   createInitialState,
   navigationReducer,
@@ -11,6 +11,8 @@ import {
   recipeClosePrimaryExcept,
   recipeNavigateFromActivity,
   recipeOpenDealInPipes,
+  recipePushDealsClosed,
+  recipePushDealsDetail,
   recipeOpenLeadDetails,
   recipeOpenLists,
   recipeOpenOutreach,
@@ -40,12 +42,6 @@ const NavigationContext = createContext(null)
 export function NavigationProvider({ children }) {
   const [state, dispatch] = useReducer(navigationReducer, undefined, createInitialState)
 
-  useLayoutEffect(() => {
-    if (state.meta.skipPanelExitAnimation) {
-      dispatch({ type: NAV_ACTIONS.SET_META, payload: { skipPanelExitAnimation: false } })
-    }
-  }, [state.navStack, state.meta.skipPanelExitAnimation])
-
   const panelProps = useMemo(() => selectPanelProps(state), [state])
   const topFrame = useMemo(() => selectTopFrame(state), [state])
 
@@ -60,6 +56,13 @@ export function NavigationProvider({ children }) {
   const pop = useCallback(() => {
     dispatch({ type: NAV_ACTIONS.POP })
   }, [])
+
+  /** Pop only when the top frame matches — avoids duplicate pops from Radix onOpenChange after back. */
+  const popIfTop = useCallback((frameType) => {
+    if (state.navStack[state.navStack.length - 1]?.type === frameType) {
+      dispatch({ type: NAV_ACTIONS.POP })
+    }
+  }, [state.navStack])
 
   const resetToMap = useCallback(() => {
     dispatch({ type: NAV_ACTIONS.REPLACE_STACK, payload: [] })
@@ -135,8 +138,8 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack])
 
   const openDealInPipes = useCallback((pipelineId, dealId) => {
-    replaceStack(recipeOpenDealInPipes(pipelineId, dealId))
-  }, [replaceStack])
+    replaceStack(recipeOpenDealInPipes(state.navStack, pipelineId, dealId))
+  }, [state.navStack, replaceStack])
 
   const openScheduleAtDate = useCallback((ts) => {
     replaceStack(recipeOpenScheduleAtDate(state.navStack, ts))
@@ -191,23 +194,22 @@ export function NavigationProvider({ children }) {
   const setActivityOpen = useCallback((open) => {
     if (open) {
       replaceStack([{ type: 'activity' }])
-    } else {
-      const stack = state.navStack.filter((f) => f.type !== 'activity')
-      replaceStack(stack)
+    } else if (state.navStack[state.navStack.length - 1]?.type === 'activity') {
+      replaceStack([])
     }
   }, [state.navStack, replaceStack])
 
   // Panel overlay navigation helpers
   const pushLeadsDetail = useCallback((leadId) => push({ type: 'leads.detail', leadId }), [push])
-  const popLeadsDetail = useCallback(() => pop(), [pop])
+  const popLeadsDetail = useCallback(() => popIfTop('leads.detail'), [popIfTop])
 
   const pushDealsDetail = useCallback((dealId, pipelineId) => {
-    push({ type: 'deals.detail', dealId, pipelineId })
-  }, [push])
+    replaceStack(recipePushDealsDetail(state.navStack, dealId, pipelineId))
+  }, [state.navStack, replaceStack])
 
   const pushDealsClosed = useCallback((closedRecordId) => {
-    push({ type: 'deals.closed', closedRecordId })
-  }, [push])
+    replaceStack(recipePushDealsClosed(state.navStack, closedRecordId))
+  }, [state.navStack, replaceStack])
 
   const pushDealsLead = useCallback((leadId) => {
     push({ type: 'deals.lead', leadId })
@@ -248,8 +250,8 @@ export function NavigationProvider({ children }) {
   }, [push])
 
   const openTaskInPipes = useCallback((pipelineId, dealId) => {
-    replaceStack(recipeOpenTaskInPipes(pipelineId, dealId))
-  }, [replaceStack])
+    replaceStack(recipeOpenTaskInPipes(state.navStack, pipelineId, dealId))
+  }, [state.navStack, replaceStack])
 
   // Map overlay
   const showParcelPopup = useCallback((overlay) => {
@@ -319,6 +321,7 @@ export function NavigationProvider({ children }) {
     topFrame,
     push,
     pop,
+    popIfTop,
     replaceStack,
     resetToMap,
     resetToMapFullState,
@@ -388,6 +391,7 @@ export function NavigationProvider({ children }) {
     topFrame,
     push,
     pop,
+    popIfTop,
     replaceStack,
     resetToMap,
     resetToMapFullState,

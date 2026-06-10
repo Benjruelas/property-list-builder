@@ -174,7 +174,7 @@ export function CreateLeadDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} modal={false} onOpenChange={onOpenChange}>
       <DialogContent
         className="map-panel list-panel create-lead-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}

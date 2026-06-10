@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Plus, Users2, Shield, Mail, Check, X } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
@@ -21,6 +22,7 @@ const TEAM_LIST_ITEM_CLASS =
 
 export function TeamsPanel({
   isOpen,
+  instantDismiss = false,
   onClose,
   onBack,
   detailTeamId = null,
@@ -119,6 +121,15 @@ export function TeamsPanel({
 
   const incomingInvites = pendingInvites.filter((i) => i.status === 'pending')
 
+  const canCreateTeam = !teamMembership && sortedTeams.length === 0
+
+  useEffect(() => {
+    if (!canCreateTeam) {
+      setCreating(false)
+      setNewName('')
+    }
+  }, [canCreateTeam])
+
   const handlePanelBack = () => {
     if (openTeamId) {
       onCloseTeamDetail?.()
@@ -131,17 +142,23 @@ export function TeamsPanel({
     onCloseTeamDetail?.()
   }
 
+  const hasNestedDetail = !!openTeamId
+  const listPanelRef = useRef(null)
+  useObscuredPanelRoot(listPanelRef, hasNestedDetail)
+
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, !!openTeamId, handlePanelBack)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack, isOpen)}>
         <DialogContent
+          ref={listPanelRef}
           className={cn(
-            'map-panel list-panel fullscreen-panel',
-            openTeamId && 'invisible pointer-events-none'
+            'map-panel list-panel teams-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            hasNestedDetail && 'crm-panel-obscured'
           )}
           showCloseButton={false}
           hideOverlay
           suppressBackdrop
+          instantDismiss={instantDismiss && !isOpen}
         >
           <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your teams and members</DialogDescription>
@@ -176,7 +193,7 @@ export function TeamsPanel({
               </div>
             )}
 
-            {creating ? (
+            {canCreateTeam && (creating ? (
               <div className="mb-4 flex gap-2">
                 <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { setCreating(false); setNewName('') } }}
@@ -187,11 +204,11 @@ export function TeamsPanel({
                 <Button variant="outline" onClick={() => { setCreating(false); setNewName('') }}>Cancel</Button>
               </div>
             ) : (
-              <Button onClick={() => setCreating(true)} variant="glass-outline" className="mb-4 w-full" disabled={!!teamMembership}>
+              <Button onClick={() => setCreating(true)} variant="glass-outline" className="mb-4 w-full">
                 <Plus className="h-4 w-4 mr-2" />
                 Create team
               </Button>
-            )}
+            ))}
 
             {teamMembership && sortedTeams.length === 0 && (
               <p className="text-xs text-gray-500 mb-3">You are on team {teamMembership.teamName}. Open it from notifications if it is not listed.</p>
@@ -200,8 +217,12 @@ export function TeamsPanel({
             {sortedTeams.length === 0 ? (
               <div className="text-center py-8">
                 <Users2 className="h-10 w-10 mx-auto mb-3 text-gray-400 opacity-60" />
-                <p className="text-gray-500 text-sm">You're not in any teams yet.</p>
-                <p className="text-gray-400 text-xs mt-1">Create a team or accept an invite to collaborate.</p>
+                <p className="text-gray-500 text-sm">
+                  {teamMembership ? `You're on ${teamMembership.teamName || 'a team'}.` : "You're not in any teams yet."}
+                </p>
+                <p className="text-gray-400 text-xs mt-1">
+                  {canCreateTeam ? 'Create a team or accept an invite to collaborate.' : 'Accept an invite to collaborate with others.'}
+                </p>
               </div>
             ) : (
               <div className="space-y-2">

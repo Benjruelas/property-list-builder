@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
@@ -96,7 +97,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
+export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
@@ -522,16 +523,27 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
     setViewMode(mode)
   }
 
+  const hasNestedLeadDetail = !!scheduleLeadId
+  const scheduleRootRef = useRef(null)
+  useObscuredPanelRoot(scheduleRootRef, hasNestedLeadDetail)
+
   return (
-    <Dialog open={isOpen} modal={!scheduleLeadId} onOpenChange={(o) => handlePanelDialogOpenChange(o, !!scheduleLeadId, handlePanelBack)}>
+    <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedLeadDetail, handlePanelBack, isOpen)}>
       <DialogContent
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         showCloseButton={false}
         hideOverlay={!stacked}
         nestedOverlay={stacked}
         topLayer={stacked}
-        suppressBackdrop={!!scheduleLeadId}
+        suppressBackdrop={hasNestedLeadDetail}
       >
+        <div
+          ref={scheduleRootRef}
+          className={cn(
+            'flex min-h-0 flex-1 flex-col overflow-hidden',
+            hasNestedLeadDetail && 'crm-panel-obscured'
+          )}
+        >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">View and manage scheduled tasks</DialogDescription>
           <PanelHeader onBack={handlePanelBack} title="Schedule">
@@ -850,6 +862,7 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
             )}
           </div>
         </div>
+        </div>
 
         {/* Add Task Dialog */}
         <NewTaskDialog
@@ -881,6 +894,7 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
+          onTextClick={onTextClick}
           onGoToParcelOnMap={onGoToParcelOnMap}
           onLeadUpdate={() => {
             onLeadsChange?.()

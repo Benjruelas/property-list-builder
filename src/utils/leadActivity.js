@@ -1,0 +1,132 @@
+/**
+ * Lead CRM activity timeline — append entries and status updates.
+ */
+
+import { updateLead, loadLocalLeads, saveLocalLeads, getLeadStatusMeta, LEAD_STATUSES } from './leads'
+
+const getApiBase = () => {
+  if (import.meta.env.DEV) return '/api'
+  if (typeof window !== 'undefined') return `${window.location.origin}/api`
+  return import.meta.env.VITE_API_URL || ''
+}
+
+const MAX_LEAD_ACTIVITY = 200
+
+export function buildActivityEntry(type, summary, meta = {}) {
+  return {
+    id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    type,
+    at: new Date().toISOString(),
+    summary: String(summary || '').trim().slice(0, 500),
+    meta: meta && typeof meta === 'object' ? meta : {},
+  }
+}
+
+export async function appendLeadActivity(getToken, leadId, entry) {
+  const token = await getToken?.()
+  if (!token) {
+    const leads = loadLocalLeads()
+    const idx = leads.findIndex((l) => l.id === leadId)
+    if (idx === -1) throw new Error('Lead not found')
+    const activities = [...(leads[idx].activity || []), entry]
+    const lead = {
+      ...leads[idx],
+      activity: activities.length > MAX_LEAD_ACTIVITY ? activities.slice(-MAX_LEAD_ACTIVITY) : activities,
+      updatedAt: new Date().toISOString(),
+    }
+    leads[idx] = lead
+    saveLocalLeads(leads)
+    return lead
+  }
+  const res = await fetch(`${getApiBase()}/leads`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ leadId, action: 'append-activity', entry }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Failed to log activity')
+  }
+  const data = await res.json()
+  return data.lead
+}
+
+export async function setLeadStatus(getToken, leadId, status, { logActivity = true, fromStatus } = {}) {
+  const now = new Date().toISOString()
+  const meta = getLeadStatusMeta(status)
+  const updates = { status, statusUpdatedAt: now }
+
+  const token = await getToken?.()
+  if (!token) {
+    const leads = loadLocalLeads()
+    const idx = leads.findIndex((l) => l.id === leadId)
+    if (idx === -1) throw new Error('Lead not found')
+    let lead = { ...leads[idx], ...updates, updatedAt: now }
+    if (logActivity && fromStatus !== status) {
+      const entry = buildActivityEntry(
+        'status',
+        `Status changed to ${meta.label}`,
+        { from: fromStatus, to: status }
+      )
+      const activities = [...(lead.activity || []), entry]
+      lead = {
+        ...lead,
+        activity: activities.length > MAX_LEAD_ACTIVITY ? activities.slice(-MAX_LEAD_ACTIVITY) : activities,
+      }
+    }
+    leads[idx] = lead
+    saveLocalLeads(leads)
+    return lead
+  }
+
+  let lead = await updateLead(getToken, leadId, updates)
+  if (logActivity && fromStatus !== status) {
+    lead = await appendLeadActivity(
+      getToken,
+      leadId,
+      buildActivityEntry('status', `Status changed to ${meta.label}`, { from: fromStatus, to: status })
+    )
+  }
+  return lead
+}
+
+/** Auto-bump new → contacted on first outreach. */
+export async function bumpLeadStatusOnContact(getToken, lead, currentEffectiveStatus) {
+  if (!lead?.id || currentEffectiveStatus !== 'new') return lead
+  return setLeadStatus(getToken, lead.id, 'contacted', { fromStatus: 'new' })
+}
+
+export async function logLeadOutreach(getToken, leadId, type, phoneOrEmail) {
+  const summaries = {
+    call: 'Called from app',
+    text: 'Texted from app',
+    email: 'Emailed from app',
+  }
+  const summary = summaries[type] || 'Outreach from app'
+  const meta = {}
+  if (phoneOrEmail) {
+    meta[type === 'email' ? 'email' : 'phone'] = phoneOrEmail
+  }
+  return appendLeadActivity(getToken, leadId, buildActivityEntry(type, summary, meta))
+}
+
+export async function logLeadDealCreated(getToken, leadId, dealTitle, dealId) {
+  return appendLeadActivity(
+    getToken,
+    leadId,
+    buildActivityEntry('deal', `Deal created: ${dealTitle || 'Untitled'}`, { dealId })
+  )
+}
+
+export async function logLeadNote(getToken, leadId, noteText) {
+  const trimmed = String(noteText || '').trim()
+  if (!trimmed) return null
+  return appendLeadActivity(getToken, leadId, buildActivityEntry('note', trimmed))
+}
+
+export function sortActivitiesNewestFirst(lead) {
+  const activities = Array.isArray(lead?.activity) ? [...lead.activity] : []
+  return activities.sort((a, b) => (b.at || '').localeCompare(a.at || ''))
+}
+
+export { LEAD_STATUSES }

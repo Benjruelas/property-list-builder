@@ -5,6 +5,7 @@ import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { cn } from '@/lib/utils'
 import { ListParcelExpanded } from '@/components/parcel-list-expanded/ListParcelExpanded'
+import { resolveParcelId } from '@/utils/parcelPropertyMap'
 
 export function ParcelListPanel({ 
   isOpen, 
@@ -91,15 +92,18 @@ export function ParcelListPanel({
   }
 
   const handleCenterParcel = (parcel) => {
-    if (onCenterParcel && parcel.properties) {
-      // Try to get coordinates from properties or use lat/lng if available
-      const lat = parcel.lat || parcel.properties.LATITUDE
-      const lng = parcel.lng || parcel.properties.LONGITUDE
-      
-      if (lat && lng) {
-        onCenterParcel({ lat: parseFloat(lat), lng: parseFloat(lng) })
-      }
-    }
+    if (!onCenterParcel || !parcel) return
+    const props = parcel.properties || {}
+    const lat = parcel.lat ?? props.LATITUDE ?? props.latitude
+    const lng = parcel.lng ?? props.LONGITUDE ?? props.longitude
+    if (lat == null || lng == null) return
+    onCenterParcel({
+      ...parcel,
+      properties: props,
+      address: parcel.address || props.SITUS_ADDR || props.SITE_ADDR || props.ADDRESS || 'No address',
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+    })
   }
 
   return (
@@ -138,7 +142,7 @@ export function ParcelListPanel({
           ) : (
             <div className="space-y-2">
               {sortedParcels.map((parcel) => {
-                const parcelId = parcel.id || parcel.properties?.PROP_ID || `parcel-${parcel.addedAt}`
+                const parcelId = resolveParcelId(parcel) || `parcel-${parcel.addedAt}`
                 const isExpanded = expandedParcels.has(parcelId)
                 const props = parcel.properties || {}
                 const address = parcel.properties?.SITUS_ADDR || 

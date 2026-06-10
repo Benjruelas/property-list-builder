@@ -290,11 +290,10 @@ export function QuoteEditor({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.() }}>
       <DialogContent
-        className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
+        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
         showCloseButton={false}
         nestedOverlay
         topLayer
-        instantDismiss
       >
         <DialogHeader
           className="flex-shrink-0 px-4 pb-3 border-b border-white/20 text-left"

@@ -1,27 +1,43 @@
-import { Calendar, ListTodo, Menu, List, Circle, Route, Send, UserSearch, Users2, Settings, User, FileText, Briefcase } from 'lucide-react'
+import { useRef, useState, useLayoutEffect, useCallback } from 'react'
+import {
+  Calendar,
+  ListTodo,
+  Menu,
+  UserSearch,
+  Briefcase,
+  Bell,
+} from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { cn } from '@/lib/utils'
 import { PipeIcon } from './PipeIcon'
+import { useActionBarLayout } from '@/hooks/useActionBarLayout'
+import { ActionBarMenu } from './ActionBarMenu'
 
 /**
- * MobileActionBar — permanent floating bottom action bar (macOS dock style).
- * Surfaces the four most frequent flows (Pipes, Tasks, Schedule, Menu)
- * outside the top-right control stack on mobile.
+ * FloatingActionBar — responsive bottom dock (phone → wide desktop).
+ * Surfaces more primary actions as the viewport widens; overflow lives in Menu.
  */
 
-const ACTIONS = [
-  { id: 'pipes',    label: 'Pipes',    Icon: PipeIcon },
-  { id: 'tasks',    label: 'Tasks',    Icon: ListTodo },
-  { id: 'schedule', label: 'Schedule', Icon: Calendar },
-  { id: 'menu',     label: 'Menu',     Icon: Menu },
-]
+const ITEM_DEFS = {
+  pipes: { label: 'Pipes', Icon: PipeIcon },
+  tasks: { label: 'Tasks', Icon: ListTodo },
+  schedule: { label: 'Schedule', Icon: Calendar },
+  leads: { label: 'Leads', Icon: UserSearch },
+  deals: { label: 'Deals', Icon: Briefcase },
+  quotes: { label: 'Quotes', Icon: QuoteIcon },
+  activity: { label: 'Activity', Icon: Bell },
+  menu: { label: 'Menu', Icon: Menu },
+}
 
 export function MobileActionBar({
   activeId = null,
   onOpenPipes,
   onOpenTasks,
   onOpenSchedule,
-  /* Hamburger menu state + handlers (reused from App / MapControls). */
+  onOpenLeads,
+  onOpenDeals,
+  onOpenQuotes,
+  onOpenActivity,
   showMenu = false,
   setShowMenu,
   onOpenListPanel,
@@ -29,182 +45,121 @@ export function MobileActionBar({
   onOpenPathsPanel,
   isPathTrackingActive,
   onOpenOutreach,
-  onOpenLeads,
-  onOpenDeals,
   onOpenForms,
-  onOpenQuotes,
   onOpenTeamsPanel,
   onOpenSettings,
   currentUser,
   onLogin,
-  NotificationMenuItem,
+  activityUnreadCount = 0,
 }) {
+  const { barIds, overflowPrimaryIds } = useActionBarLayout()
+  const menuBtnRef = useRef(null)
+  const [menuAnchor, setMenuAnchor] = useState(null)
+
+  const updateMenuAnchor = useCallback(() => {
+    const el = menuBtnRef.current
+    if (!el) {
+      setMenuAnchor(null)
+      return
+    }
+    const r = el.getBoundingClientRect()
+    setMenuAnchor({
+      right: Math.max(12, window.innerWidth - r.right),
+      bottom: Math.max(12, window.innerHeight - r.top + 16),
+    })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!showMenu) {
+      setMenuAnchor(null)
+      return undefined
+    }
+    updateMenuAnchor()
+    window.addEventListener('resize', updateMenuAnchor)
+    window.addEventListener('scroll', updateMenuAnchor, true)
+    return () => {
+      window.removeEventListener('resize', updateMenuAnchor)
+      window.removeEventListener('scroll', updateMenuAnchor, true)
+    }
+  }, [showMenu, barIds, updateMenuAnchor])
+
   const handlers = {
     pipes: onOpenPipes,
     tasks: onOpenTasks,
     schedule: onOpenSchedule,
+    leads: onOpenLeads,
+    deals: onOpenDeals,
+    quotes: onOpenQuotes,
+    activity: onOpenActivity,
     menu: () => setShowMenu?.(!showMenu),
   }
+
   const computedActiveId = showMenu ? 'menu' : activeId
-
-  const renderButtons = () =>
-    ACTIONS.map(({ id, label, Icon }) => {
-      const active = computedActiveId === id
-      return (
-        <button
-          key={id}
-          type="button"
-          onClick={() => handlers[id]?.()}
-          className={cn('mobile-action-bar-btn', active && 'is-active')}
-          aria-label={label}
-          title={label}
-          aria-expanded={id === 'menu' ? showMenu : undefined}
-          data-tour={`action-bar-${id}`}
-        >
-          <Icon className="h-6 w-6" />
-          <span className="mobile-action-bar-label">{label}</span>
-        </button>
-      )
-    })
-
-  const closeMenu = () => setShowMenu?.(false)
-
-  const menuPopup = showMenu ? (
-    <>
-      <div
-        className="mobile-action-bar-menu-backdrop"
-        onClick={closeMenu}
-        aria-hidden="true"
-      />
-      <div
-        className="mobile-action-bar-menu map-panel hamburger-menu"
-        role="menu"
-      >
-        {NotificationMenuItem && <NotificationMenuItem onSelect={closeMenu} />}
-
-        {NotificationMenuItem && <div className="my-1 border-t hamburger-menu-divider" />}
-
-        <button
-          data-tour="menu-lists"
-          onClick={() => { closeMenu(); onOpenListPanel?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <List className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1">Lists</span>
-          {selectedListIds.length > 0 && (
-            <Circle className="h-2 w-2 fill-amber-400 text-amber-400 flex-shrink-0" />
-          )}
-        </button>
-
-        <button
-          data-tour="menu-paths"
-          onClick={() => { closeMenu(); onOpenPathsPanel?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <Route className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1">Paths</span>
-          {isPathTrackingActive && (
-            <Circle className="h-2 w-2 fill-red-500 text-red-500 flex-shrink-0" />
-          )}
-        </button>
-
-        <button
-          data-tour="menu-outreach"
-          onClick={() => { closeMenu(); onOpenOutreach?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <Send className="h-4 w-4 flex-shrink-0" />
-          <span>Outreach</span>
-        </button>
-
-        <button
-          data-tour="menu-leads"
-          onClick={() => { closeMenu(); onOpenLeads?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <UserSearch className="h-4 w-4 flex-shrink-0" />
-          <span>Leads</span>
-        </button>
-
-        <button
-          data-tour="menu-deals"
-          onClick={() => { closeMenu(); onOpenDeals?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <Briefcase className="h-4 w-4 flex-shrink-0" />
-          <span>Deals</span>
-        </button>
-
-        <button
-          data-tour="menu-forms"
-          onClick={() => { closeMenu(); onOpenForms?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <FileText className="h-4 w-4 flex-shrink-0" />
-          <span>Forms</span>
-        </button>
-
-        <button
-          data-tour="menu-quotes"
-          onClick={() => { closeMenu(); onOpenQuotes?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <QuoteIcon className="h-4 w-4 flex-shrink-0" />
-          <span>Quotes</span>
-        </button>
-
-        <button
-          data-tour="menu-teams"
-          onClick={() => { closeMenu(); onOpenTeamsPanel?.() }}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <Users2 className="h-4 w-4 flex-shrink-0" />
-          <span>Teams</span>
-        </button>
-
-        <div className="my-1 border-t hamburger-menu-divider" />
-
-        {currentUser ? (
-          <>
-            <div className="px-4 py-2 border-b hamburger-menu-user">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {currentUser.displayName || 'User'}
-              </p>
-              <p className="text-xs text-gray-600 truncate">
-                {currentUser.email}
-              </p>
-            </div>
-            <button
-              data-tour="menu-settings"
-              onClick={() => { closeMenu(); onOpenSettings?.() }}
-              className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-            >
-              <Settings className="h-4 w-4 flex-shrink-0" />
-              <span>Settings</span>
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={() => { closeMenu(); onLogin?.() }}
-            className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-          >
-            <User className="h-4 w-4 flex-shrink-0" />
-            <span>Sign In</span>
-          </button>
-        )}
-      </div>
-    </>
-  ) : null
 
   return (
     <>
-      {menuPopup}
+      <ActionBarMenu
+        show={showMenu}
+        onClose={() => setShowMenu?.(false)}
+        overflowPrimaryIds={overflowPrimaryIds}
+        onOpenPipes={onOpenPipes}
+        onOpenTasks={onOpenTasks}
+        onOpenSchedule={onOpenSchedule}
+        onOpenLeads={onOpenLeads}
+        onOpenDeals={onOpenDeals}
+        onOpenQuotes={onOpenQuotes}
+        onOpenActivity={onOpenActivity}
+        onOpenListPanel={onOpenListPanel}
+        selectedListIds={selectedListIds}
+        onOpenPathsPanel={onOpenPathsPanel}
+        isPathTrackingActive={isPathTrackingActive}
+        onOpenOutreach={onOpenOutreach}
+        onOpenForms={onOpenForms}
+        onOpenTeamsPanel={onOpenTeamsPanel}
+        onOpenSettings={onOpenSettings}
+        currentUser={currentUser}
+        onLogin={onLogin}
+        activityUnreadCount={activityUnreadCount}
+        anchor={menuAnchor}
+      />
       <nav
         className="mobile-action-bar"
         role="navigation"
         aria-label="Primary actions"
+        data-action-bar-count={barIds.length}
       >
-        <div className="mobile-action-bar-inner">{renderButtons()}</div>
+        <div className="mobile-action-bar-inner">
+          {barIds.map((id) => {
+            const def = ITEM_DEFS[id]
+            if (!def) return null
+            const { label, Icon } = def
+            const active = computedActiveId === id
+            const tourId = id === 'menu' ? 'action-bar-menu' : `action-bar-${id}`
+            return (
+              <button
+                key={id}
+                ref={id === 'menu' ? menuBtnRef : undefined}
+                type="button"
+                onClick={() => handlers[id]?.()}
+                className={cn('mobile-action-bar-btn', active && 'is-active')}
+                aria-label={label}
+                title={label}
+                aria-expanded={id === 'menu' ? showMenu : undefined}
+                data-tour={tourId}
+              >
+                <span className="mobile-action-bar-icon-wrap">
+                  <Icon className="h-6 w-6" />
+                  {id === 'activity' && activityUnreadCount > 0 && (
+                    <span className="mobile-action-bar-badge" aria-hidden>
+                      {activityUnreadCount > 99 ? '99+' : activityUnreadCount}
+                    </span>
+                  )}
+                </span>
+                <span className="mobile-action-bar-label">{label}</span>
+              </button>
+            )
+          })}
+        </div>
       </nav>
     </>
   )

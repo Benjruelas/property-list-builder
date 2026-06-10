@@ -15,6 +15,8 @@ export function EmailComposer({
   parcelData,
   recipientEmail,
   recipientName,
+  leadId = null,
+  onOutreach,
   onSend,
   emailTestMode = false,
   testEmail = ''
@@ -26,12 +28,13 @@ export function EmailComposer({
   const actualRecipientEmail = (emailTestMode && testEmail) ? testEmail : recipientEmail
 
   useEffect(() => {
-    if (isOpen && template && parcelData) {
-      // Replace template tags with actual values
-      const filledSubject = replaceTemplateTags(template.subject, parcelData)
-      const filledBody = replaceTemplateTags(template.body, parcelData)
-      setSubject(filledSubject)
-      setBody(filledBody)
+    if (!isOpen) return
+    if (template && parcelData) {
+      setSubject(replaceTemplateTags(template.subject, parcelData))
+      setBody(replaceTemplateTags(template.body, parcelData))
+    } else {
+      setSubject('')
+      setBody('')
     }
   }, [isOpen, template, parcelData])
 
@@ -59,6 +62,7 @@ export function EmailComposer({
         ? `${body}\n\n${s.emailSignature}`
         : body
       const mailtoLink = `mailto:${actualRecipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(finalBody)}`
+      if (leadId && onOutreach) onOutreach('email')
       window.location.href = mailtoLink
 
       // Call onSend callback if provided
@@ -81,7 +85,7 @@ export function EmailComposer({
     }
   }
 
-  if (!isOpen || !template || !parcelData) return null
+  if (!isOpen || !parcelData) return null
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -89,7 +93,7 @@ export function EmailComposer({
         onClose()
       }
     }}>
-      <DialogContent className="map-panel email-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false} topLayer>
+      <DialogContent className="map-panel email-panel max-w-2xl max-h-[90vh] p-0" showCloseButton={false} nestedOverlay topLayer>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <PanelHeader onBack={onClose} title="Compose Email" icon={Mail} />
           <DialogDescription className="sr-only">

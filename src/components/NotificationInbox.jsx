@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useObscuredPanelRoot } from '../hooks/useObscuredPanelRoot'
 import { Bell, ChevronDown, Loader2, Search, UserSearch, Briefcase, CheckSquare, List, Route, FileText, ScrollText, Users2, Activity } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
-import { LEAD_LIST_ROW_CLASS } from './LeadRow'
+const ACTIVITY_FEED_ROW_CLASS =
+  'map-panel-list-item flex flex-row gap-3 items-start w-full text-left px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
 import {
   fetchFeed,
   markFeedSeen,
@@ -95,8 +97,7 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
         type="button"
         onClick={() => onOpen(item)}
         className={cn(
-          LEAD_LIST_ROW_CLASS,
-          'flex-row gap-3 items-start w-full text-left',
+          ACTIVITY_FEED_ROW_CLASS,
           isSessionNew && 'border-[#60a5fa]/80 bg-white/[0.08] hover:bg-white/[0.12]'
         )}
       >
@@ -158,6 +159,8 @@ export function ActivityPanel({
   }, [isOpen])
 
   const obscured = isOpen && !isFocused
+  const panelRef = useRef(null)
+  useObscuredPanelRoot(panelRef, obscured)
 
   const tabCounts = useMemo(() => countFeedItemsByTab(items), [items])
 
@@ -167,17 +170,32 @@ export function ActivityPanel({
   )
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose?.() }}>
+    <Dialog
+      open={isOpen}
+      modal={false}
+      onOpenChange={(open) => {
+        // Ignore Radix dismiss when destination panels close — back button calls onClose directly.
+        if (!open) return
+      }}
+    >
       <DialogContent
+        ref={panelRef}
         className={cn(
           'map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 p-0',
-          obscured && 'z-[9990] !opacity-0 pointer-events-none',
-          !obscured && isOpen && 'transition-opacity duration-150 ease-out'
+          obscured && 'crm-panel-obscured'
         )}
         showCloseButton={false}
         hideOverlay
+        suppressBackdrop
         topLayer={isFocused}
         aria-hidden={obscured || undefined}
+        onEscapeKeyDown={(e) => {
+          if (!isFocused) {
+            e.preventDefault()
+            return
+          }
+          onClose?.()
+        }}
       >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Notifications and team activity</DialogDescription>

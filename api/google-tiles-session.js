@@ -1,5 +1,27 @@
-let cachedSession = null
-let cachedExpiry = 0
+/** @type {Record<string, { session: string, expiry: number }>} */
+const sessionCache = {}
+
+const VALID_MAP_TYPES = new Set(['satellite', 'street', 'hybrid'])
+
+function googleSessionBody(mapType) {
+  const base = {
+    language: 'en-US',
+    region: 'US',
+    scale: 'scaleFactor2x',
+    highDpi: true,
+  }
+  if (mapType === 'street') {
+    return { ...base, mapType: 'roadmap' }
+  }
+  if (mapType === 'hybrid') {
+    return { ...base, mapType: 'satellite', layerTypes: ['layerRoadmap'] }
+  }
+  return { ...base, mapType: 'satellite' }
+}
+
+function tileUrlForSession(session, key) {
+  return `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${session}&key=${key}`
+}
 
 export default async function handler(req, res) {
   const key = process.env.GOOGLE_MAPS_TILES_KEY || process.env.GOOGLE_SOLAR_API_KEY
@@ -7,11 +29,17 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: 'GOOGLE_MAPS_TILES_KEY not configured' })
   }
 
-  if (cachedSession && Date.now() < cachedExpiry - 60_000) {
+  const rawType = req.query.mapType || 'satellite'
+  const mapType = VALID_MAP_TYPES.has(rawType) ? rawType : 'satellite'
+
+  const cached = sessionCache[mapType]
+  if (cached && Date.now() < cached.expiry - 60_000) {
     res.setHeader('Cache-Control', 'public, max-age=3600')
     return res.status(200).json({
-      tileUrl: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${cachedSession}&key=${key}`,
-      expiry: cachedExpiry,
+      tileUrl: tileUrlForSession(cached.session, key),
+      expiry: cached.expiry,
+      provider: 'google',
+      mapType,
     })
   }
 
@@ -19,13 +47,7 @@ export default async function handler(req, res) {
     const resp = await fetch(`https://tile.googleapis.com/v1/createSession?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mapType: 'satellite',
-        language: 'en-US',
-        region: 'US',
-        scale: 'scaleFactor2x',
-        highDpi: true,
-      }),
+      body: JSON.stringify(googleSessionBody(mapType)),
     })
 
     if (!resp.ok) {
@@ -35,13 +57,15 @@ export default async function handler(req, res) {
     }
 
     const data = await resp.json()
-    cachedSession = data.session
-    cachedExpiry = new Date(data.expiry).getTime()
+    const expiry = new Date(data.expiry).getTime()
+    sessionCache[mapType] = { session: data.session, expiry }
 
     res.setHeader('Cache-Control', 'public, max-age=3600')
     return res.status(200).json({
-      tileUrl: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${data.session}&key=${key}`,
-      expiry: cachedExpiry,
+      tileUrl: tileUrlForSession(data.session, key),
+      expiry,
+      provider: 'google',
+      mapType,
     })
   } catch (e) {
     console.error('Google Map Tiles session error:', e)

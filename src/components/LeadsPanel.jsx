@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
@@ -7,7 +8,14 @@ import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
-import { displayLeadName, formatLeadAddress, updateLead } from '@/utils/leads'
+import {
+  displayLeadName,
+  formatLeadAddress,
+  updateLead,
+  getLeadStatus,
+  lastContactedAt,
+  LEAD_STATUSES,
+} from '@/utils/leads'
 import { filterByTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
@@ -30,6 +38,7 @@ export function LeadsPanel({
   onOpenParcelDetails,
   onEmailClick,
   onPhoneClick,
+  onTextClick,
   onGoToParcelOnMap,
   onCreateDeal,
   onOpenDeal,
@@ -52,6 +61,8 @@ export function LeadsPanel({
 }) {
   const [search, setSearch] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState([])
+  const [statusFilter, setStatusFilter] = useState(null)
+  const [sortMode, setSortMode] = useState('recent')
   const [createOpen, setCreateOpen] = useState(false)
   const [dealPickerOpen, setDealPickerOpen] = useState(false)
   const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
@@ -63,24 +74,6 @@ export function LeadsPanel({
     [detailLeadId, leads],
   )
 
-  const filteredLeads = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    const sorted = [...leads].sort((a, b) =>
-      (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
-    )
-    const byTags = filterByTags(sorted, selectedTagIds)
-    if (!q) return byTags
-    return byTags.filter((l) => {
-      const name = displayLeadName(l).toLowerCase()
-      return (
-        name.includes(q) ||
-        (l.address || '').toLowerCase().includes(q) ||
-        (l.phone || '').includes(q) ||
-        (l.email || '').toLowerCase().includes(q)
-      )
-    })
-  }, [leads, search, selectedTagIds])
-
   const dealCountByLead = useMemo(() => {
     const m = new Map()
     for (const l of leads) {
@@ -88,6 +81,77 @@ export function LeadsPanel({
     }
     return m
   }, [leads, pipelines])
+
+  const leadAnalytics = useMemo(() => {
+    const counts = { all: leads.length }
+    for (const s of LEAD_STATUSES) counts[s.id] = 0
+    let inPipeline = 0
+    let needsFollowUp = 0
+
+    for (const l of leads) {
+      const dealCount = dealCountByLead.get(l.id) || 0
+      const st = getLeadStatus(l, dealCount)
+      if (counts[st] !== undefined) counts[st]++
+      const active = st === 'new' || st === 'contacted' || st === 'qualified'
+      if (active) {
+        inPipeline++
+        if (!lastContactedAt(l)) needsFollowUp++
+      }
+    }
+
+    return { counts, inPipeline, needsFollowUp }
+  }, [leads, dealCountByLead])
+
+  const statusCounts = leadAnalytics.counts
+
+  const hasActiveFilters = !!(search.trim() || statusFilter || selectedTagIds.length > 0 || sortMode !== 'recent')
+
+  const filteredLeads = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    let list = [...leads]
+
+    if (statusFilter) {
+      list = list.filter((l) => getLeadStatus(l, dealCountByLead.get(l.id) || 0) === statusFilter)
+    }
+
+    list = filterByTags(list, selectedTagIds)
+
+    if (q) {
+      list = list.filter((l) => {
+        const name = displayLeadName(l).toLowerCase()
+        return (
+          name.includes(q) ||
+          (l.address || '').toLowerCase().includes(q) ||
+          (l.phone || '').includes(q) ||
+          (l.email || '').toLowerCase().includes(q)
+        )
+      })
+    }
+
+    if (sortMode === 'followup') {
+      list.sort((a, b) => {
+        const statusA = getLeadStatus(a, dealCountByLead.get(a.id) || 0)
+        const statusB = getLeadStatus(b, dealCountByLead.get(b.id) || 0)
+        const inactive = new Set(['converted', 'lost'])
+        if (inactive.has(statusA) && !inactive.has(statusB)) return 1
+        if (!inactive.has(statusA) && inactive.has(statusB)) return -1
+        const contactA = lastContactedAt(a)
+        const contactB = lastContactedAt(b)
+        if (!contactA && !contactB) {
+          return (a.createdAt || '').localeCompare(b.createdAt || '')
+        }
+        if (!contactA) return -1
+        if (!contactB) return 1
+        return contactA.localeCompare(contactB)
+      })
+    } else {
+      list.sort((a, b) =>
+        (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
+      )
+    }
+
+    return list
+  }, [leads, search, selectedTagIds, statusFilter, sortMode, dealCountByLead])
 
   const leadToParcelData = (lead) => ({
     id: lead.parcelId,
@@ -143,6 +207,9 @@ export function LeadsPanel({
   }, [onCreateDealSubmit])
 
   const hasNestedDetail = !!detailLeadId
+  const hasNestedOverlay = hasNestedDetail || createOpen || dealPickerOpen || createDealOpen
+  const listPanelRef = useRef(null)
+  useObscuredPanelRoot(listPanelRef, hasNestedDetail)
 
   const handlePanelBack = () => {
     if (selectedLead) {
@@ -154,11 +221,12 @@ export function LeadsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedOverlay, handlePanelBack, isOpen)}>
         <DialogContent
+          ref={listPanelRef}
           className={cn(
             'map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedDetail && 'invisible pointer-events-none'
+            hasNestedDetail && 'crm-panel-obscured'
           )}
           showCloseButton={false}
           hideOverlay
@@ -172,7 +240,47 @@ export function LeadsPanel({
             </PanelHeader>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 min-h-0" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+            {leads.length > 0 && (
+              <div className="leads-analytics" aria-label="Lead summary">
+                <div className="leads-analytics-hero">
+                  <div className="leads-analytics-hero-value">{leadAnalytics.needsFollowUp}</div>
+                  <div className="leads-analytics-hero-copy">
+                    <div className="leads-analytics-hero-label">Need follow-up</div>
+                    <div className="leads-analytics-hero-hint">
+                      {leadAnalytics.needsFollowUp === 0
+                        ? 'Every active lead has been contacted'
+                        : 'Active leads with no call, text, or email logged'}
+                    </div>
+                  </div>
+                </div>
+                <div className="leads-analytics-row" role="list">
+                  <div className="leads-analytics-stat" role="listitem">
+                    <div className="leads-analytics-stat-value">{leadAnalytics.inPipeline}</div>
+                    <div className="leads-analytics-stat-label">Active</div>
+                  </div>
+                  <div className="leads-analytics-stat" role="listitem">
+                    <div className="leads-analytics-stat-value">{leadAnalytics.counts.new}</div>
+                    <div className="leads-analytics-stat-label">New</div>
+                  </div>
+                  <div className="leads-analytics-stat" role="listitem">
+                    <div className="leads-analytics-stat-value">{leadAnalytics.counts.converted}</div>
+                    <div className="leads-analytics-stat-label">Converted</div>
+                  </div>
+                </div>
+                <p className="leads-analytics-total">
+                  {hasActiveFilters ? (
+                    <>
+                      Showing <strong>{filteredLeads.length}</strong> of <strong>{leadAnalytics.counts.all}</strong> leads
+                    </>
+                  ) : (
+                    <>
+                      <strong>{leadAnalytics.counts.all}</strong> lead{leadAnalytics.counts.all !== 1 ? 's' : ''} total
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
             <div className="flex gap-2 mb-2">
               <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
@@ -189,6 +297,17 @@ export function LeadsPanel({
                 tags={tagRegistry.leads || []}
                 selectedTagIds={selectedTagIds}
                 onTagIdsChange={setSelectedTagIds}
+                statusOptions={LEAD_STATUSES}
+                statusFilter={statusFilter}
+                onStatusFilterChange={setStatusFilter}
+                statusCounts={statusCounts}
+                sortOptions={[
+                  { id: 'recent', label: 'Recent' },
+                  { id: 'followup', label: 'Needs follow-up' },
+                ]}
+                sortMode={sortMode}
+                onSortModeChange={setSortMode}
+                defaultSortMode="recent"
               />
             </div>
             {leads.length === 0 ? (
@@ -200,20 +319,31 @@ export function LeadsPanel({
             ) : filteredLeads.length === 0 ? (
               <div className="text-center py-12">
                 <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm opacity-60">
-                  {selectedTagIds.length > 0 ? 'No leads match the selected tags.' : 'No leads match your search.'}
-                </p>
+                <p className="text-sm opacity-60">No leads match your filters.</p>
               </div>
             ) : (
-              filteredLeads.map((lead) => (
-                <LeadRow
-                  key={lead.id}
-                  lead={lead}
-                  dealCount={dealCountByLead.get(lead.id) || 0}
-                  tagRegistry={tagRegistry}
-                  onClick={(l) => onOpenLeadDetail?.(l.id)}
-                />
-              ))
+              <div className="crm-list-rows">
+                <div className="crm-column-headers crm-lead-headers" aria-hidden>
+                  <span>Lead</span>
+                  <span>Tags</span>
+                  <span>Status</span>
+                  <span>Property</span>
+                  <span>Contact</span>
+                  <span>Activity</span>
+                </div>
+                {filteredLeads.map((lead) => (
+                  <LeadRow
+                    key={lead.id}
+                    lead={lead}
+                    dealCount={dealCountByLead.get(lead.id) || 0}
+                    tagRegistry={tagRegistry}
+                    onClick={(l) => {
+                    document.activeElement?.blur?.()
+                    onOpenLeadDetail?.(l.id)
+                  }}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </DialogContent>
@@ -268,6 +398,7 @@ export function LeadsPanel({
         onOpenParcelDetails={onOpenParcelDetails}
         onEmailClick={onEmailClick}
         onPhoneClick={onPhoneClick}
+        onTextClick={onTextClick}
         onGoToParcelOnMap={onGoToParcelOnMap}
         onLeadUpdate={handleLeadUpdate}
         onEditLead={onEditLead}

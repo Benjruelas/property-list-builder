@@ -5,7 +5,9 @@ import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
+import { formatLeadAddress } from '@/utils/leads'
 import { formatTimeInState } from '@/utils/dealPipeline'
 import { uploadDealFile, downloadDealFile, deleteDealFile, MAX_FILE_BYTES } from '@/utils/dealFiles'
 import { showToast } from './ui/toast'
@@ -25,6 +27,15 @@ function getColumnName(colId, columns) {
 
 const MENU_WIDTH = 180
 
+function DealDetailSectionTitle({ children, action }) {
+  return (
+    <div className="flex items-center justify-between gap-2 mb-2.5">
+      <h3 className="lead-detail-section-title">{children}</h3>
+      {action}
+    </div>
+  )
+}
+
 export function DealDetails({
   deal,
   pipeline,
@@ -40,6 +51,7 @@ export function DealDetails({
   readOnly = false,
   nestedOverlay = true,
   topLayer = true,
+  obscuredByChild = false,
   leadLinkActive = false,
   pipelines = [],
   leads = [],
@@ -122,6 +134,9 @@ export function DealDetails({
   const timeStr = formatTimeInState(d)
   const isClosed = !!closedRecord
   const showDealActions = !readOnly && !isClosed && (onRequestMoveDeal || onRequestCloseDeal || onRequestRemoveDeal)
+  const address = d.leadAddress || (lead ? formatLeadAddress(lead) : '')
+  const leadName = d.leadName || (lead ? `${lead.firstName || ''} ${lead.lastName || ''}`.trim() : '')
+  const pipelineTitle = pipelineMeta?.title || pipeline?.title || ''
 
   const closeMenu = () => {
     setMenuOpen(false)
@@ -204,26 +219,52 @@ export function DealDetails({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose?.() }}>
+    <Dialog
+      open
+      modal={false}
+      onOpenChange={(open) => handlePanelDialogOpenChange(open, leadLinkActive, onClose, true)}
+    >
       <DialogContent
-        className="map-panel list-panel deal-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
+        className={cn(
+          'map-panel list-panel deal-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0',
+          obscuredByChild && 'invisible opacity-0 pointer-events-none',
+        )}
         showCloseButton={false}
+        detailFocusOverlay={!obscuredByChild}
+        hideOverlay={obscuredByChild}
+        suppressBackdrop={obscuredByChild}
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
-        suppressBackdrop
-        instantDismiss
       >
         <DialogHeader
-          className="shrink-0 border-b border-white/10 px-5 pt-5 pb-3 text-left"
+          className="shrink-0 border-b border-white/10 px-5 pt-5 pb-4 text-left"
           style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}
         >
           <DialogDescription className="sr-only">Deal details</DialogDescription>
           <div className="map-panel-header-toolbar">
             <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
               <PanelBackButton onClick={onClose} />
-              <DialogTitle className="text-xl font-semibold truncate flex-1 min-w-0">
-                {d.title || d.leadAddress || 'Deal'}
-              </DialogTitle>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-xl font-semibold truncate leading-tight">
+                  {d.title || d.leadAddress || 'Deal'}
+                </DialogTitle>
+                {address && (
+                  <p className="text-xs text-white/50 truncate mt-0.5" title={address}>{address}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="leads-stage-badge text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wide font-medium">
+                    {isClosed ? 'Closed' : stageName}
+                  </span>
+                  {!isClosed && timeStr && (
+                    <span className="text-[11px] text-white/40">{timeStr}</span>
+                  )}
+                  {pipelineTitle && (
+                    <span className="text-[11px] text-white/40 truncate" title={pipelineTitle}>
+                      {pipelineTitle}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
             {showDealActions && (
               <div className="map-panel-header-actions gap-1">
@@ -242,173 +283,209 @@ export function DealDetails({
         </DialogHeader>
 
         <div
-          className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 space-y-5 min-h-0"
+          className="lead-detail-body flex-1 overflow-y-auto scrollbar-hide min-h-0"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          <div className="space-y-2 pb-4 border-b border-white/10">
-            {(lead || d.leadName) && (
-              lead ? (
+          {(lead || leadName) && (
+            <div className="px-5 py-4 border-b border-white/[0.08]">
+              {lead ? (
                 <button
                   type="button"
                   onClick={() => onOpenLead?.(lead)}
                   className={cn(
-                    'w-full flex items-center gap-2 text-sm py-1 text-left transition-colors',
-                    leadLinkActive ? 'opacity-100' : 'opacity-80 hover:opacity-100'
+                    'lead-detail-deal-card',
+                    leadLinkActive && 'ring-1 ring-white/20'
                   )}
                   aria-current={leadLinkActive ? 'true' : undefined}
                 >
                   <User className="h-4 w-4 shrink-0 opacity-50" />
-                  <span className="truncate flex-1">
-                    {d.leadName || `${lead.firstName || ''} ${lead.lastName || ''}`.trim() || 'Lead'}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{leadName || 'Lead'}</div>
+                    <div className="text-[11px] text-white/45 mt-0.5">View lead profile</div>
+                  </div>
                   <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
                 </button>
               ) : (
-                <div className="flex items-center gap-2 text-sm py-1 opacity-80">
+                <div className="lead-detail-deal-card opacity-70 pointer-events-none">
                   <User className="h-4 w-4 shrink-0 opacity-50" />
-                  <span className="truncate">{d.leadName}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{leadName}</div>
+                  </div>
                 </div>
-              )
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="leads-stage-badge text-[11px] px-2 py-0.5 rounded-full">
-                {isClosed ? 'Closed' : stageName}
-              </span>
-              {!isClosed && timeStr && <span className="text-[11px] opacity-40">{timeStr}</span>}
+              )}
             </div>
-          </div>
+          )}
 
-          <section>
-            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Notes</h3>
-            <textarea
-              value={notes}
-              onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }}
-              onBlur={saveNotes}
-              disabled={readOnly || isClosed}
-              rows={4}
-              className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none"
-              placeholder="Deal notes…"
-            />
-          </section>
+          <div className="px-5 py-4 lead-detail-columns-wrap">
+            <div className="space-y-3">
+              <section className="lead-detail-section">
+                <DealDetailSectionTitle>Notes</DealDetailSectionTitle>
+                <textarea
+                  value={notes}
+                  onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }}
+                  onBlur={saveNotes}
+                  disabled={readOnly || isClosed}
+                  rows={4}
+                  className="lead-detail-field w-full text-sm px-3 py-2 resize-none"
+                  placeholder="Deal notes…"
+                />
+              </section>
 
-          <section>
-            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Tags</h3>
-            <TagPicker
-              type="deals"
-              entity={d}
-              tagRegistry={tagRegistry}
-              getToken={getToken}
-              onRegistryChange={onRefreshTags}
-              disabled={readOnly || isClosed || !onDealUpdate}
-              hideWhenEmpty={false}
-              showAddTrigger={!readOnly && !isClosed && !!onDealUpdate}
-              inline
-              onTagsChange={({ tagIds, tagMeta }) => {
-                persist({ tagIds, tagMeta })
-              }}
-            />
-          </section>
+              <section className="lead-detail-section">
+                <DealDetailSectionTitle>Tags</DealDetailSectionTitle>
+                <TagPicker
+                  type="deals"
+                  entity={d}
+                  tagRegistry={tagRegistry}
+                  getToken={getToken}
+                  onRegistryChange={onRefreshTags}
+                  disabled={readOnly || isClosed || !onDealUpdate}
+                  hideWhenEmpty={false}
+                  showAddTrigger={!readOnly && !isClosed && !!onDealUpdate}
+                  inline
+                  onTagsChange={({ tagIds, tagMeta }) => {
+                    persist({ tagIds, tagMeta })
+                  }}
+                />
+              </section>
 
-          <DealFinancesPanel
-            payments={payments}
-            costs={costs}
-            onPaymentsChange={handlePaymentsChange}
-            onCostsChange={handleCostsChange}
-            onPaymentsCommit={handlePaymentsBlur}
-            onCostsCommit={handleCostsBlur}
-            readOnly={readOnly || isClosed}
-            canSeeDealAmounts={canSeeDealAmounts}
-          />
+              {(onOpenQuote || (!readOnly && !isClosed && onCreateQuoteForDeal)) && (
+                <section className="lead-detail-section">
+                  <DealDetailSectionTitle
+                    action={
+                      !readOnly && !isClosed && onCreateQuoteForDeal ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => onCreateQuoteForDeal({ deal: d, pipeline, lead })}
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" /> Create
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    Quotes
+                  </DealDetailSectionTitle>
+                  {dealQuotesLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-xs opacity-50">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                      Loading quotes…
+                    </div>
+                  ) : dealQuotes.length === 0 ? (
+                    <p className="text-xs text-white/40 py-1">No quotes linked to this deal</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {dealQuotes.map((q) => (
+                        <li key={q.id}>
+                          <button
+                            type="button"
+                            disabled={!onOpenQuote}
+                            onClick={() => onOpenQuote?.(q)}
+                            className="lead-detail-deal-card disabled:opacity-60 disabled:pointer-events-none"
+                          >
+                            <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{q.title || 'Quote'}</div>
+                              <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
+                                <QuoteStatusBadge status={q.status} />
+                                {canSeeDealAmounts && (
+                                  <span className="tabular-nums">{formatQuoteMoney(q.total)}</span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+            </div>
 
-          {(onOpenQuote || (!readOnly && !isClosed && onCreateQuoteForDeal)) && (
-            <section>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase opacity-50">Quotes</h3>
-                {!readOnly && !isClosed && onCreateQuoteForDeal && (
-                  <Button size="sm" variant="outline" onClick={() => onCreateQuoteForDeal({ deal: d, pipeline, lead })}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Create quote
-                  </Button>
-                )}
-              </div>
-              {dealQuotesLoading ? (
-                <div className="flex items-center gap-2 py-2 text-xs opacity-50">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                  Loading quotes…
-                </div>
-              ) : dealQuotes.length === 0 ? (
-                <p className="text-xs opacity-40 py-1">No quotes linked to this deal</p>
-              ) : (
-                <ul className="space-y-1">
-                  {dealQuotes.map((q) => (
-                    <li key={q.id}>
-                      <button
-                        type="button"
-                        disabled={!onOpenQuote}
-                        onClick={() => onOpenQuote?.(q)}
-                        className="w-full flex items-center gap-2 py-2 px-2 rounded-lg bg-white/[0.04] text-sm text-left hover:bg-white/[0.08] transition-colors disabled:opacity-60 disabled:pointer-events-none"
-                      >
-                        <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
-                        <span className="flex-1 truncate">{q.title || 'Quote'}</span>
-                        <QuoteStatusBadge status={q.status} />
-                        {canSeeDealAmounts && (
-                          <span className="text-xs opacity-50 shrink-0">{formatQuoteMoney(q.total)}</span>
-                        )}
+            <div className="space-y-3">
+              {canSeeDealAmounts && (
+                <DealFinancesPanel
+                  payments={payments}
+                  costs={costs}
+                  onPaymentsChange={handlePaymentsChange}
+                  onCostsChange={handleCostsChange}
+                  onPaymentsCommit={handlePaymentsBlur}
+                  onCostsCommit={handleCostsBlur}
+                  readOnly={readOnly || isClosed}
+                  canSeeDealAmounts={canSeeDealAmounts}
+                />
+              )}
+
+              <DealTasksSection
+                deal={d}
+                lead={lead}
+                pipeline={pipelineMeta}
+                leads={leads}
+                pipelines={pipelines}
+                teams={teams}
+                getToken={getToken}
+                onPipelinesChange={onPipelinesChange}
+                onOpenScheduleAtDate={onOpenScheduleAtDate}
+                refreshKey={taskListEpoch}
+                readOnly={readOnly || isClosed}
+              />
+
+              <section className="lead-detail-section">
+                <DealDetailSectionTitle
+                  action={
+                    !readOnly && !isClosed ? (
+                      <>
+                        <input ref={fileInputRef} type="file" className="hidden" onChange={handleFilePick} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={uploading}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          {uploading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <Upload className="h-3.5 w-3.5 mr-1" /> Upload
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    ) : null
+                  }
+                >
+                  Files
+                </DealDetailSectionTitle>
+                <p className="text-[10px] text-white/40 mb-2">Max 10MB per file</p>
+                <ul className="space-y-1.5">
+                  {(d.files || []).length === 0 && (
+                    <li className="text-xs text-white/40 py-1">No files</li>
+                  )}
+                  {(d.files || []).map((f) => (
+                    <li
+                      key={f.id}
+                      className="flex items-center gap-2 py-2 px-2.5 rounded-lg border border-white/10 bg-white/[0.04]"
+                    >
+                      <FileText className="h-4 w-4 shrink-0 opacity-50" />
+                      <span className="flex-1 text-sm truncate">{f.name}</span>
+                      <span className="text-[10px] text-white/40 shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                      <button type="button" onClick={() => downloadDealFile(getToken, f.key, f.name)} title="Download">
+                        <Download className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
                       </button>
+                      {!readOnly && !isClosed && (
+                        <button type="button" onClick={() => handleDeleteFile(f)} title="Delete">
+                          <Trash2 className="h-3.5 w-3.5 opacity-40 hover:opacity-80" />
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
-              )}
-            </section>
-          )}
-
-          <DealTasksSection
-            deal={d}
-            lead={lead}
-            pipeline={pipelineMeta}
-            leads={leads}
-            pipelines={pipelines}
-            teams={teams}
-            getToken={getToken}
-            onPipelinesChange={onPipelinesChange}
-            onOpenScheduleAtDate={onOpenScheduleAtDate}
-            refreshKey={taskListEpoch}
-            readOnly={readOnly || isClosed}
-          />
-
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold uppercase opacity-50">Files</h3>
-              {!readOnly && !isClosed && (
-                <>
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleFilePick} />
-                  <Button size="sm" variant="outline" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
-                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Upload className="h-3.5 w-3.5 mr-1" /> Upload</>}
-                  </Button>
-                </>
-              )}
+              </section>
             </div>
-            <p className="text-[10px] opacity-40 mb-2">Max 10MB per file</p>
-            <ul className="space-y-1">
-              {(d.files || []).length === 0 && (
-                <li className="text-xs opacity-40 py-2">No files</li>
-              )}
-              {(d.files || []).map((f) => (
-                <li key={f.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-white/[0.04]">
-                  <FileText className="h-4 w-4 shrink-0 opacity-50" />
-                  <span className="flex-1 text-sm truncate">{f.name}</span>
-                  <span className="text-[10px] opacity-40">{(f.size / 1024).toFixed(0)} KB</span>
-                  <button type="button" onClick={() => downloadDealFile(getToken, f.key, f.name)} title="Download">
-                    <Download className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
-                  </button>
-                  {!readOnly && !isClosed && (
-                    <button type="button" onClick={() => handleDeleteFile(f)} title="Delete">
-                      <Trash2 className="h-3.5 w-3.5 opacity-40 hover:opacity-80" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
+          </div>
         </div>
       </DialogContent>
 

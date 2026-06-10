@@ -7,7 +7,7 @@ import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
 import { showConfirm } from '../ui/confirm-dialog'
 import { useAuth } from '../../contexts/AuthContext'
-import { VisibilityBadge } from '../ResourceSharePicker'
+import { LeadSharingIcon } from '../ResourceSharePicker'
 import { ShareResourceDialog } from '../ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 import {
@@ -424,14 +424,7 @@ export function FormsPanel({
                           <div className="pr-8">
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="font-medium text-sm whitespace-nowrap">{t.name}</div>
-                              {(!owned || hasShares) && (
-                                <Users
-                                  className="h-3.5 w-3.5 flex-shrink-0 text-white/70"
-                                  title={owned ? 'Shared with others' : `Shared by ${t.ownerEmail || 'owner'}`}
-                                  aria-hidden
-                                />
-                              )}
-                              <VisibilityBadge resource={t} />
+                              <LeadSharingIcon resource={t} collaboratorHint={!owned} />
                             </div>
                             <div className="text-xs opacity-70 mt-0.5">
                               {t.pageCount || 0} page{(t.pageCount || 0) === 1 ? '' : 's'}

@@ -16,10 +16,6 @@ if ('serviceWorker' in navigator) {
   })
 }
 
-if (typeof window.__removeInitialLoader === 'function') {
-  window.__removeInitialLoader()
-}
-
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import {
   Plus,
   Loader2,
@@ -79,6 +80,8 @@ export function QuotesPanel({
   const headerMenuTriggerRef = useRef(null)
   const editorOpen = !!editorFrame
   const hasNestedQuoteView = editorOpen || !!detailQuoteId
+  const listPanelRef = useRef(null)
+  useObscuredPanelRoot(listPanelRef, hasNestedQuoteView)
   const [fetchedDetailQuote, setFetchedDetailQuote] = useState(null)
   const editorQuote = editorFrame?.prefill ?? editorFrame?.quote ?? null
   const editorTemplate = editorFrame?.template ?? null
@@ -268,11 +271,12 @@ export function QuotesPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedQuoteView, handlePanelBack)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedQuoteView, handlePanelBack, isOpen)}>
         <DialogContent
+          ref={listPanelRef}
           className={cn(
             'map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedQuoteView && 'invisible pointer-events-none'
+            hasNestedQuoteView && 'crm-panel-obscured'
           )}
           showCloseButton={false}
           hideOverlay

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { getSkipTracedParcel, updateContactMeta, updateSkipTracedContacts } from '@/utils/skipTrace'
+import { resolveParcelId } from '@/utils/parcelPropertyMap'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { computeOwnerOccupied } from '@/utils/ownerOccupied'
@@ -160,20 +161,20 @@ export function useParcelDetailsData({ isOpen, parcelData, lists = [], enableAut
   const scrollContainerRef = useRef(null)
   const inactivityTimeoutRef = useRef(null)
 
-  const parcelId = parcelData?.id || parcelData?.properties?.PROP_ID || parcelData?.PROP_ID || parcelData?.PROPID
+  const parcelId = resolveParcelId(parcelData)
 
   const refreshSkipTrace = () => {
-    if (parcelId) setSkipTracedInfo(getSkipTracedParcel(parcelId))
+    if (parcelId) setSkipTracedInfo(getSkipTracedParcel(parcelData))
   }
 
   useEffect(() => {
     if (isOpen && parcelId) {
-      const info = getSkipTracedParcel(parcelId)
+      const info = getSkipTracedParcel(parcelData)
       setSkipTracedInfo(info)
       const savedNote = getParcelNote(parcelId)
       setNote(savedNote || '')
       setIsEditingNote(false)
-      const timeout = setTimeout(() => setSkipTracedInfo(getSkipTracedParcel(parcelId)), 500)
+      const timeout = setTimeout(() => setSkipTracedInfo(getSkipTracedParcel(parcelData)), 500)
       return () => clearTimeout(timeout)
     }
   }, [isOpen, parcelId, parcelData])
@@ -275,13 +276,13 @@ export function useParcelDetailsData({ isOpen, parcelData, lists = [], enableAut
   const handleSetVerified = (type, value, next) => {
     if (!parcelId) return
     updateContactMeta(parcelId, type, value, { verified: next }); scheduleSync()
-    setSkipTracedInfo(getSkipTracedParcel(parcelId))
+    setSkipTracedInfo(getSkipTracedParcel(parcelData))
   }
 
   const handleCallerIdBlur = (value, callerId) => {
     if (!parcelId) return
     updateContactMeta(parcelId, 'phone', value, { callerId: (callerId || '').trim() }); scheduleSync()
-    setSkipTracedInfo(getSkipTracedParcel(parcelId))
+    setSkipTracedInfo(getSkipTracedParcel(parcelData))
     setCallerIdDraft(prev => { const next = { ...prev }; delete next[value]; return next })
   }
 

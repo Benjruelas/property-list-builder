@@ -35,6 +35,32 @@ export default defineConfig({
   worker: {
     format: 'es'
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/maplibre-gl') || id.includes('node_modules/react-map-gl')) {
+            return 'map'
+          }
+          if (id.includes('node_modules/firebase')) {
+            return 'firebase'
+          }
+          if (id.includes('node_modules/framer-motion')) {
+            return 'motion'
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'icons'
+          }
+          if (id.includes('node_modules/@radix-ui')) {
+            return 'radix'
+          }
+          if (id.includes('node_modules/pdfjs-dist') || id.includes('node_modules/pdf-lib') || id.includes('node_modules/pdfkit')) {
+            return 'pdf'
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 3000,
     host: true,

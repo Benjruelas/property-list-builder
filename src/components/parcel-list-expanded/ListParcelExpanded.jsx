@@ -71,7 +71,7 @@ function getParcelData(props, parcel, address) {
 
 
 function ContactBlock({ parcelId, props, address, parcel, onPhoneClick, shell = 'card' }) {
-  const skipTracedInfo = getSkipTracedParcel(parcelId)
+  const skipTracedInfo = getSkipTracedParcel({ id: parcelId, properties: props })
   if (!skipTracedInfo) return null
   const phoneDetails = skipTracedInfo.phoneDetails || (skipTracedInfo.phoneNumbers || (skipTracedInfo.phone ? [skipTracedInfo.phone] : [])).map((v, i) => ({ value: v, verified: null, callerId: '', primary: i === 0 }))
   const emailDetails = skipTracedInfo.emailDetails || (skipTracedInfo.emails || (skipTracedInfo.email ? [skipTracedInfo.email] : [])).map((v, i) => ({ value: v, verified: null, primary: i === 0 }))
@@ -258,7 +258,7 @@ function ParcelExpandedIconActions({
   if (onSkipTraceParcel && skipTraceEl) {
     row.push(cell('skip', skipTraceEl))
   }
-  if (parcel.lat && parcel.lng) {
+  if (lat != null && lng != null) {
     row.push(cell('map', (
       <button type="button" title="Center on map" className={iconWrap} onClick={(e) => { e.stopPropagation(); handleCenterParcel(parcel) }}>
         <MapPin className="h-4 w-4" />

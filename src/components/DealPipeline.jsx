@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Check, Users } from 'lucide-react'
 import { Button } from './ui/button'
@@ -26,7 +27,7 @@ import { SchedulePicker } from './SchedulePicker'
 import { canCollaborateOnPipeline, pipelinesUserCanWorkIn } from '@/utils/pipelines'
 import { CreatePipelineDialog } from './CreatePipelineDialog'
 import { displayLeadName, updateLead } from '@/utils/leads'
-import { VisibilityBadge } from './ResourceSharePicker'
+import { LeadSharingIcon, TeamSharedIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
 import { EntityTagPills } from './tags/EntityTagPills'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
@@ -102,6 +103,7 @@ export function DealPipeline({
   onOpenParcelDetails,
   onEmailClick,
   onPhoneClick,
+  onTextClick,
   onSkipTraceParcel,
   skipTracingInProgress,
   deals = [],
@@ -152,8 +154,9 @@ export function DealPipeline({
     () => pipelinesUserCanWorkIn(currentUser, pipelines, teams),
     [currentUser, pipelines, teams]
   )
+  const pipelineById = pipelines.find((p) => p.id === activePipelineId) ?? null
   const activePipeline =
-    pipelines.find((p) => p.id === activePipelineId)
+    pipelineById
     || switcherPipelines[0]
     || pipelines[0]
   const [columns, setColumns] = useState([])
@@ -206,9 +209,9 @@ export function DealPipeline({
   /** Owner or collaborator: may move leads and use tasks; structure/sharing remains owner-only (API + UI). */
   const canCollaboratePipeline = useMemo(() => {
     if (!apiMode) return true
-    if (!activePipeline) return false
-    return canCollaborateOnPipeline(currentUser, activePipeline, teams)
-  }, [apiMode, activePipeline, currentUser, teams])
+    if (!pipelineById) return false
+    return canCollaborateOnPipeline(currentUser, pipelineById, teams)
+  }, [apiMode, pipelineById, currentUser, teams])
 
   const runShareValidation = useCallback(async (email) => {
     const trimmed = (email || '').trim().toLowerCase()
@@ -791,6 +794,37 @@ export function DealPipeline({
   }
 
   const hasNestedDetail = !!(focusDealId || leadOverlayId)
+  const pipelinePanelRef = useRef(null)
+  const columnsScrollRef = useRef(null)
+  useObscuredPanelRoot(pipelinePanelRef, hasNestedDetail)
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+    const el = columnsScrollRef.current
+    if (!el) return undefined
+
+    const onWheel = (e) => {
+      if (window.matchMedia('(max-width: 767px)').matches) return
+      if (el.scrollWidth <= el.clientWidth + 1) return
+
+      const columnBody = e.target.closest('.deal-pipeline-column-body')
+      if (columnBody instanceof HTMLElement && columnBody.scrollHeight > columnBody.clientHeight + 1) {
+        const { scrollTop, clientHeight, scrollHeight } = columnBody
+        const atTop = scrollTop <= 0
+        const atBottom = scrollTop + clientHeight >= scrollHeight - 1
+        if (e.deltaY > 0 && !atBottom) return
+        if (e.deltaY < 0 && !atTop) return
+      }
+
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+
+      el.scrollLeft += e.deltaY
+      e.preventDefault()
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [isOpen, columns.length, activePipelineId])
 
   const handlePipelineBack = () => {
     if (leadOverlayId) {
@@ -814,11 +848,12 @@ export function DealPipeline({
   }
 
   return (
-    <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedDetail, handlePipelineBack)}>
+    <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedDetail, handlePipelineBack, isOpen)}>
       <DialogContent
+        ref={pipelinePanelRef}
         className={cn(
           'map-panel deal-pipeline-panel fullscreen-panel flex flex-col',
-          hasNestedDetail && 'invisible pointer-events-none'
+          hasNestedDetail && 'crm-panel-obscured'
         )}
         showCloseButton={false}
         hideOverlay
@@ -896,13 +931,16 @@ export function DealPipeline({
             </div>
           </div>
         </DialogHeader>
-        <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden deal-pipeline-content">
-          <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-6 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns">
-          <div className="flex flex-col lg:flex-row gap-2 h-full min-w-0">
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden deal-pipeline-content">
+          <div
+            ref={columnsScrollRef}
+            className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-6 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns"
+          >
+          <div className="deal-pipeline-columns-row flex flex-col md:flex-row md:flex-nowrap gap-2 h-full min-w-0 md:min-w-full md:min-h-full">
             {columns.map((col) => (
               <div
                 key={col.id}
-                className="flex-none lg:flex-1 min-w-0 lg:min-w-[90px] rounded-lg border border-white/15 bg-white/[0.12] flex flex-col min-h-[100px] lg:min-h-[200px]"
+                className="deal-pipeline-column flex-none w-full md:min-w-[9.25rem] md:flex-1 md:basis-0 rounded-lg border border-white/15 bg-white/[0.12] flex flex-col min-h-[100px] md:min-h-[200px]"
               >
                 <div className="px-2 py-2 border-b border-white/15 flex items-center gap-1 flex-shrink-0">
                   {editingColumnId === col.id ? (
@@ -934,7 +972,7 @@ export function DealPipeline({
                   )}
                 </div>
                 <div
-                  className={`flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-1.5 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
+                  className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-1.5 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
                   onDragOver={canCollaboratePipeline ? (e) => handleDragOver(e, col.id) : undefined}
                   onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
                   onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
@@ -1003,7 +1041,7 @@ export function DealPipeline({
               </div>
             ))}
             {isEditMode && columns.length < MAX_COLUMNS && (
-              <div className="flex-shrink-0 w-full lg:w-[70px] min-h-[70px] lg:min-h-0 flex items-center">
+              <div className="flex-shrink-0 w-full md:w-[70px] min-h-[70px] md:min-h-0 flex items-center">
                 {showAddColumn ? (
                   <div className="h-full rounded-lg border-2 border-dashed border-gray-300 p-2 flex flex-col gap-2">
                     <Input
@@ -1143,9 +1181,7 @@ export function DealPipeline({
                             {task.title || '(untitled)'}
                           </span>
                           {task.__source === 'team' && (
-                            <span className="text-[9px] font-medium px-1 py-0 rounded bg-blue-100/90 text-blue-800 dark:bg-blue-500/20 dark:text-blue-200 uppercase">
-                              Team
-                            </span>
+                            <TeamSharedIcon title="Team task" size="xs" />
                           )}
                         </div>
                         {(task.dealId || task.parcelId) && (
@@ -1234,6 +1270,7 @@ export function DealPipeline({
 
       {isOpen && selectedDeal && (
         <DealDetails
+          obscuredByChild={!!leadOverlayId}
           deal={selectedDeal}
           pipeline={activePipeline}
           lead={leads.find((l) => l.id === selectedDeal.leadId) || null}
@@ -1285,6 +1322,7 @@ export function DealPipeline({
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
+          onTextClick={onTextClick}
           onGoToParcelOnMap={handleGoToParcelOnMap}
           onLeadUpdate={handleLeadUpdate}
           onCreateDeal={onOpenCreateDeal}
@@ -1504,10 +1542,7 @@ export function DealPipeline({
                 )}
                 <div className="flex min-w-0 flex-1 items-center gap-1.5">
                   <span className="truncate font-medium text-left">{p.title?.trim() || 'Pipes'}</span>
-                  {p.ownerId !== currentUser?.uid && (
-                    <Users className="h-3.5 w-3.5 flex-shrink-0 text-white/70" title="Shared with you" aria-hidden />
-                  )}
-                  <VisibilityBadge resource={p} />
+                  <LeadSharingIcon resource={p} collaboratorHint={p.ownerId !== currentUser?.uid} />
                 </div>
               </button>
             ))}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { TourDemoParcelPopup } from './TourDemoParcelPopup'
+import { resolveTourSelector, stepUsesActionBar as usesActionBar } from './welcomeTourUtils'
 
 const MOBILE_MAX = 767
 
@@ -78,71 +79,41 @@ const ALL_STEPS = [
     id: 'pipes',
     title: 'Pipes',
     desc: 'See every deal by stage — drag jobs through your pipeline.',
-    target: '[data-tour="menu-pipes"]',
+    target: '[data-tour="action-bar-pipes"]',
     mobileTarget: '[data-tour="action-bar-pipes"]',
-    menuRequired: true,
     featureId: 'pipes',
   },
   {
     id: 'tasks',
     title: 'Tasks',
     desc: 'Never miss a follow-up — all tasks for your leads and deals.',
-    target: '[data-tour="menu-tasks"]',
+    target: '[data-tour="action-bar-tasks"]',
     mobileTarget: '[data-tour="action-bar-tasks"]',
-    menuRequired: true,
     featureId: 'tasks',
   },
   {
     id: 'schedule',
     title: 'Schedule',
     desc: 'Plan your week — appointments and due tasks in one calendar.',
-    target: '[data-tour="menu-schedule"]',
+    target: '[data-tour="action-bar-schedule"]',
     mobileTarget: '[data-tour="action-bar-schedule"]',
-    menuRequired: true,
     featureId: 'schedule',
   },
   {
     id: 'navigation',
     title: 'Menu',
     desc: 'Lists, outreach, teams, and the rest of the app live here.',
-    target: '[data-tour="menu"]',
+    target: '[data-tour="action-bar-menu"]',
     mobileTarget: '[data-tour="action-bar-menu"]',
     mobileTitle: 'Menu',
     mobileDesc: 'Lists, outreach, settings, and more — right from the bottom bar.',
-  },
-  // Menu — top to bottom (desktop includes Pipes/Tasks/Schedule at the top of the dropdown)
-  {
-    id: 'menu-pipes',
-    title: 'Pipes',
-    desc: 'See every deal by stage — drag jobs through your pipeline.',
-    target: '[data-tour="menu-pipes"]',
-    menuRequired: true,
-    featureId: 'pipes',
-    desktopOnly: true,
-  },
-  {
-    id: 'menu-tasks',
-    title: 'Tasks',
-    desc: 'Never miss a follow-up — all tasks for your leads and deals.',
-    target: '[data-tour="menu-tasks"]',
-    menuRequired: true,
-    featureId: 'tasks',
-    desktopOnly: true,
-  },
-  {
-    id: 'menu-schedule',
-    title: 'Schedule',
-    desc: 'Plan your week — appointments and due tasks in one calendar.',
-    target: '[data-tour="menu-schedule"]',
-    menuRequired: true,
-    featureId: 'schedule',
-    desktopOnly: true,
   },
   {
     id: 'activity',
     title: 'Activity',
     desc: 'Teammate shared a list or pipe? You\'ll see it here.',
     target: '[data-tour="menu-notifications"]',
+    mobileTarget: '[data-tour="action-bar-activity"]',
     menuRequired: true,
     featureId: 'activity',
   },
@@ -175,6 +146,7 @@ const ALL_STEPS = [
     title: 'Leads',
     desc: 'Every property you\'re actively working, in one place.',
     target: '[data-tour="menu-leads"]',
+    mobileTarget: '[data-tour="action-bar-leads"]',
     menuRequired: true,
     featureId: 'leads',
   },
@@ -183,6 +155,7 @@ const ALL_STEPS = [
     title: 'Deals',
     desc: 'Follow jobs from first contact through close.',
     target: '[data-tour="menu-deals"]',
+    mobileTarget: '[data-tour="action-bar-deals"]',
     menuRequired: true,
     featureId: 'deals',
   },
@@ -199,6 +172,7 @@ const ALL_STEPS = [
     title: 'Quotes',
     desc: 'Build and send quotes tied right to your deals.',
     target: '[data-tour="menu-quotes"]',
+    mobileTarget: '[data-tour="action-bar-quotes"]',
     menuRequired: true,
     featureId: 'quotes',
   },
@@ -275,9 +249,7 @@ function filterSteps(steps, canAccessFeature, isMobile) {
 }
 
 function resolveSelector(step, isMobile) {
-  if (step.centered) return null
-  if (isMobile && step.mobileTarget) return step.mobileTarget
-  return step.target || null
+  return resolveTourSelector(step, isMobile, findTourTarget)
 }
 
 function stepDisplay(step, isMobile) {
@@ -285,11 +257,6 @@ function stepDisplay(step, isMobile) {
     return { title: step.mobileTitle, desc: step.mobileDesc || step.desc }
   }
   return { title: step.title, desc: step.desc }
-}
-
-function stepUsesActionBar(step, isMobile) {
-  const selector = resolveSelector(step, isMobile)
-  return Boolean(selector?.includes('action-bar'))
 }
 
 /** Layout jumps when tooltip keeps a stale anchor (e.g. parcel demo → menu). */
@@ -303,7 +270,7 @@ function isMajorTourTransition(prev, next, isMobile) {
   if (prev.menuRequired && !next.menuRequired && !next.parcelDemo) return true
   if (
     next.menuRequired &&
-    !stepUsesActionBar(next, isMobile) &&
+    !usesActionBar(next, isMobile, findTourTarget) &&
     !prev.menuRequired &&
     !prev.parcelLayout
   ) {

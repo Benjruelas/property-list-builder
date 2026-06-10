@@ -92,10 +92,45 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
+const LEAD_STATUSES = new Set(['new', 'contacted', 'qualified', 'converted', 'lost'])
+const ACTIVITY_TYPES = new Set(['call', 'text', 'email', 'note', 'status', 'deal'])
+const MAX_LEAD_ACTIVITY = 200
+
 function leadDisplayName(lead) {
   const parts = [lead?.firstName, lead?.lastName].filter(Boolean)
   if (parts.length) return parts.join(' ')
   return (lead?.address || 'Lead').trim()
+}
+
+function normalizeLeadStatus(value, existing) {
+  if (value === undefined || value === null || value === '') {
+    return existing?.status || 'new'
+  }
+  const status = String(value).trim()
+  if (!LEAD_STATUSES.has(status)) {
+    throw new Error(`Invalid lead status: ${status}`)
+  }
+  return status
+}
+
+function normalizeActivityEntry(entry, user, now) {
+  if (!entry || typeof entry !== 'object') {
+    throw new Error('activity entry is required')
+  }
+  const type = String(entry.type || '').trim()
+  if (!ACTIVITY_TYPES.has(type)) {
+    throw new Error(`Invalid activity type: ${type}`)
+  }
+  const summary = String(entry.summary || '').trim()
+  if (!summary) throw new Error('activity summary is required')
+  return {
+    id: entry.id || `act_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    type,
+    at: entry.at || now,
+    summary: summary.slice(0, 500),
+    meta: entry.meta && typeof entry.meta === 'object' ? entry.meta : {},
+    byUid: entry.byUid || user.uid,
+  }
 }
 
 function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry = null) {
@@ -132,6 +167,15 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
   const tags = mergeEntityTags(body, existing, tagRegistry, 'leads')
   base.tagIds = tags.tagIds
   base.tagMeta = tags.tagMeta
+
+  const nextStatus = normalizeLeadStatus(body.status, existing)
+  base.status = nextStatus
+  if (body.status !== undefined && (!existing || nextStatus !== existing.status)) {
+    base.statusUpdatedAt = now
+  } else {
+    base.statusUpdatedAt = existing?.statusUpdatedAt || (existing?.createdAt || now)
+  }
+  base.activity = Array.isArray(existing?.activity) ? existing.activity : []
 
   if (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined) {
     return applyResourceVisibilityPatch(base, body, ctx)
@@ -214,7 +258,7 @@ export default async function handler(req, res) {
     }
 
     if (method === 'PATCH') {
-      const { leadId } = body
+      const { leadId, action } = body
       if (!leadId) return res.status(400).json({ error: 'leadId is required' })
 
       const idx = all.findIndex((l) => l.id === leadId)
@@ -227,6 +271,27 @@ export default async function handler(req, res) {
       }
       if (access === 'admin_view') {
         return res.status(403).json({ error: 'Admins can view but not edit private leads' })
+      }
+
+      if (action === 'append-activity') {
+        const now = new Date().toISOString()
+        let entry
+        try {
+          entry = normalizeActivityEntry(body.entry, user, now)
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+        const activities = [...(existing.activity || []), entry]
+        const lead = {
+          ...existing,
+          activity: activities.length > MAX_LEAD_ACTIVITY
+            ? activities.slice(-MAX_LEAD_ACTIVITY)
+            : activities,
+          updatedAt: now,
+        }
+        all[idx] = lead
+        await saveAllLeads(all)
+        return res.status(200).json({ lead })
       }
 
       if (

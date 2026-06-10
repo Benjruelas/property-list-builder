@@ -106,9 +106,7 @@ export function resolveResourceAccess(resource, user, { team = null, teamsIndex 
 
   if (onSameTeam && isAdmin) {
     if (r.visibility === VISIBILITY.PRIVATE) return 'admin_view'
-    if (resourceSharedWithUser(r, user, team) || r.visibility === VISIBILITY.TEAM) return 'admin'
-    if (r.visibility === VISIBILITY.MEMBERS && userInSharedMembers(r, user.uid)) return 'admin'
-    if (r.visibility === VISIBILITY.PRIVATE) return 'admin_view'
+    return 'admin'
   }
 
   if (resourceSharedWithUser(r, user, team, teamsIndex)) return 'collaborator'

@@ -4,6 +4,7 @@ import { Button } from '../ui/button'
 import { PanelBackButton } from '../ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { DirectionsPicker } from '../DirectionsPicker'
+import { cn } from '@/lib/utils'
 import { useParcelDetailsData, CATEGORIES } from './useParcelDetailsData'
 import { ContactSection } from './ContactSection'
 import { NotesSection } from './NotesSection'
@@ -23,7 +24,7 @@ const TABS = [
  */
 const OUTSIDE_CLOSE_GRACE_MS = 500
 
-export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false }) {
+export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false, obscuredByPanel = false }) {
   const data = useParcelDetailsData({ isOpen, parcelData, lists, enableAutoClose, onClose })
   const [activeTab, setActiveTab] = useState('overview')
   const openedAtRef = useRef(0)
@@ -38,13 +39,14 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
 
   const handleOutsideClose = useCallback((e) => {
     e.preventDefault()
-    if (suspendClose) return
+    if (suspendClose || obscuredByPanel) return
     if (e.target?.closest?.('.hail-data-panel')) return
     // Ignore the click that opened this panel (Radix treats it as "outside").
     if (performance.now() - openedAtRef.current < OUTSIDE_CLOSE_GRACE_MS) return
     if (e.target?.closest?.('.parcel-popup-card')) return
+    if (e.target?.closest?.('.list-panel:not(.parcel-details-panel)')) return
     closeDetails(false)
-  }, [suspendClose, closeDetails])
+  }, [suspendClose, obscuredByPanel, closeDetails])
 
   if (!data) return null
   const { normalized, address, ownerName, ownerOccupied, quickStats, categorizedProps, handleClose, containerRef, scrollContainerRef } = data
@@ -87,11 +89,15 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
   )
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && isOpen && !suspendClose) handleClose(false) }}>
+    <Dialog open={isOpen} modal={false} onOpenChange={(open) => { if (!open && isOpen && !suspendClose && !obscuredByPanel) handleClose(false) }}>
       <DialogContent
-        className="map-panel parcel-details-panel list-panel fullscreen-panel max-w-2xl max-h-[80vh] p-0 gap-0"
+        className={cn(
+          'map-panel parcel-details-panel list-panel fullscreen-panel max-w-2xl max-h-[80vh] p-0 gap-0',
+          obscuredByPanel && 'invisible opacity-0 pointer-events-none',
+        )}
         showCloseButton={false}
         hideOverlay
+        suppressBackdrop={obscuredByPanel}
         onPointerDownOutside={handleOutsideClose}
         onInteractOutside={handleOutsideClose}
       >

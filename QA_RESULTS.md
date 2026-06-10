@@ -69,12 +69,19 @@ Manual run required for:
 ## 2. Map, parcels, address search — MANUAL (static verified)
 
 Static (PASS):
-- Glyph server + fontstack alignment: `glyphs` URL ([src/App.jsx](src/App.jsx):138) + `'Open Sans Semibold'` at [src/components/PMTilesParcelLayer.jsx](src/components/PMTilesParcelLayer.jsx):336,512 — demotiles hosts this fontstack, so no more 404s for glyph ranges.
-- Mapbox token read points: [src/App.jsx](src/App.jsx):82, [src/components/AddressSearch.jsx](src/components/AddressSearch.jsx):22, [src/utils/reverseGeocode.js](src/utils/reverseGeocode.js):5 — all read `VITE_MAPBOX_ACCESS_TOKEN`.
+- Glyph server + fontstack alignment: `glyphs` URL ([src/config/mapProviders.js](src/config/mapProviders.js)) + `'Open Sans Semibold'` at [src/components/PMTilesParcelLayer.jsx](src/components/PMTilesParcelLayer.jsx) — demotiles hosts this fontstack.
+- Basemap: Google session via [api/google-tiles-session.js](api/google-tiles-session.js) + [src/hooks/useBasemapStyle.js](src/hooks/useBasemapStyle.js); Mapbox fallback in [src/config/mapProviders.js](src/config/mapProviders.js).
+- Mapbox token (geocoding + basemap fallback): [src/components/AddressSearch.jsx](src/components/AddressSearch.jsx), [src/utils/reverseGeocode.js](src/utils/reverseGeocode.js), [src/config/mapProviders.js](src/config/mapProviders.js).
+- Parcel tiles same-origin: [src/config/mapProviders.js](src/config/mapProviders.js) `parcelTileUrl()` → `/api/tiles`.
 - ParcelDetails import chain: `import { ParcelDetailsV3 as ParcelDetails } from './components/parcel-details'` → `index.jsx` re-exports `ParcelDetailsV3` from `./ParcelDetailsV3`. Component signature preserved (`{ isOpen, onClose, parcelData, ... }`).
 
 Manual run required for:
-- Permission prompt grant/deny paths, pan/zoom, parcel click-to-popup, multi-select, compass rotation + NorthIndicator, address-search fly-to.
+- Permission prompt grant/deny paths, pan/zoom, parcel click-to-popup, multi-select, compass rotation, address-search fly-to.
+- **Basemap styles:** Settings → Satellite, Street, Hybrid — tiles load on desktop + mobile browser.
+- **Parcel boundaries:** Visible at zoom 15+ in all three basemap styles.
+- **PWA:** Add to Home Screen — basemap + parcels visible (retest standalone vs browser).
+- **Mapbox fallback:** Unset `GOOGLE_MAPS_TILES_KEY` locally (keep `VITE_MAPBOX_ACCESS_TOKEN`) — basemap still loads via Mapbox.
+- **Google production:** `GET /api/google-tiles-session?mapType=satellite` returns `{ tileUrl, expiry }` on Vercel production.
 
 ---
 

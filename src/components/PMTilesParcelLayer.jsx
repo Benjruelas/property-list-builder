@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { mapProperties, canonicalParcelId } from '@/utils/parcelPropertyMap'
+import { parcelTileUrl } from '@/config/mapProviders'
 
 const PARCEL_MIN_ZOOM = 15
 const PARCEL_TILE_MAXZOOM = 16
@@ -264,7 +265,7 @@ export function PMTilesParcelLayer({
     const LABEL_DEBOUNCE_MS = 200
     const LABEL_MIN_INTERVAL_MS = 400
 
-    const tileUrl = window.location.origin + '/api/tiles?z={z}&x={x}&y={y}'
+    const tileUrl = parcelTileUrl()
     const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
 
     function refreshLabels() {
@@ -523,7 +524,7 @@ export function PMTilesParcelLayer({
       if (map.getSource(LABEL_SOURCE)) map.removeSource(LABEL_SOURCE)
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID)
       layersAddedRef.current = false
-      const tileUrl = window.location.origin + '/api/tiles?z={z}&x={x}&y={y}'
+      const tileUrl = parcelTileUrl()
       const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
       map.addSource(SOURCE_ID, {
         type: 'vector',

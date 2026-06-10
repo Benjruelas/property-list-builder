@@ -1,24 +1,24 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
-import { Search, Briefcase, ChevronDown, ChevronRight, Clock, Archive, Plus } from 'lucide-react'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
+import { Search, Briefcase, ChevronDown, ChevronRight, Archive, Plus } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
-import { formatTimeInState } from '@/utils/dealPipeline'
-import { displayLeadName } from '@/utils/leads'
 import { flattenDealsFromPipelines } from '@/utils/deals'
+import { aggregateDealFinancials, formatDealMoney } from '@/utils/dealFinances'
+import { profitValueClass } from './DealLineItemsSection'
 import { DealDetails } from './DealDetails'
-import { DealProfitBadge } from './DealLineItemsSection'
+import { DealRow, ClosedDealRow } from './DealRow'
 import { LeadDetails } from './LeadDetails'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { updateLead } from '@/utils/leads'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { loadClosedDeals } from '@/utils/closedDeals'
-import { filterByTags, resolveTagMeta } from '@/utils/tags'
+import { filterByTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
-import { TagChip } from './tags/TagChip'
 import { showToast } from './ui/toast'
 
 function leadToParcelData(lead) {
@@ -37,90 +37,25 @@ function leadToParcelData(lead) {
   }
 }
 
-const listRowClass =
-  'map-panel-list-item leads-panel-list-item flex flex-col gap-1 px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
-
-function getColumnName(colId, columns) {
-  const col = columns?.find((c) => c.id === colId)
-  return col?.name || colId
-}
-
 const DEALS_PANEL_MENU_W = 220
 
-function DealCard({ deal, columns, pipelineTitle, lead, onClick, canSeeDealAmounts = true, tagRegistry }) {
-  const tags = resolveTagMeta(deal, tagRegistry, 'deals')
-  const stageName = getColumnName(deal.status, columns)
-  const timeStr = formatTimeInState(deal)
-  const leadName = lead ? displayLeadName(lead) : (deal.leadName || '')
-  return (
-    <div
-      className={listRowClass}
-      onClick={() => onClick?.(deal)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick?.(deal)}
-    >
-      <div className="text-sm font-medium truncate">{deal.title || 'Untitled deal'}</div>
-      {leadName && (
-        <div className="text-xs opacity-60 truncate">{leadName}</div>
-      )}
-      <div className="flex items-center gap-3 mt-0.5 flex-wrap text-[11px] opacity-50">
-        <span className="leads-stage-badge inline-flex items-center px-2 py-0.5 rounded-full font-medium">
-          {stageName}
-        </span>
-        {timeStr && (
-          <span className="inline-flex items-center gap-1">
-            <Clock className="h-3 w-3" />{timeStr}
-          </span>
-        )}
-        {pipelineTitle && (
-          <span className="truncate max-w-[140px]">{pipelineTitle}</span>
-        )}
-        <DealProfitBadge deal={deal} className="text-[11px] ml-auto" canSeeDealAmounts={canSeeDealAmounts} />
-      </div>
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-0.5">
-          {tags.map((tag) => (
-            <TagChip key={tag.id} tag={tag} size="sm" />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+const STUCK_IN_STAGE_MS = 7 * 24 * 60 * 60 * 1000
+
+function msInCurrentStage(deal) {
+  if (!deal) return 0
+  const cum = deal.cumulativeTimeByStatus || {}
+  const cumMs = typeof cum[deal.status] === 'number' && Number.isFinite(cum[deal.status])
+    ? cum[deal.status]
+    : 0
+  const entered = deal.statusEnteredAt ?? deal.createdAt
+  const ts = entered != null && typeof entered === 'number' && Number.isFinite(entered) ? entered : null
+  const currentStintMs = ts != null && ts > 0 ? Math.max(0, Date.now() - ts) : 0
+  return cumMs + currentStintMs
 }
 
-function ClosedDealCard({ record, onClick, canSeeDealAmounts = true, tagRegistry }) {
-  const tags = resolveTagMeta(record.deal, tagRegistry, 'deals')
-  const d = record.deal
-  const closedDate = record.closedAt
-    ? new Date(record.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    : ''
-  const leadName = record.lead ? displayLeadName(record.lead) : (d?.leadName || '')
-  return (
-    <div className={listRowClass} onClick={() => onClick?.(record)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onClick?.(record)}>
-      <div className="text-sm font-medium truncate">{d?.title || 'Deal'}</div>
-      {leadName && <div className="text-xs opacity-60 truncate">{leadName}</div>}
-      <div className="flex items-center gap-3 mt-0.5 flex-wrap text-[11px] opacity-50">
-        <span className="leads-stage-badge px-2 py-0.5 rounded-full">Closed</span>
-        {closedDate && (
-          <span className="inline-flex items-center gap-1">
-            <Archive className="h-3 w-3" />{closedDate}
-          </span>
-        )}
-        {record.closedFrom?.title && (
-          <span className="truncate max-w-[140px]">{record.closedFrom.title}</span>
-        )}
-        <DealProfitBadge deal={d} className="text-[11px] ml-auto" canSeeDealAmounts={canSeeDealAmounts} />
-      </div>
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-0.5">
-          {tags.map((tag) => (
-            <TagChip key={tag.id} tag={tag} size="sm" />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+function isFirstStage(deal, columns) {
+  const firstId = columns?.[0]?.id
+  return !!(firstId && deal.status === firstId)
 }
 
 export function DealsPanel({
@@ -148,6 +83,7 @@ export function DealsPanel({
   onOpenParcelDetails,
   onEmailClick,
   onPhoneClick,
+  onTextClick,
   onGoToParcelOnMap,
   currentUserId = null,
   onCreateQuoteForDeal,
@@ -333,7 +269,30 @@ export function DealsPanel({
     [filteredPipelines]
   )
 
+  const dealAnalytics = useMemo(() => {
+    let stuck = 0
+    let earlyStage = 0
+    const activeDeals = []
+    for (const p of allPipelineData) {
+      for (const d of p.deals) {
+        activeDeals.push(d)
+        if (msInCurrentStage(d) >= STUCK_IN_STAGE_MS) stuck++
+        if (isFirstStage(d, p.columns)) earlyStage++
+      }
+    }
+    return {
+      active: totalDeals,
+      earlyStage,
+      closed: closedDeals.length,
+      stuck,
+      activeFinancials: aggregateDealFinancials(activeDeals),
+    }
+  }, [allPipelineData, totalDeals, closedDeals])
+
   const hasNestedDetail = !!(dealsDetailDealId || dealsClosedRecordId || dealsLeadOverlayId)
+  const hasNestedOverlay = hasNestedDetail || dealPickerOpen || createDealOpen
+  const listPanelRef = useRef(null)
+  useObscuredPanelRoot(listPanelRef, hasNestedDetail)
 
   const handlePanelBack = () => {
     if (leadOverlayId) {
@@ -353,11 +312,12 @@ export function DealsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedOverlay, handlePanelBack, isOpen)}>
         <DialogContent
+          ref={listPanelRef}
           className={cn(
             'map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedDetail && 'invisible pointer-events-none'
+            hasNestedDetail && 'crm-panel-obscured'
           )}
           showCloseButton={false}
           hideOverlay
@@ -385,6 +345,64 @@ export function DealsPanel({
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           >
             <div className="mb-3 space-y-2">
+              {(totalDeals > 0 || closedDeals.length > 0) && (
+                <div className="leads-analytics deals-analytics" aria-label="Deal summary">
+                  <div className="leads-analytics-hero">
+                    <div className="leads-analytics-hero-value">{dealAnalytics.stuck}</div>
+                    <div className="leads-analytics-hero-copy">
+                      <div className="leads-analytics-hero-label">Stuck in stage</div>
+                      <div className="leads-analytics-hero-hint">
+                        {dealAnalytics.stuck === 0
+                          ? 'Every active deal moved within the last 7 days'
+                          : 'Active deals in the same stage for 7+ days'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="deals-analytics-side">
+                    <div className="leads-analytics-row" role="list">
+                      <div className="leads-analytics-stat" role="listitem">
+                        <div className="leads-analytics-stat-value">{dealAnalytics.active}</div>
+                        <div className="leads-analytics-stat-label">Active</div>
+                      </div>
+                      <div className="leads-analytics-stat" role="listitem">
+                        <div className="leads-analytics-stat-value">{dealAnalytics.earlyStage}</div>
+                        <div className="leads-analytics-stat-label">Early stage</div>
+                      </div>
+                      <div className="leads-analytics-stat" role="listitem">
+                        <div className="leads-analytics-stat-value">{dealAnalytics.closed}</div>
+                        <div className="leads-analytics-stat-label">Closed</div>
+                      </div>
+                    </div>
+                    {canSeeDealAmounts && (
+                      <div className="leads-analytics-row leads-analytics-row--financial" role="list">
+                        <div className="leads-analytics-stat" role="listitem">
+                          <div
+                            className={cn(
+                              'leads-analytics-stat-value leads-analytics-stat-value--money',
+                              profitValueClass(dealAnalytics.activeFinancials.profit)
+                            )}
+                          >
+                            {formatDealMoney(dealAnalytics.activeFinancials.profit)}
+                          </div>
+                          <div className="leads-analytics-stat-label">Pipeline profit</div>
+                        </div>
+                        <div className="leads-analytics-stat" role="listitem">
+                          <div className="leads-analytics-stat-value leads-analytics-stat-value--money">
+                            {formatDealMoney(dealAnalytics.activeFinancials.collected)}
+                          </div>
+                          <div className="leads-analytics-stat-label">Collected</div>
+                        </div>
+                        <div className="leads-analytics-stat" role="listitem">
+                          <div className="leads-analytics-stat-value leads-analytics-stat-value--money">
+                            {formatDealMoney(dealAnalytics.activeFinancials.outstanding)}
+                          </div>
+                          <div className="leads-analytics-stat-label">Outstanding</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-4">
                 <button
                   type="button"
@@ -442,42 +460,49 @@ export function DealsPanel({
                   </p>
                 </div>
               ) : (
-                filteredPipelines.map((pipeline) => {
-                  if (pipeline.deals.length === 0) return null
-                  const collapsed = collapsedPipelines[pipeline.id]
-                  const showHeader = allPipelineData.length > 1
-                  return (
-                    <div key={pipeline.id}>
-                      {showHeader && (
-                        <button
-                          type="button"
-                          onClick={() => toggleCollapse(pipeline.id)}
-                          className="w-full flex items-center gap-2 py-2 text-sm font-semibold opacity-70 hover:opacity-100 transition-opacity"
-                        >
-                          {collapsed ? <ChevronRight className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
-                          <span className="truncate">{pipeline.title}</span>
-                          <span className="text-xs opacity-50 ml-auto shrink-0">{pipeline.deals.length}</span>
-                        </button>
-                      )}
-                      {!collapsed && (
-                        <div className="space-y-1.5">
-                          {pipeline.deals.map((deal) => (
-                            <DealCard
-                              key={deal.id}
-                              deal={deal}
-                              columns={pipeline.columns}
-                              pipelineTitle={showHeader ? null : pipeline.title}
-                              lead={deal.leadId ? leads.find((l) => l.id === deal.leadId) : null}
-                              onClick={(d) => onOpenDealDetail?.(d.id, pipeline.id)}
-                              canSeeDealAmounts={canSeeDealAmounts}
-                              tagRegistry={tagRegistry}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })
+                <div className="crm-list-rows">
+                  <div className="crm-column-headers crm-deal-headers" aria-hidden>
+                    <span>Deal</span>
+                    <span>Tags</span>
+                    <span>Stage</span>
+                    <span>Lead</span>
+                    <span>Property</span>
+                    <span>In stage</span>
+                    <span>Amount</span>
+                  </div>
+                  {filteredPipelines.map((pipeline) => {
+                    if (pipeline.deals.length === 0) return null
+                    const collapsed = collapsedPipelines[pipeline.id]
+                    const showHeader = allPipelineData.length > 1
+                    return (
+                      <div key={pipeline.id}>
+                        {showHeader && (
+                          <button
+                            type="button"
+                            onClick={() => toggleCollapse(pipeline.id)}
+                            className="w-full flex items-center gap-2 py-2 text-sm font-semibold opacity-70 hover:opacity-100 transition-opacity"
+                          >
+                            {collapsed ? <ChevronRight className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                            <span className="truncate">{pipeline.title}</span>
+                            <span className="text-xs opacity-50 ml-auto shrink-0">{pipeline.deals.length}</span>
+                          </button>
+                        )}
+                        {!collapsed && pipeline.deals.map((deal) => (
+                          <DealRow
+                            key={deal.id}
+                            deal={deal}
+                            columns={pipeline.columns}
+                            pipelineTitle={showHeader ? pipeline.title : null}
+                            lead={deal.leadId ? leads.find((l) => l.id === deal.leadId) : null}
+                            onClick={(d) => onOpenDealDetail?.(d.id, pipeline.id)}
+                            canSeeDealAmounts={canSeeDealAmounts}
+                            tagRegistry={tagRegistry}
+                          />
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
               )
             ) : filteredClosed.length === 0 ? (
               <div className="text-center py-16">
@@ -497,9 +522,18 @@ export function DealsPanel({
                 )}
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="crm-list-rows">
+                <div className="crm-column-headers crm-deal-headers" aria-hidden>
+                  <span>Deal</span>
+                  <span>Tags</span>
+                  <span>Status</span>
+                  <span>Lead</span>
+                  <span>Property</span>
+                  <span>Closed</span>
+                  <span>Amount</span>
+                </div>
                 {filteredClosed.map((r) => (
-                  <ClosedDealCard key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} canSeeDealAmounts={canSeeDealAmounts} tagRegistry={tagRegistry} />
+                  <ClosedDealRow key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} canSeeDealAmounts={canSeeDealAmounts} tagRegistry={tagRegistry} />
                 ))}
               </div>
             )}
@@ -550,8 +584,9 @@ export function DealsPanel({
         canSeeDealAmounts={canSeeDealAmounts}
       />
 
-      {isOpen && selectedDeal && selectedPipeline && (
+      {isOpen && selectedDeal && selectedPipeline && dealsDetailDealId && !dealsClosedRecordId && (
         <DealDetails
+          obscuredByChild={!!leadOverlayId}
           deal={selectedDeal}
           pipeline={selectedPipeline}
           lead={selectedLead}
@@ -592,6 +627,7 @@ export function DealsPanel({
           onOpenParcelDetails={onOpenParcelDetails}
           onEmailClick={onEmailClick}
           onPhoneClick={onPhoneClick}
+          onTextClick={onTextClick}
           onGoToParcelOnMap={handleGoToParcelOnMap}
           onLeadUpdate={handleLeadUpdate}
           onCreateDeal={startCreateDealFromLead}
@@ -618,8 +654,9 @@ export function DealsPanel({
         />
       )}
 
-      {isOpen && selectedClosed && (
+      {isOpen && selectedClosed && dealsClosedRecordId && !dealsDetailDealId && (
         <DealDetails
+          obscuredByChild={!!leadOverlayId}
           deal={selectedClosed.deal}
           pipeline={{ columns: selectedClosed.closedFrom?.columns, id: selectedClosed.closedFrom?.id, title: selectedClosed.closedFrom?.title }}
           lead={selectedClosedLead}

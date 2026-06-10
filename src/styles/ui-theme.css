@@ -27,6 +27,7 @@
   --map-panel-btn-hover-bg: rgba(255, 255, 255, 0.14);
   --map-panel-header-border: rgba(255, 255, 255, 0.2);
   --map-panel-section-border: rgba(255, 255, 255, 0.1);
+  --map-panel-detail-surface: rgb(18, 22, 34);
 
   --map-chrome-bg: rgba(18, 22, 34, 0.92);
   --map-chrome-bg-hover: rgba(32, 38, 56, 0.96);
@@ -60,6 +61,7 @@
   --map-panel-btn-hover-bg: rgba(255, 255, 255, 1);
   --map-panel-header-border: rgba(0, 0, 0, 0.1);
   --map-panel-section-border: rgba(0, 0, 0, 0.08);
+  --map-panel-detail-surface: #ffffff;
 
   --map-chrome-bg: rgba(255, 255, 255, 0.94);
   --map-chrome-bg-hover: rgba(255, 255, 255, 1);
@@ -97,17 +99,12 @@
   --map-panel-btn-hover-bg: rgba(255, 255, 255, 0.14);
   --map-panel-header-border: rgba(255, 255, 255, 0.2);
   --map-panel-section-border: rgba(255, 255, 255, 0.1);
+  --map-panel-detail-surface: rgb(18, 22, 34);
 
   --map-accent-blue: rgba(147, 197, 253, 1);
   --map-accent-green: rgba(134, 239, 172, 1);
   --map-accent-red: rgba(252, 165, 165, 1);
   --map-accent-amber: rgba(253, 230, 138, 1);
-}
-
-/* Glass: detail overlays & parcel dialog (pre–dark-panel look) */
-[data-ui-theme='glass'] .map-panel.lead-details-panel,
-[data-ui-theme='glass'] .map-panel.deal-details-panel {
-  background: rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-ui-theme='glass'] .parcel-details-dialog {

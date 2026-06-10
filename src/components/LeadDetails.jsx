@@ -1,12 +1,41 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Phone, Mail, MapPin, Pencil, Trash2, Briefcase, ChevronRight, MoreVertical, Plus } from 'lucide-react'
+import {
+  Phone,
+  Mail,
+  MapPin,
+  Pencil,
+  Trash2,
+  Briefcase,
+  ChevronRight,
+  MoreVertical,
+  Plus,
+  MessageSquare,
+  StickyNote,
+  ArrowRightLeft,
+  Handshake,
+  Navigation,
+} from 'lucide-react'
 import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { PanelBackButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { DirectionsPicker } from './DirectionsPicker'
 import { cn } from '@/lib/utils'
-import { displayLeadName, formatLeadAddress, deleteLead, updateLead } from '@/utils/leads'
+import {
+  displayLeadName,
+  formatLeadAddress,
+  deleteLead,
+  updateLead,
+  getLeadStatus,
+  getLeadStatusMeta,
+  LEAD_STATUSES,
+} from '@/utils/leads'
+import {
+  setLeadStatus,
+  logLeadNote,
+  sortActivitiesNewestFirst,
+} from '@/utils/leadActivity'
 import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 import { findDealsForLead } from '@/utils/deals'
@@ -24,6 +53,53 @@ function getColumnName(colId, columns) {
 
 const MENU_WIDTH = 180
 
+const ACTIVITY_ICONS = {
+  call: Phone,
+  text: MessageSquare,
+  email: Mail,
+  note: StickyNote,
+  status: ArrowRightLeft,
+  deal: Handshake,
+}
+
+function LeadDetailSectionTitle({ children, action }) {
+  return (
+    <div className="flex items-center justify-between gap-2 mb-2.5">
+      <h3 className="lead-detail-section-title">{children}</h3>
+      {action}
+    </div>
+  )
+}
+
+function LeadActionTile({ icon: Icon, label, value, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={value || label}
+      className="lead-detail-action-tile disabled:opacity-40"
+    >
+      <Icon className="h-4 w-4 shrink-0 opacity-80" />
+      <span className="lead-detail-action-label">{label}</span>
+    </button>
+  )
+}
+
+function formatActivityWhen(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Lead-only detail panel — contact info, notes, linked deals.
  */
@@ -38,6 +114,7 @@ export function LeadDetails({
   onOpenParcelDetails,
   onEmailClick,
   onPhoneClick,
+  onTextClick,
   onGoToParcelOnMap,
   onLeadUpdate,
   onEditLead,
@@ -64,6 +141,9 @@ export function LeadDetails({
   const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
   const [savingShares, setSavingShares] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [activityNote, setActivityNote] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const [statusBusy, setStatusBusy] = useState(false)
   const menuTriggerRef = useRef(null)
 
   useEffect(() => {
@@ -86,6 +166,13 @@ export function LeadDetails({
     if (!lead?.id) return []
     return findDealsForLead(pipelines, lead.id)
   }, [lead, pipelines])
+
+  const effectiveStatus = getLeadStatus(lead, linkedDeals.length)
+  const statusMeta = getLeadStatusMeta(effectiveStatus)
+  const activities = useMemo(
+    () => sortActivitiesNewestFirst(lead),
+    [lead?.activity, lead?.id]
+  )
 
   if (!isOpen || !lead) return null
 
@@ -130,6 +217,41 @@ export function LeadDetails({
     setMenuOpen(true)
   }
 
+  const handleStatusChange = async (nextStatus) => {
+    if (!lead?.id || nextStatus === effectiveStatus || statusBusy) return
+    if (nextStatus === 'converted' && linkedDeals.length === 0) {
+      showToast('Create a deal first to mark as Converted', 'info')
+      return
+    }
+    setStatusBusy(true)
+    try {
+      const saved = await setLeadStatus(getToken, lead.id, nextStatus, {
+        fromStatus: lead.status || 'new',
+      })
+      onLeadUpdate?.(saved)
+    } catch (e) {
+      showToast(e.message || 'Could not update status', 'error')
+    } finally {
+      setStatusBusy(false)
+    }
+  }
+
+  const handleAddActivityNote = async () => {
+    const trimmed = activityNote.trim()
+    if (!trimmed || !lead?.id) return
+    setSavingNote(true)
+    try {
+      const saved = await logLeadNote(getToken, lead.id, trimmed)
+      onLeadUpdate?.(saved)
+      setActivityNote('')
+      showToast('Note added', 'success')
+    } catch (e) {
+      showToast(e.message || 'Could not add note', 'error')
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
   const handleShareChange = async (next) => {
     if (!isOwner || !getToken) return
     setShareState(next)
@@ -156,18 +278,17 @@ export function LeadDetails({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose?.() }}>
+    <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, false, onClose, isOpen)}>
       <DialogContent
         className="map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
         showCloseButton={false}
-        hideOverlay
+        detailFocusOverlay
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
-        suppressBackdrop
         instantDismiss={instantDismiss}
       >
         <DialogHeader
-          className="px-5 pt-5 pb-3 border-b border-white/20 flex-shrink-0 text-left"
+          className="px-5 pt-5 pb-4 border-b border-white/10 flex-shrink-0 text-left"
           style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}
         >
           <DialogDescription className="sr-only">Lead details</DialogDescription>
@@ -175,8 +296,21 @@ export function LeadDetails({
             <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
               <PanelBackButton onClick={onClose} />
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-xl font-semibold truncate">{name}</DialogTitle>
-                <p className="text-xs opacity-50 truncate mt-0.5" title={lead.address || undefined}>{address}</p>
+                <DialogTitle className="text-xl font-semibold truncate leading-tight">{name}</DialogTitle>
+                {address && (
+                  <p className="text-xs text-white/50 truncate mt-0.5" title={lead.address || undefined}>{address}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span
+                    className={cn(
+                      'inline-flex text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium',
+                      statusMeta.color
+                    )}
+                  >
+                    {statusMeta.label}
+                  </span>
+                  <VisibilityBadge resource={lead} className="normal-case tracking-normal text-[11px]" />
+                </div>
               </div>
             </div>
             <div className="map-panel-header-actions gap-1">
@@ -194,139 +328,221 @@ export function LeadDetails({
         </DialogHeader>
 
         <div
-          className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 space-y-4 min-h-0"
+          className="lead-detail-body flex-1 overflow-y-auto scrollbar-hide min-h-0"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          <div className="space-y-2">
-            {lead.phone && (
-              <button
-                type="button"
-                className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80"
-                onClick={() => onPhoneClick?.(lead.phone, parcelData)}
-              >
-                <Phone className="h-4 w-4 opacity-50 shrink-0" />
-                <span>{lead.phone}</span>
-              </button>
-            )}
-            {lead.email && (
-              <button
-                type="button"
-                className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80 truncate"
-                onClick={() => onEmailClick?.(lead.email, parcelData)}
-              >
-                <Mail className="h-4 w-4 opacity-50 shrink-0" />
-                <span className="truncate">{lead.email}</span>
-              </button>
-            )}
-            {lead.parcelId && (
-              <button
-                type="button"
-                className="w-full flex items-center gap-3 text-sm py-2 text-left hover:opacity-80"
-                onClick={() => {
-                  onClose?.()
-                  onGoToParcelOnMap?.(parcelData || lead)
-                }}
-              >
-                <MapPin className="h-4 w-4 opacity-50 shrink-0" />
-                <span>View on map</span>
-              </button>
-            )}
-            {hasCoords && (
-              <DirectionsPicker lat={parcelLat} lng={parcelLng} variant="row" />
-            )}
-          </div>
-
-          {(activeTeam && (isOwner || shareState.visibility !== VISIBILITY.PRIVATE)) && (
-            <section>
-              {isOwner ? (
-                <ResourceSharePicker
-                  team={activeTeam}
-                  visibility={shareState.visibility}
-                  sharedMemberUids={shareState.sharedMemberUids}
-                  onChange={handleShareChange}
-                  disabled={savingShares}
-                  allowExternalSharing={allowExternalSharing}
-                  collapsible
+          <div className="px-5 py-4 border-b border-white/[0.08]">
+            <div className="lead-detail-actions-row">
+              {lead.phone ? (
+                <LeadActionTile
+                  icon={Phone}
+                  label="Call"
+                  value={lead.phone}
+                  onClick={() => onPhoneClick?.(lead.phone, parcelData, lead.id)}
                 />
               ) : (
-                <div className="flex items-center gap-2">
-                  <VisibilityBadge resource={lead} />
-                </div>
+                <LeadActionTile icon={Phone} label="Call" value="No phone" disabled />
               )}
-            </section>
-          )}
+              {lead.phone ? (
+                <LeadActionTile
+                  icon={MessageSquare}
+                  label="Text"
+                  value={lead.phone}
+                  onClick={() => onTextClick?.(lead.phone, parcelData, lead.id)}
+                />
+              ) : (
+                <LeadActionTile icon={MessageSquare} label="Text" value="No phone" disabled />
+              )}
+              {lead.email ? (
+                <LeadActionTile
+                  icon={Mail}
+                  label="Email"
+                  value={lead.email}
+                  onClick={() => onEmailClick?.(lead.email, parcelData, lead.id)}
+                />
+              ) : (
+                <LeadActionTile icon={Mail} label="Email" value="No email" disabled />
+              )}
+              {lead.parcelId ? (
+                <LeadActionTile
+                  icon={MapPin}
+                  label="Map"
+                  value="View property"
+                  onClick={() => {
+                    onClose?.()
+                    onGoToParcelOnMap?.(parcelData || lead)
+                  }}
+                />
+              ) : (
+                <LeadActionTile icon={MapPin} label="Map" value="No parcel" disabled />
+              )}
+              {hasCoords ? (
+                <DirectionsPicker lat={parcelLat} lng={parcelLng} variant="tile" />
+              ) : (
+                <LeadActionTile icon={Navigation} label="Directions" value="No location" disabled />
+              )}
+            </div>
+          </div>
 
-          <section>
-            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Tags</h3>
-            <TagPicker
-              type="leads"
-              entity={lead}
-              tagRegistry={tagRegistry}
-              getToken={getToken}
-              onRegistryChange={onRefreshTags}
-              disabled={!onLeadUpdate}
-              hideWhenEmpty={false}
-              showAddTrigger={!!onLeadUpdate}
-              inline
-              onTagsChange={({ tagIds, tagMeta }) => {
-                onLeadUpdate?.({ id: lead.id, tagIds, tagMeta })
-              }}
-            />
-          </section>
+          <div className="px-5 py-4 lead-detail-columns-wrap">
+            <div className="space-y-3">
+              <section className="lead-detail-section">
+                <LeadDetailSectionTitle>Status</LeadDetailSectionTitle>
+                <div className="flex flex-wrap gap-1.5">
+                  {LEAD_STATUSES.filter((s) => s.id !== 'converted' || linkedDeals.length > 0).map((s) => {
+                    const active = effectiveStatus === s.id
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={statusBusy}
+                        onClick={() => handleStatusChange(s.id)}
+                        className={cn(
+                          'panel-filter-option lead-detail-status-btn',
+                          active && cn(s.color, 'panel-filter-option--status-active')
+                        )}
+                        aria-pressed={active}
+                      >
+                        {s.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
 
-          <section>
-            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Notes</h3>
-            <textarea
-              value={notes}
-              onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }}
-              onBlur={saveNotes}
-              rows={4}
-              className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none"
-              placeholder="Lead notes…"
-            />
-          </section>
+              <section className="lead-detail-section">
+                <LeadDetailSectionTitle>Tags</LeadDetailSectionTitle>
+                <TagPicker
+                  type="leads"
+                  entity={lead}
+                  tagRegistry={tagRegistry}
+                  getToken={getToken}
+                  onRegistryChange={onRefreshTags}
+                  disabled={!onLeadUpdate}
+                  hideWhenEmpty={false}
+                  showAddTrigger={!!onLeadUpdate}
+                  inline
+                  onTagsChange={({ tagIds, tagMeta }) => {
+                    onLeadUpdate?.({ id: lead.id, tagIds, tagMeta })
+                  }}
+                />
+              </section>
 
-          <LeadTasksSection
-            lead={lead}
-            leads={leads}
-            pipelines={pipelines}
-            teams={teams}
-            getToken={getToken}
-            onPipelinesChange={onPipelinesChange}
-            onOpenScheduleAtDate={onOpenScheduleAtDate}
-            refreshKey={taskListEpoch}
-          />
+              {(activeTeam && (isOwner || shareState.visibility !== VISIBILITY.PRIVATE)) && (
+                <section className="lead-detail-section">
+                  <LeadDetailSectionTitle>Sharing</LeadDetailSectionTitle>
+                  {isOwner ? (
+                    <ResourceSharePicker
+                      team={activeTeam}
+                      visibility={shareState.visibility}
+                      sharedMemberUids={shareState.sharedMemberUids}
+                      onChange={handleShareChange}
+                      disabled={savingShares}
+                      allowExternalSharing={allowExternalSharing}
+                      collapsible
+                    />
+                  ) : (
+                    <VisibilityBadge resource={lead} />
+                  )}
+                </section>
+              )}
 
-          <section>
-            <h3 className="text-xs font-semibold uppercase opacity-50 mb-2">Deals</h3>
-            {linkedDeals.length === 0 ? (
-              <p className="text-xs opacity-40 py-2">No deals yet. Add this lead to a pipe to start tracking.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {linkedDeals.map((d) => (
-                  <li key={d.id}>
-                    <button
-                      type="button"
-                      onClick={() => onOpenDeal?.(d, d.__pipelineId)}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-left"
-                    >
-                      <Briefcase className="h-4 w-4 shrink-0 opacity-50" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm truncate">{d.title || d.leadAddress}</div>
-                        <div className="text-[11px] opacity-40 flex gap-2 flex-wrap items-center">
-                          <span>{d.__pipelineTitle}</span>
-                          <span>{getColumnName(d.status, d.__columns)}</span>
-                          {formatTimeInState(d) && <span>{formatTimeInState(d)}</span>}
-                          <DealProfitBadge deal={d} className="text-[11px]" canSeeDealAmounts={canSeeDealAmounts} />
-                        </div>
-                      </div>
-                      <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+              <section className="lead-detail-section">
+                <LeadDetailSectionTitle>Deals</LeadDetailSectionTitle>
+                {linkedDeals.length === 0 ? (
+                  <p className="text-xs text-white/40">No deals yet. Add this lead to a pipe to start tracking.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {linkedDeals.map((d) => (
+                      <li key={d.id}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenDeal?.(d, d.__pipelineId)}
+                          className="lead-detail-deal-card"
+                        >
+                          <Briefcase className="h-4 w-4 shrink-0 opacity-50" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">{d.title || d.leadAddress}</div>
+                            <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
+                              <span>{d.__pipelineTitle}</span>
+                              <span>{getColumnName(d.status, d.__columns)}</span>
+                              {formatTimeInState(d) && <span>{formatTimeInState(d)}</span>}
+                              <DealProfitBadge deal={d} className="text-[11px]" canSeeDealAmounts={canSeeDealAmounts} />
+                            </div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
+
+            <div className="space-y-3">
+              <section className="lead-detail-section">
+                <LeadDetailSectionTitle>Activity</LeadDetailSectionTitle>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={activityNote}
+                    onChange={(e) => setActivityNote(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddActivityNote() }}
+                    placeholder="Add a note…"
+                    className="lead-detail-field flex-1 text-sm px-3 py-2"
+                    disabled={savingNote}
+                  />
+                  <Button size="sm" className="panel-action-btn shrink-0" onClick={handleAddActivityNote} disabled={savingNote || !activityNote.trim()}>
+                    {savingNote ? '…' : 'Add'}
+                  </Button>
+                </div>
+                {activities.length === 0 ? (
+                  <p className="text-xs text-white/40">No activity yet. Calls, texts, emails, and notes will appear here.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {activities.map((entry) => {
+                      const Icon = ACTIVITY_ICONS[entry.type] || StickyNote
+                      return (
+                        <li
+                          key={entry.id}
+                          className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg border border-white/10 bg-white/[0.04]"
+                        >
+                          <Icon className="h-3.5 w-3.5 mt-0.5 opacity-50 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-snug break-words">{entry.summary}</p>
+                            <p className="text-[10px] text-white/40 mt-0.5">{formatActivityWhen(entry.at)}</p>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </section>
+
+              <section className="lead-detail-section">
+                <LeadDetailSectionTitle>Notes</LeadDetailSectionTitle>
+                <textarea
+                  value={notes}
+                  onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }}
+                  onBlur={saveNotes}
+                  rows={4}
+                  className="lead-detail-field w-full text-sm px-3 py-2 resize-none"
+                  placeholder="Lead notes…"
+                />
+              </section>
+
+              <LeadTasksSection
+                lead={lead}
+                leads={leads}
+                pipelines={pipelines}
+                teams={teams}
+                getToken={getToken}
+                onPipelinesChange={onPipelinesChange}
+                onOpenScheduleAtDate={onOpenScheduleAtDate}
+                refreshKey={taskListEpoch}
+              />
+            </div>
+          </div>
         </div>
       </DialogContent>
 

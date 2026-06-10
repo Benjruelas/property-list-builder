@@ -653,6 +653,7 @@ export function OutreachPanel({ isOpen, onClose, onUseTemplate, initialTab = 'em
         className="map-panel list-panel outreach-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}
         hideOverlay
+        nestedOverlay
         topLayer
       >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
