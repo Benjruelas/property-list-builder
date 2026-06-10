@@ -13,10 +13,11 @@ function googleSessionBody(mapType) {
   if (mapType === 'street') {
     return { ...base, mapType: 'roadmap' }
   }
-  if (mapType === 'hybrid') {
-    return { ...base, mapType: 'satellite', layerTypes: ['layerRoadmap'] }
+  // Hybrid uses satellite imagery; CARTO voyager_only_labels overlay is added client-side.
+  if (mapType === 'hybrid' || mapType === 'satellite') {
+    return { ...base, mapType: 'satellite' }
   }
-  return { ...base, mapType: 'satellite' }
+  return { ...base, mapType: 'roadmap' }
 }
 
 function tileUrlForSession(session, key) {

@@ -124,6 +124,16 @@ export async function logLeadNote(getToken, leadId, noteText) {
   return appendLeadActivity(getToken, leadId, buildActivityEntry('note', trimmed))
 }
 
+export async function logLeadPhotosAdded(getToken, leadId, count = 1) {
+  const n = Math.max(1, Number(count) || 1)
+  const summary = n === 1 ? 'Photo added' : `${n} photos added`
+  return appendLeadActivity(getToken, leadId, buildActivityEntry('photo', summary, { count: n }))
+}
+
+export async function logLeadReportEvent(getToken, leadId, summary, meta = {}) {
+  return appendLeadActivity(getToken, leadId, buildActivityEntry('report', summary, meta))
+}
+
 export function sortActivitiesNewestFirst(lead) {
   const activities = Array.isArray(lead?.activity) ? [...lead.activity] : []
   return activities.sort((a, b) => (b.at || '').localeCompare(a.at || ''))

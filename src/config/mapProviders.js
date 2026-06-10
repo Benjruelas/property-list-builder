@@ -3,6 +3,13 @@ export const MAP_STYLE_SETTINGS = ['satellite', 'street', 'hybrid']
 
 export const GLYPHS_URL = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf'
 
+/** Raster label overlays for satellite / hybrid (street basemaps include labels). */
+export const CARTO_LABEL_TILES = {
+  satellite: 'https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png',
+  hybrid: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}@2x.png',
+}
+export const CARTO_LABEL_ATTRIBUTION = '&copy; OpenStreetMap &copy; CARTO'
+
 /** Same-origin parcel vector tiles (LandRecords via R2 cache). */
 export function parcelTileUrl() {
   if (typeof window === 'undefined') return '/api/tiles?z={z}&x={x}&y={y}'

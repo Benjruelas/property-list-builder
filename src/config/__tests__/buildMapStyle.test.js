@@ -14,9 +14,28 @@ describe('buildMapStyle', () => {
     const style = buildMapStyle(source, 'satellite')
     expect(style.version).toBe(8)
     expect(style.sources.basemap.tiles[0]).toContain('tile.googleapis.com')
-    expect(style.layers).toHaveLength(1)
+    expect(style.layers).toHaveLength(2)
     expect(style.layers[0].id).toBe('basemap-layer')
+    expect(style.layers[1].id).toBe('carto-labels-layer')
+    expect(style.sources['carto-labels'].tiles[0]).toContain('light_only_labels')
     expect(style.terrain).toBeUndefined()
+  })
+
+  it('adds voyager labels for hybrid and none for street', () => {
+    const source = {
+      tileUrl: 'https://example.com/{z}/{x}/{y}',
+      tileSize: 512,
+      maxzoom: 22,
+      attribution: 'test',
+      provider: 'google',
+    }
+    const hybrid = buildMapStyle(source, 'hybrid')
+    expect(hybrid.layers).toHaveLength(2)
+    expect(hybrid.sources['carto-labels'].tiles[0]).toContain('voyager_only_labels')
+
+    const street = buildMapStyle(source, 'street')
+    expect(street.layers).toHaveLength(1)
+    expect(street.sources['carto-labels']).toBeUndefined()
   })
 
   it('empty style has no sources', () => {

@@ -168,10 +168,12 @@
     min-width: 480px !important;
   }
 
-  /* Desktop: Leads, Deals, Quotes, Pipes & Schedule — same width as floating action bar */
+  /* Desktop: Leads, Deals, Quotes, Reports, Pipes & Schedule — same width as floating action bar */
   .leads-panel.fullscreen-panel,
   .deals-panel.fullscreen-panel,
   .quotes-panel.fullscreen-panel:not(.quote-details-panel):not(.quote-editor-panel),
+  .reports-panel.fullscreen-panel:not(.report-details-panel):not(.report-editor-panel),
+  .photos-panel.fullscreen-panel,
   .deal-pipeline-panel.fullscreen-panel {
     width: var(--action-bar-width) !important;
     min-width: 0 !important;
@@ -205,6 +207,17 @@
     min-width: 9.25rem !important;
     max-width: none !important;
     width: auto !important;
+  }
+
+  /* Desktop: Photo mode — centered panel, same footprint as Quotes/Reports */
+  .photo-mode-overlay.photos-panel.fullscreen-panel {
+    inset: auto !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%);
+    overflow: hidden;
   }
 
   /* Desktop: Activity — compact feed width (not action-bar width on large screens) */
@@ -3803,7 +3816,17 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 @media (min-width: 1440px) {
   :root {
-    --action-bar-width: min(96vw, 920px);
+    --action-bar-width: min(98vw, 1120px);
+  }
+}
+
+@media (min-width: 1440px) {
+  .mobile-action-bar-btn {
+    min-width: 2.75rem;
+    padding: 4px 2px 6px;
+  }
+  .mobile-action-bar-label {
+    font-size: 9px;
   }
 }
 
@@ -4765,4 +4788,203 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .quote-details-panel .quote-details-actions button[data-panel-action].panel-action-btn--danger:hover:not(:disabled) {
   background: rgba(185, 28, 28, 0.5) !important;
   border-color: rgba(252, 165, 165, 0.6) !important;
+}
+
+/* ---- Lead photos ---- */
+.lead-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 480px) {
+  .lead-photo-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.photo-mode-overlay,
+.photo-annotator-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10030;
+  display: flex;
+  flex-direction: column;
+  background: #0a0c12;
+  color: var(--map-chrome-text, #fff);
+}
+
+.photo-mode-header,
+.photo-annotator-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 12px 12px;
+  background: var(--map-chrome-bg, rgba(18, 22, 34, 0.92));
+  border-bottom: 1px solid var(--map-chrome-border, rgba(255, 255, 255, 0.2));
+  box-shadow: var(--map-chrome-shadow);
+}
+
+.photo-mode-viewport {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: hidden;
+}
+
+.photo-mode-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-mode-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  margin: 1.5rem;
+  max-width: 320px;
+  width: 100%;
+}
+
+.photo-mode-footer {
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--map-chrome-bg);
+  border-top: 1px solid var(--map-chrome-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.photo-mode-thumbs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  width: 100%;
+  padding-bottom: 4px;
+}
+
+.photo-mode-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.photo-mode-shutter {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.photo-mode-overlay .photo-mode-btn {
+  border: 1px solid var(--map-chrome-border, rgba(255, 255, 255, 0.35)) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--map-chrome-text, #fff) !important;
+  box-shadow: none !important;
+}
+
+.photo-mode-overlay .photo-mode-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  color: #fff !important;
+}
+
+.photo-mode-overlay .photo-mode-btn--primary {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  font-weight: 600;
+}
+
+.photo-mode-overlay .photo-mode-btn--primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.28) !important;
+}
+
+.photo-annotator-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #111;
+}
+
+.photo-annotator-toolbar {
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--map-chrome-bg);
+  border-top: 1px solid var(--map-chrome-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-annotator-tools,
+.photo-annotator-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.photo-annotator-tool-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--map-chrome-border);
+  background: var(--map-chrome-bg-hover, rgba(32, 38, 56, 0.96));
+  color: var(--map-chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-annotator-tool-btn.is-active {
+  border-color: var(--map-accent-blue, #93c5fd);
+  background: rgba(147, 197, 253, 0.15);
+}
+
+.photo-annotator-colors {
+  display: flex;
+  gap: 6px;
+}
+
+.photo-annotator-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+.photo-annotator-swatch.is-active {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.photo-annotator-stroke-slider {
+  width: 72px;
+  accent-color: var(--map-accent-blue, #93c5fd);
+}
+
+.report-section-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
 }

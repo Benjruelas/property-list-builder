@@ -1,17 +1,33 @@
 import { useRef, useState, useLayoutEffect, useCallback } from 'react'
 import {
   Calendar,
+  List,
   ListTodo,
   Menu,
   UserSearch,
   Briefcase,
   Bell,
+  Camera,
+  FileText,
+  ClipboardList,
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { cn } from '@/lib/utils'
 import { PipeIcon } from './PipeIcon'
 import { useActionBarLayout } from '@/hooks/useActionBarLayout'
+import { prefetchPanel } from '@/utils/panelChunks'
 import { ActionBarMenu } from './ActionBarMenu'
+
+const BAR_PREFETCH_KEY = {
+  pipes: 'dealPipeline',
+  tasks: 'tasks',
+  schedule: 'schedule',
+  leads: 'leads',
+  deals: 'deals',
+  quotes: 'quotes',
+  forms: 'forms',
+  reports: 'reports',
+}
 
 /**
  * FloatingActionBar — responsive bottom dock (phone → wide desktop).
@@ -25,6 +41,10 @@ const ITEM_DEFS = {
   leads: { label: 'Leads', Icon: UserSearch },
   deals: { label: 'Deals', Icon: Briefcase },
   quotes: { label: 'Quotes', Icon: QuoteIcon },
+  forms: { label: 'Forms', Icon: ClipboardList },
+  photos: { label: 'Photos', Icon: Camera },
+  reports: { label: 'Reports', Icon: FileText },
+  lists: { label: 'Lists', Icon: List },
   activity: { label: 'Activity', Icon: Bell },
   menu: { label: 'Menu', Icon: Menu },
 }
@@ -37,6 +57,8 @@ export function MobileActionBar({
   onOpenLeads,
   onOpenDeals,
   onOpenQuotes,
+  onOpenPhotos,
+  onOpenReports,
   onOpenActivity,
   showMenu = false,
   setShowMenu,
@@ -90,6 +112,10 @@ export function MobileActionBar({
     leads: onOpenLeads,
     deals: onOpenDeals,
     quotes: onOpenQuotes,
+    photos: onOpenPhotos,
+    reports: onOpenReports,
+    lists: onOpenListPanel,
+    forms: onOpenForms,
     activity: onOpenActivity,
     menu: () => setShowMenu?.(!showMenu),
   }
@@ -101,6 +127,7 @@ export function MobileActionBar({
       <ActionBarMenu
         show={showMenu}
         onClose={() => setShowMenu?.(false)}
+        barIds={barIds}
         overflowPrimaryIds={overflowPrimaryIds}
         onOpenPipes={onOpenPipes}
         onOpenTasks={onOpenTasks}
@@ -108,6 +135,8 @@ export function MobileActionBar({
         onOpenLeads={onOpenLeads}
         onOpenDeals={onOpenDeals}
         onOpenQuotes={onOpenQuotes}
+        onOpenPhotos={onOpenPhotos}
+        onOpenReports={onOpenReports}
         onOpenActivity={onOpenActivity}
         onOpenListPanel={onOpenListPanel}
         selectedListIds={selectedListIds}
@@ -141,6 +170,10 @@ export function MobileActionBar({
                 ref={id === 'menu' ? menuBtnRef : undefined}
                 type="button"
                 onClick={() => handlers[id]?.()}
+                onPointerEnter={() => {
+                  const key = BAR_PREFETCH_KEY[id]
+                  if (key) prefetchPanel(key)
+                }}
                 className={cn('mobile-action-bar-btn', active && 'is-active')}
                 aria-label={label}
                 title={label}

@@ -100,6 +100,8 @@ export function selectPanelProps(state) {
   const formsFill = findFrame(state, 'forms.fill')
   const quotesEditor = findFrame(state, 'quotes.editor')
   const quotesDetail = findFrame(state, 'quotes.detail')
+  const reportsEditor = findFrame(state, 'reports.editor')
+  const reportsDetail = findFrame(state, 'reports.detail')
   const teamsDetail = findFrame(state, 'teams.detail')
   const outreachFrame = findFrame(state, 'outreach')
   const emailComposerFrame = findFrame(state, 'emailComposer')
@@ -144,6 +146,9 @@ export function selectPanelProps(state) {
     quotesDetailQuoteId: quotesDetail?.quoteId ?? null,
     quotesDetailQuote: quotesDetail?.quote ?? null,
     quotesDetailReturnToDeal: !!quotesDetail?.returnToDeal,
+    isReportsPanelOpen: hasFrameRoot(state, 'reports'),
+    reportsEditorFrame: reportsEditor ?? null,
+    reportsDetailReportId: reportsDetail?.reportId ?? null,
     isTeamsPanelOpen: hasFrameRoot(state, 'teams'),
     teamsDetailTeamId: teamsDetail?.teamId ?? null,
     isSettingsPanelOpen: hasFrameRoot(state, 'settings'),

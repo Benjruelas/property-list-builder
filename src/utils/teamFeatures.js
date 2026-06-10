@@ -14,6 +14,8 @@ export const TEAM_FEATURE_IDS = [
   'deals',
   'forms',
   'quotes',
+  'photos',
+  'reports',
 ]
 
 export const TEAM_FEATURE_LABELS = {
@@ -28,6 +30,8 @@ export const TEAM_FEATURE_LABELS = {
   deals: 'Deals',
   forms: 'Forms',
   quotes: 'Quotes',
+  photos: 'Photos',
+  reports: 'Reports',
 }
 
 export function defaultMemberFeatures() {

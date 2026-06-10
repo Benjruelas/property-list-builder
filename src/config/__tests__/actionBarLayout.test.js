@@ -11,7 +11,7 @@ describe('actionBarLayout', () => {
   it('shows full desktop bar at 1440px+', () => {
     const { barIds, overflowPrimaryIds } = resolveActionBarLayout(1600)
     expect(barIds).toEqual([
-      'pipes', 'tasks', 'schedule', 'leads', 'deals', 'quotes', 'activity', 'menu',
+      'pipes', 'tasks', 'schedule', 'leads', 'deals', 'quotes', 'forms', 'photos', 'reports', 'lists', 'activity', 'menu',
     ])
     expect(overflowPrimaryIds).toEqual([])
   })

@@ -14,6 +14,8 @@ import {
   ArrowRightLeft,
   Handshake,
   Navigation,
+  Camera,
+  FileText,
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
@@ -45,6 +47,8 @@ import { DealProfitBadge } from './DealLineItemsSection'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { TagPicker } from './tags/TagPicker'
+import { LeadPhotoGallery } from './photos/LeadPhotoGallery'
+import { fetchPhotoReports } from '@/utils/photoReports'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -60,6 +64,8 @@ const ACTIVITY_ICONS = {
   note: StickyNote,
   status: ArrowRightLeft,
   deal: Handshake,
+  photo: Camera,
+  report: FileText,
 }
 
 function LeadDetailSectionTitle({ children, action }) {
@@ -130,6 +136,11 @@ export function LeadDetails({
   leads = [],
   taskListEpoch = 0,
   currentUserId = null,
+  currentUser = null,
+  canAccessPhotos = true,
+  canAccessReports = true,
+  onCreatePhotoReport,
+  onOpenPhotoReport,
   canSeeDealAmounts = true,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
@@ -144,6 +155,7 @@ export function LeadDetails({
   const [activityNote, setActivityNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
+  const [leadReports, setLeadReports] = useState([])
   const menuTriggerRef = useRef(null)
 
   useEffect(() => {
@@ -161,6 +173,23 @@ export function LeadDetails({
   useEffect(() => {
     setMenuOpen(false)
   }, [lead?.id, isOpen])
+
+  useEffect(() => {
+    if (!lead?.id || !getToken || !canAccessReports || !onOpenPhotoReport) {
+      setLeadReports([])
+      return undefined
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await fetchPhotoReports(getToken, { leadId: lead.id })
+        if (!cancelled) setLeadReports(Array.isArray(list) ? list : [])
+      } catch {
+        if (!cancelled) setLeadReports([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [lead?.id, getToken, canAccessReports, onOpenPhotoReport])
 
   const linkedDeals = useMemo(() => {
     if (!lead?.id) return []
@@ -427,6 +456,57 @@ export function LeadDetails({
                   }}
                 />
               </section>
+
+              {canAccessPhotos && (
+                <LeadPhotoGallery
+                  lead={lead}
+                  getToken={getToken}
+                  currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
+                  onLeadUpdate={onLeadUpdate}
+                />
+              )}
+
+              {canAccessReports && onCreatePhotoReport && (
+                <section className="lead-detail-section">
+                  <LeadDetailSectionTitle
+                    action={(
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => onCreatePhotoReport(lead.id)}
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Create report
+                      </Button>
+                    )}
+                  >
+                    Photo reports
+                  </LeadDetailSectionTitle>
+                  {leadReports.length === 0 ? (
+                    <p className="text-xs text-white/40 py-1">No photo reports yet</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {leadReports.map((report) => (
+                        <li key={report.id}>
+                          <button
+                            type="button"
+                            onClick={() => onOpenPhotoReport?.(report.id)}
+                            className="lead-detail-deal-card w-full"
+                          >
+                            <FileText className="h-4 w-4 shrink-0 opacity-50" />
+                            <div className="flex-1 min-w-0 text-left">
+                              <div className="text-sm font-medium truncate">{report.title || 'Photo Report'}</div>
+                              <div className="text-[11px] text-white/45 mt-0.5">{report.status || 'draft'}</div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
 
               {(activeTeam && (isOwner || shareState.visibility !== VISIBILITY.PRIVATE)) && (
                 <section className="lead-detail-section">

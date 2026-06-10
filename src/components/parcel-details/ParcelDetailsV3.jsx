@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Phone, ListPlus, UserPlus, CloudRain, /* Telescope, */ CheckCircle2, Loader2 } from 'lucide-react'
+import { X, Phone, ListPlus, UserPlus, CloudRain, Camera, /* Telescope, */ CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { PanelBackButton } from '../ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
@@ -24,7 +24,7 @@ const TABS = [
  */
 const OUTSIDE_CLOSE_GRACE_MS = 500
 
-export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false, obscuredByPanel = false }) {
+export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onOpenPhotos, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false, obscuredByPanel = false }) {
   const data = useParcelDetailsData({ isOpen, parcelData, lists, enableAutoClose, onClose })
   const [activeTab, setActiveTab] = useState('overview')
   const openedAtRef = useRef(0)
@@ -177,6 +177,18 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
               <div className="flex flex-1 justify-center min-w-0">
                 <button type="button" onClick={() => onConvertToLead()} className="parcel-details-action-btn p-3.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white transition-colors" title="Convert to Lead">
                   <UserPlus size={22} />
+                </button>
+              </div>
+            )}
+            {onOpenPhotos && (
+              <div className="flex flex-1 justify-center min-w-0">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onOpenPhotos() }}
+                  className="parcel-details-action-btn p-3.5 rounded-xl bg-slate-600/80 hover:bg-slate-600 text-white transition-colors"
+                  title="Photos"
+                >
+                  <Camera size={22} />
                 </button>
               </div>
             )}

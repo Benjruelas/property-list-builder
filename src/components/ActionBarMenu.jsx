@@ -8,23 +8,54 @@ import {
   Settings,
   User,
   FileText,
+  ClipboardList,
   Briefcase,
   Calendar,
   ListTodo,
   Bell,
+  Camera,
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { PipeIcon } from './PipeIcon'
 
-const OVERFLOW_PRIMARY = [
+/** Bar-primary items that only appear in the menu when they overflow off the action bar. */
+const BAR_OVERFLOW_ONLY = [
   { id: 'pipes', label: 'Pipes', Icon: PipeIcon, tour: 'menu-pipes' },
   { id: 'tasks', label: 'Tasks', Icon: ListTodo, tour: 'menu-tasks' },
   { id: 'schedule', label: 'Schedule', Icon: Calendar, tour: 'menu-schedule' },
   { id: 'leads', label: 'Leads', Icon: UserSearch, tour: 'menu-leads' },
   { id: 'deals', label: 'Deals', Icon: Briefcase, tour: 'menu-deals' },
   { id: 'quotes', label: 'Quotes', Icon: QuoteIcon, tour: 'menu-quotes' },
-  { id: 'activity', label: 'Activity', Icon: Bell, tour: 'menu-notifications' },
+  { id: 'forms', label: 'Forms', Icon: ClipboardList, tour: 'menu-forms' },
+  { id: 'photos', label: 'Photos', Icon: Camera, tour: 'menu-photos' },
+  { id: 'reports', label: 'Reports', Icon: FileText, tour: 'menu-reports' },
 ]
+
+const TOOLS_MENU = [
+  { id: 'lists', label: 'Lists', Icon: List, tour: 'menu-lists' },
+  { id: 'paths', label: 'Paths', Icon: Route, tour: 'menu-paths' },
+  { id: 'outreach', label: 'Outreach', Icon: Send, tour: 'menu-outreach' },
+  { id: 'teams', label: 'Teams', Icon: Users2, tour: 'menu-teams' },
+]
+
+function MenuDivider() {
+  return <div className="my-1 border-t hamburger-menu-divider" role="separator" />
+}
+
+function MenuButton({ tour, onClick, Icon, label, trailing = null }) {
+  return (
+    <button
+      type="button"
+      data-tour={tour}
+      onClick={onClick}
+      className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
+    >
+      <Icon className="h-4 w-4 flex-shrink-0" />
+      <span className="flex-1">{label}</span>
+      {trailing}
+    </button>
+  )
+}
 
 /**
  * Overflow menu for the floating action bar (and former desktop hamburger).
@@ -32,6 +63,7 @@ const OVERFLOW_PRIMARY = [
 export function ActionBarMenu({
   show,
   onClose,
+  barIds = [],
   overflowPrimaryIds = [],
   onOpenPipes,
   onOpenTasks,
@@ -39,6 +71,8 @@ export function ActionBarMenu({
   onOpenLeads,
   onOpenDeals,
   onOpenQuotes,
+  onOpenPhotos,
+  onOpenReports,
   onOpenActivity,
   onOpenListPanel,
   selectedListIds = [],
@@ -65,15 +99,30 @@ export function ActionBarMenu({
     leads: onOpenLeads,
     deals: onOpenDeals,
     quotes: onOpenQuotes,
+    photos: onOpenPhotos,
+    reports: onOpenReports,
+    lists: onOpenListPanel,
+    forms: onOpenForms,
     activity: onOpenActivity,
+    paths: onOpenPathsPanel,
+    outreach: onOpenOutreach,
+    teams: onOpenTeamsPanel,
   }
 
+  const onBarSet = new Set(barIds.filter((id) => id !== 'menu'))
   const overflowSet = new Set(overflowPrimaryIds)
-  const visibleOverflow = OVERFLOW_PRIMARY.filter((item) => {
-    if (!overflowSet.has(item.id)) return false
-    if (item.id === 'activity' && !currentUser) return false
-    return true
-  })
+
+  const overflowMenuItems = BAR_OVERFLOW_ONLY.filter(
+    (item) => overflowSet.has(item.id) && !onBarSet.has(item.id)
+  )
+
+  const toolsMenuItems = TOOLS_MENU.filter((item) => !onBarSet.has(item.id))
+
+  const showActivityInMenu = currentUser && !onBarSet.has('activity')
+  const showOverflowSection = overflowMenuItems.length > 0
+  const showToolsSection = toolsMenuItems.length > 0
+  const showTopDivider = showActivityInMenu && (showOverflowSection || showToolsSection)
+  const showMiddleDivider = showOverflowSection && showToolsSection
 
   const run = (fn) => {
     onClose?.()
@@ -92,85 +141,54 @@ export function ActionBarMenu({
             : undefined
         }
       >
-        {visibleOverflow.map(({ id, label, Icon, tour }) => (
-          <button
-            key={id}
-            type="button"
-            data-tour={tour}
-            onClick={() => run(handlers[id])}
-            className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-          >
-            <Icon className="h-4 w-4 flex-shrink-0" />
-            <span className="flex-1">{label}</span>
-            {id === 'activity' && activityUnreadCount > 0 && (
-              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
-                {activityUnreadCount > 99 ? '99+' : activityUnreadCount}
-              </span>
-            )}
-          </button>
-        ))}
-
-        {visibleOverflow.length > 0 && (
-          <div className="my-1 border-t hamburger-menu-divider" />
+        {showActivityInMenu && (
+          <MenuButton
+            tour="menu-notifications"
+            Icon={Bell}
+            label="Activity"
+            onClick={() => run(onOpenActivity)}
+            trailing={
+              activityUnreadCount > 0 ? (
+                <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
+                  {activityUnreadCount > 99 ? '99+' : activityUnreadCount}
+                </span>
+              ) : null
+            }
+          />
         )}
 
-        <button
-          type="button"
-          data-tour="menu-lists"
-          onClick={() => run(onOpenListPanel)}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <List className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1">Lists</span>
-          {selectedListIds.length > 0 && (
-            <Circle className="h-2 w-2 fill-amber-400 text-amber-400 flex-shrink-0" />
-          )}
-        </button>
+        {showTopDivider && <MenuDivider />}
 
-        <button
-          type="button"
-          data-tour="menu-paths"
-          onClick={() => run(onOpenPathsPanel)}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <Route className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1">Paths</span>
-          {isPathTrackingActive && (
-            <Circle className="h-2 w-2 fill-red-500 text-red-500 flex-shrink-0" />
-          )}
-        </button>
+        {overflowMenuItems.map(({ id, label, Icon, tour }) => (
+          <MenuButton
+            key={id}
+            tour={tour}
+            Icon={Icon}
+            label={label}
+            onClick={() => run(handlers[id])}
+          />
+        ))}
 
-        <button
-          type="button"
-          data-tour="menu-outreach"
-          onClick={() => run(onOpenOutreach)}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <Send className="h-4 w-4 flex-shrink-0" />
-          <span>Outreach</span>
-        </button>
+        {showMiddleDivider && <MenuDivider />}
 
-        <button
-          type="button"
-          data-tour="menu-forms"
-          onClick={() => run(onOpenForms)}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <FileText className="h-4 w-4 flex-shrink-0" />
-          <span>Forms</span>
-        </button>
+        {toolsMenuItems.map(({ id, label, Icon, tour }) => (
+          <MenuButton
+            key={id}
+            tour={tour}
+            Icon={Icon}
+            label={label}
+            onClick={() => run(handlers[id])}
+            trailing={
+              id === 'lists' && selectedListIds.length > 0 ? (
+                <Circle className="h-2 w-2 fill-amber-400 text-amber-400 flex-shrink-0" />
+              ) : id === 'paths' && isPathTrackingActive ? (
+                <Circle className="h-2 w-2 fill-red-500 text-red-500 flex-shrink-0" />
+              ) : null
+            }
+          />
+        ))}
 
-        <button
-          type="button"
-          data-tour="menu-teams"
-          onClick={() => run(onOpenTeamsPanel)}
-          className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
-        >
-          <Users2 className="h-4 w-4 flex-shrink-0" />
-          <span>Teams</span>
-        </button>
-
-        <div className="my-1 border-t hamburger-menu-divider" />
+        <MenuDivider />
 
         {currentUser ? (
           <>

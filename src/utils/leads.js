@@ -4,6 +4,7 @@
 
 import { splitOwnerName } from './ownerName'
 import { getFullAddress } from './dealPipeline'
+import { collectParcelIdCandidates, resolveParcelId } from './parcelPropertyMap'
 
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
@@ -168,14 +169,27 @@ export async function deleteLead(getToken, leadId) {
   }
 }
 
-export function isParcelALead(leads, parcelId) {
-  if (!parcelId) return false
-  return (leads || []).some((l) => l.parcelId === parcelId)
+function parcelIdCandidateSet(parcelOrId) {
+  if (parcelOrId == null || parcelOrId === '') return new Set()
+  if (typeof parcelOrId === 'object') {
+    return new Set(collectParcelIdCandidates(parcelOrId).map((id) => String(id).trim()).filter(Boolean))
+  }
+  const s = String(parcelOrId).trim()
+  return s ? new Set([s]) : new Set()
 }
 
-export function findLeadByParcelId(leads, parcelId) {
-  if (!parcelId) return null
-  return (leads || []).find((l) => l.parcelId === parcelId) || null
+export function findLeadByParcelId(leads, parcelOrId) {
+  const ids = parcelIdCandidateSet(parcelOrId)
+  if (!ids.size) return null
+  return (leads || []).find((l) => {
+    const pid = l?.parcelId
+    if (pid == null || pid === '') return false
+    return ids.has(String(pid).trim())
+  }) || null
+}
+
+export function isParcelALead(leads, parcelOrId) {
+  return !!findLeadByParcelId(leads, parcelOrId)
 }
 
 export function displayLeadName(lead) {
@@ -244,12 +258,34 @@ export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {
     firstName,
     lastName,
     address: getFullAddress(parcelData),
-    parcelId: parcelData?.id || null,
+    parcelId: resolveParcelId(parcelData) || parcelData?.id || null,
     lat: parcelData?.lat ?? (parcelData?.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
     lng: parcelData?.lng ?? (parcelData?.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
     phone: skipTrace?.phone || skipTrace?.phoneNumbers?.[0] || '',
     email: skipTrace?.email || skipTrace?.emails?.[0] || '',
     notes: '',
     properties: parcelData?.properties || null,
+  }
+}
+
+/** Minimal lead payload for silent create-from-parcel (photo mode, etc.). */
+export function buildAutoLeadPayloadFromParcel(parcelData, skipTrace = null) {
+  const prefill = buildLeadPrefillFromParcel(parcelData, skipTrace)
+  const address = (prefill.address || parcelData?.address || '').trim()
+  if (!address) throw new Error('Could not determine parcel address')
+  let firstName = (prefill.firstName || '').trim()
+  let lastName = (prefill.lastName || '').trim()
+  if (!firstName && !lastName) lastName = 'Property'
+  return {
+    firstName,
+    lastName,
+    address,
+    phone: (prefill.phone || '').trim() || null,
+    email: (prefill.email || '').trim() || null,
+    notes: '',
+    parcelId: prefill.parcelId,
+    lat: prefill.lat,
+    lng: prefill.lng,
+    properties: prefill.properties,
   }
 }

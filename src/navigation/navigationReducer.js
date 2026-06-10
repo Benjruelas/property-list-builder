@@ -206,6 +206,7 @@ function filterStackForKeep(stack, keep) {
       (keep.paths && root === 'paths') ||
       (keep.forms && root === 'forms') ||
       (keep.quotes && root === 'quotes') ||
+      (keep.reports && root === 'reports') ||
       (keep.teams && root === 'teams') ||
       (keep.settings && root === 'settings') ||
       (keep.outreach && root === 'outreach') ||

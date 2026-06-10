@@ -23,6 +23,7 @@ export function recipeClosePrimaryExcept(currentStack, keep, append = []) {
       paths: root === 'paths',
       forms: root === 'forms',
       quotes: root === 'quotes',
+      reports: root === 'reports',
       teams: root === 'teams',
       settings: root === 'settings',
       outreach: root === 'outreach',
@@ -81,6 +82,11 @@ export function recipeOpenForms(currentStack) {
 /** Legacy: openQuotesPanel */
 export function recipeOpenQuotes(currentStack) {
   return recipeClosePrimaryExcept(currentStack, { quotes: true }, [{ type: 'quotes' }])
+}
+
+/** Legacy: openReportsPanel */
+export function recipeOpenReports(currentStack) {
+  return recipeClosePrimaryExcept(currentStack, { reports: true }, [{ type: 'reports' }])
 }
 
 /** Legacy: openTeamsPanel */

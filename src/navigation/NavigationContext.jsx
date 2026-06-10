@@ -23,6 +23,7 @@ import {
   recipeOpenQuoteEditorFromDeal,
   recipeOpenQuoteDetailFromDeal,
   recipeOpenQuotes,
+  recipeOpenReports,
   recipeOpenSchedule,
   recipeOpenScheduleAtDate,
   recipeOpenSettings,
@@ -119,6 +120,10 @@ export function NavigationProvider({ children }) {
 
   const openQuotes = useCallback(() => {
     replaceStack(recipeOpenQuotes(state.navStack))
+  }, [state.navStack, replaceStack])
+
+  const openReports = useCallback(() => {
+    replaceStack(recipeOpenReports(state.navStack))
   }, [state.navStack, replaceStack])
 
   const openTeams = useCallback(() => {
@@ -245,6 +250,14 @@ export function NavigationProvider({ children }) {
     push({ type: 'quotes.detail', quoteId })
   }, [push])
 
+  const pushReportsEditor = useCallback((editorFrame) => {
+    push({ type: 'reports.editor', ...editorFrame })
+  }, [push])
+
+  const pushReportsDetail = useCallback((reportId) => {
+    push({ type: 'reports.detail', reportId })
+  }, [push])
+
   const pushTeamsDetail = useCallback((teamId) => {
     push({ type: 'teams.detail', teamId })
   }, [push])
@@ -336,6 +349,7 @@ export function NavigationProvider({ children }) {
     openPaths,
     openForms,
     openQuotes,
+    openReports,
     openTeams,
     openSettings,
     openActivity,
@@ -365,6 +379,8 @@ export function NavigationProvider({ children }) {
     popFormsSubView,
     pushQuotesEditor,
     pushQuotesDetail,
+    pushReportsEditor,
+    pushReportsDetail,
     pushTeamsDetail,
     openTaskInPipes,
     showParcelPopup,
@@ -406,6 +422,7 @@ export function NavigationProvider({ children }) {
     openPaths,
     openForms,
     openQuotes,
+    openReports,
     openTeams,
     openSettings,
     openActivity,
@@ -435,6 +452,8 @@ export function NavigationProvider({ children }) {
     popFormsSubView,
     pushQuotesEditor,
     pushQuotesDetail,
+    pushReportsEditor,
+    pushReportsDetail,
     pushTeamsDetail,
     openTaskInPipes,
     showParcelPopup,

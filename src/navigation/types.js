@@ -130,6 +130,24 @@
  */
 
 /**
+ * @typedef {object} ReportsFrame
+ * @property {'reports'} type
+ */
+
+/**
+ * @typedef {object} ReportsEditorFrame
+ * @property {'reports.editor'} type
+ * @property {string} [leadId]
+ * @property {object} [report]
+ */
+
+/**
+ * @typedef {object} ReportsDetailFrame
+ * @property {'reports.detail'} type
+ * @property {string} reportId
+ */
+
+/**
  * @typedef {object} TeamsFrame
  * @property {'teams'} type
  */
@@ -174,6 +192,7 @@
  *   PipesFrame | PipesDealFrame | PipesLeadFrame | TasksFrame | ScheduleFrame | ScheduleLeadFrame |
  *   PathsFrame | FormsFrame | FormsEditFrame | FormsFillFrame |
  *   QuotesFrame | QuotesEditorFrame | QuotesDetailFrame |
+ *   ReportsFrame | ReportsEditorFrame | ReportsDetailFrame |
  *   TeamsFrame | TeamsDetailFrame | SettingsFrame | SkipTracedFrame |
  *   OutreachFrame | EmailComposerFrame | BulkEmailPreviewFrame} NavFrame
  */
@@ -284,6 +303,7 @@ export const ROOT_PANEL_TYPES = new Set([
   'paths',
   'forms',
   'quotes',
+  'reports',
   'teams',
   'settings',
   'skipTraced',

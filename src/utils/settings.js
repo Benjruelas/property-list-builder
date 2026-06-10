@@ -59,6 +59,9 @@ export const DEFAULT_SETTINGS = {
 
   /** Default email/text templates when sending quotes */
   quoteSendTemplates: null,
+
+  /** Default email/text templates when sending photo reports */
+  reportSendTemplates: null,
 }
 
 export function getSettings() {
@@ -78,6 +81,9 @@ export function getSettings() {
       }
       if (saved.quoteSendTemplates && typeof saved.quoteSendTemplates === 'object') {
         merged.quoteSendTemplates = saved.quoteSendTemplates
+      }
+      if (saved.reportSendTemplates && typeof saved.reportSendTemplates === 'object') {
+        merged.reportSendTemplates = saved.reportSendTemplates
       }
       if (!Object.prototype.hasOwnProperty.call(saved, 'uiTheme')) {
         merged.uiTheme = DEFAULT_UI_THEME
@@ -113,6 +119,9 @@ export function updateSettings(partial, getToken) {
   }
   if (partial.quoteSendTemplates && typeof partial.quoteSendTemplates === 'object') {
     next = { ...next, quoteSendTemplates: partial.quoteSendTemplates }
+  }
+  if (partial.reportSendTemplates && typeof partial.reportSendTemplates === 'object') {
+    next = { ...next, reportSendTemplates: partial.reportSendTemplates }
   }
   next.uiTheme = normalizeUiTheme(next.uiTheme)
   try {

@@ -1,4 +1,4 @@
-import { ChevronUp, ListPlus, UserPlus, X } from 'lucide-react'
+import { ChevronUp, ListPlus, UserPlus, Camera, X } from 'lucide-react'
 import { OwnerOccupiedBadge } from '@/components/OwnerOccupiedBadge'
 
 /**
@@ -66,6 +66,15 @@ export function TourDemoParcelPopup() {
           title="Add to Pipeline"
         >
           <UserPlus size={13} />
+        </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          data-tour="parcel-demo-photos"
+          className="parcel-popup-card__btn-secondary p-2 rounded-lg transition-colors pointer-events-none"
+          title="Photos"
+        >
+          <Camera size={13} />
         </button>
       </div>
     </div>

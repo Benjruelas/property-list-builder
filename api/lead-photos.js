@@ -1,0 +1,300 @@
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import {
+  getLeadWithAccess,
+  saveAllLeads,
+  canEditLead,
+} from './lib/leadAccess.js'
+
+/**
+ * Lead photo upload/download via R2.
+ * POST: upload original + thumbnail, append to lead.photos
+ * PATCH: update annotations / annotated image
+ * GET: ?key=lead-photos/...
+ * DELETE: remove photo from R2 + lead.photos
+ */
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024
+const MAX_PHOTOS_PER_LEAD = 200
+
+let _s3
+function s3() {
+  if (_s3) return _s3
+  _s3 = new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+  })
+  return _s3
+}
+
+async function verifyFirebaseToken(idToken) {
+  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
+  if (!apiKey || !idToken) return null
+  try {
+    const r = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      }
+    )
+    if (!r.ok) return null
+    const data = await r.json()
+    const user = data.users && data.users[0]
+    if (!user) return null
+    return { uid: user.localId, email: (user.email || '').toLowerCase() }
+  } catch (e) {
+    console.error('Token verify error', e.message)
+    return null
+  }
+}
+
+function sanitizeId(v) {
+  return String(v || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 80)
+}
+
+function decodeBase64(fileBase64) {
+  const cleaned = String(fileBase64 || '').replace(/^data:[^;]+;base64,/, '')
+  try {
+    const buf = Buffer.from(cleaned, 'base64')
+    if (!buf.length || buf.length > MAX_FILE_BYTES) return null
+    return buf
+  } catch {
+    return null
+  }
+}
+
+function photoKey(ownerUid, leadId, photoId, variant) {
+  const ext = variant === 'original' || variant === 'annotated' ? 'jpg' : 'jpg'
+  return `lead-photos/${ownerUid}/${leadId}/${photoId}/${variant}.${ext}`
+}
+
+async function canAccessPhotoKey(user, key) {
+  if (!key.startsWith('lead-photos/')) return false
+  const parts = key.split('/')
+  const ownerUid = parts[1]
+  const leadId = parts[2]
+  if (ownerUid === user.uid) return true
+  const { lead, access } = await getLeadWithAccess(user, leadId)
+  return !!lead && !!access
+}
+
+export const config = {
+  api: { bodyParser: { sizeLimit: '14mb' } },
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  if (req.method === 'OPTIONS') return res.status(200).end()
+
+  const authHeader = req.headers.authorization
+  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+  const host = req.headers.host || req.headers['x-forwarded-host'] || ''
+  const origin = req.headers.origin || ''
+  const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
+  const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
+  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
+  if (!user) user = await verifyFirebaseToken(idToken)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+
+  try {
+    if (req.method === 'POST') {
+      const body = req.body || {}
+      const leadId = sanitizeId(body.leadId)
+      if (!leadId) return res.status(400).json({ error: 'leadId is required' })
+
+      const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
+      if (!lead) return res.status(404).json({ error: 'Lead not found' })
+      if (!canEditLead(access)) return res.status(403).json({ error: 'No permission to add photos' })
+
+      const photos = Array.isArray(lead.photos) ? lead.photos : []
+      if (photos.length >= MAX_PHOTOS_PER_LEAD) {
+        return res.status(413).json({ error: `Maximum ${MAX_PHOTOS_PER_LEAD} photos per lead` })
+      }
+
+      const originalBuf = decodeBase64(body.fileBase64)
+      if (!originalBuf) {
+        return res.status(400).json({ error: 'Invalid or oversized image (max 10MB)' })
+      }
+
+      const thumbBuf = body.thumbnailBase64 ? decodeBase64(body.thumbnailBase64) : null
+      const photoId = `photo_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      const ownerUid = lead.ownerId || user.uid
+      const key = photoKey(ownerUid, leadId, photoId, 'original')
+      const thumbnailKey = photoKey(ownerUid, leadId, photoId, 'thumb')
+
+      await s3().send(new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: key,
+        Body: originalBuf,
+        ContentType: body.contentType || 'image/jpeg',
+      }))
+
+      if (thumbBuf) {
+        await s3().send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: thumbnailKey,
+          Body: thumbBuf,
+          ContentType: 'image/jpeg',
+        }))
+      }
+
+      const now = new Date().toISOString()
+      const photoRecord = {
+        id: photoId,
+        key,
+        thumbnailKey: thumbBuf ? thumbnailKey : key,
+        annotatedKey: null,
+        contentType: body.contentType || 'image/jpeg',
+        size: originalBuf.length,
+        width: body.width ?? null,
+        height: body.height ?? null,
+        capturedAt: body.capturedAt || now,
+        capturedByUid: user.uid,
+        capturedByName: String(body.capturedByName || '').slice(0, 120) || null,
+        lat: body.lat ?? null,
+        lng: body.lng ?? null,
+        addressLabel: String(body.addressLabel || '').slice(0, 300) || null,
+        parcelId: body.parcelId ? sanitizeId(body.parcelId) : null,
+        annotations: { version: 1, objects: [] },
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      const updatedLead = {
+        ...lead,
+        photos: [...photos, photoRecord],
+        updatedAt: now,
+      }
+      const nextAll = [...all]
+      nextAll[index] = updatedLead
+      await saveAllLeads(nextAll)
+
+      return res.status(200).json({ photo: photoRecord, lead: updatedLead })
+    }
+
+    if (req.method === 'PATCH') {
+      const body = req.body || {}
+      const leadId = sanitizeId(body.leadId)
+      const photoId = sanitizeId(body.photoId)
+      if (!leadId || !photoId) return res.status(400).json({ error: 'leadId and photoId are required' })
+
+      const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
+      if (!lead) return res.status(404).json({ error: 'Lead not found' })
+      if (!canEditLead(access)) return res.status(403).json({ error: 'No permission to edit photos' })
+
+      const photos = Array.isArray(lead.photos) ? [...lead.photos] : []
+      const pIdx = photos.findIndex((p) => p.id === photoId)
+      if (pIdx === -1) return res.status(404).json({ error: 'Photo not found' })
+
+      const existing = photos[pIdx]
+      const ownerUid = lead.ownerId || user.uid
+      const now = new Date().toISOString()
+      let annotatedKey = existing.annotatedKey
+
+      if (body.annotatedBase64) {
+        const annBuf = decodeBase64(body.annotatedBase64)
+        if (!annBuf) return res.status(400).json({ error: 'Invalid annotated image' })
+        annotatedKey = photoKey(ownerUid, leadId, photoId, 'annotated')
+        await s3().send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: annotatedKey,
+          Body: annBuf,
+          ContentType: 'image/jpeg',
+        }))
+      }
+
+      photos[pIdx] = {
+        ...existing,
+        annotations: body.annotations !== undefined
+          ? body.annotations
+          : existing.annotations,
+        annotatedKey: body.annotatedBase64 ? annotatedKey : (body.clearAnnotated ? null : existing.annotatedKey),
+        updatedAt: now,
+      }
+
+      const updatedLead = { ...lead, photos, updatedAt: now }
+      const nextAll = [...all]
+      nextAll[index] = updatedLead
+      await saveAllLeads(nextAll)
+
+      return res.status(200).json({ photo: photos[pIdx], lead: updatedLead })
+    }
+
+    if (req.method === 'GET') {
+      const key = String(req.query.key || '')
+      if (!key) return res.status(400).json({ error: 'key is required' })
+      if (!key.startsWith('lead-photos/')) return res.status(400).json({ error: 'Malformed key' })
+
+      const allowed = await canAccessPhotoKey(user, key)
+      if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+
+      try {
+        const r = await s3().send(new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: key,
+        }))
+        const chunks = []
+        for await (const c of r.Body) chunks.push(c)
+        const body = Buffer.concat(chunks)
+        res.setHeader('Content-Type', r.ContentType || 'image/jpeg')
+        res.setHeader('Cache-Control', 'private, max-age=300')
+        return res.status(200).send(body)
+      } catch (e) {
+        if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) {
+          return res.status(404).json({ error: 'File not found' })
+        }
+        throw e
+      }
+    }
+
+    if (req.method === 'DELETE') {
+      const body = req.body || {}
+      const leadId = sanitizeId(body.leadId)
+      const photoId = sanitizeId(body.photoId)
+      if (!leadId || !photoId) return res.status(400).json({ error: 'leadId and photoId are required' })
+
+      const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
+      if (!lead) return res.status(404).json({ error: 'Lead not found' })
+      if (!canEditLead(access)) return res.status(403).json({ error: 'No permission to delete photos' })
+
+      const photos = Array.isArray(lead.photos) ? lead.photos : []
+      const photo = photos.find((p) => p.id === photoId)
+      if (!photo) return res.status(404).json({ error: 'Photo not found' })
+
+      for (const k of [photo.key, photo.thumbnailKey, photo.annotatedKey].filter(Boolean)) {
+        try {
+          await s3().send(new DeleteObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: k,
+          }))
+        } catch (e) {
+          if (e.name !== 'NoSuchKey') console.warn('delete photo key', k, e.message)
+        }
+      }
+
+      const updatedLead = {
+        ...lead,
+        photos: photos.filter((p) => p.id !== photoId),
+        updatedAt: new Date().toISOString(),
+      }
+      const nextAll = [...all]
+      nextAll[index] = updatedLead
+      await saveAllLeads(nextAll)
+
+      return res.status(200).json({ lead: updatedLead })
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' })
+  } catch (err) {
+    console.error('lead-photos error', err)
+    return res.status(500).json({ error: 'Internal server error', message: err.message })
+  }
+}

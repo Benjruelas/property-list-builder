@@ -54,9 +54,12 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
     target?.closest?.('[data-options-menu]') ||
     target?.closest?.('[data-confirm-dialog]') ||
     target?.closest?.('[data-send-quote-dialog]') ||
+    target?.closest?.('[data-send-report-dialog]') ||
+    target?.closest?.('[data-lead-picker-dialog]') ||
     target?.closest?.('[data-pipe-menu]') ||
     target?.closest?.('[data-deals-panel-menu]') ||
     target?.closest?.('[data-quotes-panel-menu]') ||
+    target?.closest?.('[data-reports-panel-menu]') ||
     target?.closest?.('[data-deal-template-menu]') ||
     target?.closest?.('[data-tag-picker-menu]') ||
     target?.closest?.('[data-tag-picker-trigger]') ||
@@ -77,7 +80,10 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
     target?.closest?.('.new-task-panel') ||
     target?.closest?.('.deal-details-panel') ||
     target?.closest?.('.team-details-panel') ||
-    target?.closest?.('.activity-panel')
+    target?.closest?.('.activity-panel') ||
+    target?.closest?.('.reports-panel') ||
+    target?.closest?.('.photo-mode-overlay') ||
+    target?.closest?.('.photo-annotator-overlay')
   ) {
     e.preventDefault()
   }

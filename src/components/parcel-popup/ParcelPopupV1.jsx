@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useRef } from 'react'
-import { X, ChevronUp, ListPlus, UserPlus, CheckCircle2, Loader2 } from 'lucide-react'
+import { X, ChevronUp, ListPlus, UserPlus, CheckCircle2, Loader2, Camera } from 'lucide-react'
 import { OwnerOccupiedBadge } from '@/components/OwnerOccupiedBadge'
 import { usePopupPosition } from './usePopupPosition'
 
@@ -11,7 +11,7 @@ import { usePopupPosition } from './usePopupPosition'
  */
 export function ParcelPopupV1({
   popupData, clickedParcelData, mapRef,
-  onClose, onOpenDetails, onAddToList, onConvertToLead, isLead,
+  onClose, onOpenDetails, onAddToList, onConvertToLead, onOpenPhotos, isLead,
 }) {
   const pos = usePopupPosition(mapRef, popupData?.lat, popupData?.lng)
   const cardRef = useRef(null)
@@ -141,6 +141,16 @@ export function ParcelPopupV1({
               title="Add to Pipeline"
             >
               <UserPlus size={13} />
+            </button>
+          )}
+          {onOpenPhotos && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenPhotos?.() }}
+              className="parcel-popup-card__btn-secondary p-2 rounded-lg transition-colors"
+              title="Photos"
+            >
+              <Camera size={13} />
             </button>
           )}
         </div>

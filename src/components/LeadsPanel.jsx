@@ -1,10 +1,10 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, lazy, Suspense } from 'react'
 import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
-import { LeadDetails } from './LeadDetails'
+const LeadDetails = lazy(() => import('./LeadDetails').then((m) => ({ default: m.LeadDetails })))
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
@@ -50,6 +50,11 @@ export function LeadsPanel({
   onOpenLeadDetail,
   onCloseLeadDetail,
   currentUserId = null,
+  currentUser = null,
+  canAccessPhotos = true,
+  canAccessReports = true,
+  onCreatePhotoReport,
+  onOpenPhotoReport,
   createDealPipelines = [],
   createDealSaving = false,
   onCreateDealSubmit,
@@ -387,34 +392,43 @@ export function LeadsPanel({
         canSeeDealAmounts={canSeeDealAmounts}
       />
 
-      <LeadDetails
-        isOpen={isOpen && !!selectedLead}
-        instantDismiss={instantDismiss}
-        onClose={() => onCloseLeadDetail?.()}
-        lead={selectedLead}
-        pipelines={pipelines}
-        getToken={getToken}
-        parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
-        onOpenParcelDetails={onOpenParcelDetails}
-        onEmailClick={onEmailClick}
-        onPhoneClick={onPhoneClick}
-        onTextClick={onTextClick}
-        onGoToParcelOnMap={onGoToParcelOnMap}
-        onLeadUpdate={handleLeadUpdate}
-        onEditLead={onEditLead}
-        onCreateDeal={onCreateDeal ?? startCreateDeal}
-        onOpenDeal={onOpenDeal}
-        onLeadDeleted={() => { onCloseLeadDetail?.(); onRefreshLeads?.() }}
-        onOpenScheduleAtDate={onOpenScheduleAtDate}
-        onPipelinesChange={onPipelinesChange}
-        teams={teams}
-        teamMembership={teamMembership}
-        leads={leads}
-        canSeeDealAmounts={canSeeDealAmounts}
-        currentUserId={currentUserId}
-        tagRegistry={tagRegistry}
-        onRefreshTags={onRefreshTags}
-      />
+      {selectedLead ? (
+        <Suspense fallback={null}>
+          <LeadDetails
+            isOpen={isOpen}
+            instantDismiss={instantDismiss}
+            onClose={() => onCloseLeadDetail?.()}
+            lead={selectedLead}
+            pipelines={pipelines}
+            getToken={getToken}
+            parcelData={leadToParcelData(selectedLead)}
+            onOpenParcelDetails={onOpenParcelDetails}
+            onEmailClick={onEmailClick}
+            onPhoneClick={onPhoneClick}
+            onTextClick={onTextClick}
+            onGoToParcelOnMap={onGoToParcelOnMap}
+            onLeadUpdate={handleLeadUpdate}
+            onEditLead={onEditLead}
+            onCreateDeal={onCreateDeal ?? startCreateDeal}
+            onOpenDeal={onOpenDeal}
+            onLeadDeleted={() => { onCloseLeadDetail?.(); onRefreshLeads?.() }}
+            onOpenScheduleAtDate={onOpenScheduleAtDate}
+            onPipelinesChange={onPipelinesChange}
+            teams={teams}
+            teamMembership={teamMembership}
+            leads={leads}
+            canSeeDealAmounts={canSeeDealAmounts}
+            currentUserId={currentUserId}
+            currentUser={currentUser}
+            canAccessPhotos={canAccessPhotos}
+            canAccessReports={canAccessReports}
+            onCreatePhotoReport={onCreatePhotoReport}
+            onOpenPhotoReport={onOpenPhotoReport}
+            tagRegistry={tagRegistry}
+            onRefreshTags={onRefreshTags}
+          />
+        </Suspense>
+      ) : null}
     </>
   )
 }

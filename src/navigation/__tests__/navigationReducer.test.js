@@ -12,6 +12,7 @@ import {
   recipeOpenScheduleAtDate,
   recipeNavigateFromActivity,
   recipeOpenQuoteEditorFromDeal,
+  recipeOpenReports,
   recipeOpenDealInPipes,
   recipeOpenLeadDetails,
   recipePushDealsClosed,
@@ -266,6 +267,28 @@ describe('recipes', () => {
     )
     expect(stack.some((f) => f.type === 'pipes')).toBe(true)
     expect(stack.some((f) => f.type === 'quotes.editor')).toBe(true)
+  })
+
+  it('openReports replaces other panels', () => {
+    const stack = recipeOpenReports([{ type: 'tasks' }])
+    expect(stack.map((f) => f.type)).toEqual(['reports'])
+  })
+
+  it('reports editor and detail derive from stack', () => {
+    const state = createInitialState()
+    state.navStack = [
+      { type: 'reports' },
+      { type: 'reports.editor', leadId: 'l1' },
+    ]
+    const props = selectPanelProps(state)
+    expect(props.isReportsPanelOpen).toBe(true)
+    expect(props.reportsEditorFrame?.leadId).toBe('l1')
+    state.navStack = [
+      { type: 'reports' },
+      { type: 'reports.detail', reportId: 'r1' },
+    ]
+    const detailProps = selectPanelProps(state)
+    expect(detailProps.reportsDetailReportId).toBe('r1')
   })
 
   it('recipeOpenDealInPipes preserves activity prefix', () => {

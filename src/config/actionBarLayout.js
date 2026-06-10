@@ -3,7 +3,7 @@
  * Wider viewports surface more primary actions; overflow stays in Menu.
  */
 
-/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'activity' | 'menu'} ActionBarItemId */
+/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'photos' | 'reports' | 'lists' | 'activity' | 'menu'} ActionBarItemId */
 
 /** Primary items in priority order (menu is always appended last). */
 export const PRIMARY_BAR_ORDER = [
@@ -13,13 +13,17 @@ export const PRIMARY_BAR_ORDER = [
   'leads',
   'deals',
   'quotes',
+  'forms',
+  'photos',
+  'reports',
+  'lists',
   'activity',
 ]
 
 /**
  * How many primary items (excluding Menu) to show at a given viewport width.
  * Smallest (phone): 3 → Pipes, Tasks, Schedule, Menu.
- * Largest (wide desktop): 7 → …Quotes, Activity, Menu.
+ * Desktop (1440+): all primaries including Forms, Reports, Lists.
  * @param {number} width
  */
 export function getPrimaryBarCount(width) {
@@ -28,7 +32,7 @@ export function getPrimaryBarCount(width) {
   if (width < 1100) return 4
   if (width < 1280) return 5
   if (width < 1440) return 6
-  return 7
+  return PRIMARY_BAR_ORDER.length
 }
 
 /**

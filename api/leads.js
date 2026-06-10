@@ -93,7 +93,7 @@ async function verifyFirebaseToken(idToken) {
 }
 
 const LEAD_STATUSES = new Set(['new', 'contacted', 'qualified', 'converted', 'lost'])
-const ACTIVITY_TYPES = new Set(['call', 'text', 'email', 'note', 'status', 'deal'])
+const ACTIVITY_TYPES = new Set(['call', 'text', 'email', 'note', 'status', 'deal', 'photo', 'report'])
 const MAX_LEAD_ACTIVITY = 200
 
 function leadDisplayName(lead) {
@@ -176,6 +176,9 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
     base.statusUpdatedAt = existing?.statusUpdatedAt || (existing?.createdAt || now)
   }
   base.activity = Array.isArray(existing?.activity) ? existing.activity : []
+  base.photos = body.photos !== undefined
+    ? (Array.isArray(body.photos) ? body.photos : existing?.photos || [])
+    : (existing?.photos || [])
 
   if (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined) {
     return applyResourceVisibilityPatch(base, body, ctx)
