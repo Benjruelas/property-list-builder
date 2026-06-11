@@ -3,7 +3,7 @@
  * Wider viewports surface more primary actions; overflow stays in Menu.
  */
 
-/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'photos' | 'reports' | 'lists' | 'activity' | 'menu'} ActionBarItemId */
+/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'menu'} ActionBarItemId */
 
 /** Primary items in priority order (menu is always appended last). */
 export const PRIMARY_BAR_ORDER = [
@@ -14,7 +14,6 @@ export const PRIMARY_BAR_ORDER = [
   'deals',
   'quotes',
   'forms',
-  'photos',
   'reports',
   'lists',
   'activity',

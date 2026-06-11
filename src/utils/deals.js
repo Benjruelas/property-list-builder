@@ -61,6 +61,18 @@ export function findDealsForLead(pipelines, leadId) {
   return flattenDealsFromPipelines(pipelines).filter((d) => d.leadId === leadId)
 }
 
+/** O(deals) map for lead list rendering — avoids per-lead pipeline scans. */
+export function buildDealCountByLeadId(pipelines) {
+  const counts = new Map()
+  for (const p of pipelines || []) {
+    for (const d of p.deals || []) {
+      if (!d?.leadId) continue
+      counts.set(d.leadId, (counts.get(d.leadId) || 0) + 1)
+    }
+  }
+  return counts
+}
+
 export function findDealInPipelines(pipelines, dealId) {
   for (const p of pipelines || []) {
     const deal = (p.deals || []).find((d) => d.id === dealId)

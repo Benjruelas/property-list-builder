@@ -14,8 +14,13 @@ import {
  * DELETE: remove photo from R2 + lead.photos
  */
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024
-const MAX_PHOTOS_PER_LEAD = 200
+import {
+  ENTITY_STORAGE_LIMITS,
+  MAX_SINGLE_UPLOAD_BYTES,
+  entityStorageError,
+  formatStorageBytes,
+  sumLeadPhotoBytes,
+} from './lib/uploadLimits.js'
 
 let _s3
 function s3() {
@@ -58,11 +63,11 @@ function sanitizeId(v) {
   return String(v || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 80)
 }
 
-function decodeBase64(fileBase64) {
+function decodeBase64(fileBase64, maxBytes = MAX_SINGLE_UPLOAD_BYTES) {
   const cleaned = String(fileBase64 || '').replace(/^data:[^;]+;base64,/, '')
   try {
     const buf = Buffer.from(cleaned, 'base64')
-    if (!buf.length || buf.length > MAX_FILE_BYTES) return null
+    if (!buf.length || buf.length > maxBytes) return null
     return buf
   } catch {
     return null
@@ -115,16 +120,20 @@ export default async function handler(req, res) {
       if (!canEditLead(access)) return res.status(403).json({ error: 'No permission to add photos' })
 
       const photos = Array.isArray(lead.photos) ? lead.photos : []
-      if (photos.length >= MAX_PHOTOS_PER_LEAD) {
-        return res.status(413).json({ error: `Maximum ${MAX_PHOTOS_PER_LEAD} photos per lead` })
-      }
 
       const originalBuf = decodeBase64(body.fileBase64)
       if (!originalBuf) {
-        return res.status(400).json({ error: 'Invalid or oversized image (max 10MB)' })
+        return res.status(400).json({
+          error: `Invalid or oversized image (max ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} per upload)`,
+        })
       }
 
       const thumbBuf = body.thumbnailBase64 ? decodeBase64(body.thumbnailBase64) : null
+      const existingBytes = sumLeadPhotoBytes(photos)
+      const newBytes = originalBuf.length + (thumbBuf?.length || 0)
+      if (existingBytes + newBytes > ENTITY_STORAGE_LIMITS.lead) {
+        return res.status(413).json({ error: entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead) })
+      }
       const photoId = `photo_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
       const ownerUid = lead.ownerId || user.uid
       const key = photoKey(ownerUid, leadId, photoId, 'original')
@@ -154,6 +163,7 @@ export default async function handler(req, res) {
         annotatedKey: null,
         contentType: body.contentType || 'image/jpeg',
         size: originalBuf.length,
+        thumbnailSize: thumbBuf?.length || 0,
         width: body.width ?? null,
         height: body.height ?? null,
         capturedAt: body.capturedAt || now,
@@ -198,17 +208,25 @@ export default async function handler(req, res) {
       const ownerUid = lead.ownerId || user.uid
       const now = new Date().toISOString()
       let annotatedKey = existing.annotatedKey
+      let annotatedSize = existing.annotatedSize || 0
 
       if (body.annotatedBase64) {
         const annBuf = decodeBase64(body.annotatedBase64)
         if (!annBuf) return res.status(400).json({ error: 'Invalid annotated image' })
+        const withoutAnnotated = sumLeadPhotoBytes(photos) - (Number(existing.annotatedSize) || 0)
+        if (withoutAnnotated + annBuf.length > ENTITY_STORAGE_LIMITS.lead) {
+          return res.status(413).json({ error: entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead) })
+        }
         annotatedKey = photoKey(ownerUid, leadId, photoId, 'annotated')
+        annotatedSize = annBuf.length
         await s3().send(new PutObjectCommand({
           Bucket: process.env.R2_BUCKET_NAME,
           Key: annotatedKey,
           Body: annBuf,
           ContentType: 'image/jpeg',
         }))
+      } else if (body.clearAnnotated) {
+        annotatedSize = 0
       }
 
       photos[pIdx] = {
@@ -217,6 +235,7 @@ export default async function handler(req, res) {
           ? body.annotations
           : existing.annotations,
         annotatedKey: body.annotatedBase64 ? annotatedKey : (body.clearAnnotated ? null : existing.annotatedKey),
+        annotatedSize,
         updatedAt: now,
       }
 

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { QuoteIcon } from '../icons/QuoteIcon'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
-import { handlePanelDialogOpenChange } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -36,6 +36,7 @@ import { OptionsMenuDropdown, OptionsMenuItem } from '../ui/OptionsMenuDropdown'
 import { QuoteEditor } from './QuoteEditor'
 import { QuoteDetails } from './QuoteDetails'
 import { SendQuoteDialog } from './SendQuoteDialog'
+import { QuoteTemplatePickerDialog } from './QuoteTemplatePickerDialog'
 import {
   QUOTE_SEND_TAGS,
   replaceQuoteTags,
@@ -52,6 +53,7 @@ const MENU_WIDTH = 180
 
 export function QuotesPanel({
   isOpen,
+  panelDockSlot,
   onClose,
   onBack,
   pipelines = [],
@@ -83,10 +85,17 @@ export function QuotesPanel({
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, hasNestedQuoteView)
   const [fetchedDetailQuote, setFetchedDetailQuote] = useState(null)
-  const editorQuote = editorFrame?.prefill ?? editorFrame?.quote ?? null
+  const editorSeed = editorFrame?.prefill ?? editorFrame?.quote ?? null
   const editorTemplate = editorFrame?.template ?? null
   const editorMode = editorFrame?.mode ?? 'quote'
+  const editorTemplateSeed =
+    editorMode === 'template'
+      ? editorTemplate
+      : editorSeed
+        ? null
+        : editorTemplate
   const [sendQuote, setSendQuote] = useState(null)
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
   const [msgTextBody, setMsgTextBody] = useState('')
@@ -187,7 +196,14 @@ export function QuotesPanel({
   })
 
   const openNewQuote = () => {
-    onOpenEditor?.({ mode: 'quote' })
+    setTemplatePickerOpen(true)
+  }
+
+  const handleTemplatePicked = (template) => {
+    onOpenEditor?.({
+      mode: 'quote',
+      ...(template ? { template } : {}),
+    })
   }
 
   const openNewTemplate = () => {
@@ -271,13 +287,14 @@ export function QuotesPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedQuoteView, handlePanelBack, isOpen)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
           className={cn(
             'map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0',
             hasNestedQuoteView && 'crm-panel-obscured'
           )}
+          panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
           suppressBackdrop
@@ -494,8 +511,8 @@ export function QuotesPanel({
         open={editorOpen}
         onClose={() => onCloseEditor?.()}
         getToken={getToken}
-        quote={editorMode === 'quote' ? editorQuote : null}
-        template={editorMode === 'template' ? editorTemplate : null}
+        quote={editorMode === 'quote' ? editorSeed : null}
+        template={editorTemplateSeed}
         mode={editorMode}
         pipelines={pipelines}
         leads={leads}
@@ -521,6 +538,15 @@ export function QuotesPanel({
         }}
         onSend={(q) => setSendQuote(q)}
         onDelete={handleDeleteQuote}
+        teams={teams}
+        teamMembership={teamMembership}
+      />
+
+      <QuoteTemplatePickerDialog
+        open={templatePickerOpen}
+        onOpenChange={setTemplatePickerOpen}
+        templates={templates}
+        onSelect={handleTemplatePicked}
       />
 
       <SendQuoteDialog

@@ -3,6 +3,7 @@ import { Loader2, CheckCircle2, AlertCircle, CreditCard } from 'lucide-react'
 import { fetchPublicQuote, respondToPublicQuote, createQuoteCheckout } from '../../utils/quotes'
 import { computeQuoteTotals, formatQuoteMoney } from '../../utils/quoteMath'
 import { PublicFormBrandBar } from '../forms/PublicFormBrand'
+import { QuoteBrandHeader } from './QuoteBrandHeader'
 import { QuoteCheckToggle } from './QuoteCheckToggle'
 import { cn } from '@/lib/utils'
 
@@ -96,6 +97,20 @@ export function PublicQuotePage({ token }) {
   const pageClass = cn('public-form-page flex flex-col min-h-screen bg-gray-100 text-gray-900')
   const displayTotal = liveTotals?.total ?? data?.total ?? 0
   const optionalIds = new Set(data?.optionalLineIds || [])
+  const branding = data?.branding
+
+  const brandChrome = branding ? (
+    <QuoteBrandHeader
+      variant="public"
+      className="quote-brand-header--page"
+      businessName={branding.businessName}
+      logoBase64={branding.logoBase64}
+      senderName={branding.senderName}
+      senderEmail={branding.senderEmail}
+    />
+  ) : (
+    <PublicFormBrandBar className="public-form-brand-bar--page" />
+  )
 
   if (loading) {
     return (
@@ -124,7 +139,7 @@ export function PublicQuotePage({ token }) {
   if (data?.status === 'paid' || paymentParam === 'success') {
     return (
       <div className={pageClass}>
-        <PublicFormBrandBar className="public-form-brand-bar--page" />
+        {brandChrome}
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
           <h1 className="text-xl font-semibold mb-2">Payment received</h1>
@@ -136,7 +151,7 @@ export function PublicQuotePage({ token }) {
 
   return (
     <div className={pageClass}>
-      <PublicFormBrandBar className="public-form-brand-bar--page" />
+      {brandChrome}
       <div className="flex-1 overflow-y-auto px-4 py-6 max-w-lg mx-auto w-full">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">{data.title || 'Quote'}</h1>

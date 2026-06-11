@@ -3,8 +3,13 @@
  */
 
 import { compressImageFile, compressDataUrl, blobToBase64 } from './imageCompress'
-
-const MAX_FILE_BYTES = 10 * 1024 * 1024
+import {
+  ENTITY_STORAGE_LIMITS,
+  MAX_SINGLE_UPLOAD_BYTES,
+  entityStorageError,
+  formatStorageBytes,
+  sumLeadPhotoBytes,
+} from './uploadLimits'
 
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
@@ -12,7 +17,13 @@ const getApiBase = () => {
   return import.meta.env.VITE_API_URL || ''
 }
 
-export { MAX_FILE_BYTES }
+export const LEAD_STORAGE_LIMIT_BYTES = ENTITY_STORAGE_LIMITS.lead
+
+export {
+  MAX_SINGLE_UPLOAD_BYTES,
+  sumLeadPhotoBytes,
+  formatStorageBytes,
+}
 
 export function leadPhotoUrl(key) {
   if (!key) return ''
@@ -29,21 +40,37 @@ export async function fetchLeadPhotoBlob(getToken, key) {
   return res.blob()
 }
 
+function assertLeadPhotoStorage(existingPhotos, addingBytes) {
+  const used = sumLeadPhotoBytes(existingPhotos)
+  if (used + addingBytes > ENTITY_STORAGE_LIMITS.lead) {
+    throw new Error(entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead))
+  }
+}
+
 export async function uploadLeadPhoto(getToken, {
   leadId,
   file,
   dataUrl,
   metadata = {},
+  existingPhotos = [],
 }) {
   let compressed
   if (dataUrl) {
     compressed = await compressDataUrl(dataUrl)
   } else if (file) {
-    if (file.size > MAX_FILE_BYTES * 2) throw new Error('Image too large')
+    if (file.size > MAX_SINGLE_UPLOAD_BYTES * 2) {
+      throw new Error(`Image too large (max ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} per upload)`)
+    }
     compressed = await compressImageFile(file)
   } else {
     throw new Error('No image provided')
   }
+
+  const addingBytes = compressed.file.size + compressed.thumbnail.size
+  if (compressed.file.size > MAX_SINGLE_UPLOAD_BYTES) {
+    throw new Error(`Each upload must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`)
+  }
+  assertLeadPhotoStorage(existingPhotos, addingBytes)
 
   const [fileBase64, thumbnailBase64] = await Promise.all([
     blobToBase64(compressed.file),
@@ -78,12 +105,21 @@ export async function saveLeadPhotoAnnotations(getToken, {
   photoId,
   annotations,
   annotatedBlob,
+  existingPhotos = [],
 }) {
   const token = await getToken()
   if (!token) throw new Error('Sign in required')
 
   const body = { leadId, photoId, annotations }
   if (annotatedBlob) {
+    if (annotatedBlob.size > MAX_SINGLE_UPLOAD_BYTES) {
+      throw new Error(`Annotated image must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`)
+    }
+    const existing = existingPhotos.find((p) => p.id === photoId)
+    const withoutAnnotated = sumLeadPhotoBytes(existingPhotos) - (Number(existing?.annotatedSize) || 0)
+    if (withoutAnnotated + annotatedBlob.size > ENTITY_STORAGE_LIMITS.lead) {
+      throw new Error(entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead))
+    }
     body.annotatedBase64 = await blobToBase64(annotatedBlob)
   }
 

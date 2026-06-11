@@ -4,7 +4,7 @@ import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { getFullAddress } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
@@ -97,7 +97,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
+export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
@@ -528,9 +528,10 @@ export function SchedulePanel({ isOpen, onClose, onBack, hasScheduleOpener = fal
   useObscuredPanelRoot(scheduleRootRef, hasNestedLeadDetail)
 
   return (
-    <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedLeadDetail, handlePanelBack, isOpen)}>
+    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
+        panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay={!stacked}
         nestedOverlay={stacked}

@@ -111,6 +111,7 @@ function formatActivityWhen(iso) {
  */
 export function LeadDetails({
   isOpen,
+  panelDockSlot,
   instantDismiss = false,
   onClose,
   lead,
@@ -310,6 +311,7 @@ export function LeadDetails({
     <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, false, onClose, isOpen)}>
       <DialogContent
         className="map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
+        panelDockSlot={panelDockSlot}
         showCloseButton={false}
         detailFocusOverlay
         nestedOverlay={nestedOverlay}

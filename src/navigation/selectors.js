@@ -1,4 +1,5 @@
 import { frameRoot, STACKABLE_SCHEDULE_OPENERS } from './types.js'
+import { findDockablePrimaryRoot, stackHasTasks } from './taskDock.js'
 
 /**
  * @param {ReturnType<import('./navigationReducer.js').createInitialState>} state
@@ -77,6 +78,34 @@ function findFrameRoot(state, root) {
 }
 
 /**
+ * Desktop: Tasks docked to the right of an open primary list panel.
+ * @param {ReturnType<import('./navigationReducer.js').createInitialState>} state
+ */
+export function selectTasksDockLayout(state) {
+  const stack = state.navStack
+  if (!stackHasTasks(stack)) {
+    return { tasksDocked: false, primaryRoot: null }
+  }
+  const primaryRoot = findDockablePrimaryRoot(stack)
+  return {
+    tasksDocked: !!primaryRoot,
+    primaryRoot,
+  }
+}
+
+/** Activity is interactive when it is top, or the docked primary beside Tasks. */
+export function isActivityFeedFocused(state) {
+  const stack = state.navStack
+  const activityFrame = stack.find((f) => f.type === 'activity')
+  if (!activityFrame) return false
+  const top = selectTopFrame(state)
+  if (top?.type === 'activity') return true
+  if (!stackHasTasks(stack)) return false
+  const primaryRoot = findDockablePrimaryRoot(stack)
+  return primaryRoot === 'activity' && frameRoot(top?.type) === 'tasks'
+}
+
+/**
  * Derive all panel props from navigation state.
  * @param {ReturnType<import('./navigationReducer.js').createInitialState>} state
  */
@@ -116,7 +145,7 @@ export function selectPanelProps(state) {
   return {
     /** Activity dialog stays mounted while activity remains in the stack (avoids reopen flicker on back). */
     isActivityPanelOpen: !!activityFrame,
-    isActivityPanelFocused: !!activityFrame && top?.type === 'activity',
+    isActivityPanelFocused: isActivityFeedFocused(state),
     isListPanelOpen: hasFrameRoot(state, 'lists'),
     isParcelListPanelOpen: !!listsParcels,
     viewingListId: listsParcels?.listId ?? null,
@@ -132,6 +161,7 @@ export function selectPanelProps(state) {
     pipesDealId: pipesDeal?.dealId ?? null,
     pipesLeadOverlayId: pipesLead?.leadId ?? null,
     isTasksPanelOpen: hasFrameRoot(state, 'tasks'),
+    tasksDockLayout: selectTasksDockLayout(state),
     isSchedulePanelOpen: hasFrameRoot(state, 'schedule'),
     scheduleInitialDate: scheduleFrame?.initialDate ?? null,
     scheduleLeadId: scheduleLead?.leadId ?? null,

@@ -283,6 +283,7 @@ export function PhotoAnnotator({ open, lead, photo, getToken, onClose, onSaved }
         photoId: photo.id,
         annotations: serializeAnnotationLayer(objects),
         annotatedBlob,
+        existingPhotos: lead.photos || [],
       })
       showToast('Annotations saved', 'success')
       onSaved?.(updated)

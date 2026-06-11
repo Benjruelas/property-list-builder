@@ -12,7 +12,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
-import { handlePanelDialogOpenChange } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss } from '../ui/panelDialogUtils'
 import {
   PanelHeader,
   PANEL_LIST_HEADER_CLASS,
@@ -53,6 +53,7 @@ const MENU_WIDTH = 180
 
 export function ReportsPanel({
   isOpen,
+  panelDockSlot,
   onClose,
   onBack,
   leads = [],
@@ -254,13 +255,14 @@ export function ReportsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNested, handlePanelBack, isOpen)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
           className={cn(
             'map-panel list-panel reports-panel fullscreen-panel flex flex-col min-h-0 p-0',
             hasNested && 'crm-panel-obscured'
           )}
+          panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
           suppressBackdrop

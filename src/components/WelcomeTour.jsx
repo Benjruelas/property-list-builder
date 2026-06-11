@@ -162,15 +162,6 @@ const ALL_STEPS = [
     featureId: 'forms',
   },
   {
-    id: 'photos',
-    title: 'Photos',
-    desc: 'Capture and annotate job-site photos — tied to leads from the map or action bar.',
-    target: '[data-tour="menu-photos"]',
-    mobileTarget: '[data-tour="action-bar-photos"]',
-    menuRequired: true,
-    featureId: 'photos',
-  },
-  {
     id: 'reports',
     title: 'Photo Reports',
     desc: 'Bundle lead photos into branded PDF reports — email or text a link to clients.',

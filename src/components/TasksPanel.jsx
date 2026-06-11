@@ -5,7 +5,7 @@ import { TeamSharedIcon } from './ResourceSharePicker'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
+import { handlePanelDialogOpenChange, ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { getFullAddress } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
@@ -51,6 +51,8 @@ function getLeadLabel(lead, parcelId) {
 
 export function TasksPanel({
   isOpen,
+  panelDockSlot,
+  instantDismiss = false,
   onClose,
   onBack,
   onOpenParcelDetails,
@@ -525,32 +527,17 @@ export function TasksPanel({
     onBack?.() ?? onClose?.()
   }
 
-  const hasNestedOverlay = showAddTask || !!editingTask || !!pipePickerState?.open
-  const suppressParentDismissRef = useRef(false)
-  const hadNestedOverlayRef = useRef(false)
-
-  useEffect(() => {
-    if (hadNestedOverlayRef.current && !hasNestedOverlay) {
-      suppressParentDismissRef.current = true
-      const id = requestAnimationFrame(() => {
-        suppressParentDismissRef.current = false
-      })
-      hadNestedOverlayRef.current = hasNestedOverlay
-      return () => cancelAnimationFrame(id)
-    }
-    hadNestedOverlayRef.current = hasNestedOverlay
-  }, [hasNestedOverlay])
-
-  const handleTasksPanelOpenChange = (open) => {
-    if (!open && suppressParentDismissRef.current) return
-    handlePanelDialogOpenChange(open, hasNestedOverlay, handlePanelBack, isOpen)
-  }
-
   return (
     <>
-    <Dialog open={isOpen} modal={false} onOpenChange={handleTasksPanelOpenChange}>
+    <Dialog
+      open={isOpen}
+      modal={false}
+      onOpenChange={ignoreRadixMapPanelDismiss}
+    >
       <DialogContent
-        className="map-panel list-panel fullscreen-panel flex flex-col min-h-0"
+        className="map-panel list-panel tasks-panel fullscreen-panel flex flex-col min-h-0"
+        panelDockSlot={panelDockSlot}
+        instantDismiss={instantDismiss}
         showCloseButton={false}
         hideOverlay
         suppressBackdrop

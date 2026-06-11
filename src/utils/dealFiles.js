@@ -2,7 +2,14 @@
  * Deal file upload/download client.
  */
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024
+import {
+  ENTITY_STORAGE_LIMITS,
+  MAX_SINGLE_UPLOAD_BYTES,
+  entityStorageError,
+  formatStorageBytes,
+  sumDealFileBytes,
+} from './uploadLimits'
+import { fetchAuthenticatedBlob, triggerBlobDownload } from './filePreview'
 
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
@@ -10,11 +17,24 @@ const getApiBase = () => {
   return import.meta.env.VITE_API_URL || ''
 }
 
-export { MAX_FILE_BYTES }
+export const DEAL_STORAGE_LIMIT_BYTES = ENTITY_STORAGE_LIMITS.deal
 
-export async function uploadDealFile(getToken, { pipelineId, dealId, file }) {
+export {
+  MAX_SINGLE_UPLOAD_BYTES,
+  sumDealFileBytes,
+  formatStorageBytes,
+}
+
+export async function uploadDealFile(getToken, { pipelineId, dealId, file, existingFiles = [] }) {
   if (!file) throw new Error('No file selected')
-  if (file.size > MAX_FILE_BYTES) throw new Error('File must be 10MB or smaller')
+  if (file.size > MAX_SINGLE_UPLOAD_BYTES) {
+    throw new Error(`Each upload must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`)
+  }
+
+  const used = sumDealFileBytes(existingFiles)
+  if (used + file.size > ENTITY_STORAGE_LIMITS.deal) {
+    throw new Error(entityStorageError('deal', ENTITY_STORAGE_LIMITS.deal))
+  }
 
   const token = await getToken()
   if (!token) throw new Error('Sign in to upload files')
@@ -44,20 +64,18 @@ export async function uploadDealFile(getToken, { pipelineId, dealId, file }) {
   return data.file
 }
 
+export function dealFileUrl(key) {
+  if (!key) return ''
+  return `${getApiBase()}/deal-files?key=${encodeURIComponent(key)}`
+}
+
+export async function fetchDealFileBlob(getToken, key) {
+  return fetchAuthenticatedBlob(getToken, dealFileUrl(key))
+}
+
 export async function downloadDealFile(getToken, key, fileName) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to download files')
-  const res = await fetch(`${getApiBase()}/deal-files?key=${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error('Download failed')
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName || 'download'
-  a.click()
-  URL.revokeObjectURL(url)
+  const blob = await fetchDealFileBlob(getToken, key)
+  triggerBlobDownload(blob, fileName)
 }
 
 export async function deleteDealFile(getToken, { key, pipelineId }) {

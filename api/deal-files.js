@@ -2,14 +2,20 @@ import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } fro
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
 
+import {
+  ENTITY_STORAGE_LIMITS,
+  MAX_SINGLE_UPLOAD_BYTES,
+  entityStorageError,
+  formatStorageBytes,
+  sumDealFileBytes,
+} from './lib/uploadLimits.js'
+
 /**
  * Deal file upload/download via R2.
- * - POST: { pipelineId, dealId, fileName, fileBase64, contentType } — max 10MB
+ * - POST: { pipelineId, dealId, fileName, fileBase64, contentType }
  * - GET: ?key=deal-files/... — download
  * - DELETE: { key, pipelineId, dealId } — remove file
  */
-
-const MAX_FILE_BYTES = 10 * 1024 * 1024
 
 let kv = null
 let kvAvailable = false
@@ -142,8 +148,18 @@ export default async function handler(req, res) {
       } catch {
         return res.status(400).json({ error: 'Invalid base64 file' })
       }
-      if (!buf.length || buf.length > MAX_FILE_BYTES) {
-        return res.status(413).json({ error: `File must be between 1 byte and ${MAX_FILE_BYTES} bytes (10MB)` })
+      if (!buf.length) {
+        return res.status(400).json({ error: 'Empty file' })
+      }
+      if (buf.length > MAX_SINGLE_UPLOAD_BYTES) {
+        return res.status(413).json({
+          error: `Single upload must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`,
+        })
+      }
+
+      const existingBytes = sumDealFileBytes(deal.files)
+      if (existingBytes + buf.length > ENTITY_STORAGE_LIMITS.deal) {
+        return res.status(413).json({ error: entityStorageError('deal', ENTITY_STORAGE_LIMITS.deal) })
       }
 
       const safeName = sanitizeFileName(fileName)

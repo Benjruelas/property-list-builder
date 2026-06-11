@@ -20,4 +20,10 @@ describe('handlePanelDialogOpenChange', () => {
     expect(onPanelBack).not.toHaveBeenCalled()
   })
 
+  it('ignores dismiss when docked primary panel must stay open', () => {
+    const onPanelBack = vi.fn()
+    handlePanelDialogOpenChange(false, false, onPanelBack, true, { retainOpen: true })
+    expect(onPanelBack).not.toHaveBeenCalled()
+  })
+
 })

@@ -30,6 +30,8 @@ import {
   recipeOpenSkipTraced,
   recipeOpenTaskInPipes,
   recipeOpenTasks,
+  recipeCloseTasks,
+  recipeSwapPrimaryKeepTasks,
   recipeOpenTeams,
   recipeOpenLeads,
   recipeReturnToActivity,
@@ -37,6 +39,10 @@ import {
   recipeOpenBulkEmailPreview,
   recipeOpenEmailComposer,
 } from './recipes.js'
+import {
+  isDesktopTaskDockEnabled,
+  shouldKeepTasksWhenOpening,
+} from './taskDock.js'
 
 const NavigationContext = createContext(null)
 
@@ -86,57 +92,73 @@ export function NavigationProvider({ children }) {
     replaceStack(frames)
   }, [replaceStack])
 
+  const taskDockOpts = useCallback(() => ({
+    keepTasks: shouldKeepTasksWhenOpening(state.navStack),
+  }), [state.navStack])
+
   const openLeads = useCallback(() => {
-    replaceStack(recipeOpenLeads(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenLeads(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openDeals = useCallback(() => {
-    replaceStack(recipeOpenDeals(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenDeals(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openPipes = useCallback((pipelineId) => {
-    replaceStack(recipeOpenPipes(state.navStack, pipelineId))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenPipes(state.navStack, pipelineId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openTasks = useCallback(() => {
-    replaceStack(recipeOpenTasks(state.navStack))
+    replaceStack(recipeOpenTasks(state.navStack, { keepPrimary: isDesktopTaskDockEnabled() }))
+  }, [state.navStack, replaceStack])
+
+  const closeTasksPanel = useCallback(() => {
+    replaceStack(recipeCloseTasks(state.navStack))
   }, [state.navStack, replaceStack])
 
   const openSchedule = useCallback(() => {
+    if (shouldKeepTasksWhenOpening(state.navStack)) {
+      replaceStack(recipeSwapPrimaryKeepTasks(state.navStack, { type: 'schedule' }))
+      return
+    }
     replaceStack(recipeOpenSchedule(state.navStack))
   }, [state.navStack, replaceStack])
 
   const openLists = useCallback(() => {
-    replaceStack(recipeOpenLists(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenLists(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openPaths = useCallback(() => {
-    replaceStack(recipeOpenPaths(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenPaths(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openForms = useCallback(() => {
-    replaceStack(recipeOpenForms(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenForms(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openQuotes = useCallback(() => {
-    replaceStack(recipeOpenQuotes(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenQuotes(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openReports = useCallback(() => {
-    replaceStack(recipeOpenReports(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenReports(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openTeams = useCallback(() => {
-    replaceStack(recipeOpenTeams(state.navStack))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenTeams(state.navStack, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openSettings = useCallback(() => {
     replaceStack(recipeOpenSettings(state.navStack))
   }, [state.navStack, replaceStack])
 
   const openActivity = useCallback(() => {
+    if (shouldKeepTasksWhenOpening(state.navStack)) {
+      replaceStack(recipeSwapPrimaryKeepTasks(state.navStack, { type: 'activity' }))
+      return
+    }
     replaceStack([{ type: 'activity' }])
-  }, [replaceStack])
+  }, [state.navStack, replaceStack])
 
   const openLeadDetails = useCallback((leadId) => {
     replaceStack(recipeOpenLeadDetails(state.navStack, leadId))
@@ -198,7 +220,11 @@ export function NavigationProvider({ children }) {
 
   const setActivityOpen = useCallback((open) => {
     if (open) {
-      replaceStack([{ type: 'activity' }])
+      if (shouldKeepTasksWhenOpening(state.navStack)) {
+        replaceStack(recipeSwapPrimaryKeepTasks(state.navStack, { type: 'activity' }))
+      } else {
+        replaceStack([{ type: 'activity' }])
+      }
     } else if (state.navStack[state.navStack.length - 1]?.type === 'activity') {
       replaceStack([])
     }
@@ -344,6 +370,7 @@ export function NavigationProvider({ children }) {
     openDeals,
     openPipes,
     openTasks,
+    closeTasksPanel,
     openSchedule,
     openLists,
     openPaths,
@@ -417,6 +444,7 @@ export function NavigationProvider({ children }) {
     openDeals,
     openPipes,
     openTasks,
+    closeTasksPanel,
     openSchedule,
     openLists,
     openPaths,

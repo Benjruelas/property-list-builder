@@ -10,5 +10,5 @@ export function useStickyPanelMount(...openFlags) {
   useEffect(() => {
     if (active) setMounted(true)
   }, [active])
-  return mounted
+  return mounted || active
 }

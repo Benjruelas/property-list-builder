@@ -3,7 +3,7 @@ import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 const LeadDetails = lazy(() => import('./LeadDetails').then((m) => ({ default: m.LeadDetails })))
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
@@ -20,12 +20,15 @@ import { filterByTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
-import { findDealsForLead } from '@/utils/deals'
+import { buildDealCountByLeadId } from '@/utils/deals'
 import { showToast } from './ui/toast'
 import { LeadRow } from './LeadRow'
+import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 
 export function LeadsPanel({
   isOpen,
+  panelDockSlot,
+  loading = false,
   instantDismiss = false,
   onClose,
   onBack,
@@ -79,13 +82,10 @@ export function LeadsPanel({
     [detailLeadId, leads],
   )
 
-  const dealCountByLead = useMemo(() => {
-    const m = new Map()
-    for (const l of leads) {
-      m.set(l.id, findDealsForLead(pipelines, l.id).length)
-    }
-    return m
-  }, [leads, pipelines])
+  const dealCountByLead = useMemo(
+    () => buildDealCountByLeadId(pipelines),
+    [pipelines],
+  )
 
   const leadAnalytics = useMemo(() => {
     const counts = { all: leads.length }
@@ -226,13 +226,14 @@ export function LeadsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedOverlay, handlePanelBack, isOpen)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
           className={cn(
             'map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0',
             hasNestedDetail && 'crm-panel-obscured'
           )}
+          panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
           suppressBackdrop
@@ -315,7 +316,9 @@ export function LeadsPanel({
                 defaultSortMode="recent"
               />
             </div>
-            {leads.length === 0 ? (
+            {loading ? (
+              <PanelListBodyLoading />
+            ) : leads.length === 0 ? (
               <div className="text-center py-16">
                 <UserSearch className="h-10 w-10 mx-auto mb-3 opacity-30" />
                 <p className="text-sm opacity-60">No leads yet.</p>

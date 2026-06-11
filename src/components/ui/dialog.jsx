@@ -83,7 +83,12 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
     target?.closest?.('.activity-panel') ||
     target?.closest?.('.reports-panel') ||
     target?.closest?.('.photo-mode-overlay') ||
-    target?.closest?.('.photo-annotator-overlay')
+    target?.closest?.('.photo-annotator-overlay') ||
+    target?.closest?.('.file-preview-overlay') ||
+    target?.closest?.('.mobile-action-bar') ||
+    target?.closest?.('.mobile-action-bar-menu') ||
+    target?.closest?.('.mobile-action-bar-menu-backdrop') ||
+    target?.closest?.('[data-tasks-dock-slot]')
   ) {
     e.preventDefault()
   }
@@ -116,7 +121,7 @@ const AppDialogBackdrop = React.forwardRef(({ className, ...props }, ref) => (
 ))
 AppDialogBackdrop.displayName = 'AppDialogBackdrop'
 
-const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, suppressBackdrop = false, focusOverlay = false, blurOverlay = false, detailFocusOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, panelMode, instantDismiss = false, onPointerDownOutside, onInteractOutside, onFocusOutside, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, suppressBackdrop = false, focusOverlay = false, blurOverlay = false, detailFocusOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, panelMode, panelDockSlot, instantDismiss = false, onPointerDownOutside, onInteractOutside, onFocusOutside, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
   const useStackedDetailLayer = topLayer && nestedOverlay && !blurOverlay && !detailFocusOverlay
   const effectiveNestedOverlay = nestedOverlay && !useStackedDetailLayer && !blurOverlay && !detailFocusOverlay
   const effectiveHideOverlay = hideOverlay || useStackedDetailLayer
@@ -177,7 +182,11 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
   }, [ref])
 
   const panelContentProps = isPanel
-    ? { tabIndex: undefined, 'data-map-panel-content': true }
+    ? {
+        tabIndex: undefined,
+        'data-map-panel-content': true,
+        ...(panelDockSlot ? { 'data-tasks-dock-slot': panelDockSlot } : {}),
+      }
     : {}
 
   return (

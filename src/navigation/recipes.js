@@ -3,6 +3,45 @@
  * Each recipe returns { navStack, mapOverlayStack?, modalStack?, meta? } patches or action lists.
  */
 
+import { frameRoot } from './types.js'
+import { collectDockableKeepFlags, stackHasTasks, TASKS_DOCKABLE_ROOTS } from './taskDock.js'
+
+/**
+ * Desktop dock: replace the current primary panel but keep Tasks on the right.
+ * @param {import('./types.js').NavFrame[]} currentStack
+ * @param {import('./types.js').NavFrame} frame
+ */
+export function recipeSwapPrimaryKeepTasks(currentStack, frame) {
+  const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+  const frameRootKey = frameRoot(frame.type)
+  const rest = currentStack.filter((f) => {
+    if (frameRoot(f.type) === 'tasks') return false
+    if (TASKS_DOCKABLE_ROOTS.has(frameRoot(f.type))) return false
+    return true
+  })
+  const withoutSameRoot = rest.filter((f) => frameRoot(f.type) !== frameRootKey)
+  return [...withoutSameRoot, frame, ...tasksFrames]
+}
+
+/**
+ * Open a root panel, optionally keeping Tasks docked on desktop.
+ * @param {import('./types.js').NavFrame[]} currentStack
+ * @param {string} rootKey — keep map key (e.g. 'leads', 'list')
+ * @param {import('./types.js').NavFrame} frame
+ * @param {{ keepTasks?: boolean }} [opts]
+ */
+function recipeOpenRootPanel(currentStack, rootKey, frame, opts = {}) {
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    return recipeSwapPrimaryKeepTasks(currentStack, frame)
+  }
+  const keep = { [rootKey]: true }
+  if (opts.keepTasks) keep.tasks = true
+  const filtered = recipeClosePrimaryExcept(currentStack, keep, [])
+  const frameRootKey = frameRoot(frame.type)
+  const withoutSameRoot = filtered.filter((f) => frameRoot(f.type) !== frameRootKey)
+  return [...withoutSameRoot, frame]
+}
+
 /**
  * closePrimaryPanelsExcept(keep) — rebuild stack keeping allowed roots.
  * @param {import('./types.js').NavFrame[]} currentStack
@@ -39,24 +78,34 @@ export function recipeClosePrimaryExcept(currentStack, keep, append = []) {
 }
 
 /** Legacy: openLeadsPanel */
-export function recipeOpenLeads(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { leads: true }, [{ type: 'leads' }])
+export function recipeOpenLeads(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'leads', { type: 'leads' }, opts)
 }
 
 /** Legacy: openDealsPanel */
-export function recipeOpenDeals(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { deals: true }, [{ type: 'deals' }])
+export function recipeOpenDeals(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'deals', { type: 'deals' }, opts)
 }
 
 /** Legacy: openDealPipeline */
-export function recipeOpenPipes(currentStack, pipelineId) {
-  const frames = [{ type: 'pipes', pipelineId }]
-  return recipeClosePrimaryExcept(currentStack, { pipes: true }, frames)
+export function recipeOpenPipes(currentStack, pipelineId, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'pipes', { type: 'pipes', pipelineId }, opts)
+}
+
+/** Close Tasks only — leave any primary panel in the stack. */
+export function recipeCloseTasks(currentStack) {
+  return currentStack.filter((f) => f.type !== 'tasks')
 }
 
 /** Legacy: openTasks */
-export function recipeOpenTasks(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { tasks: true }, [{ type: 'tasks' }])
+export function recipeOpenTasks(currentStack, opts = {}) {
+  const keep = { tasks: true }
+  if (opts.keepPrimary) {
+    Object.assign(keep, collectDockableKeepFlags(currentStack))
+  }
+  const filtered = recipeClosePrimaryExcept(currentStack, keep, [])
+  if (filtered.some((f) => f.type === 'tasks')) return filtered
+  return [...filtered, { type: 'tasks' }]
 }
 
 /** Legacy: openSchedule (standalone, clears schedule stack) */
@@ -65,33 +114,33 @@ export function recipeOpenSchedule(currentStack) {
 }
 
 /** Legacy: openListPanel */
-export function recipeOpenLists(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { list: true }, [{ type: 'lists' }])
+export function recipeOpenLists(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'list', { type: 'lists' }, opts)
 }
 
 /** Legacy: openPathsPanel */
-export function recipeOpenPaths(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { paths: true }, [{ type: 'paths' }])
+export function recipeOpenPaths(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'paths', { type: 'paths' }, opts)
 }
 
 /** Legacy: openFormsPanel */
-export function recipeOpenForms(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { forms: true }, [{ type: 'forms' }])
+export function recipeOpenForms(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'forms', { type: 'forms' }, opts)
 }
 
 /** Legacy: openQuotesPanel */
-export function recipeOpenQuotes(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { quotes: true }, [{ type: 'quotes' }])
+export function recipeOpenQuotes(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'quotes', { type: 'quotes' }, opts)
 }
 
 /** Legacy: openReportsPanel */
-export function recipeOpenReports(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { reports: true }, [{ type: 'reports' }])
+export function recipeOpenReports(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'reports', { type: 'reports' }, opts)
 }
 
 /** Legacy: openTeamsPanel */
-export function recipeOpenTeams(currentStack) {
-  return recipeClosePrimaryExcept(currentStack, { teams: true }, [{ type: 'teams' }])
+export function recipeOpenTeams(currentStack, opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'teams', { type: 'teams' }, opts)
 }
 
 /** Legacy: openSettingsPanel — stacks on top, does NOT close other panels */
@@ -187,9 +236,6 @@ export function recipeReturnToActivity() {
   return [{ type: 'activity' }]
 }
 
-function frameRoot(type) {
-  return type.split('.')[0]
-}
 
 export function recipeViewListContents(currentStack, listId) {
   const base = recipeClosePrimaryExcept(currentStack, { list: true }, [{ type: 'lists' }])

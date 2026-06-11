@@ -1,25 +1,50 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
-import { createPortal } from 'react-dom'
-import { X, FileText, Trash2, Edit3, Upload, Loader2, MoreVertical, Share2, Users, Link2 } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
-import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from '../ui/panel-header'
+import {
+  FileText,
+  Trash2,
+  Edit3,
+  Upload,
+  Loader2,
+  MoreVertical,
+  Share2,
+  Link2,
+  Eye,
+  Search,
+} from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
+import { ignoreRadixMapPanelDismiss } from '../ui/panelDialogUtils'
+import {
+  PanelHeader,
+  PANEL_LIST_HEADER_CLASS,
+  PANEL_LIST_HEADER_STYLE,
+  PanelCreateButton,
+} from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
 import { showConfirm } from '../ui/confirm-dialog'
 import { useAuth } from '../../contexts/AuthContext'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { LeadSharingIcon } from '../ResourceSharePicker'
 import { ShareResourceDialog } from '../ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
+import { OptionsMenuDropdown, OptionsMenuItem } from '../ui/OptionsMenuDropdown'
+import { cn } from '@/lib/utils'
 import {
   fetchTemplates,
   createTemplate,
   deleteTemplate,
-  uploadFormPdf
+  uploadFormPdf,
+  fetchFormPdfBlob,
 } from '../../utils/forms'
+import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
+import { SendFormLinkDialog } from './SendFormLinkDialog'
 
 const FormBuilderView = lazy(() => import('./FormBuilderView'))
 const FormFillView = lazy(() => import('./FormFillView'))
-import { SendFormLinkDialog } from './SendFormLinkDialog'
+
+const MENU_WIDTH = 180
+const FORM_SUB_PANEL_CLASS =
+  'map-panel forms-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,56rem)] max-w-[56rem]'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -46,6 +71,7 @@ async function getPdfPageCount(arrayBuffer) {
 
 export function FormsPanel({
   isOpen,
+  panelDockSlot,
   onClose,
   onBack,
   formsView = 'list',
@@ -57,7 +83,7 @@ export function FormsPanel({
   teamMembership = null,
   onShareForm,
   onShareFormWithTeams,
-  onValidateShareEmail
+  onValidateShareEmail,
 }) {
   const { getToken, currentUser } = useAuth()
   const view = formsView
@@ -65,10 +91,14 @@ export function FormsPanel({
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [search, setSearch] = useState('')
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [menuAnchor, setMenuAnchor] = useState(null)
+  const menuTriggerRef = useRef(null)
+  const listPanelRef = useRef(null)
 
-  // Share dialog state
+  const hasNestedView = view !== 'list'
+  useObscuredPanelRoot(listPanelRef, hasNestedView)
+
   const [shareTemplateId, setShareTemplateId] = useState(null)
   const [localShareState, setLocalShareState] = useState(null)
   const [linkTemplateId, setLinkTemplateId] = useState(null)
@@ -77,49 +107,43 @@ export function FormsPanel({
   const [shareEmailValid, setShareEmailValid] = useState(null)
   const [shareEmailError, setShareEmailError] = useState('')
   const [isValidatingShare, setIsValidatingShare] = useState(false)
+  const [previewTemplate, setPreviewTemplate] = useState(null)
   const validateTimeoutRef = useRef(null)
-  const closeMenu = useCallback(() => {
-    setOpenMenuId(null)
-    setMenuAnchor(null)
-  }, [])
-  const openMenu = useCallback((templateId, event) => {
-    event.stopPropagation()
-    const rect = event.currentTarget.getBoundingClientRect()
-    const MENU_WIDTH = 180
-    const PADDING = 8
-    let top = rect.bottom + 4
-    let left = rect.right - MENU_WIDTH
-    if (left < PADDING) left = PADDING
-    if (left + MENU_WIDTH > window.innerWidth - PADDING) {
-      left = window.innerWidth - MENU_WIDTH - PADDING
+
+  const handlePreviewTemplate = useCallback((template) => {
+    if (!template?.originalPdfKey) {
+      showToast('This form has no PDF to preview', 'error')
+      return
     }
-    const estimatedHeight = 120
-    if (top + estimatedHeight > window.innerHeight - PADDING) {
-      top = Math.max(PADDING, rect.top - estimatedHeight - 4)
-    }
-    setMenuAnchor({ top, left })
-    setOpenMenuId(templateId)
+    setPreviewTemplate(template)
   }, [])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ silent = false } = {}) => {
     if (!getToken) return
-    setLoading(true)
+    if (!silent) setLoading(true)
     try {
       const list = await fetchTemplates(getToken)
       setTemplates(list)
     } catch (e) {
-      showToast(e.message || 'Failed to load form templates', 'error')
+      if (!silent) showToast(e.message || 'Failed to load form templates', 'error')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [getToken])
 
   useEffect(() => {
-    if (isOpen && view === 'list') refresh()
-  }, [isOpen, view, refresh])
+    if (!isOpen || !getToken) return
+    if (view !== 'list') {
+      refresh({ silent: true })
+      return
+    }
+    refresh()
+  }, [isOpen, getToken, view, refresh])
 
   useEffect(() => {
     if (!isOpen) {
+      setSearch('')
+      setOpenMenuId(null)
       setShareTemplateId(null)
       setLocalShareState(null)
       setLinkTemplateId(null)
@@ -134,7 +158,6 @@ export function FormsPanel({
     }
   }, [isOpen])
 
-  // Debounced email validation for the share dialog.
   const runValidation = useCallback(async (email) => {
     const trimmed = (email || '').trim().toLowerCase()
     if (!trimmed) {
@@ -204,17 +227,17 @@ export function FormsPanel({
         const created = await createTemplate(getToken, {
           name: baseName,
           fields: [],
-          pageCount
+          pageCount,
         })
         const { key, url } = await uploadFormPdf(getToken, {
           templateId: created.id,
-          file: buf
+          file: buf,
         })
         const { updateTemplate } = await import('../../utils/forms')
         const updated = await updateTemplate(getToken, created.id, {
           originalPdfKey: key,
           originalPdfUrl: url,
-          pageCount
+          pageCount,
         })
         setTemplates((prev) => [...prev.filter((t) => t.id !== updated.id), updated])
         onOpenEdit?.(updated.id)
@@ -226,13 +249,14 @@ export function FormsPanel({
       }
     }
     input.click()
-  }, [getToken])
+  }, [getToken, onOpenEdit])
 
   const handleDelete = useCallback(async (template) => {
     const ok = await showConfirm({
       title: 'Delete form template?',
       message: `"${template.name}" will be permanently removed.`,
-      confirmLabel: 'Delete'
+      confirmLabel: 'Delete',
+      destructive: true,
     })
     if (!ok) return
     try {
@@ -246,7 +270,7 @@ export function FormsPanel({
 
   const isOwnedByUser = useCallback(
     (template) => !!(template && currentUser && template.ownerId === currentUser.uid),
-    [currentUser]
+    [currentUser],
   )
 
   const handleShareSave = useCallback(async () => {
@@ -335,23 +359,33 @@ export function FormsPanel({
       visibility: norm.visibility || VISIBILITY.PRIVATE,
       sharedMemberUids: norm.sharedMemberUids || [],
     })
-  }, [shareTemplateId])
+  }, [shareTemplateId, templates])
 
   const activeTemplate = useMemo(
     () => templates.find((t) => t.id === activeTemplateId) || null,
-    [templates, activeTemplateId]
+    [templates, activeTemplateId],
   )
 
   const linkTemplate = useMemo(
     () => templates.find((t) => t.id === linkTemplateId) || null,
-    [templates, linkTemplateId]
+    [templates, linkTemplateId],
   )
+
+  const filteredTemplates = useMemo(() => {
+    const s = search.trim().toLowerCase()
+    if (!s) return templates
+    return templates.filter((t) => (t.name || '').toLowerCase().includes(s))
+  }, [templates, search])
 
   const handleTemplateUpdated = useCallback((updated) => {
     setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
   }, [])
 
-  if (!isOpen) return null
+  const openMenu = (id, e) => {
+    e.stopPropagation()
+    menuTriggerRef.current = e.currentTarget
+    setOpenMenuId(id)
+  }
 
   const handlePanelBack = () => {
     if (view !== 'list') {
@@ -366,103 +400,171 @@ export function FormsPanel({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
-      <DialogContent
-        className={`map-panel fullscreen-panel p-0 flex flex-col max-w-none w-screen h-screen md:w-[95vw] md:h-[92vh] md:rounded-lg ${view === 'list' ? 'list-panel md:!w-auto md:!max-w-5xl' : ''}`}
-        showCloseButton={false}
-        hideOverlay
-        onInteractOutside={(e) => {
-          if (e.target.closest?.('[data-forms-panel-dropdown]')) e.preventDefault()
-        }}
-      >
-        {view === 'list' && (
-          <>
-            <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
-              <DialogDescription className="sr-only">Create, open, fill, or delete your form templates.</DialogDescription>
-              <PanelHeader onBack={handlePanelBack} title="Forms">
-                <PanelCreateButton
-                  onClick={handleNewForm}
-                  title="New form"
-                  disabled={uploading}
-                  loading={uploading}
+    <>
+      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+        <DialogContent
+          ref={listPanelRef}
+          className={cn(
+            'map-panel list-panel forms-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            hasNestedView && 'crm-panel-obscured',
+          )}
+          panelDockSlot={panelDockSlot}
+          showCloseButton={false}
+          hideOverlay
+          suppressBackdrop
+          onInteractOutside={(e) => {
+            if (e.target.closest?.('[data-forms-panel-menu]')) e.preventDefault()
+          }}
+        >
+          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
+            <DialogDescription className="sr-only">Forms</DialogDescription>
+            <PanelHeader onBack={handlePanelBack} title="Forms">
+              <PanelCreateButton
+                onClick={handleNewForm}
+                title="New form"
+                disabled={uploading}
+                loading={uploading}
+              />
+            </PanelHeader>
+          </DialogHeader>
+
+          <div
+            className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5 min-h-0"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="mb-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search forms by name…"
+                  className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+                  aria-label="Search forms"
                 />
-              </PanelHeader>
-            </DialogHeader>
+              </div>
+            </div>
 
-            <div
-              className="px-6 py-4 overflow-y-auto flex-1"
-              style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
-            >
-              {loading && templates.length === 0 ? (
-                <div className="flex items-center justify-center py-12 text-sm opacity-70">
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading templates…
-                </div>
-              ) : templates.length === 0 ? (
-                <div className="text-center py-12">
-                  <FileText className="h-10 w-10 mx-auto mb-3 opacity-60" />
-                  <p className="text-sm opacity-80">No form templates yet.</p>
-                  <p className="text-xs opacity-60 mt-1">Upload a PDF to get started.</p>
-                  <Button className="mt-4" onClick={handleNewForm} disabled={uploading}>
-                    <Upload className="h-4 w-4 mr-2" /> Upload PDF
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
-                  {templates.map((t) => {
-                    const owned = isOwnedByUser(t)
-                    const sharedEmails = t.sharedWith || []
-                    const norm = normalizeResourceVisibility(t)
-                    const hasShares = sharedEmails.length > 0 || norm.visibility !== VISIBILITY.PRIVATE
-                    return (
-                      <div
-                        key={t.id}
-                        onClick={() => onOpenFill?.(t.id)}
-                        className="map-panel-list-item relative w-full sm:w-auto rounded-lg p-4 transition-all cursor-pointer border border-white/10 bg-white/[0.06] hover:bg-white/[0.1]"
-                      >
-                        <div className="flex items-start gap-2">
-                          <FileText className="h-5 w-5 flex-shrink-0 mt-0.5 opacity-80" />
-                          <div className="pr-8">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <div className="font-medium text-sm whitespace-nowrap">{t.name}</div>
-                              <LeadSharingIcon resource={t} collaboratorHint={!owned} />
-                            </div>
-                            <div className="text-xs opacity-70 mt-0.5">
-                              {t.pageCount || 0} page{(t.pageCount || 0) === 1 ? '' : 's'}
-                              {' · '}
-                              {(t.fields || []).length} field{(t.fields || []).length === 1 ? '' : 's'}
-                            </div>
-                            <div className="text-xs opacity-60 mt-0.5 tabular-nums">
-                              Last used {formatDate(t.lastUsedAt || t.updatedAt)}
-                            </div>
-                          </div>
-                        </div>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-2 right-2 h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (openMenuId === t.id) {
-                              closeMenu()
-                            } else {
-                              openMenu(t.id, e)
-                            }
-                          }}
-                          title="Form options"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin opacity-60" />
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="text-center py-16">
+                <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm opacity-60">No forms yet.</p>
+                <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">Upload a PDF to create a fillable form template.</p>
+                <Button className="mt-4 create-list-btn" onClick={handleNewForm} disabled={uploading}>
+                  <Upload className="h-4 w-4 mr-2" /> Upload PDF
+                </Button>
+              </div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="text-center py-12">
+                <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm opacity-60">No forms match your search.</p>
+              </div>
+            ) : (
+              filteredTemplates.map((t) => {
+                const owned = isOwnedByUser(t)
+                return (
+                  <div
+                    key={t.id}
+                    role="button"
+                    tabIndex={0}
+                    className="w-full text-left map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 cursor-pointer"
+                    onClick={() => onOpenFill?.(t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpenFill?.(t.id)
+                      }
+                    }}
+                  >
+                    <FileText className="h-5 w-5 shrink-0 opacity-70" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium truncate">{t.name}</span>
+                        <LeadSharingIcon resource={t} collaboratorHint={!owned} />
                       </div>
-                    )
-                  })}
+                      <p className="text-sm opacity-70 truncate">
+                        {t.pageCount || 0} page{(t.pageCount || 0) === 1 ? '' : 's'}
+                        {' · '}
+                        {(t.fields || []).length} field{(t.fields || []).length === 1 ? '' : 's'}
+                      </p>
+                      <p className="text-sm opacity-50">Last used {formatDate(t.lastUsedAt || t.updatedAt)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md opacity-50 hover:opacity-90 hover:bg-white/10"
+                      onClick={(e) => openMenu(`f-${t.id}`, e)}
+                      aria-label={`Options for ${t.name}`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <OptionsMenuDropdown
+        open={!!openMenuId}
+        onClose={() => setOpenMenuId(null)}
+        triggerRef={menuTriggerRef}
+        menuWidth={MENU_WIDTH}
+        dataAttr="data-forms-panel-menu"
+      >
+        {(() => {
+          const tid = openMenuId?.replace('f-', '')
+          const t = templates.find((x) => x.id === tid)
+          if (!t) return null
+          const owned = isOwnedByUser(t)
+          return (
+            <>
+              <OptionsMenuItem onClick={() => { handlePreviewTemplate(t); setOpenMenuId(null) }}>
+                <Eye className="h-4 w-4" /> Preview PDF
+              </OptionsMenuItem>
+              {owned && (
+                <OptionsMenuItem onClick={() => { onOpenEdit?.(t.id); setOpenMenuId(null) }}>
+                  <Edit3 className="h-4 w-4" /> Edit
+                </OptionsMenuItem>
+              )}
+              {owned && onShareForm && (
+                <OptionsMenuItem onClick={() => { setShareTemplateId(t.id); setOpenMenuId(null) }}>
+                  <Share2 className="h-4 w-4" /> Share
+                </OptionsMenuItem>
+              )}
+              <OptionsMenuItem onClick={() => { setLinkTemplateId(t.id); setLinkPrefillValues(null); setOpenMenuId(null) }}>
+                <Link2 className="h-4 w-4" /> Send link
+              </OptionsMenuItem>
+              {owned ? (
+                <OptionsMenuItem destructive onClick={() => { handleDelete(t); setOpenMenuId(null) }}>
+                  <Trash2 className="h-4 w-4" /> Delete
+                </OptionsMenuItem>
+              ) : (
+                <div className="px-3 py-2 text-xs opacity-50 italic">
+                  Shared form — only the owner can edit or delete.
                 </div>
               )}
-            </div>
-          </>
-        )}
+            </>
+          )
+        })()}
+      </OptionsMenuDropdown>
 
-        {view === 'edit' && activeTemplate && (
+      <Dialog
+        open={view === 'edit' && !!activeTemplate}
+        modal={false}
+        onOpenChange={(open) => { if (!open) handleSubViewBack() }}
+      >
+        <DialogContent
+          className={cn(FORM_SUB_PANEL_CLASS, 'form-editor-panel')}
+          showCloseButton={false}
+          nestedOverlay
+          topLayer
+        >
           <Suspense fallback={<LoadingScreen label="Loading form builder…" />}>
             <FormBuilderView
               template={activeTemplate}
@@ -470,15 +572,31 @@ export function FormsPanel({
               onTemplateUpdated={handleTemplateUpdated}
             />
           </Suspense>
-        )}
+        </DialogContent>
+      </Dialog>
 
-        {view === 'fill' && activeTemplate && (
+      <Dialog
+        open={view === 'fill' && !!activeTemplate}
+        modal={false}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleSubViewBack()
+            refresh({ silent: true })
+          }
+        }}
+      >
+        <DialogContent
+          className={cn(FORM_SUB_PANEL_CLASS, 'form-fill-panel')}
+          showCloseButton={false}
+          nestedOverlay
+          topLayer
+        >
           <Suspense fallback={<LoadingScreen label="Loading form…" />}>
             <FormFillView
               template={activeTemplate}
               onBack={() => {
-                onCloseSubView?.()
-                refresh()
+                handleSubViewBack()
+                refresh({ silent: true })
               }}
               onTemplateUpdated={handleTemplateUpdated}
               onRequestCompletion={(prefillValues) => {
@@ -487,91 +605,8 @@ export function FormsPanel({
               }}
             />
           </Suspense>
-        )}
-      </DialogContent>
-
-      {openMenuId && menuAnchor && typeof document !== 'undefined' && createPortal(
-        (() => {
-          const t = templates.find((x) => x.id === openMenuId)
-          if (!t) return null
-          const owned = isOwnedByUser(t)
-          return (
-            <div
-              data-forms-panel-dropdown
-              className="pointer-events-auto"
-              style={{ position: 'fixed', inset: 0, zIndex: 10000 }}
-            >
-              <div
-                className="fixed inset-0 z-[10001]"
-                onClick={closeMenu}
-                aria-hidden
-              />
-              <div
-                className="map-panel list-panel fixed z-[10002] rounded-xl min-w-[180px] pt-1 overflow-hidden"
-                style={{ top: menuAnchor.top, left: menuAnchor.left }}
-                role="menu"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {owned && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeMenu()
-                      onOpenEdit?.(t.id)
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-                  >
-                    <Edit3 className="h-4 w-4 flex-shrink-0" />
-                    Edit
-                  </button>
-                )}
-                {owned && onShareForm && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeMenu()
-                      setShareTemplateId(t.id)
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-                  >
-                    <Share2 className="h-4 w-4 flex-shrink-0" />
-                    Share
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeMenu()
-                    setLinkTemplateId(t.id)
-                    setLinkPrefillValues(null)
-                  }}
-                  className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-                >
-                  <Link2 className="h-4 w-4 flex-shrink-0" />
-                  Send link
-                </button>
-                {owned ? (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { closeMenu(); handleDelete(t) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { closeMenu(); handleDelete(t) } }}
-                    className="list-panel-delete-btn w-full px-3 py-2 pb-2 rounded-b-xl text-left text-sm flex items-center gap-2 transition-colors text-red-400 hover:bg-red-600/80 cursor-pointer"
-                  >
-                    <Trash2 className="h-4 w-4 flex-shrink-0" />
-                    Delete
-                  </div>
-                ) : (
-                  <div className="px-3 py-2 text-xs text-gray-500 italic">
-                    Shared form — only the owner can edit or delete.
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })(),
-        document.getElementById('modal-root') || document.body
-      )}
+        </DialogContent>
+      </Dialog>
 
       {shareTemplateId && (() => {
         const template = templates.find((t) => t.id === shareTemplateId)
@@ -617,13 +652,25 @@ export function FormsPanel({
           setLinkPrefillValues(null)
         }}
       />
-    </Dialog>
+
+      <FilePreviewOverlay
+        open={!!previewTemplate}
+        onClose={() => setPreviewTemplate(null)}
+        items={previewTemplate ? [{
+          id: previewTemplate.id,
+          name: `${previewTemplate.name || 'Form'}.pdf`,
+          contentType: 'application/pdf',
+          loadBlob: () => fetchFormPdfBlob(getToken, previewTemplate.originalPdfKey),
+        }] : []}
+        initialIndex={0}
+      />
+    </>
   )
 }
 
 function LoadingScreen({ label }) {
   return (
-    <div className="flex items-center justify-center flex-1 py-20 text-sm text-gray-500">
+    <div className="flex items-center justify-center flex-1 py-20 text-sm opacity-60">
       <Loader2 className="h-5 w-5 mr-2 animate-spin" /> {label}
     </div>
   )

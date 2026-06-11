@@ -13,6 +13,7 @@ import {
   resolveAcceptedLineIds,
 } from './lib/quoteMath.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
+import { resolveSenderBranding } from './lib/senderBranding.js'
 
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const stripe = stripeKey ? new Stripe(stripeKey) : null
@@ -24,7 +25,7 @@ function resolveOrigin(req) {
   return req.headers.origin || 'https://localhost'
 }
 
-function publicQuotePayload(quote, invite, { selectedOptionalIds = [] } = {}) {
+async function publicQuotePayload(quote, invite, { selectedOptionalIds = [] } = {}) {
   const optionalIds = (quote.lineItems || []).filter((l) => l.isOptional).map((l) => l.id)
   const totals = computeQuoteTotals(quote.lineItems || [], quote.taxRate || 0, {
     selectedOptionalIds: quote.status === 'accepted' || quote.status === 'paid'
@@ -34,6 +35,18 @@ function publicQuotePayload(quote, invite, { selectedOptionalIds = [] } = {}) {
   const requiredOnly = computeQuoteTotals(quote.lineItems || [], quote.taxRate || 0, {
     selectedOptionalIds: [],
   })
+
+  let branding = null
+  if (quote.ownerId) {
+    try {
+      branding = await resolveSenderBranding({
+        uid: quote.ownerId,
+        email: quote.ownerEmail || '',
+      })
+    } catch {
+      branding = null
+    }
+  }
 
   return {
     title: quote.title,
@@ -57,6 +70,14 @@ function publicQuotePayload(quote, invite, { selectedOptionalIds = [] } = {}) {
     paidAt: quote.paidAt || null,
     acceptedLineIds: quote.acceptedLineIds || null,
     viewCount: quote.viewTracking?.viewCount || 0,
+    branding: branding
+      ? {
+          businessName: branding.businessName,
+          logoBase64: branding.logoBase64,
+          senderName: quote.createdByName || branding.senderName,
+          senderEmail: branding.senderEmail || quote.ownerEmail || '',
+        }
+      : null,
   }
 }
 
@@ -132,7 +153,7 @@ export default async function handler(req, res) {
       if (ctx.error) return res.status(ctx.status).json({ error: ctx.error })
 
       const updated = await recordQuoteView(ctx.quote, ctx.index, ctx.all, ctx.invite)
-      return res.status(200).json(publicQuotePayload(updated, ctx.invite))
+      return res.status(200).json(await publicQuotePayload(updated, ctx.invite))
     }
 
     if (req.method === 'POST') {
@@ -304,7 +325,7 @@ export default async function handler(req, res) {
         status: quote.status,
         canPay,
         stripeConfigured: !!stripeKey,
-        quote: publicQuotePayload(quote, invite),
+        quote: await publicQuotePayload(quote, invite),
       })
     }
 

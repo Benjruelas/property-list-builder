@@ -5,7 +5,7 @@ import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, S
 import { Button } from './ui/button'
 import { PanelBackButton, PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle, formatTimeInState } from '@/utils/dealPipeline'
@@ -97,6 +97,7 @@ function leadToParcelData(lead) {
 
 export function DealPipeline({
   isOpen,
+  panelDockSlot,
   instantDismiss = false,
   onClose,
   onBack,
@@ -848,13 +849,14 @@ export function DealPipeline({
   }
 
   return (
-    <Dialog open={isOpen} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, hasNestedDetail, handlePipelineBack, isOpen)}>
+    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         ref={pipelinePanelRef}
         className={cn(
           'map-panel deal-pipeline-panel fullscreen-panel flex flex-col',
           hasNestedDetail && 'crm-panel-obscured'
         )}
+        panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay
         suppressBackdrop

@@ -92,7 +92,9 @@ export async function fetchLeads(getToken) {
   })
   if (!res.ok) throw new Error('Failed to fetch leads')
   const data = await res.json()
-  return data.leads || []
+  const leads = data.leads || []
+  saveLocalLeads(leads)
+  return leads
 }
 
 export async function createLead(getToken, leadData) {

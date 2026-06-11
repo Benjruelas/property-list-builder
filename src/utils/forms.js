@@ -3,6 +3,8 @@
  * All methods accept an async getToken() that returns a Firebase ID token.
  */
 
+import { fetchAuthenticatedBlob } from './filePreview'
+
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
   if (typeof window !== 'undefined') return `${window.location.origin}/api`
@@ -125,11 +127,20 @@ export async function uploadFormPdf(getToken, { templateId, file }) {
   return await parseJsonSafe(res)
 }
 
+export function formPdfUrl(key) {
+  if (!key) return ''
+  return `${getApiBase()}/forms-upload?key=${encodeURIComponent(key)}`
+}
+
+export async function fetchFormPdfBlob(getToken, key) {
+  return fetchAuthenticatedBlob(getToken, formPdfUrl(key))
+}
+
 export async function downloadFormPdf(getToken, key) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to fetch PDFs')
   if (!key) throw new Error('key is required')
-  const url = `${getApiBase()}/forms-upload?key=${encodeURIComponent(key)}`
+  const url = formPdfUrl(key)
   const res = await fetch(url, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` }

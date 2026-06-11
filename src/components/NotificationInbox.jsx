@@ -4,7 +4,7 @@ import { Bell, ChevronDown, Loader2, Search, UserSearch, Briefcase, CheckSquare,
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 const ACTIVITY_FEED_ROW_CLASS =
-  'map-panel-list-item flex flex-row gap-3 items-start w-full text-left px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
+  'map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer w-full text-left'
 import {
   fetchFeed,
   markFeedSeen,
@@ -17,8 +17,6 @@ import {
   feedItemIconKind,
 } from '../utils/feed'
 import { cn } from '@/lib/utils'
-
-const FEED_UNSEEN_COLOR = '#60a5fa'
 
 function formatWhen(iso) {
   try {
@@ -73,11 +71,10 @@ const FEED_ICON_MAP = {
   activity: Activity,
 }
 
-function FeedItemIcon({ kind }) {
-  const Icon = FEED_ICON_MAP[kind] || Activity
+function FeedCategoryBadge({ label }) {
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 mt-0.5">
-      <Icon className="h-4 w-4 opacity-70" aria-hidden />
+    <span className="inline-flex shrink-0 max-w-full text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium bg-white/10 text-white/70 border-white/20">
+      <span className="truncate">{label}</span>
     </span>
   )
 }
@@ -88,55 +85,62 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
   const secondary = !isActivity && item.body ? item.body : null
   const category = feedItemCategoryLabel(item)
   const iconKind = feedItemIconKind(item)
-  const MetaIcon = FEED_ICON_MAP[iconKind] || Activity
+  const RowIcon = FEED_ICON_MAP[iconKind] || Activity
   const when = formatWhen(item.createdAt)
+
+  const handleOpen = () => onOpen(item)
 
   return (
     <li className="min-w-0">
-      <button
-        type="button"
-        onClick={() => onOpen(item)}
+      <div
+        role="button"
+        tabIndex={0}
+        onMouseDown={(e) => {
+          if (e.button === 0) e.preventDefault()
+        }}
+        onClick={handleOpen}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handleOpen()
+          }
+        }}
         className={cn(
           ACTIVITY_FEED_ROW_CLASS,
           isSessionNew && 'border-[#60a5fa]/80 bg-white/[0.08] hover:bg-white/[0.12]'
         )}
       >
-        <FeedItemIcon kind={iconKind} />
-        <div className="min-w-0 flex-1 flex flex-col gap-1">
-          <div className="text-sm font-medium truncate">{primary}</div>
-          {secondary ? (
-            <div className="text-xs opacity-60 truncate">{secondary}</div>
-          ) : (
-            <div className="text-xs opacity-60 truncate">{category}</div>
-          )}
-          <div className="flex items-center gap-3 mt-0.5 flex-wrap text-[11px] opacity-50">
-            {secondary && (
-              <span className="inline-flex items-center gap-1">
-                <MetaIcon className="h-3 w-3 shrink-0" />
-                {category}
-              </span>
-            )}
-            {when && <span>{when}</span>}
-            {isActivity && isAdmin && item.audience === 'admin_only' && (
-              <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase">
-                Admin
-              </span>
-            )}
+        <RowIcon className="h-5 w-5 shrink-0 opacity-70" aria-hidden />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <span className="font-medium truncate">{primary}</span>
+            <FeedCategoryBadge label={category} />
             {isSessionNew && (
-              <span className="inline-flex items-center gap-1" style={{ color: FEED_UNSEEN_COLOR }}>
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: FEED_UNSEEN_COLOR }} aria-hidden />
+              <span className="inline-flex shrink-0 text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium border-[#60a5fa]/40 bg-[#60a5fa]/20 text-[#93c5fd]">
                 New
               </span>
             )}
+            {isActivity && isAdmin && item.audience === 'admin_only' && (
+              <span className="inline-flex shrink-0 text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium bg-amber-500/20 text-amber-300 border-amber-400/30">
+                Admin
+              </span>
+            )}
           </div>
+          {secondary ? (
+            <p className="text-sm opacity-70 truncate">{secondary}</p>
+          ) : null}
+          {when ? (
+            <p className="text-sm opacity-50 truncate">{when}</p>
+          ) : null}
         </div>
-      </button>
+      </div>
     </li>
   )
 }
 
 export function ActivityPanel({
   isOpen,
+  panelDockSlot,
   isFocused = true,
   onClose,
   items,
@@ -181,9 +185,10 @@ export function ActivityPanel({
       <DialogContent
         ref={panelRef}
         className={cn(
-          'map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 p-0',
+          'map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0',
           obscured && 'crm-panel-obscured'
         )}
+        panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
@@ -220,7 +225,7 @@ export function ActivityPanel({
         </DialogHeader>
 
         <div
-          className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto scrollbar-hide px-6 py-3"
+          className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-hide px-6 py-3"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
           <div className="mb-3 space-y-2">
@@ -271,6 +276,7 @@ export function ActivityPanel({
 export function useNotificationInbox({
   isOpen: controlledOpen,
   isFeedActive: controlledFeedActive,
+  panelDockSlot,
   onOpenChange,
   getToken,
   currentUser,
@@ -384,6 +390,7 @@ export function useNotificationInbox({
   const panel = currentUser ? (
     <ActivityPanel
       isOpen={open}
+      panelDockSlot={panelDockSlot}
       isFocused={feedActive}
       onClose={handleClose}
       items={items}

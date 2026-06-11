@@ -1,4 +1,23 @@
 import { useRef, useState, useLayoutEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
+
+const DESKTOP_BAR_MQ = '(min-width: 768px)'
+
+function useDesktopActionBarElevated() {
+  const [elevated, setElevated] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_BAR_MQ).matches
+  )
+
+  useLayoutEffect(() => {
+    const mq = window.matchMedia(DESKTOP_BAR_MQ)
+    const onChange = () => setElevated(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  return elevated
+}
 import {
   Calendar,
   List,
@@ -7,7 +26,6 @@ import {
   UserSearch,
   Briefcase,
   Bell,
-  Camera,
   FileText,
   ClipboardList,
 } from 'lucide-react'
@@ -42,7 +60,6 @@ const ITEM_DEFS = {
   deals: { label: 'Deals', Icon: Briefcase },
   quotes: { label: 'Quotes', Icon: QuoteIcon },
   forms: { label: 'Forms', Icon: ClipboardList },
-  photos: { label: 'Photos', Icon: Camera },
   reports: { label: 'Reports', Icon: FileText },
   lists: { label: 'Lists', Icon: List },
   activity: { label: 'Activity', Icon: Bell },
@@ -57,7 +74,6 @@ export function MobileActionBar({
   onOpenLeads,
   onOpenDeals,
   onOpenQuotes,
-  onOpenPhotos,
   onOpenReports,
   onOpenActivity,
   showMenu = false,
@@ -74,6 +90,7 @@ export function MobileActionBar({
   onLogin,
   activityUnreadCount = 0,
 }) {
+  const elevateBar = useDesktopActionBarElevated()
   const { barIds, overflowPrimaryIds } = useActionBarLayout()
   const menuBtnRef = useRef(null)
   const [menuAnchor, setMenuAnchor] = useState(null)
@@ -112,7 +129,6 @@ export function MobileActionBar({
     leads: onOpenLeads,
     deals: onOpenDeals,
     quotes: onOpenQuotes,
-    photos: onOpenPhotos,
     reports: onOpenReports,
     lists: onOpenListPanel,
     forms: onOpenForms,
@@ -122,7 +138,7 @@ export function MobileActionBar({
 
   const computedActiveId = showMenu ? 'menu' : activeId
 
-  return (
+  const chrome = (
     <>
       <ActionBarMenu
         show={showMenu}
@@ -135,7 +151,6 @@ export function MobileActionBar({
         onOpenLeads={onOpenLeads}
         onOpenDeals={onOpenDeals}
         onOpenQuotes={onOpenQuotes}
-        onOpenPhotos={onOpenPhotos}
         onOpenReports={onOpenReports}
         onOpenActivity={onOpenActivity}
         onOpenListPanel={onOpenListPanel}
@@ -152,7 +167,7 @@ export function MobileActionBar({
         anchor={menuAnchor}
       />
       <nav
-        className="mobile-action-bar"
+        className={cn('mobile-action-bar', elevateBar && 'mobile-action-bar--elevated')}
         role="navigation"
         aria-label="Primary actions"
         data-action-bar-count={barIds.length}
@@ -196,4 +211,7 @@ export function MobileActionBar({
       </nav>
     </>
   )
+
+  if (!elevateBar || typeof document === 'undefined') return chrome
+  return createPortal(chrome, document.getElementById('modal-root') || document.body)
 }

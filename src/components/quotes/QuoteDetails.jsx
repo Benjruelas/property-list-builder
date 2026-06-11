@@ -6,6 +6,9 @@ import { QuoteLineItemsEditor } from './QuoteLineItemsEditor'
 import { formatQuoteMoney, isQuoteEditable } from '@/utils/quoteMath'
 import { displayLeadName } from '@/utils/leads'
 import { showConfirm } from '../ui/confirm-dialog'
+import { QuoteBrandHeader } from './QuoteBrandHeader'
+import { getTeamEmailBranding, getTeamForMembership, getSenderDisplayName } from '@/utils/profile'
+import { useAuth } from '@/contexts/AuthContext'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -26,8 +29,19 @@ export function QuoteDetails({
   onOpenDeal,
   leads = [],
   canSeeDealAmounts = true,
+  teams = [],
+  teamMembership = null,
 }) {
+  const { currentUser } = useAuth()
   if (!quote) return null
+
+  const team = getTeamForMembership(teams, teamMembership)
+  const teamBranding = getTeamEmailBranding(team)
+  const senderName = quote.createdByName
+    || (quote.ownerId === currentUser?.uid ? getSenderDisplayName(currentUser) : '')
+    || (quote.ownerEmail || '').split('@')[0]
+    || ''
+  const senderEmail = quote.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
 
   const vt = quote.viewTracking || {}
   const acceptedOptionalIds = quote.clientResponse?.selectedOptionalIds || []
@@ -42,6 +56,7 @@ export function QuoteDetails({
       <DialogContent
         className="map-panel quotes-panel quote-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
         showCloseButton={false}
+        detailFocusOverlay
         nestedOverlay
         topLayer
       >
@@ -59,6 +74,14 @@ export function QuoteDetails({
           className="flex-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto scrollbar-hide overscroll-contain px-4 py-4 space-y-4"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
+          <QuoteBrandHeader
+            variant="panel"
+            businessName={teamBranding.businessName}
+            logoBase64={teamBranding.logoBase64}
+            senderName={senderName}
+            senderEmail={senderEmail}
+          />
+
           <div className="text-sm space-y-1 opacity-90">
             {leadName && <p><span className="opacity-60">Lead:</span> {leadName}</p>}
             {quote.validUntil && <p><span className="opacity-60">Valid until:</span> {quote.validUntil.slice(0, 10)}</p>}

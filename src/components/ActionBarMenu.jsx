@@ -13,7 +13,6 @@ import {
   Calendar,
   ListTodo,
   Bell,
-  Camera,
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { PipeIcon } from './PipeIcon'
@@ -27,7 +26,6 @@ const BAR_OVERFLOW_ONLY = [
   { id: 'deals', label: 'Deals', Icon: Briefcase, tour: 'menu-deals' },
   { id: 'quotes', label: 'Quotes', Icon: QuoteIcon, tour: 'menu-quotes' },
   { id: 'forms', label: 'Forms', Icon: ClipboardList, tour: 'menu-forms' },
-  { id: 'photos', label: 'Photos', Icon: Camera, tour: 'menu-photos' },
   { id: 'reports', label: 'Reports', Icon: FileText, tour: 'menu-reports' },
 ]
 
@@ -71,7 +69,6 @@ export function ActionBarMenu({
   onOpenLeads,
   onOpenDeals,
   onOpenQuotes,
-  onOpenPhotos,
   onOpenReports,
   onOpenActivity,
   onOpenListPanel,
@@ -99,7 +96,6 @@ export function ActionBarMenu({
     leads: onOpenLeads,
     deals: onOpenDeals,
     quotes: onOpenQuotes,
-    photos: onOpenPhotos,
     reports: onOpenReports,
     lists: onOpenListPanel,
     forms: onOpenForms,

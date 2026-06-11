@@ -5,6 +5,7 @@ import { Input } from './ui/input'
 import { showToast } from './ui/toast'
 import { updateTeamSettings } from '@/utils/teams'
 import { getTeamEmailBranding, readLogoFileAsDataUrl } from '@/utils/profile'
+import { FilePreviewOverlay } from './ui/FilePreviewOverlay'
 
 export function TeamEmailBrandingSection({ team, getToken, onSaved, disabled }) {
   const initial = getTeamEmailBranding(team)
@@ -14,6 +15,7 @@ export function TeamEmailBrandingSection({ team, getToken, onSaved, disabled }) 
   const [companyEmail, setCompanyEmail] = useState(initial.companyEmail)
   const [logoBase64, setLogoBase64] = useState(initial.logoBase64)
   const [saving, setSaving] = useState(false)
+  const [logoPreviewOpen, setLogoPreviewOpen] = useState(false)
   const fileRef = useRef(null)
 
   const handleLogoPick = async (e) => {
@@ -79,7 +81,14 @@ export function TeamEmailBrandingSection({ team, getToken, onSaved, disabled }) 
           <div className="flex items-center gap-3">
             {logoBase64 ? (
               <div className="relative shrink-0 rounded-md border border-white/15 bg-white/5 p-2">
-                <img src={logoBase64} alt="" className="h-10 max-w-[120px] object-contain" />
+                <button
+                  type="button"
+                  className="block"
+                  onClick={() => setLogoPreviewOpen(true)}
+                  title="Preview logo"
+                >
+                  <img src={logoBase64} alt="" className="h-10 max-w-[120px] object-contain" />
+                </button>
                 <button
                   type="button"
                   className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-black/80 border border-white/20 flex items-center justify-center"
@@ -144,6 +153,18 @@ export function TeamEmailBrandingSection({ team, getToken, onSaved, disabled }) 
           Save branding
         </Button>
       </div>
+
+      <FilePreviewOverlay
+        open={logoPreviewOpen && !!logoBase64}
+        onClose={() => setLogoPreviewOpen(false)}
+        items={logoBase64 ? [{
+          id: 'team-logo',
+          name: 'Team logo',
+          contentType: 'image/png',
+          loadBlob: async () => logoBase64,
+        }] : []}
+        initialIndex={0}
+      />
     </div>
   )
 }

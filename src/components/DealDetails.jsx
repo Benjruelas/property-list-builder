@@ -9,7 +9,9 @@ import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { formatLeadAddress } from '@/utils/leads'
 import { formatTimeInState } from '@/utils/dealPipeline'
-import { uploadDealFile, downloadDealFile, deleteDealFile, MAX_FILE_BYTES } from '@/utils/dealFiles'
+import { uploadDealFile, downloadDealFile, deleteDealFile, fetchDealFileBlob, sumDealFileBytes, DEAL_STORAGE_LIMIT_BYTES } from '@/utils/dealFiles'
+import { StorageUsageBar } from './ui/StorageUsageBar'
+import { FilePreviewOverlay } from './ui/FilePreviewOverlay'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { DealTasksSection } from './DealTasksSection'
@@ -96,6 +98,7 @@ export function DealDetails({
   )
   const [dealQuotesLoading, setDealQuotesLoading] = useState(false)
   const fileInputRef = useRef(null)
+  const [previewFileIndex, setPreviewFileIndex] = useState(null)
 
   useEffect(() => {
     if (!d?.id || !getToken) {
@@ -183,20 +186,26 @@ export function DealDetails({
     commitFinances(payments, nextCosts)
   }
 
+  const dealFilesUsed = sumDealFileBytes(d.files)
+  const dealStorageFull = dealFilesUsed >= DEAL_STORAGE_LIMIT_BYTES
+  const dealFilePreviewItems = (d.files || []).map((f) => ({
+    id: f.id,
+    name: f.name,
+    contentType: f.contentType,
+    loadBlob: () => fetchDealFileBlob(getToken, f.key),
+  }))
+
   const handleFilePick = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !pipeline?.id) return
-    if (file.size > MAX_FILE_BYTES) {
-      showToast('File must be 10MB or smaller', 'error')
-      return
-    }
     setUploading(true)
     try {
       const record = await uploadDealFile(getToken, {
         pipelineId: pipeline.id,
         dealId: d.id,
         file,
+        existingFiles: d.files || [],
       })
       persist({ files: [...(d.files || []), record] })
       showToast('File uploaded', 'success')
@@ -442,7 +451,7 @@ export function DealDetails({
                           size="sm"
                           variant="outline"
                           className="h-7 px-2 text-xs"
-                          disabled={uploading}
+                          disabled={uploading || dealStorageFull}
                           onClick={() => fileInputRef.current?.click()}
                         >
                           {uploading ? (
@@ -459,24 +468,50 @@ export function DealDetails({
                 >
                   Files
                 </DealDetailSectionTitle>
-                <p className="text-[10px] text-white/40 mb-2">Max 10MB per file</p>
+                <StorageUsageBar
+                  usedBytes={dealFilesUsed}
+                  limitBytes={DEAL_STORAGE_LIMIT_BYTES}
+                  className="mb-2"
+                  label="Deal storage"
+                />
                 <ul className="space-y-1.5">
                   {(d.files || []).length === 0 && (
                     <li className="text-xs text-white/40 py-1">No files</li>
                   )}
-                  {(d.files || []).map((f) => (
+                  {(d.files || []).map((f, fileIndex) => (
                     <li
                       key={f.id}
                       className="flex items-center gap-2 py-2 px-2.5 rounded-lg border border-white/10 bg-white/[0.04]"
                     >
-                      <FileText className="h-4 w-4 shrink-0 opacity-50" />
-                      <span className="flex-1 text-sm truncate">{f.name}</span>
-                      <span className="text-[10px] text-white/40 shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
-                      <button type="button" onClick={() => downloadDealFile(getToken, f.key, f.name)} title="Download">
+                      <button
+                        type="button"
+                        className="flex flex-1 min-w-0 items-center gap-2 text-left hover:opacity-90"
+                        onClick={() => setPreviewFileIndex(fileIndex)}
+                        title="Preview file"
+                      >
+                        <FileText className="h-4 w-4 shrink-0 opacity-50" />
+                        <span className="flex-1 text-sm truncate">{f.name}</span>
+                        <span className="text-[10px] text-white/40 shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          downloadDealFile(getToken, f.key, f.name)
+                        }}
+                        title="Download"
+                      >
                         <Download className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
                       </button>
                       {!readOnly && !isClosed && (
-                        <button type="button" onClick={() => handleDeleteFile(f)} title="Delete">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteFile(f)
+                          }}
+                          title="Delete"
+                        >
                           <Trash2 className="h-3.5 w-3.5 opacity-40 hover:opacity-80" />
                         </button>
                       )}
@@ -488,6 +523,13 @@ export function DealDetails({
           </div>
         </div>
       </DialogContent>
+
+      <FilePreviewOverlay
+        open={previewFileIndex != null}
+        onClose={() => setPreviewFileIndex(null)}
+        items={dealFilePreviewItems}
+        initialIndex={previewFileIndex ?? 0}
+      />
 
       <OptionsMenuDropdown
         open={menuOpen}

@@ -4,6 +4,7 @@ import { X, Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Users, Tag
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { LeadSharingIcon } from './ResourceSharePicker'
@@ -22,6 +23,7 @@ const PATH_COLORS = [
 
 export function PathsPanel({
   isOpen,
+  panelDockSlot,
   onClose,
   onBack,
   currentUser,
@@ -278,9 +280,10 @@ export function PathsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handlePanelBack() }}>
+      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          className="map-panel list-panel fullscreen-panel"
+          className="map-panel list-panel paths-panel fullscreen-panel"
+          panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
           onInteractOutside={(e) => {

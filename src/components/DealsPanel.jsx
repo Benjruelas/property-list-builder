@@ -1,17 +1,17 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, lazy, Suspense } from 'react'
 import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, Briefcase, ChevronDown, ChevronRight, Archive, Plus } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { flattenDealsFromPipelines } from '@/utils/deals'
 import { aggregateDealFinancials, formatDealMoney } from '@/utils/dealFinances'
 import { profitValueClass } from './DealLineItemsSection'
-import { DealDetails } from './DealDetails'
 import { DealRow, ClosedDealRow } from './DealRow'
-import { LeadDetails } from './LeadDetails'
+const DealDetails = lazy(() => import('./DealDetails').then((m) => ({ default: m.DealDetails })))
+const LeadDetails = lazy(() => import('./LeadDetails').then((m) => ({ default: m.LeadDetails })))
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { updateLead } from '@/utils/leads'
@@ -20,6 +20,7 @@ import { loadClosedDeals } from '@/utils/closedDeals'
 import { filterByTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { showToast } from './ui/toast'
+import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 
 function leadToParcelData(lead) {
   if (!lead) return null
@@ -60,6 +61,8 @@ function isFirstStage(deal, columns) {
 
 export function DealsPanel({
   isOpen,
+  panelDockSlot,
+  loading = false,
   instantDismiss = false,
   onClose,
   onBack,
@@ -312,13 +315,14 @@ export function DealsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedOverlay, handlePanelBack, isOpen)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
           className={cn(
             'map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0',
             hasNestedDetail && 'crm-panel-obscured'
           )}
+          panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
           suppressBackdrop
@@ -445,7 +449,9 @@ export function DealsPanel({
                 />
               </div>
             </div>
-            {tab === 'active' ? (
+            {loading ? (
+              <PanelListBodyLoading />
+            ) : tab === 'active' ? (
               totalDeals === 0 ? (
                 <div className="text-center py-16">
                   <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -585,6 +591,7 @@ export function DealsPanel({
       />
 
       {isOpen && selectedDeal && selectedPipeline && dealsDetailDealId && !dealsClosedRecordId && (
+        <Suspense fallback={null}>
         <DealDetails
           obscuredByChild={!!leadOverlayId}
           deal={selectedDeal}
@@ -613,9 +620,11 @@ export function DealsPanel({
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
         />
+        </Suspense>
       )}
 
       {isOpen && leadOverlay && (
+        <Suspense fallback={null}>
         <LeadDetails
           isOpen
           instantDismiss={instantDismiss}
@@ -652,9 +661,11 @@ export function DealsPanel({
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
         />
+        </Suspense>
       )}
 
       {isOpen && selectedClosed && dealsClosedRecordId && !dealsDetailDealId && (
+        <Suspense fallback={null}>
         <DealDetails
           obscuredByChild={!!leadOverlayId}
           deal={selectedClosed.deal}
@@ -675,6 +686,7 @@ export function DealsPanel({
           quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
         />
+        </Suspense>
       )}
     </>
   )

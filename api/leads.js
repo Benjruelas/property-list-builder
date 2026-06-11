@@ -16,32 +16,11 @@ import {
   teamIdsFromResource,
 } from './lib/activityLog.js'
 import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
+import { kv, kvAvailable } from './lib/kvBootstrap.js'
 
 /**
  * User-scoped leads CRM with team sharing v2. Firebase Bearer auth.
  */
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
 
 const KV_KEY = 'user_leads'
 let fallbackStore = []

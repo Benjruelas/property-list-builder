@@ -31,7 +31,7 @@ import { resolveParcelId } from './utils/parcelPropertyMap'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import PathTracker from './components/PathTracker'
-import { panelLazy, prefetchAllPanels } from './utils/panelChunks'
+import { panelLazy, prefetchAllPanels, prefetchPanel } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
 const FormsPanel = lazy(panelLazy.forms)
 const DealPipeline = lazy(panelLazy.dealPipeline)
@@ -70,8 +70,11 @@ import { DealTemplateEditorDialog } from './components/DealTemplateEditorDialog'
 import { DealTemplatesManagerDialog } from './components/DealTemplatesManagerDialog'
 import { templateToCreateDealPrefill } from './utils/dealTemplates'
 import { AppLoadingScreen } from './components/AppLoadingScreen'
+import { PanelListLoadingShell } from './components/ui/PanelListLoadingShell'
 import { BasemapErrorBanner } from './components/BasemapErrorBanner'
 import { useBasemapStyle } from './hooks/useBasemapStyle'
+import { useTasksDockLayout } from './hooks/useTasksDockLayout'
+import { resolvePanelDockSlot } from './navigation/panelDockSlot'
 import { HailStormOverlay, HailStormDismissPill, HailStormMapMarkers } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
 // import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
@@ -87,6 +90,7 @@ import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
 import {
   fetchLeads,
+  loadLocalLeads,
   createLead,
   buildLeadPrefillFromParcel,
   buildAutoLeadPayloadFromParcel,
@@ -200,6 +204,7 @@ function App() {
     pipesDealId,
     pipesLeadOverlayId,
     isTasksPanelOpen,
+    tasksDockLayout,
     isSchedulePanelOpen,
     scheduleInitialDate,
     scheduleLeadId,
@@ -250,6 +255,13 @@ function App() {
     dealTemplatesManagerOpen,
     moveDealContext,
   } = pp
+
+  const { dockLeaving: tasksDockLeaving } = useTasksDockLayout(
+    tasksDockLayout ?? { tasksDocked: false, primaryRoot: null },
+    isTasksPanelOpen,
+  )
+
+  const panelDockSlot = (root, isOpen) => resolvePanelDockSlot(root, isOpen, tasksDockLayout)
 
   const dealPipelineMounted = useStickyPanelMount(isDealPipelineOpen, pipesDealId, pipesLeadOverlayId)
   const schedulePanelMounted = useStickyPanelMount(isSchedulePanelOpen, scheduleLeadId)
@@ -357,10 +369,14 @@ function App() {
   const [skipTracingInProgress, setSkipTracingInProgress] = useState(new Set()) // Track parcels being skip traced
   const [dealPipelineDeals, setDealPipelineDeals] = useState([])
   const [leads, setLeads] = useState([])
+  const [leadsLoading, setLeadsLoading] = useState(false)
+  const leadsRef = useRef(leads)
   const [tagRegistry, setTagRegistry] = useState({ leads: [], deals: [], paths: [], lists: [] })
   const [editLead, setEditLead] = useState(null)
   const [closedDeals, setClosedDeals] = useState(() => loadClosedDeals())
   const [pipelines, setPipelines] = useState([])
+  const [pipelinesLoading, setPipelinesLoading] = useState(false)
+  const pipelinesRef = useRef(pipelines)
   const [activePipelineId, setActivePipelineId] = useState(null)
   const [createDealSaving, setCreateDealSaving] = useState(false)
   const [dealTemplatesRefreshKey, setDealTemplatesRefreshKey] = useState(0)
@@ -403,7 +419,26 @@ function App() {
   /** Restore parcel details under hail after exiting storm map view */
   const returnToParcelDetailsAfterHailEventRef = useRef(false)
   const parcelFetchAbortRef = useRef(null)
+  const parcelRecenterTimerRef = useRef(null)
   const programmaticMoveRef = useRef(false)
+
+  const cancelParcelPopupWork = useCallback(() => {
+    currentPopupRef.current = null
+    parcelFetchAbortRef.current?.abort()
+    parcelFetchAbortRef.current = null
+    if (parcelRecenterTimerRef.current) {
+      clearTimeout(parcelRecenterTimerRef.current)
+      parcelRecenterTimerRef.current = null
+    }
+  }, [])
+
+  const prevClickedParcelIdRef = useRef(clickedParcelId)
+  useEffect(() => {
+    if (prevClickedParcelIdRef.current != null && clickedParcelId == null && !isParcelDetailsOpen) {
+      cancelParcelPopupWork()
+    }
+    prevClickedParcelIdRef.current = clickedParcelId
+  }, [clickedParcelId, isParcelDetailsOpen, cancelParcelPopupWork])
   /** Viewport to restore after closing Hail Data / storm map (saved before storm zoom). */
   const hailViewportRestoreRef = useRef(null)
   const initialSetDoneRef = useRef(false)
@@ -1042,13 +1077,25 @@ function App() {
     }
   }, [paths, visiblePathIds])
 
+  useEffect(() => {
+    leadsRef.current = leads
+  }, [leads])
+
+  useEffect(() => {
+    pipelinesRef.current = pipelines
+  }, [pipelines])
+
   const refreshLeads = useCallback(async () => {
     if (!currentUser) return
+    const showSpinner = leadsRef.current.length === 0
+    if (showSpinner) setLeadsLoading(true)
     try {
       const next = await fetchLeads(getToken)
       setLeads(next)
     } catch (error) {
       console.error('Error loading leads:', error)
+    } finally {
+      if (showSpinner) setLeadsLoading(false)
     }
   }, [currentUser, getToken])
 
@@ -1082,21 +1129,30 @@ function App() {
   }, [])
 
   const localPipelineMigrationRef = useRef(null)
+  const teamsRef = useRef(teams)
+  useEffect(() => {
+    teamsRef.current = teams
+  }, [teams])
+
+  const pickActivePipelineId = useCallback((next, prev) => {
+    const teamsNow = teamsRef.current
+    const editable = pipelinesUserCanWorkIn(currentUser, next, teamsNow)
+    const prevPipe = prev ? next.find((p) => p.id === prev) : null
+    if (prevPipe && canAddDealsToPipeline(currentUser, prevPipe, teamsNow)) return prev
+    const first = editable.find((p) => p.ownerId === currentUser.uid) || editable[0]
+    return first?.id ?? null
+  }, [currentUser])
 
   const refreshPipelines = useCallback(async () => {
     if (!currentUser) return
+    const showSpinner = pipelinesRef.current.length === 0
+    if (showSpinner) setPipelinesLoading(true)
     const migrationKey = localPipelineMigrationKey(currentUser.uid)
     try {
       const next = await fetchPipelines(getToken)
       if (next.length > 0) {
         setPipelines(next)
-        setActivePipelineId((prev) => {
-          const editable = pipelinesUserCanWorkIn(currentUser, next, teams)
-          const prevPipe = prev ? next.find((p) => p.id === prev) : null
-          if (prevPipe && canAddDealsToPipeline(currentUser, prevPipe, teams)) return prev
-          const first = editable.find((p) => p.ownerId === currentUser.uid) || editable[0]
-          return first?.id ?? null
-        })
+        setActivePipelineId((prev) => pickActivePipelineId(next, prev))
         return
       }
 
@@ -1152,11 +1208,34 @@ function App() {
       console.error('Error loading pipelines:', error)
       setPipelines([])
       setActivePipelineId(null)
+    } finally {
+      if (showSpinner) setPipelinesLoading(false)
     }
-  }, [currentUser, getToken, teams])
+  }, [currentUser, getToken, pickActivePipelineId])
+
+  const teamsReadyForPipelinesRef = useRef(false)
+  useEffect(() => {
+    if (!currentUser || teams.length === 0) {
+      teamsReadyForPipelinesRef.current = false
+      return
+    }
+    if (teamsReadyForPipelinesRef.current || pipelines.length === 0) return
+    teamsReadyForPipelinesRef.current = true
+    setActivePipelineId((prev) => pickActivePipelineId(pipelines, prev))
+  }, [currentUser, teams.length, pipelines.length, pipelines, pickActivePipelineId])
 
   useEffect(() => {
     if (currentUser) {
+      const cached = loadLocalLeads()
+      if (cached.length > 0) {
+        setLeads(cached)
+      } else {
+        setLeadsLoading(true)
+      }
+      setPipelinesLoading(true)
+      prefetchPanel('leads')
+      prefetchPanel('deals')
+      prefetchPanel('dealPipeline')
       runLeadsDealsFreshStartMigration()
       refreshPipelines()
       refreshLeads()
@@ -1165,6 +1244,8 @@ function App() {
       setPipelines([])
       setActivePipelineId(null)
       setLeads([])
+      setLeadsLoading(false)
+      setPipelinesLoading(false)
       setTagRegistry({ leads: [], deals: [], paths: [], lists: [] })
     }
   }, [currentUser, refreshPipelines, refreshLeads, refreshTags])
@@ -2103,10 +2184,15 @@ function App() {
     } else {
       presentParcelOnMap(buildTileParcelData())
       loadLandRecordsParcel()
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.easeTo({ center: [latlng.lng, latlng.lat], duration: 500 })
-        }
+      if (parcelRecenterTimerRef.current) clearTimeout(parcelRecenterTimerRef.current)
+      parcelRecenterTimerRef.current = setTimeout(() => {
+        parcelRecenterTimerRef.current = null
+        if (currentPopupRef.current !== requestId) return
+        const map = mapInstanceRef.current
+        if (!map) return
+        programmaticMoveRef.current = true
+        map.easeTo({ center: [latlng.lng, latlng.lat], duration: 500 })
+        setTimeout(() => { programmaticMoveRef.current = false }, 600)
       }, 300)
     }
     
@@ -2382,11 +2468,12 @@ function App() {
       return
     }
     if (!isParcelDetailsOpenRef.current) {
+      cancelParcelPopupWork()
       nav.clearMapOverlays()
     } else {
       nav.patchTopOverlay({ popupData: null })
     }
-  }, [nav])
+  }, [nav, cancelParcelPopupWork])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
     if (isHailDataOpen || hailOpening) return
@@ -2574,10 +2661,6 @@ function App() {
     })
   }, [requireAuth, guardFeature, leads, openPhotoModeForLead, autoCreateLeadAndOpenPhotoMode, popupData])
 
-  const openPhotosPanel = useCallback(() => {
-    beginPhotoCapture({})
-  }, [beginPhotoCapture])
-
   const handleParcelPhotos = useCallback(() => {
     if (!clickedParcelData) return
     beginPhotoCapture({ parcelData: clickedParcelData })
@@ -2720,6 +2803,10 @@ function App() {
     nav.pop()
   }, [fromActivity, nav])
 
+  const handleTasksPanelClose = useCallback(() => {
+    nav.closeTasksPanel()
+  }, [nav])
+
   const handleListPanelBack = useCallback(() => {
     const parcel = parcelPendingForList
     const detailsStillOpen = isParcelDetailsOpen
@@ -2744,6 +2831,7 @@ function App() {
   const notificationInbox = useNotificationInbox({
     isOpen: isActivityPanelOpen,
     isFeedActive: isActivityPanelFocused,
+    panelDockSlot: panelDockSlot('activity', isActivityPanelOpen),
     onOpenChange: (open) => {
       if (open) guardFeature('activity', () => nav.setActivityOpen(true))
       else nav.closeActivity()
@@ -3427,7 +3515,6 @@ function App() {
           : isFormsPanelOpen ? 'forms'
           : isReportsPanelOpen ? 'reports'
           : isListPanelOpen && !isParcelListPanelOpen ? 'lists'
-          : photoModeLead ? 'photos'
           : isActivityPanelOpen ? 'activity'
           : null
         }
@@ -3437,7 +3524,6 @@ function App() {
         onOpenLeads={openLeadsPanel}
         onOpenDeals={openDealsPanel}
         onOpenQuotes={openQuotesPanel}
-        onOpenPhotos={openPhotosPanel}
         onOpenReports={openReportsPanel}
         onOpenActivity={() => guardFeature('activity', () => notificationInbox.openInbox())}
         activityUnreadCount={notificationInbox.unreadCount}
@@ -3458,6 +3544,7 @@ function App() {
       <ListPanel
         currentUser={currentUser}
         isOpen={isListPanelOpen && !isParcelListPanelOpen}
+        panelDockSlot={panelDockSlot('lists', isListPanelOpen && !isParcelListPanelOpen)}
         onClose={handleListPanelBack}
         onBack={handleListPanelBack}
         selectedListIds={selectedListIds}
@@ -3564,6 +3651,7 @@ function App() {
       <Suspense fallback={null}>
       <DealPipeline
         isOpen={isDealPipelineOpen}
+        panelDockSlot={panelDockSlot('pipes', isDealPipelineOpen)}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         pipelines={pipelines}
@@ -3644,6 +3732,7 @@ function App() {
       <Suspense fallback={null}>
       <SchedulePanel
         isOpen={isSchedulePanelOpen}
+        panelDockSlot={panelDockSlot('schedule', isSchedulePanelOpen)}
         stacked={scheduleStacked}
         onClose={closeSchedulePanel}
         onBack={handlePanelBack}
@@ -3680,8 +3769,10 @@ function App() {
       <Suspense fallback={null}>
       <TasksPanel
         isOpen={isTasksPanelOpen}
-        onClose={handlePanelBack}
-        onBack={handlePanelBack}
+        panelDockSlot={panelDockSlot('tasks', isTasksPanelOpen)}
+        instantDismiss={isTasksPanelOpen && panelDockSlot('tasks', isTasksPanelOpen) === 'tasks'}
+        onClose={handleTasksPanelClose}
+        onBack={handleTasksPanelClose}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
         leads={leads}
@@ -3780,6 +3871,7 @@ function App() {
         <Suspense fallback={null}>
           <FormsPanel
             isOpen={isFormsPanelOpen}
+            panelDockSlot={panelDockSlot('forms', isFormsPanelOpen)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             formsView={formsView}
@@ -3800,6 +3892,7 @@ function App() {
         <Suspense fallback={null}>
           <QuotesPanel
             isOpen={isQuotesPanelOpen}
+            panelDockSlot={panelDockSlot('quotes', isQuotesPanelOpen)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             pipelines={pipelines}
@@ -3823,6 +3916,7 @@ function App() {
         <Suspense fallback={null}>
           <ReportsPanel
             isOpen={isReportsPanelOpen}
+            panelDockSlot={panelDockSlot('reports', isReportsPanelOpen)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             leads={leads}
@@ -3888,6 +3982,7 @@ function App() {
       <Suspense fallback={null}>
       <PathsPanel
         isOpen={isPathsPanelOpen}
+        panelDockSlot={panelDockSlot('paths', isPathsPanelOpen)}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         currentUser={currentUser}
@@ -3916,6 +4011,7 @@ function App() {
       <Suspense fallback={null}>
       <TeamsPanel
         isOpen={isTeamsPanelOpen}
+        panelDockSlot={panelDockSlot('teams', isTeamsPanelOpen)}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         detailTeamId={teamsDetailTeamId}
@@ -3952,9 +4048,13 @@ function App() {
       {notificationInbox.panel}
 
       {leadsPanelMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell open={isLeadsPanelOpen} title="Leads" onBack={handlePanelBack} className="leads-panel" />
+      }>
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
+        panelDockSlot={panelDockSlot('leads', isLeadsPanelOpen)}
+        loading={leadsLoading}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         leads={leads}
@@ -4000,9 +4100,13 @@ function App() {
       )}
 
       {dealsPanelMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell open={isDealsPanelOpen} title="Deals" onBack={handlePanelBack} className="deals-panel" />
+      }>
       <DealsPanel
         isOpen={isDealsPanelOpen}
+        panelDockSlot={panelDockSlot('deals', isDealsPanelOpen)}
+        loading={pipelinesLoading}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         pipelines={pipelines}

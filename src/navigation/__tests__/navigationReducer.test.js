@@ -9,6 +9,11 @@ import { selectPanelProps, selectIsStackedUnderSchedule } from '../selectors.js'
 import { feedDataToFrames } from '../feedNavigation.js'
 import {
   recipeOpenLeads,
+  recipeOpenDeals,
+  recipeOpenPipes,
+  recipeOpenLists,
+  recipeOpenTasks,
+  recipeCloseTasks,
   recipeOpenScheduleAtDate,
   recipeNavigateFromActivity,
   recipeOpenQuoteEditorFromDeal,
@@ -95,6 +100,17 @@ describe('navigationReducer', () => {
     expect(props.isActivityPanelFocused).toBe(true)
     expect(props.isLeadsPanelOpen).toBe(false)
     expect(props.leadsDetailLeadId).toBe(null)
+  })
+
+  it('activity stays focused when docked beside tasks', () => {
+    const state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'tasks' },
+    ])
+    const props = selectPanelProps(state)
+    expect(props.isActivityPanelOpen).toBe(true)
+    expect(props.isActivityPanelFocused).toBe(true)
+    expect(props.isTasksPanelOpen).toBe(true)
   })
 
   it('activity stack: nested pipes.deal back returns to activity', () => {
@@ -247,6 +263,72 @@ describe('feedNavigation', () => {
 describe('recipes', () => {
   it('openLeads replaces other panels', () => {
     const stack = recipeOpenLeads([{ type: 'tasks' }])
+    expect(stack.map((f) => f.type)).toEqual(['leads'])
+  })
+
+  it('openLeads keeps tasks when keepTasks (desktop dock)', () => {
+    const stack = recipeOpenLeads([{ type: 'tasks' }], { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'tasks'])
+  })
+
+  it('openDeals swaps leads and keeps tasks when keepTasks (desktop dock)', () => {
+    const stack = recipeOpenDeals([{ type: 'leads' }, { type: 'tasks' }], { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'tasks'])
+  })
+
+  it('openPipes swaps leads and keeps tasks when keepTasks (desktop dock)', () => {
+    const stack = recipeOpenPipes([{ type: 'leads' }, { type: 'tasks' }], 'p1', { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['pipes', 'tasks'])
+  })
+
+  it('openDeals drops lead detail when swapping primary beside tasks', () => {
+    const stack = recipeOpenDeals(
+      [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }, { type: 'tasks' }],
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'tasks'])
+  })
+
+  it('openLists swaps schedule primary and keeps tasks when keepTasks', () => {
+    const stack = recipeOpenLists([{ type: 'schedule' }, { type: 'tasks' }], { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['lists', 'tasks'])
+  })
+
+  it('openTasks keeps primary panel when keepPrimary (desktop dock)', () => {
+    const stack = recipeOpenTasks([{ type: 'leads' }], { keepPrimary: true })
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'tasks'])
+  })
+
+  it('openTasks keeps pipes when keepPrimary (desktop dock)', () => {
+    const stack = recipeOpenTasks([{ type: 'pipes', pipelineId: 'p1' }], { keepPrimary: true })
+    expect(stack.map((f) => f.type)).toEqual(['pipes', 'tasks'])
+  })
+
+  it('openTasks is noop when tasks already open', () => {
+    const stack = recipeOpenTasks([{ type: 'leads' }, { type: 'tasks' }], { keepPrimary: true })
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'tasks'])
+  })
+
+  it('openTasks keeps leads when schedule is stacked on top', () => {
+    const stack = recipeOpenTasks(
+      [{ type: 'leads' }, { type: 'schedule' }],
+      { keepPrimary: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'schedule', 'tasks'])
+  })
+
+  it('openTasks keeps schedule when only schedule is open', () => {
+    const stack = recipeOpenTasks([{ type: 'schedule' }], { keepPrimary: true })
+    expect(stack.map((f) => f.type)).toEqual(['schedule', 'tasks'])
+  })
+
+  it('closeTasks removes only tasks frame and keeps primary', () => {
+    const stack = recipeCloseTasks([{ type: 'leads' }, { type: 'tasks' }])
+    expect(stack.map((f) => f.type)).toEqual(['leads'])
+  })
+
+  it('closeTasks is noop when tasks not open', () => {
+    const stack = recipeCloseTasks([{ type: 'leads' }])
     expect(stack.map((f) => f.type)).toEqual(['leads'])
   })
 

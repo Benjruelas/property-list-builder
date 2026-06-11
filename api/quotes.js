@@ -1,4 +1,5 @@
 import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import { resolveSenderBranding } from './lib/senderBranding.js'
 import { getAllQuoteTemplates } from './lib/quoteStore.js'
 import { getAllQuotes, saveAllQuotes, getQuoteById } from './lib/quoteStore.js'
 import {
@@ -73,6 +74,7 @@ function buildQuoteFromBody(body, user, existing = null) {
     paymentEnabled: body.paymentEnabled !== undefined ? !!body.paymentEnabled : (existing?.paymentEnabled ?? false),
     ownerId: existing?.ownerId || user.uid,
     ownerEmail: existing?.ownerEmail || user.email,
+    createdByName: existing?.createdByName || body.createdByName || '',
     clientResponse: existing?.clientResponse ?? null,
     viewTracking: existing?.viewTracking ?? null,
     acceptedLineIds: existing?.acceptedLineIds ?? null,
@@ -147,7 +149,8 @@ export default async function handler(req, res) {
         }
       }
 
-      const quote = buildQuoteFromBody(seed, user)
+      const branding = await resolveSenderBranding(user)
+      const quote = buildQuoteFromBody({ ...seed, createdByName: branding.senderName }, user)
       const all = await getAllQuotes()
       all.push(quote)
       await saveAllQuotes(all)

@@ -4,7 +4,7 @@ import { Plus, Users2, Shield, Mail, Check, X } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { showToast } from './ui/toast'
 import {
@@ -22,6 +22,7 @@ const TEAM_LIST_ITEM_CLASS =
 
 export function TeamsPanel({
   isOpen,
+  panelDockSlot,
   instantDismiss = false,
   onClose,
   onBack,
@@ -148,13 +149,14 @@ export function TeamsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, hasNestedDetail, handlePanelBack, isOpen)}>
+      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
           className={cn(
             'map-panel list-panel teams-panel fullscreen-panel flex flex-col min-h-0 p-0',
             hasNestedDetail && 'crm-panel-obscured'
           )}
+          panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
           suppressBackdrop
