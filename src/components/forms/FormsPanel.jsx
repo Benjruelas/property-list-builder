@@ -11,7 +11,7 @@ import {
   Eye,
   Search,
 } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { ignoreRadixMapPanelDismiss } from '../ui/panelDialogUtils'
 import {
   PanelHeader,
@@ -133,12 +133,13 @@ export function FormsPanel({
 
   useEffect(() => {
     if (!isOpen || !getToken) return
-    if (view !== 'list') {
-      refresh({ silent: true })
-      return
-    }
     refresh()
-  }, [isOpen, getToken, view, refresh])
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen || !getToken || view === 'list') return
+    refresh({ silent: true })
+  }, [view])
 
   useEffect(() => {
     if (!isOpen) {
@@ -555,7 +556,7 @@ export function FormsPanel({
       </OptionsMenuDropdown>
 
       <Dialog
-        open={view === 'edit' && !!activeTemplate}
+        open={view === 'edit'}
         modal={false}
         onOpenChange={(open) => { if (!open) handleSubViewBack() }}
       >
@@ -565,24 +566,29 @@ export function FormsPanel({
           nestedOverlay
           topLayer
         >
-          <Suspense fallback={<LoadingScreen label="Loading form builder…" />}>
-            <FormBuilderView
-              template={activeTemplate}
-              onBack={handleSubViewBack}
-              onTemplateUpdated={handleTemplateUpdated}
-            />
-          </Suspense>
+          <DialogHeader className="sr-only">
+            <DialogTitle>Edit form</DialogTitle>
+            <DialogDescription>Place and configure fields on a form template</DialogDescription>
+          </DialogHeader>
+          {activeTemplate ? (
+            <Suspense fallback={<LoadingScreen label="Loading form builder…" />}>
+              <FormBuilderView
+                template={activeTemplate}
+                onBack={handleSubViewBack}
+                onTemplateUpdated={handleTemplateUpdated}
+              />
+            </Suspense>
+          ) : (
+            <LoadingScreen label="Loading form…" />
+          )}
         </DialogContent>
       </Dialog>
 
       <Dialog
-        open={view === 'fill' && !!activeTemplate}
+        open={view === 'fill'}
         modal={false}
         onOpenChange={(open) => {
-          if (!open) {
-            handleSubViewBack()
-            refresh({ silent: true })
-          }
+          if (!open) handleSubViewBack()
         }}
       >
         <DialogContent
@@ -591,20 +597,25 @@ export function FormsPanel({
           nestedOverlay
           topLayer
         >
-          <Suspense fallback={<LoadingScreen label="Loading form…" />}>
-            <FormFillView
-              template={activeTemplate}
-              onBack={() => {
-                handleSubViewBack()
-                refresh({ silent: true })
-              }}
-              onTemplateUpdated={handleTemplateUpdated}
-              onRequestCompletion={(prefillValues) => {
-                setLinkTemplateId(activeTemplate.id)
-                setLinkPrefillValues(prefillValues || null)
-              }}
-            />
-          </Suspense>
+          <DialogHeader className="sr-only">
+            <DialogTitle>Fill form</DialogTitle>
+            <DialogDescription>Complete and send a form</DialogDescription>
+          </DialogHeader>
+          {activeTemplate ? (
+            <Suspense fallback={<LoadingScreen label="Loading form…" />}>
+              <FormFillView
+                template={activeTemplate}
+                onBack={handleSubViewBack}
+                onTemplateUpdated={handleTemplateUpdated}
+                onRequestCompletion={(prefillValues) => {
+                  setLinkTemplateId(activeTemplate.id)
+                  setLinkPrefillValues(prefillValues || null)
+                }}
+              />
+            </Suspense>
+          ) : (
+            <LoadingScreen label="Loading form…" />
+          )}
         </DialogContent>
       </Dialog>
 

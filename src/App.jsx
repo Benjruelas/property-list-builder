@@ -55,6 +55,7 @@ import { PublicReportPage } from './components/reports/PublicReportPage'
 import { LeadPickerDialog } from './components/photos/LeadPickerDialog'
 import { PhotoMode } from './components/photos/PhotoMode'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
+import { buildPathColorMap } from './utils/pathColors'
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { fetchTeamContext } from './utils/teams'
 import { resolveTeamMemberFeatures, canAccessTeamFeature, canSeeDealAmounts, TEAM_FEATURE_ACCESS_DENIED_MESSAGE, featureIdForFeedNav } from './utils/teamFeatures'
@@ -393,6 +394,7 @@ function App() {
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
   const [paths, setPaths] = useState([])
+  const pathColorMap = useMemo(() => buildPathColorMap(paths), [paths])
   const [visiblePathIds, setVisiblePathIds] = useState([])
   const [teams, setTeams] = useState([])
   const [teamMembership, setTeamMembership] = useState(null)
@@ -2793,12 +2795,14 @@ function App() {
   const handlePanelBack = useCallback(() => {
     const stack = nav.state.navStack
     if (fromActivity) {
-      if (stack.length === 2 && stack[0]?.type === 'activity') {
+      const tasksTrailing = stack.length > 1 && stack[stack.length - 1]?.type === 'tasks'
+      const coreLength = tasksTrailing ? stack.length - 1 : stack.length
+      if (coreLength === 2 && stack[0]?.type === 'activity') {
         nav.returnToActivity()
         return
       }
       // Ignore spurious panel dismiss after activity-origin detail already returned to feed
-      if (stack.length === 1 && stack[0]?.type === 'activity') return
+      if (coreLength === 1 && stack[0]?.type === 'activity') return
     }
     nav.pop()
   }, [fromActivity, nav])
@@ -3410,6 +3414,7 @@ function App() {
             isTracking={isPathTrackingActive}
             userLocation={userLocation}
             savedPathsToShow={paths.filter(p => visiblePathIds.includes(p.id))}
+            pathColorMap={pathColorMap}
             smoothingLevel={settings.pathSmoothing}
           />
           {userLocation && (
@@ -4003,6 +4008,7 @@ function App() {
         getToken={getToken}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('paths', tag)}
+        pathColorMap={pathColorMap}
       />
       </Suspense>
       )}

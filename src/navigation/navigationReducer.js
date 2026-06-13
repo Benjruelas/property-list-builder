@@ -5,6 +5,7 @@ import {
   isNestedChildFrame,
   ROOT_PANEL_TYPES,
 } from './types.js'
+import { appendTrailingTasks, splitTrailingTasks } from './taskDock.js'
 
 export { createInitialState }
 
@@ -105,9 +106,9 @@ export function navigationReducer(state, action) {
  * Activity → destination → detail (e.g. activity, leads, leads.detail): back from detail
  * returns to Activity, not the intermediate list/pipe panel.
  */
-function shouldReturnToActivityOnDetailPop(navStack, topType) {
-  if (navStack.length !== 3 || navStack[0].type !== 'activity') return false
-  const destination = navStack[1]
+function shouldReturnToActivityOnDetailPop(coreStack, topType) {
+  if (coreStack.length !== 3 || coreStack[0].type !== 'activity') return false
+  const destination = coreStack[1]
   const destRoot = frameRoot(destination.type)
   if (!ROOT_PANEL_TYPES.has(destRoot) || destRoot === 'activity' || destRoot === 'schedule') return false
   return frameRoot(topType) === destRoot
@@ -121,40 +122,43 @@ function popNavStack(state) {
   const { navStack } = state
   if (navStack.length === 0) return state
 
-  const top = navStack[navStack.length - 1]
+  const { tasksFrames, coreStack } = splitTrailingTasks(navStack)
+  if (coreStack.length === 0) return state
+
+  const top = coreStack[coreStack.length - 1]
   const topType = top.type
+  let newCore
 
   // 1. Nested child frames (leads.detail, pipes.deal, forms.edit, etc.)
   if (isNestedChildFrame(topType) && topType !== 'schedule') {
-    if (shouldReturnToActivityOnDetailPop(navStack, topType)) {
-      return stateWithReturnToActivity(state)
+    if (shouldReturnToActivityOnDetailPop(coreStack, topType)) {
+      newCore = [{ type: 'activity' }]
+    } else {
+      newCore = coreStack.slice(0, -1)
     }
-    return { ...state, navStack: navStack.slice(0, -1) }
-  }
-
-  // schedule.lead → schedule (or Activity when opened from activity feed)
-  if (topType === 'schedule.lead') {
-    if (shouldReturnToActivityOnDetailPop(navStack, topType)) {
-      return stateWithReturnToActivity(state)
+  } else if (topType === 'schedule.lead') {
+    // schedule.lead → schedule (or Activity when opened from activity feed)
+    if (shouldReturnToActivityOnDetailPop(coreStack, topType)) {
+      newCore = [{ type: 'activity' }]
+    } else {
+      newCore = coreStack.slice(0, -1)
     }
-    return { ...state, navStack: navStack.slice(0, -1) }
-  }
-
-  // 2. Schedule with opener below → pop schedule only
-  if (topType === 'schedule' && navStack.length > 1) {
-    return { ...state, navStack: navStack.slice(0, -1) }
-  }
-
-  // 3. Activity parent: popping root destination returns to activity
-  if (navStack.length >= 2 && navStack[0].type === 'activity') {
+  } else if (topType === 'schedule' && coreStack.length > 1) {
+    // Schedule with opener below → pop schedule only
+    newCore = coreStack.slice(0, -1)
+  } else if (coreStack.length >= 2 && coreStack[0].type === 'activity') {
+    // Activity parent: popping root destination returns to activity
     const isRootPanel = ROOT_PANEL_TYPES.has(topType) && topType !== 'activity'
     if (isRootPanel) {
-      return { ...state, navStack: navStack.slice(0, -1) }
+      newCore = coreStack.slice(0, -1)
+    } else {
+      newCore = coreStack.slice(0, -1)
     }
+  } else {
+    newCore = coreStack.slice(0, -1)
   }
 
-  // 4. Default: pop top frame
-  return { ...state, navStack: navStack.slice(0, -1) }
+  return { ...state, navStack: appendTrailingTasks(newCore, tasksFrames) }
 }
 
 /** Close all panels and overlays — equivalent to closeAllPanelsForMap. */
@@ -219,14 +223,8 @@ function filterStackForKeep(stack, keep) {
   return result
 }
 
-/** Return to activity from any activity-origin destination. */
-export function returnToActivityStack() {
-  return [{ type: 'activity' }]
-}
-
-function stateWithReturnToActivity(state) {
-  return {
-    ...state,
-    navStack: returnToActivityStack(),
-  }
+/** Return to activity from any activity-origin destination, keeping docked Tasks. */
+export function returnToActivityStack(currentStack = []) {
+  const { tasksFrames } = splitTrailingTasks(currentStack)
+  return appendTrailingTasks([{ type: 'activity' }], tasksFrames)
 }

@@ -125,12 +125,13 @@ export function QuotesPanel({
 
   useEffect(() => {
     if (!isOpen || !getToken) return
-    if (detailQuoteId) {
-      refresh({ silent: true })
-      return
-    }
     refresh()
-  }, [isOpen, getToken, detailQuoteId, refresh])
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen || !getToken || (!detailQuoteId && !editorOpen)) return
+    refresh({ silent: true })
+  }, [detailQuoteId, editorOpen])
 
   useEffect(() => {
     if (!detailQuoteId || !getToken) {

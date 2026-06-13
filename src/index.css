@@ -190,7 +190,8 @@
   .photos-panel.fullscreen-panel,
   .deal-pipeline-panel.fullscreen-panel,
   .activity-panel.fullscreen-panel,
-  .lists-panel.fullscreen-panel {
+  .lists-panel.fullscreen-panel,
+  .paths-panel.fullscreen-panel {
     width: var(--action-bar-width) !important;
     min-width: 0 !important;
     max-width: var(--action-bar-width) !important;
@@ -4085,6 +4086,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 @media (min-width: 768px) {
   #modal-root .mobile-action-bar-inner {
     pointer-events: auto !important; /* modal-root sets pointer-events: none on the portal host */
+  }
+  #modal-root .mobile-action-bar-menu,
+  #modal-root .mobile-action-bar-menu-backdrop {
+    pointer-events: auto !important;
   }
   .mobile-action-bar-inner {
     gap: 6px;

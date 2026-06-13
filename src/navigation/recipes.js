@@ -226,14 +226,21 @@ export function recipeOpenTaskInPipes(currentStack, pipelineId, dealId) {
   ]
 }
 
-/** Legacy: handleActivityNavigate */
-export function recipeNavigateFromActivity(currentStack, destinationFrames) {
-  return [{ type: 'activity' }, ...destinationFrames]
+/** Legacy: handleActivityNavigate — prefix activity, optionally keep docked Tasks */
+export function recipeNavigateFromActivity(currentStack, destinationFrames, opts = {}) {
+  const tasksFrames = (currentStack || []).filter((f) => frameRoot(f.type) === 'tasks')
+  const base = [{ type: 'activity' }, ...destinationFrames]
+  if (opts.keepTasks && tasksFrames.length) {
+    const withoutTasks = base.filter((f) => frameRoot(f.type) !== 'tasks')
+    return [...withoutTasks, ...tasksFrames]
+  }
+  return base
 }
 
-/** Legacy: returnFromActivityDestination */
-export function recipeReturnToActivity() {
-  return [{ type: 'activity' }]
+/** Legacy: returnFromActivityDestination — keep docked Tasks */
+export function recipeReturnToActivity(currentStack = []) {
+  const tasksFrames = (currentStack || []).filter((f) => frameRoot(f.type) === 'tasks')
+  return [{ type: 'activity' }, ...tasksFrames]
 }
 
 

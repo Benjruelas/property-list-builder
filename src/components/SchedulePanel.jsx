@@ -533,10 +533,9 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
-        hideOverlay={!stacked}
-        nestedOverlay={stacked}
+        hideOverlay
+        suppressBackdrop
         topLayer={stacked}
-        suppressBackdrop={hasNestedLeadDetail}
       >
         <div
           ref={scheduleRootRef}

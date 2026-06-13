@@ -342,6 +342,39 @@ describe('recipes', () => {
     expect(stack[0].type).toBe('activity')
   })
 
+  it('navigateFromActivity keeps tasks when docked on desktop', () => {
+    const stack = recipeNavigateFromActivity(
+      [{ type: 'activity' }, { type: 'tasks' }],
+      [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }],
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['activity', 'leads', 'leads.detail', 'tasks'])
+  })
+
+  it('activity stack: back from nested detail keeps docked tasks', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'leads' },
+      { type: 'leads.detail', leadId: 'l1' },
+      { type: 'tasks' },
+    ])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity', 'tasks'])
+    const props = selectPanelProps(state)
+    expect(props.isActivityPanelFocused).toBe(true)
+    expect(props.isTasksPanelOpen).toBe(true)
+  })
+
+  it('activity stack: back from destination keeps docked tasks', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'leads' },
+      { type: 'tasks' },
+    ])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity', 'tasks'])
+  })
+
   it('quote editor keeps pipes and deals', () => {
     const stack = recipeOpenQuoteEditorFromDeal(
       [{ type: 'pipes' }, { type: 'deals' }],

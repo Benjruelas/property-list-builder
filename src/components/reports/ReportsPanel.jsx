@@ -118,7 +118,12 @@ export function ReportsPanel({
   useEffect(() => {
     if (!isOpen || !getToken) return
     refresh()
-  }, [isOpen, getToken, refresh])
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen || !getToken || (!detailReportId && !editorOpen)) return
+    refresh({ silent: true })
+  }, [detailReportId, editorOpen])
 
   useEffect(() => {
     if (!isOpen) {

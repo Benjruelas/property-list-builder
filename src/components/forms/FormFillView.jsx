@@ -66,7 +66,7 @@ export function FormFillView({
   const [sendOpen, setSendOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [recipient, setRecipient] = useState('')
-  const [subject, setSubject] = useState(`Completed form: ${template.name || 'Form'}`)
+  const [subject, setSubject] = useState(`Completed form: ${template?.name || 'Form'}`)
   const [message, setMessage] = useState('')
   const [sendMeCopy, setSendMeCopy] = useState(false)
   /** Public forms start in fill mode; authenticated forms open in view mode first. */
@@ -92,12 +92,12 @@ export function FormFillView({
 
   // Natural reading order: page → y → x.
   const orderedFields = useMemo(() => {
-    return [...(template.fields || [])].sort((a, b) => {
+    return [...(template?.fields || [])].sort((a, b) => {
       if (a.page !== b.page) return a.page - b.page
       if (a.y !== b.y) return a.y - b.y
       return a.x - b.x
     })
-  }, [template.fields])
+  }, [template?.fields])
 
   const activeTourFields = useMemo(
     () => orderedFields.filter((f) => !effectiveLockedSet.has(f.id)),
@@ -144,7 +144,7 @@ export function FormFillView({
           if (!publicToken) throw new Error('Form link is missing')
           buf = await downloadPublicFormPdf(publicToken)
         } else {
-          if (!template.originalPdfKey) throw new Error('Template has no PDF source')
+          if (!template?.originalPdfKey) throw new Error('Template has no PDF source')
           buf = await downloadFormPdf(getToken, template.originalPdfKey)
         }
         if (cancelled) return
@@ -180,7 +180,7 @@ export function FormFillView({
       renderedPages.current.clear()
       inflightRenders.current.clear()
     }
-  }, [template.originalPdfKey, getToken, isPublic, publicToken])
+  }, [template?.originalPdfKey, getToken, isPublic, publicToken])
 
   useEffect(() => {
     fillZoomRef.current = fillZoom

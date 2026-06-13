@@ -32,6 +32,21 @@ export function stackHasTasks(stack) {
   return stack.some((f) => f.type === 'tasks' || frameRoot(f.type) === 'tasks')
 }
 
+/** Tasks dock frame pinned at stack end — excluded from back/pop targeting. */
+export function splitTrailingTasks(navStack) {
+  if (!navStack?.length) return { tasksFrames: [], coreStack: [] }
+  const last = navStack[navStack.length - 1]
+  if (navStack.length > 1 && frameRoot(last.type) === 'tasks') {
+    return { tasksFrames: [last], coreStack: navStack.slice(0, -1) }
+  }
+  return { tasksFrames: [], coreStack: navStack }
+}
+
+export function appendTrailingTasks(coreStack, tasksFrames) {
+  if (!tasksFrames?.length) return coreStack
+  return [...coreStack, ...tasksFrames]
+}
+
 export function shouldKeepTasksWhenOpening(stack) {
   return isDesktopTaskDockEnabled() && stackHasTasks(stack)
 }

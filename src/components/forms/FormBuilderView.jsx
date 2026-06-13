@@ -34,10 +34,10 @@ export function FormBuilderView({ template, onBack, onTemplateUpdated }) {
   const [pageSizes, setPageSizes] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadingErr, setLoadingErr] = useState(null)
-  const [fields, setFields] = useState(() => Array.isArray(template.fields) ? template.fields : [])
+  const [fields, setFields] = useState(() => Array.isArray(template?.fields) ? template.fields : [])
   const [selectedFieldId, setSelectedFieldId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [templateName, setTemplateName] = useState(template.name || '')
+  const [templateName, setTemplateName] = useState(template?.name || '')
   const [armedType, setArmedType] = useState(null)
   const [draggingPaletteType, setDraggingPaletteType] = useState(null)
 

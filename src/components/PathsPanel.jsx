@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
-import { X, Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Users, Tag } from 'lucide-react'
+import { Eye, Trash2, MoreVertical, Pencil, Route, Share2, Tag, Search } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
-import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
@@ -15,11 +14,30 @@ import { updatePathTags } from '@/utils/paths'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { EntityTagPills } from './tags/EntityTagPills'
 import { TagPicker } from './tags/TagPicker'
+import { getPathColor } from '../utils/pathColors'
 
-const PATH_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
-  '#06b6d4', '#f97316', '#6366f1', '#14b8a6', '#e11d48',
+const MENU_WIDTH = 180
+const MENU_PADDING = 8
+
+const PATH_TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'mine', label: 'Mine' },
+  { id: 'shared', label: 'Shared' },
+  { id: 'visible', label: 'On map' },
 ]
+
+function filterPathsByTab(paths, tab, ownerId, visiblePathIds) {
+  switch (tab) {
+    case 'mine':
+      return paths.filter((p) => p.ownerId === ownerId)
+    case 'shared':
+      return paths.filter((p) => p.ownerId !== ownerId)
+    case 'visible':
+      return paths.filter((p) => visiblePathIds.includes(p.id))
+    default:
+      return paths
+  }
+}
 
 export function PathsPanel({
   isOpen,
@@ -44,15 +62,18 @@ export function PathsPanel({
   getToken,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
+  pathColorMap,
 }) {
+  const [tab, setTab] = useState('all')
+  const [search, setSearch] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState([])
   const [tagEditPathId, setTagEditPathId] = useState(null)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const [tagPickerAnchorPosition, setTagPickerAnchorPosition] = useState(null)
   const tagPickerAnchorRef = useRef(null)
   const tagPickerPortalRef = useRef(null)
-  const [openDropdownPathId, setOpenDropdownPathId] = useState(null)
-  const [dropdownAnchor, setDropdownAnchor] = useState(null)
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const menuTriggerRef = useRef(null)
   const [renamingPathId, setRenamingPathId] = useState(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef(null)
@@ -66,8 +87,9 @@ export function PathsPanel({
 
   useEffect(() => {
     if (!isOpen) {
-      setOpenDropdownPathId(null)
-      setDropdownAnchor(null)
+      setTab('all')
+      setSearch('')
+      setOpenMenuId(null)
       setRenamingPathId(null)
       setRenameValue('')
       setSharePathId(null)
@@ -94,7 +116,8 @@ export function PathsPanel({
     }
   }, [renamingPathId])
 
-  const isPathOwnedByUser = (path) => path?.ownerId === currentUser?.uid
+  const ownerId = currentUser?.uid
+  const isPathOwnedByUser = (path) => path?.ownerId === ownerId
 
   const runValidation = useCallback(async (email) => {
     const trimmed = (email || '').trim().toLowerCase()
@@ -139,7 +162,7 @@ export function PathsPanel({
       visibility: norm.visibility || VISIBILITY.PRIVATE,
       sharedMemberUids: norm.sharedMemberUids || [],
     })
-  }, [sharePathId])
+  }, [sharePathId, paths])
 
   const handleShareChange = useCallback(
     (next) => {
@@ -168,9 +191,9 @@ export function PathsPanel({
     if (!email) { showToast('Please enter an email', 'error'); return }
     if (shareEmailValid === false) { showToast('No user found with this email', 'error'); return }
     if (shareEmailValid !== true && onValidateShareEmail) { showToast('Please wait for email validation', 'error'); return }
-    const path = allPaths.find(p => p.id === sharePathId)
+    const path = allPaths.find((p) => p.id === sharePathId)
     const current = path?.sharedWith || []
-    if (current.some(e => (e || '').toLowerCase() === email)) { showToast('This email is already in the share list', 'error'); return }
+    if (current.some((e) => (e || '').toLowerCase() === email)) { showToast('This email is already in the share list', 'error'); return }
     onSharePath(sharePathId, [...current, email])
     setShareEmail('')
     setShareEmailValid(null)
@@ -180,38 +203,17 @@ export function PathsPanel({
 
   const handleRemoveSharedEmail = (emailToRemove) => {
     if (!sharePathId || !onSharePath) return
-    const path = allPaths.find(p => p.id === sharePathId)
+    const path = allPaths.find((p) => p.id === sharePathId)
     const current = path?.sharedWith || []
-    const updated = current.filter(e => (e || '').toLowerCase() !== (emailToRemove || '').toLowerCase())
+    const updated = current.filter((e) => (e || '').toLowerCase() !== (emailToRemove || '').toLowerCase())
     onSharePath(sharePathId, updated)
   }
 
-  const MENU_WIDTH = 160
-  const MENU_PADDING = 8
-  const openDropdown = (pathId, event) => {
-    event.stopPropagation()
-    const el = event.currentTarget
-    tagPickerAnchorRef.current = el
-    const rect = el.getBoundingClientRect()
-    let top = rect.bottom + 4
-    let left = rect.right - MENU_WIDTH
-    if (left < MENU_PADDING) left = MENU_PADDING
-    if (left + MENU_WIDTH > window.innerWidth - MENU_PADDING) left = window.innerWidth - MENU_WIDTH - MENU_PADDING
-    const menuHeight = 120
-    if (top + menuHeight > window.innerHeight - MENU_PADDING) top = Math.max(MENU_PADDING, rect.top - menuHeight - 4)
-    setDropdownAnchor({ top, left })
-    setOpenDropdownPathId(pathId)
-  }
-
-  const closeDropdown = () => {
-    setOpenDropdownPathId(null)
-    setDropdownAnchor(null)
-  }
-
-  const handleStartRename = (path) => {
-    setRenamingPathId(path.id)
-    setRenameValue(path.name)
-    closeDropdown()
+  const openMenu = (pathId, e) => {
+    e.stopPropagation()
+    menuTriggerRef.current = e.currentTarget
+    tagPickerAnchorRef.current = e.currentTarget
+    setOpenMenuId(pathId)
   }
 
   const handleRenameSubmit = async (pathId) => {
@@ -231,15 +233,17 @@ export function PathsPanel({
   }
 
   const handleDeleteClick = (path) => {
-    closeDropdown()
+    setOpenMenuId(null)
     if (onDeletePath) onDeletePath(path)
   }
 
   const formatDate = (iso) => {
-    if (!iso) return ''
-    const d = new Date(iso)
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
-      ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    if (!iso) return '—'
+    try {
+      return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    } catch {
+      return '—'
+    }
   }
 
   const allPaths = useMemo(() => {
@@ -253,10 +257,27 @@ export function PathsPanel({
     return list
   }, [paths])
 
-  const filteredPaths = useMemo(
-    () => filterByTags(allPaths, selectedTagIds),
-    [allPaths, selectedTagIds]
-  )
+  const tabCounts = useMemo(() => ({
+    all: allPaths.length,
+    mine: allPaths.filter((p) => p.ownerId === ownerId).length,
+    shared: allPaths.filter((p) => p.ownerId !== ownerId).length,
+    visible: allPaths.filter((p) => visiblePathIds.includes(p.id)).length,
+  }), [allPaths, ownerId, visiblePathIds])
+
+  const filteredPaths = useMemo(() => {
+    let result = filterPathsByTab(allPaths, tab, ownerId, visiblePathIds)
+    const q = search.trim().toLowerCase()
+    if (q) {
+      result = result.filter((p) => {
+        const name = (p.name || '').toLowerCase()
+        const city = (p.city || '').toLowerCase()
+        return name.includes(q) || city.includes(q)
+      })
+    }
+    return filterByTags(result, selectedTagIds)
+  }, [allPaths, tab, ownerId, visiblePathIds, search, selectedTagIds])
+
+  const openMenuPath = openMenuId ? allPaths.find((p) => p.id === openMenuId) : null
 
   const handlePathTagsChange = useCallback(async (pathId, { tagIds, tagMeta }) => {
     if (!getToken) return
@@ -282,18 +303,19 @@ export function PathsPanel({
     <>
       <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          className="map-panel list-panel paths-panel fullscreen-panel"
+          className="map-panel list-panel paths-panel fullscreen-panel flex flex-col min-h-0 p-0"
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
+          suppressBackdrop
           onInteractOutside={(e) => {
-            if (e.target.closest?.('[data-paths-panel-dropdown]')) e.preventDefault()
+            if (e.target.closest?.('[data-paths-panel-menu]')) e.preventDefault()
             if (e.target.closest?.('[data-tag-picker-menu]')) e.preventDefault()
             if (e.target.closest?.('[data-tag-picker-trigger]')) e.preventDefault()
             if (e.target.closest?.('[data-panel-filter-menu]')) e.preventDefault()
           }}
         >
-          <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
+          <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">View and manage your recorded GPS paths</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Paths">
               {allPaths.length > 0 && (
@@ -306,207 +328,228 @@ export function PathsPanel({
             </PanelHeader>
           </DialogHeader>
 
-          <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-            <div className="space-y-4">
-              {allPaths.length === 0 ? (
-                <div className="text-center py-8">
-                  <Route className="h-10 w-10 mx-auto mb-3 text-gray-400 opacity-60" />
-                  <p className="text-gray-500 text-sm">No paths recorded yet.</p>
-                  <p className="text-gray-400 text-xs mt-1">Tap the record button on the map to start tracking.</p>
-                </div>
-              ) : filteredPaths.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500 text-sm">No paths match the selected tags.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredPaths.map((path, idx) => {
-                    const isVisible = visiblePathIds.includes(path.id)
-                    const color = PATH_COLORS[idx % PATH_COLORS.length]
-                    const isRenaming = renamingPathId === path.id
-                    const cityLabel = path.city?.trim() || 'Unknown city'
-                    const distLabel =
-                      typeof path.distanceMiles === 'number'
-                        ? distanceUnit === 'km'
-                          ? `${Math.round(path.distanceMiles * 1.60934 * 100) / 100} km`
-                          : `${path.distanceMiles} mi`
-                        : null
-                    const ptsCount = path.points?.length ?? 0
-                    const metaLine = [cityLabel, distLabel, `${ptsCount} pts`].filter(Boolean).join(', ')
-
-                    return (
-                      <div
-                        key={path.id}
-                        className={cn(
-                          "flex items-start justify-between gap-2 p-3 rounded-lg transition-all cursor-pointer",
-                          isVisible
-                            ? "border border-solid bg-white/[0.08]"
-                            : "map-panel-list-item border border-white/10 bg-white/[0.04] hover:bg-white/[0.08]"
-                        )}
-                        style={isVisible ? {
-                          borderColor: color,
-                          backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                        } : undefined}
-                        onClick={() => {
-                          if (!isRenaming && onCenterOnPath) onCenterOnPath(path.id)
-                        }}
-                      >
-                        <div className="flex gap-3 flex-1 min-w-0 items-start">
-                          <span
-                            className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-                            style={{
-                              backgroundColor: isVisible ? color : 'rgba(156, 163, 175, 0.5)'
-                            }}
-                            aria-hidden
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {isRenaming ? (
-                                <input
-                                  ref={renameInputRef}
-                                  type="text"
-                                  value={renameValue}
-                                  onChange={(e) => setRenameValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleRenameSubmit(path.id)
-                                    if (e.key === 'Escape') { setRenamingPathId(null); setRenameValue('') }
-                                  }}
-                                  onBlur={() => handleRenameSubmit(path.id)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="font-medium text-sm bg-transparent border-b border-white/40 outline-none w-full min-w-0"
-                                />
-                              ) : (
-                                <span className="font-medium text-sm truncate">{path.name}</span>
-                              )}
-                              <LeadSharingIcon
-                                resource={path}
-                                collaboratorHint={!isPathOwnedByUser(path)}
-                              />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-0.5 leading-snug line-clamp-2">
-                              {metaLine}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5 tabular-nums">
-                              {formatDate(path.createdAt) || '—'}
-                            </p>
-                            <EntityTagPills
-                              entity={path}
-                              tagRegistry={tagRegistry}
-                              type="paths"
-                              className="mt-1"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="relative flex flex-shrink-0 items-center gap-1 pt-0.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (onTogglePathVisibility) onTogglePathVisibility(path.id)
-                            }}
-                            title={isVisible ? 'Hide path' : 'Show on map'}
-                          >
-                            {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4 opacity-50" />}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className={cn("h-8 w-8", openDropdownPathId === path.id && "opacity-90")}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openDropdownPathId === path.id ? closeDropdown() : openDropdown(path.id, e)
-                            }}
-                            title="Path options"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+          <div
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide px-6 py-3 space-y-1.5"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="mb-3 space-y-2">
+              <div className="hidden md:flex gap-4 flex-wrap" role="tablist" aria-label="Path filters">
+                {PATH_TABS.map(({ id, label }) => {
+                  const isActive = tab === id
+                  const count = tabCounts[id] ?? 0
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setTab(id)}
+                      className={cn(
+                        'pb-1.5 text-sm font-medium border-b-2 transition-opacity',
+                        isActive ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
+                      )}
+                    >
+                      {label}
+                      <span className="text-xs opacity-60 ml-1">{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search paths by name or city…"
+                  className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
+                  aria-label="Search paths"
+                />
+              </div>
             </div>
+
+            {allPaths.length === 0 ? (
+              <div className="text-center py-16">
+                <Route className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm opacity-60">No paths recorded yet.</p>
+                <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">Tap the record button on the map to start tracking a route.</p>
+              </div>
+            ) : filteredPaths.length === 0 ? (
+              <div className="text-center py-12">
+                <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm opacity-60">
+                  {search.trim() || selectedTagIds.length > 0
+                    ? 'No paths match your filters.'
+                    : `No ${tab === 'all' ? '' : `${PATH_TABS.find((t) => t.id === tab)?.label?.toLowerCase() || tab} `}paths yet.`}
+                </p>
+              </div>
+            ) : (
+              filteredPaths.map((path) => {
+                const isVisible = visiblePathIds.includes(path.id)
+                const pathColor = getPathColor(path.id, pathColorMap)
+                const cityLabel = path.city?.trim() || 'Unknown city'
+                const distLabel =
+                  typeof path.distanceMiles === 'number'
+                    ? distanceUnit === 'km'
+                      ? `${Math.round(path.distanceMiles * 1.60934 * 100) / 100} km`
+                      : `${path.distanceMiles} mi`
+                    : null
+                const ptsCount = path.points?.length ?? 0
+
+                return (
+                  <div
+                    key={path.id}
+                    role="button"
+                    tabIndex={0}
+                    className={cn(
+                      'w-full text-left map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 cursor-pointer',
+                      isVisible && 'border-solid bg-white/[0.08]'
+                    )}
+                    style={isVisible ? {
+                      borderColor: pathColor,
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    } : undefined}
+                    onClick={() => {
+                      if (renamingPathId !== path.id && onCenterOnPath) onCenterOnPath(path.id)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        if (renamingPathId !== path.id && onCenterOnPath) onCenterOnPath(path.id)
+                      }
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span
+                          className={cn(
+                            'w-2.5 h-2.5 rounded-full shrink-0',
+                            !isVisible && 'opacity-40'
+                          )}
+                          style={{ backgroundColor: pathColor }}
+                          aria-hidden
+                        />
+                        {renamingPathId === path.id ? (
+                          <input
+                            ref={renameInputRef}
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameSubmit(path.id)
+                              if (e.key === 'Escape') { setRenamingPathId(null); setRenameValue('') }
+                            }}
+                            onBlur={() => handleRenameSubmit(path.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-medium text-sm bg-transparent border-b border-white/40 outline-none w-full min-w-0 py-0.5"
+                          />
+                        ) : (
+                          <span className="font-medium truncate">{path.name}</span>
+                        )}
+                        <LeadSharingIcon
+                          resource={path}
+                          collaboratorHint={!isPathOwnedByUser(path)}
+                        />
+                      </div>
+                      <p className="text-sm opacity-70 truncate">
+                        {[cityLabel, distLabel, `${ptsCount} pt${ptsCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
+                      </p>
+                      <p className="text-sm opacity-50">{formatDate(path.createdAt)}</p>
+                      <EntityTagPills
+                        entity={path}
+                        tagRegistry={tagRegistry}
+                        type="paths"
+                        className="mt-0.5"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md opacity-50 hover:opacity-90 hover:bg-white/10"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (onTogglePathVisibility) onTogglePathVisibility(path.id)
+                      }}
+                      title={isVisible ? 'Hide on map' : 'Show on map'}
+                      aria-pressed={isVisible}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md opacity-50 hover:opacity-90 hover:bg-white/10"
+                      onClick={(e) => openMenu(path.id, e)}
+                      aria-label={`Options for ${path.name}`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  </div>
+                )
+              })
+            )}
           </div>
           <div ref={tagPickerPortalRef} className="contents" aria-hidden />
         </DialogContent>
       </Dialog>
 
-      {openDropdownPathId && dropdownAnchor && typeof document !== 'undefined' && createPortal(
-        (() => {
-          const path = allPaths.find(p => p.id === openDropdownPathId)
-          if (!path) return null
-          return (
-            <div data-paths-panel-dropdown className="pointer-events-auto" style={{ position: 'fixed', inset: 0, zIndex: 10000 }}>
-              <div className="fixed inset-0 z-[10001]" onClick={closeDropdown} aria-hidden />
-              <div
-                className="map-panel list-panel fixed z-[10002] rounded-xl min-w-[160px] pt-1 overflow-hidden"
-                style={{ top: dropdownAnchor.top, left: dropdownAnchor.left }}
-                role="menu"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  onClick={() => handleStartRename(path)}
-                  className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-                >
-                  <Pencil className="h-4 w-4 flex-shrink-0" />
-                  Rename
-                </button>
-                {getToken && isPathOwnedByUser(path) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = tagPickerAnchorRef.current
-                      if (el) {
-                        const rect = el.getBoundingClientRect()
-                        setTagPickerAnchorPosition({
-                          top: rect.bottom + 4,
-                          left: Math.max(MENU_PADDING, rect.right - 220),
-                          minWidth: 220,
-                        })
-                      } else {
-                        setTagPickerAnchorPosition({ top: 80, left: 24, minWidth: 220 })
-                      }
-                      setTagEditPathId(path.id)
-                      closeDropdown()
-                      requestAnimationFrame(() => setTagPickerOpen(true))
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-                  >
-                    <Tag className="h-4 w-4 flex-shrink-0" />
-                    Tags
-                  </button>
-                )}
-                {onSharePath && (
-                  <button
-                    type="button"
-                    onClick={() => { closeDropdown(); setSharePathId(path.id); setShareEmail('') }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-900 flex items-center gap-2 transition-colors"
-                  >
-                    <Share2 className="h-4 w-4 flex-shrink-0" />
-                    Share
-                  </button>
-                )}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleDeleteClick(path)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleDeleteClick(path)}
-                  className="list-panel-delete-btn w-full px-3 py-2 pb-2 rounded-b-xl text-left text-sm flex items-center gap-2 transition-colors text-red-400 hover:bg-red-600/80 cursor-pointer"
-                >
-                  <Trash2 className="h-4 w-4 flex-shrink-0" />
-                  Delete
-                </div>
-              </div>
-            </div>
-          )
-        })(),
-        document.getElementById('modal-root') || document.body
-      )}
+      <OptionsMenuDropdown
+        open={!!openMenuPath}
+        onClose={() => setOpenMenuId(null)}
+        triggerRef={menuTriggerRef}
+        menuWidth={MENU_WIDTH}
+        dataAttr="data-paths-panel-menu"
+      >
+        {openMenuPath && (
+          <>
+            {onRenamePath && isPathOwnedByUser(openMenuPath) && (
+              <OptionsMenuItem onClick={() => {
+                setOpenMenuId(null)
+                setRenameValue(openMenuPath.name)
+                setRenamingPathId(openMenuPath.id)
+              }}>
+                <Pencil className="h-4 w-4" />
+                Rename
+              </OptionsMenuItem>
+            )}
+            {getToken && isPathOwnedByUser(openMenuPath) && (
+              <OptionsMenuItem onClick={() => {
+                const el = tagPickerAnchorRef.current
+                if (el) {
+                  const rect = el.getBoundingClientRect()
+                  setTagPickerAnchorPosition({
+                    top: rect.bottom + 4,
+                    left: Math.max(MENU_PADDING, rect.right - 220),
+                    minWidth: 220,
+                  })
+                } else {
+                  setTagPickerAnchorPosition({ top: 80, left: 24, minWidth: 220 })
+                }
+                setTagEditPathId(openMenuPath.id)
+                setOpenMenuId(null)
+                requestAnimationFrame(() => setTagPickerOpen(true))
+              }}>
+                <Tag className="h-4 w-4" />
+                Tags
+              </OptionsMenuItem>
+            )}
+            {onSharePath && isPathOwnedByUser(openMenuPath) && (
+              <OptionsMenuItem onClick={() => {
+                setOpenMenuId(null)
+                setSharePathId(openMenuPath.id)
+                setShareEmail('')
+              }}>
+                <Share2 className="h-4 w-4" />
+                Share
+              </OptionsMenuItem>
+            )}
+            {isPathOwnedByUser(openMenuPath) && (
+              <OptionsMenuItem destructive onClick={() => handleDeleteClick(openMenuPath)}>
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </OptionsMenuItem>
+            )}
+          </>
+        )}
+      </OptionsMenuDropdown>
 
       {sharePathId && (() => {
         const path = allPaths.find((p) => p.id === sharePathId)

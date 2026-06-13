@@ -202,13 +202,13 @@ export function NavigationProvider({ children }) {
   const navigateFromActivity = useCallback((data, ctx) => {
     const result = feedDataToFrames(data, ctx)
     if (!result.ok) return result
-    replaceStack(recipeNavigateFromActivity([], result.frames))
+    replaceStack(recipeNavigateFromActivity(state.navStack, result.frames, taskDockOpts()))
     return result
-  }, [replaceStack])
+  }, [replaceStack, state.navStack, taskDockOpts])
 
   const returnToActivity = useCallback(() => {
-    replaceStack(recipeReturnToActivity())
-  }, [replaceStack])
+    replaceStack(recipeReturnToActivity(state.navStack))
+  }, [replaceStack, state.navStack])
 
   const closeActivity = useCallback(() => {
     if (state.navStack[0]?.type === 'activity' && state.navStack.length === 1) {
