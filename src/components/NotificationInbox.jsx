@@ -14,6 +14,7 @@ import {
   filterFeedItems,
   countFeedItemsByTab,
   feedItemCategoryLabel,
+  feedItemBadgeClassName,
   feedItemIconKind,
 } from '../utils/feed'
 import { cn } from '@/lib/utils'
@@ -71,9 +72,14 @@ const FEED_ICON_MAP = {
   activity: Activity,
 }
 
-function FeedCategoryBadge({ label }) {
+function FeedCategoryBadge({ label, className }) {
   return (
-    <span className="inline-flex shrink-0 max-w-full text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium bg-white/10 text-white/70 border-white/20">
+    <span
+      className={cn(
+        'inline-flex shrink-0 max-w-full text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium',
+        className
+      )}
+    >
       <span className="truncate">{label}</span>
     </span>
   )
@@ -113,8 +119,8 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
         <RowIcon className="h-5 w-5 shrink-0 opacity-70" aria-hidden />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
-            <span className="font-medium truncate">{primary}</span>
-            <FeedCategoryBadge label={category} />
+            <span className="font-medium panel-item-title truncate">{primary}</span>
+            <FeedCategoryBadge label={category} className={feedItemBadgeClassName(item)} />
             {isSessionNew && (
               <span className="inline-flex shrink-0 text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium border-[#60a5fa]/40 bg-[#60a5fa]/20 text-[#93c5fd]">
                 New
@@ -127,10 +133,10 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
             )}
           </div>
           {secondary ? (
-            <p className="text-sm opacity-70 truncate">{secondary}</p>
+            <p className="panel-item-body opacity-70 truncate">{secondary}</p>
           ) : null}
           {when ? (
-            <p className="text-sm opacity-50 truncate">{when}</p>
+            <p className="panel-item-meta opacity-50 truncate">{when}</p>
           ) : null}
         </div>
       </div>
@@ -142,6 +148,7 @@ export function ActivityPanel({
   isOpen,
   panelDockSlot,
   isFocused = true,
+  topLayer = isFocused,
   onClose,
   items,
   loading,
@@ -192,7 +199,7 @@ export function ActivityPanel({
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
-        topLayer={isFocused}
+        topLayer={topLayer}
         aria-hidden={obscured || undefined}
         onEscapeKeyDown={(e) => {
           if (!isFocused) {
@@ -276,6 +283,7 @@ export function ActivityPanel({
 export function useNotificationInbox({
   isOpen: controlledOpen,
   isFeedActive: controlledFeedActive,
+  topLayer: controlledTopLayer,
   panelDockSlot,
   onOpenChange,
   getToken,
@@ -288,6 +296,7 @@ export function useNotificationInbox({
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const open = isControlled ? controlledOpen : uncontrolledOpen
   const feedActive = controlledFeedActive !== undefined ? controlledFeedActive : open
+  const topLayer = controlledTopLayer !== undefined ? controlledTopLayer : feedActive
   const setOpen = useCallback((value) => {
     const next = typeof value === 'function' ? value(open) : value
     if (isControlled) onOpenChange?.(next)
@@ -392,6 +401,7 @@ export function useNotificationInbox({
       isOpen={open}
       panelDockSlot={panelDockSlot}
       isFocused={feedActive}
+      topLayer={topLayer}
       onClose={handleClose}
       items={items}
       loading={loading}

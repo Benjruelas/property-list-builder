@@ -4,12 +4,13 @@ import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from '.
 import { cn } from '@/lib/utils'
 
 /** Visible panel chrome while a lazy list panel chunk is still loading. */
-export function PanelListLoadingShell({ open, title, onBack, className }) {
+export function PanelListLoadingShell({ open, title, onBack, className, panelDockSlot }) {
   if (!open) return null
   return (
     <Dialog open modal={false} onOpenChange={() => onBack?.()}>
       <DialogContent
         className={cn('map-panel list-panel fullscreen-panel flex flex-col min-h-0 p-0', className)}
+        panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
@@ -32,6 +33,16 @@ export function PanelListBodyLoading() {
     <div className="flex justify-center py-16" role="status" aria-live="polite">
       <Loader2 className="h-6 w-6 animate-spin opacity-60" aria-hidden />
       <span className="sr-only">Loading</span>
+    </div>
+  )
+}
+
+/** Compact spinner for inline task sections (deal/lead detail). */
+export function TaskListLoading({ className }) {
+  return (
+    <div className={cn('flex justify-center py-6', className)} role="status" aria-live="polite">
+      <Loader2 className="h-6 w-6 animate-spin opacity-60" aria-hidden />
+      <span className="sr-only">Loading tasks</span>
     </div>
   )
 }

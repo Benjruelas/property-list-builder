@@ -1,4 +1,4 @@
-import { useRef, useState, useLayoutEffect, useCallback } from 'react'
+import { useRef, useState, useLayoutEffect, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
 const DESKTOP_BAR_MQ = '(min-width: 768px)'
@@ -121,6 +121,14 @@ export function MobileActionBar({
       window.removeEventListener('scroll', updateMenuAnchor, true)
     }
   }, [showMenu, barIds, updateMenuAnchor])
+
+  useEffect(() => {
+    if (!showMenu) return
+    prefetchPanel('outreach')
+    prefetchPanel('paths')
+    prefetchPanel('teams')
+    prefetchPanel('settings')
+  }, [showMenu])
 
   const handlers = {
     pipes: onOpenPipes,

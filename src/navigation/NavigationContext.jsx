@@ -5,7 +5,7 @@ import {
   resetToMapFull,
 } from './navigationReducer.js'
 import { NAV_ACTIONS } from './types.js'
-import { selectPanelProps, selectTopFrame } from './selectors.js'
+import { selectActionBarActiveId, selectPanelProps, selectTopFrame } from './selectors.js'
 import { feedDataToFrames } from './feedNavigation.js'
 import {
   recipeClosePrimaryExcept,
@@ -13,7 +13,11 @@ import {
   recipeOpenDealInPipes,
   recipePushDealsClosed,
   recipePushDealsDetail,
+  recipePushDealsLead,
   recipeOpenLeadDetails,
+  recipeOpenStandaloneLeadDetail,
+  recipeOpenStandaloneDealDetail,
+  recipeOpenDealFromLeadDetail,
   recipeOpenLists,
   recipeOpenOutreach,
   recipeOpenPaths,
@@ -40,8 +44,14 @@ import {
   recipeOpenEmailComposer,
 } from './recipes.js'
 import {
+  findDockablePrimaryRoot,
   isDesktopTaskDockEnabled,
+  popFrameIfTopOfCore,
+  primeTasksPanelOpen,
+  recipeClosePrimaryRoot,
   shouldKeepTasksWhenOpening,
+  stackHasPrimaryRoot,
+  stackHasTasks,
 } from './taskDock.js'
 
 const NavigationContext = createContext(null)
@@ -64,10 +74,11 @@ export function NavigationProvider({ children }) {
     dispatch({ type: NAV_ACTIONS.POP })
   }, [])
 
-  /** Pop only when the top frame matches — avoids duplicate pops from Radix onOpenChange after back. */
+  /** Pop only when the frame matches stack top — ignores trailing Tasks dock frame. */
   const popIfTop = useCallback((frameType) => {
-    if (state.navStack[state.navStack.length - 1]?.type === frameType) {
-      dispatch({ type: NAV_ACTIONS.POP })
+    const next = popFrameIfTopOfCore(state.navStack, frameType)
+    if (next !== state.navStack) {
+      dispatch({ type: NAV_ACTIONS.REPLACE_STACK, payload: next })
     }
   }, [state.navStack])
 
@@ -97,19 +108,39 @@ export function NavigationProvider({ children }) {
   }), [state.navStack])
 
   const openLeads = useCallback(() => {
+    if (state.navStack.some((f) => f.type === 'leads')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'leads'))
+      return
+    }
     replaceStack(recipeOpenLeads(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openDeals = useCallback(() => {
+    if (state.navStack.some((f) => f.type === 'deals')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'deals'))
+      return
+    }
     replaceStack(recipeOpenDeals(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openPipes = useCallback((pipelineId) => {
+    if (stackHasPrimaryRoot(state.navStack, 'pipes')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'pipes'))
+      return
+    }
     replaceStack(recipeOpenPipes(state.navStack, pipelineId, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openTasks = useCallback(() => {
-    replaceStack(recipeOpenTasks(state.navStack, { keepPrimary: isDesktopTaskDockEnabled() }))
+    if (stackHasTasks(state.navStack)) {
+      replaceStack(recipeCloseTasks(state.navStack))
+      return
+    }
+    const keepPrimary = isDesktopTaskDockEnabled()
+    const nextStack = recipeOpenTasks(state.navStack, { keepPrimary })
+    const primaryRoot = keepPrimary ? findDockablePrimaryRoot(nextStack) : null
+    primeTasksPanelOpen({ docked: !!primaryRoot, primaryRoot })
+    replaceStack(nextStack)
   }, [state.navStack, replaceStack])
 
   const closeTasksPanel = useCallback(() => {
@@ -117,6 +148,10 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack])
 
   const openSchedule = useCallback(() => {
+    if (stackHasPrimaryRoot(state.navStack, 'schedule')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'schedule'))
+      return
+    }
     if (shouldKeepTasksWhenOpening(state.navStack)) {
       replaceStack(recipeSwapPrimaryKeepTasks(state.navStack, { type: 'schedule' }))
       return
@@ -125,30 +160,58 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack])
 
   const openLists = useCallback(() => {
+    if (state.navStack.some((f) => f.type === 'lists')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'list'))
+      return
+    }
     replaceStack(recipeOpenLists(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openPaths = useCallback(() => {
+    if (stackHasPrimaryRoot(state.navStack, 'paths')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'paths'))
+      return
+    }
     replaceStack(recipeOpenPaths(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openForms = useCallback(() => {
+    if (stackHasPrimaryRoot(state.navStack, 'forms')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'forms'))
+      return
+    }
     replaceStack(recipeOpenForms(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openQuotes = useCallback(() => {
+    if (stackHasPrimaryRoot(state.navStack, 'quotes')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'quotes'))
+      return
+    }
     replaceStack(recipeOpenQuotes(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openReports = useCallback(() => {
+    if (stackHasPrimaryRoot(state.navStack, 'reports')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'reports'))
+      return
+    }
     replaceStack(recipeOpenReports(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openTeams = useCallback(() => {
+    if (stackHasPrimaryRoot(state.navStack, 'teams')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'teams'))
+      return
+    }
     replaceStack(recipeOpenTeams(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openSettings = useCallback(() => {
+    if (state.navStack.some((f) => f.type === 'settings')) {
+      replaceStack(state.navStack.filter((f) => f.type !== 'settings'))
+      return
+    }
     replaceStack(recipeOpenSettings(state.navStack))
   }, [state.navStack, replaceStack])
 
@@ -160,9 +223,29 @@ export function NavigationProvider({ children }) {
     replaceStack([{ type: 'activity' }])
   }, [state.navStack, replaceStack])
 
+  const toggleActivityFromActionBar = useCallback(() => {
+    if (selectActionBarActiveId(state) === 'activity') {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'activity'))
+      return
+    }
+    openActivity()
+  }, [state, openActivity, replaceStack])
+
   const openLeadDetails = useCallback((leadId) => {
-    replaceStack(recipeOpenLeadDetails(state.navStack, leadId))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenLeadDetails(state.navStack, leadId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
+
+  const openLeadDetailFromTasks = useCallback((leadId) => {
+    replaceStack(recipeOpenStandaloneLeadDetail(state.navStack, leadId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
+
+  const openDealDetailFromTasks = useCallback((dealId, pipelineId) => {
+    replaceStack(recipeOpenStandaloneDealDetail(state.navStack, dealId, pipelineId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
+
+  const openDealFromLead = useCallback((dealId, pipelineId) => {
+    replaceStack(recipeOpenDealFromLeadDetail(state.navStack, dealId, pipelineId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openDealInPipes = useCallback((pipelineId, dealId) => {
     replaceStack(recipeOpenDealInPipes(state.navStack, pipelineId, dealId))
@@ -181,16 +264,20 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack])
 
   const viewListContents = useCallback((listId) => {
-    replaceStack(recipeViewListContents(state.navStack, listId))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeViewListContents(state.navStack, listId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openSkipTraced = useCallback(() => {
     replaceStack(recipeOpenSkipTraced(state.navStack))
   }, [state.navStack, replaceStack])
 
   const openOutreach = useCallback((initialTab = 'email') => {
-    replaceStack(recipeOpenOutreach(state.navStack, initialTab))
-  }, [state.navStack, replaceStack])
+    if (stackHasPrimaryRoot(state.navStack, 'outreach')) {
+      replaceStack(recipeClosePrimaryRoot(state.navStack, 'outreach'))
+      return
+    }
+    replaceStack(recipeOpenOutreach(state.navStack, initialTab, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const navigateFromFeed = useCallback((data, ctx) => {
     const result = feedDataToFrames(data, ctx)
@@ -200,7 +287,7 @@ export function NavigationProvider({ children }) {
   }, [replaceStack])
 
   const navigateFromActivity = useCallback((data, ctx) => {
-    const result = feedDataToFrames(data, ctx)
+    const result = feedDataToFrames(data, ctx, { standaloneDetail: true })
     if (!result.ok) return result
     replaceStack(recipeNavigateFromActivity(state.navStack, result.frames, taskDockOpts()))
     return result
@@ -235,16 +322,16 @@ export function NavigationProvider({ children }) {
   const popLeadsDetail = useCallback(() => popIfTop('leads.detail'), [popIfTop])
 
   const pushDealsDetail = useCallback((dealId, pipelineId) => {
-    replaceStack(recipePushDealsDetail(state.navStack, dealId, pipelineId))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipePushDealsDetail(state.navStack, dealId, pipelineId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const pushDealsClosed = useCallback((closedRecordId) => {
     replaceStack(recipePushDealsClosed(state.navStack, closedRecordId))
   }, [state.navStack, replaceStack])
 
   const pushDealsLead = useCallback((leadId) => {
-    push({ type: 'deals.lead', leadId })
-  }, [push])
+    replaceStack(recipePushDealsLead(state.navStack, leadId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const pushPipesDeal = useCallback((dealId) => {
     push({ type: 'pipes.deal', dealId })
@@ -380,7 +467,11 @@ export function NavigationProvider({ children }) {
     openTeams,
     openSettings,
     openActivity,
+    toggleActivityFromActionBar,
     openLeadDetails,
+    openLeadDetailFromTasks,
+    openDealDetailFromTasks,
+    openDealFromLead,
     openDealInPipes,
     openScheduleAtDate,
     openQuoteEditorFromDeal,
@@ -454,7 +545,11 @@ export function NavigationProvider({ children }) {
     openTeams,
     openSettings,
     openActivity,
+    toggleActivityFromActionBar,
     openLeadDetails,
+    openLeadDetailFromTasks,
+    openDealDetailFromTasks,
+    openDealFromLead,
     openDealInPipes,
     openScheduleAtDate,
     openQuoteEditorFromDeal,

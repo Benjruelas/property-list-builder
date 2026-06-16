@@ -20,6 +20,16 @@ export function filterLeads(leads, query) {
   })
 }
 
+/** Deals linked to a lead (by leadId or shared parcelId). */
+export function filterDealsForLead(deals, lead) {
+  if (!lead?.id) return deals || []
+  return (deals || []).filter((d) => {
+    if (d.leadId === lead.id) return true
+    if (lead.parcelId && d.parcelId && String(d.parcelId) === String(lead.parcelId)) return true
+    return false
+  })
+}
+
 export function filterDeals(deals, query) {
   const q = (query || '').toLowerCase().trim()
   const sorted = [...(deals || [])].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
@@ -47,6 +57,26 @@ export function dealSecondaryLabel(deal) {
 
 export function dealPipelineLabel(deal) {
   return (deal?.__pipelineTitle || '').trim() || null
+}
+
+export function filterTeamMembers(members, query) {
+  const q = (query || '').toLowerCase().trim()
+  const sorted = [...(members || [])].sort((a, b) =>
+    (a.email || a.uid || '').localeCompare(b.email || b.uid || '')
+  )
+  if (!q) return sorted
+  const tokens = q.split(/\s+/).filter(Boolean)
+  return sorted.filter((member) => {
+    const searchable = [member.email, member.uid, member.displayName, member.name]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return tokens.every((tok) => searchable.includes(tok))
+  })
+}
+
+export function memberPrimaryLabel(member) {
+  return (member?.email || member?.displayName || member?.name || member?.uid || 'Member').trim()
 }
 
 export { displayLeadName, formatLeadAddress }

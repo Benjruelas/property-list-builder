@@ -8,28 +8,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
-import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle, formatTimeInState } from '@/utils/dealPipeline'
+import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle } from '@/utils/dealPipeline'
 import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, deleteAllLeadTasks, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline } from '@/utils/leadTasks'
 import { addPipelineTask, updatePipelineTask, togglePipelineTask, removePipelineTask, flattenPipelineTasks } from '@/utils/pipelineTasks'
 import { addTeamTask, updateTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
 import { getAllTeamMembers, flattenTeamTasks, formatAssigneeList, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
-import { TeamMemberAssignSectionLight } from './TeamMemberAssignSection'
 import { NewTaskDialog } from './NewTaskDialog'
+import { createServerAssignedTask, resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { DealDetails } from './DealDetails'
 import { LeadDetails } from './LeadDetails'
-import { DealProfitBadge } from './DealLineItemsSection'
-import { dealHasFinancials } from '@/utils/dealFinances'
-import { SchedulePicker } from './SchedulePicker'
 import { canCollaborateOnPipeline, pipelinesUserCanWorkIn } from '@/utils/pipelines'
 import { CreatePipelineDialog } from './CreatePipelineDialog'
 import { displayLeadName, updateLead } from '@/utils/leads'
 import { LeadSharingIcon, TeamSharedIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
-import { EntityTagPills } from './tags/EntityTagPills'
+import { PipelineDealCard } from './DealRow'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 
 const MAX_COLUMNS = 10
@@ -69,32 +66,7 @@ function taskBelongsToLocalDeals(task, displayDeals) {
   return false
 }
 
-function getDealCardLabels(deal, leads) {
-  const title = (deal.title || '').trim() || 'Untitled deal'
-  let leadName = (deal.leadName || '').trim()
-  if (deal.leadId && leads?.length) {
-    const lead = leads.find((l) => l.id === deal.leadId)
-    if (lead) leadName = displayLeadName(lead)
-  }
-  return { title, leadName }
-}
-
-function leadToParcelData(lead) {
-  if (!lead) return null
-  return {
-    id: lead.parcelId,
-    address: lead.address,
-    properties: lead.properties || {
-      OWNER_NAME: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
-      SITUS_ADDR: lead.address,
-      LATITUDE: lead.lat,
-      LONGITUDE: lead.lng,
-    },
-    lat: lead.lat,
-    lng: lead.lng,
-  }
-}
-
+import { leadToParcelData } from '@/utils/leads'
 export function DealPipeline({
   isOpen,
   panelDockSlot,
@@ -180,15 +152,11 @@ export function DealPipeline({
   const [allTasks, setAllTasks] = useState([])
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false)
   const [addTaskPrefill, setAddTaskPrefill] = useState(null)
-  const [editTaskAssignUids, setEditTaskAssignUids] = useState([])
+  const [editTask, setEditTask] = useState(null)
   const [tasksCollapsed, setTasksCollapsed] = useState(false)
   const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [scheduledSectionCollapsed, setScheduledSectionCollapsed] = useState(false)
   const [unscheduledSectionCollapsed, setUnscheduledSectionCollapsed] = useState(false)
-  const [editTask, setEditTask] = useState(null)
-  const [editTaskTitle, setEditTaskTitle] = useState('')
-  const [editTaskScheduledAt, setEditTaskScheduledAt] = useState(null)
-  const [editTaskScheduledEndAt, setEditTaskScheduledEndAt] = useState(null)
   const [taskMenu, setTaskMenu] = useState(null) // { task, anchor: { top, left } }
   const [pipelineDropdownOpen, setPipelineDropdownOpen] = useState(false)
   const [pipelineDropdownAnchor, setPipelineDropdownAnchor] = useState(null)
@@ -672,12 +640,39 @@ export function DealPipeline({
       if (!trimmed) return
       const deal = addTaskDealId ? displayDeals.find((d) => d.id === addTaskDealId) : null
       const selectedLead = addTaskLeadId ? (leads || []).find((l) => l.id === addTaskLeadId) : null
-      const leadId = addTaskLeadId || deal?.leadId || null
-      const parcelId = deal?.parcelId || selectedLead?.parcelId || null
-      if (assignedUids.length > 0 && !leadId) {
-        showToast('Assign a deal or lead to notify teammates', 'error')
-        return
+      const ctx = resolveTaskContext({
+        leadId: addTaskLeadId,
+        dealId: addTaskDealId,
+        deal,
+        leads: leads || [],
+        pipelines,
+      })
+      const parcelId = ctx.parcelId || deal?.parcelId || selectedLead?.parcelId || null
+      if (assignedUids.length > 0 && getToken) {
+        try {
+          await createServerAssignedTask(getToken, {
+            title: trimmed,
+            scheduledAt,
+            scheduledEndAt,
+            assignedUids,
+            leadId: ctx.leadId,
+            dealId: ctx.dealId,
+            deal,
+            leads: leads || [],
+            pipelines,
+            pipelineId: activePipelineId || ctx.pipelineId,
+          })
+          showToast('Task added', 'success')
+          setShowAddTaskDialog(false)
+          setAddTaskPrefill(null)
+          if (deal) onOpenDeal?.(deal.id)
+          return
+        } catch (err) {
+          showToast(err.message || 'Could not add task', 'error')
+          return
+        }
       }
+      const leadId = ctx.leadId || deal?.leadId || null
       if (apiMode && activePipelineId && shouldStoreAsTeamTask(activePipeline, { assignedUids, leadId })) {
         try {
           await addTeamTask(getToken, activePipelineId, leadId, {
@@ -731,13 +726,12 @@ export function DealPipeline({
       onPipelinesChange,
       refreshAllTasks,
       scheduleSync,
-      displayDeals,
-      leads,
+      pipelines,
       onOpenDeal,
     ]
   )
 
-  const commitEditTask = useCallback(async (title) => {
+  const commitEditTask = useCallback(async ({ title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
     const trimmed = (title || '').toString().trim()
     if (!trimmed || !editTask?.task) return
     const task = editTask.task
@@ -746,13 +740,12 @@ export function DealPipeline({
         await updateTeamTask(getToken, task.pipelineId, task.leadId, {
           id: task.id,
           title: trimmed,
-          dueAt: editTaskScheduledAt,
-          assignedUids: editTaskAssignUids
+          dueAt: scheduledAt,
+          assignedUids,
         })
         await onPipelinesChange?.()
         showToast('Task updated', 'success')
         setEditTask(null)
-        setEditTaskAssignUids([])
       } catch (err) {
         showToast(err.message || 'Could not update task', 'error')
       }
@@ -763,8 +756,8 @@ export function DealPipeline({
         await updatePipelineTask(getToken, task.pipelineId, {
           id: task.id,
           title: trimmed,
-          scheduledAt: editTaskScheduledAt,
-          scheduledEndAt: editTaskScheduledEndAt
+          scheduledAt,
+          scheduledEndAt,
         })
         await onPipelinesChange?.()
         showToast('Task updated', 'success')
@@ -775,14 +768,19 @@ export function DealPipeline({
       return
     }
     updateLeadTaskTitle(task.parcelId, task.id, trimmed)
-    updateLeadTaskSchedule(task.parcelId, task.id, editTaskScheduledAt, editTaskScheduledEndAt)
+    updateLeadTaskSchedule(task.parcelId, task.id, scheduledAt, scheduledEndAt)
     refreshAllTasks()
     scheduleSync()
     showToast('Task updated', 'success')
     setEditTask(null)
-  }, [editTask, editTaskScheduledAt, editTaskScheduledEndAt, editTaskAssignUids, getToken, onPipelinesChange, refreshAllTasks, scheduleSync])
+  }, [editTask, getToken, onPipelinesChange, refreshAllTasks, scheduleSync])
 
   const newTaskTeamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
+
+  const editTaskFormIds = useMemo(
+    () => resolveTaskFormIdsFromTask(editTask?.task, leads || [], displayDeals),
+    [editTask, leads, displayDeals]
+  )
 
   const resetPipelineUi = () => {
     setIsEditMode(false)
@@ -974,70 +972,29 @@ export function DealPipeline({
                   )}
                 </div>
                 <div
-                  className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-1.5 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
+                  className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
                   onDragOver={canCollaboratePipeline ? (e) => handleDragOver(e, col.id) : undefined}
                   onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
                   onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
                 >
                   {getDealsForColumn(col.id).map((deal) => (
-                    <div
+                    <PipelineDealCard
                       key={deal.id}
+                      deal={deal}
+                      leads={leads}
+                      tagRegistry={tagRegistry}
+                      canSeeDealAmounts={canSeeDealAmounts}
+                      isDragging={draggedDealId === deal.id}
+                      isEditMode={isEditMode}
+                      canCollaborate={canCollaboratePipeline}
+                      canMoveNext={columns.findIndex((c) => c.id === deal.status) < columns.length - 1}
                       draggable={canCollaboratePipeline}
                       onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, deal.id) : undefined}
                       onDragEnd={canCollaboratePipeline ? handleDragEnd : undefined}
                       onClick={() => handleDealClick(deal)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && handleDealClick(deal)}
-                      className={`deal-pipeline-lead-card map-panel-list-item px-2 py-1.5 rounded-md border border-white/10 text-white text-xs group flex items-start gap-1 transition-colors ${canCollaboratePipeline ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedDealId === deal.id ? 'opacity-50' : ''}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        {(() => {
-                          const { title, leadName } = getDealCardLabels(deal, leads)
-                          return (
-                            <>
-                              <div className="font-medium truncate text-white" title={title}>
-                                {title}
-                              </div>
-                              {leadName && (
-                                <div className="text-[11px] truncate text-white/85" title={leadName}>
-                                  {leadName}
-                                </div>
-                              )}
-                            </>
-                          )
-                        })()}
-                        <EntityTagPills entity={deal} tagRegistry={tagRegistry} type="deals" className="mt-0.5" />
-                        {(() => {
-                          const duration = formatTimeInState(deal)
-                          const hasProfit = canSeeDealAmounts && dealHasFinancials(deal)
-                          if (!duration && !hasProfit) return null
-                          return (
-                            <div className="text-[10px] mt-0.5 text-white/75 flex items-center gap-2 flex-wrap">
-                              {duration && <span title="Cumulative time in this stage">{duration}</span>}
-                              {hasProfit && <DealProfitBadge deal={deal} className="text-[10px]" canSeeDealAmounts={canSeeDealAmounts} />}
-                            </div>
-                          )
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-0.5 flex-shrink-0 text-white/90 pt-0.5">
-                        {isEditMode ? (
-                          <button type="button" className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 text-red-400 hover:text-red-300" onClick={(e) => handleDeleteDeal(deal.id, e)} title="Remove deal">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed text-white/90"
-                            onClick={(e) => { e.stopPropagation(); handleMoveToNext(deal.id) }}
-                            title="Move to next stage"
-                            disabled={!canCollaboratePipeline || columns.findIndex(c => c.id === deal.status) >= columns.length - 1}
-                          >
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                      onMoveNext={() => handleMoveToNext(deal.id)}
+                      onDelete={() => handleDeleteDeal(deal.id)}
+                    />
                   ))}
                 </div>
               </div>
@@ -1371,109 +1328,41 @@ export function DealPipeline({
         nestedOverlay
       />
 
-      {/* Edit Task dialog */}
-      <Dialog open={!!editTask} onOpenChange={(open) => !open && setEditTask(null)}>
-        <DialogContent
-          className="map-panel list-panel new-task-panel !flex !max-w-md w-[min(92vw,24rem)] max-h-[min(92vh,900px)] min-h-[min(68vh,560px)] flex-col gap-0 p-0 !rounded-2xl"
-          showCloseButton={false}
-          nestedOverlay
-        >
-          <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-2 border-b border-white/20">
-            <DialogTitle className="text-xl font-semibold">Edit Task</DialogTitle>
-            <DialogDescription className="sr-only">Edit task details</DialogDescription>
-          </DialogHeader>
-          {editTask && (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4 scrollbar-hide create-list-form">
-              {(editTask.task.dealId || editTask.task.parcelId) ? (
-                <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95 space-y-1">
-                  {(() => {
-                    const deal = editTask.deal || displayDeals.find((d) => d.id === editTask.task.dealId || String(d.parcelId) === String(editTask.task.parcelId))
-                    const name = (deal?.leadName || '').toString().trim()
-                    const address = (deal?.leadAddress || '').toString().trim()
-                    const fallback = getDealLabel(editTask.task.dealId, editTask.task.parcelId) || 'Unknown'
-                    return (
-                      <>
-                        {(name || address) ? (
-                          <>
-                            {name && <div className="font-medium truncate" title={name}>{name}</div>}
-                            {address && <div className={`text-white/85 truncate ${name ? 'text-xs' : ''}`} title={address}>{address}</div>}
-                          </>
-                        ) : (
-                          <div className="truncate" title={fallback}>{fallback}</div>
-                        )}
-                      </>
-                    )
-                  })()}
-                </div>
-              ) : (
-                <div className="rounded border border-white/20 px-3 py-2 text-sm text-white/95">
-                  <span className="text-[10px] uppercase text-white/70">Scope</span>
-                  <div className="truncate">Pipeline task (no deal)</div>
-                </div>
-              )}
-              <div>
-                <label className="text-xs font-medium block mb-1 opacity-90">Title</label>
-                <Input
-                  value={editTaskTitle}
-                  onChange={(e) => setEditTaskTitle(e.target.value)}
-                  placeholder="e.g. Call back on Monday"
-                  className="text-sm"
-                  onKeyDown={async (e) => {
-                    if (e.key === 'Enter') {
-                      const t = editTaskTitle.trim()
-                      if (t) await commitEditTask(t)
-                    }
-                  }}
-                />
-              </div>
-              <SchedulePicker
-                inline
-                value={editTaskScheduledAt}
-                onChange={setEditTaskScheduledAt}
-                endValue={editTask.task?.__source === 'team' ? null : editTaskScheduledEndAt}
-                onEndChange={editTask.task?.__source === 'team' ? undefined : setEditTaskScheduledEndAt}
-                minDate={Date.now()}
-              />
-              {editTask.task?.__source === 'team' && (activePipeline?.teamShares || []).length > 0 && (
-                <TeamMemberAssignSectionLight
-                  members={newTaskTeamMembers}
-                  selectedUids={editTaskAssignUids}
-                  onToggle={(uid) => {
-                    setEditTaskAssignUids((prev) =>
-                      prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
-                    )
-                  }}
-                />
-              )}
-              <div className="flex gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="create-list-btn flex-1"
-                  onClick={async () => {
-                    const t = editTaskTitle.trim()
-                    if (t) await commitEditTask(t)
-                  }}
-                  disabled={!editTaskTitle.trim()}
-                >
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="create-list-btn flex-1"
-                  onClick={() => {
-                    setEditTaskAssignUids([])
-                    setEditTask(null)
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <NewTaskDialog
+        open={!!editTask}
+        onOpenChange={(open) => !open && setEditTask(null)}
+        isEditMode
+        leads={leads || []}
+        deals={displayDeals}
+        showDealPicker
+        initialTitle={editTask?.task?.title || ''}
+        initialLeadId={editTaskFormIds.leadId}
+        initialDealId={editTaskFormIds.dealId}
+        initialScheduledAt={
+          editTask?.task
+            ? editTask.task.__source === 'team'
+              ? (editTask.task.dueAt ?? editTask.task.scheduledAt ?? null)
+              : (editTask.task.scheduledAt ?? null)
+            : null
+        }
+        initialScheduledEndAt={
+          editTask?.task && editTask.task.__source !== 'team' ? (editTask.task.scheduledEndAt ?? null) : null
+        }
+        initialDateTimeExpanded={!!(editTask?.task?.scheduledAt || editTask?.task?.dueAt)}
+        initialTeamAssignUids={
+          editTask?.task?.__source === 'team' && Array.isArray(editTask.task.assignedUids)
+            ? [...editTask.task.assignedUids]
+            : []
+        }
+        lockLead={!!(editTaskFormIds.dealId || editTaskFormIds.leadId)}
+        lockDeal={!!editTaskFormIds.dealId}
+        disableDealClear={!!editTaskFormIds.dealId}
+        showTeamAssign={editTask?.task?.__source === 'team' && newTaskTeamMembers.length > 0}
+        teamMembers={newTaskTeamMembers}
+        teamContextActive={editTask?.task?.__source === 'team'}
+        onSubmit={commitEditTask}
+        nestedOverlay
+      />
 
       {sharePipelineId && onSharePipeline && (() => {
         const pipe = pipelines.find((p) => p.id === sharePipelineId)
@@ -1657,18 +1546,6 @@ export function DealPipeline({
                 setTaskMenu(null)
                 onCloseDeal?.()
                 setEditTask({ task: taskMenu.task, deal: deal || null })
-                setEditTaskTitle(taskMenu.task.title || '')
-                setEditTaskScheduledAt(
-                  taskMenu.task.__source === 'team'
-                    ? (taskMenu.task.dueAt ?? taskMenu.task.scheduledAt ?? null)
-                    : (taskMenu.task.scheduledAt ?? null)
-                )
-                setEditTaskScheduledEndAt(taskMenu.task.__source === 'team' ? null : (taskMenu.task.scheduledEndAt ?? null))
-                setEditTaskAssignUids(
-                  taskMenu.task.__source === 'team' && Array.isArray(taskMenu.task.assignedUids)
-                    ? [...taskMenu.task.assignedUids]
-                    : []
-                )
               }}
               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
             >

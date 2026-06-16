@@ -7,6 +7,8 @@ import { AddressAutocompleteField } from './AddressAutocompleteField'
 import { ResourceSharePicker } from './ResourceSharePicker'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 import { createLead, updateLead } from '@/utils/leads'
+import { mergeLeadFormWithParcel, ensureLeadParcelLink } from '@/utils/resolveLeadParcel'
+import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from './ui/toast'
 
 const emptyForm = {
@@ -53,13 +55,14 @@ export function CreateLeadDialog({
   topLayer = false,
   confirmLayer = false,
 }) {
-  const activeTeam = teams?.[0] || null
+  const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
   const [form, setForm] = useState(emptyForm)
   const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
   const [saving, setSaving] = useState(false)
   const [resolvingParcel, setResolvingParcel] = useState(false)
   const isEdit = !!editLead?.id
+  const fromParcel = Boolean(prefill?.parcelId) && !isEdit
 
   useEffect(() => {
     if (!open) {
@@ -97,14 +100,8 @@ export function CreateLeadDialog({
     setResolvingParcel(true)
     try {
       const parcel = await onResolveParcel(lat, lng)
-      if (parcel?.id) {
-        setForm((f) => ({
-          ...f,
-          parcelId: parcel.id,
-          properties: parcel.properties || f.properties,
-          lat: parcel.lat ?? lat,
-          lng: parcel.lng ?? lng,
-        }))
+      if (parcel?.id || parcel?.parcelId) {
+        setForm((f) => mergeLeadFormWithParcel(f, parcel))
       }
       return parcel
     } finally {
@@ -133,28 +130,34 @@ export function CreateLeadDialog({
       showToast('Enter a first or last name', 'error')
       return
     }
-    if (form.parcelId && existingLeads.some((l) => l.parcelId === form.parcelId && l.id !== editLead?.id)) {
-      showToast('A lead already exists for this parcel', 'warning')
-      return
-    }
-
     setSaving(true)
     try {
+      const linked = await ensureLeadParcelLink(
+        { ...form, firstName, lastName, address },
+        onResolveParcel
+      )
+      if (!linked.parcelId && linked.lat != null && linked.lng != null) {
+        showToast('Could not link to a county parcel — lead saved with map coordinates only', 'warning')
+      }
       const payload = {
         firstName,
         lastName,
-        address,
+        address: linked.address || address,
         phone: (form.phone ?? '').trim() || null,
         email: (form.email ?? '').trim() || null,
         notes: (form.notes ?? '').trim(),
-        parcelId: form.parcelId,
-        lat: form.lat,
-        lng: form.lng,
-        properties: form.properties,
+        parcelId: linked.parcelId,
+        lat: linked.lat,
+        lng: linked.lng,
+        properties: linked.properties,
         visibility: shareState.visibility,
         sharedMemberUids: shareState.sharedMemberUids,
         teamId: activeTeam?.id || null,
         teamShares: shareState.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
+      }
+      if (linked.parcelId && existingLeads.some((l) => l.parcelId === linked.parcelId && l.id !== editLead?.id)) {
+        showToast('A lead already exists for this parcel', 'warning')
+        return
       }
       if (isEdit) {
         const lead = await updateLead(getToken, editLead.id, payload)
@@ -228,7 +231,16 @@ export function CreateLeadDialog({
             <label className="text-xs opacity-60 mb-1 block">Property Address</label>
             <AddressAutocompleteField
               value={form.address ?? ''}
-              onChange={(v) => setField('address', v)}
+              onChange={(v) => {
+                setForm((f) => ({
+                  ...f,
+                  address: v ?? '',
+                  parcelId: null,
+                  lat: null,
+                  lng: null,
+                  properties: null,
+                }))
+              }}
               onSelectResult={handleAddressSelect}
             />
             {resolvingParcel && (
@@ -273,17 +285,17 @@ export function CreateLeadDialog({
             />
           </div>
 
-          {activeTeam && (
-            <ResourceSharePicker
-              team={activeTeam}
-              visibility={shareState.visibility}
-              sharedMemberUids={shareState.sharedMemberUids}
-              onChange={setShareState}
-              disabled={saving}
-              allowExternalSharing={allowExternalSharing}
-              collapsible
-            />
-          )}
+          <ResourceSharePicker
+            key={open ? (isEdit ? `edit-${editLead.id}` : fromParcel ? `parcel-${prefill.parcelId}` : 'new') : 'closed'}
+            team={activeTeam}
+            visibility={shareState.visibility}
+            sharedMemberUids={shareState.sharedMemberUids}
+            onChange={setShareState}
+            disabled={saving}
+            allowExternalSharing={allowExternalSharing}
+            collapsible={!fromParcel}
+            defaultExpanded={fromParcel}
+          />
 
           </div>
 

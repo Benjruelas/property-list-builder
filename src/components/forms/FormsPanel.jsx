@@ -44,7 +44,7 @@ const FormFillView = lazy(() => import('./FormFillView'))
 
 const MENU_WIDTH = 180
 const FORM_SUB_PANEL_CLASS =
-  'map-panel forms-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,56rem)] max-w-[56rem]'
+  'map-panel forms-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none'
 
 function formatDate(iso) {
   if (!iso) return '—'

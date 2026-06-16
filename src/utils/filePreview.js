@@ -2,6 +2,8 @@
  * File preview helpers — MIME/extension detection and blob URL management.
  */
 
+import { getModalPortalContainer } from './modalPortal.js'
+
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i
 const PDF_EXT = /\.pdf$/i
 const TEXT_EXT = /\.(txt|csv|md|log)$/i
@@ -46,8 +48,7 @@ export async function readTextFromBlob(blob, maxChars = MAX_TEXT_PREVIEW_CHARS) 
 
 /** Body-only portals render under #modal-root — use this for fullscreen overlays. */
 export function getFilePreviewPortalContainer() {
-  if (typeof document === 'undefined') return null
-  return document.getElementById('modal-root') || document.body
+  return getModalPortalContainer()
 }
 
 export function triggerBlobDownload(blob, fileName) {

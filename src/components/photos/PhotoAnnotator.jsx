@@ -19,6 +19,7 @@ import { Button } from '../ui/button'
 import { fetchLeadPhotoBlob, saveLeadPhotoAnnotations } from '@/utils/leadPhotos'
 import { showToast } from '../ui/toast'
 import { cn } from '@/lib/utils'
+import { getModalPortalContainer } from '@/utils/modalPortal'
 import { normalizeAnnotationObjects, serializeAnnotationLayer } from '@/utils/photoAnnotations'
 
 const TOOLS = ['select', 'circle', 'rect', 'arrow', 'line', 'text']
@@ -540,6 +541,6 @@ export function PhotoAnnotator({ open, lead, photo, getToken, onClose, onSaved }
         </div>
       </div>
     </div>,
-    document.body
+    getModalPortalContainer()
   )
 }

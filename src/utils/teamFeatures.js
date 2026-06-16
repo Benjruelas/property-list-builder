@@ -97,7 +97,7 @@ export function featureIdForFeedNav(data) {
   if (data.panel === 'quotes') return 'quotes'
   const type = String(data.type || '').toLowerCase()
   if (!type) return null
-  if (type === 'lead') return 'leads'
+  if (type === 'lead' || (type === 'pipelineleadstage' && data.leadId)) return 'leads'
   if (type === 'deal' || type === 'pipelinedealstage') return 'deals'
   if (type === 'pipeline' || type === 'pipelineshared' || type === 'pipelineleadstage') return 'pipes'
   if (type.startsWith('task')) return 'tasks'

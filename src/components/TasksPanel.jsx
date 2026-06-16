@@ -6,8 +6,6 @@ import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from '.
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { handlePanelDialogOpenChange, ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
-import { Input } from './ui/input'
-import { getFullAddress } from '@/utils/dealPipeline'
 import { displayLeadName } from '@/utils/leads'
 import {
   getAllTasks,
@@ -31,16 +29,17 @@ import {
 } from '@/utils/pipelineTasks'
 import { addTeamTask, updateTeamTask, removeTeamTask } from '@/utils/teamTasks'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
+import { buildVisibleTaskListFresh } from '@/utils/taskListSync'
 import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline, formatAssigneeList, resolveTeamTaskLeadId, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
 import { flattenDealsFromPipelines, findDealInPipelines } from '@/utils/deals'
+import { fetchTeamTasks, updateTeamTask as updateServerTeamTask, deleteTeamTask } from '@/utils/tasks'
+import { createServerAssignedTask, normalizeServerTask, resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { NewTaskDialog } from './NewTaskDialog'
-import { TeamMemberAssignSection } from './TeamMemberAssignSection'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
+import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 
-import { SchedulePicker } from './SchedulePicker'
-import { PipelineDropdown } from './PipelineDropdown'
 import { cn } from '@/lib/utils'
 
 function getLeadLabel(lead, parcelId) {
@@ -52,15 +51,17 @@ function getLeadLabel(lead, parcelId) {
 export function TasksPanel({
   isOpen,
   panelDockSlot,
+  topLayer = false,
   instantDismiss = false,
   onClose,
   onBack,
   onOpenParcelDetails,
   pipelines = [],
   leads = [],
+  deals = [],
   onLeadsChange,
   activePipelineId = null,
-  onOpenTaskInDealPipeline,
+  onOpenDeal,
   onOpenScheduleAtDate,
   onOpenLead,
   getToken = null,
@@ -70,58 +71,33 @@ export function TasksPanel({
 }) {
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
+  const [tasksLoading, setTasksLoading] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
-  const [editTeamAssignUids, setEditTeamAssignUids] = useState([])
 
   const [collapsedSections, setCollapsedSections] = useState({})
   const [showClosedTasks, setShowClosedTasks] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
-  const [editTitle, setEditTitle] = useState('')
-  const [editScheduledAt, setEditScheduledAt] = useState(null)
-  const [editScheduledEndAt, setEditScheduledEndAt] = useState(null)
-  const [assignPipelineId, setAssignPipelineId] = useState('')
-  const [assignParcelId, setAssignParcelId] = useState('')
-  const [assignLeadSearch, setAssignLeadSearch] = useState('')
-  const [assignSuggestionsOpen, setAssignSuggestionsOpen] = useState(false)
-  const [assignHighlightIndex, setAssignHighlightIndex] = useState(-1)
 
   const apiMode = pipelines.length > 0
 
   const displayLeads = useMemo(() => leads, [leads])
 
-  const assignLeadsPool = useMemo(() => displayLeads, [displayLeads])
-
-  const assignLeadSuggestions = useMemo(() => {
-    const q = (assignLeadSearch || '').trim().toLowerCase()
-    if (!q) return []
-    const tokens = q.split(/\s+/).filter(Boolean)
-    const pool = apiMode ? assignLeadsPool : displayLeads
-    const results = []
-    for (const lead of pool) {
-      const label = (getLeadLabel(lead, lead.parcelId) || '').toLowerCase()
-      const fullAddr = (getFullAddress(lead) || '').toLowerCase()
-      const owner = (lead.owner || '').toLowerCase()
-      const address = (lead.address || '').toLowerCase()
-      const searchable = [label, fullAddr, owner, address].filter(Boolean).join(' ')
-      if (!tokens.every((tok) => searchable.includes(tok))) continue
-      results.push({ lead, displayValue: getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId })
-    }
-    return results
-  }, [assignLeadSearch, assignLeadsPool, displayLeads, apiMode])
-
   const [pipePickerState, setPipePickerState] = useState(null)
 
-  const refreshTasks = useCallback(() => {
-    if (apiMode) {
-      setTasksWithPendingMerge(setAllTasks, [
-        ...getPersonalTasks(),
-        ...flattenPipelineTasks(pipelines),
-        ...flattenTeamTasks(pipelines),
-      ])
-    } else {
-      setTasksWithPendingMerge(setAllTasks, getAllTasks())
+  const refreshTasks = useCallback(async () => {
+    setTasksLoading(true)
+    try {
+      // Tasks panel always shows the full merged list (TASK_LIST_SCOPE.ALL).
+      if (apiMode) {
+        const merged = await buildVisibleTaskListFresh({ pipelines, getToken, teams })
+        setTasksWithPendingMerge(setAllTasks, merged)
+      } else {
+        setTasksWithPendingMerge(setAllTasks, getAllTasks())
+      }
+    } finally {
+      setTasksLoading(false)
     }
-  }, [apiMode, pipelines])
+  }, [apiMode, pipelines, getToken, teams])
 
   useEffect(() => {
     if (isOpen) refreshTasks()
@@ -132,43 +108,63 @@ export function TasksPanel({
     }
   }, [isOpen, refreshTasks])
 
-  useEffect(() => {
-    if (!editingTask) return
-    setEditTitle(editingTask.title || '')
-    setEditScheduledAt(
-      editingTask.__source === 'team'
-        ? (editingTask.dueAt ?? editingTask.scheduledAt ?? null)
-        : (editingTask.scheduledAt ?? null)
-    )
-    setEditScheduledEndAt(editingTask.__source === 'team' ? null : (editingTask.scheduledEndAt ?? null))
-    setAssignPipelineId(editingTask.pipelineId || '')
-    setAssignParcelId(editingTask.parcelId ? String(editingTask.parcelId) : '')
-    setEditTeamAssignUids(
-      editingTask.__source === 'team' && Array.isArray(editingTask.assignedUids)
-        ? [...editingTask.assignedUids]
-        : []
-    )
-    const lead = editingTask.parcelId ? displayLeads.find((l) => l.parcelId === editingTask.parcelId) : null
-    setAssignLeadSearch(
-      lead ? getLeadLabel(lead, lead.parcelId) || lead.address || lead.parcelId : ''
-    )
-    setAssignSuggestionsOpen(false)
-    setAssignHighlightIndex(-1)
-  }, [editingTask, displayLeads])
+  const allDeals = useMemo(() => {
+    const fromPipelines = flattenDealsFromPipelines(pipelines)
+    if (fromPipelines.length > 0) return fromPipelines
+    return (deals || []).map((d) => ({
+      ...d,
+      __pipelineId: d.__pipelineId ?? d.pipelineId ?? null,
+    }))
+  }, [pipelines, deals])
 
-  const allDeals = useMemo(() => flattenDealsFromPipelines(pipelines), [pipelines])
+  const newTaskMemberList = useMemo(() => getAllTeamMembers(teams), [teams])
+
+  const editingTaskFormIds = useMemo(
+    () => resolveTaskFormIdsFromTask(editingTask, displayLeads, allDeals),
+    [editingTask, displayLeads, allDeals]
+  )
+
+  const editTaskTeamMembers = useMemo(() => {
+    if (!editingTask) return newTaskMemberList
+    if (editingTask.__source === 'server') return getAllTeamMembers(teams)
+    if (editingTask.__source === 'team') {
+      const pipe = pipelines.find((p) => p.id === editingTask.pipelineId)
+      return pipe ? getMembersForTeamSharedPipeline(pipe, teams) : []
+    }
+    return newTaskMemberList
+  }, [editingTask, teams, pipelines, newTaskMemberList])
+
+  const editTeamContext = editingTask?.__source === 'team' || editingTask?.__source === 'server'
 
   const openAddTask = () => {
     setShowAddTask(true)
   }
 
-  const newTaskMemberList = useMemo(() => getAllTeamMembers(teams), [teams])
-
   const finalizeTaskCreate = useCallback(
-    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
-      if (assignedUids.length > 0 && !parcelId && !dealId) {
-        showToast('Assign a lead or deal to notify teammates', 'error')
-        return
+    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [], leadId = null, deal = null, notes = null }) => {
+      if (assignedUids.length > 0 && getToken) {
+        try {
+          await createServerAssignedTask(getToken, {
+            title,
+            scheduledAt,
+            scheduledEndAt,
+            assignedUids,
+            leadId,
+            dealId,
+            deal,
+            leads: displayLeads,
+            pipelines,
+            pipelineId,
+            notes,
+          })
+          showToast('Task added', 'success')
+          setShowAddTask(false)
+          refreshTasks()
+          return
+        } catch (err) {
+          showToast(err.message || 'Could not add task', 'error')
+          return
+        }
       }
       if (pipelineId) {
         const pipe = pipelines.find((p) => p.id === pipelineId)
@@ -197,7 +193,7 @@ export function TasksPanel({
           return
         }
         if (assignedUids.length > 0 && !leadId) {
-          showToast('Assign a lead or deal to notify teammates', 'error')
+          showToast('Could not resolve a lead for this pipe task', 'error')
           return
         }
         try {
@@ -207,6 +203,7 @@ export function TasksPanel({
             dealId: dealId || null,
             scheduledAt,
             scheduledEndAt,
+            notes,
           })
           await onPipelinesChange?.()
           showToast('Task added', 'success')
@@ -215,11 +212,16 @@ export function TasksPanel({
           return
         }
       } else {
-        if (assignedUids.length > 0) {
-          showToast('Pick a pipe for this task to assign teammates', 'error')
-          return
-        }
-        addTask({ pipelineId: null, parcelId: parcelId || null, dealId: dealId || null, title, scheduledAt, scheduledEndAt })
+        addTask({
+          pipelineId: null,
+          parcelId: parcelId || null,
+          dealId: dealId || null,
+          leadId: leadId || null,
+          title,
+          scheduledAt,
+          scheduledEndAt,
+          notes,
+        })
         refreshTasks()
         scheduleSync()
         showToast('Task added', 'success')
@@ -227,7 +229,7 @@ export function TasksPanel({
       setShowAddTask(false)
       refreshTasks()
     },
-    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipelines, displayLeads]
+    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipelines, displayLeads, teams]
   )
 
   const handleCreateTask = ({
@@ -237,6 +239,7 @@ export function TasksPanel({
     assignedUids = [],
     leadId: addTaskLeadId,
     dealId: addTaskDealId,
+    notes = null,
   }) => {
     const trimmed = title.trim()
     if (!trimmed) {
@@ -253,36 +256,48 @@ export function TasksPanel({
     }
     const dealId = addTaskDealId || null
     const deal = dealId ? allDeals.find((d) => d.id === dealId) : null
-    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
-    const parcelId = deal?.parcelId
-      ? String(deal.parcelId)
-      : (lead?.parcelId ? String(lead.parcelId) : null)
+    const ctx = resolveTaskContext({
+      leadId: addTaskLeadId,
+      dealId,
+      deal,
+      leads: displayLeads,
+      pipelines,
+    })
     const payload = {
       title: trimmed,
       scheduledAt,
       scheduledEndAt: endAt,
-      parcelId,
-      dealId,
+      parcelId: ctx.parcelId,
+      dealId: ctx.dealId,
+      leadId: ctx.leadId,
+      deal,
       assignedUids,
+      notes,
+    }
+
+    if (assignedUids.length > 0) {
+      if (!getToken) {
+        showToast('Sign in to assign tasks to teammates', 'error')
+        return
+      }
+      finalizeTaskCreate({ ...payload, pipelineId: ctx.pipelineId })
+      return
     }
 
     // Deal selection implies its pipe — check before parcel/lead routing (deal auto-fills lead).
-    if (dealId && apiMode) {
-      const pipelineId = deal?.__pipelineId || findDealInPipelines(pipelines, dealId).pipeline?.id
-      if (pipelineId) {
-        finalizeTaskCreate({ ...payload, pipelineId })
-        return
-      }
+    if (ctx.dealId && apiMode && ctx.pipelineId) {
+      finalizeTaskCreate({ ...payload, pipelineId: ctx.pipelineId })
+      return
     }
 
-    if (parcelId) {
-      const leadForParcel = displayLeads.find((l) => l.parcelId === parcelId)
+    if (ctx.parcelId) {
+      const leadForParcel = displayLeads.find((l) => l.parcelId === ctx.parcelId)
       if (leadForParcel?.__pipelineId) {
         finalizeTaskCreate({ ...payload, pipelineId: leadForParcel.__pipelineId })
         return
       }
       if (apiMode) {
-        const owning = pipelinesContainingParcel(pipelines, parcelId)
+        const owning = pipelinesContainingParcel(pipelines, ctx.parcelId)
         if (owning.length === 1) {
           finalizeTaskCreate({ ...payload, pipelineId: owning[0].id })
           return
@@ -296,10 +311,6 @@ export function TasksPanel({
       return
     }
 
-    if (apiMode && pipelines.length > 0) {
-      setPipePickerState({ open: true, eligiblePipelines: pipelines, allowNoPipe: true, payload })
-      return
-    }
     finalizeTaskCreate({ ...payload, pipelineId: null })
   }
 
@@ -331,6 +342,16 @@ export function TasksPanel({
   )
 
   const handleDeleteTask = async (task) => {
+    if (task.__source === 'server' && getToken) {
+      try {
+        await deleteTeamTask(getToken, task.id)
+        showToast('Task deleted', 'success')
+        refreshTasks()
+      } catch (err) {
+        showToast(err.message || 'Could not delete task', 'error')
+      }
+      return
+    }
     if (task.__source === 'team' && task.pipelineId && task.leadId) {
       try {
         await removeTeamTask(getToken, task.pipelineId, task.leadId, task.id)
@@ -387,67 +408,97 @@ export function TasksPanel({
     onOpenLead?.(lead)
   }, [resolveLeadFromTask, onOpenLead])
 
-  const handleRowActivate = (task, sectionKey) => {
-    if (sectionKey === 'unlabeled') {
-      setEditingTask(task)
+  const handleRowActivate = useCallback((task) => {
+    if (task.dealId) {
+      const deal = allDeals.find((d) => d.id === task.dealId)
+      const pipelineId = deal?.__pipelineId
+        ?? deal?.pipelineId
+        ?? findDealInPipelines(pipelines, task.dealId).pipeline?.id
+        ?? null
+      if (onOpenDeal) {
+        onOpenDeal(task.dealId, pipelineId)
+      } else {
+        showToast('Deal not found', 'error')
+      }
       return
     }
-    if (sectionKey === '__local__') {
-      onOpenTaskInDealPipeline?.({
-        pipelineId: null,
-        parcelId: task.parcelId ?? null,
-        mode: 'local'
-      })
-      return
-    }
-    const pipelineId = sectionKey
-    onOpenTaskInDealPipeline?.({
-      pipelineId,
-      parcelId: task.parcelId ?? null,
-      mode: 'api'
-    })
-  }
 
-  const handleSaveEdit = async () => {
+    if (task.leadId || task.parcelId) {
+      handleOpenLeadFromTask(task)
+      return
+    }
+
+    setEditingTask(task)
+  }, [allDeals, pipelines, onOpenDeal, handleOpenLeadFromTask])
+
+  const handleEditTaskSubmit = async ({
+    title,
+    scheduledAt,
+    scheduledEndAt,
+    assignedUids = [],
+    leadId = null,
+    dealId = null,
+  }) => {
     if (!editingTask) return
-    const t = editTitle.trim() || 'Task'
-    if (editingTask.__source === 'team' && editingTask.pipelineId && editingTask.leadId) {
+    const t = title.trim()
+    if (!t) {
+      showToast('Enter a task title', 'error')
+      return
+    }
+    const endAt = scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
+    if (editingTask.__source === 'server' && getToken) {
       try {
-        await updateTeamTask(getToken, editingTask.pipelineId, editingTask.leadId, {
-          id: editingTask.id,
+        await updateServerTeamTask(getToken, editingTask.id, {
           title: t,
-          dueAt: editScheduledAt,
-          assignedUids: editTeamAssignUids
+          scheduledAt,
+          scheduledEndAt: endAt,
+          assignedUids,
         })
-        await onPipelinesChange?.()
         showToast('Task updated', 'success')
         setEditingTask(null)
-        setEditTeamAssignUids([])
+        refreshTasks()
       } catch (err) {
         showToast(err.message || 'Could not update task', 'error')
       }
       return
     }
-    const endAt = editScheduledEndAt && editScheduledEndAt > (editScheduledAt || 0) ? editScheduledEndAt : null
-    if (endAt && editScheduledAt && endAt <= editScheduledAt) {
+    if (editingTask.__source === 'team' && editingTask.pipelineId && editingTask.leadId) {
+      try {
+        await updateTeamTask(getToken, editingTask.pipelineId, editingTask.leadId, {
+          id: editingTask.id,
+          title: t,
+          dueAt: scheduledAt,
+          assignedUids,
+        })
+        await onPipelinesChange?.()
+        showToast('Task updated', 'success')
+        setEditingTask(null)
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
+      }
+      return
+    }
+    if (endAt && scheduledAt && endAt <= scheduledAt) {
       showToast('End time must be after start time', 'error')
       return
     }
-    let pipelineId = null
-    let parcelId = (assignParcelId || '').trim() || null
-    if (apiMode) {
-      if (parcelId) {
-        const lead = displayLeads.find((l) => String(l.parcelId) === String(parcelId))
-        pipelineId = lead?.__pipelineId ?? (assignPipelineId || null)
-      } else {
-        pipelineId = assignPipelineId || null
-      }
-    } else {
-      pipelineId = null
-      if (parcelId) {
-        const lead = displayLeads.find((l) => String(l.parcelId) === String(parcelId))
-        if (!lead) parcelId = null
-      }
+
+    const deal = dealId ? allDeals.find((d) => d.id === dealId) : null
+    const ctx = resolveTaskContext({
+      leadId,
+      dealId,
+      deal,
+      leads: displayLeads,
+      pipelines,
+    })
+    let parcelId = ctx.parcelId
+    let pipelineId = ctx.pipelineId
+
+    if (apiMode && parcelId) {
+      const lead = displayLeads.find(
+        (l) => String(l.parcelId) === String(parcelId) || String(l.id) === String(parcelId)
+      )
+      pipelineId = lead?.__pipelineId ?? pipelineId
     }
 
     const wasPipeline = editingTask.__source === 'pipeline' && editingTask.pipelineId
@@ -456,58 +507,60 @@ export function TasksPanel({
 
     try {
       if (sameTargetPipe) {
-        // Stay within the same pipeline — just update in place.
         await updatePipelineTask(getToken, pipelineId, {
           id: editingTask.id,
           title: t,
-          scheduledAt: editScheduledAt,
+          scheduledAt,
           scheduledEndAt: endAt,
-          parcelId
+          parcelId,
+          dealId: ctx.dealId,
         })
         await onPipelinesChange?.()
       } else if (wasPipeline && !goingToPipe) {
-        // Moved off a pipe → becomes personal. Delete from pipe, add locally.
         await removePipelineTask(getToken, editingTask.pipelineId, editingTask.id)
         addTask({
           pipelineId: null,
           parcelId: parcelId || null,
+          dealId: ctx.dealId,
+          leadId: ctx.leadId,
           title: t,
-          scheduledAt: editScheduledAt,
-          scheduledEndAt: endAt
+          scheduledAt,
+          scheduledEndAt: endAt,
         })
         await onPipelinesChange?.()
         scheduleSync()
       } else if (wasPipeline && goingToPipe && !sameTargetPipe) {
-        // Moved to a different pipe → delete from old + add to new.
         await removePipelineTask(getToken, editingTask.pipelineId, editingTask.id)
         await addPipelineTask(getToken, pipelineId, {
           id: editingTask.id,
           title: t,
           parcelId: parcelId || null,
-          scheduledAt: editScheduledAt,
-          scheduledEndAt: endAt
+          dealId: ctx.dealId,
+          scheduledAt,
+          scheduledEndAt: endAt,
         })
         await onPipelinesChange?.()
       } else if (!wasPipeline && goingToPipe) {
-        // Personal → pipe: remove from local store, add to pipe.
         removeLocalTaskById(editingTask.id)
         await addPipelineTask(getToken, pipelineId, {
           id: editingTask.id,
           title: t,
           parcelId: parcelId || null,
-          scheduledAt: editScheduledAt,
-          scheduledEndAt: endAt
+          dealId: ctx.dealId,
+          scheduledAt,
+          scheduledEndAt: endAt,
         })
         await onPipelinesChange?.()
         scheduleSync()
       } else {
-        // Personal → personal: unchanged path.
         updateTaskById(editingTask.id, {
           title: t,
-          scheduledAt: editScheduledAt,
+          scheduledAt,
           scheduledEndAt: endAt,
           pipelineId: null,
-          parcelId
+          parcelId,
+          dealId: ctx.dealId,
+          leadId: ctx.leadId,
         })
         refreshTasks()
         scheduleSync()
@@ -541,6 +594,7 @@ export function TasksPanel({
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
+        topLayer={topLayer}
       >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Tasks grouped by pipe</DialogDescription>
@@ -565,6 +619,10 @@ export function TasksPanel({
           className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-6 py-4"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
+          {tasksLoading && allTasks.length === 0 ? (
+            <PanelListBodyLoading />
+          ) : (
+            <>
           {showEmptyOpen && (
             <p className="text-sm text-white/60 py-8 text-center">No open tasks</p>
           )}
@@ -578,7 +636,7 @@ export function TasksPanel({
                       displayLeads={displayLeads}
                       teams={teams}
                       onToggle={handleToggle}
-                      onActivate={task.parcelId && (task.scheduledAt || task.dueAt) ? null : () => handleRowActivate(task, 'unlabeled')}
+                      onActivate={() => handleRowActivate(task)}
                       onEdit={() => setEditingTask(task)}
                       onDelete={() => handleDeleteTask(task)}
                       onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
@@ -618,7 +676,7 @@ export function TasksPanel({
                           displayLeads={displayLeads}
                           teams={teams}
                           onToggle={handleToggle}
-                          onActivate={task.parcelId && (task.scheduledAt || task.dueAt) ? null : () => handleRowActivate(task, sid)}
+                          onActivate={() => handleRowActivate(task)}
                           onEdit={() => setEditingTask(task)}
                           onDelete={() => handleDeleteTask(task)}
                           onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
@@ -644,7 +702,7 @@ export function TasksPanel({
                           displayLeads={displayLeads}
                           teams={teams}
                           onToggle={handleToggle}
-                          onActivate={() => handleRowActivate(task, 'unlabeled')}
+                          onActivate={() => handleRowActivate(task)}
                           onEdit={() => setEditingTask(task)}
                           onDelete={() => handleDeleteTask(task)}
                           onViewOnSchedule={null}
@@ -684,7 +742,7 @@ export function TasksPanel({
                               displayLeads={displayLeads}
                               teams={teams}
                               onToggle={handleToggle}
-                              onActivate={() => handleRowActivate(task, pipeline.id === '__local__' ? '__local__' : pipeline.id)}
+                              onActivate={() => handleRowActivate(task)}
                               onEdit={() => setEditingTask(task)}
                               onDelete={() => handleDeleteTask(task)}
                               onViewOnSchedule={null}
@@ -698,6 +756,8 @@ export function TasksPanel({
                 )
               })}
             </div>
+          )}
+            </>
           )}
         </div>
       </DialogContent>
@@ -713,152 +773,51 @@ export function TasksPanel({
         teamMembers={newTaskMemberList}
         onSubmit={handleCreateTask}
         nestedOverlay
+        topLayer
       />
 
-      <Dialog open={!!editingTask} modal={false} onOpenChange={(o) => handlePanelDialogOpenChange(o, false, () => setEditingTask(null), !!editingTask)}>
-        <DialogContent className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0" showCloseButton={false} nestedOverlay>
-          <DialogHeader
-            className="px-6 pt-6 pb-2 border-b border-white/20 flex-shrink-0 text-left"
-            style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
-          >
-            <PanelHeader onBack={() => setEditingTask(null)} title="Edit task" />
-            <DialogDescription className="sr-only">Edit title, schedule, or assign to a pipeline and lead</DialogDescription>
-          </DialogHeader>
-          <div className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-            <div>
-              <label className="text-xs font-medium block mb-1 opacity-90">Title</label>
-              <Input
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                placeholder="e.g. Call back, Roof inspection"
-                className="text-sm"
-              />
-            </div>
-            <SchedulePicker
-              inline
-              value={editScheduledAt}
-              onChange={setEditScheduledAt}
-              endValue={editingTask?.__source === 'team' ? null : editScheduledEndAt}
-              onEndChange={editingTask?.__source === 'team' ? undefined : setEditScheduledEndAt}
-              minDate={Date.now()}
-            />
-            {apiMode && editingTask?.__source !== 'team' && (
-              <PipelineDropdown
-                value={assignPipelineId}
-                onChange={(val) => {
-                  setAssignPipelineId(val)
-                  setAssignParcelId('')
-                  setAssignLeadSearch('')
-                }}
-                pipelines={pipelines}
-                allowEmpty
-              />
-            )}
-            <div className="relative">
-              <label className="text-xs font-medium block mb-1 opacity-90">Lead</label>
-              {editingTask?.__source === 'team' ? (
-                <p className="text-sm text-white/80 py-2 rounded-md border border-white/15 px-2 bg-white/[0.04]">
-                  {assignLeadSearch || (editingTask.parcelId ? 'Lead' : '')}
-                </p>
-              ) : (
-              <>
-              <Input
-                value={assignLeadSearch}
-                onChange={(e) => {
-                  setAssignLeadSearch(e.target.value)
-                  setAssignParcelId('')
-                  setAssignSuggestionsOpen(e.target.value.trim().length > 0)
-                  setAssignHighlightIndex(-1)
-                }}
-                onBlur={() => setTimeout(() => setAssignSuggestionsOpen(false), 150)}
-                placeholder={apiMode && !assignPipelineId ? 'Choose a pipeline first…' : 'Type address or name…'}
-                disabled={apiMode && !assignPipelineId}
-                className="text-sm"
-                onKeyDown={(e) => {
-                  if (!assignSuggestionsOpen || assignLeadSuggestions.length === 0) return
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    setAssignHighlightIndex((i) => Math.min(i + 1, assignLeadSuggestions.length - 1))
-                  } else if (e.key === 'ArrowUp') {
-                    e.preventDefault()
-                    setAssignHighlightIndex((i) => Math.max(i - 1, -1))
-                  } else if (e.key === 'Enter' && assignHighlightIndex >= 0 && assignLeadSuggestions[assignHighlightIndex]) {
-                    e.preventDefault()
-                    const item = assignLeadSuggestions[assignHighlightIndex]
-                    setAssignParcelId(String(item.lead.parcelId))
-                    setAssignLeadSearch(item.displayValue)
-                    setAssignSuggestionsOpen(false)
-                    setAssignHighlightIndex(-1)
-                  }
-                }}
-              />
-              {assignSuggestionsOpen && assignLeadSearch.trim() && assignLeadSuggestions.length > 0 && (
-                <ul className="add-task-lead-dropdown absolute z-50 left-0 right-0 mt-0.5 max-h-40 overflow-y-auto rounded-lg border py-1 text-sm" role="listbox">
-                  {assignLeadSuggestions.map((item, idx) => (
-                    <li
-                      key={item.lead.parcelId ?? item.lead.id}
-                      role="option"
-                      aria-selected={assignHighlightIndex === idx}
-                      className={`px-3 py-2 cursor-pointer ${assignHighlightIndex === idx ? 'bg-white/10' : 'hover:bg-white/10'}`}
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        setAssignParcelId(String(item.lead.parcelId))
-                        setAssignLeadSearch(item.displayValue)
-                        setAssignSuggestionsOpen(false)
-                        setAssignHighlightIndex(-1)
-                      }}
-                    >
-                      <span className="truncate font-medium block">{item.displayValue}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              </>
-              )}
-            </div>
-            {editingTask?.__source === 'team' && (
-              (() => {
-                const p = pipelines.find((x) => x.id === editingTask.pipelineId)
-                const mem = p ? getMembersForTeamSharedPipeline(p, teams) : []
-                if (mem.length === 0) return null
-                return (
-                  <TeamMemberAssignSection
-                    members={mem}
-                    selectedUids={editTeamAssignUids}
-                    onToggle={(uid) => {
-                      setEditTeamAssignUids((prev) =>
-                        prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
-                      )
-                    }}
-                  />
-                )
-              })()
-            )}
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={handleSaveEdit}>
-                Save
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="create-list-btn flex-1"
-                onClick={() => {
-                  setEditTeamAssignUids([])
-                  setEditingTask(null)
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <NewTaskDialog
+        open={!!editingTask}
+        onOpenChange={(o) => handlePanelDialogOpenChange(o, false, () => setEditingTask(null), !!editingTask)}
+        isEditMode
+        leads={displayLeads}
+        deals={allDeals}
+        showDealPicker={apiMode}
+        showTeamAssign={editTaskTeamMembers.length > 0}
+        teamMembers={editTaskTeamMembers}
+        teamContextActive={editTeamContext}
+        initialTitle={editingTask?.title || ''}
+        initialLeadId={editingTaskFormIds.leadId}
+        initialDealId={editingTaskFormIds.dealId}
+        initialScheduledAt={
+          editingTask
+            ? editingTask.__source === 'team'
+              ? (editingTask.dueAt ?? editingTask.scheduledAt ?? null)
+              : (editingTask.scheduledAt ?? null)
+            : null
+        }
+        initialScheduledEndAt={
+          editingTask && editingTask.__source !== 'team' ? (editingTask.scheduledEndAt ?? null) : null
+        }
+        initialDateTimeExpanded={!!(editingTask?.scheduledAt || editingTask?.dueAt)}
+        initialTeamAssignUids={
+          editingTask && (editingTask.__source === 'team' || editingTask.__source === 'server') && Array.isArray(editingTask.assignedUids)
+            ? [...editingTask.assignedUids]
+            : []
+        }
+        lockLead={editTeamContext || !!editingTaskFormIds.dealId}
+        lockDeal={editTeamContext && !!editingTaskFormIds.dealId}
+        onSubmit={handleEditTaskSubmit}
+        nestedOverlay
+        topLayer
+      />
 
       <ConvertToLeadPipelineDialog
         open={!!pipePickerState?.open}
         onOpenChange={(o) => { if (!o) setPipePickerState(null) }}
         pipelines={pipePickerState?.eligiblePipelines ?? []}
         currentUser={currentUser}
+        topLayer
         title="Pick a pipe for this task"
         description="Everyone the pipe is shared with will see this task."
         allowNoPipe={!!pipePickerState?.allowNoPipe}
@@ -889,11 +848,16 @@ function getModalPortalContainer() {
 }
 
 export function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead, hideLeadLine = false }) {
-  const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId || l.id === task.parcelId) : null
-  const leadLine = !hideLeadLine && task.parcelId
-    ? `Lead: ${getLeadLabel(lead, task.parcelId)}`
+  const lead = task.parcelId
+    ? displayLeads.find((l) => l.parcelId === task.parcelId || l.id === task.parcelId)
+    : (task.leadId ? displayLeads.find((l) => l.id === task.leadId) : null)
+  const leadLine = !hideLeadLine && (task.parcelId || task.leadId)
+    ? `Lead: ${getLeadLabel(lead, task.parcelId || task.leadId)}`
     : null
-  const assigneeStr = task.__source === 'team' ? formatAssigneeList(task.assignedUids, teams) : null
+  const isAssignedTask = task.__source === 'team' || task.__source === 'server'
+  const assigneeStr = isAssignedTask && (task.assignedUids?.length > 0)
+    ? formatAssigneeList(task.assignedUids, teams)
+    : null
   const isDone = task.completed
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuFixed, setMenuFixed] = useState(null)
@@ -978,30 +942,30 @@ export function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, 
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
-            <span className={cn('font-medium text-white/95', isDone && 'line-through text-white/55')}>
+            <span className={cn('font-medium panel-item-title text-white/95', isDone && 'line-through text-white/55')}>
               {task.title || '(untitled)'}
             </span>
-            {task.__source === 'team' && (
+            {isAssignedTask && (
               <TeamSharedIcon title="Team task" />
             )}
           </div>
           {leadLine && (
-            <div className="text-xs text-white/55 mt-0.5 truncate" title={leadLine}>
+            <div className="panel-item-body text-white/55 mt-0.5 truncate" title={leadLine}>
               {leadLine}
             </div>
           )}
           {assigneeStr && (
-            <div className="text-xs text-white/45 mt-0.5 truncate" title={assigneeStr}>
+            <div className="panel-item-body text-white/45 mt-0.5 truncate" title={assigneeStr}>
               {assigneeStr}
             </div>
           )}
           {isDone && task.completedAt != null && (
-            <div className="text-xs text-white/50 mt-0.5 truncate">
+            <div className="panel-item-meta text-white/50 mt-0.5 truncate">
               Completed {formatTaskCompletedDate(task.completedAt)}
             </div>
           )}
           {!isDone && task.scheduledAt && (
-            <div className={cn('text-xs mt-0.5 truncate', task.scheduledAt < Date.now() ? 'text-red-400' : 'text-white/55')}>
+            <div className={cn('panel-item-meta mt-0.5 truncate', task.scheduledAt < Date.now() ? 'text-red-400' : 'text-white/55')}>
               {formatTaskScheduledDate(task.scheduledAt)}
             </div>
           )}

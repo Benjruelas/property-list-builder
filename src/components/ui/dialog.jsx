@@ -28,7 +28,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 const PANEL_CONTENT_MOTION =
   'map-panel-dialog pointer-events-auto'
 const PANEL_OVERLAY_MOTION =
-  'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-150 ease-out'
+  'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-200 ease-out'
 const DEFAULT_CONTENT_MOTION =
   'pointer-events-auto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]'
 
@@ -79,6 +79,7 @@ const preventCloseWhenNestedOverlay = (e, existing) => {
     target?.closest?.('.create-deal-panel') ||
     target?.closest?.('.new-task-panel') ||
     target?.closest?.('.deal-details-panel') ||
+    target?.closest?.('[data-team-member-features-dialog]') ||
     target?.closest?.('.team-details-panel') ||
     target?.closest?.('.activity-panel') ||
     target?.closest?.('.reports-panel') ||
@@ -135,9 +136,10 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
     instantDismiss && INSTANT_PANEL_MOTION
   )
   const zOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[10000]'
-  const zContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[10001]'
+  const aboveDetailScrim = topLayer || detailFocusOverlay
+  const zContent = confirmLayer ? 'z-[10041]' : aboveDetailScrim ? 'z-[10021]' : 'z-[10001]'
   const zHideOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]'
-  const zDefaultContent = confirmLayer ? 'z-[10041]' : topLayer ? 'z-[10021]' : 'z-[9999]'
+  const zDefaultContent = confirmLayer ? 'z-[10041]' : aboveDetailScrim ? 'z-[10021]' : 'z-[9999]'
   const contentPosition = cn(
     'fixed left-[50%] top-[50%] grid w-full max-w-lg gap-4',
     isPanel

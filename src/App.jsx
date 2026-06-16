@@ -28,6 +28,7 @@ import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validat
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
 import { resolveParcelId } from './utils/parcelPropertyMap'
+import { resolveLeadParcelAtLocation, parcelDataFromLandRecords } from './utils/resolveLeadParcel'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import PathTracker from './components/PathTracker'
@@ -94,7 +95,6 @@ import {
   loadLocalLeads,
   createLead,
   buildLeadPrefillFromParcel,
-  buildAutoLeadPayloadFromParcel,
   isParcelALead as isParcelInLeadsList,
   findLeadByParcelId,
   displayLeadName,
@@ -190,12 +190,16 @@ function App() {
   const {
     isActivityPanelOpen,
     isActivityPanelFocused,
+    isActivityPanelTopLayer,
+    isTasksPanelTopLayer,
     isListPanelOpen,
     isParcelListPanelOpen,
     viewingListId,
     isLeadsPanelOpen,
     leadsDetailLeadId,
+    isLeadsDetailStandalone,
     isDealsPanelOpen,
+    isDealsDetailStandalone,
     dealsDetailDealId,
     dealsDetailPipelineId,
     dealsClosedRecordId,
@@ -388,7 +392,6 @@ function App() {
   const [photoModeLead, setPhotoModeLead] = useState(null)
   const [photoModeParcelId, setPhotoModeParcelId] = useState(null)
   const [photoModeAddress, setPhotoModeAddress] = useState('')
-  const pendingPhotoAfterLeadRef = useRef(false)
   /** When set, user is choosing a target pipeline to move a deal into. */
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
@@ -406,6 +409,8 @@ function App() {
   // const [isRoofInspectorOpen, setIsRoofInspectorOpen] = useState(false) // roof inspector — restore later
   // const [roofInspectorParcel, setRoofInspectorParcel] = useState(null)
   const [settings, setSettings] = useState(() => getSettings())
+  /** Parcel boundary highlight when navigating from CRM (lead map) without opening popup */
+  const [mapHighlightedParcelId, setMapHighlightedParcelId] = useState(null)
 
   useEffect(() => {
     applyUiTheme(getUiThemeFromSettings(settings))
@@ -598,11 +603,6 @@ function App() {
     setTimeout(() => { programmaticMoveRef.current = false }, 800)
   }, [selectedHailEvent, hailParcelCoords])
 
-  const anyPanelOpen = isListPanelOpen || isParcelListPanelOpen || isParcelDetailsOpen ||
-    isSkipTracedListPanelOpen || isOutreachPanelOpen ||
-    isEmailComposerOpen || isBulkEmailPreviewOpen || isDealPipelineOpen ||
-    isSchedulePanelOpen || isTasksPanelOpen || isActivityPanelOpen || isPathsPanelOpen || isFormsPanelOpen || isQuotesPanelOpen || isReportsPanelOpen || isTeamsPanelOpen || isSettingsPanelOpen || isLeadsPanelOpen || isDealsPanelOpen || isHailDataOpen
-    // || isRoofInspectorOpen // roof inspector — restore later
   const hasPopup = clickedParcelId != null
 
   // iOS Safari resize fix
@@ -703,9 +703,16 @@ function App() {
         } catch {
           continue
         }
+        const taskName = (t.title || 'Untitled task').toString().slice(0, 80)
+        const when = new Date(at).toLocaleString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
         showLocalNotification('Task due soon', {
-          body: `${(t.title || 'Task').toString().slice(0, 80)} — ${new Date(at).toLocaleString()}`,
-          tag: `task-${t.id}-${dayKey}`
+          body: when ? `${taskName} · ${when}` : taskName,
+          tag: `task-${t.id}-${dayKey}`,
         })
       }
     }
@@ -1087,6 +1094,12 @@ function App() {
     pipelinesRef.current = pipelines
   }, [pipelines])
 
+  useEffect(() => {
+    if (pipelinesLoading && pipelines.length > 0) {
+      setPipelinesLoading(false)
+    }
+  }, [pipelinesLoading, pipelines.length])
+
   const refreshLeads = useCallback(async () => {
     if (!currentUser) return
     const showSpinner = leadsRef.current.length === 0
@@ -1234,7 +1247,6 @@ function App() {
       } else {
         setLeadsLoading(true)
       }
-      setPipelinesLoading(true)
       prefetchPanel('leads')
       prefetchPanel('deals')
       prefetchPanel('dealPipeline')
@@ -1313,8 +1325,8 @@ function App() {
   const isParcelALeadCheck = useCallback((parcelId) => isParcelInLeadsList(leads, parcelId), [leads])
 
   const handleResolveParcelForLead = useCallback(async (lat, lng) => {
-    if (!parcelLayerRef.current?.findParcelAtLocation) return null
-    return parcelLayerRef.current.findParcelAtLocation(lat, lng)
+    const tileHit = parcelLayerRef.current?.queryParcelFeatureAtLocation?.(lat, lng)
+    return resolveLeadParcelAtLocation(lat, lng, { lrid: tileHit?.lrid || '' })
   }, [])
 
   const handleConvertToLead = useCallback((parcelData) => {
@@ -1328,7 +1340,7 @@ function App() {
         showToast('Invalid parcel data', 'error')
         return
       }
-      if (isParcelALeadCheck(parcelData.id)) {
+      if (isParcelALeadCheck(parcelData)) {
         showToast('Parcel is already a lead', 'warning')
         return
       }
@@ -1341,16 +1353,7 @@ function App() {
     setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
     refreshLeads()
     nav.popModal()
-    if (pendingPhotoAfterLeadRef.current) {
-      pendingPhotoAfterLeadRef.current = false
-      setPhotoModeLead(lead)
-      setPhotoModeParcelId(lead.parcelId || photoPickerParcelId || null)
-      setPhotoModeAddress(photoPickerAddress || '')
-      setPhotoPickerOpen(false)
-      setPhotoPickerParcelId(null)
-      setPhotoPickerAddress('')
-    }
-  }, [refreshLeads, nav, photoPickerParcelId, photoPickerAddress])
+  }, [refreshLeads, nav])
 
   const handleLeadUpdated = useCallback((lead) => {
     setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)))
@@ -2034,6 +2037,7 @@ function App() {
     const isSkipTracingInProgress = skipTracingInProgress.has(parcelId)
     const listsWithParcel = (lists || []).filter(l => (l.parcels || []).some(p => (p.id || p) === parcelId))
     const parcelData = { id: parcelId, properties, address: display.fullAddress || address, lat, lng }
+    if (data.leadId) parcelData.leadId = data.leadId
     return {
       type: 'popup',
       parcelId,
@@ -2053,6 +2057,7 @@ function App() {
   }, [lists, skipTracingInProgress])
 
   const openParcelPopup = useCallback((data) => {
+    setMapHighlightedParcelId(null)
     const overlay = buildPopupOverlay(data)
     if (overlay) nav.showParcelPopup(overlay)
   }, [buildPopupOverlay, nav])
@@ -2367,35 +2372,88 @@ function App() {
     nav.resetToMapFullState()
   }, [nav, clearListAddMode])
 
+  const scheduleParcelHighlight = useCallback((lat, lng, preferredId = null) => {
+    const attempt = () => {
+      const hit = parcelLayerRef.current?.queryParcelFeatureAtLocation?.(lat, lng)
+      const id = preferredId || hit?.id
+      if (id) {
+        setMapHighlightedParcelId(id)
+        return true
+      }
+      return false
+    }
+
+    if (attempt()) return
+
+    const map = mapInstanceRef.current
+    if (!map) return
+
+    let tries = 0
+    const maxTries = 10
+    const retry = () => {
+      tries += 1
+      if (attempt() || tries >= maxTries) return
+      setTimeout(retry, 350)
+    }
+    map.once('idle', retry)
+    setTimeout(retry, 800)
+  }, [])
+
   const handleGoToParcelOnMap = useCallback((raw) => {
     if (!raw) return
-    const parcelId = resolveParcelId(raw) || raw.id || raw.parcelId || raw.properties?.PROP_ID || raw.PROP_ID
     const lat = Number(raw.lat ?? raw.latlng?.lat ?? raw.properties?.LATITUDE ?? raw.properties?.latitude)
     const lng = Number(raw.lng ?? raw.latlng?.lng ?? raw.properties?.LONGITUDE ?? raw.properties?.longitude)
-    const address = raw.address || raw.properties?.SITUS_ADDR || raw.properties?.SITE_ADDR || raw.properties?.ADDRESS || 'No address'
-    const properties = raw.properties || {
-      OWNER_NAME: `${raw.firstName || ''} ${raw.lastName || ''}`.trim(),
-      SITUS_ADDR: address,
-      LATITUDE: lat,
-      LONGITUDE: lng,
-      PROP_ID: parcelId,
-    }
-    closeAllPanelsForMap()
-    if (!parcelId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-      showToast('No map location for this parcel', 'error')
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      showToast('No map location for this lead', 'error')
       return
     }
-    openParcelPopup({
-      id: parcelId,
-      address,
-      properties: { ...properties, PROP_ID: parcelId },
+
+    const parcelId = raw.parcelId || raw.id || resolveParcelId(raw) || ''
+
+    cancelParcelPopupWork()
+    closeAllPanelsForMap()
+    nav.clearMapOverlays()
+    setMapHighlightedParcelId(null)
+
+    if (parcelId) {
+      setMapHighlightedParcelId(parcelId)
+    }
+
+    const map = mapInstanceRef.current
+    const flyZoom = 18
+    if (map) {
+      programmaticMoveRef.current = true
+      map.flyTo({ center: [lng, lat], zoom: flyZoom, duration: 700, essential: true })
+      map.once('moveend', () => {
+        programmaticMoveRef.current = false
+        scheduleParcelHighlight(lat, lng, parcelId || null)
+      })
+      setTimeout(() => { programmaticMoveRef.current = false }, 800)
+    } else {
+      scheduleParcelHighlight(lat, lng, parcelId || null)
+    }
+
+    parcelFetchAbortRef.current?.abort()
+    const controller = new AbortController()
+    parcelFetchAbortRef.current = controller
+
+    fetchLandRecordsParcel({
       lat,
       lng,
+      lrid: parcelId,
+      signal: controller.signal,
     })
-    if (mapRef.current) {
-      mapRef.current.flyTo({ center: [lng, lat], zoom: 17, duration: 500 })
-    }
-  }, [closeAllPanelsForMap, openParcelPopup, showToast])
+      .then((result) => {
+        if (controller.signal.aborted) return
+        const parcelData = parcelDataFromLandRecords(result, lat, lng)
+        if (parcelData?.id) {
+          setMapHighlightedParcelId(parcelData.id)
+        }
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return
+      })
+  }, [cancelParcelPopupWork, closeAllPanelsForMap, nav, scheduleParcelHighlight, showToast])
 
   const handleOpenParcelDetails = useCallback((parcelData = null) => {
     if (authLoading) return
@@ -2471,6 +2529,7 @@ function App() {
     }
     if (!isParcelDetailsOpenRef.current) {
       cancelParcelPopupWork()
+      setMapHighlightedParcelId(null)
       nav.clearMapOverlays()
     } else {
       nav.patchTopOverlay({ popupData: null })
@@ -2504,6 +2563,7 @@ function App() {
       return
     }
     guardFeature('outreach', () => {
+      prefetchPanel('outreach')
       setIsBulkEmailMode(false)
       setEmailComposerParcelData(parcelData)
       setEmailComposerRecipient({ email, name: parcelData?.properties?.OWNER_NAME || '' })
@@ -2519,6 +2579,7 @@ function App() {
       return
     }
     guardFeature('outreach', () => {
+      prefetchPanel('outreach')
       setIsBulkEmailMode(false)
       setEmailComposerParcelData(null)
       setEmailComposerRecipient({ email: '', name: '' })
@@ -2587,41 +2648,16 @@ function App() {
     setPhotoModeAddress('')
   }, [])
 
-  const autoCreateLeadAndOpenPhotoMode = useCallback(async (parcelData) => {
+  const openPhotoModeForDraftParcel = useCallback((parcelData) => {
     if (!parcelData) return
-    const parcelId = resolveParcelId(parcelData) || parcelData.id
-    if (!parcelId) return
-    const addressLabel = parcelData.address || popupData?.address || ''
-
-    const existing = findLeadByParcelId(leads, parcelData)
-    if (existing) {
-      openPhotoModeForLead(existing, { parcelId, addressLabel })
-      return
-    }
-
-    try {
-      const skip = getSkipTracedParcel(parcelId)
-      const payload = buildAutoLeadPayloadFromParcel(parcelData, skip)
-      const lead = await createLead(getToken, payload)
-      setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
-      refreshLeads()
-      openPhotoModeForLead(lead, { parcelId, addressLabel })
-    } catch (e) {
-      const msg = e?.message || ''
-      if (msg.toLowerCase().includes('already exists')) {
-        try {
-          const refreshed = await fetchLeads(getToken)
-          const found = findLeadByParcelId(refreshed, parcelData)
-          if (found) {
-            setLeads(refreshed)
-            openPhotoModeForLead(found, { parcelId, addressLabel })
-            return
-          }
-        } catch { /* fall through */ }
-      }
-      showToast(msg || 'Could not create lead for photos', 'error')
-    }
-  }, [leads, getToken, refreshLeads, openPhotoModeForLead, popupData])
+    const pid = resolveParcelId(parcelData) || parcelData.id
+    if (!pid) return
+    const skip = getSkipTracedParcel(pid)
+    const prefill = buildLeadPrefillFromParcel(parcelData, skip)
+    setPhotoModeLead({ ...prefill, photos: [] })
+    setPhotoModeParcelId(pid)
+    setPhotoModeAddress(parcelData.address || popupData?.address || prefill.address || '')
+  }, [popupData])
 
   const beginPhotoCapture = useCallback((opts = {}) => {
     if (!requireAuth()) return
@@ -2643,7 +2679,7 @@ function App() {
           })
           return
         }
-        guardFeature('leads', () => { void autoCreateLeadAndOpenPhotoMode(parcelData) })
+        guardFeature('leads', () => openPhotoModeForDraftParcel(parcelData))
         return
       }
       const parcelId = opts.parcelId || null
@@ -2661,7 +2697,7 @@ function App() {
       setPhotoPickerAddress(popupData?.address || '')
       setPhotoPickerOpen(true)
     })
-  }, [requireAuth, guardFeature, leads, openPhotoModeForLead, autoCreateLeadAndOpenPhotoMode, popupData])
+  }, [requireAuth, guardFeature, leads, openPhotoModeForLead, openPhotoModeForDraftParcel, popupData])
 
   const handleParcelPhotos = useCallback(() => {
     if (!clickedParcelData) return
@@ -2787,10 +2823,8 @@ function App() {
     const result = nav.navigateFromActivity(data, feedCtx)
     if (result?.toast) showToast(result.toast, 'warning')
     if (result?.pipelineId) setActivePipelineId(result.pipelineId)
-    if (result?.listId) {
-      setSelectedListIds((prev) => (prev.includes(result.listId) ? prev : [...prev, result.listId].slice(0, 20)))
-    }
-  }, [nav, feedCtx, canAccessFeature])
+    if (result?.pathId) handleCenterOnPath(result.pathId)
+  }, [nav, feedCtx, canAccessFeature, handleCenterOnPath])
 
   const handlePanelBack = useCallback(() => {
     const stack = nav.state.navStack
@@ -2835,6 +2869,7 @@ function App() {
   const notificationInbox = useNotificationInbox({
     isOpen: isActivityPanelOpen,
     isFeedActive: isActivityPanelFocused,
+    topLayer: isActivityPanelTopLayer,
     panelDockSlot: panelDockSlot('activity', isActivityPanelOpen),
     onOpenChange: (open) => {
       if (open) guardFeature('activity', () => nav.setActivityOpen(true))
@@ -2884,6 +2919,7 @@ function App() {
   // Handle email button click from list (opens template selection, then preview)
   const handleBulkEmailFromList = useCallback((listId) => {
     guardFeature('outreach', () => {
+      prefetchPanel('outreach')
       setBulkEmailListId(listId)
       setIsBulkEmailMode(true)
       setEmailComposerParcelData(null)
@@ -3396,7 +3432,7 @@ function App() {
             clickedParcelId={
               selectedHailEvent
                 ? (hailStormParcel?.id ?? hailDataParcel?.id ?? clickedParcelId)
-                : clickedParcelId
+                : (clickedParcelId ?? mapHighlightedParcelId)
             }
             selectedParcels={selectedParcels}
             isMultiSelectActive={isMultiSelectActive}
@@ -3451,7 +3487,7 @@ function App() {
         onAddToList={() => beginAddParcelToList(clickedParcelData)}
         onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
         onOpenPhotos={handleParcelPhotos}
-        isLead={popupData ? isParcelALeadCheck(popupData.parcelId) : false}
+        isLead={popupData ? isParcelALeadCheck(clickedParcelData || popupData) : false}
       />
 
       <AddressSearch
@@ -3519,7 +3555,7 @@ function App() {
           : isQuotesPanelOpen ? 'quotes'
           : isFormsPanelOpen ? 'forms'
           : isReportsPanelOpen ? 'reports'
-          : isListPanelOpen && !isParcelListPanelOpen ? 'lists'
+          : isListPanelOpen ? 'lists'
           : isActivityPanelOpen ? 'activity'
           : null
         }
@@ -3530,7 +3566,7 @@ function App() {
         onOpenDeals={openDealsPanel}
         onOpenQuotes={openQuotesPanel}
         onOpenReports={openReportsPanel}
-        onOpenActivity={() => guardFeature('activity', () => notificationInbox.openInbox())}
+        onOpenActivity={() => guardFeature('activity', () => nav.toggleActivityFromActionBar())}
         activityUnreadCount={notificationInbox.unreadCount}
         showMenu={showMenu}
         setShowMenu={nav.setShowMenu}
@@ -3588,11 +3624,12 @@ function App() {
 
       <ParcelListPanel
         isOpen={isParcelListPanelOpen}
-        onClose={() => nav.pop()}
+        panelDockSlot={panelDockSlot('lists', isParcelListPanelOpen)}
+        onClose={handlePanelBack}
         selectedListId={viewingListId}
         lists={lists}
         onCenterParcel={handleGoToParcelOnMap}
-        onBack={() => nav.pop()}
+        onBack={handlePanelBack}
         onRemoveParcel={handleRemoveParcelFromList}
         onOpenParcelDetails={handleOpenParcelDetails}
         onPhoneClick={handlePhoneClick}
@@ -3620,7 +3657,7 @@ function App() {
             isSkipTracing: skipTracingInProgress.has(resolveParcelId(clickedParcelData) || clickedParcelData.id),
             hasSkipTraced: isParcelSkipTraced(clickedParcelData),
           } : popupData}
-          isLead={clickedParcelData ? isParcelALeadCheck(clickedParcelData.id) : false}
+          isLead={clickedParcelData ? isParcelALeadCheck(clickedParcelData) : false}
           onSkipTrace={() => { if (clickedParcelData) handleSkipTraceParcel(clickedParcelData) }}
           onAddToList={() => beginAddParcelToList(clickedParcelData)}
           onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
@@ -3653,7 +3690,9 @@ function App() {
       />
 
       {dealPipelineMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell open={isDealPipelineOpen} title="Pipes" onBack={handlePanelBack} className="deal-pipeline-panel" />
+      }>
       <DealPipeline
         isOpen={isDealPipelineOpen}
         panelDockSlot={panelDockSlot('pipes', isDealPipelineOpen)}
@@ -3734,7 +3773,9 @@ function App() {
       )}
 
       {schedulePanelMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell open={isSchedulePanelOpen} title="Schedule" onBack={handlePanelBack} className="schedule-panel deal-pipeline-panel" />
+      }>
       <SchedulePanel
         isOpen={isSchedulePanelOpen}
         panelDockSlot={panelDockSlot('schedule', isSchedulePanelOpen)}
@@ -3771,11 +3812,20 @@ function App() {
       )}
 
       {tasksPanelMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell
+          open={isTasksPanelOpen}
+          title="Tasks"
+          onBack={handleTasksPanelClose}
+          className="tasks-panel"
+          panelDockSlot={panelDockSlot('tasks', isTasksPanelOpen)}
+        />
+      }>
       <TasksPanel
         isOpen={isTasksPanelOpen}
+        topLayer={isTasksPanelTopLayer}
         panelDockSlot={panelDockSlot('tasks', isTasksPanelOpen)}
-        instantDismiss={isTasksPanelOpen && panelDockSlot('tasks', isTasksPanelOpen) === 'tasks'}
+        instantDismiss={false}
         onClose={handleTasksPanelClose}
         onBack={handleTasksPanelClose}
         pipelines={pipelines}
@@ -3785,12 +3835,18 @@ function App() {
         onLeadsChange={() => refreshLeads()}
         onDealsChange={() => refreshPipelines()}
         onOpenTaskInDealPipeline={handleOpenTaskInDealPipeline}
+        onOpenDeal={(dealId, pipelineId) => {
+          guardFeature('deals', () => nav.openDealDetailFromTasks(dealId, pipelineId))
+        }}
         getToken={getToken}
         currentUser={currentUser}
         onPipelinesChange={refreshPipelines}
         teams={teams}
         onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts)}
-        onOpenLead={openLeadDetails}
+        onOpenLead={(lead) => {
+          if (!lead?.id) return
+          guardFeature('leads', () => nav.openLeadDetailFromTasks(lead.id))
+        }}
       />
       </Suspense>
       )}
@@ -3809,6 +3865,7 @@ function App() {
       <Suspense fallback={null}>
       <OutreachPanel
         isOpen={isOutreachPanelOpen}
+        panelDockSlot={panelDockSlot('outreach', isOutreachPanelOpen)}
         onClose={() => {
           nav.pop()
           setSelectedEmailTemplate(null)
@@ -3873,7 +3930,9 @@ function App() {
       )}
 
       {formsPanelMounted && (
-        <Suspense fallback={null}>
+        <Suspense fallback={
+          <PanelListLoadingShell open={isFormsPanelOpen} title="Forms" onBack={handlePanelBack} className="forms-panel lists-panel" />
+        }>
           <FormsPanel
             isOpen={isFormsPanelOpen}
             panelDockSlot={panelDockSlot('forms', isFormsPanelOpen)}
@@ -3894,7 +3953,9 @@ function App() {
       )}
 
       {quotesPanelMounted && (
-        <Suspense fallback={null}>
+        <Suspense fallback={
+          <PanelListLoadingShell open={isQuotesPanelOpen} title="Quotes" onBack={handlePanelBack} className="quotes-panel lists-panel" />
+        }>
           <QuotesPanel
             isOpen={isQuotesPanelOpen}
             panelDockSlot={panelDockSlot('quotes', isQuotesPanelOpen)}
@@ -3918,7 +3979,9 @@ function App() {
       )}
 
       {reportsPanelMounted && (
-        <Suspense fallback={null}>
+        <Suspense fallback={
+          <PanelListLoadingShell open={isReportsPanelOpen} title="Reports" onBack={handlePanelBack} className="reports-panel lists-panel" />
+        }>
           <ReportsPanel
             isOpen={isReportsPanelOpen}
             panelDockSlot={panelDockSlot('reports', isReportsPanelOpen)}
@@ -3957,13 +4020,18 @@ function App() {
         }}
         onCreateLead={() => {
           setPhotoPickerOpen(false)
-          pendingPhotoAfterLeadRef.current = true
           const parcel = photoPickerParcelId && clickedParcelData?.id === photoPickerParcelId
             ? clickedParcelData
             : null
-          const skip = parcel ? getSkipTracedParcel(parcel.id) : null
-          const prefill = parcel ? buildLeadPrefillFromParcel(parcel, skip) : null
-          guardFeature('leads', () => nav.pushModal({ type: 'createLead', prefill }))
+          if (parcel) {
+            guardFeature('leads', () => openPhotoModeForDraftParcel(parcel))
+            setPhotoPickerParcelId(null)
+            setPhotoPickerAddress('')
+            return
+          }
+          setPhotoPickerParcelId(null)
+          setPhotoPickerAddress('')
+          guardFeature('leads', () => nav.pushModal({ type: 'createLead', prefill: null }))
         }}
       />
 
@@ -3980,11 +4048,21 @@ function App() {
             setLeads((prev) => prev.map((l) => (l.id === updatedLead.id ? updatedLead : l)))
             setPhotoModeLead(updatedLead)
           }}
+          onLeadCreated={(lead) => {
+            setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
+            refreshLeads()
+            closePhotoMode()
+          }}
+          teams={teams}
+          teamMembership={teamMembership}
+          existingLeads={leads}
         />
       )}
 
       {pathsPanelMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell open={isPathsPanelOpen} title="Paths" onBack={handlePanelBack} className="paths-panel lists-panel" />
+      }>
       <PathsPanel
         isOpen={isPathsPanelOpen}
         panelDockSlot={panelDockSlot('paths', isPathsPanelOpen)}
@@ -4014,7 +4092,9 @@ function App() {
       )}
 
       {teamsPanelMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell open={isTeamsPanelOpen} title="Teams" onBack={handlePanelBack} className="teams-panel lists-panel" />
+      }>
       <TeamsPanel
         isOpen={isTeamsPanelOpen}
         panelDockSlot={panelDockSlot('teams', isTeamsPanelOpen)}
@@ -4034,7 +4114,9 @@ function App() {
       )}
 
       {settingsPanelMounted && (
-      <Suspense fallback={null}>
+      <Suspense fallback={
+        <PanelListLoadingShell open={isSettingsPanelOpen} title="Settings" onBack={() => nav.pop()} className="lists-panel" />
+      }>
       <SettingsPanel
         isOpen={isSettingsPanelOpen}
         onClose={() => nav.pop()}
@@ -4059,7 +4141,7 @@ function App() {
       }>
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
-        panelDockSlot={panelDockSlot('leads', isLeadsPanelOpen)}
+        panelDockSlot={panelDockSlot('leads', isLeadsPanelOpen || isLeadsDetailStandalone)}
         loading={leadsLoading}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
@@ -4080,8 +4162,7 @@ function App() {
         pipelinesCount={pipelines.length}
         onOpenDeal={(deal, pipelineId) => {
           guardFeature('deals', () => {
-            if (pipelineId) setActivePipelineId(pipelineId)
-            nav.openDealInPipes(pipelineId || activePipelineId, deal.id)
+            nav.openDealFromLead(deal.id, pipelineId || deal.__pipelineId)
           })
         }}
         onOpenScheduleAtDate={(ts) => openScheduleAtDate(ts)}
@@ -4111,7 +4192,7 @@ function App() {
       }>
       <DealsPanel
         isOpen={isDealsPanelOpen}
-        panelDockSlot={panelDockSlot('deals', isDealsPanelOpen)}
+        panelDockSlot={panelDockSlot('deals', isDealsPanelOpen || isDealsDetailStandalone)}
         loading={pipelinesLoading}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
@@ -4145,7 +4226,9 @@ function App() {
         dealsDetailPipelineId={dealsDetailPipelineId}
         dealsClosedRecordId={dealsClosedRecordId}
         dealsLeadOverlayId={dealsLeadOverlayId}
+        leadsDetailLeadId={leadsDetailLeadId}
         onOpenDealDetail={(dealId, pipelineId) => nav.pushDealsDetail(dealId, pipelineId)}
+        onOpenDealFromLead={(dealId, pipelineId) => nav.openDealFromLead(dealId, pipelineId)}
         onOpenClosedDeal={(closedRecordId) => nav.pushDealsClosed(closedRecordId)}
         onOpenLeadOverlay={(leadId) => nav.pushDealsLead(leadId)}
         onCloseDealDetail={() => nav.popIfTop('deals.detail')}
@@ -4169,11 +4252,6 @@ function App() {
           if (!v) {
             setEditLead(null)
             if (createLeadOpen) nav.popModal()
-            if (pendingPhotoAfterLeadRef.current) {
-              pendingPhotoAfterLeadRef.current = false
-              setPhotoPickerParcelId(null)
-              setPhotoPickerAddress('')
-            }
           }
         }}
         prefill={createLeadPrefill}

@@ -6,8 +6,7 @@ import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from '.
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
-import { getFullAddress } from '@/utils/dealPipeline'
-import { displayLeadName } from '@/utils/leads'
+import { displayLeadName, leadToParcelData } from '@/utils/leads'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
 import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
 import { addTeamTask } from '@/utils/teamTasks'
@@ -15,9 +14,11 @@ import { flattenTeamTasks, getAllTeamMembers } from '@/utils/teamTaskUtils'
 import { flattenDealsFromPipelines, findDealInPipelines } from '@/utils/deals'
 import { NewTaskDialog } from './NewTaskDialog'
 import { fetchTeamTasks } from '@/utils/tasks'
+import { createServerAssignedTask, normalizeServerTask, resolveTaskContext } from '@/utils/taskCreateFlow'
 import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
+import { TaskListLoading } from './ui/PanelListLoadingShell'
 import { LeadDetails } from './LeadDetails'
 import { EditLeadTaskDialog } from './EditLeadTaskDialog'
 
@@ -101,6 +102,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
+  const [tasksLoading, setTasksLoading] = useState(false)
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth())
   const [viewMode, setViewMode] = useState('day') // 'month' | 'week' | 'day'
@@ -124,24 +126,32 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
   const isTeamAdmin = teamMembership?.role === 'admin'
 
   const refreshTasks = useCallback(async () => {
-    if (apiMode) {
-      let tasks = [
-        ...getPersonalTasks(),
-        ...flattenPipelineTasks(pipelines),
-        ...flattenTeamTasks(pipelines),
-      ]
-      if (isTeamAdmin && adminTeamView && getToken) {
-        const { tasks: serverTasks } = await fetchTeamTasks(getToken)
-        const ids = new Set(tasks.map((t) => t.id))
-        for (const t of serverTasks) {
-          if (!ids.has(t.id)) tasks.push({ ...t, __serverTask: true })
+    setTasksLoading(true)
+    try {
+      if (apiMode) {
+        let tasks = [
+          ...getPersonalTasks(),
+          ...flattenPipelineTasks(pipelines),
+          ...flattenTeamTasks(pipelines),
+        ]
+        if (getToken && teams?.length > 0) {
+          const { tasks: serverTasks } = await fetchTeamTasks(getToken)
+          const ids = new Set(tasks.map((t) => t.id))
+          for (const t of serverTasks) {
+            if (!ids.has(t.id)) {
+              tasks.push(normalizeServerTask(t))
+              ids.add(t.id)
+            }
+          }
         }
+        setAllTasks(tasks)
+      } else {
+        setAllTasks(getAllTasks())
       }
-      setAllTasks(tasks)
-    } else {
-      setAllTasks(getAllTasks())
+    } finally {
+      setTasksLoading(false)
     }
-  }, [apiMode, pipelines, isTeamAdmin, adminTeamView, getToken])
+  }, [apiMode, pipelines, getToken, teams])
 
   const selectedLeadPipelineId = useMemo(() => {
     if (!selectedLead) return null
@@ -235,7 +245,32 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
   }
 
   const finalizeTaskCreate = useCallback(
-    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
+    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [], leadId = null, deal = null }) => {
+      if (assignedUids.length > 0 && getToken) {
+        try {
+          await createServerAssignedTask(getToken, {
+            title,
+            scheduledAt,
+            scheduledEndAt,
+            assignedUids,
+            leadId,
+            dealId,
+            deal,
+            leads: displayLeads,
+            pipelines,
+            pipelineId,
+          })
+          showToast('Task scheduled', 'success')
+          setShowAddTask(false)
+          refreshTasks()
+          const lead = parcelId ? displayLeads.find((l) => l.parcelId === parcelId) : null
+          if (lead) onOpenScheduleLead?.(lead.id)
+          return
+        } catch (err) {
+          showToast(err.message || 'Could not add task', 'error')
+          return
+        }
+      }
       if (pipelineId) {
         const pipe = pipelines.find((p) => p.id === pipelineId)
         const isTeamPipe = pipe && Array.isArray(pipe.teamShares) && pipe.teamShares.length > 0
@@ -285,7 +320,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
       const lead = parcelId ? displayLeads.find((l) => l.parcelId === parcelId) : null
       if (lead) onOpenScheduleLead?.(lead.id)
     },
-    [getToken, onPipelinesChange, refreshTasks, scheduleSync, displayLeads, pipelines]
+    [getToken, onPipelinesChange, refreshTasks, scheduleSync, displayLeads, pipelines, onOpenScheduleLead]
   )
 
   const handleCreateTask = ({
@@ -308,28 +343,46 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
     }
     const dealId = addTaskDealId || null
     const deal = dealId ? allDeals.find((d) => d.id === dealId) : null
-    const lead = addTaskLeadId ? displayLeads.find((l) => l.id === addTaskLeadId) : null
-    const parcelId = deal?.parcelId
-      ? String(deal.parcelId)
-      : (lead?.parcelId ? String(lead.parcelId) : null)
-    const payload = { title: trimmed, scheduledAt, scheduledEndAt: endAt, parcelId, dealId, assignedUids }
-
-    if (dealId && apiMode) {
-      const pipelineId = deal?.__pipelineId || findDealInPipelines(pipelines, dealId).pipeline?.id
-      if (pipelineId) {
-        finalizeTaskCreate({ ...payload, pipelineId })
-        return
-      }
+    const ctx = resolveTaskContext({
+      leadId: addTaskLeadId,
+      dealId,
+      deal,
+      leads: displayLeads,
+      pipelines,
+    })
+    const payload = {
+      title: trimmed,
+      scheduledAt,
+      scheduledEndAt: endAt,
+      parcelId: ctx.parcelId,
+      dealId: ctx.dealId,
+      leadId: ctx.leadId,
+      deal,
+      assignedUids,
     }
 
-    if (parcelId) {
-      const leadForParcel = displayLeads.find((l) => l.parcelId === parcelId)
+    if (assignedUids.length > 0) {
+      if (!getToken) {
+        showToast('Sign in to assign tasks to teammates', 'error')
+        return
+      }
+      finalizeTaskCreate({ ...payload, pipelineId: ctx.pipelineId })
+      return
+    }
+
+    if (dealId && apiMode && ctx.pipelineId) {
+      finalizeTaskCreate({ ...payload, pipelineId: ctx.pipelineId })
+      return
+    }
+
+    if (ctx.parcelId) {
+      const leadForParcel = displayLeads.find((l) => l.parcelId === ctx.parcelId)
       if (leadForParcel?.__pipelineId) {
         finalizeTaskCreate({ ...payload, pipelineId: leadForParcel.__pipelineId })
         return
       }
       if (apiMode) {
-        const owning = pipelinesContainingParcel(pipelines, parcelId)
+        const owning = pipelinesContainingParcel(pipelines, ctx.parcelId)
         if (owning.length === 1) {
           finalizeTaskCreate({ ...payload, pipelineId: owning[0].id })
           return
@@ -348,28 +401,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
       return
     }
 
-    // No parcel selected
-    if (apiMode && pipelines.length > 0) {
-      setPipePickerState({
-        open: true,
-        eligiblePipelines: pipelines,
-        allowNoPipe: true,
-        payload
-      })
-      return
-    }
     finalizeTaskCreate({ ...payload, pipelineId: null })
-  }
-
-  const leadToParcelData = (lead) => {
-    if (!lead) return null
-    return {
-      id: lead.parcelId,
-      address: lead.address || getFullAddress(lead),
-      properties: lead.properties || { OWNER_NAME: lead.owner, SITUS_ADDR: lead.address },
-      lat: lead.lat,
-      lng: lead.lng
-    }
   }
 
   const days = getDaysInMonth(viewYear, viewMonth)
@@ -621,7 +653,9 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
             className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/12 bg-white/[0.03] max-md:rounded-none max-md:border-x-0 max-md:border-b-0"
             style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}
           >
-            {viewMode === 'month' ? (
+            {tasksLoading ? (
+              <TaskListLoading className="flex-1 min-h-[12rem] items-center" />
+            ) : viewMode === 'month' ? (
               <div className="schedule-calendar-month-grid grid grid-cols-7 grid-rows-[auto_repeat(6,minmax(0,1fr))] flex-1 min-h-0 min-w-0">
                 {DAYS.map((d) => (
                   <div key={d} className="schedule-calendar-weekday-header text-center text-[11px] font-semibold text-white/50 py-2 uppercase tracking-wider">
@@ -924,6 +958,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
           pipelines={pipelines}
           teams={teams}
           displayLeads={displayLeads}
+          deals={allDeals}
           getToken={getToken}
           onPipelinesChange={onPipelinesChange}
           scheduleSync={scheduleSync}
@@ -938,6 +973,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
           onOpenChange={(o) => { if (!o) setPipePickerState(null) }}
           pipelines={pipePickerState?.eligiblePipelines ?? []}
           currentUser={currentUser}
+          topLayer
           title="Pick a pipe for this task"
           description="Everyone the pipe is shared with will see this task."
           allowNoPipe={!!pipePickerState?.allowNoPipe}

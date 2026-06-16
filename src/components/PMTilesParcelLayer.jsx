@@ -470,36 +470,54 @@ export function PMTilesParcelLayer({
   }, [mapRef, mapReady])
 
 
+  const queryParcelFeatureAtLocation = useCallback((lat, lng) => {
+    const map = mapRef?.current
+    if (!map) return null
+    try {
+      if (!map.getLayer(FILL_LAYER)) return null
+      const point = map.project([lng, lat])
+      const features = map.queryRenderedFeatures(point, { layers: [FILL_LAYER] })
+      if (!features.length) return null
+      const feature = pickBestFeature(features)
+      if (!feature) return null
+      const raw = feature.properties || {}
+      const properties = mapProperties(raw)
+      const parcelId = properties.PROP_ID
+      if (!parcelId) return null
+      return {
+        id: parcelId,
+        properties,
+        lat,
+        lng,
+        lrid: raw.lrid || raw.parcelid || '',
+        geometry: feature.geometry,
+      }
+    } catch {
+      return null
+    }
+  }, [mapRef])
+
   const findParcelAtLocation = useCallback((lat, lng) => {
     const map = mapRef?.current
     if (!map || !onParcelClickRef.current) return false
 
     const tryQuery = () => {
-      try {
-        if (!map.getLayer(FILL_LAYER)) return false
-        const point = map.project([lng, lat])
-        const features = map.queryRenderedFeatures(point, { layers: [FILL_LAYER] })
-        if (!features.length) return false
-        const feature = pickBestFeature(features)
-        if (!feature) return false
-        const raw = feature.properties || {}
-        const properties = mapProperties(raw)
-        const parcelId = properties.PROP_ID
-        if (!parcelId || !onParcelClickRef.current) return false
-        onParcelClickRef.current({
-          latlng: { lat, lng },
-          properties,
-          geometry: feature.geometry,
-          parcelId,
-        })
-        return true
-      } catch { return false }
+      const hit = queryParcelFeatureAtLocation(lat, lng)
+      if (!hit || !onParcelClickRef.current) return false
+      onParcelClickRef.current({
+        latlng: { lat, lng },
+        properties: hit.properties,
+        geometry: hit.geometry,
+        parcelId: hit.id,
+        lrid: hit.lrid,
+      })
+      return true
     }
 
     if (tryQuery()) return true
     map.once('idle', tryQuery)
     return false
-  }, [mapRef])
+  }, [mapRef, queryParcelFeatureAtLocation])
 
   const setBoundaryColor = useCallback((color) => {
     colorRef.current = color
@@ -576,8 +594,8 @@ export function PMTilesParcelLayer({
 
   useEffect(() => {
     if (!onLayerReady) return
-    onLayerReady({ findParcelAtLocation, setBoundaryColor, setBoundaryOpacity, repaint, reload })
-  }, [onLayerReady, findParcelAtLocation, setBoundaryColor, setBoundaryOpacity, reload])
+    onLayerReady({ findParcelAtLocation, queryParcelFeatureAtLocation, setBoundaryColor, setBoundaryOpacity, repaint, reload })
+  }, [onLayerReady, findParcelAtLocation, queryParcelFeatureAtLocation, setBoundaryColor, setBoundaryOpacity, reload])
 
   return null
 }

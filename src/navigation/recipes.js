@@ -4,7 +4,7 @@
  */
 
 import { frameRoot } from './types.js'
-import { collectDockableKeepFlags, stackHasTasks, TASKS_DOCKABLE_ROOTS } from './taskDock.js'
+import { appendTrailingTasks, collectDockableKeepFlags, splitTrailingTasks, stackHasTasks, TASKS_DOCKABLE_ROOTS } from './taskDock.js'
 
 /**
  * Desktop dock: replace the current primary panel but keep Tasks on the right.
@@ -154,14 +154,43 @@ function activityPrefix(currentStack) {
 }
 
 /** Legacy: openLeadDetails */
-export function recipeOpenLeadDetails(currentStack, leadId) {
-  const fromActivity = currentStack[0]?.type === 'activity'
-  const keep = { leads: true, ...(fromActivity ? { activity: true } : {}) }
-  const withoutDetail = currentStack.filter((f) => f.type !== 'leads.detail')
-  const base = recipeClosePrimaryExcept(withoutDetail, keep, [])
-  const hasLeads = base.some((f) => f.type === 'leads')
-  const stack = hasLeads ? base : [...base, { type: 'leads' }]
-  return [...stack, { type: 'leads.detail', leadId }]
+export function recipeOpenLeadDetails(currentStack, leadId, opts = {}) {
+  const build = (stack) => {
+    const fromActivity = stack[0]?.type === 'activity'
+    const keep = { leads: true, ...(fromActivity ? { activity: true } : {}) }
+    const withoutDetail = stack.filter((f) => f.type !== 'leads.detail')
+    const base = recipeClosePrimaryExcept(withoutDetail, keep, [])
+    const hasLeads = base.some((f) => f.type === 'leads')
+    const leadStack = hasLeads ? base : [...base, { type: 'leads' }]
+    return [...leadStack, { type: 'leads.detail', leadId }]
+  }
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
+}
+
+/** Open lead detail only — no Leads list panel (e.g. from Tasks). */
+export function recipeOpenStandaloneLeadDetail(currentStack, leadId, opts = {}) {
+  const detailStack = [{ type: 'leads.detail', leadId }]
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    return appendTrailingTasks(detailStack, tasksFrames)
+  }
+  return detailStack
+}
+
+/** Open deal detail only — no Deals list panel (e.g. from Tasks). */
+export function recipeOpenStandaloneDealDetail(currentStack, dealId, pipelineId, opts = {}) {
+  const detailStack = [{ type: 'deals.detail', dealId, pipelineId }]
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    return appendTrailingTasks(detailStack, tasksFrames)
+  }
+  return detailStack
 }
 
 /** Legacy: handleCreateQuoteForDeal */
@@ -193,11 +222,22 @@ export function recipeOpenScheduleAtDate(currentStack, initialDate) {
 }
 
 /** Push active deal detail — replaces any competing closed/lead overlays. */
-export function recipePushDealsDetail(currentStack, dealId, pipelineId) {
-  const filtered = currentStack.filter(
-    (f) => f.type !== 'deals.closed' && f.type !== 'deals.lead' && f.type !== 'deals.detail',
-  )
-  return [...filtered, { type: 'deals.detail', dealId, pipelineId }]
+export function recipePushDealsDetail(currentStack, dealId, pipelineId, opts = {}) {
+  const build = (stack) => {
+    const filtered = stack.filter(
+      (f) => f.type !== 'deals.closed' && f.type !== 'deals.lead' && f.type !== 'deals.detail',
+    )
+    const hasDeals = filtered.some((f) => f.type === 'deals')
+    const withDeals = hasDeals ? filtered : [...filtered, { type: 'deals' }]
+    return [...withDeals, { type: 'deals.detail', dealId, pipelineId }]
+  }
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
 }
 
 /** Push closed deal view — replaces any competing active deal/lead overlays. */
@@ -206,6 +246,46 @@ export function recipePushDealsClosed(currentStack, closedRecordId) {
     (f) => f.type !== 'deals.detail' && f.type !== 'deals.lead' && f.type !== 'deals.closed',
   )
   return [...filtered, { type: 'deals.closed', closedRecordId }]
+}
+
+/**
+ * Open lead detail over deal detail — keeps deal in stack for back navigation.
+ * Inserts before trailing Tasks so the dock layout stays on the right rail.
+ */
+export function recipePushDealsLead(currentStack, leadId, opts = {}) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const withoutLead = coreStack.filter((f) => f.type !== 'deals.lead')
+  const withLead = [...withoutLead, { type: 'deals.lead', leadId }]
+  if (opts.keepTasks && tasksFrames.length) {
+    return appendTrailingTasks(withLead, tasksFrames)
+  }
+  return withLead
+}
+
+/**
+ * Open deal detail from lead context — no Deals list or Pipes panel.
+ * Keeps lead detail (and optional leads list) in the stack for back navigation.
+ */
+export function recipeOpenDealFromLeadDetail(currentStack, dealId, pipelineId, opts = {}) {
+  const stripDealAndPipeFrames = (f) =>
+    f.type !== 'deals.detail' &&
+    f.type !== 'deals.lead' &&
+    f.type !== 'deals.closed' &&
+    f.type !== 'deals' &&
+    f.type !== 'pipes' &&
+    f.type !== 'pipes.deal'
+
+  const build = (stack) => [
+    ...stack.filter(stripDealAndPipeFrames),
+    { type: 'deals.detail', dealId, pipelineId },
+  ]
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
 }
 
 /** Legacy: Leads → open deal in pipes */
@@ -244,19 +324,33 @@ export function recipeReturnToActivity(currentStack = []) {
 }
 
 
-export function recipeViewListContents(currentStack, listId) {
-  const base = recipeClosePrimaryExcept(currentStack, { list: true }, [{ type: 'lists' }])
+export function recipeViewListContents(currentStack, listId, opts = {}) {
+  const listsFrame = { type: 'lists' }
+  const parcelFrame = { type: 'lists.parcels', listId }
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const rest = currentStack.filter((f) => {
+      const root = frameRoot(f.type)
+      if (root === 'tasks') return false
+      if (TASKS_DOCKABLE_ROOTS.has(root)) return false
+      return true
+    })
+    return [...rest, listsFrame, parcelFrame, ...tasksFrames]
+  }
+
+  const base = recipeClosePrimaryExcept(currentStack, { list: true }, [])
   const hasLists = base.some((f) => f.type === 'lists')
-  const stack = hasLists ? base : [...base, { type: 'lists' }]
-  return [...stack.filter((f) => f.type !== 'lists.parcels'), { type: 'lists.parcels', listId }]
+  const stack = hasLists ? base : [...base, listsFrame]
+  return [...stack.filter((f) => f.type !== 'lists.parcels'), parcelFrame]
 }
 
 export function recipeOpenSkipTraced(currentStack) {
   return recipeClosePrimaryExcept(currentStack, { skipTraced: true }, [{ type: 'skipTraced' }])
 }
 
-export function recipeOpenOutreach(currentStack, initialTab = 'email') {
-  return recipeClosePrimaryExcept(currentStack, { outreach: true }, [{ type: 'outreach', initialTab }])
+export function recipeOpenOutreach(currentStack, initialTab = 'email', opts = {}) {
+  return recipeOpenRootPanel(currentStack, 'outreach', { type: 'outreach', initialTab }, opts)
 }
 
 export function recipeOpenEmailComposer(currentStack, payload) {

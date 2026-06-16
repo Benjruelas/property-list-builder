@@ -1,0 +1,4236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KnockScout — Manual Regression Test Procedure</title>
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: rgba(255,255,255,0.12);
+      --text: #f0f0f0;
+      --muted: rgba(255,255,255,0.55);
+      --pass: #22c55e;
+      --fail: #ef4444;
+      --blocked: #f59e0b;
+      --pending: rgba(255,255,255,0.25);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(15,15,15,0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+    }
+    .header h1 { margin: 0 0 8px; font-size: 1.15rem; }
+    .summary { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; color: var(--muted); margin-bottom: 10px; }
+    .summary strong { color: var(--text); }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .controls input, .controls select, .controls button {
+      font: inherit;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
+    .controls button { cursor: pointer; }
+    .controls button:hover { background: #252525; }
+    .progress-wrap { margin-top: 10px; }
+    .progress-bar { height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--pass); transition: width 0.2s; }
+    main { max-width: 960px; margin: 0 auto; padding: 16px; }
+    details.readme { margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    details.readme summary { cursor: pointer; font-weight: 600; }
+    .section { margin-bottom: 20px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--surface);
+      cursor: pointer;
+      user-select: none;
+    }
+    .section-header h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+    .section-meta { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+    .section-body { display: none; padding: 0 8px 8px; }
+    .section.open .section-body { display: block; }
+    .case {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: #141414;
+    }
+    .case.hidden { display: none; }
+    .case-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; justify-content: space-between; }
+    .case-id { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--muted); }
+    .case-title { font-weight: 600; flex: 1; min-width: 200px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .tag { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--muted); text-transform: uppercase; }
+    .status-btn {
+      min-width: 88px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .status-pending { background: transparent; color: var(--muted); }
+    .status-pass { background: rgba(34,197,94,0.15); color: var(--pass); border-color: var(--pass); }
+    .status-fail { background: rgba(239,68,68,0.15); color: var(--fail); border-color: var(--fail); }
+    .status-blocked { background: rgba(245,158,11,0.15); color: var(--blocked); border-color: var(--blocked); }
+    .case-pre { font-size: 0.8rem; color: var(--muted); margin: 6px 0; }
+    .case ol { margin: 6px 0; padding-left: 1.25rem; }
+    .case-expected { font-size: 0.85rem; margin-top: 6px; }
+    .case-expected strong { color: var(--muted); font-weight: 500; }
+    .case-notes {
+      width: 100%;
+      margin-top: 8px;
+      min-height: 48px;
+      resize: vertical;
+      font: inherit;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+    @media print {
+      .header .controls, .status-btn, .case-notes { display: none !important; }
+      .section-body { display: block !important; }
+      .case::after {
+        content: " [" attr(data-status-print) "]";
+        font-weight: bold;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>KnockScout Manual Regression Test Procedure</h1>
+    <div class="summary" id="summary"></div>
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+    <div class="controls" style="margin-top:10px">
+      <input type="search" id="searchInput" placeholder="Search cases…" aria-label="Search" />
+      <select id="statusFilter" aria-label="Status filter">
+        <option value="all">All statuses</option>
+        <option value="pending">Not run</option>
+        <option value="pass">Pass</option>
+        <option value="fail">Fail</option>
+        <option value="blocked">Blocked</option>
+      </select>
+      <select id="roleFilter" aria-label="Role filter">
+        <option value="all">All roles</option>
+        <option value="solo">Solo</option>
+        <option value="team-admin">Team admin</option>
+        <option value="team-member">Team member</option>
+        <option value="logged-out">Logged out</option>
+      </select>
+      <button type="button" id="expandAll">Expand all</button>
+      <button type="button" id="collapseAll">Collapse all</button>
+      <button type="button" id="exportBtn">Export JSON</button>
+      <button type="button" id="importBtn">Import JSON</button>
+      <input type="file" id="importFile" accept="application/json" hidden />
+      <button type="button" id="resetAll">Reset all</button>
+    </div>
+  </header>
+  <main>
+    <details class="readme">
+      <summary>How to use this checklist</summary>
+      <ol>
+        <li>Open the app at <code>http://localhost:3000</code> (or your deploy URL) in a separate window.</li>
+        <li>Pick a <strong>role filter</strong> matching the account you are testing (solo, team admin, restricted member, or logged-out).</li>
+        <li>Work through each section. Click the status button to cycle: <em>Not run → Pass → Fail → Blocked</em>.</li>
+        <li>Add notes on failures. Progress saves automatically in this browser via localStorage.</li>
+        <li>Use <strong>Export JSON</strong> to attach results to a bug report or share with the team.</li>
+        <li>Some cases are tagged <code>desktop</code> or <code>mobile</code> — resize the viewport or use device emulation as noted.</li>
+      </ol>
+    </details>
+    <div id="sections"></div>
+  </main>
+  <script>
+    const STORAGE_KEY = 'knockscout-regression-v1';
+    const SECTIONS = [{"id":"01","title":"Auth and bootstrap"},{"id":"02","title":"Map and parcels"},{"id":"03","title":"Navigation and action bar"},{"id":"04","title":"Lists and parcels"},{"id":"05","title":"Leads CRM"},{"id":"06","title":"Deals and pipes"},{"id":"07","title":"Tasks and schedule"},{"id":"08","title":"Paths, activity, and settings"},{"id":"09","title":"Forms, quotes, and reports"},{"id":"10","title":"Teams and outreach"},{"id":"11","title":"Cross-panel flows"},{"id":"12","title":"Public routes and edge cases"}];
+    const TEST_CASES = [
+  {
+    "id": "AUTH-001",
+    "section": "01",
+    "title": "Login with valid credentials",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged out",
+    "steps": [
+      "Open Menu → Sign In",
+      "Enter email and password",
+      "Submit"
+    ],
+    "expected": "User lands on map; action bar visible"
+  },
+  {
+    "id": "AUTH-002",
+    "section": "01",
+    "title": "Login with invalid credentials",
+    "roles": [
+      "logged-out"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged out",
+    "steps": [
+      "Open Sign In",
+      "Enter wrong password",
+      "Submit"
+    ],
+    "expected": "Error message shown; still logged out"
+  },
+  {
+    "id": "AUTH-003",
+    "section": "01",
+    "title": "Sign up new account",
+    "roles": [
+      "logged-out"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged out",
+    "steps": [
+      "Open Sign Up from login",
+      "Complete registration form",
+      "Submit"
+    ],
+    "expected": "Account created or verification step shown"
+  },
+  {
+    "id": "AUTH-004",
+    "section": "01",
+    "title": "Forgot password flow",
+    "roles": [
+      "logged-out"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged out",
+    "steps": [
+      "Sign In → Forgot password",
+      "Enter email",
+      "Submit"
+    ],
+    "expected": "Reset instructions sent message"
+  },
+  {
+    "id": "AUTH-005",
+    "section": "01",
+    "title": "Switch login ↔ sign up ↔ forgot",
+    "roles": [
+      "logged-out"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged out",
+    "steps": [
+      "Navigate between auth modals via links"
+    ],
+    "expected": "Each modal opens without error"
+  },
+  {
+    "id": "AUTH-006",
+    "section": "01",
+    "title": "Sign out",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Menu → Settings → Logout"
+    ],
+    "expected": "Returned to logged-out state; Sign In available"
+  },
+  {
+    "id": "AUTH-007",
+    "section": "01",
+    "title": "Gated action opens login when logged out",
+    "roles": [
+      "logged-out"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged out",
+    "steps": [
+      "Tap Leads or other gated panel from menu"
+    ],
+    "expected": "Login modal opens instead of panel"
+  },
+  {
+    "id": "AUTH-008",
+    "section": "01",
+    "title": "Location/orientation permission prompt",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Fresh session or reset permissions",
+    "steps": [
+      "Load app first time or after clearing site data"
+    ],
+    "expected": "Permission prompt appears; grant/deny handled gracefully"
+  },
+  {
+    "id": "AUTH-009",
+    "section": "01",
+    "title": "Notification permission prompt",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in, notifications not granted",
+    "steps": [
+      "Load app or trigger notification prompt"
+    ],
+    "expected": "Prompt shown; choice persisted"
+  },
+  {
+    "id": "AUTH-010",
+    "section": "01",
+    "title": "Complete welcome tour",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "New user or restart tour from Settings",
+    "steps": [
+      "Step through all tour slides",
+      "Finish tour"
+    ],
+    "expected": "Tour dismisses; map usable"
+  },
+  {
+    "id": "AUTH-011",
+    "section": "01",
+    "title": "Restart tour from Settings",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Settings → Help → Restart tour"
+    ],
+    "expected": "Welcome tour relaunches"
+  },
+  {
+    "id": "AUTH-012",
+    "section": "01",
+    "title": "Feature gate denies panel for restricted member",
+    "roles": [
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Member without leads feature",
+    "steps": [
+      "Menu → Leads"
+    ],
+    "expected": "Toast: access denied; panel does not open"
+  },
+  {
+    "id": "MAP-001",
+    "section": "02",
+    "title": "Map loads with parcels visible",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Open app at localhost"
+    ],
+    "expected": "Satellite/street basemap renders; parcel outlines visible"
+  },
+  {
+    "id": "MAP-002",
+    "section": "02",
+    "title": "Address search fly-to",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Enter address in search",
+      "Select result"
+    ],
+    "expected": "Map flies to location; marker/parcel context updates"
+  },
+  {
+    "id": "MAP-003",
+    "section": "02",
+    "title": "Zoom in/out controls",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Use +/− zoom buttons"
+    ],
+    "expected": "Map zoom level changes"
+  },
+  {
+    "id": "MAP-004",
+    "section": "02",
+    "title": "Recenter to user location",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Location permission granted",
+    "steps": [
+      "Tap recenter/locate control"
+    ],
+    "expected": "Map centers on user position"
+  },
+  {
+    "id": "MAP-005",
+    "section": "02",
+    "title": "Compass orient map",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Orientation permission granted",
+    "steps": [
+      "Tap compass control"
+    ],
+    "expected": "Map rotates to device heading"
+  },
+  {
+    "id": "MAP-006",
+    "section": "02",
+    "title": "Parcel click opens popup",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in, parcel on map",
+    "steps": [
+      "Click a parcel polygon"
+    ],
+    "expected": "Parcel popup appears at click location"
+  },
+  {
+    "id": "MAP-007",
+    "section": "02",
+    "title": "Popup → Details opens Parcel Details",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Popup open",
+    "steps": [
+      "Tap Details in popup"
+    ],
+    "expected": "Full Parcel Details overlay opens"
+  },
+  {
+    "id": "MAP-008",
+    "section": "02",
+    "title": "Popup → Add to list",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Popup open",
+    "steps": [
+      "Tap Add to list"
+    ],
+    "expected": "Lists panel opens in pick-list mode with banner"
+  },
+  {
+    "id": "MAP-009",
+    "section": "02",
+    "title": "Popup → Convert to lead",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Popup open, parcel not a lead",
+    "steps": [
+      "Tap Convert to lead"
+    ],
+    "expected": "Create Lead dialog opens with parcel prefill"
+  },
+  {
+    "id": "MAP-010",
+    "section": "02",
+    "title": "Popup → Photos",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Popup open",
+    "steps": [
+      "Tap Photos"
+    ],
+    "expected": "Lead picker or photo mode flow starts"
+  },
+  {
+    "id": "MAP-011",
+    "section": "02",
+    "title": "Close parcel popup",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Popup open",
+    "steps": [
+      "Tap close or click map away"
+    ],
+    "expected": "Popup dismisses"
+  },
+  {
+    "id": "MAP-012",
+    "section": "02",
+    "title": "Parcel Details — Overview tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Review Overview tab content"
+    ],
+    "expected": "Address and summary fields visible"
+  },
+  {
+    "id": "MAP-013",
+    "section": "02",
+    "title": "Parcel Details — Contact tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Open Contact tab"
+    ],
+    "expected": "Phone/email actions available"
+  },
+  {
+    "id": "MAP-014",
+    "section": "02",
+    "title": "Parcel Details — Property tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Open Property tab"
+    ],
+    "expected": "Property fields display"
+  },
+  {
+    "id": "MAP-015",
+    "section": "02",
+    "title": "Parcel Details — Value tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Open Value tab"
+    ],
+    "expected": "Value/assessment data shows or empty state"
+  },
+  {
+    "id": "MAP-016",
+    "section": "02",
+    "title": "Parcel Details — Owner tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Open Owner tab"
+    ],
+    "expected": "Owner info displays"
+  },
+  {
+    "id": "MAP-017",
+    "section": "02",
+    "title": "Parcel Details — Legal tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Open Legal tab"
+    ],
+    "expected": "Legal fields display"
+  },
+  {
+    "id": "MAP-018",
+    "section": "02",
+    "title": "Edit parcel note in details",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Edit note field",
+      "Save"
+    ],
+    "expected": "Note persists after close/reopen"
+  },
+  {
+    "id": "MAP-019",
+    "section": "02",
+    "title": "Edit contacts in details",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Add phone or email",
+      "Mark primary/verified"
+    ],
+    "expected": "Contact saved and shown"
+  },
+  {
+    "id": "MAP-020",
+    "section": "02",
+    "title": "Phone action from parcel contact",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open with phone",
+    "steps": [
+      "Tap phone number"
+    ],
+    "expected": "PhoneActionPanel opens (text/call)"
+  },
+  {
+    "id": "MAP-021",
+    "section": "02",
+    "title": "Email action from parcel contact",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open with email",
+    "steps": [
+      "Tap email"
+    ],
+    "expected": "Outreach/EmailComposer flow starts"
+  },
+  {
+    "id": "MAP-022",
+    "section": "02",
+    "title": "Skip trace single parcel",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details or popup",
+    "steps": [
+      "Trigger Skip trace",
+      "Wait for completion"
+    ],
+    "expected": "Progress indicator then success/fail toast; badge if traced"
+  },
+  {
+    "id": "MAP-023",
+    "section": "02",
+    "title": "Hail data panel from parcel",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Details open",
+    "steps": [
+      "Open Hail data"
+    ],
+    "expected": "HailDataPanel lists events near parcel"
+  },
+  {
+    "id": "MAP-024",
+    "section": "02",
+    "title": "Hail storm overlay timeline",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Hail panel open, event selected",
+    "steps": [
+      "Select event",
+      "Scrub timeline prev/next",
+      "Exit storm"
+    ],
+    "expected": "Radar overlay animates; exit returns to hail panel"
+  },
+  {
+    "id": "MAP-025",
+    "section": "02",
+    "title": "Multi-select parcels and add to list",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Enable multi-select on map",
+      "Tap several parcels",
+      "Tap + Add to list",
+      "Pick list"
+    ],
+    "expected": "Parcels added; banner shows count in Lists panel"
+  },
+  {
+    "id": "MAP-026",
+    "section": "02",
+    "title": "Cancel multi-select mode",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Multi-select active",
+    "steps": [
+      "Tap cancel/X on multi-select UI"
+    ],
+    "expected": "Selection cleared; mode exits"
+  },
+  {
+    "id": "MAP-027",
+    "section": "02",
+    "title": "Start and stop path recording",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Start path recording from map control",
+      "Move/walk briefly",
+      "Stop recording"
+    ],
+    "expected": "Path saved; visible in Paths panel"
+  },
+  {
+    "id": "NAV-001",
+    "section": "03",
+    "title": "Open Pipes from action bar",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Tap Pipes on action bar"
+    ],
+    "expected": "Deal pipeline panel opens"
+  },
+  {
+    "id": "NAV-002",
+    "section": "03",
+    "title": "Open Tasks from action bar",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Tap Tasks"
+    ],
+    "expected": "Tasks panel opens"
+  },
+  {
+    "id": "NAV-003",
+    "section": "03",
+    "title": "Open Schedule from action bar",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Tap Schedule"
+    ],
+    "expected": "Schedule panel opens"
+  },
+  {
+    "id": "NAV-004",
+    "section": "03",
+    "title": "Open Leads from action bar",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in with leads access",
+    "steps": [
+      "Tap Leads"
+    ],
+    "expected": "Leads list opens"
+  },
+  {
+    "id": "NAV-005",
+    "section": "03",
+    "title": "Open Deals from action bar",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in with deals access",
+    "steps": [
+      "Tap Deals"
+    ],
+    "expected": "Deals panel opens"
+  },
+  {
+    "id": "NAV-006",
+    "section": "03",
+    "title": "Open Quotes from action bar",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Wide viewport ≥1440px",
+    "steps": [
+      "Tap Quotes on bar"
+    ],
+    "expected": "Quotes panel opens"
+  },
+  {
+    "id": "NAV-007",
+    "section": "03",
+    "title": "Open Forms from overflow menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "mobile",
+    "preconditions": "Narrow viewport <768px",
+    "steps": [
+      "Menu → Forms"
+    ],
+    "expected": "Forms panel opens"
+  },
+  {
+    "id": "NAV-008",
+    "section": "03",
+    "title": "Open Reports from overflow menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "mobile",
+    "preconditions": "Forms not on bar",
+    "steps": [
+      "Menu → Reports"
+    ],
+    "expected": "Reports panel opens"
+  },
+  {
+    "id": "NAV-009",
+    "section": "03",
+    "title": "Open Lists from menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Menu → Lists"
+    ],
+    "expected": "Lists panel opens"
+  },
+  {
+    "id": "NAV-010",
+    "section": "03",
+    "title": "Open Paths from menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Menu → Paths"
+    ],
+    "expected": "Paths panel opens"
+  },
+  {
+    "id": "NAV-011",
+    "section": "03",
+    "title": "Open Outreach from menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Menu → Outreach"
+    ],
+    "expected": "Outreach panel opens"
+  },
+  {
+    "id": "NAV-012",
+    "section": "03",
+    "title": "Open Teams from menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Menu → Teams"
+    ],
+    "expected": "Teams panel opens"
+  },
+  {
+    "id": "NAV-013",
+    "section": "03",
+    "title": "Open Activity from menu with badge",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Unread activity exists",
+    "steps": [
+      "Menu → Activity"
+    ],
+    "expected": "Activity feed opens; unread count visible on bar when applicable"
+  },
+  {
+    "id": "NAV-014",
+    "section": "03",
+    "title": "Open Settings from menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Menu → Settings"
+    ],
+    "expected": "Settings panel stacks on top"
+  },
+  {
+    "id": "NAV-015",
+    "section": "03",
+    "title": "Panel back returns to previous view",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Nested detail open",
+    "steps": [
+      "Open lead detail",
+      "Tap back"
+    ],
+    "expected": "Returns to leads list not map"
+  },
+  {
+    "id": "NAV-016",
+    "section": "03",
+    "title": "Tasks dock beside primary panel (desktop)",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Width ≥768px",
+    "steps": [
+      "Open Leads",
+      "Open Tasks"
+    ],
+    "expected": "Leads left, Tasks right, centered group"
+  },
+  {
+    "id": "NAV-017",
+    "section": "03",
+    "title": "Close Tasks while keeping primary panel",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Tasks docked",
+    "steps": [
+      "Close Tasks panel"
+    ],
+    "expected": "Primary panel remains; Tasks dismisses"
+  },
+  {
+    "id": "NAV-018",
+    "section": "03",
+    "title": "Solo Tasks rail when no primary panel",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Only Tasks open",
+    "steps": [
+      "Open Tasks alone"
+    ],
+    "expected": "Tasks on right rail"
+  },
+  {
+    "id": "NAV-019",
+    "section": "03",
+    "title": "Activity → lead keeps Activity+Tasks docked",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Activity and Tasks open",
+    "steps": [
+      "Open Activity item for a lead"
+    ],
+    "expected": "Lead detail overlay; Activity+Tasks stay docked"
+  },
+  {
+    "id": "NAV-020",
+    "section": "03",
+    "title": "Back from Activity-origin detail returns to Activity",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Opened lead from Activity",
+    "steps": [
+      "Close/back from lead detail"
+    ],
+    "expected": "Activity feed focused again"
+  },
+  {
+    "id": "LST-001",
+    "section": "04",
+    "title": "Lists tabs All/Mine/Shared/On map",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lists panel open",
+    "steps": [
+      "Click each tab"
+    ],
+    "expected": "List filters correctly; counts update"
+  },
+  {
+    "id": "LST-002",
+    "section": "04",
+    "title": "Search lists by name",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lists exist",
+    "steps": [
+      "Type in search box"
+    ],
+    "expected": "Matching lists only"
+  },
+  {
+    "id": "LST-003",
+    "section": "04",
+    "title": "Tag filter on lists",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Tagged lists exist",
+    "steps": [
+      "Open filter menu",
+      "Select tag"
+    ],
+    "expected": "Only tagged lists shown"
+  },
+  {
+    "id": "LST-004",
+    "section": "04",
+    "title": "Create new list",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged in",
+    "steps": [
+      "Tap + create",
+      "Enter name",
+      "Save"
+    ],
+    "expected": "List appears in All/Mine"
+  },
+  {
+    "id": "LST-005",
+    "section": "04",
+    "title": "Open list parcel view",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "List with parcels",
+    "steps": [
+      "Click list row"
+    ],
+    "expected": "ParcelListPanel opens"
+  },
+  {
+    "id": "LST-006",
+    "section": "04",
+    "title": "Highlight list on map (eye open)",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "List with parcels",
+    "steps": [
+      "Click eye icon to highlight"
+    ],
+    "expected": "Open eye; list colored on map; row highlighted"
+  },
+  {
+    "id": "LST-007",
+    "section": "04",
+    "title": "Remove map highlight (eye closed)",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "List highlighted",
+    "steps": [
+      "Click eye again"
+    ],
+    "expected": "Closed eye; highlight removed from map"
+  },
+  {
+    "id": "LST-008",
+    "section": "04",
+    "title": "Max 20 highlights toast",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "20 lists already highlighted",
+    "steps": [
+      "Try highlight 21st"
+    ],
+    "expected": "Warning toast about maximum"
+  },
+  {
+    "id": "LST-009",
+    "section": "04",
+    "title": "Export list CSV from menu",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own list",
+    "steps": [
+      "⋮ → Export"
+    ],
+    "expected": "CSV download or email flow completes"
+  },
+  {
+    "id": "LST-010",
+    "section": "04",
+    "title": "Share list via email",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own list",
+    "steps": [
+      "⋮ → Share",
+      "Add email",
+      "Save"
+    ],
+    "expected": "Email added to share list"
+  },
+  {
+    "id": "LST-011",
+    "section": "04",
+    "title": "Rename list inline",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own list",
+    "steps": [
+      "⋮ → Rename",
+      "Edit name",
+      "Save"
+    ],
+    "expected": "Name updates in list"
+  },
+  {
+    "id": "LST-012",
+    "section": "04",
+    "title": "Edit list tags",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own list",
+    "steps": [
+      "⋮ → Tags",
+      "Add/remove tags"
+    ],
+    "expected": "Tags persist on list"
+  },
+  {
+    "id": "LST-013",
+    "section": "04",
+    "title": "Delete list with confirm",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own list",
+    "steps": [
+      "⋮ → Delete",
+      "Confirm"
+    ],
+    "expected": "List removed"
+  },
+  {
+    "id": "LST-014",
+    "section": "04",
+    "title": "Shared list — no owner menu actions",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Shared list not owned",
+    "steps": [
+      "Verify ⋮ menu on shared row"
+    ],
+    "expected": "Export may show; rename/delete hidden per ownership"
+  },
+  {
+    "id": "LST-015",
+    "section": "04",
+    "title": "Add single parcel from map banner mode",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Add-to-list from popup",
+    "steps": [
+      "Select target list in banner mode"
+    ],
+    "expected": "Parcel added; toast or confirmation"
+  },
+  {
+    "id": "LST-016",
+    "section": "04",
+    "title": "Multi-select add parcels to list",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Multi-select mode active",
+    "steps": [
+      "Complete add flow"
+    ],
+    "expected": "All selected parcels in list"
+  },
+  {
+    "id": "LST-017",
+    "section": "04",
+    "title": "Parcel list expand row",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "ParcelListPanel open",
+    "steps": [
+      "Expand a parcel row"
+    ],
+    "expected": "Expanded details and actions visible"
+  },
+  {
+    "id": "LST-018",
+    "section": "04",
+    "title": "Parcel list — open details",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Expanded row",
+    "steps": [
+      "Tap Details"
+    ],
+    "expected": "Parcel Details opens"
+  },
+  {
+    "id": "LST-019",
+    "section": "04",
+    "title": "Parcel list — skip trace from row",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Expanded row",
+    "steps": [
+      "Tap Skip trace"
+    ],
+    "expected": "Skip trace runs"
+  },
+  {
+    "id": "LST-020",
+    "section": "04",
+    "title": "Parcel list — remove parcel from list",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own list",
+    "steps": [
+      "Remove parcel action",
+      "Confirm if prompted"
+    ],
+    "expected": "Parcel removed from list"
+  },
+  {
+    "id": "LED-001",
+    "section": "05",
+    "title": "Create lead from panel +",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads access",
+    "steps": [
+      "Tap +",
+      "Fill required fields",
+      "Save"
+    ],
+    "expected": "Lead appears in list"
+  },
+  {
+    "id": "LED-002",
+    "section": "05",
+    "title": "Search leads",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads exist",
+    "steps": [
+      "Search by name/address"
+    ],
+    "expected": "Filtered results"
+  },
+  {
+    "id": "LED-003",
+    "section": "05",
+    "title": "Filter leads by status",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads exist",
+    "steps": [
+      "Change status filter"
+    ],
+    "expected": "List filters"
+  },
+  {
+    "id": "LED-004",
+    "section": "05",
+    "title": "Filter leads by tags",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Tagged leads",
+    "steps": [
+      "Tag filter menu"
+    ],
+    "expected": "Filtered list"
+  },
+  {
+    "id": "LED-005",
+    "section": "05",
+    "title": "Sort leads recent vs follow-up",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads exist",
+    "steps": [
+      "Toggle sort"
+    ],
+    "expected": "Order changes"
+  },
+  {
+    "id": "LED-006",
+    "section": "05",
+    "title": "Analytics strip counts",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads exist",
+    "steps": [
+      "View status counts strip"
+    ],
+    "expected": "Counts match list"
+  },
+  {
+    "id": "LED-007",
+    "section": "05",
+    "title": "Open lead detail",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads exist",
+    "steps": [
+      "Click lead row"
+    ],
+    "expected": "LeadDetails opens"
+  },
+  {
+    "id": "LED-008",
+    "section": "05",
+    "title": "Change lead status",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead detail open",
+    "steps": [
+      "Tap status button",
+      "Select new status"
+    ],
+    "expected": "Status updates"
+  },
+  {
+    "id": "LED-009",
+    "section": "05",
+    "title": "Add lead note",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead detail open",
+    "steps": [
+      "Add note in activity/notes"
+    ],
+    "expected": "Note appears in timeline"
+  },
+  {
+    "id": "LED-010",
+    "section": "05",
+    "title": "Lead phone/text/email actions",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead with contact info",
+    "steps": [
+      "Tap phone, text, or email"
+    ],
+    "expected": "Correct outreach panel opens"
+  },
+  {
+    "id": "LED-011",
+    "section": "05",
+    "title": "Open linked deal from lead",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead with deal",
+    "steps": [
+      "Tap deal in Deals section"
+    ],
+    "expected": "Deal detail opens"
+  },
+  {
+    "id": "LED-012",
+    "section": "05",
+    "title": "Create deal from lead",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead detail open",
+    "steps": [
+      "Create deal",
+      "Pick template/pipe",
+      "Submit"
+    ],
+    "expected": "Deal created and linked"
+  },
+  {
+    "id": "LED-013",
+    "section": "05",
+    "title": "Lead tasks — add task",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead detail open",
+    "steps": [
+      "Add task in Tasks section"
+    ],
+    "expected": "Task appears"
+  },
+  {
+    "id": "LED-014",
+    "section": "05",
+    "title": "Lead tasks — toggle complete",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Task exists",
+    "steps": [
+      "Toggle checkbox"
+    ],
+    "expected": "Task moves to completed when hidden toggle off"
+  },
+  {
+    "id": "LED-015",
+    "section": "05",
+    "title": "Lead tasks — show completed toggle",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Completed tasks exist",
+    "steps": [
+      "Toggle show completed"
+    ],
+    "expected": "Completed tasks visible"
+  },
+  {
+    "id": "LED-016",
+    "section": "05",
+    "title": "Schedule at date from lead",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead detail open",
+    "steps": [
+      "Open schedule link/action"
+    ],
+    "expected": "Schedule opens at date"
+  },
+  {
+    "id": "LED-017",
+    "section": "05",
+    "title": "Go to parcel on map from lead",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead with parcel",
+    "steps": [
+      "Go to map action"
+    ],
+    "expected": "Map centers on parcel"
+  },
+  {
+    "id": "LED-018",
+    "section": "05",
+    "title": "Edit lead via menu",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead detail open",
+    "steps": [
+      "⋮ → Edit"
+    ],
+    "expected": "CreateLeadDialog in edit mode"
+  },
+  {
+    "id": "LED-019",
+    "section": "05",
+    "title": "Delete lead via menu",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead detail open",
+    "steps": [
+      "⋮ → Delete",
+      "Confirm"
+    ],
+    "expected": "Lead removed"
+  },
+  {
+    "id": "LED-020",
+    "section": "05",
+    "title": "Photo reports section",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Photos feature enabled",
+    "steps": [
+      "Create or open photo report"
+    ],
+    "expected": "Report builder or detail opens"
+  },
+  {
+    "id": "LED-021",
+    "section": "05",
+    "title": "Lead photos gallery",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Photos on lead",
+    "steps": [
+      "Open photos section"
+    ],
+    "expected": "Gallery displays"
+  },
+  {
+    "id": "LED-022",
+    "section": "05",
+    "title": "Convert parcel to lead creates lead",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Parcel not lead",
+    "steps": [
+      "Convert from map flow"
+    ],
+    "expected": "Lead created with parcel link"
+  },
+  {
+    "id": "DPL-001",
+    "section": "06",
+    "title": "Deals Active tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deals exist",
+    "steps": [
+      "Open Deals panel"
+    ],
+    "expected": "Active deals grouped by pipeline"
+  },
+  {
+    "id": "DPL-002",
+    "section": "06",
+    "title": "Deals Closed tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Closed deals exist",
+    "steps": [
+      "Switch to Closed"
+    ],
+    "expected": "Closed records listed"
+  },
+  {
+    "id": "DPL-003",
+    "section": "06",
+    "title": "Collapse/expand pipeline group",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deals panel",
+    "steps": [
+      "Toggle pipeline header"
+    ],
+    "expected": "Group collapses/expands"
+  },
+  {
+    "id": "DPL-004",
+    "section": "06",
+    "title": "Open deal detail from Deals list",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Active deal",
+    "steps": [
+      "Click deal row"
+    ],
+    "expected": "DealDetails opens"
+  },
+  {
+    "id": "DPL-005",
+    "section": "06",
+    "title": "Open closed deal record",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Closed deal",
+    "steps": [
+      "Click closed row"
+    ],
+    "expected": "Closed deal view opens"
+  },
+  {
+    "id": "DPL-006",
+    "section": "06",
+    "title": "Create deal from Deals panel",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deals access",
+    "steps": [
+      "Create deal action"
+    ],
+    "expected": "Create deal dialog"
+  },
+  {
+    "id": "DPL-007",
+    "section": "06",
+    "title": "Manage deal templates from Deals menu",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deals panel",
+    "steps": [
+      "Header ⋮ → Manage templates"
+    ],
+    "expected": "Template manager opens"
+  },
+  {
+    "id": "DPL-008",
+    "section": "06",
+    "title": "Deal detail — edit title/notes",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal detail open",
+    "steps": [
+      "Edit fields",
+      "Save"
+    ],
+    "expected": "Changes persist"
+  },
+  {
+    "id": "DPL-009",
+    "section": "06",
+    "title": "Deal detail — upload file",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal detail open",
+    "steps": [
+      "Upload file"
+    ],
+    "expected": "File appears in files list"
+  },
+  {
+    "id": "DPL-010",
+    "section": "06",
+    "title": "Deal detail — preview/delete file",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "File attached",
+    "steps": [
+      "Preview then delete"
+    ],
+    "expected": "Preview works; file removed"
+  },
+  {
+    "id": "DPL-011",
+    "section": "06",
+    "title": "Deal detail — create quote",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal detail open",
+    "steps": [
+      "Create quote"
+    ],
+    "expected": "Quote editor opens"
+  },
+  {
+    "id": "DPL-012",
+    "section": "06",
+    "title": "Deal detail — open linked quote",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Quote linked",
+    "steps": [
+      "Open quote from list"
+    ],
+    "expected": "Quote detail opens"
+  },
+  {
+    "id": "DPL-013",
+    "section": "06",
+    "title": "Deal detail — move deal",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal detail open",
+    "steps": [
+      "⋮ → Move deal",
+      "Pick pipeline"
+    ],
+    "expected": "Deal moves to target pipe"
+  },
+  {
+    "id": "DPL-014",
+    "section": "06",
+    "title": "Deal detail — close deal",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Open deal",
+    "steps": [
+      "⋮ → Close deal"
+    ],
+    "expected": "Deal archived to closed"
+  },
+  {
+    "id": "DPL-015",
+    "section": "06",
+    "title": "Deal detail — remove deal",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Open deal",
+    "steps": [
+      "⋮ → Remove",
+      "Confirm"
+    ],
+    "expected": "Deal removed from pipeline"
+  },
+  {
+    "id": "DPL-016",
+    "section": "06",
+    "title": "Deal detail — open lead overlay",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal with lead",
+    "steps": [
+      "View lead"
+    ],
+    "expected": "LeadDetails overlays; back returns to deal"
+  },
+  {
+    "id": "DPL-017",
+    "section": "06",
+    "title": "Open Pipes kanban",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Pipeline exists",
+    "steps": [
+      "Action bar → Pipes"
+    ],
+    "expected": "Columns and deal cards visible"
+  },
+  {
+    "id": "DPL-018",
+    "section": "06",
+    "title": "Switch pipeline dropdown",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Multiple pipelines",
+    "steps": [
+      "Select different pipeline"
+    ],
+    "expected": "Deals/columns update"
+  },
+  {
+    "id": "DPL-019",
+    "section": "06",
+    "title": "Create new pipeline",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Owner/admin",
+    "steps": [
+      "Create pipeline dialog"
+    ],
+    "expected": "New pipeline appears"
+  },
+  {
+    "id": "DPL-020",
+    "section": "06",
+    "title": "Share pipeline",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own pipeline",
+    "steps": [
+      "Share pipeline",
+      "Add email/team"
+    ],
+    "expected": "Sharing updated"
+  },
+  {
+    "id": "DPL-021",
+    "section": "06",
+    "title": "Edit mode — rename column",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Pipeline owner",
+    "steps": [
+      "Edit mode → rename column"
+    ],
+    "expected": "Column name updates"
+  },
+  {
+    "id": "DPL-022",
+    "section": "06",
+    "title": "Edit mode — add/delete column",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Edit mode",
+    "steps": [
+      "Add column",
+      "Delete empty column"
+    ],
+    "expected": "Columns update"
+  },
+  {
+    "id": "DPL-023",
+    "section": "06",
+    "title": "Drag deal between columns",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Collaborate permission",
+    "steps": [
+      "Drag deal to new column"
+    ],
+    "expected": "Deal status updates; persists on refresh"
+  },
+  {
+    "id": "DPL-024",
+    "section": "06",
+    "title": "Move deal to next stage button",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal in pipe",
+    "steps": [
+      "Click → on deal card"
+    ],
+    "expected": "Deal advances one column"
+  },
+  {
+    "id": "DPL-025",
+    "section": "06",
+    "title": "Open deal from pipe card click",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal in column",
+    "steps": [
+      "Click deal card body"
+    ],
+    "expected": "DealDetails overlay opens"
+  },
+  {
+    "id": "DPL-026",
+    "section": "06",
+    "title": "Pipe tasks sidebar — toggle complete",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Tasks in pipe sidebar",
+    "steps": [
+      "Toggle task checkbox"
+    ],
+    "expected": "Task completion updates"
+  },
+  {
+    "id": "DPL-027",
+    "section": "06",
+    "title": "Pipe tasks — open deal from task",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Task linked to deal",
+    "steps": [
+      "Click task row"
+    ],
+    "expected": "Deal opens"
+  },
+  {
+    "id": "DPL-028",
+    "section": "06",
+    "title": "Deal cards visually distinct from columns",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deals in pipe",
+    "steps": [
+      "Compare card vs column background"
+    ],
+    "expected": "Cards readable and contrast with column wells"
+  },
+  {
+    "id": "TSK-001",
+    "section": "07",
+    "title": "Tasks panel — pipeline groups",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Pipeline tasks exist",
+    "steps": [
+      "Open Tasks"
+    ],
+    "expected": "Tasks grouped by pipeline"
+  },
+  {
+    "id": "TSK-002",
+    "section": "07",
+    "title": "Tasks panel — unlabeled tasks section",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Standalone tasks",
+    "steps": [
+      "View unlabeled section"
+    ],
+    "expected": "Personal tasks listed"
+  },
+  {
+    "id": "TSK-003",
+    "section": "07",
+    "title": "Toggle show completed tasks",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Completed tasks exist",
+    "steps": [
+      "Eye toggle for completed"
+    ],
+    "expected": "Completed tasks show/hide"
+  },
+  {
+    "id": "TSK-004",
+    "section": "07",
+    "title": "Create new task",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Tasks panel open",
+    "steps": [
+      "+ New task",
+      "Fill form",
+      "Save"
+    ],
+    "expected": "Task appears in list"
+  },
+  {
+    "id": "TSK-005",
+    "section": "07",
+    "title": "Edit existing task",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Task exists",
+    "steps": [
+      "Open edit on task"
+    ],
+    "expected": "Edit dialog saves changes"
+  },
+  {
+    "id": "TSK-006",
+    "section": "07",
+    "title": "Delete task",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Task exists",
+    "steps": [
+      "Delete task",
+      "Confirm"
+    ],
+    "expected": "Task removed"
+  },
+  {
+    "id": "TSK-007",
+    "section": "07",
+    "title": "Open deal from task",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Task with dealId",
+    "steps": [
+      "Activate/open deal from task"
+    ],
+    "expected": "Deal detail opens (standalone beside Tasks if docked)"
+  },
+  {
+    "id": "TSK-008",
+    "section": "07",
+    "title": "Open lead from task",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Task with leadId",
+    "steps": [
+      "Open lead from task"
+    ],
+    "expected": "Lead detail opens"
+  },
+  {
+    "id": "TSK-009",
+    "section": "07",
+    "title": "Open schedule from task",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Scheduled task",
+    "steps": [
+      "View on schedule"
+    ],
+    "expected": "Schedule opens at task time"
+  },
+  {
+    "id": "TSK-010",
+    "section": "07",
+    "title": "Schedule month view",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Schedule open",
+    "steps": [
+      "Month view"
+    ],
+    "expected": "Calendar grid renders"
+  },
+  {
+    "id": "TSK-011",
+    "section": "07",
+    "title": "Schedule week view",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Schedule open",
+    "steps": [
+      "Week view"
+    ],
+    "expected": "Week grid renders"
+  },
+  {
+    "id": "TSK-012",
+    "section": "07",
+    "title": "Schedule day view",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Schedule open",
+    "steps": [
+      "Day view"
+    ],
+    "expected": "Hour slots render"
+  },
+  {
+    "id": "TSK-013",
+    "section": "07",
+    "title": "Click schedule slot — new task",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Schedule open",
+    "steps": [
+      "Click empty hour slot"
+    ],
+    "expected": "New task dialog with time prefill"
+  },
+  {
+    "id": "TSK-014",
+    "section": "07",
+    "title": "Click existing schedule task — edit",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Task on calendar",
+    "steps": [
+      "Click task block"
+    ],
+    "expected": "Edit task dialog"
+  },
+  {
+    "id": "TSK-015",
+    "section": "07",
+    "title": "Schedule lead overlay",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Task with lead on schedule",
+    "steps": [
+      "Open lead from schedule"
+    ],
+    "expected": "Lead detail overlay; back to schedule"
+  },
+  {
+    "id": "TSK-016",
+    "section": "07",
+    "title": "Schedule stacked from leads — back",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Opened schedule from leads",
+    "steps": [
+      "Back from schedule"
+    ],
+    "expected": "Returns to leads not map"
+  },
+  {
+    "id": "TSK-017",
+    "section": "07",
+    "title": "Navigate months in schedule",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Month view",
+    "steps": [
+      "Prev/next month"
+    ],
+    "expected": "Calendar updates"
+  },
+  {
+    "id": "TSK-018",
+    "section": "07",
+    "title": "Today/now indicator",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Schedule on today",
+    "steps": [
+      "View current day"
+    ],
+    "expected": "Now line or highlight visible"
+  },
+  {
+    "id": "PTH-001",
+    "section": "08",
+    "title": "Paths tabs All/Mine/Shared/On map",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Paths exist",
+    "steps": [
+      "Click each tab"
+    ],
+    "expected": "Filtering works"
+  },
+  {
+    "id": "PTH-002",
+    "section": "08",
+    "title": "Search paths",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Paths exist",
+    "steps": [
+      "Search by name/city"
+    ],
+    "expected": "Filtered results"
+  },
+  {
+    "id": "PTH-003",
+    "section": "08",
+    "title": "Toggle path visibility on map",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Path exists",
+    "steps": [
+      "Eye icon toggle"
+    ],
+    "expected": "Open/closed eye; path shows/hides on map"
+  },
+  {
+    "id": "PTH-004",
+    "section": "08",
+    "title": "Center path on map from row click",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Path exists",
+    "steps": [
+      "Click path row"
+    ],
+    "expected": "Map centers on path"
+  },
+  {
+    "id": "PTH-005",
+    "section": "08",
+    "title": "Owned path — rename via menu",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own path",
+    "steps": [
+      "⋮ → Rename"
+    ],
+    "expected": "Inline rename works"
+  },
+  {
+    "id": "PTH-006",
+    "section": "08",
+    "title": "Owned path — share",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own path",
+    "steps": [
+      "⋮ → Share"
+    ],
+    "expected": "Share dialog"
+  },
+  {
+    "id": "PTH-007",
+    "section": "08",
+    "title": "Owned path — delete",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own path",
+    "steps": [
+      "⋮ → Delete",
+      "Confirm"
+    ],
+    "expected": "Path removed"
+  },
+  {
+    "id": "PTH-008",
+    "section": "08",
+    "title": "Shared path — no options button",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Shared path not owned",
+    "steps": [
+      "Inspect row actions"
+    ],
+    "expected": "⋮ hidden; eye still present"
+  },
+  {
+    "id": "PTH-009",
+    "section": "08",
+    "title": "Owned path — tags via menu",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own path",
+    "steps": [
+      "⋮ → Tags"
+    ],
+    "expected": "Tag picker works"
+  },
+  {
+    "id": "ACT-001",
+    "section": "08",
+    "title": "Activity tabs filter",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Activity items exist",
+    "steps": [
+      "All/Leads/Deals/Tasks/Other tabs"
+    ],
+    "expected": "Items filter correctly"
+  },
+  {
+    "id": "ACT-002",
+    "section": "08",
+    "title": "Activity search",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Many items",
+    "steps": [
+      "Search feed"
+    ],
+    "expected": "Results filter"
+  },
+  {
+    "id": "ACT-003",
+    "section": "08",
+    "title": "Activity — open lead item",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead activity item",
+    "steps": [
+      "Click item"
+    ],
+    "expected": "Standalone lead detail; Activity+Tasks docked"
+  },
+  {
+    "id": "ACT-004",
+    "section": "08",
+    "title": "Activity — open deal item",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal activity item",
+    "steps": [
+      "Click item"
+    ],
+    "expected": "Standalone deal detail opens"
+  },
+  {
+    "id": "ACT-005",
+    "section": "08",
+    "title": "Activity — open list item",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "List activity item",
+    "steps": [
+      "Click item"
+    ],
+    "expected": "List parcels view; list highlighted on map"
+  },
+  {
+    "id": "ACT-006",
+    "section": "08",
+    "title": "Activity — open path item",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Path activity item",
+    "steps": [
+      "Click item"
+    ],
+    "expected": "Map centers on path; Activity stays"
+  },
+  {
+    "id": "ACT-007",
+    "section": "08",
+    "title": "Activity — open task item",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Task activity item",
+    "steps": [
+      "Click item"
+    ],
+    "expected": "Tasks panel focus"
+  },
+  {
+    "id": "ACT-008",
+    "section": "08",
+    "title": "Activity — back to feed after detail",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Opened item from activity",
+    "steps": [
+      "Back/close detail"
+    ],
+    "expected": "Activity feed visible"
+  },
+  {
+    "id": "SET-001",
+    "section": "08",
+    "title": "Settings — display name",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Edit display name",
+      "Save"
+    ],
+    "expected": "Name persists"
+  },
+  {
+    "id": "SET-002",
+    "section": "08",
+    "title": "Settings — UI theme toggle",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Switch light/dark theme"
+    ],
+    "expected": "Theme applies app-wide"
+  },
+  {
+    "id": "SET-003",
+    "section": "08",
+    "title": "Settings — map style",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Change map style"
+    ],
+    "expected": "Basemap updates"
+  },
+  {
+    "id": "SET-004",
+    "section": "08",
+    "title": "Settings — parcel boundary color",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Change boundary color"
+    ],
+    "expected": "Map parcel outlines update"
+  },
+  {
+    "id": "SET-005",
+    "section": "08",
+    "title": "Settings — path distance units",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Toggle miles/km"
+    ],
+    "expected": "Paths panel distances update"
+  },
+  {
+    "id": "SET-006",
+    "section": "08",
+    "title": "Settings — email test mode",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Enable test mode"
+    ],
+    "expected": "Composer redirects per setting"
+  },
+  {
+    "id": "SET-007",
+    "section": "08",
+    "title": "Settings — notification toggles",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Toggle notification types"
+    ],
+    "expected": "Preferences saved"
+  },
+  {
+    "id": "SET-008",
+    "section": "08",
+    "title": "Settings — sync now",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Settings open",
+    "steps": [
+      "Tap Sync now"
+    ],
+    "expected": "Sync completes without error"
+  },
+  {
+    "id": "SET-009",
+    "section": "08",
+    "title": "Settings — browse skip traced parcels",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Skip traced data exists",
+    "steps": [
+      "Open skip traced section",
+      "Open parcel"
+    ],
+    "expected": "Parcel details from settings path"
+  },
+  {
+    "id": "FRM-001",
+    "section": "09",
+    "title": "Forms — upload PDF template",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Forms access",
+    "steps": [
+      "Upload PDF"
+    ],
+    "expected": "Template appears in list"
+  },
+  {
+    "id": "FRM-002",
+    "section": "09",
+    "title": "Forms — search templates",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Templates exist",
+    "steps": [
+      "Search"
+    ],
+    "expected": "Filtered list"
+  },
+  {
+    "id": "FRM-003",
+    "section": "09",
+    "title": "Forms — open fill view",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Template exists",
+    "steps": [
+      "Click row"
+    ],
+    "expected": "Form fill view opens"
+  },
+  {
+    "id": "FRM-004",
+    "section": "09",
+    "title": "Forms — preview PDF from menu",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Template exists",
+    "steps": [
+      "⋮ → Preview"
+    ],
+    "expected": "PDF preview overlay"
+  },
+  {
+    "id": "FRM-005",
+    "section": "09",
+    "title": "Forms — edit builder",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own template",
+    "steps": [
+      "⋮ → Edit"
+    ],
+    "expected": "Form builder with field overlays"
+  },
+  {
+    "id": "FRM-006",
+    "section": "09",
+    "title": "Forms — share template",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own template",
+    "steps": [
+      "⋮ → Share"
+    ],
+    "expected": "Share dialog"
+  },
+  {
+    "id": "FRM-007",
+    "section": "09",
+    "title": "Forms — send public link",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own template",
+    "steps": [
+      "⋮ → Send link"
+    ],
+    "expected": "Link dialog with ?form= URL"
+  },
+  {
+    "id": "FRM-008",
+    "section": "09",
+    "title": "Forms — delete template",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own template",
+    "steps": [
+      "⋮ → Delete",
+      "Confirm"
+    ],
+    "expected": "Template removed"
+  },
+  {
+    "id": "QTE-001",
+    "section": "09",
+    "title": "Quotes — create new quote",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Quotes access",
+    "steps": [
+      "+ Create quote"
+    ],
+    "expected": "Quote editor opens"
+  },
+  {
+    "id": "QTE-002",
+    "section": "09",
+    "title": "Quotes — tabs Quotes/Templates/Messages",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Quotes panel",
+    "steps": [
+      "Switch tabs"
+    ],
+    "expected": "Each tab renders"
+  },
+  {
+    "id": "QTE-003",
+    "section": "09",
+    "title": "Quotes — open quote detail",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Quote exists",
+    "steps": [
+      "Click quote row"
+    ],
+    "expected": "Quote detail view"
+  },
+  {
+    "id": "QTE-004",
+    "section": "09",
+    "title": "Quotes — edit quote",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Quote exists",
+    "steps": [
+      "Edit from menu"
+    ],
+    "expected": "Editor opens with data"
+  },
+  {
+    "id": "QTE-005",
+    "section": "09",
+    "title": "Quotes — send quote",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Quote ready",
+    "steps": [
+      "Send quote dialog"
+    ],
+    "expected": "Send flow completes"
+  },
+  {
+    "id": "QTE-006",
+    "section": "09",
+    "title": "Quotes — delete quote",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own quote",
+    "steps": [
+      "Delete",
+      "Confirm"
+    ],
+    "expected": "Quote removed"
+  },
+  {
+    "id": "QTE-007",
+    "section": "09",
+    "title": "Quote templates CRUD",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Templates tab",
+    "steps": [
+      "Create/edit/delete template"
+    ],
+    "expected": "Templates manage correctly"
+  },
+  {
+    "id": "RPT-001",
+    "section": "09",
+    "title": "Reports — create photo report",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Reports + lead with photos",
+    "steps": [
+      "Create report",
+      "Pick lead/template"
+    ],
+    "expected": "Report builder opens"
+  },
+  {
+    "id": "RPT-002",
+    "section": "09",
+    "title": "Reports — open report detail",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Report exists",
+    "steps": [
+      "Click report"
+    ],
+    "expected": "Report detail/PDF view"
+  },
+  {
+    "id": "RPT-003",
+    "section": "09",
+    "title": "Reports — edit report",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Draft report",
+    "steps": [
+      "Edit in builder"
+    ],
+    "expected": "Changes save"
+  },
+  {
+    "id": "RPT-004",
+    "section": "09",
+    "title": "Reports — send report",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Report ready",
+    "steps": [
+      "Send report"
+    ],
+    "expected": "Send dialog works"
+  },
+  {
+    "id": "RPT-005",
+    "section": "09",
+    "title": "Reports — delete report",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Own report",
+    "steps": [
+      "Delete",
+      "Confirm"
+    ],
+    "expected": "Report removed"
+  },
+  {
+    "id": "RPT-006",
+    "section": "09",
+    "title": "Report templates tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Templates exist",
+    "steps": [
+      "Templates tab actions"
+    ],
+    "expected": "Templates list/manage"
+  },
+  {
+    "id": "TEM-001",
+    "section": "10",
+    "title": "Teams — accept invite",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Pending invite",
+    "steps": [
+      "Accept invite"
+    ],
+    "expected": "Member joins team"
+  },
+  {
+    "id": "TEM-002",
+    "section": "10",
+    "title": "Teams — decline invite",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Pending invite",
+    "steps": [
+      "Decline invite"
+    ],
+    "expected": "Invite removed"
+  },
+  {
+    "id": "TEM-003",
+    "section": "10",
+    "title": "Teams — create team",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Can create teams",
+    "steps": [
+      "Create team"
+    ],
+    "expected": "Team appears in list"
+  },
+  {
+    "id": "TEM-004",
+    "section": "10",
+    "title": "Team detail — invite member",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Team admin",
+    "steps": [
+      "Invite by email"
+    ],
+    "expected": "Invite sent/pending shown"
+  },
+  {
+    "id": "TEM-005",
+    "section": "10",
+    "title": "Team detail — remove member",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Team admin",
+    "steps": [
+      "Remove member",
+      "Confirm"
+    ],
+    "expected": "Member removed"
+  },
+  {
+    "id": "TEM-006",
+    "section": "10",
+    "title": "Team detail — feature toggles per member",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Team admin",
+    "steps": [
+      "Toggle feature for member"
+    ],
+    "expected": "Member access changes"
+  },
+  {
+    "id": "TEM-007",
+    "section": "10",
+    "title": "Team detail — transfer ownership",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Team owner",
+    "steps": [
+      "Transfer ownership"
+    ],
+    "expected": "New owner assigned"
+  },
+  {
+    "id": "TEM-008",
+    "section": "10",
+    "title": "Team detail — delete team",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Team owner",
+    "steps": [
+      "Delete team",
+      "Confirm"
+    ],
+    "expected": "Team removed"
+  },
+  {
+    "id": "OUT-001",
+    "section": "10",
+    "title": "Outreach — email templates tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Outreach open",
+    "steps": [
+      "Email templates tab"
+    ],
+    "expected": "Templates listed"
+  },
+  {
+    "id": "OUT-002",
+    "section": "10",
+    "title": "Outreach — create email template",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Outreach open",
+    "steps": [
+      "Create template"
+    ],
+    "expected": "Editor saves template"
+  },
+  {
+    "id": "OUT-003",
+    "section": "10",
+    "title": "Outreach — text templates tab",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Outreach open",
+    "steps": [
+      "Text templates tab"
+    ],
+    "expected": "SMS templates listed"
+  },
+  {
+    "id": "OUT-004",
+    "section": "10",
+    "title": "Outreach — use template → composer",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Template exists",
+    "steps": [
+      "Use template from parcel email flow"
+    ],
+    "expected": "EmailComposer opens with merge tags"
+  },
+  {
+    "id": "OUT-005",
+    "section": "10",
+    "title": "PhoneActionPanel — text with template",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Parcel with phone",
+    "steps": [
+      "Phone → Text → pick template"
+    ],
+    "expected": "Template applied"
+  },
+  {
+    "id": "OUT-006",
+    "section": "10",
+    "title": "PhoneActionPanel — call action",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Parcel with phone",
+    "steps": [
+      "Phone → Call"
+    ],
+    "expected": "Tel link or call UI"
+  },
+  {
+    "id": "OUT-007",
+    "section": "10",
+    "title": "Bulk email — list pick → preview → send",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Template + list with emails",
+    "steps": [
+      "Bulk flow from outreach"
+    ],
+    "expected": "Preview then confirm send"
+  },
+  {
+    "id": "XFL-001",
+    "section": "11",
+    "title": "Map popup → convert → lead detail",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Parcel not lead",
+    "steps": [
+      "Full convert flow"
+    ],
+    "expected": "Lead exists and opens in detail"
+  },
+  {
+    "id": "XFL-002",
+    "section": "11",
+    "title": "Map → add to list → parcel list",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Parcel on map",
+    "steps": [
+      "Add to list flow"
+    ],
+    "expected": "Parcel in list; parcel list view works"
+  },
+  {
+    "id": "XFL-003",
+    "section": "11",
+    "title": "Multi-select → list → verify on map",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Multiple parcels",
+    "steps": [
+      "Add all to list",
+      "Highlight list"
+    ],
+    "expected": "All parcels on map highlight"
+  },
+  {
+    "id": "XFL-004",
+    "section": "11",
+    "title": "Lead → create deal → visible in Pipes",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead without deal",
+    "steps": [
+      "Create deal from lead"
+    ],
+    "expected": "Deal card in correct pipeline column"
+  },
+  {
+    "id": "XFL-005",
+    "section": "11",
+    "title": "Lead detail → open deal → back to lead",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Linked deal",
+    "steps": [
+      "Open deal",
+      "Back"
+    ],
+    "expected": "Returns to lead detail"
+  },
+  {
+    "id": "XFL-006",
+    "section": "11",
+    "title": "Deal detail → lead overlay → back to deal",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal with lead",
+    "steps": [
+      "Open lead overlay",
+      "Back"
+    ],
+    "expected": "Deal detail restored"
+  },
+  {
+    "id": "XFL-007",
+    "section": "11",
+    "title": "Deal → create quote → return to deal",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Open deal",
+    "steps": [
+      "Create quote",
+      "Save",
+      "Back from quote"
+    ],
+    "expected": "Deal still visible under stack"
+  },
+  {
+    "id": "XFL-008",
+    "section": "11",
+    "title": "Task → deal detail beside docked Tasks",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Tasks docked",
+    "steps": [
+      "Open deal from task"
+    ],
+    "expected": "Deal detail; Tasks remain on rail"
+  },
+  {
+    "id": "XFL-009",
+    "section": "11",
+    "title": "Task → lead detail beside docked Tasks",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Tasks docked",
+    "steps": [
+      "Open lead from task"
+    ],
+    "expected": "Lead detail; Tasks on rail"
+  },
+  {
+    "id": "XFL-010",
+    "section": "11",
+    "title": "Activity → lead → back to Activity+Tasks",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "desktop",
+    "preconditions": "Activity+Tasks open",
+    "steps": [
+      "Open lead activity",
+      "Back"
+    ],
+    "expected": "Activity feed focused; dock intact"
+  },
+  {
+    "id": "XFL-011",
+    "section": "11",
+    "title": "Activity → list → back to Activity",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Activity open",
+    "steps": [
+      "Open list activity",
+      "Back from parcels"
+    ],
+    "expected": "Activity feed"
+  },
+  {
+    "id": "XFL-012",
+    "section": "11",
+    "title": "Activity → deal → back to Activity",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Activity open",
+    "steps": [
+      "Open deal activity",
+      "Back"
+    ],
+    "expected": "Activity feed"
+  },
+  {
+    "id": "XFL-013",
+    "section": "11",
+    "title": "Pipes drag-drop persists after reload",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal in pipe",
+    "steps": [
+      "Move deal column",
+      "Refresh page"
+    ],
+    "expected": "Deal stays in new column"
+  },
+  {
+    "id": "XFL-014",
+    "section": "11",
+    "title": "Share list with team visibility",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Team member account",
+    "steps": [
+      "Share list to team",
+      "Login as member"
+    ],
+    "expected": "Member sees list in Shared tab"
+  },
+  {
+    "id": "XFL-015",
+    "section": "11",
+    "title": "Share path with team visibility",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Team member account",
+    "steps": [
+      "Share path to team",
+      "Login as member"
+    ],
+    "expected": "Path in Shared tab; no ⋮ menu"
+  },
+  {
+    "id": "XFL-016",
+    "section": "11",
+    "title": "Share pipeline with collaborator",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Second user email",
+    "steps": [
+      "Share pipe",
+      "Other user opens Pipes"
+    ],
+    "expected": "Collaborator sees deals; can drag if permitted"
+  },
+  {
+    "id": "XFL-017",
+    "section": "11",
+    "title": "Schedule from deal at specific date",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal detail open",
+    "steps": [
+      "Schedule action"
+    ],
+    "expected": "Schedule opens on chosen date"
+  },
+  {
+    "id": "XFL-018",
+    "section": "11",
+    "title": "Email from parcel → outreach → composer",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Parcel with email",
+    "steps": [
+      "Full email chain"
+    ],
+    "expected": "Composer opens with template content"
+  },
+  {
+    "id": "XFL-019",
+    "section": "11",
+    "title": "Photo mode — capture and attach to lead",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Lead exists",
+    "steps": [
+      "Photos from parcel",
+      "Capture/upload",
+      "Done"
+    ],
+    "expected": "Photos on lead gallery"
+  },
+  {
+    "id": "XFL-020",
+    "section": "11",
+    "title": "Settings stacks over Leads panel",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads open",
+    "steps": [
+      "Open Settings",
+      "Close Settings"
+    ],
+    "expected": "Leads still open underneath"
+  },
+  {
+    "id": "XFL-021",
+    "section": "11",
+    "title": "Leads → Schedule stacked → back to Leads",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Leads open",
+    "steps": [
+      "Open schedule from lead context",
+      "Back"
+    ],
+    "expected": "Leads panel returns"
+  },
+  {
+    "id": "XFL-022",
+    "section": "11",
+    "title": "Deals list → detail → move deal dialog",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deal open",
+    "steps": [
+      "Move deal between pipes"
+    ],
+    "expected": "Deal appears in target pipeline"
+  },
+  {
+    "id": "XFL-023",
+    "section": "11",
+    "title": "Closed deal from Deals → closed view",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Closed deal exists",
+    "steps": [
+      "Open from Closed tab"
+    ],
+    "expected": "Read-only closed record"
+  },
+  {
+    "id": "XFL-024",
+    "section": "11",
+    "title": "List bulk email pick mode",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Outreach template selected",
+    "steps": [
+      "Enter bulk mode",
+      "Pick list"
+    ],
+    "expected": "BulkEmailPreview opens"
+  },
+  {
+    "id": "XFL-025",
+    "section": "11",
+    "title": "Lead from Activity does not open Leads list panel",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Activity+Tasks",
+    "steps": [
+      "Open lead from feed"
+    ],
+    "expected": "No Leads list underneath detail"
+  },
+  {
+    "id": "PUB-001",
+    "section": "12",
+    "title": "Public form page loads and submits",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Valid ?form= link",
+    "steps": [
+      "Open public URL",
+      "Fill required fields",
+      "Submit"
+    ],
+    "expected": "Success/thank you state"
+  },
+  {
+    "id": "PUB-002",
+    "section": "12",
+    "title": "Public quote page loads",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Valid ?quote= link",
+    "steps": [
+      "Open public URL"
+    ],
+    "expected": "Quote displays read-only"
+  },
+  {
+    "id": "PUB-003",
+    "section": "12",
+    "title": "Public report page loads",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Valid ?report= link",
+    "steps": [
+      "Open public URL"
+    ],
+    "expected": "Report displays"
+  },
+  {
+    "id": "PUB-004",
+    "section": "12",
+    "title": "Destructive delete shows confirm dialog",
+    "roles": [
+      "solo",
+      "team-admin"
+    ],
+    "viewport": "both",
+    "preconditions": "Deletable resource",
+    "steps": [
+      "Trigger delete"
+    ],
+    "expected": "Confirm dialog blocks until confirmed"
+  },
+  {
+    "id": "PUB-005",
+    "section": "12",
+    "title": "Toast appears on success action",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Any save action",
+    "steps": [
+      "Perform save"
+    ],
+    "expected": "Green/success toast visible"
+  },
+  {
+    "id": "PUB-006",
+    "section": "12",
+    "title": "Basemap error banner if tiles fail",
+    "roles": [
+      "solo",
+      "team-admin",
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Simulate offline or block tiles",
+    "steps": [
+      "Load map"
+    ],
+    "expected": "Error banner or graceful degradation"
+  },
+  {
+    "id": "PUB-007",
+    "section": "12",
+    "title": "Menu Sign In when logged out",
+    "roles": [
+      "logged-out"
+    ],
+    "viewport": "both",
+    "preconditions": "Logged out",
+    "steps": [
+      "Menu shows Sign In"
+    ],
+    "expected": "Tapping opens login"
+  },
+  {
+    "id": "PUB-008",
+    "section": "12",
+    "title": "Restricted member deal amounts hidden",
+    "roles": [
+      "team-member"
+    ],
+    "viewport": "both",
+    "preconditions": "Member without dealAmounts",
+    "steps": [
+      "Open deal detail"
+    ],
+    "expected": "Amount/profit fields hidden or masked"
+  }
+];
+    const STATUSES = ['pending', 'pass', 'fail', 'blocked'];
+    const STATUS_LABELS = { pending: 'Not run', pass: 'Pass', fail: 'Fail', blocked: 'Blocked' };
+
+    let state = loadState();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (_) {}
+      return { cases: {}, exportedAt: null };
+    }
+
+    function saveState() {
+      state.exportedAt = new Date().toISOString();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      updateSummary();
+    }
+
+    function getCaseState(id) {
+      return state.cases[id] || { status: 'pending', notes: '' };
+    }
+
+    function cycleStatus(id) {
+      const cur = getCaseState(id);
+      const idx = STATUSES.indexOf(cur.status);
+      const next = STATUSES[(idx + 1) % STATUSES.length];
+      state.cases[id] = { ...cur, status: next };
+      saveState();
+      render();
+    }
+
+    function setNotes(id, notes) {
+      const cur = getCaseState(id);
+      state.cases[id] = { ...cur, notes };
+      saveState();
+    }
+
+    function matchesFilters(tc) {
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      const statusF = document.getElementById('statusFilter').value;
+      const roleF = document.getElementById('roleFilter').value;
+      const cs = getCaseState(tc.id);
+      if (statusF !== 'all' && cs.status !== statusF) return false;
+      if (roleF !== 'all' && !tc.roles.includes(roleF)) return false;
+      if (q) {
+        const hay = [tc.id, tc.title, tc.preconditions, tc.expected, ...tc.steps].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    }
+
+    function updateSummary() {
+      const total = TEST_CASES.length;
+      let pass = 0, fail = 0, blocked = 0, pending = 0;
+      TEST_CASES.forEach(tc => {
+        const s = getCaseState(tc.id).status;
+        if (s === 'pass') pass++;
+        else if (s === 'fail') fail++;
+        else if (s === 'blocked') blocked++;
+        else pending++;
+      });
+      const done = pass + fail + blocked;
+      const pct = total ? Math.round((pass / total) * 100) : 0;
+      document.getElementById('summary').innerHTML =
+        '<span><strong>' + pass + '</strong> pass</span>' +
+        '<span><strong>' + fail + '</strong> fail</span>' +
+        '<span><strong>' + blocked + '</strong> blocked</span>' +
+        '<span><strong>' + pending + '</strong> not run</span>' +
+        '<span><strong>' + done + '</strong> / ' + total + ' touched</span>';
+      document.getElementById('progressFill').style.width = pct + '%';
+    }
+
+    function render() {
+      const root = document.getElementById('sections');
+      root.innerHTML = '';
+      SECTIONS.forEach(sec => {
+        const cases = TEST_CASES.filter(tc => tc.section === sec.id);
+        const visible = cases.filter(matchesFilters);
+        let secPass = 0, secTotal = cases.length;
+        cases.forEach(tc => { if (getCaseState(tc.id).status === 'pass') secPass++; });
+
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'section open';
+        sectionEl.dataset.section = sec.id;
+
+        const header = document.createElement('div');
+        header.className = 'section-header';
+        header.innerHTML = '<h2>' + sec.id + ' — ' + sec.title + '</h2>' +
+          '<span class="section-meta">' + secPass + '/' + secTotal + ' pass · ' + visible.length + ' shown</span>';
+        header.addEventListener('click', () => sectionEl.classList.toggle('open'));
+
+        const body = document.createElement('div');
+        body.className = 'section-body';
+
+        cases.forEach(tc => {
+          const cs = getCaseState(tc.id);
+          const show = matchesFilters(tc);
+          const caseEl = document.createElement('div');
+          caseEl.className = 'case' + (show ? '' : ' hidden');
+          caseEl.dataset.statusPrint = STATUS_LABELS[cs.status];
+
+          const tags = tc.roles.map(r => '<span class="tag">' + r + '</span>').join('') +
+            '<span class="tag">' + tc.viewport + '</span>';
+
+          const steps = tc.steps.map((s, i) => '<li>' + escapeHtml(s) + '</li>').join('');
+
+          caseEl.innerHTML =
+            '<div class="case-top">' +
+              '<div><div class="case-id">' + tc.id + '</div><div class="case-title">' + escapeHtml(tc.title) + '</div>' +
+              '<div class="tags">' + tags + '</div></div>' +
+              '<button type="button" class="status-btn status-' + cs.status + '" data-id="' + tc.id + '">' +
+                STATUS_LABELS[cs.status] + '</button>' +
+            '</div>' +
+            '<div class="case-pre"><strong>Pre:</strong> ' + escapeHtml(tc.preconditions) + '</div>' +
+            '<ol>' + steps + '</ol>' +
+            '<div class="case-expected"><strong>Expected:</strong> ' + escapeHtml(tc.expected) + '</div>' +
+            '<textarea class="case-notes" placeholder="Notes (failures, blockers…)" data-id="' + tc.id + '">' +
+              escapeHtml(cs.notes || '') + '</textarea>';
+
+          caseEl.querySelector('.status-btn').addEventListener('click', e => {
+            e.stopPropagation();
+            cycleStatus(tc.id);
+          });
+          caseEl.querySelector('.case-notes').addEventListener('input', e => {
+            setNotes(tc.id, e.target.value);
+          });
+
+          body.appendChild(caseEl);
+        });
+
+        sectionEl.appendChild(header);
+        sectionEl.appendChild(body);
+        root.appendChild(sectionEl);
+      });
+      updateSummary();
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    document.getElementById('searchInput').addEventListener('input', render);
+    document.getElementById('statusFilter').addEventListener('change', render);
+    document.getElementById('roleFilter').addEventListener('change', render);
+
+    document.getElementById('expandAll').addEventListener('click', () => {
+      document.querySelectorAll('.section').forEach(el => el.classList.add('open'));
+    });
+    document.getElementById('collapseAll').addEventListener('click', () => {
+      document.querySelectorAll('.section').forEach(el => el.classList.remove('open'));
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        cases: state.cases,
+        summary: TEST_CASES.map(tc => ({ id: tc.id, ...getCaseState(tc.id) })),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'knockscout-regression-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (data.cases) state.cases = { ...state.cases, ...data.cases };
+          saveState();
+          render();
+          alert('Import complete.');
+        } catch (err) {
+          alert('Invalid JSON file.');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('resetAll').addEventListener('click', () => {
+      if (!confirm('Reset all pass/fail/notes for every test case?')) return;
+      state.cases = {};
+      saveState();
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

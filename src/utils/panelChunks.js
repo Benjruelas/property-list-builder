@@ -21,16 +21,16 @@ export const panelLazy = {
 }
 
 const PREFETCH_ORDER = [
+  'tasks',
   'dealPipeline',
   'leads',
   'deals',
-  'tasks',
   'schedule',
+  'outreach',
   'quotes',
   'forms',
   'reports',
   'paths',
-  'outreach',
   'teams',
   'settings',
   'emailComposer',

@@ -124,17 +124,75 @@ export function categorizeFeedItem(item) {
   return 'other'
 }
 
-export function feedItemCategoryLabel(item) {
+/** @typedef {'lead' | 'deal' | 'task' | 'list' | 'path' | 'form' | 'quote' | 'team' | 'pipeline' | 'shared' | 'notification' | 'activity'} FeedBadgeKind */
+
+export const FEED_BADGE_LABELS = {
+  lead: 'Lead',
+  deal: 'Deal',
+  task: 'Task',
+  list: 'List',
+  path: 'Path',
+  form: 'Form',
+  quote: 'Quote',
+  team: 'Team',
+  pipeline: 'Pipe',
+  shared: 'Shared',
+  notification: 'Notification',
+  activity: 'Update',
+}
+
+export const FEED_BADGE_STYLES = {
+  lead: 'bg-sky-500/20 text-sky-300 border-sky-400/30',
+  deal: 'bg-violet-500/20 text-violet-300 border-violet-400/30',
+  task: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30',
+  list: 'bg-orange-500/20 text-orange-300 border-orange-400/30',
+  path: 'bg-teal-500/20 text-teal-300 border-teal-400/30',
+  form: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/30',
+  quote: 'bg-amber-500/20 text-amber-300 border-amber-400/30',
+  team: 'bg-pink-500/20 text-pink-300 border-pink-400/30',
+  pipeline: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/30',
+  shared: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/30',
+  notification: 'bg-white/10 text-white/70 border-white/20',
+  activity: 'bg-slate-500/20 text-slate-300 border-slate-400/30',
+}
+
+/** Badge kind for row type tags — finer than tab category where needed (list, path, pipe, etc.). */
+export function feedItemBadgeKind(item) {
   const cat = categorizeFeedItem(item)
-  if (cat === 'leads') return 'Lead'
-  if (cat === 'deals') return 'Deal'
-  if (cat === 'tasks') return 'Task'
-  if (item?.source === 'notification') {
-    const t = String(item?.type || '').toLowerCase()
-    if (t.includes('shared')) return 'Shared item'
-    return 'Notification'
+  if (cat === 'leads') return 'lead'
+  if (cat === 'tasks') return 'task'
+  if (cat === 'deals') {
+    const type = String(item?.type || '').toLowerCase()
+    const navType = String(item?.nav?.type || '').toLowerCase()
+    if (
+      (type.includes('pipeline') || navType === 'pipeline' || type === 'pipelineshared') &&
+      !type.includes('deal') &&
+      !type.includes('lead') &&
+      navType !== 'pipelinedealstage' &&
+      navType !== 'pipelineleadstage'
+    ) {
+      return 'pipeline'
+    }
+    return 'deal'
   }
-  return 'Update'
+
+  const type = String(item?.type || '').toLowerCase()
+  if (item?.source === 'notification' && type.includes('shared')) return 'shared'
+
+  const iconKind = feedItemIconKind(item)
+  if (iconKind === 'notification') return 'notification'
+  if (iconKind === 'activity') return 'activity'
+  return iconKind
+}
+
+export function feedItemCategoryLabel(item) {
+  const kind = feedItemBadgeKind(item)
+  return FEED_BADGE_LABELS[kind] || FEED_BADGE_LABELS.activity
+}
+
+export function feedItemBadgeClassName(item) {
+  const kind = feedItemBadgeKind(item)
+  return FEED_BADGE_STYLES[kind] || FEED_BADGE_STYLES.activity
 }
 
 /** @returns {'lead' | 'deal' | 'task' | 'list' | 'path' | 'form' | 'quote' | 'team' | 'notification' | 'activity'} */

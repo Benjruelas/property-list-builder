@@ -358,7 +358,7 @@ export function DealFinancesPanel({
   const showProfit = paymentsTotal !== 0 || costsTotal !== 0
 
   return (
-    <div className="rounded-lg border border-white/10 overflow-hidden divide-y divide-white/10 bg-white/[0.02]">
+    <div className="deal-finances-panel rounded-lg border border-white/10 overflow-hidden divide-y divide-white/10 bg-white/[0.02]">
       <DealFinancesGroup
         title="Payments"
         items={payments}

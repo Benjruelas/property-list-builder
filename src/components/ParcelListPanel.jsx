@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils'
 import { ListParcelExpanded } from '@/components/parcel-list-expanded/ListParcelExpanded'
 import { resolveParcelId } from '@/utils/parcelPropertyMap'
 
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+
 export function ParcelListPanel({ 
   isOpen, 
   onClose, 
@@ -22,6 +24,7 @@ export function ParcelListPanel({
   isParcelALead: isParcelALeadProp,
   onExportList,
   skipTracingInProgress = new Set(),
+  panelDockSlot,
   /** Matches map parcel outlines — expanded row border + expanded gradients */
   parcelBoundaryColor = '#2563eb',
 }) {
@@ -107,16 +110,14 @@ export function ParcelListPanel({
   }
 
   return (
-    <Dialog open={isOpen && !!selectedListId} onOpenChange={(open) => {
-      if (!open) {
-        if (onBack) {
-          onBack()
-        } else if (onClose) {
-          onClose()
-        }
-      }
-    }}>
-      <DialogContent className="map-panel list-panel parcel-list-panel fullscreen-panel max-w-2xl max-h-[80vh] p-0" showCloseButton={false} hideOverlay>
+    <Dialog open={isOpen && !!selectedListId} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <DialogContent
+        className="map-panel list-panel lists-panel parcel-list-panel fullscreen-panel flex flex-col min-h-0 p-0"
+        panelDockSlot={panelDockSlot}
+        showCloseButton={false}
+        hideOverlay
+        suppressBackdrop
+      >
         <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">
             List of parcels in {listName || 'this list'}. Click on a parcel to view details.
@@ -136,7 +137,7 @@ export function ParcelListPanel({
           </PanelHeader>
         </DialogHeader>
 
-        <div className="px-6 py-4 overflow-y-auto scrollbar-hide flex-1" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide px-6 py-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           {sortedParcels.length === 0 ? (
             <p className="text-center text-gray-500 py-8 text-sm">No parcels in this list yet.</p>
           ) : (

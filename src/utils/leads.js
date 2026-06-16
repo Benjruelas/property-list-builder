@@ -180,14 +180,77 @@ function parcelIdCandidateSet(parcelOrId) {
   return s ? new Set([s]) : new Set()
 }
 
+const LEAD_COORD_EPS = 1e-4
+
+function collectLeadParcelIdCandidates(lead) {
+  const ids = new Set()
+  collectParcelIdCandidates(lead).forEach((id) => ids.add(id))
+  collectParcelIdCandidates({
+    id: lead?.parcelId,
+    parcelId: lead?.parcelId,
+    properties: lead?.properties,
+  }).forEach((id) => ids.add(id))
+  if (lead?.parcelId != null && lead.parcelId !== '') {
+    ids.add(String(lead.parcelId).trim())
+  }
+  return ids
+}
+
+function extractParcelCoords(parcelOrId) {
+  if (!parcelOrId || typeof parcelOrId !== 'object') return { lat: null, lng: null }
+  const lat = Number(
+    parcelOrId.lat ??
+    parcelOrId.latlng?.lat ??
+    parcelOrId.properties?.LATITUDE ??
+    parcelOrId.properties?.latitude
+  )
+  const lng = Number(
+    parcelOrId.lng ??
+    parcelOrId.latlng?.lng ??
+    parcelOrId.properties?.LONGITUDE ??
+    parcelOrId.properties?.longitude
+  )
+  return {
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+  }
+}
+
+function coordsNear(aLat, aLng, bLat, bLng, eps = LEAD_COORD_EPS) {
+  return Math.abs(aLat - bLat) <= eps && Math.abs(aLng - bLng) <= eps
+}
+
 export function findLeadByParcelId(leads, parcelOrId) {
-  const ids = parcelIdCandidateSet(parcelOrId)
-  if (!ids.size) return null
-  return (leads || []).find((l) => {
-    const pid = l?.parcelId
-    if (pid == null || pid === '') return false
-    return ids.has(String(pid).trim())
-  }) || null
+  if (!leads?.length || parcelOrId == null || parcelOrId === '') return null
+
+  if (typeof parcelOrId === 'object' && parcelOrId.leadId) {
+    const byLeadId = leads.find((l) => l.id === parcelOrId.leadId)
+    if (byLeadId) return byLeadId
+  }
+
+  const parcelIds = parcelIdCandidateSet(parcelOrId)
+  const { lat: parcelLat, lng: parcelLng } = extractParcelCoords(
+    typeof parcelOrId === 'object' ? parcelOrId : null
+  )
+
+  return (
+    leads.find((lead) => {
+      const leadIds = collectLeadParcelIdCandidates(lead)
+      if (parcelIds.size) {
+        for (const id of parcelIds) {
+          if (leadIds.has(id)) return true
+        }
+      }
+      if (parcelLat != null && parcelLng != null) {
+        const leadLat = Number(lead.lat)
+        const leadLng = Number(lead.lng)
+        if (Number.isFinite(leadLat) && Number.isFinite(leadLng)) {
+          if (coordsNear(parcelLat, parcelLng, leadLat, leadLng)) return true
+        }
+      }
+      return false
+    }) || null
+  )
 }
 
 export function isParcelALead(leads, parcelOrId) {
@@ -251,6 +314,25 @@ export function formatLeadAddress(leadOrAddress) {
   }
 
   return str
+}
+
+/** Map lead record to parcel-shaped data for map navigation (no synthetic owner from contact name). */
+export function leadToParcelData(lead) {
+  if (!lead) return null
+  return {
+    id: lead.parcelId,
+    parcelId: lead.parcelId,
+    leadId: lead.id,
+    address: lead.address || getFullAddress(lead),
+    properties: lead.properties || {
+      SITUS_ADDR: lead.address || '',
+      LATITUDE: lead.lat ?? '',
+      LONGITUDE: lead.lng ?? '',
+      ...(lead.parcelId ? { PROP_ID: lead.parcelId } : {}),
+    },
+    lat: lead.lat,
+    lng: lead.lng,
+  }
 }
 
 export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {

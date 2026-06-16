@@ -3,7 +3,7 @@
  * Team users store tasks in KV user_tasks; solo users keep local fallback on client.
  */
 
-import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { getAllTeams, fullTeamsIndex } from './lib/teams.js'
 import { userHasTeamMembership } from './lib/access.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
@@ -88,9 +88,6 @@ function taskVisibleToUser(task, user, membership) {
 function normalizeAssignedUids(body, existing, membership) {
   const raw = body.assignedUids !== undefined ? body.assignedUids : (existing?.assignedUids || [])
   const arr = Array.isArray(raw) ? [...new Set(raw.filter(Boolean))] : []
-  if (arr.length === 0 && membership) {
-    throw new Error('Assign at least one teammate when creating a team task')
-  }
   return arr
 }
 
@@ -102,10 +99,7 @@ export default async function handler(req, res) {
 
   const authHeader = req.headers.authorization
   const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const host = req.headers.host || req.headers['x-forwarded-host'] || ''
-  const origin = req.headers.origin || ''
-  const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
-  const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
+  const allowDevBypass = isDevBypassAllowed(req)
   let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
   if (!user) user = await verifyFirebaseToken(idToken)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
@@ -153,6 +147,7 @@ export default async function handler(req, res) {
         dealId: body.dealId || null,
         pipelineId: body.pipelineId || null,
         parcelId: body.parcelId || null,
+        notes: body.notes ? String(body.notes).trim() || null : null,
         createdAt: now,
         updatedAt: now,
       }
@@ -197,6 +192,7 @@ export default async function handler(req, res) {
       if (body.title !== undefined) task.title = String(body.title || '').trim() || task.title
       if (body.scheduledAt !== undefined) task.scheduledAt = body.scheduledAt
       if (body.scheduledEndAt !== undefined) task.scheduledEndAt = body.scheduledEndAt
+      if (body.notes !== undefined) task.notes = String(body.notes || '').trim() || null
       if (body.assignedUids !== undefined) {
         const prevAssigned = new Set(task.assignedUids || [])
         try {

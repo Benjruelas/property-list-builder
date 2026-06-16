@@ -14,7 +14,7 @@ export function TagFilterBar({ tags = [], selectedIds = [], onChange, className 
   const allSelected = selectedIds.length === 0
 
   return (
-    <div className={cn('flex flex-wrap gap-1.5', className)}>
+    <div className={cn('tag-filter-bar flex flex-wrap gap-1.5', className)}>
       <button
         type="button"
         className={cn(

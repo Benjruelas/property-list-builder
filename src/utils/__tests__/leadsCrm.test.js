@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getLeadStatus, lastContactedAt, formatLastContacted } from '../leads'
+import { getLeadStatus, lastContactedAt, formatLastContacted, findLeadByParcelId, isParcelALead } from '../leads'
 import { buildActivityEntry } from '../leadActivity'
 
 describe('lead CRM helpers', () => {
@@ -35,5 +35,45 @@ describe('lead CRM helpers', () => {
   it('formatLastContacted handles recent dates', () => {
     const today = new Date().toISOString()
     expect(formatLastContacted(today)).toBe('Contacted today')
+  })
+})
+
+describe('findLeadByParcelId', () => {
+  const leads = [
+    {
+      id: 'lead_1',
+      parcelId: 'LR-100',
+      lat: 30.27,
+      lng: -97.74,
+      properties: { PROP_ID: 'LR-100', LL_UUID: 'uuid-abc' },
+    },
+    {
+      id: 'lead_2',
+      parcelId: null,
+      lat: 32.78,
+      lng: -96.8,
+      address: '456 Oak St',
+    },
+  ]
+
+  it('matches by parcel id string', () => {
+    expect(findLeadByParcelId(leads, 'LR-100')?.id).toBe('lead_1')
+  })
+
+  it('matches when popup parcel id differs but shares property ids', () => {
+    expect(findLeadByParcelId(leads, { id: 'uuid-abc', properties: { LL_UUID: 'uuid-abc' } })?.id).toBe('lead_1')
+  })
+
+  it('matches scratch leads by coordinates when parcel id is missing', () => {
+    expect(findLeadByParcelId(leads, { lat: 32.78, lng: -96.8 })?.id).toBe('lead_2')
+  })
+
+  it('matches by leadId when navigating from lead detail', () => {
+    expect(findLeadByParcelId(leads, { leadId: 'lead_2', id: null })?.id).toBe('lead_2')
+  })
+
+  it('isParcelALead reflects findLeadByParcelId', () => {
+    expect(isParcelALead(leads, { lat: 32.78, lng: -96.8 })).toBe(true)
+    expect(isParcelALead(leads, { lat: 0, lng: 0 })).toBe(false)
   })
 })

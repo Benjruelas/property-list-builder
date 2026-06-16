@@ -8,6 +8,8 @@ import { SchedulePicker } from './SchedulePicker'
 import { TeamMemberAssignSection } from './TeamMemberAssignSection'
 import { DealPickerField } from './pickers/DealPickerField'
 import { LeadPickerField } from './pickers/LeadPickerField'
+import { displayLeadName } from '@/utils/leads'
+import { filterDealsForLead } from './pickers/entityPickerShared'
 import { showToast } from './ui/toast'
 
 /**
@@ -33,6 +35,7 @@ export function NewTaskDialog({
   showDealPicker = true,
   showLeadPicker = true,
   lockLead = false,
+  lockDeal = false,
   disableDealClear = false,
   showTeamAssign = false,
   teamMembers = [],
@@ -63,20 +66,30 @@ export function NewTaskDialog({
       if (byId) return byId
     }
     if (deal.parcelId) {
-      return leads.find((l) => String(l.parcelId) === String(deal.parcelId)) || null
+      const byParcel = leads.find((l) => String(l.parcelId) === String(deal.parcelId))
+      if (byParcel) return byParcel
+    }
+    const dealLeadName = (deal.leadName || '').trim().toLowerCase()
+    if (dealLeadName) {
+      const byName = leads.find((l) => displayLeadName(l).trim().toLowerCase() === dealLeadName)
+      if (byName) return byName
     }
     return null
   }
 
+  const applyLeadFromDeal = (deal) => {
+    const lead = resolveLeadFromDeal(deal)
+    if (lead) setLeadId(lead.id)
+  }
+
   const handleDealChange = (deal) => {
+    if (lockDeal) return
     if (!deal) {
       setDealId(null)
-      if (!lockLead) setLeadId(null)
       return
     }
     setDealId(deal.id)
-    const lead = resolveLeadFromDeal(deal)
-    if (lead) setLeadId(lead.id)
+    applyLeadFromDeal(deal)
   }
 
   // Reset form only when the dialog opens — not on every parent re-render (inline [] deps caused flicker).
@@ -101,13 +114,32 @@ export function NewTaskDialog({
     setTeamAssignUids(Array.isArray(initialTeamAssignUids) ? [...initialTeamAssignUids] : [])
   }, [open])
 
+  useEffect(() => {
+    if (!open || !dealId) return
+    const deal = deals.find((d) => d.id === dealId)
+    if (!deal) return
+    const lead = resolveLeadFromDeal(deal)
+    if (lead && lead.id !== leadId) setLeadId(lead.id)
+  }, [open, dealId, deals, leads, leadId])
+
   const minScheduleDate = useMemo(() => (open ? Date.now() : 0), [open])
 
   const usesTeamStorage = teamAssignUids.length > 0
   const isTeamContext = teamContextActive || usesTeamStorage
-  const showDealField = !isEditMode && showDealPicker
+  const selectedLead = useMemo(
+    () => (leadId ? leads.find((l) => l.id === leadId) : null),
+    [leads, leadId]
+  )
+  const dealsForSelectedLead = useMemo(
+    () => (leadId ? filterDealsForLead(deals, selectedLead) : deals),
+    [deals, leadId, selectedLead]
+  )
+  const leadHasDeals = dealsForSelectedLead.length > 0
   const selectedDeal = dealId ? deals.find((d) => d.id === dealId) : null
   const selectedDealPipeline = selectedDeal?.__pipelineTitle || null
+  const showLeadField = showLeadPicker && !dealId
+  const showDealField = showDealPicker && (!leadId || leadHasDeals || !!dealId)
+  const pickerDeals = dealId ? deals : (leadId ? dealsForSelectedLead : deals)
 
   const close = () => onOpenChange?.(false)
 
@@ -123,12 +155,14 @@ export function NewTaskDialog({
       showToast('End time must be after start time', 'error')
       return
     }
+    const deal = dealId ? deals.find((d) => d.id === dealId) : null
+    const resolvedLeadId = leadId || resolveLeadFromDeal(deal)?.id || null
     onSubmit?.({
       title: trimmed,
       scheduledAt,
       scheduledEndAt: endAt,
       assignedUids: teamAssignUids,
-      leadId: leadId || null,
+      leadId: resolvedLeadId,
       dealId: dealId || null,
     })
   }
@@ -168,8 +202,8 @@ export function NewTaskDialog({
           </DialogDescription>
         </DialogHeader>
         <div
-          className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form"
-          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+          className="new-task-form-body px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-3 create-list-form"
+          style={{ paddingBottom: '0.75rem' }}
         >
           {isEditMode && showContextCard && contextPrimary && (
             <div className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2.5">
@@ -201,34 +235,34 @@ export function NewTaskDialog({
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
             />
           </div>
-          {!isEditMode && showDealField && (
-            <DealPickerField
-              key={`deal-${pickerSession}`}
-              deals={deals}
-              value={dealId}
-              onChange={handleDealChange}
-              disableClear={disableDealClear}
+          {showLeadField && (
+            <LeadPickerField
+              key={`lead-${pickerSession}`}
+              leads={leads}
+              value={leadId}
+              onChange={(l) => {
+                if (dealId || lockLead) return
+                setLeadId(l?.id || null)
+              }}
+              readOnly={lockLead || !!dealId}
             />
           )}
-          {!isEditMode && selectedDealPipeline && (
+          {showDealField && (
+            <DealPickerField
+              key={`deal-${pickerSession}`}
+              deals={pickerDeals}
+              value={dealId}
+              onChange={handleDealChange}
+              disableClear={disableDealClear || lockDeal}
+            />
+          )}
+          {selectedDealPipeline && (
             <div>
               <label className="text-xs font-medium block mb-1 opacity-90">Pipe</label>
               <p className="text-sm text-white/75 py-2 px-3 rounded-lg border border-white/15 bg-white/[0.04] truncate">
                 {selectedDealPipeline}
               </p>
             </div>
-          )}
-          {!isEditMode && showLeadPicker && (
-            <LeadPickerField
-              key={`lead-${pickerSession}`}
-              leads={leads}
-              value={leadId}
-              onChange={(l) => {
-                if (dealId) return
-                setLeadId(l?.id || null)
-              }}
-              readOnly={lockLead || !!dealId}
-            />
           )}
           <div className="rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
             <button
@@ -273,14 +307,17 @@ export function NewTaskDialog({
               }}
             />
           )}
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={handleSave}>
-              {isEditMode ? 'Save' : 'Create'}
-            </Button>
-            <Button size="sm" variant="outline" className="create-list-btn flex-1" onClick={close}>
-              Cancel
-            </Button>
-          </div>
+        </div>
+        <div
+          className="new-task-form-footer shrink-0 flex gap-2 px-6 py-3 border-t border-white/20"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <Button size="sm" variant="outline" className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]" onClick={handleSave}>
+            {isEditMode ? 'Save' : 'Create'}
+          </Button>
+          <Button size="sm" variant="outline" className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]" onClick={close}>
+            Cancel
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

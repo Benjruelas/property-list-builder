@@ -26,6 +26,7 @@ function normalizeTask(t) {
     pipelineId: t.pipelineId != null && t.pipelineId !== '' ? t.pipelineId : null,
     parcelId: t.parcelId != null && t.parcelId !== '' && t.parcelId !== LEGACY_UNASSIGNED ? t.parcelId : null,
     dealId: t.dealId != null && t.dealId !== '' ? t.dealId : null,
+    leadId: t.leadId != null && t.leadId !== '' ? t.leadId : null,
   }
 }
 
@@ -158,6 +159,12 @@ export function updateTaskById(taskId, updates = {}) {
   if ('parcelId' in updates) {
     t.parcelId = updates.parcelId != null && String(updates.parcelId).trim() ? String(updates.parcelId).trim() : null
   }
+  if ('dealId' in updates) {
+    t.dealId = updates.dealId != null && String(updates.dealId).trim() ? String(updates.dealId).trim() : null
+  }
+  if ('leadId' in updates) {
+    t.leadId = updates.leadId != null && String(updates.leadId).trim() ? String(updates.leadId).trim() : null
+  }
   store.tasks[idx] = normalizeTask(t)
   saveStore(store)
 }
@@ -284,7 +291,8 @@ export const migrateLeadTasksToPipelines = async (pipelines, addPipelineTaskFn) 
         completedAt: t.completedAt ?? null,
         scheduledAt: t.scheduledAt ?? null,
         scheduledEndAt: t.scheduledEndAt ?? null,
-        parcelId: t.parcelId ?? null
+        parcelId: t.parcelId ?? null,
+        dealId: t.dealId ?? null,
       })
       removeLocalTaskById(t.id)
       stats.migrated += 1
@@ -301,7 +309,8 @@ export const migrateLeadTasksToPipelines = async (pipelines, addPipelineTaskFn) 
             completedAt: t.completedAt ?? null,
             scheduledAt: t.scheduledAt ?? null,
             scheduledEndAt: t.scheduledEndAt ?? null,
-            parcelId: null
+            parcelId: null,
+            dealId: t.dealId ?? null,
           })
           removeLocalTaskById(t.id)
           stats.migrated += 1
@@ -356,11 +365,13 @@ export const addTask = ({
   pipelineId = null,
   parcelId = null,
   dealId = null,
+  leadId = null,
   title = '',
   scheduledAt = null,
   scheduledEndAt = null,
   completed = false,
   completedAt = null,
+  notes = null,
 } = {}) => {
   const store = loadStore()
   const now = Date.now()
@@ -375,7 +386,9 @@ export const addTask = ({
     scheduledEndAt: scheduledEndAt && Number.isFinite(scheduledEndAt) ? scheduledEndAt : null,
     pipelineId: pipelineId && String(pipelineId).trim() ? pipelineId : null,
     parcelId: parcelId && String(parcelId).trim() ? parcelId : null,
-    dealId: dealId && String(dealId).trim() ? dealId : null
+    dealId: dealId && String(dealId).trim() ? dealId : null,
+    leadId: leadId && String(leadId).trim() ? leadId : null,
+    notes: notes && String(notes).trim() ? String(notes).trim() : null,
   })
   store.tasks = [...store.tasks, task]
   saveStore(store)

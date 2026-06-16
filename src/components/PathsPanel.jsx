@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Eye, Trash2, MoreVertical, Pencil, Route, Share2, Tag, Search } from 'lucide-react'
+import { Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Tag, Search } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
@@ -118,6 +118,11 @@ export function PathsPanel({
 
   const ownerId = currentUser?.uid
   const isPathOwnedByUser = (path) => path?.ownerId === ownerId
+
+  const pathHasMenuOptions = useCallback((path) => {
+    if (path?.ownerId !== ownerId) return false
+    return !!(onRenamePath || getToken || onSharePath || onDeletePath)
+  }, [ownerId, onRenamePath, getToken, onSharePath, onDeletePath])
 
   const runValidation = useCallback(async (email) => {
     const trimmed = (email || '').trim().toLowerCase()
@@ -469,19 +474,25 @@ export function PathsPanel({
                         e.stopPropagation()
                         if (onTogglePathVisibility) onTogglePathVisibility(path.id)
                       }}
-                      title={isVisible ? 'Hide on map' : 'Show on map'}
+                      title={isVisible ? 'Remove highlight' : 'Highlight on map'}
                       aria-pressed={isVisible}
                     >
-                      <Eye className="h-4 w-4" />
+                      {isVisible ? (
+                        <Eye className="h-4 w-4" />
+                      ) : (
+                        <EyeOff className="h-4 w-4" />
+                      )}
                     </button>
-                    <button
-                      type="button"
-                      className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md opacity-50 hover:opacity-90 hover:bg-white/10"
-                      onClick={(e) => openMenu(path.id, e)}
-                      aria-label={`Options for ${path.name}`}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
+                    {pathHasMenuOptions(path) && (
+                      <button
+                        type="button"
+                        className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md opacity-50 hover:opacity-90 hover:bg-white/10"
+                        onClick={(e) => openMenu(path.id, e)}
+                        aria-label={`Options for ${path.name}`}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 )
               })
@@ -541,7 +552,7 @@ export function PathsPanel({
                 Share
               </OptionsMenuItem>
             )}
-            {isPathOwnedByUser(openMenuPath) && (
+            {isPathOwnedByUser(openMenuPath) && onDeletePath && (
               <OptionsMenuItem destructive onClick={() => handleDeleteClick(openMenuPath)}>
                 <Trash2 className="h-4 w-4" />
                 Delete

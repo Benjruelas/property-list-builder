@@ -99,6 +99,19 @@ But note that API calls will fail since serverless functions won't have environm
 - For side-by-side sessions, use two browser profiles (or normal + incognito) and set each to a different persona so both users are signed in at once.
 - You can also set `localStorage.setItem('property_list_builder_dev_persona', '2')` and reload (use `'1'` for User A).
 
+### Phone testing on the same Wi‑Fi (dev@localhost not on your team)
+
+When you open dev on your phone via your Mac’s LAN IP (e.g. `http://192.168.1.42:3000`), the UI still shows `dev@localhost`, but the API must accept the synthetic dev token for that host. Recent builds treat private LAN IPs the same as `localhost` for dev bypass.
+
+If team membership still looks wrong on the phone:
+
+1. Confirm the phone URL uses the same dev server as your Mac (not a stale preview deploy).
+2. Restart `vercel dev` after pulling changes.
+3. Hard-refresh the phone browser (or clear site data for that host).
+4. Optional fallback: add `ENABLE_DEV_BYPASS=true` to `.env.local` and restart the dev server.
+
+Both Mac (`localhost`) and phone (`192.168.x.x`) must hit the **same** Redis/KV-backed team data — if one device uses `npm run dev` without the API proxy, team calls will fail silently.
+
 ### "Bearer token" / "Unauthorized" when creating lists
 - **Use `vercel dev`** not `npm run dev` – the API serverless functions only run under vercel dev
 - If using `vercel dev` and still getting 401, add to `.env.local`:

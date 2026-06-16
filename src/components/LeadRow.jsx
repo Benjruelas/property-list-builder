@@ -97,7 +97,7 @@ export function LeadRow({ lead, dealCount = 0, onClick, className, tagRegistry }
       <div className="hidden md:contents">
         <div className="crm-col-lead min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <div className="text-sm font-medium truncate">{name}</div>
+            <div className="panel-item-title truncate">{name}</div>
             <LeadSharingIcon resource={lead} />
           </div>
         </div>
@@ -110,7 +110,7 @@ export function LeadRow({ lead, dealCount = 0, onClick, className, tagRegistry }
           <LeadStatusBadge statusMeta={statusMeta} />
         </div>
 
-        <div className="crm-col-property min-w-0 truncate text-xs opacity-60" title={lead.address || undefined}>
+        <div className="crm-col-property min-w-0 truncate panel-item-body opacity-60" title={lead.address || undefined}>
           {address}
         </div>
 

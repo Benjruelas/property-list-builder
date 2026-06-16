@@ -15,6 +15,7 @@ import {
   getLeadStatus,
   lastContactedAt,
   LEAD_STATUSES,
+  leadToParcelData,
 } from '@/utils/leads'
 import { filterByTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
@@ -158,18 +159,6 @@ export function LeadsPanel({
     return list
   }, [leads, search, selectedTagIds, statusFilter, sortMode, dealCountByLead])
 
-  const leadToParcelData = (lead) => ({
-    id: lead.parcelId,
-    address: lead.address,
-    properties: lead.properties || {
-      OWNER_NAME: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
-      SITUS_ADDR: lead.address,
-      LATITUDE: lead.lat,
-      LONGITUDE: lead.lng,
-    },
-    lat: lead.lat,
-    lng: lead.lng,
-  })
 
   const handleLeadUpdate = useCallback(async (updated) => {
     onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
@@ -398,8 +387,11 @@ export function LeadsPanel({
       {selectedLead ? (
         <Suspense fallback={null}>
           <LeadDetails
-            isOpen={isOpen}
+            isOpen={!!selectedLead}
             instantDismiss={instantDismiss}
+            panelDockSlot={!isOpen ? panelDockSlot : undefined}
+            nestedOverlay={isOpen}
+            topLayer
             onClose={() => onCloseLeadDetail?.()}
             lead={selectedLead}
             pipelines={pipelines}

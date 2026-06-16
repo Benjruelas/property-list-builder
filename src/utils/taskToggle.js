@@ -1,6 +1,7 @@
 import { toggleLeadTask } from './leadTasks'
 import { togglePipelineTask } from './pipelineTasks'
 import { toggleTeamTask } from './teamTasks'
+import { updateTeamTask as updateServerTeamTask } from './tasks'
 
 /** In-flight checkbox toggles — keeps server refreshes from briefly reverting UI. */
 const pendingToggles = new Map()
@@ -64,6 +65,10 @@ export function setTasksWithPendingMerge(setTaskList, freshTasks) {
 
 /** Persist toggle to API or localStorage (call after optimistic UI update). */
 export async function persistTaskToggle({ task, getToken, onPipelinesChange, scheduleSync }) {
+  if (task.__source === 'server' && getToken) {
+    await updateServerTeamTask(getToken, task.id, { completed: !task.completed })
+    return
+  }
   if (task.__source === 'team' && task.pipelineId && task.leadId) {
     await toggleTeamTask(getToken, task.pipelineId, task.leadId, task.id)
     if (onPipelinesChange) await onPipelinesChange()
@@ -100,7 +105,8 @@ export function createOptimisticTaskToggleHandler({
         await persistTaskToggle({ task: snapshot, getToken, onPipelinesChange, scheduleSync })
         if (
           snapshot.__source !== 'team' &&
-          snapshot.__source !== 'pipeline'
+          snapshot.__source !== 'pipeline' &&
+          snapshot.__source !== 'server'
         ) {
           onAfterLocalToggle?.()
         }

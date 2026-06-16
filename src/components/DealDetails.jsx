@@ -7,7 +7,7 @@ import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
-import { formatLeadAddress } from '@/utils/leads'
+import { formatLeadAddress, displayLeadName } from '@/utils/leads'
 import { formatTimeInState } from '@/utils/dealPipeline'
 import { uploadDealFile, downloadDealFile, deleteDealFile, fetchDealFileBlob, sumDealFileBytes, DEAL_STORAGE_LIMIT_BYTES } from '@/utils/dealFiles'
 import { StorageUsageBar } from './ui/StorageUsageBar'
@@ -53,6 +53,7 @@ export function DealDetails({
   readOnly = false,
   nestedOverlay = true,
   topLayer = true,
+  panelDockSlot,
   obscuredByChild = false,
   leadLinkActive = false,
   pipelines = [],
@@ -138,8 +139,12 @@ export function DealDetails({
   const isClosed = !!closedRecord
   const showDealActions = !readOnly && !isClosed && (onRequestMoveDeal || onRequestCloseDeal || onRequestRemoveDeal)
   const address = d.leadAddress || (lead ? formatLeadAddress(lead) : '')
-  const leadName = d.leadName || (lead ? `${lead.firstName || ''} ${lead.lastName || ''}`.trim() : '')
+  const leadName = d.leadName || (lead ? displayLeadName(lead) : '')
   const pipelineTitle = pipelineMeta?.title || pipeline?.title || ''
+
+  const effectiveTopLayer = topLayer || nestedOverlay
+  const effectiveHideOverlay = true
+  const effectiveSuppressBackdrop = true
 
   const closeMenu = () => {
     setMenuOpen(false)
@@ -238,12 +243,13 @@ export function DealDetails({
           'map-panel list-panel deal-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0',
           obscuredByChild && 'invisible opacity-0 pointer-events-none',
         )}
+        panelDockSlot={panelDockSlot}
         showCloseButton={false}
-        detailFocusOverlay={!obscuredByChild}
-        hideOverlay={obscuredByChild}
-        suppressBackdrop={obscuredByChild}
-        nestedOverlay={nestedOverlay}
-        topLayer={topLayer}
+        detailFocusOverlay={false}
+        hideOverlay={effectiveHideOverlay}
+        suppressBackdrop={effectiveSuppressBackdrop}
+        nestedOverlay={false}
+        topLayer={effectiveTopLayer}
       >
         <DialogHeader
           className="shrink-0 border-b border-white/10 px-5 pt-5 pb-4 text-left"
@@ -255,13 +261,17 @@ export function DealDetails({
               <PanelBackButton onClick={onClose} />
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-xl font-semibold truncate leading-tight">
-                  {d.title || d.leadAddress || 'Deal'}
+                  {d.title || 'Deal'}
                 </DialogTitle>
-                {address && (
-                  <p className="text-xs text-white/50 truncate mt-0.5" title={address}>{address}</p>
-                )}
                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  <span className="leads-stage-badge text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wide font-medium">
+                  <span
+                    className={cn(
+                      'inline-flex text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium',
+                      isClosed
+                        ? 'bg-white/10 text-white/70 border-white/20'
+                        : 'bg-blue-500/20 text-blue-200 border-blue-400/40',
+                    )}
+                  >
                     {isClosed ? 'Closed' : stageName}
                   </span>
                   {!isClosed && timeStr && (
@@ -302,23 +312,29 @@ export function DealDetails({
                   type="button"
                   onClick={() => onOpenLead?.(lead)}
                   className={cn(
-                    'lead-detail-deal-card',
-                    leadLinkActive && 'ring-1 ring-white/20'
+                    'deal-detail-lead-link lead-detail-deal-card',
+                    leadLinkActive && 'ring-1 ring-white/20',
                   )}
                   aria-current={leadLinkActive ? 'true' : undefined}
                 >
-                  <User className="h-4 w-4 shrink-0 opacity-50" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{leadName || 'Lead'}</div>
-                    <div className="text-[11px] text-white/45 mt-0.5">View lead profile</div>
+                  <User className="deal-detail-lead-icon shrink-0 opacity-70" aria-hidden />
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="deal-detail-lead-name truncate">{leadName || 'Lead'}</div>
+                    {address ? (
+                      <p className="deal-detail-lead-address truncate" title={address}>{address}</p>
+                    ) : null}
+                    <p className="deal-detail-lead-hint">View lead profile</p>
                   </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+                  <ChevronRight className="deal-detail-lead-chevron shrink-0 opacity-50" aria-hidden />
                 </button>
               ) : (
-                <div className="lead-detail-deal-card opacity-70 pointer-events-none">
-                  <User className="h-4 w-4 shrink-0 opacity-50" />
+                <div className="deal-detail-lead-link lead-detail-deal-card opacity-70 pointer-events-none">
+                  <User className="deal-detail-lead-icon shrink-0 opacity-70" aria-hidden />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{leadName}</div>
+                    <div className="deal-detail-lead-name truncate">{leadName}</div>
+                    {address ? (
+                      <p className="deal-detail-lead-address truncate" title={address}>{address}</p>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -415,16 +431,19 @@ export function DealDetails({
 
             <div className="space-y-3">
               {canSeeDealAmounts && (
-                <DealFinancesPanel
-                  payments={payments}
-                  costs={costs}
-                  onPaymentsChange={handlePaymentsChange}
-                  onCostsChange={handleCostsChange}
-                  onPaymentsCommit={handlePaymentsBlur}
-                  onCostsCommit={handleCostsBlur}
-                  readOnly={readOnly || isClosed}
-                  canSeeDealAmounts={canSeeDealAmounts}
-                />
+                <section className="lead-detail-section">
+                  <DealDetailSectionTitle>Finances</DealDetailSectionTitle>
+                  <DealFinancesPanel
+                    payments={payments}
+                    costs={costs}
+                    onPaymentsChange={handlePaymentsChange}
+                    onCostsChange={handleCostsChange}
+                    onPaymentsCommit={handlePaymentsBlur}
+                    onCostsCommit={handleCostsBlur}
+                    readOnly={readOnly || isClosed}
+                    canSeeDealAmounts={canSeeDealAmounts}
+                  />
+                </section>
               )}
 
               <DealTasksSection
@@ -479,42 +498,43 @@ export function DealDetails({
                     <li className="text-xs text-white/40 py-1">No files</li>
                   )}
                   {(d.files || []).map((f, fileIndex) => (
-                    <li
-                      key={f.id}
-                      className="flex items-center gap-2 py-2 px-2.5 rounded-lg border border-white/10 bg-white/[0.04]"
-                    >
-                      <button
-                        type="button"
-                        className="flex flex-1 min-w-0 items-center gap-2 text-left hover:opacity-90"
-                        onClick={() => setPreviewFileIndex(fileIndex)}
-                        title="Preview file"
-                      >
-                        <FileText className="h-4 w-4 shrink-0 opacity-50" />
-                        <span className="flex-1 text-sm truncate">{f.name}</span>
-                        <span className="text-[10px] text-white/40 shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          downloadDealFile(getToken, f.key, f.name)
-                        }}
-                        title="Download"
-                      >
-                        <Download className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
-                      </button>
-                      {!readOnly && !isClosed && (
+                    <li key={f.id}>
+                      <div className="lead-detail-deal-card">
                         <button
                           type="button"
+                          className="flex flex-1 min-w-0 items-center gap-2 text-left hover:opacity-90"
+                          onClick={() => setPreviewFileIndex(fileIndex)}
+                          title="Preview file"
+                        >
+                          <FileText className="h-4 w-4 shrink-0 opacity-50" />
+                          <span className="flex-1 text-sm truncate">{f.name}</span>
+                          <span className="text-[10px] text-white/40 shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="lead-detail-file-action-btn shrink-0"
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleDeleteFile(f)
+                            downloadDealFile(getToken, f.key, f.name)
                           }}
-                          title="Delete"
+                          title="Download"
                         >
-                          <Trash2 className="h-3.5 w-3.5 opacity-40 hover:opacity-80" />
+                          <Download className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
                         </button>
-                      )}
+                        {!readOnly && !isClosed && (
+                          <button
+                            type="button"
+                            className="lead-detail-file-action-btn shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteFile(f)
+                            }}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 opacity-40 hover:opacity-80" />
+                          </button>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>

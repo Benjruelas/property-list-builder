@@ -3,6 +3,18 @@ import { flattenPipelineTasks } from './pipelineTasks'
 import { flattenTeamTasks } from './teamTaskUtils'
 import { findDealsForLead } from './deals'
 import { loadDeals } from './dealPipeline'
+import { buildVisibleTaskListFresh } from './taskListSync'
+
+/** Where a task list is rendered — controls filtering. */
+export const TASK_LIST_SCOPE = {
+  ALL: 'all',
+  LEAD: 'lead',
+  DEAL: 'deal',
+}
+
+function taskHasTitle(task) {
+  return !!(task?.title ?? '').toString().trim()
+}
 
 /** Open tasks first — used where completed/incomplete are in separate sections. */
 export function sortTasks(a, b) {
@@ -30,15 +42,34 @@ export function sortTasksStable(a, b) {
   return compareTasksStable(a, b)
 }
 
-/** All deals for a lead (API pipelines or local storage). */
-export function findDealsForLeadId(leadId, pipelines = []) {
-  if (!leadId) return []
+/** All deals for a lead (API pipelines or local storage), including parcel-only deal links. */
+export function resolveLeadDeals(lead, pipelines = []) {
+  if (!lead?.id) return []
   if (Array.isArray(pipelines) && pipelines.length > 0) {
-    return findDealsForLead(pipelines, leadId)
+    const byLeadId = findDealsForLead(pipelines, lead.id)
+    if (byLeadId.length > 0) return byLeadId
+    if (lead.parcelId) {
+      return pipelines.flatMap((p) =>
+        (p.deals || [])
+          .filter((d) => String(d.parcelId) === String(lead.parcelId))
+          .map((d) => ({
+            ...d,
+            __pipelineId: p.id,
+            __pipelineTitle: p.title || 'Pipes',
+          }))
+      )
+    }
+    return []
   }
   return loadDeals()
-    .filter((d) => d.leadId === leadId)
+    .filter((d) => d.leadId === lead.id || (lead.parcelId && String(d.parcelId) === String(lead.parcelId)))
     .map((d) => ({ ...d, __pipelineId: d.pipelineId || null, __pipelineTitle: 'Pipes' }))
+}
+
+/** @deprecated Use resolveLeadDeals — kept for callers passing leadId only. */
+export function findDealsForLeadId(leadId, pipelines = []) {
+  if (!leadId) return []
+  return resolveLeadDeals({ id: leadId }, pipelines)
 }
 
 /**
@@ -49,20 +80,46 @@ export function taskMatchesDeal(task, deal) {
   return task.dealId === deal.id
 }
 
+/**
+ * Task belongs to a lead when explicitly linked via leadId, dealId (on one of the lead's deals),
+ * or parcelId (lead-level tasks with no deal).
+ */
 export function taskMatchesLead(task, lead, pipelines = []) {
-  const key = leadTaskKey(lead)
-  if (!key || !task) return false
+  if (!lead?.id || !task) return false
+
+  if (task.leadId === lead.id) return true
 
   if (task.dealId) {
-    const deals = findDealsForLeadId(lead.id, pipelines)
-    if (deals.some((d) => d.id === task.dealId)) return true
+    const deals = resolveLeadDeals(lead, pipelines)
+    return deals.some((d) => d.id === task.dealId)
   }
 
-  if (task.__source === 'team') {
-    return task.leadId === lead.id || task.parcelId === key || task.parcelId === lead.parcelId
-  }
+  if (task.leadId && task.leadId !== lead.id) return false
 
-  return task.parcelId === key || task.parcelId === lead.parcelId || task.parcelId === lead.id
+  const key = leadTaskKey(lead)
+  if (!key || task.parcelId == null) return false
+  return (
+    String(task.parcelId) === String(key) ||
+    (lead.parcelId && String(task.parcelId) === String(lead.parcelId))
+  )
+}
+
+/**
+ * Filter a merged task list for the panel context.
+ * - ALL: Tasks panel / schedule — every visible task
+ * - LEAD: Lead detail — tasks linked to this lead
+ * - DEAL: Deal detail — tasks linked to this deal
+ */
+export function filterTasksForScope(tasks, scope, { lead, deal, pipelines } = {}) {
+  const list = (tasks || []).filter(taskHasTitle)
+  if (!scope || scope === TASK_LIST_SCOPE.ALL) return list
+  if (scope === TASK_LIST_SCOPE.LEAD && lead) {
+    return list.filter((t) => taskMatchesLead(t, lead, pipelines))
+  }
+  if (scope === TASK_LIST_SCOPE.DEAL && deal) {
+    return list.filter((t) => taskMatchesDeal(t, deal))
+  }
+  return list
 }
 
 export function collectAllTasks(pipelines, { getPersonalTasks, getAllTasks, flattenTeamTasksFn = flattenTeamTasks }) {
@@ -75,23 +132,34 @@ export function collectAllTasks(pipelines, { getPersonalTasks, getAllTasks, flat
 
 export function collectTasksForDeal(deal, pipelines, getters) {
   if (!deal?.id) return []
-  return collectAllTasks(pipelines, getters)
-    .filter((t) => (t.title ?? '').toString().trim() && taskMatchesDeal(t, deal))
+  return filterTasksForScope(collectAllTasks(pipelines, getters), TASK_LIST_SCOPE.DEAL, { deal })
     .sort(compareTasksStable)
+}
+
+/** Fresh pipeline fetch + server tasks — use when opening deal/lead detail after Tasks panel edits. */
+export async function collectTasksForDealFresh(deal, pipelines, { getToken, teams } = {}) {
+  if (!deal?.id) return []
+  const merged = await buildVisibleTaskListFresh({ pipelines, getToken, teams })
+  return filterTasksForScope(merged, TASK_LIST_SCOPE.DEAL, { deal }).sort(compareTasksStable)
+}
+
+export async function collectTasksForLeadFresh(lead, pipelines, { getToken, teams } = {}) {
+  if (!lead?.id) return []
+  const merged = await buildVisibleTaskListFresh({ pipelines, getToken, teams })
+  return filterTasksForScope(merged, TASK_LIST_SCOPE.LEAD, { lead, pipelines }).sort(sortTasks)
 }
 
 export function collectTasksForLead(lead, pipelines, getters) {
   if (!lead?.id) return []
-  return collectAllTasks(pipelines, getters)
-    .filter((t) => (t.title ?? '').toString().trim() && taskMatchesLead(t, lead, pipelines))
+  return filterTasksForScope(collectAllTasks(pipelines, getters), TASK_LIST_SCOPE.LEAD, { lead, pipelines })
     .sort(sortTasks)
 }
 
 /**
  * Group a lead's tasks under their deal. Tasks without a dealId (or with unknown dealId) go to unassigned.
  */
-export function groupLeadTasksByDeal(tasks, leadId, pipelines = []) {
-  const deals = findDealsForLeadId(leadId, pipelines).sort((a, b) =>
+export function groupLeadTasksByDeal(tasks, leadId, pipelines = [], lead = null) {
+  const deals = resolveLeadDeals(lead || { id: leadId }, pipelines).sort((a, b) =>
     (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
   )
   const dealById = new Map(deals.map((d) => [d.id, d]))

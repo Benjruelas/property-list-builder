@@ -1,5 +1,5 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
-import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
 
 /**
@@ -91,10 +91,7 @@ async function verifyFirebaseToken(idToken) {
 function resolveUser(req) {
   const authHeader = req.headers.authorization
   const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const host = req.headers.host || req.headers['x-forwarded-host'] || ''
-  const origin = req.headers.origin || ''
-  const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
-  const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
+  const allowDevBypass = isDevBypassAllowed(req)
   return { idToken, allowDevBypass }
 }
 

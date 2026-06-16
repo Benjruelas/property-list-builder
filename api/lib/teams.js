@@ -8,7 +8,7 @@
  * - lookupFirebaseUidByEmail - email -> uid resolution via identitytoolkit
  */
 
-import { resolveDevBypassUser, isDevBypassToken, DEV_BYPASS_USER_A, DEV_BYPASS_USER_B } from './devBypassUsers.js'
+import { resolveDevBypassUser, isDevBypassToken, isDevBypassAllowed, DEV_BYPASS_USER_A, DEV_BYPASS_USER_B } from './devBypassUsers.js'
 import { kv, kvAvailable } from './kvBootstrap.js'
 
 export const TEAMS_KV_KEY = 'teams'
@@ -108,12 +108,7 @@ export function resolveAccess(resource, user, teamsIndex = {}) {
  * auth chain as the resource handlers (dev-bypass first, then Firebase lookup).
  */
 export function getDevBypassUserIfAllowed(req, idToken) {
-  const host = req.headers.host || req.headers['x-forwarded-host'] || ''
-  const origin = req.headers.origin || ''
-  const isLocalhost =
-    /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) ||
-    /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
-  const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
+  const allowDevBypass = isDevBypassAllowed(req)
   const user = allowDevBypass ? resolveDevBypassUser(idToken) : null
   return { user, allowDevBypass }
 }

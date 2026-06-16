@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from './ui/button'
+import { CompletedTasksToggleButton } from './CompletedTasksToggleButton'
+import { TaskListLoading } from './ui/PanelListLoadingShell'
+import { splitOpenAndCompletedTasks } from '@/utils/taskListDisplay'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import {
-  getAllTasks,
-  getPersonalTasks,
   deleteLeadTask,
   addTask,
   updateLeadTaskTitle,
@@ -18,13 +19,12 @@ import {
 import { addTeamTask, removeTeamTask, updateTeamTask } from '@/utils/teamTasks'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { getAllTeamMembers, getMembersForTeamSharedPipeline, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
-import { collectTasksForDeal } from '@/utils/dealTaskMatching'
+import { collectTasksForDealFresh } from '@/utils/dealTaskMatching'
+import { createServerAssignedTask } from '@/utils/taskCreateFlow'
 import { TaskRow } from './TasksPanel'
 import { NewTaskDialog } from './NewTaskDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
-
-const taskGetters = { getPersonalTasks, getAllTasks }
 
 /**
  * Deal-scoped tasks — same TaskRow and task dialog UX as LeadTasksSection.
@@ -44,6 +44,8 @@ export function DealTasksSection({
 }) {
   const { scheduleSync } = useUserDataSync()
   const [tasks, setTasks] = useState([])
+  const [tasksLoading, setTasksLoading] = useState(false)
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
 
@@ -71,13 +73,25 @@ export function DealTasksSection({
     return [taskLead, ...displayLeads]
   }, [taskLead, displayLeads])
 
-  const refreshTasks = useCallback(() => {
+  const refreshTasks = useCallback(async () => {
     if (!deal) {
       setTasks([])
       return
     }
-    setTasksWithPendingMerge(setTasks, collectTasksForDeal(deal, pipelines, taskGetters))
-  }, [deal, pipelines])
+    setTasksLoading(true)
+    try {
+      // Deal detail — only tasks linked to this deal (TASK_LIST_SCOPE.DEAL).
+      const list = await collectTasksForDealFresh(deal, pipelines, { getToken, teams })
+      setTasksWithPendingMerge(setTasks, list)
+    } finally {
+      setTasksLoading(false)
+    }
+  }, [deal, pipelines, getToken, teams])
+
+  const { open: openTasks, completed: completedTasks } = useMemo(
+    () => splitOpenAndCompletedTasks(tasks),
+    [tasks]
+  )
 
   useEffect(() => {
     refreshTasks()
@@ -86,6 +100,7 @@ export function DealTasksSection({
   useEffect(() => {
     setShowAddTask(false)
     setEditingTask(null)
+    setShowCompletedTasks(false)
   }, [deal?.id])
 
   const closeTaskDialog = () => {
@@ -112,9 +127,28 @@ export function DealTasksSection({
   const finalizeTaskCreate = useCallback(
     async ({ title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
       const pipelineId = pipeline?.id
-      if (assignedUids.length > 0 && !deal?.leadId) {
-        showToast('This deal needs a linked lead to assign teammates', 'error')
-        return
+      if (assignedUids.length > 0 && getToken) {
+        try {
+          await createServerAssignedTask(getToken, {
+            title,
+            scheduledAt,
+            scheduledEndAt,
+            assignedUids,
+            leadId: deal?.leadId || taskLead?.id || null,
+            dealId: deal?.id || null,
+            deal,
+            leads: displayLeads,
+            pipelines,
+            pipelineId,
+          })
+          showToast('Task added', 'success')
+          setShowAddTask(false)
+          refreshTasks()
+          return
+        } catch (err) {
+          showToast(err.message || 'Could not add task', 'error')
+          return
+        }
       }
       if (pipelineId) {
         if (shouldStoreAsTeamTask(pipeline, { assignedUids, leadId: deal?.leadId })) {
@@ -148,10 +182,6 @@ export function DealTasksSection({
           }
         }
       } else {
-        if (assignedUids.length > 0) {
-          showToast('Pick a pipe for this task to assign teammates', 'error')
-          return
-        }
         addTask({
           pipelineId: null,
           parcelId: deal?.parcelId || deal?.leadId || null,
@@ -166,7 +196,7 @@ export function DealTasksSection({
       setShowAddTask(false)
       refreshTasks()
     },
-    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipeline, deal]
+    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipeline, deal, taskLead, displayLeads, pipelines]
   )
 
   const handleDialogSubmit = ({ title, scheduledAt, scheduledEndAt, assignedUids }) => {
@@ -282,44 +312,83 @@ export function DealTasksSection({
       <section className="lead-detail-section">
         <div className="flex items-center justify-between mb-2.5">
           <h3 className="lead-detail-section-title">Tasks</h3>
-          {canMutate && (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="h-7 w-7"
-              onClick={openAddTask}
-              title="New task"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {completedTasks.length > 0 && (
+              <CompletedTasksToggleButton
+                showCompleted={showCompletedTasks}
+                onToggle={() => setShowCompletedTasks((s) => !s)}
+              />
+            )}
+            {canMutate && (
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-7 w-7"
+                onClick={openAddTask}
+                title="New task"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
-        {tasks.length === 0 ? (
-          <p className="text-xs text-white/40 py-2">No tasks yet.</p>
+        {tasksLoading && tasks.length === 0 ? (
+          <TaskListLoading />
+        ) : openTasks.length === 0 && !(showCompletedTasks && completedTasks.length > 0) ? (
+          <p className="text-xs text-white/40 py-2">No open tasks yet.</p>
         ) : (
-          <ul className="space-y-2">
-            {tasks.map((task) => (
-              <li key={`${task.id}-${task.__source || 'p'}`}>
-                <TaskRow
-                  task={task}
-                  displayLeads={displayLeads}
-                  teams={teams}
-                  hideLeadLine
-                  onToggle={canMutate ? handleToggle : () => {}}
-                  onActivate={null}
-                  onEdit={canMutate ? () => openEditTask(task) : null}
-                  onDelete={canMutate ? () => handleDeleteTask(task) : null}
-                  onViewOnSchedule={
-                    (task.scheduledAt || task.dueAt) && onOpenScheduleAtDate
-                      ? () => handleViewOnSchedule(task)
-                      : null
-                  }
-                  onOpenLead={null}
-                />
-              </li>
-            ))}
-          </ul>
+          <>
+            {openTasks.length > 0 && (
+              <ul className="space-y-2">
+                {openTasks.map((task) => (
+                  <li key={`${task.id}-${task.__source || 'p'}`}>
+                    <TaskRow
+                      task={task}
+                      displayLeads={displayLeads}
+                      teams={teams}
+                      hideLeadLine
+                      onToggle={canMutate ? handleToggle : () => {}}
+                      onActivate={null}
+                      onEdit={canMutate ? () => openEditTask(task) : null}
+                      onDelete={canMutate ? () => handleDeleteTask(task) : null}
+                      onViewOnSchedule={
+                        (task.scheduledAt || task.dueAt) && onOpenScheduleAtDate
+                          ? () => handleViewOnSchedule(task)
+                          : null
+                      }
+                      onOpenLead={null}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {showCompletedTasks && completedTasks.length > 0 && (
+              <div className={openTasks.length > 0 ? 'mt-4 pt-3 border-t border-white/10' : undefined}>
+                <h4 className="text-[10px] font-semibold uppercase tracking-wide opacity-45 mb-2 px-0.5">
+                  Completed
+                </h4>
+                <ul className="space-y-2">
+                  {completedTasks.map((task) => (
+                    <li key={`${task.id}-${task.__source || 'p'}`}>
+                      <TaskRow
+                        task={task}
+                        displayLeads={displayLeads}
+                        teams={teams}
+                        hideLeadLine
+                        onToggle={canMutate ? handleToggle : () => {}}
+                        onActivate={null}
+                        onEdit={canMutate ? () => openEditTask(task) : null}
+                        onDelete={canMutate ? () => handleDeleteTask(task) : null}
+                        onViewOnSchedule={null}
+                        onOpenLead={null}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -330,13 +399,9 @@ export function DealTasksSection({
             if (!open) closeTaskDialog()
           }}
           isEditMode={isEditMode}
-          showContextCard={isEditMode}
-          contextPrimary={dealLabel}
-          contextSecondary={leadLabel && leadLabel !== dealLabel ? leadLabel : ''}
-          contextTertiary={leadAddress}
           initialTitle={editingTask?.title || ''}
-          initialLeadId={isEditMode ? null : taskLead?.id || deal?.leadId || null}
-          initialDealId={isEditMode ? null : deal?.id || null}
+          initialLeadId={taskLead?.id || deal?.leadId || null}
+          initialDealId={deal?.id || null}
           initialScheduledAt={
             editingTask
               ? editingTask.__source === 'team'
@@ -354,9 +419,9 @@ export function DealTasksSection({
           }
           leads={dialogLeads}
           deals={deal ? [deal] : []}
-          showDealPicker={!isEditMode}
-          lockLead={!isEditMode}
-          disableDealClear={!isEditMode}
+          showDealPicker={!!deal}
+          lockLead
+          disableDealClear
           showTeamAssign={showTeamAssign}
           teamMembers={teamMemberList}
           teamContextActive={teamContextActive}

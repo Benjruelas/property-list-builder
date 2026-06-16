@@ -16,6 +16,21 @@ import {
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { PipeIcon } from './PipeIcon'
+import { prefetchPanel } from '@/utils/panelChunks'
+
+const MENU_PREFETCH_KEY = {
+  pipes: 'dealPipeline',
+  tasks: 'tasks',
+  schedule: 'schedule',
+  leads: 'leads',
+  deals: 'deals',
+  quotes: 'quotes',
+  forms: 'forms',
+  reports: 'reports',
+  paths: 'paths',
+  outreach: 'outreach',
+  teams: 'teams',
+}
 
 /** Bar-primary items that only appear in the menu when they overflow off the action bar. */
 const BAR_OVERFLOW_ONLY = [
@@ -40,12 +55,13 @@ function MenuDivider() {
   return <div className="my-1 border-t hamburger-menu-divider" role="separator" />
 }
 
-function MenuButton({ tour, onClick, Icon, label, trailing = null }) {
+function MenuButton({ tour, onClick, onPointerEnter, Icon, label, trailing = null }) {
   return (
     <button
       type="button"
       data-tour={tour}
       onClick={onClick}
+      onPointerEnter={onPointerEnter}
       className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
     >
       <Icon className="h-4 w-4 flex-shrink-0" />
@@ -162,6 +178,10 @@ export function ActionBarMenu({
             Icon={Icon}
             label={label}
             onClick={() => run(handlers[id])}
+            onPointerEnter={() => {
+              const key = MENU_PREFETCH_KEY[id]
+              if (key) prefetchPanel(key)
+            }}
           />
         ))}
 
@@ -174,6 +194,10 @@ export function ActionBarMenu({
             Icon={Icon}
             label={label}
             onClick={() => run(handlers[id])}
+            onPointerEnter={() => {
+              const key = MENU_PREFETCH_KEY[id]
+              if (key) prefetchPanel(key)
+            }}
             trailing={
               id === 'lists' && selectedListIds.length > 0 ? (
                 <Circle className="h-2 w-2 fill-amber-400 text-amber-400 flex-shrink-0" />
@@ -198,6 +222,7 @@ export function ActionBarMenu({
               type="button"
               data-tour="menu-settings"
               onClick={() => run(onOpenSettings)}
+              onPointerEnter={() => prefetchPanel('settings')}
               className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
             >
               <Settings className="h-4 w-4 flex-shrink-0" />

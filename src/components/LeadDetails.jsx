@@ -28,7 +28,6 @@ import {
   displayLeadName,
   formatLeadAddress,
   deleteLead,
-  updateLead,
   getLeadStatus,
   getLeadStatusMeta,
   LEAD_STATUSES,
@@ -38,8 +37,7 @@ import {
   logLeadNote,
   sortActivitiesNewestFirst,
 } from '@/utils/leadActivity'
-import { ResourceSharePicker, VisibilityBadge } from './ResourceSharePicker'
-import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
+import { VisibilityBadge } from './ResourceSharePicker'
 import { findDealsForLead } from '@/utils/deals'
 import { formatTimeInState } from '@/utils/dealPipeline'
 import { LeadTasksSection } from './LeadTasksSection'
@@ -86,7 +84,7 @@ function LeadActionTile({ icon: Icon, label, value, onClick, disabled }) {
       title={value || label}
       className="lead-detail-action-tile disabled:opacity-40"
     >
-      <Icon className="h-4 w-4 shrink-0 opacity-80" />
+      <Icon className="lead-detail-action-icon shrink-0 opacity-80" aria-hidden />
       <span className="lead-detail-action-label">{label}</span>
     </button>
   )
@@ -130,6 +128,8 @@ export function LeadDetails({
   onLeadDeleted,
   nestedOverlay = true,
   topLayer = true,
+  hideOverlay = true,
+  suppressBackdrop = true,
   teams = [],
   teamMembership = null,
   onPipelinesChange,
@@ -146,12 +146,8 @@ export function LeadDetails({
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
 }) {
-  const activeTeam = teams?.[0] || null
-  const allowExternalSharing = teamMembership?.allowExternalSharing === true
   const [notes, setNotes] = useState('')
   const [notesDirty, setNotesDirty] = useState(false)
-  const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
-  const [savingShares, setSavingShares] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activityNote, setActivityNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
@@ -163,11 +159,6 @@ export function LeadDetails({
     if (lead) {
       setNotes(lead.notes || '')
       setNotesDirty(false)
-      const norm = normalizeResourceVisibility(lead)
-      setShareState({
-        visibility: norm.visibility || VISIBILITY.PRIVATE,
-        sharedMemberUids: norm.sharedMemberUids || [],
-      })
     }
   }, [lead])
 
@@ -208,10 +199,10 @@ export function LeadDetails({
 
   const name = displayLeadName(lead)
   const address = formatLeadAddress(lead)
-  const isOwner = currentUserId && lead.ownerId === currentUserId
   const parcelLat = Number(lead.lat ?? parcelData?.lat ?? parcelData?.properties?.LATITUDE ?? parcelData?.properties?.latitude)
   const parcelLng = Number(lead.lng ?? parcelData?.lng ?? parcelData?.properties?.LONGITUDE ?? parcelData?.properties?.longitude)
   const hasCoords = Number.isFinite(parcelLat) && Number.isFinite(parcelLng)
+  const canViewOnMap = !!(lead.parcelId || hasCoords)
 
   const saveNotes = () => {
     if (!notesDirty) return
@@ -282,30 +273,10 @@ export function LeadDetails({
     }
   }
 
-  const handleShareChange = async (next) => {
-    if (!isOwner || !getToken) return
-    setShareState(next)
-    setSavingShares(true)
-    try {
-      const saved = await updateLead(getToken, lead.id, {
-        visibility: next.visibility,
-        sharedMemberUids: next.sharedMemberUids,
-        teamId: activeTeam?.id || null,
-        teamShares: next.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
-      })
-      onLeadUpdate?.(saved)
-      showToast('Sharing updated', 'success')
-    } catch (e) {
-      const norm = normalizeResourceVisibility(lead)
-      setShareState({
-        visibility: norm.visibility || VISIBILITY.PRIVATE,
-        sharedMemberUids: norm.sharedMemberUids || [],
-      })
-      showToast(e.message || 'Could not update sharing', 'error')
-    } finally {
-      setSavingShares(false)
-    }
-  }
+  const standaloneDocked = !!panelDockSlot || (topLayer && !nestedOverlay)
+  const effectiveTopLayer = topLayer || nestedOverlay
+  const effectiveHideOverlay = hideOverlay || standaloneDocked
+  const effectiveSuppressBackdrop = suppressBackdrop || standaloneDocked
 
   return (
     <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, false, onClose, isOpen)}>
@@ -313,9 +284,11 @@ export function LeadDetails({
         className="map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
-        detailFocusOverlay
+        detailFocusOverlay={false}
+        hideOverlay={effectiveHideOverlay}
+        suppressBackdrop={effectiveSuppressBackdrop}
         nestedOverlay={nestedOverlay}
-        topLayer={topLayer}
+        topLayer={effectiveTopLayer}
         instantDismiss={instantDismiss}
       >
         <DialogHeader
@@ -394,18 +367,18 @@ export function LeadDetails({
               ) : (
                 <LeadActionTile icon={Mail} label="Email" value="No email" disabled />
               )}
-              {lead.parcelId ? (
+              {canViewOnMap ? (
                 <LeadActionTile
                   icon={MapPin}
                   label="Map"
-                  value="View property"
+                  value={lead.parcelId ? 'View property' : 'View on map'}
                   onClick={() => {
                     onClose?.()
                     onGoToParcelOnMap?.(parcelData || lead)
                   }}
                 />
               ) : (
-                <LeadActionTile icon={MapPin} label="Map" value="No parcel" disabled />
+                <LeadActionTile icon={MapPin} label="Map" value="No location" disabled />
               )}
               {hasCoords ? (
                 <DirectionsPicker lat={parcelLat} lng={parcelLng} variant="tile" />
@@ -510,24 +483,19 @@ export function LeadDetails({
                 </section>
               )}
 
-              {(activeTeam && (isOwner || shareState.visibility !== VISIBILITY.PRIVATE)) && (
-                <section className="lead-detail-section">
-                  <LeadDetailSectionTitle>Sharing</LeadDetailSectionTitle>
-                  {isOwner ? (
-                    <ResourceSharePicker
-                      team={activeTeam}
-                      visibility={shareState.visibility}
-                      sharedMemberUids={shareState.sharedMemberUids}
-                      onChange={handleShareChange}
-                      disabled={savingShares}
-                      allowExternalSharing={allowExternalSharing}
-                      collapsible
-                    />
-                  ) : (
-                    <VisibilityBadge resource={lead} />
-                  )}
-                </section>
-              )}
+            </div>
+
+            <div className="space-y-3">
+              <LeadTasksSection
+                lead={lead}
+                leads={leads}
+                pipelines={pipelines}
+                teams={teams}
+                getToken={getToken}
+                onPipelinesChange={onPipelinesChange}
+                onOpenScheduleAtDate={onOpenScheduleAtDate}
+                refreshKey={taskListEpoch}
+              />
 
               <section className="lead-detail-section">
                 <LeadDetailSectionTitle>Deals</LeadDetailSectionTitle>
@@ -559,9 +527,19 @@ export function LeadDetails({
                   </ul>
                 )}
               </section>
-            </div>
 
-            <div className="space-y-3">
+              <section className="lead-detail-section">
+                <LeadDetailSectionTitle>Notes</LeadDetailSectionTitle>
+                <textarea
+                  value={notes}
+                  onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }}
+                  onBlur={saveNotes}
+                  rows={4}
+                  className="lead-detail-field w-full text-sm px-3 py-2 resize-none"
+                  placeholder="Lead notes…"
+                />
+              </section>
+
               <section className="lead-detail-section">
                 <LeadDetailSectionTitle>Activity</LeadDetailSectionTitle>
                 <div className="flex gap-2 mb-3">
@@ -600,29 +578,6 @@ export function LeadDetails({
                   </ul>
                 )}
               </section>
-
-              <section className="lead-detail-section">
-                <LeadDetailSectionTitle>Notes</LeadDetailSectionTitle>
-                <textarea
-                  value={notes}
-                  onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }}
-                  onBlur={saveNotes}
-                  rows={4}
-                  className="lead-detail-field w-full text-sm px-3 py-2 resize-none"
-                  placeholder="Lead notes…"
-                />
-              </section>
-
-              <LeadTasksSection
-                lead={lead}
-                leads={leads}
-                pipelines={pipelines}
-                teams={teams}
-                getToken={getToken}
-                onPipelinesChange={onPipelinesChange}
-                onOpenScheduleAtDate={onOpenScheduleAtDate}
-                refreshKey={taskListEpoch}
-              />
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { PanelHeader } from './ui/panel-header'
 import { cn } from '@/lib/utils'
 import {
@@ -58,14 +58,24 @@ export function TeamMemberFeaturesDialog({
   )
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose?.() }}>
-      <DialogContent className="map-panel list-panel share-list-dialog max-w-md p-0" showCloseButton nestedOverlay topLayer>
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left">
+    <Dialog open={open} modal={false} onOpenChange={(v) => { if (!v) onClose?.() }}>
+      <DialogContent
+        className="map-panel list-panel share-list-dialog team-member-features-dialog flex flex-col min-h-0 w-[min(92vw,22rem)] max-w-md max-h-[min(88vh,720px)] p-0 overflow-hidden"
+        showCloseButton={false}
+        nestedOverlay
+        topLayer
+        data-team-member-features-dialog
+      >
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b border-white/20 text-left">
           <PanelHeader onBack={onClose} title="Feature access" />
           <DialogDescription className="sr-only">Configure team member feature access</DialogDescription>
           <p className="text-sm text-white/70 mt-2 truncate">{member.email || member.uid}</p>
         </DialogHeader>
-        <div className="px-6 py-4 space-y-3">
+
+        <div
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide px-6 py-4 space-y-3"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           <p className="text-xs opacity-60">
             Choose which parts of the app this member can use. Admins always have full access.
           </p>
@@ -109,12 +119,29 @@ export function TeamMemberFeaturesDialog({
             </p>
           </div>
           <p className="text-[11px] opacity-50">{enabledCount} of {TEAM_FEATURE_IDS.length} enabled</p>
-          <div className="flex gap-2 pt-1">
-            <Button className="create-list-btn flex-1" onClick={() => onSave?.(features)} disabled={saving}>
+        </div>
+
+        <div
+          className="shrink-0 px-6 py-4 border-t border-white/20"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <div className="share-dialog-actions">
+            <Button
+              type="button"
+              onClick={() => onSave?.(features)}
+              disabled={saving}
+              className="share-dialog-btn share-dialog-btn--primary flex-1 min-w-0"
+            >
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save
             </Button>
-            <Button variant="outline" className="flex-1 share-dialog-btn" onClick={onClose} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={saving}
+              className="share-dialog-btn share-dialog-btn--secondary flex-1 min-w-0"
+            >
               Cancel
             </Button>
           </div>

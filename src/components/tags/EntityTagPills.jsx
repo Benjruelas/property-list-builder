@@ -9,7 +9,7 @@ export function EntityTagPills({ entity, tagRegistry, type, className, onClick }
 
   return (
     <div
-      className={cn('flex flex-wrap gap-1', className)}
+      className={cn('entity-tag-pills flex flex-wrap gap-1', className)}
       onClick={(e) => {
         e.stopPropagation()
         onClick?.(e)

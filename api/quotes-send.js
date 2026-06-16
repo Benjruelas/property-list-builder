@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import { resolveDevBypassUser } from './lib/devBypassUsers.js'
+import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import {
   generateToken,
   INVITE_EXPIRY_DAYS,
@@ -61,10 +61,7 @@ export default async function handler(req, res) {
 
   const authHeader = req.headers.authorization
   const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const host = req.headers.host || req.headers['x-forwarded-host'] || ''
-  const origin = req.headers.origin || ''
-  const isLocalhost = /localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0/.test(host) || /localhost|127\.0\.0\.1|\[::1\]/.test(origin)
-  const allowDevBypass = isLocalhost || process.env.ENABLE_DEV_BYPASS === 'true'
+  const allowDevBypass = isDevBypassAllowed(req)
   let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
   if (!user) user = await verifyFirebaseToken(idToken)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })

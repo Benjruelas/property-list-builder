@@ -5,8 +5,13 @@ import { DialogTitle } from './dialog'
 import { cn } from '@/lib/utils'
 
 /** Shared list-panel header chrome (Lists panel is the reference). */
-export const PANEL_LIST_HEADER_CLASS = 'px-6 pt-6 pb-4 border-b border-white/20 text-left'
-export const PANEL_LIST_HEADER_STYLE = { paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }
+export const PANEL_LIST_HEADER_CLASS = 'panel-list-header border-b border-white/20 text-left'
+export const PANEL_LIST_HEADER_STYLE = {
+  paddingTop: 'calc(calc(1.5rem * var(--ui-touch-scale)) + env(safe-area-inset-top, 0px))',
+  paddingLeft: 'calc(1.5rem * var(--ui-touch-scale))',
+  paddingRight: 'calc(1.5rem * var(--ui-touch-scale))',
+  paddingBottom: 'calc(1rem * var(--ui-touch-scale))',
+}
 
 export function PanelCreateButton({
   onClick,
@@ -22,8 +27,8 @@ export function PanelCreateButton({
       variant="ghost"
       onClick={onClick}
       disabled={disabled || loading}
-      className={cn(
-        'create-new-list-btn h-11 w-11 min-h-[2.75rem] min-w-[2.75rem] shrink-0 p-0',
+        className={cn(
+        'create-new-list-btn panel-chrome-btn-lg shrink-0 p-0',
         className
       )}
       title={title}
@@ -47,7 +52,7 @@ export const PanelOptionsButton = React.forwardRef(function PanelOptionsButton(
       type="button"
       variant="ghost"
       size="icon"
-      className={cn('h-8 w-8 shrink-0', className)}
+      className={cn('panel-chrome-btn shrink-0', className)}
       title={title}
       onClick={onClick}
     >
@@ -62,7 +67,7 @@ export function PanelBackButton({ onClick, title = 'Back', className }) {
       type="button"
       variant="ghost"
       size="icon"
-      className={cn('h-8 w-8 shrink-0', className)}
+      className={cn('panel-chrome-btn shrink-0', className)}
       onClick={onClick}
       title={title}
     >

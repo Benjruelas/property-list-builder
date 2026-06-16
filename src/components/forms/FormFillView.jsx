@@ -271,7 +271,8 @@ export function FormFillView({
     const availableW = Math.max(120, scroller.clientWidth - padX)
     const fitZoomW = availableW / pageEl.offsetWidth
     if (!isPublic) {
-      return Math.min(FILL_ZOOM_MAX, Math.max(1.2, fitZoomW))
+      // In-panel view: fit page width; never upscale above 1 (avoids blank canvas + overflow).
+      return Math.min(1, Math.max(FIT_TO_SCREEN_MIN, fitZoomW))
     }
     const padY = 32
     const availableH = Math.max(120, scroller.clientHeight - padY)
@@ -322,16 +323,8 @@ export function FormFillView({
       })
       return
     }
-    if (isPublic) {
-      applyReviewFit()
-      return
-    }
-    requestAnimationFrame(() => {
-      const z = computeViewModeZoom()
-      setFillZoom(z)
-      fillZoomRef.current = z
-    })
-  }, [applyReviewFit, computeViewModeZoom, fillMode, isPublic])
+    applyReviewFit()
+  }, [applyReviewFit, fillMode])
 
   const getFieldMetrics = useCallback((field, zoom) => {
     const pageEl = pageRefs.current[field.page]?.wrapper
@@ -432,14 +425,10 @@ export function FormFillView({
 
   const needsViewReset = useMemo(() => {
     if (fillMode) return false
-    if (isPublic) {
-      if (Math.abs(fillZoom - reviewFitZoom) > 0.05) return true
-    } else if (Math.abs(fillZoom - 1) > 0.02) {
-      return true
-    }
+    if (Math.abs(fillZoom - reviewFitZoom) > 0.05) return true
     if (scrollPos.top > 2 || scrollPos.left > 2) return true
     return false
-  }, [fillMode, fillZoom, isPublic, reviewFitZoom, scrollPos.left, scrollPos.top])
+  }, [fillMode, fillZoom, reviewFitZoom, scrollPos.left, scrollPos.top])
 
   const renderPage = useCallback(async (pageIndex, force = false) => {
     if (!pdfDoc) return
@@ -561,16 +550,8 @@ export function FormFillView({
     setFillMode(false)
     formFocusZoomRef.current = null
     lastFocusedFieldRef.current = null
-    if (isPublic) {
-      applyReviewFit()
-      return
-    }
-    requestAnimationFrame(() => {
-      const z = computeViewModeZoom()
-      setFillZoom(z)
-      fillZoomRef.current = z
-    })
-  }, [applyReviewFit, computeViewModeZoom, isPublic])
+    applyReviewFit()
+  }, [applyReviewFit])
 
   const setStepForField = useCallback((fieldId) => {
     if (effectiveLockedSet.has(fieldId)) return
@@ -582,22 +563,45 @@ export function FormFillView({
     if (idx >= 0) setTourStep(idx)
   }, [activeTourFields, enterFillMode, fillMode, effectiveLockedSet])
 
-  // View mode: fit the page width to the panel for better screen use.
+  // View mode: scale the full form to fit the panel viewport.
   useEffect(() => {
     if (fillMode || loading || loadingErr || !pdfDoc || !pageSizes.length) return
     let cancelled = false
-    ;(async () => {
+    const refit = async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if (cancelled) return
+      await renderPage(0)
       if (cancelled) return
       const z = computeViewModeZoom()
       if (Math.abs(z - fillZoomRef.current) <= 0.02) return
       setFillZoom(z)
       fillZoomRef.current = z
-      if (isPublic) setReviewFitZoom(z)
-      await renderPage(0, true)
-    })()
-    return () => { cancelled = true }
-  }, [fillMode, isPublic, loading, loadingErr, pdfDoc, pageSizes.length, computeViewModeZoom, renderPage])
+      setReviewFitZoom(z)
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if (cancelled) return
+      await redrawRenderedPages()
+    }
+    refit()
+    const scroller = scrollContainerRef.current
+    if (!scroller) return () => { cancelled = true }
+    const ro = new ResizeObserver(() => {
+      if (cancelled) return
+      requestAnimationFrame(() => { refit() })
+    })
+    ro.observe(scroller)
+    return () => {
+      cancelled = true
+      ro.disconnect()
+    }
+  }, [fillMode, loading, loadingErr, pdfDoc, pageSizes.length, unscaledSize.w, unscaledSize.h, computeViewModeZoom, renderPage, redrawRenderedPages])
+
+  // Redraw canvases after view-mode zoom changes (CSS transform blanks PDF canvases until repaint).
+  useEffect(() => {
+    if (fillMode || loading || !pdfDoc || renderedPages.current.size === 0) return
+    if (manualZoomRef.current) return
+    const t = window.setTimeout(() => { redrawRenderedPages() }, 80)
+    return () => window.clearTimeout(t)
+  }, [fillZoom, fillMode, loading, pdfDoc, redrawRenderedPages])
 
   const allFieldsFilled = useMemo(() => {
     const fields = template.fields || []
@@ -866,6 +870,7 @@ export function FormFillView({
   }, [allFieldsFilled, exitFillMode, fillMode, isPublic])
 
   const publicReviewMode = isPublic && !fillMode
+  const publicFitReady = publicReviewMode && unscaledSize.w > 0 && unscaledSize.h > 0
 
   // Keep completed public forms centered — clear fill-mode scroll offset after layout.
   useEffect(() => {
@@ -1000,10 +1005,10 @@ export function FormFillView({
         ref={scrollContainerRef}
         onScroll={handleScrollContainerScroll}
         className={cn(
-          'fill-scroll-container flex-1 min-h-0 overscroll-behavior-contain bg-gray-200/50',
+          'fill-scroll-container scrollbar-hide flex-1 min-h-0 overscroll-behavior-contain bg-gray-200/50',
           fillMode && 'p-4 overflow-y-auto overflow-x-auto',
           !fillMode && !publicReviewMode && 'px-2 py-3 overflow-y-auto overflow-x-auto',
-          publicReviewMode && 'public-form-review-scroll'
+          publicReviewMode && 'form-fill-fit-scroll',
         )}
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
@@ -1020,16 +1025,16 @@ export function FormFillView({
           <>
             <div
               className={cn(
-                publicReviewMode && 'public-form-review-frame',
-                publicReviewMode && (reviewFitsViewport
-                  ? 'public-form-review-frame--fits'
-                  : 'public-form-review-frame--scroll')
+                publicFitReady && 'form-fill-fit-frame',
+                publicFitReady && (reviewFitsViewport
+                  ? 'form-fill-fit-frame--fits'
+                  : 'form-fill-fit-frame--scroll')
               )}
             >
               <div
-                className={cn(publicReviewMode && 'public-form-review-stage')}
+                className={cn(publicFitReady && 'form-fill-fit-stage')}
                 style={
-                  publicReviewMode && unscaledSize.w > 0
+                  publicFitReady
                     ? {
                         width: unscaledSize.w * fillZoom,
                         minHeight: unscaledSize.h * fillZoom,
@@ -1043,7 +1048,7 @@ export function FormFillView({
                   style={{
                     transform: `scale(${fillZoom})`,
                     transformOrigin: 'top left',
-                    width: publicReviewMode && unscaledSize.w > 0 ? unscaledSize.w : undefined,
+                    width: publicFitReady ? unscaledSize.w : undefined,
                     minWidth: fillMode ? `${fillZoom * 100}%` : undefined,
                   }}
                 >

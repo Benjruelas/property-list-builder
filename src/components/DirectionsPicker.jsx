@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Navigation } from 'lucide-react'
 import { Button } from './ui/button'
+import { cn } from '@/lib/utils'
 import {
   computeOptionsMenuPosition,
   getOptionsMenuPortalContainer,
@@ -139,6 +140,24 @@ export function DirectionsPicker({ lat, lng, variant = 'icon', className = '', i
     setOpen((p) => !p)
   }
 
+  if (variant === 'parcel-tile') {
+    return (
+      <div ref={triggerRef} className={cn('relative min-w-0 w-full', className)}>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={toggle}
+          title="Get directions"
+          className="parcel-details-action-tile parcel-details-action-tile--directions w-full"
+        >
+          <Navigation className="parcel-details-action-icon" aria-hidden />
+          <span className="parcel-details-action-label">Directions</span>
+        </button>
+        {portaledMenu}
+      </div>
+    )
+  }
+
   if (variant === 'tile') {
     return (
       <div ref={triggerRef} className={`relative min-w-0 w-full ${className}`}>
@@ -149,7 +168,7 @@ export function DirectionsPicker({ lat, lng, variant = 'icon', className = '', i
           title="Open in maps"
           className="lead-detail-action-tile w-full"
         >
-          <Navigation className="h-4 w-4 shrink-0 opacity-80" />
+          <Navigation className="lead-detail-action-icon shrink-0 opacity-80" aria-hidden />
           <span className="lead-detail-action-label">Directions</span>
         </button>
         {portaledMenu}

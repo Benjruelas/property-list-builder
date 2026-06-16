@@ -5,13 +5,14 @@ import {
   resetToMapFull,
 } from '../navigationReducer.js'
 import { NAV_ACTIONS } from '../types.js'
-import { selectPanelProps, selectIsStackedUnderSchedule } from '../selectors.js'
+import { selectPanelProps, selectIsStackedUnderSchedule, selectTasksDockLayout, selectActionBarActiveId } from '../selectors.js'
 import { feedDataToFrames } from '../feedNavigation.js'
 import {
   recipeOpenLeads,
   recipeOpenDeals,
   recipeOpenPipes,
   recipeOpenLists,
+  recipeViewListContents,
   recipeOpenTasks,
   recipeCloseTasks,
   recipeOpenScheduleAtDate,
@@ -20,9 +21,14 @@ import {
   recipeOpenReports,
   recipeOpenDealInPipes,
   recipeOpenLeadDetails,
+  recipeOpenStandaloneLeadDetail,
+  recipeOpenStandaloneDealDetail,
+  recipeOpenDealFromLeadDetail,
   recipePushDealsClosed,
   recipePushDealsDetail,
+  recipePushDealsLead,
 } from '../recipes.js'
+import { getStandaloneDetailBesideTasks, popFrameIfTopOfCore, recipeClosePrimaryRoot, splitTrailingTasks, stackHasPrimaryRoot } from '../taskDock.js'
 
 function reduce(state, type, payload) {
   return navigationReducer(state, { type, payload })
@@ -110,7 +116,9 @@ describe('navigationReducer', () => {
     const props = selectPanelProps(state)
     expect(props.isActivityPanelOpen).toBe(true)
     expect(props.isActivityPanelFocused).toBe(true)
+    expect(props.isActivityPanelTopLayer).toBe(false)
     expect(props.isTasksPanelOpen).toBe(true)
+    expect(props.isTasksPanelTopLayer).toBe(true)
   })
 
   it('activity stack: nested pipes.deal back returns to activity', () => {
@@ -248,6 +256,67 @@ describe('feedNavigation', () => {
     ])
   })
 
+  it('maps lead activity to standalone leads.detail', () => {
+    const r = feedDataToFrames({ type: 'lead', leadId: 'l1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{ type: 'leads.detail', leadId: 'l1' }])
+  })
+
+  it('maps deal activity to standalone deals.detail', () => {
+    const r = feedDataToFrames({ type: 'deal', dealId: 'd1', pipelineId: 'pipe1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{ type: 'deals.detail', dealId: 'd1', pipelineId: 'pipe1' }])
+  })
+
+  it('maps list activity to standalone lists.parcels', () => {
+    const r = feedDataToFrames({ type: 'list', listId: 'list1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{ type: 'lists.parcels', listId: 'list1' }])
+    expect(r.listId).toBe('list1')
+  })
+
+  it('maps pipeline activity to map focus only (no pipe panel)', () => {
+    const r = feedDataToFrames({ type: 'pipeline', pipelineId: 'pipe1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([])
+    expect(r.pipelineId).toBe('pipe1')
+  })
+
+  it('maps path activity to map focus only (no paths panel)', () => {
+    const r = feedDataToFrames({ type: 'path', pathId: 'path1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([])
+    expect(r.pathId).toBe('path1')
+  })
+
+  it('maps form activity to standalone forms.fill', () => {
+    const r = feedDataToFrames({ type: 'form', templateId: 'tpl1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{ type: 'forms.fill', templateId: 'tpl1' }])
+  })
+
+  it('maps team activity to standalone teams.detail', () => {
+    const r = feedDataToFrames({ type: 'team', teamId: 'team1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{ type: 'teams.detail', teamId: 'team1' }])
+  })
+
+  it('maps quote activity to standalone quotes.detail', () => {
+    const r = feedDataToFrames({ panel: 'quotes', quoteId: 'q1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{ type: 'quotes.detail', quoteId: 'q1' }])
+  })
+
+  it('maps pipelineLeadStage activity to standalone lead detail', () => {
+    const r = feedDataToFrames(
+      { type: 'pipelineLeadStage', pipelineId: 'pipe1', leadId: 'l1' },
+      ctx,
+      { standaloneDetail: true },
+    )
+    expect(r.frames).toEqual([{ type: 'leads.detail', leadId: 'l1' }])
+  })
+
+  it('maps pipelineDealStage activity to standalone deal detail', () => {
+    const r = feedDataToFrames(
+      { type: 'pipelineDealStage', pipelineId: 'pipe1', dealId: 'd1' },
+      ctx,
+      { standaloneDetail: true },
+    )
+    expect(r.frames).toEqual([{ type: 'deals.detail', dealId: 'd1', pipelineId: 'pipe1' }])
+  })
+
   it('maps task to tasks only', () => {
     const r = feedDataToFrames({ type: 'task' }, ctx)
     expect(r.frames).toEqual([{ type: 'tasks' }])
@@ -294,6 +363,25 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['lists', 'tasks'])
   })
 
+  it('viewListContents swaps primary and keeps tasks when keepTasks', () => {
+    const stack = recipeViewListContents(
+      [{ type: 'leads' }, { type: 'tasks' }],
+      'list-1',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['lists', 'lists.parcels', 'tasks'])
+  })
+
+  it('viewListContents replaces parcels frame when switching lists with tasks docked', () => {
+    const stack = recipeViewListContents(
+      [{ type: 'lists' }, { type: 'lists.parcels', listId: 'old' }, { type: 'tasks' }],
+      'new-list',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['lists', 'lists.parcels', 'tasks'])
+    expect(stack.find((f) => f.type === 'lists.parcels')?.listId).toBe('new-list')
+  })
+
   it('openTasks keeps primary panel when keepPrimary (desktop dock)', () => {
     const stack = recipeOpenTasks([{ type: 'leads' }], { keepPrimary: true })
     expect(stack.map((f) => f.type)).toEqual(['leads', 'tasks'])
@@ -304,9 +392,14 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['pipes', 'tasks'])
   })
 
-  it('openTasks is noop when tasks already open', () => {
+  it('openTasks recipe leaves stack unchanged when tasks already open', () => {
     const stack = recipeOpenTasks([{ type: 'leads' }, { type: 'tasks' }], { keepPrimary: true })
     expect(stack.map((f) => f.type)).toEqual(['leads', 'tasks'])
+  })
+
+  it('closeTasks toggles tasks off while keeping primary (NavigationContext uses this)', () => {
+    const stack = recipeCloseTasks([{ type: 'leads' }, { type: 'tasks' }])
+    expect(stack.map((f) => f.type)).toEqual(['leads'])
   })
 
   it('openTasks keeps leads when schedule is stacked on top', () => {
@@ -332,6 +425,76 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['leads'])
   })
 
+  it('recipeClosePrimaryRoot removes leads but keeps docked tasks', () => {
+    const stack = recipeClosePrimaryRoot([{ type: 'leads' }, { type: 'tasks' }], 'leads')
+    expect(stack.map((f) => f.type)).toEqual(['tasks'])
+  })
+
+  it('recipeClosePrimaryRoot removes schedule stack but keeps tasks', () => {
+    const stack = recipeClosePrimaryRoot(
+      [{ type: 'schedule' }, { type: 'schedule.lead', leadId: 'l1' }, { type: 'tasks' }],
+      'schedule',
+    )
+    expect(stack.map((f) => f.type)).toEqual(['tasks'])
+  })
+
+  it('stackHasPrimaryRoot detects open pipes', () => {
+    expect(stackHasPrimaryRoot([{ type: 'pipes', pipelineId: 'p1' }], 'pipes')).toBe(true)
+    expect(stackHasPrimaryRoot([{ type: 'leads' }], 'pipes')).toBe(false)
+  })
+
+  it('selectActionBarActiveId prefers pipes over tasks', () => {
+    const state = { navStack: [{ type: 'pipes', pipelineId: 'p1' }, { type: 'tasks' }], mapOverlayStack: [], modalStack: [], meta: {} }
+    expect(selectActionBarActiveId(state)).toBe('pipes')
+  })
+
+  it('selectActionBarActiveId returns activity when only activity open', () => {
+    const state = { navStack: [{ type: 'activity' }], mapOverlayStack: [], modalStack: [], meta: {} }
+    expect(selectActionBarActiveId(state)).toBe('activity')
+  })
+
+  it('splitTrailingTasks peels solo tasks frame for pop protection', () => {
+    expect(splitTrailingTasks([{ type: 'tasks' }])).toEqual({
+      tasksFrames: [{ type: 'tasks' }],
+      coreStack: [],
+    })
+    expect(splitTrailingTasks([{ type: 'leads' }, { type: 'tasks' }])).toEqual({
+      tasksFrames: [{ type: 'tasks' }],
+      coreStack: [{ type: 'leads' }],
+    })
+  })
+
+  it('popFrameIfTopOfCore pops detail frame with trailing tasks', () => {
+    const stack = [
+      { type: 'deals' },
+      { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' },
+      { type: 'tasks' },
+    ]
+    expect(popFrameIfTopOfCore(stack, 'deals.detail').map((f) => f.type)).toEqual(['deals', 'tasks'])
+    expect(popFrameIfTopOfCore(stack, 'tasks')).toBe(stack)
+  })
+
+  it('pop closing primary keeps trailing tasks open', () => {
+    let state = replaceStack(createInitialState(), [{ type: 'leads' }, { type: 'tasks' }])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['tasks'])
+    expect(selectPanelProps(state).isTasksPanelOpen).toBe(true)
+    expect(selectPanelProps(state).isLeadsPanelOpen).toBe(false)
+  })
+
+  it('pop is noop when only tasks is open (use closeTasks to dismiss)', () => {
+    let state = replaceStack(createInitialState(), [{ type: 'tasks' }])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['tasks'])
+  })
+
+  it('double pop after closing primary does not dismiss solo tasks', () => {
+    let state = replaceStack(createInitialState(), [{ type: 'leads' }, { type: 'tasks' }])
+    state = pop(state)
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['tasks'])
+  })
+
   it('openScheduleAtDate stacks on leads', () => {
     const stack = recipeOpenScheduleAtDate([{ type: 'leads' }], '2025-06-01')
     expect(stack.map((f) => f.type)).toEqual(['leads', 'schedule'])
@@ -345,10 +508,24 @@ describe('recipes', () => {
   it('navigateFromActivity keeps tasks when docked on desktop', () => {
     const stack = recipeNavigateFromActivity(
       [{ type: 'activity' }, { type: 'tasks' }],
-      [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }],
+      [{ type: 'leads.detail', leadId: 'l1' }],
       { keepTasks: true },
     )
-    expect(stack.map((f) => f.type)).toEqual(['activity', 'leads', 'leads.detail', 'tasks'])
+    expect(stack.map((f) => f.type)).toEqual(['activity', 'leads.detail', 'tasks'])
+  })
+
+  it('activity stack: back from standalone detail keeps docked tasks', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'leads.detail', leadId: 'l1' },
+      { type: 'tasks' },
+    ])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity', 'tasks'])
+    const props = selectPanelProps(state)
+    expect(props.isActivityPanelFocused).toBe(true)
+    expect(props.isTasksPanelOpen).toBe(true)
+    expect(props.isLeadsPanelOpen).toBe(false)
   })
 
   it('activity stack: back from nested detail keeps docked tasks', () => {
@@ -446,6 +623,85 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.detail'])
   })
 
+  it('recipePushDealsDetail from tasks-only stack opens deals and keeps tasks', () => {
+    const stack = recipePushDealsDetail([{ type: 'tasks' }], 'd1', 'p1', { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.detail', 'tasks'])
+  })
+
+  it('recipeOpenLeadDetails from tasks-only stack opens leads and keeps tasks', () => {
+    const stack = recipeOpenLeadDetails([{ type: 'tasks' }], 'l1', { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'leads.detail', 'tasks'])
+  })
+
+  it('recipeOpenStandaloneLeadDetail opens detail only beside tasks', () => {
+    const stack = recipeOpenStandaloneLeadDetail([{ type: 'tasks' }], 'l1', { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'tasks'])
+  })
+
+  it('recipeOpenStandaloneDealDetail opens detail only beside tasks', () => {
+    const stack = recipeOpenStandaloneDealDetail([{ type: 'tasks' }], 'd1', 'p1', { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['deals.detail', 'tasks'])
+  })
+
+  it('recipeOpenDealFromLeadDetail opens deal detail without pipes or deals list', () => {
+    const stack = recipeOpenDealFromLeadDetail(
+      [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }, { type: 'tasks' }],
+      'd1',
+      'p1',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'leads.detail', 'deals.detail', 'tasks'])
+  })
+
+  it('recipeOpenDealFromLeadDetail replaces pipes stack when opening from lead', () => {
+    const stack = recipeOpenDealFromLeadDetail(
+      [{ type: 'leads.detail', leadId: 'l1' }, { type: 'pipes', pipelineId: 'p1' }, { type: 'pipes.deal', dealId: 'd0' }],
+      'd1',
+      'p1',
+    )
+    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'deals.detail'])
+  })
+
+  it('pop deals.detail returns to lead detail', () => {
+    const stack = [
+      { type: 'leads.detail', leadId: 'l1' },
+      { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' },
+      { type: 'tasks' },
+    ]
+    expect(popFrameIfTopOfCore(stack, 'deals.detail').map((f) => f.type)).toEqual(['leads.detail', 'tasks'])
+  })
+
+  it('recipePushDealsLead from standalone deal keeps tasks trailing and deal beneath lead', () => {
+    const stack = recipePushDealsLead(
+      [{ type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' }, { type: 'tasks' }],
+      'l1',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['deals.detail', 'deals.lead', 'tasks'])
+  })
+
+  it('pop deals.lead returns to standalone deal with tasks still trailing', () => {
+    const stack = [
+      { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' },
+      { type: 'deals.lead', leadId: 'l1' },
+      { type: 'tasks' },
+    ]
+    expect(popFrameIfTopOfCore(stack, 'deals.lead').map((f) => f.type)).toEqual(['deals.detail', 'tasks'])
+  })
+
+  it('standalone deal with lead overlay keeps tasks on solo rail', () => {
+    const stack = [
+      { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' },
+      { type: 'deals.lead', leadId: 'l1' },
+      { type: 'tasks' },
+    ]
+    expect(getStandaloneDetailBesideTasks(stack)).toBe('deals')
+    const state = createInitialState()
+    state.navStack = stack
+    expect(selectTasksDockLayout(state).tasksSoloDetail).toBe(true)
+    expect(selectTasksDockLayout(state).soloDetailRoot).toBe('deals')
+  })
+
   it('activity stack: schedule.lead back returns to schedule', () => {
     let state = replaceStack(createInitialState(), [
       { type: 'activity' },
@@ -479,6 +735,81 @@ describe('selectors', () => {
     const props = selectPanelProps(state)
     expect(props.isLeadsPanelOpen).toBe(true)
     expect(props.leadsDetailLeadId).toBe('l1')
+    expect(props.isLeadsDetailStandalone).toBe(false)
     expect(props.fromActivity).toBe(false)
+  })
+
+  it('standalone lead detail without leads list', () => {
+    const state = createInitialState()
+    state.navStack = [{ type: 'leads.detail', leadId: 'l1' }, { type: 'tasks' }]
+    const props = selectPanelProps(state)
+    expect(props.isLeadsPanelOpen).toBe(false)
+    expect(props.leadsDetailLeadId).toBe('l1')
+    expect(props.isLeadsDetailStandalone).toBe(true)
+    expect(props.isTasksPanelOpen).toBe(true)
+  })
+
+  it('standalone deal detail without deals list', () => {
+    const state = createInitialState()
+    state.navStack = [{ type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' }, { type: 'tasks' }]
+    const props = selectPanelProps(state)
+    expect(props.isDealsPanelOpen).toBe(false)
+    expect(props.dealsDetailDealId).toBe('d1')
+    expect(props.isDealsDetailStandalone).toBe(true)
+  })
+
+  it('standalone detail beside tasks keeps tasks on solo rail', () => {
+    expect(getStandaloneDetailBesideTasks([{ type: 'leads.detail', leadId: 'l1' }, { type: 'tasks' }])).toBe('leads')
+    expect(getStandaloneDetailBesideTasks([{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }, { type: 'tasks' }])).toBe(null)
+    const state = createInitialState()
+    state.navStack = [{ type: 'leads.detail', leadId: 'l1' }, { type: 'tasks' }]
+    expect(selectTasksDockLayout(state)).toEqual({
+      tasksDocked: false,
+      primaryRoot: null,
+      tasksSoloDetail: true,
+      soloDetailRoot: 'leads',
+    })
+  })
+
+  it('activity lead detail keeps activity and tasks docked together', () => {
+    const state = createInitialState()
+    state.navStack = [
+      { type: 'activity' },
+      { type: 'leads.detail', leadId: 'l1' },
+      { type: 'tasks' },
+    ]
+    expect(selectTasksDockLayout(state)).toEqual({
+      tasksDocked: true,
+      primaryRoot: 'activity',
+      tasksSoloDetail: false,
+      soloDetailRoot: null,
+    })
+  })
+
+  it('list from activity keeps activity and tasks docked together', () => {
+    const state = createInitialState()
+    state.navStack = [
+      { type: 'activity' },
+      { type: 'lists.parcels', listId: 'list1' },
+      { type: 'tasks' },
+    ]
+    expect(selectTasksDockLayout(state)).toEqual({
+      tasksDocked: true,
+      primaryRoot: 'activity',
+      tasksSoloDetail: false,
+      soloDetailRoot: null,
+    })
+  })
+
+  it('activity list detail back returns to activity feed', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'lists.parcels', listId: 'list1' },
+      { type: 'tasks' },
+    ])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['activity', 'tasks'])
+    expect(selectPanelProps(state).isActivityPanelFocused).toBe(true)
+    expect(selectPanelProps(state).isParcelListPanelOpen).toBe(false)
   })
 })

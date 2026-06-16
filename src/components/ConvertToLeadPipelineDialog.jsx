@@ -15,7 +15,8 @@ import { Button } from './ui/button'
  *   allowNoPipe?: boolean,
  *   noPipeLabel?: string,
  *   noPipeDescription?: string,
- *   onSelectNoPipe?: () => void
+ *   onSelectNoPipe?: () => void,
+ *   topLayer?: boolean
  * }} props
  */
 export function ConvertToLeadPipelineDialog({
@@ -29,7 +30,8 @@ export function ConvertToLeadPipelineDialog({
   allowNoPipe = false,
   noPipeLabel = 'No pipe',
   noPipeDescription = 'Only you will see this task.',
-  onSelectNoPipe
+  onSelectNoPipe,
+  topLayer = false,
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -37,6 +39,7 @@ export function ConvertToLeadPipelineDialog({
         className="map-panel convert-to-lead-pipeline-dialog max-w-xs p-0 gap-0 overflow-hidden border border-white/15 rounded-2xl"
         showCloseButton={false}
         blurOverlay
+        topLayer={topLayer}
       >
         <div className="map-panel-header-toolbar map-panel-header-toolbar--top gap-2 px-4 pt-4 pb-3 border-b border-white/15">
           <div className="map-panel-header-title-wrap flex min-w-0 items-start gap-3">

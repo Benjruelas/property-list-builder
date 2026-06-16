@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Plus, Eye, Trash2, MoreVertical, FileDown, Share2, Pencil, Tag, List, Search } from 'lucide-react'
+import { Plus, Eye, EyeOff, Trash2, MoreVertical, FileDown, Share2, Pencil, Tag, List, Search } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
@@ -579,7 +579,11 @@ export function ListPanel({
                         title={isSelected ? 'Remove highlight' : 'Highlight on map'}
                         aria-pressed={isSelected}
                       >
-                        <Eye className="h-4 w-4" />
+                        {isSelected ? (
+                          <Eye className="h-4 w-4" />
+                        ) : (
+                          <EyeOff className="h-4 w-4" />
+                        )}
                       </button>
                       <button
                         type="button"

@@ -24,6 +24,183 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
+
+    /* Mobile defaults — desktop overrides at 768px+ */
+    --ui-panel-width-ratio: 1.365;
+    --ui-touch-scale: 1;
+    --action-bar-width: min(92vw, 400px);
+    --tasks-dock-width: min(300px, 24vw);
+    --tasks-dock-gap: 14px;
+    --tasks-panel-right-inset: calc(12px + env(safe-area-inset-right, 0px));
+    --tasks-panel-fade-duration: 380ms;
+    --tasks-panel-fade-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    /* Desktop chrome — fixed inset/gap; panel height derived when a panel is open in #modal-root */
+    --ui-chrome-inset: 12px;
+    --ui-chrome-panel-gap: 12px;
+    --ui-action-bar-inner-v-pad: calc(12px * var(--ui-touch-scale));
+    --ui-action-bar-btn-height: calc(3.5rem * var(--ui-touch-scale));
+    --ui-action-bar-block: calc(
+      var(--ui-action-bar-btn-height)
+      + var(--ui-action-bar-inner-v-pad)
+      + var(--ui-chrome-inset)
+      + env(safe-area-inset-bottom, 0px)
+    );
+    /* Action bar size is fixed — never tied to open-panel height */
+    --ui-action-bar-height-basis: 80vh;
+    --ui-chrome-stack-height: 90vh;
+    --ui-panel-height: 80vh;
+    --ui-panel-min-height: 60vh;
+    --ui-panel-center-y: 50%;
+    --ui-touch-scale: 1.125;
+    --action-bar-width: min(94vw, calc(var(--ui-action-bar-height-basis) * var(--ui-panel-width-ratio)));
+    --ui-panel-width: var(--action-bar-width);
+    --tasks-dock-width: min(calc(var(--ui-action-bar-height-basis) * 0.366), 28vw);
+    --tasks-dock-gap: calc(14px * var(--ui-touch-scale));
+    --tasks-panel-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
+    --map-controls-stack-height: calc(4 * 2.5rem + 3 * 0.5rem);
+    --map-controls-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
+    --tasks-panel-motion-duration: 380ms;
+    --tasks-panel-motion-ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --tasks-panel-fade-duration: 480ms;
+    --tasks-panel-fade-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Interpolate Tasks panel layout vars on html (Tasks only — not primary dock width) */
+  @property --tasks-layout-width {
+    syntax: '<length-percentage>';
+    inherits: true;
+    initial-value: 300px;
+  }
+  @property --tasks-layout-height {
+    syntax: '<length-percentage>';
+    inherits: true;
+    initial-value: 400px;
+  }
+  @property --tasks-layout-x {
+    syntax: '<length-percentage>';
+    inherits: true;
+    initial-value: 100vw;
+  }
+  @property --tasks-layout-top {
+    syntax: '<length-percentage>';
+    inherits: true;
+    initial-value: 0px;
+  }
+  @property --tasks-layout-center-y {
+    syntax: '<length-percentage>';
+    inherits: true;
+    initial-value: 50vh;
+  }
+  @property --tasks-layout-opacity {
+    syntax: '<number>';
+    inherits: true;
+    initial-value: 1;
+  }
+
+  /* Dock / undock morph — always active (primary panel width/transform animations depend on this) */
+  html[data-tasks-docked="1"],
+  html[data-tasks-dock-leave="1"],
+  html[data-tasks-solo-detail="1"] {
+    transition:
+      --tasks-layout-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      --tasks-layout-height var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      --tasks-layout-top var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease);
+  }
+
+  /* Solo layout morph — not during solo open/close fade */
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]):not([data-tasks-docked="1"]):not([data-tasks-panel-fade]),
+  html:not([data-tasks-panel-fade]):has(#modal-root .map-panel-dialog.tasks-panel[data-state="open"]):not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) {
+    transition:
+      --tasks-layout-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      --tasks-layout-height var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      --tasks-layout-top var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease);
+  }
+
+  /* Solo open/close fade — x + opacity only (never while docked / undocking) */
+  html[data-tasks-panel-fade="in"]:not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]),
+  html[data-tasks-panel-fade="out"]:not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) {
+    --tasks-layout-opacity: 1;
+    transition:
+      --tasks-layout-x var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      --tasks-layout-opacity var(--tasks-panel-fade-duration) var(--tasks-panel-fade-ease);
+  }
+
+  html[data-tasks-panel-fade="in"]:not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) {
+    --tasks-layout-width: var(--tasks-solo-dock-width);
+    --tasks-layout-height: var(--tasks-solo-rail-height);
+    --tasks-layout-min-height: min(280px, var(--tasks-solo-rail-height));
+  }
+
+  @starting-style {
+    html[data-tasks-panel-fade="in"],
+    html:has(#modal-root .map-panel-dialog.tasks-panel[data-state="open"]):not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) {
+      --tasks-layout-opacity: 0;
+      --tasks-layout-width: var(--tasks-solo-dock-width, min(300px, 24vw));
+      --tasks-layout-height: var(--tasks-solo-rail-height, 400px);
+    }
+  }
+
+  /* Panel open (DOM): maximize panel footprint — action bar width unchanged */
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) {
+    --ui-viewport-content-width: min(
+      calc(100vw - 2 * var(--ui-chrome-inset) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)),
+      calc(100dvw - 2 * var(--ui-chrome-inset) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))
+    );
+    --ui-panel-width: var(--ui-viewport-content-width);
+    --tasks-dock-group-width: var(--ui-viewport-content-width);
+    --ui-panel-height: calc(
+      100vh
+      - var(--ui-chrome-inset)
+      - env(safe-area-inset-top, 0px)
+      - var(--ui-chrome-panel-gap)
+      - var(--ui-action-bar-block)
+    );
+    --ui-panel-min-height: min(320px, var(--ui-panel-height));
+    --ui-panel-center-y: calc(
+      var(--ui-chrome-inset)
+      + env(safe-area-inset-top, 0px)
+      + var(--ui-panel-height) / 2
+    );
+    --tasks-solo-detail-width: min(
+      calc(var(--ui-panel-width) - var(--tasks-dock-width) - var(--tasks-dock-gap) - var(--tasks-panel-right-inset)),
+      calc(100vw - var(--tasks-panel-right-inset) - var(--tasks-dock-width) - 2 * var(--ui-chrome-inset))
+    );
+  }
+
+  .map-controls-stack,
+  .map-search-stack,
+  .north-indicator {
+    transition:
+      opacity var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      visibility var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease);
+  }
+
+  /* Hide map chrome when a primary panel is open — keep visible for solo Tasks only */
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-controls-stack,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-search-stack,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .north-indicator {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  /* Solo Tasks only — keep map chrome visible (beats any stale panel-open rules) */
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]) .map-controls-stack,
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]) .map-search-stack,
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]) .north-indicator {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .mobile-action-bar {
+    max-height: none;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ui-chrome-inset));
   }
 }
 
@@ -156,6 +333,12 @@
   }
 }
 
+@media (max-width: 767px) {
+  .new-task-panel .new-task-form-body {
+    overflow-y: auto;
+  }
+}
+
 /* Parent list stays visible under nested detail scrim; block interaction only */
 .map-panel.fullscreen-panel.crm-panel-obscured,
 .list-panel.fullscreen-panel.crm-panel-obscured {
@@ -163,27 +346,71 @@
 }
 
 @media (min-width: 768px) {
-  /* Desktop: list-style panels — fit to content, capped at viewport */
-  .list-panel.fullscreen-panel {
+  /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel) {
     width: auto !important;
-    min-width: 360px !important;
+    min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
     height: auto !important;
-    max-height: 85vh !important;
+    max-height: var(--ui-panel-height) !important;
     display: flex !important;
     flex-direction: column !important;
   }
 
   /* Desktop: outreach panel — fixed width so Email/Text tabs don't resize */
   .outreach-panel.fullscreen-panel {
-    width: 480px !important;
-    min-width: 480px !important;
+    width: calc(var(--ui-panel-height) * 0.585) !important;
+    min-width: calc(var(--ui-panel-height) * 0.585) !important;
   }
 
-  /* Desktop: Leads, Deals, Quotes, Reports, Tasks, Pipes & Schedule — same width as floating action bar */
+  /* Desktop: outreach template create/edit — full form height, CRM panel width */
+  .outreach-template-panel.fullscreen-panel {
+    width: min(calc(var(--ui-panel-height) * 0.878), 52vw) !important;
+    min-width: min(520px, 92vw) !important;
+    max-width: min(calc(var(--ui-panel-height) * 0.976), 56vw) !important;
+    height: calc(var(--ui-panel-height) * 0.9) !important;
+    max-height: calc(var(--ui-panel-height) * 0.9375) !important;
+    min-height: 0 !important;
+    border-radius: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .outreach-template-panel .outreach-template-form {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .outreach-template-panel .outreach-template-form-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .outreach-template-panel .outreach-template-form-footer {
+    flex-shrink: 0;
+    justify-content: flex-end;
+    background: inherit;
+  }
+
+  /* Desktop: form fill/editor — same footprint as other CRM panels */
+  .form-fill-panel.fullscreen-panel,
+  .form-editor-panel.fullscreen-panel {
+    width: var(--action-bar-width) !important;
+    min-width: 0 !important;
+    max-width: var(--action-bar-width) !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
+  }
+
+  /* Desktop: Leads, Deals, Quotes, Reports, Pipes & Schedule — same width as floating action bar */
   .leads-panel.fullscreen-panel,
   .deals-panel.fullscreen-panel,
-  .tasks-panel.fullscreen-panel,
   .quotes-panel.fullscreen-panel:not(.quote-details-panel):not(.quote-editor-panel),
   .forms-panel.fullscreen-panel:not(.form-editor-panel):not(.form-fill-panel),
   .reports-panel.fullscreen-panel:not(.report-details-panel):not(.report-editor-panel),
@@ -191,13 +418,204 @@
   .deal-pipeline-panel.fullscreen-panel,
   .activity-panel.fullscreen-panel,
   .lists-panel.fullscreen-panel,
+  .parcel-list-panel.fullscreen-panel,
   .paths-panel.fullscreen-panel {
     width: var(--action-bar-width) !important;
     min-width: 0 !important;
     max-width: var(--action-bar-width) !important;
-    height: min(88vh, 820px) !important;
-    min-height: min(65vh, 520px) !important;
-    max-height: 90vh !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
+  }
+
+  /* Solo Tasks — skinny right rail below map controls (map chrome stays visible) */
+  html:has(#modal-root .map-panel-dialog.tasks-panel[data-state="open"]):not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]),
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]):not([data-tasks-docked="1"]),
+  html[data-tasks-dock-leave="1"]:not([data-tasks-solo-detail="1"]):not([data-tasks-dock-root]) {
+    --tasks-solo-dock-width: min(300px, 24vw);
+    --tasks-solo-rail-top: calc(
+      var(--ui-chrome-inset)
+      + env(safe-area-inset-top, 0px)
+      + var(--map-controls-stack-height)
+      + var(--ui-chrome-panel-gap)
+    );
+    --tasks-solo-rail-height: calc(
+      100vh
+      - var(--tasks-solo-rail-top)
+      - var(--ui-chrome-panel-gap)
+      - var(--ui-action-bar-block)
+    );
+  }
+
+  html:has(#modal-root .map-panel-dialog.tasks-panel[data-state="open"]):not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) {
+    --ui-panel-width: var(--action-bar-width);
+    --tasks-dock-group-width: var(--action-bar-width);
+  }
+
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]):not([data-tasks-docked="1"]) {
+    --ui-panel-width: var(--action-bar-width);
+    --tasks-dock-group-width: var(--action-bar-width);
+  }
+
+  /* Unified Tasks layout vars — top-right anchored so solo ↔ docked shrinks in place */
+  html:has(#modal-root .map-panel-dialog.tasks-panel[data-state="open"]):not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]),
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]):not([data-tasks-docked="1"]),
+  html[data-tasks-dock-leave="1"]:not([data-tasks-solo-detail="1"]):not([data-tasks-dock-root]) {
+    --tasks-layout-top: var(--tasks-solo-rail-top);
+    --tasks-layout-width: var(--tasks-solo-dock-width);
+    --tasks-layout-height: var(--tasks-solo-rail-height);
+    --tasks-layout-min-height: min(280px, var(--tasks-solo-rail-height));
+  }
+
+  /* Undock beside primary: Tasks stays in docked column while fading out */
+  html[data-tasks-dock-leave="1"][data-tasks-dock-root]:not([data-tasks-solo="1"]) {
+    --tasks-layout-top: calc(var(--ui-chrome-inset) + env(safe-area-inset-top, 0px));
+    --tasks-layout-width: var(--tasks-dock-width);
+    --tasks-layout-height: var(--ui-panel-height);
+    --tasks-layout-min-height: var(--ui-panel-min-height);
+  }
+
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) {
+    --tasks-layout-top: calc(var(--ui-chrome-inset) + env(safe-area-inset-top, 0px));
+    --tasks-layout-width: var(--tasks-dock-width);
+    --tasks-layout-height: var(--ui-panel-height);
+    --tasks-layout-min-height: var(--ui-panel-min-height);
+  }
+
+  /* Tasks panel — layout positioning (solo rail, docked column, undock, solo-detail) */
+  html:has(#modal-root .map-panel-dialog.tasks-panel[data-state="open"]):not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]) .map-panel-dialog.tasks-panel.list-panel.fullscreen-panel[data-state="open"],
+  html[data-tasks-docked="1"] .map-panel-dialog.tasks-panel.list-panel.fullscreen-panel[data-state="open"],
+  html[data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="tasks"][data-state="open"],
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel.list-panel.fullscreen-panel[data-state="open"],
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-solo-detail="1"] .map-panel-dialog.tasks-panel.list-panel.fullscreen-panel[data-state="open"],
+  html[data-tasks-solo-detail="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html:has(#modal-root .map-panel-dialog.tasks-panel[data-state="open"]):not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]) .map-panel-dialog.tasks-panel.list-panel.fullscreen-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.tasks-panel.list-panel.fullscreen-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel.list-panel.fullscreen-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    left: auto !important;
+    right: var(--tasks-panel-right-inset) !important;
+    bottom: auto !important;
+    top: var(--tasks-layout-top, 50%) !important;
+    overflow: hidden !important;
+    transform-origin: top right;
+  }
+
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="open"],
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-panel-fade="in"][data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-panel-fade="out"][data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-panel-fade="out"][data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    width: var(--tasks-layout-width) !important;
+    min-width: 0 !important;
+    max-width: var(--tasks-layout-width) !important;
+    height: var(--tasks-layout-height) !important;
+    max-height: var(--tasks-layout-height) !important;
+    min-height: var(--tasks-layout-min-height, 0px) !important;
+    transition:
+      top var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      height var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-height var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) !important;
+  }
+
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="open"],
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-panel-fade="in"][data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-panel-fade="out"][data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-panel-fade="out"][data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    transform: none !important;
+  }
+
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="open"],
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    opacity: var(--tasks-layout-opacity) !important;
+  }
+
+  /* Steady state only — do not cancel enter/exit keyframes on html[data-tasks-panel-fade] */
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="open"],
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    animation: none !important;
+  }
+
+  /* Solo open/close — after layout rules; pin full size, slide only (no width/height transition) */
+  html[data-tasks-panel-fade="in"]:not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"])
+    .map-panel-dialog.tasks-panel[data-state="open"] {
+    left: auto !important;
+    right: var(--tasks-panel-right-inset) !important;
+    top: var(--tasks-solo-rail-top) !important;
+    transform-origin: top right;
+    width: var(--tasks-solo-dock-width) !important;
+    max-width: var(--tasks-solo-dock-width) !important;
+    height: var(--tasks-solo-rail-height) !important;
+    max-height: var(--tasks-solo-rail-height) !important;
+    min-height: min(280px, var(--tasks-solo-rail-height)) !important;
+    transition: none !important;
+    animation: tasks-panel-slide-in-from-right var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) forwards !important;
+  }
+
+  html[data-tasks-panel-fade="out"]:not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"])
+    .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-panel-fade="out"]:not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"])
+    .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    left: auto !important;
+    right: var(--tasks-panel-right-inset) !important;
+    top: var(--tasks-solo-rail-top) !important;
+    transform-origin: top right;
+    width: var(--tasks-solo-dock-width) !important;
+    max-width: var(--tasks-solo-dock-width) !important;
+    height: var(--tasks-solo-rail-height) !important;
+    max-height: var(--tasks-solo-rail-height) !important;
+    min-height: min(280px, var(--tasks-solo-rail-height)) !important;
+    transition: none !important;
+    animation: tasks-panel-slide-out-to-right var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) forwards !important;
+  }
+
+  html[data-tasks-panel-fade="in"][data-tasks-docked="1"]:not([data-tasks-solo="1"])
+    .map-panel-dialog.tasks-panel[data-state="open"] {
+    width: var(--tasks-dock-width) !important;
+    max-width: var(--tasks-dock-width) !important;
+    height: var(--ui-panel-height) !important;
+    max-height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    transition: none !important;
+    animation: tasks-panel-fade-in-docked var(--tasks-panel-fade-duration) var(--tasks-panel-fade-ease) forwards !important;
+  }
+
+  html[data-tasks-panel-fade="out"][data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel[data-state="open"],
+  html[data-tasks-panel-fade="out"][data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    width: var(--tasks-dock-width) !important;
+    max-width: var(--tasks-dock-width) !important;
+    height: var(--ui-panel-height) !important;
+    max-height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    transition: none !important;
+    animation: tasks-panel-fade-out-docked var(--tasks-panel-fade-duration) var(--tasks-panel-fade-ease) forwards !important;
+  }
+
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]) .map-panel-dialog.tasks-panel.fullscreen-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]),
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    visibility: visible !important;
+    pointer-events: none !important;
+  }
+
+  /* instantDismiss must not snap Tasks back to viewport center on desktop */
+  html[data-tasks-solo="1"]:not([data-tasks-solo-detail="1"]) .map-panel-dialog.tasks-panel.animate-none[data-state="open"],
+  html[data-tasks-docked="1"] .map-panel-dialog.tasks-panel.animate-none[data-state="open"],
+  html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="tasks"].animate-none[data-state="open"],
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.tasks-panel.animate-none[data-state="open"],
+  html[data-tasks-solo-detail="1"] .map-panel-dialog.tasks-panel.animate-none[data-state="open"] {
+    top: var(--tasks-layout-top, 50%) !important;
+    right: var(--tasks-panel-right-inset) !important;
+    left: auto !important;
+    transform: none !important;
   }
 
   /* Pipes: tasks live in the Tasks panel on desktop */
@@ -245,50 +663,97 @@
     align-items: center !important;
   }
 
-  /* Desktop: Tasks + primary panel side-by-side, centered as a group */
+  /* Desktop: Tasks + primary panel side-by-side — group uses maximized width when open */
   html[data-tasks-docked="1"],
   html[data-tasks-dock-leave="1"] {
-    --tasks-dock-gap: 14px;
     --tasks-dock-width: min(300px, 24vw);
-    --tasks-dock-primary-width: var(--action-bar-width);
+    --tasks-dock-primary-width: max(
+      0px,
+      calc(var(--tasks-dock-group-width, var(--action-bar-width)) - var(--tasks-dock-width) - var(--tasks-dock-gap))
+    );
     /* Primary slides left when Tasks docks; fade only when swapping primaries */
     --tasks-dock-primary-shift: calc((var(--tasks-dock-width) + var(--tasks-dock-gap)) / 2);
-    --tasks-dock-tasks-shift: calc((var(--action-bar-width) + var(--tasks-dock-gap)) / 2);
+    --tasks-dock-tasks-shift: calc((var(--tasks-dock-primary-width) + var(--tasks-dock-gap)) / 2);
   }
 
   html[data-tasks-docked="1"][data-tasks-dock-root="activity"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="activity"] {
-    --tasks-dock-primary-width: min(400px, 92vw);
+    /* Activity uses the same dock primary width as other panels (full share beside Tasks) */
+    --tasks-dock-primary-width: max(
+      0px,
+      calc(var(--tasks-dock-group-width, var(--action-bar-width)) - var(--tasks-dock-width) - var(--tasks-dock-gap))
+    );
   }
 
-  html[data-tasks-docked="1"] .map-panel-dialog.tasks-panel[data-state="open"],
-  html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="tasks"][data-state="open"] {
-    width: var(--tasks-dock-width) !important;
-    min-width: min(260px, 22vw) !important;
-    max-width: var(--tasks-dock-width) !important;
-    transform: translate3d(calc(-50% + var(--tasks-dock-tasks-shift)), -50%, 0) !important;
-    transition: none !important;
+  /* Docked primary panels: narrow width so primary + Tasks fits within viewport group */
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog[data-tasks-dock-slot="primary"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.form-fill-panel),
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.leads-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.deals-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.deal-pipeline-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.quotes-panel.fullscreen-panel:not(.quote-details-panel):not(.quote-editor-panel),
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.reports-panel.fullscreen-panel:not(.report-details-panel):not(.report-editor-panel),
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.forms-panel.fullscreen-panel:not(.form-editor-panel):not(.form-fill-panel),
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.form-editor-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.paths-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.lists-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.teams-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.activity-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.schedule-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.outreach-panel.fullscreen-panel {
+    width: var(--tasks-dock-primary-width) !important;
+    max-width: var(--tasks-dock-primary-width) !important;
+    min-width: 0 !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
+    transition:
+      transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease);
+  }
+
+  html[data-tasks-solo-detail="1"] {
+    --tasks-dock-width: min(300px, 24vw);
+    --tasks-solo-detail-width: min(calc(var(--ui-panel-height) * 0.878), 48vw);
+    --tasks-solo-detail-shift: calc(
+      50vw
+      - var(--tasks-panel-right-inset)
+      - var(--tasks-dock-width)
+      - var(--tasks-dock-gap)
+      - var(--tasks-solo-detail-width) / 2
+      - var(--tasks-dock-width) / 2
+    );
+    --tasks-layout-top: calc(var(--ui-chrome-inset) + env(safe-area-inset-top, 0px));
+    --tasks-layout-width: var(--tasks-dock-width);
+    --tasks-layout-height: var(--ui-panel-height);
+    --tasks-layout-min-height: var(--ui-panel-min-height);
+  }
+
+  /* Solo close — layout opacity (dock undock uses panel keyframe above) */
+  html[data-tasks-panel-fade="out"]:not([data-tasks-docked="1"]):not([data-tasks-dock-leave="1"]):not([data-tasks-solo-detail="1"]) {
+    --tasks-layout-opacity: 0 !important;
+  }
+
+  html[data-tasks-solo-detail="1"] .map-panel-dialog.lead-details-panel[data-state="open"],
+  html[data-tasks-solo-detail="1"] .map-panel-dialog.deal-details-panel[data-state="open"],
+  html[data-tasks-solo-detail="1"] .map-panel-dialog.parcel-list-panel[data-state="open"] {
+    left: 50% !important;
+    right: auto !important;
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translate3d(calc(-50% - var(--tasks-solo-detail-shift)), -50%, 0) !important;
+    transition: transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease), opacity 220ms cubic-bezier(0.4, 0, 0.2, 1) !important;
     animation: none !important;
     opacity: 1 !important;
+    z-index: 10001 !important;
   }
 
-  @keyframes map-panel-tasks-dock-out {
-    from {
-      transform: translate3d(calc(-50% + var(--tasks-dock-tasks-shift)), -50%, 0) scale(1);
-    }
-    to {
-      transform: translate3d(calc(-50% + var(--tasks-dock-tasks-shift)), -50%, 0) scale(0.985);
-    }
+  html[data-tasks-solo-detail="1"] [data-crm-detail-focus] {
+    display: none !important;
   }
 
-  /* Closing docked Tasks: narrow width + scale-out at dock position */
-  html[data-tasks-dock-leave="1"]:not([data-tasks-panel-close-settled="1"]) .map-panel-dialog.tasks-panel[data-state="closed"] {
-    width: var(--tasks-dock-width) !important;
-    min-width: min(260px, 22vw) !important;
-    max-width: var(--tasks-dock-width) !important;
-    visibility: visible !important;
-    animation: map-panel-tasks-dock-out 120ms ease-in forwards !important;
-    pointer-events: none !important;
+  html[data-tasks-solo-detail="1"] .map-panel-dialog.tasks-panel[data-state="open"] {
+    z-index: 10002 !important;
   }
 
   /* After close animation: hide sticky-mounted Tasks (prevents full-width replay) */
@@ -299,12 +764,21 @@
     animation: none !important;
   }
 
-  html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="primary"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel) {
+  html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel),
+  html[data-tasks-dock-leave="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel) {
     transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) !important;
     animation: none !important;
-    opacity: 1 !important;
     z-index: 10001 !important;
+  }
+
+  html[data-tasks-dock-leave="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel) {
+    width: var(--action-bar-width) !important;
+    max-width: var(--action-bar-width) !important;
+    transform: translate3d(-50%, -50%, 0) !important;
   }
 
   /* Nested CRM detail/editor overlays: viewport-centered above dock + blur */
@@ -313,7 +787,9 @@
   html[data-tasks-docked="1"] .map-panel-dialog.quote-details-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.quote-editor-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.report-details-panel,
-  html[data-tasks-docked="1"] .map-panel-dialog.report-editor-panel {
+  html[data-tasks-docked="1"] .map-panel-dialog.report-editor-panel,
+  html[data-tasks-docked="1"] .map-panel-dialog.parcel-list-panel,
+  html[data-tasks-docked="1"] .map-panel-dialog.form-fill-panel {
     transform: translate3d(-50%, -50%, 0) !important;
     transition: none !important;
     z-index: 10021 !important;
@@ -327,26 +803,29 @@
     z-index: 10002 !important;
   }
 
-  html[data-tasks-docked="1"][data-tasks-dock-root="leads"] .map-panel-dialog.leads-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="deals"] .map-panel-dialog.deals-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="pipes"] .map-panel-dialog.deal-pipeline-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="quotes"] .map-panel-dialog.quotes-panel:not(.quote-details-panel):not(.quote-editor-panel),
-  html[data-tasks-docked="1"][data-tasks-dock-root="reports"] .map-panel-dialog.reports-panel:not(.report-details-panel):not(.report-editor-panel),
-  html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.forms-panel.list-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-editor-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-fill-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="paths"] .map-panel-dialog.paths-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="lists"] .map-panel-dialog.lists-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="teams"] .map-panel-dialog.teams-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="activity"] .map-panel-dialog.activity-panel,
-  html[data-tasks-docked="1"][data-tasks-dock-root="schedule"] .map-panel-dialog.schedule-panel {
+  html[data-tasks-docked="1"][data-tasks-dock-root="leads"] .map-panel-dialog.leads-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="deals"] .map-panel-dialog.deals-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="pipes"] .map-panel-dialog.deal-pipeline-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="quotes"] .map-panel-dialog.quotes-panel[data-state="open"]:not(.quote-details-panel):not(.quote-editor-panel),
+  html[data-tasks-docked="1"][data-tasks-dock-root="reports"] .map-panel-dialog.reports-panel[data-state="open"]:not(.report-details-panel):not(.report-editor-panel),
+  html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.forms-panel.list-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-editor-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-fill-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="paths"] .map-panel-dialog.paths-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="lists"] .map-panel-dialog.lists-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="teams"] .map-panel-dialog.teams-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="activity"] .map-panel-dialog.activity-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="schedule"] .map-panel-dialog.schedule-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="outreach"] .map-panel-dialog.outreach-panel[data-state="open"] {
     transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease);
     animation: none !important;
-    opacity: 1 !important;
   }
 
-  /* Keep open primaries visible — slide only, no entrance animation when Tasks docks */
+  /* Keep open primaries visible — slide only, no entrance animation when Tasks docks mid-session */
   html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.leads-panel[data-state="open"],
   html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.deals-panel[data-state="open"],
   html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.deal-pipeline-panel[data-state="open"],
@@ -357,9 +836,9 @@
   html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.lists-panel[data-state="open"],
   html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.teams-panel[data-state="open"],
   html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.activity-panel[data-state="open"],
-  html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.schedule-panel[data-state="open"] {
+  html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.schedule-panel[data-state="open"],
+  html[data-tasks-docked="1"]:not([data-tasks-dock-swap="1"]) .map-panel-dialog.outreach-panel[data-state="open"] {
     animation: none !important;
-    opacity: 1 !important;
   }
 
   @keyframes map-panel-primary-dock-fade-in {
@@ -396,8 +875,9 @@
   html[data-tasks-dock-swap="1"] .map-panel-dialog.lists-panel[data-state="open"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.teams-panel[data-state="open"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.activity-panel[data-state="open"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.schedule-panel[data-state="open"] {
-    animation: map-panel-primary-dock-fade-in 0.2s ease-out forwards !important;
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.schedule-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.outreach-panel[data-state="open"] {
+    animation: map-panel-primary-dock-fade-in 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
     transition: none !important;
   }
 
@@ -411,30 +891,15 @@
   html[data-tasks-dock-swap="1"] .map-panel-dialog.lists-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.teams-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.activity-panel[data-state="closed"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.schedule-panel[data-state="closed"] {
-    animation: map-panel-primary-dock-fade-out 0.16s ease-in forwards !important;
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.schedule-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.outreach-panel[data-state="closed"] {
+    animation: map-panel-primary-dock-fade-out 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
     transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
     transition: none !important;
     pointer-events: none !important;
   }
 
-  /* Desktop list panels: no scale pulse on open (prevents re-trigger after Tasks undock) */
-  .map-panel-dialog.leads-panel[data-state="open"],
-  .map-panel-dialog.deals-panel[data-state="open"],
-  .map-panel-dialog.deal-pipeline-panel[data-state="open"],
-  .map-panel-dialog.quotes-panel[data-state="open"]:not(.quote-details-panel):not(.quote-editor-panel),
-  .map-panel-dialog.reports-panel[data-state="open"]:not(.report-details-panel):not(.report-editor-panel),
-  .map-panel-dialog.forms-panel.list-panel[data-state="open"],
-  .map-panel-dialog.paths-panel[data-state="open"],
-  .map-panel-dialog.lists-panel[data-state="open"],
-  .map-panel-dialog.teams-panel[data-state="open"],
-  .map-panel-dialog.activity-panel[data-state="open"],
-  .map-panel-dialog.schedule-panel[data-state="open"] {
-    animation: none !important;
-    opacity: 1 !important;
-  }
-
-  /* Undock: primary slides back to center and stays open */
+  /* Undock: primary slides back to center, expands width into Tasks column */
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="leads"] .map-panel-dialog.leads-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="deals"] .map-panel-dialog.deals-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="pipes"] .map-panel-dialog.deal-pipeline-panel[data-state="open"],
@@ -447,40 +912,202 @@
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="lists"] .map-panel-dialog.lists-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="teams"] .map-panel-dialog.teams-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="activity"] .map-panel-dialog.activity-panel[data-state="open"],
-  html[data-tasks-dock-leave="1"][data-tasks-dock-root="schedule"] .map-panel-dialog.schedule-panel[data-state="open"] {
+  html[data-tasks-dock-leave="1"][data-tasks-dock-root="schedule"] .map-panel-dialog.schedule-panel[data-state="open"],
+  html[data-tasks-dock-leave="1"][data-tasks-dock-root="outreach"] .map-panel-dialog.outreach-panel[data-state="open"] {
+    width: var(--action-bar-width) !important;
+    max-width: var(--action-bar-width) !important;
+    min-width: 0 !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
     transform: translate3d(-50%, -50%, 0) !important;
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition:
+      transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) !important;
     animation: none !important;
-    opacity: 1 !important;
   }
 
   /* Desktop: CRM detail panels — readable width, same height as list panels */
   .lead-details-panel.fullscreen-panel,
   .deal-details-panel.fullscreen-panel {
-    width: min(720px, 46vw) !important;
-    min-width: 420px !important;
-    max-width: min(780px, 48vw) !important;
-    height: min(88vh, 820px) !important;
-    min-height: min(65vh, 520px) !important;
-    max-height: 90vh !important;
+    width: min(calc(var(--ui-panel-height) * 0.878), 48vw) !important;
+    min-width: calc(var(--ui-panel-height) * 0.512) !important;
+    max-width: min(calc(var(--ui-panel-height) * 0.951), 52vw) !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
+  }
+
+  /* Desktop: New / Edit task — wider, shorter, sticky footer actions */
+  .new-task-panel.fullscreen-panel {
+    width: min(calc(var(--ui-panel-height) * 0.878), 52vw) !important;
+    min-width: calc(var(--ui-panel-height) * 0.585) !important;
+    max-width: min(calc(var(--ui-panel-height) * 0.976), 56vw) !important;
+    height: calc(var(--ui-panel-height) * 0.9) !important;
+    max-height: calc(var(--ui-panel-height) * 0.9375) !important;
+    min-height: 0 !important;
+    border-radius: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .new-task-panel .new-task-form-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .new-task-panel .new-task-form-footer {
+    flex-shrink: 0;
+    justify-content: flex-end;
+    background: inherit;
+  }
+
+  /* Maximized desktop panels — anchor below top inset, gap above action bar */
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel),
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog[data-state="closed"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not([data-tasks-panel-close-settled="1"]) {
+    top: var(--ui-panel-center-y) !important;
+  }
+
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog) {
+    box-sizing: border-box !important;
+    width: var(--ui-panel-width) !important;
+    max-width: var(--ui-panel-width) !important;
+    min-width: 0 !important;
+    height: var(--ui-panel-height) !important;
+    max-height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    overflow-x: clip !important;
+  }
+
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .list-panel.fullscreen-panel:not(.tasks-panel) {
+    width: var(--ui-panel-width) !important;
+    min-width: 0 !important;
+    max-width: var(--ui-panel-width) !important;
+  }
+
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-solo-detail="1"] .map-panel-dialog.lead-details-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-solo-detail="1"] .map-panel-dialog.deal-details-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-solo-detail="1"] .map-panel-dialog.parcel-list-panel.fullscreen-panel {
+    width: var(--tasks-solo-detail-width) !important;
+    max-width: var(--tasks-solo-detail-width) !important;
+    min-width: 0 !important;
+  }
+
+  /* Beat maximized --ui-panel-width when Tasks is docked beside a primary panel */
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog[data-tasks-dock-slot="primary"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.form-fill-panel),
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.leads-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.deals-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.deal-pipeline-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.quotes-panel.fullscreen-panel:not(.quote-details-panel):not(.quote-editor-panel),
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.reports-panel.fullscreen-panel:not(.report-details-panel):not(.report-editor-panel),
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.forms-panel.fullscreen-panel:not(.form-editor-panel):not(.form-fill-panel),
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.form-editor-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.paths-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.lists-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.teams-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.activity-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.schedule-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.outreach-panel.fullscreen-panel {
+    width: var(--tasks-dock-primary-width) !important;
+    max-width: var(--tasks-dock-primary-width) !important;
+    min-width: 0 !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
   }
 }
 
 /* Map panel dialogs: viewport-centered entrance (fade + subtle scale from center) */
 @keyframes map-panel-center-in {
   from {
-    transform: translate3d(-50%, -50%, 0) scale(0.985);
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) scale(0.99);
   }
   to {
+    opacity: 1;
     transform: translate3d(-50%, -50%, 0) scale(1);
   }
 }
 @keyframes map-panel-center-out {
   from {
+    opacity: 1;
     transform: translate3d(-50%, -50%, 0) scale(1);
   }
   to {
-    transform: translate3d(-50%, -50%, 0) scale(0.985);
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) scale(0.99);
+  }
+}
+@keyframes map-panel-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes map-panel-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes map-panel-tasks-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes map-panel-tasks-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes tasks-panel-slide-in-from-right {
+  from {
+    opacity: 0;
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes tasks-panel-slide-out-to-right {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(100%, 0, 0);
+  }
+}
+@keyframes tasks-panel-fade-in-docked {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes tasks-panel-fade-out-docked {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 .map-panel-dialog {
@@ -494,17 +1121,64 @@
 .map-panel-dialog:focus-visible {
   outline: none !important;
 }
-.map-panel-dialog[data-state='open'] {
+.map-panel-dialog:not(.tasks-panel)[data-state='open'] {
   animation: map-panel-center-in 160ms ease-out forwards;
 }
-.map-panel-dialog[data-state='closed'] {
+@media (max-width: 767px) {
+  .map-panel-dialog.tasks-panel[data-state='open'] {
+    animation: map-panel-tasks-fade-in var(--tasks-panel-fade-duration) var(--tasks-panel-fade-ease) forwards;
+  }
+}
+.map-panel-dialog:not(.tasks-panel)[data-state='closed'] {
   animation: map-panel-center-out 120ms ease-in forwards;
+}
+@media (max-width: 767px) {
+  .map-panel-dialog.tasks-panel[data-state='closed']:not([data-tasks-panel-close-settled="1"]) {
+    animation: map-panel-tasks-fade-out var(--tasks-panel-fade-duration) var(--tasks-panel-fade-ease) forwards !important;
+  }
 }
 .map-panel-dialog.animate-none[data-state='open'],
 .map-panel-dialog.animate-none[data-state='closed'] {
   animation: none !important;
   opacity: 1;
   transform: translate3d(-50%, -50%, 0) scale(1);
+}
+
+/* Desktop: smooth opacity fade on panel open/close (data-state driven — no re-trigger on Tasks dock layout) */
+@media (min-width: 768px) {
+  .map-panel-dialog:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel) {
+    transition: opacity 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @starting-style {
+    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel) {
+      opacity: 0;
+    }
+  }
+
+  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel) {
+    opacity: 1;
+    animation: none !important;
+  }
+
+  /* Desktop Tasks: steady state uses layout vars; enter/exit use keyframes above */
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="open"],
+  html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
+    animation: none !important;
+  }
+
+  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not([data-tasks-panel-close-settled="1"]) {
+    opacity: 0;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none !important;
+    animation: none !important;
+  }
+
+  [data-crm-detail-focus],
+  [data-app-dialog-backdrop] {
+    transition: opacity 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
 
 /* Dialog panels: solid surface — backdrop-filter + transform blurs text in Chrome */
@@ -653,8 +1327,43 @@
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 0.5rem;
+  gap: calc(0.5rem * var(--ui-touch-scale));
   min-width: 0;
+}
+
+/* Scaled panel chrome — headers, icon buttons, titles track viewport sizing */
+.map-panel .panel-chrome-btn {
+  height: calc(2rem * var(--ui-touch-scale)) !important;
+  width: calc(2rem * var(--ui-touch-scale)) !important;
+  min-height: calc(2rem * var(--ui-touch-scale)) !important;
+  min-width: calc(2rem * var(--ui-touch-scale)) !important;
+}
+.map-panel .panel-chrome-btn svg {
+  width: calc(1rem * var(--ui-touch-scale)) !important;
+  height: calc(1rem * var(--ui-touch-scale)) !important;
+}
+.map-panel .panel-chrome-btn-lg {
+  height: calc(2.75rem * var(--ui-touch-scale)) !important;
+  width: calc(2.75rem * var(--ui-touch-scale)) !important;
+  min-height: calc(2.75rem * var(--ui-touch-scale)) !important;
+  min-width: calc(2.75rem * var(--ui-touch-scale)) !important;
+}
+.map-panel .panel-chrome-btn-lg svg {
+  width: calc(1.25rem * var(--ui-touch-scale)) !important;
+  height: calc(1.25rem * var(--ui-touch-scale)) !important;
+}
+.map-panel .map-panel-header-toolbar .text-xl {
+  font-size: calc(1.25rem * var(--ui-touch-scale)) !important;
+  line-height: 1.3 !important;
+}
+.map-panel .map-panel-header-toolbar .h-5 {
+  width: calc(1.25rem * var(--ui-touch-scale)) !important;
+  height: calc(1.25rem * var(--ui-touch-scale)) !important;
+}
+.map-panel .panel-list-header {
+  padding-left: calc(1.5rem * var(--ui-touch-scale));
+  padding-right: calc(1.5rem * var(--ui-touch-scale));
+  padding-bottom: calc(1rem * var(--ui-touch-scale));
 }
 .map-panel .map-panel-header-toolbar > .map-panel-header-title-wrap {
   flex: 1 1 0%;
@@ -982,10 +1691,10 @@
 }
 
 /* Lead/Deal details — flat text links; outlined tiles, status chips, and fields keep borders */
-.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn),
+.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn):not(.lead-detail-file-action-btn),
 .map-panel.lead-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-deal-card),
 .map-panel.lead-details-panel a,
-.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn),
+.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn):not(.lead-detail-file-action-btn),
 .map-panel.deal-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-deal-card),
 .map-panel.deal-details-panel a {
   background: none !important;
@@ -1002,6 +1711,60 @@
 .map-panel.deal-details-panel a:hover {
   background: none !important;
   background-color: transparent !important;
+}
+
+/* Lead/Deal details — outlined buttons (list-panel reset strips borders from section controls) */
+.map-panel.lead-details-panel .lead-detail-action-tile,
+.map-panel.deal-details-panel .lead-detail-action-tile {
+  border: 2px solid rgba(255, 255, 255, 0.24) !important;
+  border-style: solid !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.map-panel.lead-details-panel .lead-detail-action-tile:hover:not(:disabled),
+.map-panel.deal-details-panel .lead-detail-action-tile:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.38) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.panel-filter-option),
+.map-panel.lead-details-panel .map-panel-header-actions .panel-chrome-btn,
+.map-panel.deal-details-panel .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.panel-filter-option),
+.map-panel.deal-details-panel .map-panel-header-actions .panel-chrome-btn,
+.map-panel.deal-details-panel .map-panel-header-actions button {
+  border: 1px solid #ffffff !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.map-panel.lead-details-panel .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.panel-filter-option):hover:not(:disabled),
+.map-panel.lead-details-panel .map-panel-header-actions .panel-chrome-btn:hover:not(:disabled),
+.map-panel.deal-details-panel .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.panel-filter-option):hover:not(:disabled),
+.map-panel.deal-details-panel .map-panel-header-actions .panel-chrome-btn:hover:not(:disabled),
+.map-panel.deal-details-panel .map-panel-header-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: #ffffff !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed,
+.map-panel.deal-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed {
+  border: 1px dashed #ffffff !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed:hover:not(:disabled),
+.map-panel.deal-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed:hover:not(:disabled) {
+  border-color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-status-btn,
+.map-panel.lead-details-panel .lead-detail-section .panel-filter-option,
+.map-panel.deal-details-panel .lead-detail-status-btn,
+.map-panel.deal-details-panel .lead-detail-section .panel-filter-option {
+  border: 1px solid #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .lead-detail-section {
@@ -1050,21 +1813,28 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
+  gap: 0.375rem;
   width: 100%;
   min-width: 0;
-  min-height: 3.5rem;
-  padding: 0.5rem 0.25rem !important;
-  border-radius: 0.625rem !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  min-height: 4.25rem;
+  padding: 0.625rem 0.375rem !important;
+  border-radius: 0.75rem !important;
+  border: 2px solid rgba(255, 255, 255, 0.24) !important;
+  border-style: solid !important;
   background: rgba(255, 255, 255, 0.05) !important;
   color: rgba(255, 255, 255, 0.92);
   text-align: center;
   transition: background-color 0.15s, border-color 0.15s;
 }
 
+.lead-detail-action-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
 .lead-detail-action-label {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 500;
   line-height: 1.15;
   width: 100%;
@@ -1076,7 +1846,108 @@
 
 .lead-detail-action-tile:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.09) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+}
+
+@media (min-width: 768px) {
+  .map-panel.lead-details-panel .lead-detail-actions-row,
+  .map-panel.deal-details-panel .lead-detail-actions-row {
+    gap: 0.625rem;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-action-tile,
+  .map-panel.deal-details-panel .lead-detail-action-tile {
+    min-height: 5.5rem;
+    padding: 0.875rem 0.5rem !important;
+    gap: 0.5rem;
+    border-radius: 0.875rem !important;
+    border-width: 2px !important;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-action-icon,
+  .map-panel.deal-details-panel .lead-detail-action-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-action-label,
+  .map-panel.deal-details-panel .lead-detail-action-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-status-btn,
+  .map-panel.lead-details-panel .lead-detail-section .panel-filter-option,
+  .map-panel.deal-details-panel .lead-detail-status-btn,
+  .map-panel.deal-details-panel .lead-detail-section .panel-filter-option {
+    min-height: 2.75rem;
+    padding: 0.5625rem 1rem;
+    font-size: 0.875rem;
+    border-radius: 0.625rem;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-section .flex.flex-wrap.gap-1\.5,
+  .map-panel.deal-details-panel .lead-detail-section .flex.flex-wrap.gap-1\.5 {
+    gap: 0.625rem;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-section button.h-7:not(.w-7),
+  .map-panel.lead-details-panel .lead-detail-section button.panel-action-btn,
+  .map-panel.deal-details-panel .lead-detail-section button.h-7:not(.w-7),
+  .map-panel.deal-details-panel .lead-detail-section button.panel-action-btn {
+    min-height: 2.75rem !important;
+    height: auto !important;
+    padding: 0.5625rem 1rem !important;
+    font-size: 0.875rem !important;
+    border-radius: 0.625rem !important;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-section button.h-7.w-7,
+  .map-panel.lead-details-panel .lead-detail-section button[class*="h-7"][class*="w-7"],
+  .map-panel.deal-details-panel .lead-detail-section button.h-7.w-7,
+  .map-panel.deal-details-panel .lead-detail-section button[class*="h-7"][class*="w-7"] {
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+    min-width: 2.75rem !important;
+    min-height: 2.75rem !important;
+    border-radius: 0.625rem !important;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-section button.h-7 svg,
+  .map-panel.lead-details-panel .lead-detail-section button.panel-action-btn svg,
+  .map-panel.deal-details-panel .lead-detail-section button.h-7 svg,
+  .map-panel.deal-details-panel .lead-detail-section button.panel-action-btn svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-field,
+  .map-panel.lead-details-panel textarea.lead-detail-field,
+  .map-panel.deal-details-panel .lead-detail-field,
+  .map-panel.deal-details-panel textarea.lead-detail-field {
+    font-size: 0.9375rem !important;
+    padding: 0.625rem 0.875rem !important;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-section-title,
+  .map-panel.deal-details-panel .lead-detail-section-title {
+    font-size: 0.8125rem;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed,
+  .map-panel.deal-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed {
+    min-height: 2.75rem;
+    padding: 0.5rem 1.125rem;
+    font-size: 0.875rem;
+    border-width: 1px;
+  }
+
+  .map-panel.lead-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed svg,
+  .map-panel.deal-details-panel .lead-detail-section .inline-flex.rounded-full.border-dashed svg {
+    width: 1rem;
+    height: 1rem;
+  }
 }
 
 .lead-detail-deal-card {
@@ -1089,11 +1960,120 @@
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   background: rgba(255, 255, 255, 0.04) !important;
   text-align: left;
-  transition: background-color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
 .lead-detail-deal-card:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-deal-card,
+.map-panel.deal-details-panel .lead-detail-deal-card {
+  border: 1px solid #ffffff !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-deal-card:hover:not(:disabled),
+.map-panel.deal-details-panel .lead-detail-deal-card:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: #ffffff !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-deal-card .lead-detail-file-action-btn,
+.map-panel.deal-details-panel .lead-detail-deal-card .lead-detail-file-action-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0 !important;
+  border-radius: 0.5rem !important;
+  border: 1px solid #ffffff !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-deal-card .lead-detail-file-action-btn:hover:not(:disabled),
+.map-panel.deal-details-panel .lead-detail-deal-card .lead-detail-file-action-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: #ffffff !important;
+}
+
+/* Deal detail — prominent linked lead card */
+.deal-detail-lead-link {
+  align-items: flex-start !important;
+  gap: 0.875rem !important;
+  padding: 1rem 1.125rem !important;
+}
+
+.deal-detail-lead-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: 0.125rem;
+}
+
+.deal-detail-lead-name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.deal-detail-lead-address {
+  margin-top: 0.375rem;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.deal-detail-lead-hint {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.deal-detail-lead-chevron {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.375rem;
+}
+
+@media (min-width: 768px) {
+  .deal-detail-lead-link {
+    padding: 1.25rem 1.375rem !important;
+    gap: 1rem !important;
+  }
+
+  .deal-detail-lead-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-top: 0.1875rem;
+  }
+
+  .deal-detail-lead-name {
+    font-size: 1.375rem;
+  }
+
+  .deal-detail-lead-address {
+    margin-top: 0.4375rem;
+    font-size: 1rem;
+  }
+
+  .deal-detail-lead-hint {
+    margin-top: 0.625rem;
+    font-size: 0.8125rem;
+  }
+
+  .deal-detail-lead-chevron {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-top: 0.5rem;
+  }
+}
+
+.lead-detail-section .deal-finances-panel {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .map-panel.lead-details-panel .lead-detail-field,
@@ -1439,7 +2419,7 @@
 
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
 /* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle, form-fill buttons - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action),
 .map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action) {
   background: var(--map-panel-btn-bg) !important;
   border-color: var(--map-panel-btn-border) !important;
@@ -1447,7 +2427,7 @@
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled),
 .map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled) {
   background: var(--map-panel-btn-hover-bg) !important;
   border-color: var(--map-panel-btn-border) !important;
@@ -1505,16 +2485,16 @@
 }
 
 /* List panel - no fills on buttons (except delete, create form actions) */
-/* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams) */
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option) {
+/* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams); action tiles (parcel/lead details) */
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):hover:not(:disabled) {
   background: transparent !important;
 }
 
@@ -1540,10 +2520,11 @@
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border-radius: 0.75rem !important;
-  min-height: 2.75rem;
-  padding-left: 1rem;
-  padding-right: 1rem;
+  border-radius: calc(0.75rem * var(--ui-touch-scale)) !important;
+  min-height: calc(2.75rem * var(--ui-touch-scale));
+  padding-left: calc(1rem * var(--ui-touch-scale));
+  padding-right: calc(1rem * var(--ui-touch-scale));
+  font-size: calc(0.875rem * var(--ui-touch-scale));
 }
 .list-panel button.create-list-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.22) !important;
@@ -1586,15 +2567,15 @@
   align-items: center !important;
   justify-content: center !important;
   width: 100% !important;
-  min-height: 2.75rem !important;
-  padding: 0.625rem 1rem !important;
-  border-radius: 0.75rem !important;
+  min-height: calc(2.75rem * var(--ui-touch-scale)) !important;
+  padding: calc(0.625rem * var(--ui-touch-scale)) calc(1rem * var(--ui-touch-scale)) !important;
+  border-radius: calc(0.75rem * var(--ui-touch-scale)) !important;
   border: 1.5px solid rgba(255, 255, 255, 0.5) !important;
   background: rgba(255, 255, 255, 0.12) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
-  font-size: 0.875rem !important;
+  font-size: calc(0.875rem * var(--ui-touch-scale)) !important;
   font-weight: 500 !important;
   line-height: 1.25 !important;
 }
@@ -1905,9 +2886,10 @@
   padding-top: 0.25rem;
 }
 .share-list-dialog .share-dialog-btn {
-  border-radius: 0.625rem !important;
+  border-radius: calc(0.625rem * var(--ui-touch-scale)) !important;
   font-weight: 600 !important;
-  font-size: 0.875rem !important;
+  font-size: calc(0.875rem * var(--ui-touch-scale)) !important;
+  min-height: calc(2.75rem * var(--ui-touch-scale)) !important;
   box-shadow: none !important;
 }
 .share-list-dialog .share-dialog-btn--primary {
@@ -2221,23 +3203,18 @@
   color: rgba(255, 255, 255, 0.95) !important;
 }
 
-/* Deal pipeline lead cards - dark fill for readability on map background */
-.deal-pipeline-lead-card,
-.deal-pipeline-panel .deal-pipeline-lead-card,
-.map-panel .deal-pipeline-lead-card {
-  background: rgba(0, 0, 0, 0.75) !important;
-  border-color: rgba(255, 255, 255, 0.25) !important;
-  color: rgba(255, 255, 255, 0.98) !important;
+/* Pipeline deal cards — elevated surface distinct from column wells (bg-white/12) */
+.deal-pipeline-panel .deal-pipeline-lead-card.lead-detail-deal-card {
+  align-items: flex-start !important;
+  background: rgba(0, 0, 0, 0.42) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
-.deal-pipeline-lead-card:hover,
-.deal-pipeline-panel .deal-pipeline-lead-card:hover {
-  background: rgba(0, 0, 0, 0.85) !important;
+
+.deal-pipeline-panel .deal-pipeline-lead-card.lead-detail-deal-card:hover {
+  background: rgba(0, 0, 0, 0.54) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
 }
-.deal-pipeline-lead-card .text-gray-600,
-.deal-pipeline-lead-card .text-gray-500,
-.deal-pipeline-lead-card [class*="text-gray"] {
-  color: rgba(255, 255, 255, 0.85) !important;
-}
+
 .deal-pipeline-lead-card select {
   background: rgba(0, 0, 0, 0.4) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
@@ -2280,6 +3257,201 @@
   background-color: transparent !important;
 }
 
+/* Parcel details — action tiles (icon + label, outlined; list-panel reset strips borders without this) */
+.parcel-details-panel .parcel-details-action-tile {
+  border: 2px solid rgba(255, 255, 255, 0.24) !important;
+  border-style: solid !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.parcel-details-panel .parcel-details-action-tile:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.38) !important;
+}
+
+.parcel-details-actions-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-evenly;
+  gap: 0.375rem;
+}
+
+.parcel-details-actions-row > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.parcel-details-action-tile {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 3rem;
+  padding: 0.5rem 0.25rem !important;
+  border-radius: 0.625rem !important;
+  border: 2px solid rgba(255, 255, 255, 0.24) !important;
+  border-style: solid !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  text-align: center;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.parcel-details-action-tile:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border: 2px solid rgba(255, 255, 255, 0.38) !important;
+}
+
+.parcel-details-action-tile:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.parcel-details-action-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.parcel-details-action-label {
+  display: none;
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1.15;
+  width: 100%;
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.parcel-details-action-tile--contact.parcel-details-action-tile--active {
+  border-color: rgba(255, 255, 255, 0.38) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+@media (min-width: 768px) {
+  .parcel-details-panel {
+    max-width: 36rem;
+  }
+
+  .parcel-details-actions-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(5.75rem, 1fr));
+    gap: 0.625rem;
+  }
+
+  .parcel-details-action-tile {
+    min-height: 5rem;
+    padding: 0.75rem 0.5rem !important;
+    border-radius: 0.75rem !important;
+    border-width: 2px !important;
+    gap: 0.4375rem;
+  }
+
+  .parcel-details-action-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .parcel-details-action-label {
+    display: block;
+    font-size: 0.75rem;
+    letter-spacing: 0.01em;
+  }
+
+  .parcel-details-title {
+    font-size: 1.875rem;
+    line-height: 1.2;
+  }
+
+  .parcel-details-owner {
+    font-size: 1.25rem;
+  }
+
+  .parcel-details-value {
+    font-size: 1.375rem;
+  }
+
+  .parcel-details-badge {
+    font-size: 0.8125rem !important;
+    padding: 0.25rem 0.625rem !important;
+  }
+
+  .parcel-details-tab {
+    font-size: 0.9375rem;
+    padding: 0.625rem 0.875rem;
+  }
+
+  .parcel-details-data-row {
+    font-size: 0.9375rem;
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+  }
+
+  .parcel-details-data-label {
+    font-size: 0.875rem;
+  }
+
+  .parcel-details-data-value {
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .parcel-details-stat-card {
+    padding: 0.875rem 1rem;
+  }
+
+  .parcel-details-stat-label {
+    font-size: 0.75rem;
+  }
+
+  .parcel-details-stat-value {
+    font-size: 1.0625rem;
+  }
+
+  .parcel-details-section-title {
+    font-size: 0.8125rem;
+  }
+
+  .parcel-details-note-input,
+  .parcel-details-note-display,
+  .parcel-details-note-empty {
+    font-size: 0.9375rem;
+  }
+
+  .parcel-details-note-btn {
+    font-size: 0.8125rem;
+    padding: 0.375rem 0.875rem;
+  }
+
+  .parcel-details-panel .parcel-details-contact {
+    font-size: 0.9375rem;
+  }
+
+  .parcel-details-panel .parcel-details-contact .text-lg {
+    font-size: 1.125rem;
+  }
+
+  .parcel-details-panel .parcel-details-contact .text-sm {
+    font-size: 0.875rem;
+  }
+
+  .parcel-details-panel .parcel-details-contact .text-xs {
+    font-size: 0.8125rem;
+  }
+
+  .parcel-details-panel .parcel-details-contact input {
+    font-size: 0.9375rem;
+    padding: 0.5rem 0.625rem;
+  }
+}
+
 /* Liquid Glass aesthetic - light frosted glass, no added darkness
    https://kube.io/blog/liquid-glass-css-svg/ */
 .liquid-glass {
@@ -2317,6 +3489,7 @@
 /* Hide scrollbars while keeping scroll */
 .scrollbar-hide,
 .hide-scrollbar,
+.fill-scroll-container,
 .parcel-details-scroll,
 .roof-inspector-scroll {
   scrollbar-width: none;
@@ -2324,6 +3497,7 @@
 }
 .scrollbar-hide::-webkit-scrollbar,
 .hide-scrollbar::-webkit-scrollbar,
+.fill-scroll-container::-webkit-scrollbar,
 .parcel-details-scroll::-webkit-scrollbar,
 .roof-inspector-scroll::-webkit-scrollbar {
   display: none;
@@ -3197,30 +4371,35 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .public-form-page .fill-scroll-container {
   background: #e5e7eb;
 }
-.public-form-review-scroll {
+.public-form-review-scroll,
+.form-fill-fit-scroll {
   overflow-x: hidden !important;
   overflow-y: auto !important;
   padding: 0 0.5rem 1rem;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.public-form-review-scroll::-webkit-scrollbar {
+.public-form-review-scroll::-webkit-scrollbar,
+.form-fill-fit-scroll::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
 }
-.public-form-review-frame {
+.public-form-review-frame,
+.form-fill-fit-frame {
   display: flex;
   justify-content: center;
   width: 100%;
   box-sizing: border-box;
 }
-.public-form-review-frame--fits {
+.public-form-review-frame--fits,
+.form-fill-fit-frame--fits {
   align-items: center;
   min-height: 100%;
   padding: 0.75rem 0;
 }
-.public-form-review-frame--scroll {
+.public-form-review-frame--scroll,
+.form-fill-fit-frame--scroll {
   align-items: flex-start;
   min-height: auto;
   padding: 0.75rem 0 0.5rem;
@@ -3231,7 +4410,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   flex-shrink: 0;
   background: #ffffff;
 }
-.public-form-review-stage {
+.public-form-review-stage,
+.form-fill-fit-stage {
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -3466,6 +4646,19 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 /* Send-form / share popup dialogs — darker panel for readable text on mobile */
+.map-panel.forms-send-dialog,
+.map-panel.share-list-dialog.team-member-features-dialog {
+  height: auto !important;
+  max-height: min(88vh, 720px) !important;
+  overflow: hidden !important;
+}
+@media (min-width: 768px) {
+  .map-panel.share-list-dialog.team-member-features-dialog {
+    max-height: var(--ui-panel-height) !important;
+    width: min(calc(var(--ui-panel-height) * 0.537), 92vw) !important;
+    max-width: min(calc(var(--ui-panel-height) * 0.537), 92vw) !important;
+  }
+}
 .map-panel.forms-send-dialog,
 .map-panel.share-list-dialog {
   background: rgba(12, 14, 18, 0.94) !important;
@@ -3910,11 +5103,147 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 @media (min-width: 768px) {
+  .tag-chip--pill {
+    min-height: 2.75rem;
+    padding: 0.5625rem 1.125rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.25;
+    gap: 0.4375rem;
+  }
+
+  .tag-chip--filter,
+  .tag-filter-bar .panel-filter-option {
+    min-height: 2.75rem;
+    padding: 0.5625rem 1rem !important;
+    font-size: 0.875rem !important;
+    border-radius: 0.625rem;
+  }
+
+  .tag-chip-remove svg {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+
+  .tag-chip-add {
+    min-height: 2.75rem;
+    padding: 0.5625rem 1.125rem !important;
+    font-size: 0.875rem !important;
+    gap: 0.4375rem;
+  }
+
+  .tag-chip-add svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .entity-tag-pills,
+  .tag-picker-pills,
+  .tag-filter-bar {
+    gap: 0.625rem !important;
+  }
+
+  /* Desktop panel list typography — matches Pipes deal cards (excludes panel headers & action bar). */
+  .panel-item-title {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.375;
+  }
+
+  .panel-item-body {
+    font-size: 0.875rem;
+    line-height: 1.375;
+  }
+
+  .panel-item-meta {
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .panel-item-value {
+    font-size: 1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    .font-medium:not(.text-xs):not(.uppercase):not([class*='text-[10px]']):not([class*='text-[11px]']) {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.375;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    :is(.font-semibold.text-sm, .font-semibold.truncate) {
+    font-size: 1rem;
+    line-height: 1.375;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    .text-sm {
+    font-size: 0.875rem;
+    line-height: 1.375;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    .text-base.font-medium,
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    .text-base.font-semibold {
+    font-size: 1rem;
+    line-height: 1.375;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    .text-xs:not(.panel-item-meta):not(.uppercase):not([class*='text-[10px]']):not([class*='text-[11px]']) {
+    font-size: 0.875rem;
+    line-height: 1.375;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    :is(
+      .panel-item-meta,
+      .text-xs.opacity-50,
+      .text-xs.opacity-70,
+      .text-sm.opacity-50,
+      .text-sm.opacity-40,
+      [class*='border-t'] .text-xs,
+      [class*='border-t'] [class*='text-[11px]']
+    ) {
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
+    [class*='text-[11px]']:not(.uppercase):not([class*='border-t']) {
+    font-size: 0.875rem;
+    line-height: 1.375;
+  }
+
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card).text-xs,
+  .map-panel
+    :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card).text-sm {
+    font-size: 0.875rem;
+    line-height: 1.375;
+  }
+
+  .deal-pipeline-panel .deal-pipeline-column .font-semibold.text-sm {
+    font-size: 1rem;
+    line-height: 1.375;
+  }
+
   .crm-column-headers {
     display: grid;
     gap: 0.75rem;
     padding: 0.25rem 0.875rem 0.5rem;
-    font-size: 0.625rem;
+    font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -3957,10 +5286,18 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     padding-bottom: 0.625rem !important;
   }
 
+  .crm-lead-row .crm-col-lead,
+  .crm-deal-row .crm-col-deal,
+  .crm-deal-row .crm-col-lead {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.375;
+  }
+
   .crm-lead-row .crm-col-tags,
   .crm-deal-row .crm-col-tags {
-    font-size: 0.625rem;
-    line-height: 1.3;
+    font-size: 0.75rem;
+    line-height: 1.35;
     overflow: hidden;
   }
 
@@ -3972,32 +5309,39 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
   .crm-lead-row .crm-col-status,
   .crm-deal-row .crm-col-stage {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
   }
 
   .crm-lead-row .crm-col-property,
   .crm-deal-row .crm-col-property {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     opacity: 0.65;
   }
 
   .crm-lead-row .crm-col-contact {
-    font-size: 0.6875rem;
+    font-size: 0.875rem;
     opacity: 0.55;
-    line-height: 1.4;
+    line-height: 1.375;
   }
 
   .crm-lead-row .crm-col-meta,
   .crm-deal-row .crm-col-meta {
-    font-size: 0.6875rem;
+    font-size: 0.875rem;
     opacity: 0.55;
-    line-height: 1.4;
+    line-height: 1.375;
   }
 
   .crm-deal-row .crm-col-amount {
-    font-size: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  .crm-deal-row .crm-col-amount .panel-item-value,
+  .crm-deal-row .crm-col-amount .tabular-nums {
+    font-size: 1rem;
+    font-weight: 600;
   }
 
   .crm-deal-headers span:last-child {
@@ -4008,41 +5352,28 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
    Floating Action Bar — responsive bottom dock (phone → wide desktop).
    ========================================================================= */
 
-:root {
-  --action-bar-width: min(92vw, 400px);
-}
-
-@media (min-width: 768px) {
-  :root {
-    --action-bar-width: min(94vw, 520px);
-  }
-}
-
 @media (min-width: 1100px) {
   :root {
-    --action-bar-width: min(96vw, 640px);
+    --action-bar-width: min(96vw, calc(var(--ui-action-bar-height-basis) * var(--ui-panel-width-ratio)));
   }
 }
 
 @media (min-width: 1280px) {
   :root {
-    --action-bar-width: min(96vw, 760px);
+    --action-bar-width: min(96vw, calc(var(--ui-action-bar-height-basis) * var(--ui-panel-width-ratio)));
   }
 }
 
 @media (min-width: 1440px) {
   :root {
-    --action-bar-width: min(98vw, 1120px);
+    --action-bar-width: min(98vw, calc(var(--ui-action-bar-height-basis) * var(--ui-panel-width-ratio)));
   }
 }
 
-@media (min-width: 1440px) {
-  .mobile-action-bar-btn {
-    min-width: 2.75rem;
-    padding: 4px 2px 6px;
-  }
-  .mobile-action-bar-label {
-    font-size: 9px;
+@media (min-width: 768px) {
+  .mobile-action-bar {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + calc(12px * var(--ui-touch-scale)));
+    max-height: calc(var(--ui-chrome-stack-height) - var(--ui-panel-height));
   }
 }
 
@@ -4076,9 +5407,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   -webkit-backdrop-filter: blur(12px) saturate(180%);
   backdrop-filter: blur(12px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 12px;
-  padding: 6px;
-  gap: 4px;
+  border-radius: calc(12px * var(--ui-touch-scale));
+  padding: calc(6px * var(--ui-touch-scale));
+  gap: calc(4px * var(--ui-touch-scale));
   width: var(--action-bar-width);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
 }
@@ -4092,23 +5423,23 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     pointer-events: auto !important;
   }
   .mobile-action-bar-inner {
-    gap: 6px;
-    padding: 8px;
+    gap: calc(6px * var(--ui-touch-scale));
+    padding: calc(8px * var(--ui-touch-scale));
   }
   .mobile-action-bar-btn {
-    min-width: 3.25rem;
+    min-width: calc(3.25rem * var(--ui-touch-scale));
   }
   .mobile-action-bar-label {
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-touch-scale));
   }
 }
 
 @media (min-width: 1440px) {
   .mobile-action-bar-inner {
-    border-radius: 14px;
+    border-radius: calc(14px * var(--ui-touch-scale));
   }
   .mobile-action-bar-label {
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-touch-scale));
   }
 }
 
@@ -4125,10 +5456,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   flex: 1 1 0;
   min-width: 0;
   flex-direction: column;
-  gap: 6px;
-  padding: 4px 4px 6px;
-  height: 56px;
-  border-radius: 8px;
+  gap: calc(6px * var(--ui-touch-scale));
+  padding: calc(4px * var(--ui-touch-scale)) calc(4px * var(--ui-touch-scale)) calc(6px * var(--ui-touch-scale));
+  height: calc(3.5rem * var(--ui-touch-scale));
+  border-radius: calc(8px * var(--ui-touch-scale));
   background: transparent;
   border: 1px solid transparent;
 }
@@ -4153,6 +5484,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   align-items: center;
   justify-content: center;
 }
+.mobile-action-bar-btn svg {
+  width: calc(1.5rem * var(--ui-touch-scale));
+  height: calc(1.5rem * var(--ui-touch-scale));
+}
 
 .mobile-action-bar-badge {
   position: absolute;
@@ -4172,7 +5507,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 .mobile-action-bar-label {
-  font-size: 10px;
+  font-size: calc(10px * var(--ui-touch-scale));
   line-height: 1;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -5064,15 +6399,15 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   align-items: center !important;
   justify-content: center !important;
   width: 100% !important;
-  min-height: 2.75rem !important;
-  padding: 0.625rem 1rem !important;
-  border-radius: 0.75rem !important;
+  min-height: calc(2.75rem * var(--ui-touch-scale)) !important;
+  padding: calc(0.625rem * var(--ui-touch-scale)) calc(1rem * var(--ui-touch-scale)) !important;
+  border-radius: calc(0.75rem * var(--ui-touch-scale)) !important;
   border: 1.5px solid rgba(255, 255, 255, 0.5) !important;
   background: rgba(255, 255, 255, 0.12) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
-  font-size: 0.875rem !important;
+  font-size: calc(0.875rem * var(--ui-touch-scale)) !important;
   font-weight: 500 !important;
   cursor: pointer !important;
 }
@@ -5111,6 +6446,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   flex-direction: column;
   background: #0a0c12;
   color: var(--map-chrome-text, #fff);
+  pointer-events: auto;
 }
 
 .photo-mode-header,
@@ -5456,6 +6792,35 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   border-radius: 8px;
   object-fit: cover;
   border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.photo-mode-save-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+.photo-mode-save-thumb-btn {
+  display: block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.photo-mode-save-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.photo-mode-save-thumb-btn:hover .photo-mode-save-thumb {
+  border-color: rgba(255, 255, 255, 0.45);
 }
 
 .storage-usage {

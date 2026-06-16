@@ -26,6 +26,7 @@ function OwnerMatchBadge({ confidence }) {
 export function ContactSection({
   data, onPhoneClick, onEmailClick, compact = false,
   onSkipTrace = null, isSkipTracing = false, hasSkipTraced = false,
+  className = '',
 }) {
   const {
     phoneDetails, emailDetails, skipTracedInfo, normalized,
@@ -42,7 +43,7 @@ export function ContactSection({
   // Contact tab meaningful (button + add fields) instead of a blank panel.
   if (!hasContacts) {
     return (
-      <div className="space-y-4">
+      <div className={`parcel-details-contact space-y-4 ${className}`.trim()}>
         <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
           <Phone className="h-5 w-5" />
           <span>{compact ? 'Contact' : 'Contact Information'}</span>
@@ -94,7 +95,7 @@ export function ContactSection({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={`parcel-details-contact space-y-2 ${className}`.trim()}>
       <div className="flex items-center gap-2 text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
         <Phone className="h-5 w-5" />
         <span>{compact ? 'Contact' : 'Contact Information'}</span>

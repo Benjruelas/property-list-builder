@@ -22,22 +22,7 @@ import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { showToast } from './ui/toast'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 
-function leadToParcelData(lead) {
-  if (!lead) return null
-  return {
-    id: lead.parcelId,
-    address: lead.address,
-    properties: lead.properties || {
-      OWNER_NAME: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
-      SITUS_ADDR: lead.address,
-      LATITUDE: lead.lat,
-      LONGITUDE: lead.lng,
-    },
-    lat: lead.lat,
-    lng: lead.lng,
-  }
-}
-
+import { leadToParcelData } from '@/utils/leads'
 const DEALS_PANEL_MENU_W = 220
 
 const STUCK_IN_STAGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -96,7 +81,9 @@ export function DealsPanel({
   dealsDetailPipelineId = null,
   dealsClosedRecordId = null,
   dealsLeadOverlayId = null,
+  leadsDetailLeadId = null,
   onOpenDealDetail,
+  onOpenDealFromLead,
   onOpenClosedDeal,
   onOpenLeadOverlay,
   onCloseDealDetail,
@@ -590,10 +577,15 @@ export function DealsPanel({
         canSeeDealAmounts={canSeeDealAmounts}
       />
 
-      {isOpen && selectedDeal && selectedPipeline && dealsDetailDealId && !dealsClosedRecordId && (
+      {selectedDeal && selectedPipeline && dealsDetailDealId && !dealsClosedRecordId && (
         <Suspense fallback={null}>
         <DealDetails
           obscuredByChild={!!leadOverlayId}
+          panelDockSlot={!isOpen ? panelDockSlot : undefined}
+          nestedOverlay={isOpen}
+          topLayer={!isOpen}
+          hideOverlay
+          suppressBackdrop
           deal={selectedDeal}
           pipeline={selectedPipeline}
           lead={selectedLead}
@@ -623,11 +615,14 @@ export function DealsPanel({
         </Suspense>
       )}
 
-      {isOpen && leadOverlay && (
+      {leadOverlay && (
         <Suspense fallback={null}>
         <LeadDetails
           isOpen
           instantDismiss={instantDismiss}
+          panelDockSlot={!isOpen ? panelDockSlot : undefined}
+          nestedOverlay={isOpen}
+          topLayer
           onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
           pipelines={pipelines}
@@ -642,7 +637,7 @@ export function DealsPanel({
           onCreateDeal={startCreateDealFromLead}
           onOpenDeal={(deal, pipelineId) => {
             onCloseLeadOverlay?.()
-            onOpenDealDetail?.(deal.id, pipelineId || deal.__pipelineId || selectedPipelineId)
+            onOpenDealFromLead?.(deal.id, pipelineId || deal.__pipelineId || selectedPipelineId)
           }}
           onLeadDeleted={() => {
             onCloseLeadOverlay?.()
@@ -654,8 +649,6 @@ export function DealsPanel({
           teamMembership={teamMembership}
           leads={leads}
           canSeeDealAmounts={canSeeDealAmounts}
-          nestedOverlay
-          topLayer
           currentUserId={currentUserId}
           onEditLead={onEditLead}
           tagRegistry={tagRegistry}

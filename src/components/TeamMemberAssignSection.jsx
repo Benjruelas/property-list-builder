@@ -15,16 +15,17 @@ export function TeamMemberAssignSection({
   disabled = false,
   title = 'Assign to:',
   description = '',
-  className = ''
+  className = '',
+  compact = false,
 }) {
   if (!Array.isArray(members) || members.length === 0) return null
   const sel = new Set(selectedUids || [])
 
   return (
-    <div className={className}>
+    <div className={cn(compact && 'team-member-assign--compact', className)}>
       <p className="text-xs font-medium block mb-1 opacity-90">{title}</p>
       {description ? <p className="text-[11px] text-white/50 mb-2">{description}</p> : null}
-      <ul className="space-y-1.5">
+      <ul className={cn(compact ? 'grid grid-cols-2 gap-1.5' : 'space-y-1.5')}>
         {members.map((m) => {
           const on = sel.has(m.uid)
           return (
@@ -34,7 +35,8 @@ export function TeamMemberAssignSection({
                 disabled={disabled}
                 onClick={() => onToggle?.(m.uid)}
                 className={cn(
-                  'w-full flex items-center gap-2 py-2 px-2.5 rounded-md border text-left text-sm transition-colors',
+                  'w-full flex items-center gap-2 rounded-md border text-left transition-colors',
+                  compact ? 'py-1.5 px-2 text-xs' : 'py-2 px-2.5 text-sm',
                   on
                     ? 'bg-blue-500/15 border-blue-500/40 text-white/95'
                     : 'bg-black/10 border-transparent hover:bg-black/15 text-white/85',
@@ -43,11 +45,12 @@ export function TeamMemberAssignSection({
               >
                 <span
                   className={cn(
-                    'h-4 w-4 rounded border flex items-center justify-center flex-shrink-0',
+                    'rounded border flex items-center justify-center flex-shrink-0',
+                    compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
                     on ? 'border-blue-400 bg-blue-500/80 text-white' : 'border-white/40'
                   )}
                 >
-                  {on && <Check className="h-3 w-3" strokeWidth={3} />}
+                  {on && <Check className={cn(compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} strokeWidth={3} />}
                 </span>
                 <span className="truncate flex-1">{m.email || m.uid}</span>
               </button>

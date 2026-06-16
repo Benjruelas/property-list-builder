@@ -23,15 +23,15 @@ export function TagChip({
       onClick={onClick}
       aria-pressed={interactive ? selected : undefined}
       className={cn(
-        'inline-flex items-center gap-1 font-medium max-w-full',
+        'tag-chip inline-flex items-center gap-1 font-medium max-w-full',
         isFilter
           ? cn(
-              'panel-filter-option cursor-pointer',
+              'tag-chip--filter panel-filter-option cursor-pointer',
               isSmall ? 'min-h-[30px] px-2.5 py-1 text-[11px]' : 'min-h-[34px] px-3 py-1.5 text-xs',
               selected && 'panel-filter-option--status-active'
             )
           : cn(
-              'rounded-full',
+              'tag-chip--pill rounded-full',
               isSmall ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs',
               interactive && 'cursor-pointer transition-opacity hover:opacity-90',
               selected && 'ring-1 ring-offset-1 ring-offset-transparent'
@@ -61,7 +61,7 @@ export function TagChip({
       {onRemove && (
         <button
           type="button"
-          className="shrink-0 rounded-full hover:opacity-80"
+          className="tag-chip-remove shrink-0 rounded-full hover:opacity-80"
           onClick={(e) => {
             e.stopPropagation()
             onRemove(tag)

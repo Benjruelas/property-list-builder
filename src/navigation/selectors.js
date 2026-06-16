@@ -1,5 +1,5 @@
 import { frameRoot, STACKABLE_SCHEDULE_OPENERS } from './types.js'
-import { findDockablePrimaryRoot, stackHasTasks } from './taskDock.js'
+import { findDockablePrimaryRoot, getStandaloneDetailBesideTasks, stackHasTasks } from './taskDock.js'
 
 /**
  * @param {ReturnType<import('./navigationReducer.js').createInitialState>} state
@@ -70,6 +70,10 @@ function findFrame(state, type) {
   return null
 }
 
+function hasExactFrame(state, type) {
+  return state.navStack.some((f) => f.type === type)
+}
+
 function findFrameRoot(state, root) {
   for (let i = state.navStack.length - 1; i >= 0; i--) {
     if (frameRoot(state.navStack[i].type) === root) return state.navStack[i]
@@ -84,12 +88,28 @@ function findFrameRoot(state, root) {
 export function selectTasksDockLayout(state) {
   const stack = state.navStack
   if (!stackHasTasks(stack)) {
-    return { tasksDocked: false, primaryRoot: null }
+    return { tasksDocked: false, primaryRoot: null, tasksSoloDetail: false, soloDetailRoot: null }
   }
+
+  const soloDetailRoot = getStandaloneDetailBesideTasks(stack)
   const primaryRoot = findDockablePrimaryRoot(stack)
+
+  // Standalone detail beside solo Tasks (e.g. task → lead). When a dockable primary
+  // (activity, leads list, etc.) is still in the stack, keep the docked pair intact.
+  if (soloDetailRoot && !primaryRoot) {
+    return {
+      tasksDocked: false,
+      primaryRoot: null,
+      tasksSoloDetail: true,
+      soloDetailRoot,
+    }
+  }
+
   return {
     tasksDocked: !!primaryRoot,
     primaryRoot,
+    tasksSoloDetail: false,
+    soloDetailRoot: null,
   }
 }
 
@@ -146,12 +166,17 @@ export function selectPanelProps(state) {
     /** Activity dialog stays mounted while activity remains in the stack (avoids reopen flicker on back). */
     isActivityPanelOpen: !!activityFrame,
     isActivityPanelFocused: isActivityFeedFocused(state),
+    /** Visual stack order: only the top nav frame gets dialog topLayer (z-index). */
+    isActivityPanelTopLayer: top?.type === 'activity',
+    isTasksPanelTopLayer: top?.type === 'tasks',
     isListPanelOpen: hasFrameRoot(state, 'lists'),
     isParcelListPanelOpen: !!listsParcels,
     viewingListId: listsParcels?.listId ?? null,
-    isLeadsPanelOpen: hasFrameRoot(state, 'leads'),
+    isLeadsPanelOpen: hasExactFrame(state, 'leads'),
     leadsDetailLeadId: leadsDetail?.leadId ?? null,
-    isDealsPanelOpen: hasFrameRoot(state, 'deals'),
+    isLeadsDetailStandalone: !!leadsDetail && !hasExactFrame(state, 'leads'),
+    isDealsPanelOpen: hasExactFrame(state, 'deals'),
+    isDealsDetailStandalone: !!dealsDetail && !hasExactFrame(state, 'deals'),
     dealsDetailDealId: dealsDetail?.dealId ?? null,
     dealsDetailPipelineId: dealsDetail?.pipelineId ?? null,
     dealsClosedRecordId: dealsClosed?.closedRecordId ?? null,
@@ -219,4 +244,20 @@ export function selectPanelProps(state) {
     dealTemplatesManagerOpen: state.modalStack.some((m) => m.type === 'dealTemplatesManager'),
     moveDealContext: state.modalStack.find((m) => m.type === 'moveDeal')?.context ?? null,
   }
+}
+
+/** Action bar highlight — highest-priority open primary panel. */
+export function selectActionBarActiveId(state) {
+  const p = selectPanelProps(state)
+  if (p.isDealPipelineOpen) return 'pipes'
+  if (p.isTasksPanelOpen) return 'tasks'
+  if (p.isSchedulePanelOpen) return 'schedule'
+  if (p.isLeadsPanelOpen) return 'leads'
+  if (p.isDealsPanelOpen) return 'deals'
+  if (p.isQuotesPanelOpen) return 'quotes'
+  if (p.isFormsPanelOpen) return 'forms'
+  if (p.isReportsPanelOpen) return 'reports'
+  if (p.isListPanelOpen && !p.isParcelListPanelOpen) return 'lists'
+  if (p.isActivityPanelOpen) return 'activity'
+  return null
 }

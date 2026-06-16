@@ -205,22 +205,18 @@ export function CreateDealTasksEditor({
           if (!open) closeTaskDialog()
         }}
         isEditMode={isEditMode}
-        showContextCard={isEditMode}
-        contextPrimary={contextPrimary}
-        contextSecondary={leadLabel && contextPrimary !== leadLabel ? leadLabel : ''}
-        contextTertiary={leadAddress}
         initialTitle={editingTask?.title || ''}
-        initialLeadId={isEditMode ? null : lead?.id || null}
-        initialDealId={isEditMode ? null : pendingDeal?.id || null}
+        initialLeadId={lead?.id || null}
+        initialDealId={isEditMode ? (editingTask?.dealId || pendingDeal?.id || null) : (pendingDeal?.id || null)}
         initialScheduledAt={editingTask?.scheduledAt ?? null}
         initialScheduledEndAt={editingTask?.scheduledEndAt ?? null}
         initialTeamAssignUids={editingTask?.assignedUids || []}
         leads={displayLeads}
         deals={pendingDeal ? [pendingDeal] : []}
-        showDealPicker={!!lead && !isEditMode}
+        showDealPicker={!!lead}
         showLeadPicker={!!lead}
-        lockLead={!!lead && !isEditMode}
-        disableDealClear={!isEditMode}
+        lockLead={!!lead}
+        disableDealClear={!!pendingDeal?.id}
         showTeamAssign={showTeamAssign}
         teamMembers={teamMembers}
         teamContextActive={teamContextActive}

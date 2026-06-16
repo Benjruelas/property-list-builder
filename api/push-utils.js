@@ -236,10 +236,34 @@ export function getTeamMemberEmails(team) {
   return [...emails]
 }
 
+function clip(text, max = 80) {
+  const s = String(text ?? '').trim()
+  return s ? s.slice(0, max) : ''
+}
+
 function shareKindForResourceType(resourceType) {
   if (resourceType === 'pipeline') return 'pipelineShared'
   if (resourceType === 'path') return 'pathShared'
   return 'listShared'
+}
+
+function shareTitleForResourceType(resourceType) {
+  if (resourceType === 'pipeline') return 'Pipeline shared with you'
+  if (resourceType === 'path') return 'Path shared with you'
+  return 'List shared with you'
+}
+
+function shortWhen(iso) {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
 }
 
 function shareNavData(resourceType, resourceId) {
@@ -275,12 +299,14 @@ export async function notifyNewMemberShares(newMemberUids, team, { resourceType,
   const emails = memberEmailsForUids(team, newMemberUids, actorUid)
   const kind = shareKindForResourceType(resourceType)
   const data = shareNavData(resourceType, resourceId)
+  const title = shareTitleForResourceType(resourceType)
+  const body = clip(resourceName) || 'Untitled'
   for (const email of emails) {
     await sendWebPushToEmail(
       email,
       {
-        title: 'Item shared with you',
-        body: `${actorEmail || 'Someone'} shared "${resourceName || 'an item'}" with you`,
+        title,
+        body,
         tag: `member-share-${resourceType}-${resourceId}-${email}`,
         data,
       },
@@ -296,12 +322,14 @@ export async function notifyTeamResourceShare(newTeamIds, teamsIndex, { resource
     const team = teamsIndex[tid]
     if (!team) continue
     const data = { ...shareNavData(resourceType, resourceId), teamId: tid }
+    const name = clip(resourceName) || 'Untitled'
+    const teamName = clip(team.name, 40)
     for (const email of getTeamMemberEmails(team)) {
       await sendWebPushToEmail(
         email,
         {
-          title: 'Item shared with you',
-          body: `${actorEmail || 'Someone'} shared "${resourceName || 'an item'}" with team ${team.name || ''}`.trim(),
+          title: 'Shared with team',
+          body: teamName ? `${name} · ${teamName}` : name,
           tag: `team-share-${resourceType}-${resourceId}-${tid}`,
           data,
         },
@@ -313,12 +341,13 @@ export async function notifyTeamResourceShare(newTeamIds, teamsIndex, { resource
 }
 
 export async function notifyNewListShares(newEmails, { listName, listId, actorEmail }) {
+  const body = clip(listName) || 'Untitled list'
   for (const email of newEmails) {
     await sendWebPushToEmail(
       email,
       {
-        title: 'Item shared with you',
-        body: `${actorEmail || 'Someone'} shared "${listName || 'a list'}" with you`,
+        title: 'List shared with you',
+        body,
         tag: `list-share-${listId || Date.now()}`,
         data: { type: 'listShared', listId },
       },
@@ -329,12 +358,13 @@ export async function notifyNewListShares(newEmails, { listName, listId, actorEm
 }
 
 export async function notifyNewPipelineShares(newEmails, { pipelineTitle, pipelineId, actorEmail }) {
+  const body = clip(pipelineTitle) || 'Untitled pipeline'
   for (const email of newEmails) {
     await sendWebPushToEmail(
       email,
       {
-        title: 'Item shared with you',
-        body: `${actorEmail || 'Someone'} shared "${pipelineTitle || 'a pipeline'}" with you`,
+        title: 'Pipeline shared with you',
+        body,
         tag: `pipe-share-${pipelineId || Date.now()}`,
         data: { type: 'pipelineShared', pipelineId },
       },
@@ -345,12 +375,13 @@ export async function notifyNewPipelineShares(newEmails, { pipelineTitle, pipeli
 }
 
 export async function notifyNewPathShares(newEmails, { pathName, pathId, actorEmail }) {
+  const body = clip(pathName) || 'Untitled path'
   for (const email of newEmails) {
     await sendWebPushToEmail(
       email,
       {
-        title: 'Item shared with you',
-        body: `${actorEmail || 'Someone'} shared "${pathName || 'a path'}" with you`,
+        title: 'Path shared with you',
+        body,
         tag: `path-share-${pathId || Date.now()}`,
         data: { type: 'pathShared', pathId },
       },
@@ -361,11 +392,13 @@ export async function notifyNewPathShares(newEmails, { pathName, pathId, actorEm
 }
 
 export async function notifyFormSubmitted(ownerEmail, { formName, submitterEmail, templateId, inviteId }) {
+  const name = clip(formName) || 'Untitled form'
+  const who = clip(submitterEmail, 40)
   await sendWebPushToEmail(
     ownerEmail,
     {
       title: 'Form submitted',
-      body: `${submitterEmail || 'Someone'} completed "${formName || 'a form'}"`,
+      body: who ? `${name} · ${who}` : name,
       tag: `form-submit-${inviteId || templateId || Date.now()}`,
       data: { type: 'formSubmitted', templateId, inviteId },
     },
@@ -378,8 +411,8 @@ export async function notifyTeamMemberAdded(memberEmail, { teamName, teamId, act
   await sendWebPushToEmail(
     memberEmail,
     {
-      title: 'Added to a team',
-      body: `${actorEmail || 'Someone'} added you to "${teamName || 'a team'}"`,
+      title: 'Added to team',
+      body: clip(teamName) || 'Untitled team',
       tag: `team-add-${teamId || Date.now()}`,
       data: { type: 'teamAdded', teamId },
     },
@@ -434,16 +467,15 @@ export async function notifyPipelineDealStatusChanges(
   const actor = (actorEmail || '').toLowerCase().trim()
   recipients.delete(actor)
 
-  for (const { deal, oldStatus, newStatus } of changes) {
-    const from = columnName(columns, oldStatus)
+  for (const { deal, newStatus } of changes) {
     const to = columnName(columns, newStatus)
     const label = dealLabel(deal)
-    const body = `"${label}" moved from ${from} \u2192 ${to} in ${pipelineTitle || 'pipeline'}`
+    const body = label ? `${label} \u2192 ${to}` : to
     for (const email of recipients) {
       await sendWebPushToEmail(
         email,
         {
-          title: 'Deal stage updated',
+          title: 'Deal moved',
           body,
           tag: `deal-${deal.id}-${newStatus}`,
           data: { type: 'pipelineDealStage', pipelineId, dealId: deal.id, newStatus },
@@ -469,16 +501,15 @@ export async function notifyPipelineLeadStatusChanges(
   const actor = (actorEmail || '').toLowerCase().trim()
   recipients.delete(actor)
 
-  for (const { lead, oldStatus, newStatus } of changes) {
-    const from = columnName(columns, oldStatus)
+  for (const { lead, newStatus } of changes) {
     const to = columnName(columns, newStatus)
     const label = leadLabel(lead)
-    const body = `"${label}" moved from ${from} \u2192 ${to} in ${pipelineTitle || 'pipeline'}`
+    const body = label ? `${label} \u2192 ${to}` : to
     for (const email of recipients) {
       await sendWebPushToEmail(
         email,
         {
-          title: 'Lead stage updated',
+          title: 'Lead moved',
           body,
           tag: `lead-${lead.id}-${newStatus}`,
           data: { type: 'pipelineLeadStage', pipelineId, leadId: lead.id, newStatus },
@@ -507,11 +538,13 @@ export function diffLeadStatusChanges(oldLeads, newLeads) {
 }
 
 export async function notifyQuoteSent(ownerEmail, { quoteTitle, recipientEmail, quoteId }) {
+  const title = clip(quoteTitle) || 'Untitled quote'
+  const to = clip(recipientEmail, 40)
   await sendWebPushToEmail(
     ownerEmail,
     {
       title: 'Quote sent',
-      body: `"${quoteTitle || 'Quote'}" sent to ${recipientEmail || 'client'}`,
+      body: to ? `${title} \u2192 ${to}` : title,
       tag: `quote-sent-${quoteId || Date.now()}`,
       data: { type: 'quoteSent', quoteId },
     },
@@ -521,11 +554,13 @@ export async function notifyQuoteSent(ownerEmail, { quoteTitle, recipientEmail, 
 }
 
 export async function notifyQuoteViewed(ownerEmail, { quoteTitle, clientName, quoteId }) {
+  const title = clip(quoteTitle) || 'Untitled quote'
+  const who = clip(clientName, 40)
   await sendWebPushToEmail(
     ownerEmail,
     {
       title: 'Quote viewed',
-      body: `${clientName || 'Client'} opened "${quoteTitle || 'your quote'}"`,
+      body: who ? `${title} · ${who}` : title,
       tag: `quote-view-${quoteId || Date.now()}`,
       data: { type: 'quoteViewed', quoteId },
     },
@@ -535,12 +570,17 @@ export async function notifyQuoteViewed(ownerEmail, { quoteTitle, clientName, qu
 }
 
 export async function notifyQuoteResponded(ownerEmail, { quoteTitle, action, clientName, message, quoteId }) {
-  const actionLabel = String(action || '').replace('_', ' ')
+  const actionLabel = String(action || 'updated').replace(/_/g, ' ')
+  const title = clip(quoteTitle) || 'Untitled quote'
+  const who = clip(clientName, 40)
+  let body = who ? `${title} · ${who}` : title
+  const note = clip(message, 60)
+  if (note) body = `${body} — ${note}`
   await sendWebPushToEmail(
     ownerEmail,
     {
       title: `Quote ${actionLabel}`,
-      body: `${clientName || 'Client'} ${actionLabel} "${quoteTitle || 'quote'}"${message ? `: ${message.slice(0, 80)}` : ''}`,
+      body,
       tag: `quote-respond-${quoteId || Date.now()}`,
       data: { type: 'quoteResponded', quoteId, action },
     },
@@ -550,12 +590,15 @@ export async function notifyQuoteResponded(ownerEmail, { quoteTitle, action, cli
 }
 
 export async function notifyQuotePaid(ownerEmail, { quoteTitle, clientName, amount, quoteId }) {
+  const title = clip(quoteTitle) || 'Untitled quote'
   const amt = amount != null ? `$${Number(amount).toFixed(2)}` : ''
+  const who = clip(clientName, 40)
+  const parts = [amt, title, who].filter(Boolean)
   await sendWebPushToEmail(
     ownerEmail,
     {
       title: 'Quote paid',
-      body: `${clientName || 'Client'} paid ${amt} for "${quoteTitle || 'quote'}"`,
+      body: parts.join(' · '),
       tag: `quote-paid-${quoteId || Date.now()}`,
       data: { type: 'quotePaid', quoteId },
     },
@@ -577,8 +620,6 @@ function emailForUid(uid, teamsIndex) {
 /** Notify teammates when a task is assigned to them (by uid). */
 export async function notifyTaskAssigned(assignedUids, { taskTitle, taskId, actorEmail }, teamsIndex = {}) {
   const title = 'Task assigned to you'
-  const label = (taskTitle || 'Task').slice(0, 80)
-  const actor = actorEmail || 'Someone'
   for (const uid of assignedUids || []) {
     const email = emailForUid(uid, teamsIndex)
     if (!email) continue
@@ -586,9 +627,9 @@ export async function notifyTaskAssigned(assignedUids, { taskTitle, taskId, acto
       email,
       {
         title,
-        body: `${actor} assigned you "${label}"`,
+        body: '',
         tag: `task-assign-${taskId || Date.now()}-${uid}`,
-        data: { type: 'taskAssigned', taskId },
+        data: { type: 'taskAssigned', taskId, taskTitle: clip(taskTitle) || undefined },
       },
       'taskDeadline',
       { email: actorEmail }
@@ -607,7 +648,9 @@ export async function notifyTaskDeadline(uid, email, { taskTitle, scheduledAt, t
   if (!prefs.pushEnabled || !prefs.taskDeadline) return
 
   const title = 'Task due soon'
-  const body = `${(taskTitle || 'Task').slice(0, 80)} — ${new Date(scheduledAt).toLocaleString()}`
+  const name = clip(taskTitle) || 'Untitled task'
+  const when = shortWhen(scheduledAt)
+  const body = when ? `${name} · ${when}` : name
   const data = { type: 'taskDeadline', taskId }
 
   await appendInAppNotification(targetUid, { type: 'taskDeadline', title, body, data })

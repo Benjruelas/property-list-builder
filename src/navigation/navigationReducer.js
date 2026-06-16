@@ -107,7 +107,14 @@ export function navigationReducer(state, action) {
  * returns to Activity, not the intermediate list/pipe panel.
  */
 function shouldReturnToActivityOnDetailPop(coreStack, topType) {
-  if (coreStack.length !== 3 || coreStack[0].type !== 'activity') return false
+  if (coreStack[0]?.type !== 'activity') return false
+
+  // Standalone detail from activity feed: [activity, leads.detail] or [activity, deals.detail]
+  if (coreStack.length === 2 && isNestedChildFrame(topType)) {
+    return true
+  }
+
+  if (coreStack.length !== 3) return false
   const destination = coreStack[1]
   const destRoot = frameRoot(destination.type)
   if (!ROOT_PANEL_TYPES.has(destRoot) || destRoot === 'activity' || destRoot === 'schedule') return false

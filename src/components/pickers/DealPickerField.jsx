@@ -15,6 +15,7 @@ function SelectedDealCard({ deal, onClear }) {
   return (
     <div
       className={cn(
+        'entity-picker-body entity-picker-body--selected',
         ENTITY_ROW_CLASS,
         'border-white/20 bg-white/[0.06] cursor-default flex-row items-center justify-between gap-3'
       )}
@@ -86,7 +87,7 @@ export function DealPickerField({
   const showPicker = !selectedDeal || pickerOpen
 
   return (
-    <div className={className}>
+    <div className={cn('entity-picker-field', className)}>
       <label className="text-xs font-medium block mb-1 opacity-90">
         {label}
         {required && (
@@ -102,7 +103,7 @@ export function DealPickerField({
       {selectedDeal && !showPicker ? (
         <SelectedDealCard deal={selectedDeal} onClear={disableClear ? undefined : clearDeal} />
       ) : (
-        <div className="rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
+        <div className="entity-picker-body entity-picker-body--list rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden flex flex-col min-h-0">
           <div className="relative border-b border-white/10">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
             <input
@@ -132,7 +133,7 @@ export function DealPickerField({
           </div>
 
           <ul
-            className="max-h-52 overflow-y-auto scrollbar-hide p-1.5 space-y-1.5"
+            className="entity-picker-list max-h-52 overflow-y-auto scrollbar-hide p-1.5 space-y-1.5"
             role="listbox"
             aria-label="Deals"
           >

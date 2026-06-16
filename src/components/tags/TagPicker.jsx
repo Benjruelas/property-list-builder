@@ -195,7 +195,7 @@ export function TagPicker({
     <div
       data-tag-picker-trigger
       className={cn(
-        'flex flex-wrap items-center gap-1',
+        'tag-picker-pills flex flex-wrap items-center gap-1',
         compact && 'gap-0.5',
         !disabled && (hasPills || showAddTrigger) && 'cursor-pointer'
       )}
@@ -221,7 +221,7 @@ export function TagPicker({
       {showAddTrigger && !disabled && (
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-white/25 px-2 py-0.5 text-[11px] text-white/50 hover:text-white/80 hover:border-white/40 transition-colors"
+          className="tag-chip-add inline-flex items-center gap-1 rounded-full border border-dashed border-white/25 px-2 py-0.5 text-[11px] text-white/50 hover:text-white/80 hover:border-white/40 transition-colors"
           onClick={(e) => {
             e.stopPropagation()
             openPicker(e)
