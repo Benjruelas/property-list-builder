@@ -5,10 +5,6 @@ import { createPortal } from 'react-dom'
 const MINUTE_OPTIONS = [0, 15, 30, 45]
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function roundToNearestMinute(m) {
-  return MINUTE_OPTIONS.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev)
-}
-
 function getDaysInMonth(year, month) {
   const first = new Date(year, month, 1)
   const last = new Date(year, month + 1, 0)
@@ -33,79 +29,147 @@ function formatScheduleRange(startTs, endTs) {
 const HOURS_12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const DROP_STYLE = { background: 'rgba(30, 30, 30, 0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
 
-function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey, activeDropdown, dropdownRef, onToggleDropdown, onHourChange, onMinuteChange, onAMPMChange }) {
-  const hourOpen = activeDropdown === hourDropdownKey
-  const minOpen = activeDropdown === minuteDropdownKey
+function clampHour12(n) {
+  if (n == null || Number.isNaN(n)) return null
+  return Math.min(12, Math.max(1, Math.round(n)))
+}
+
+function clampMinute(n) {
+  if (n == null || Number.isNaN(n)) return null
+  return Math.min(59, Math.max(0, Math.round(n)))
+}
+
+function parseTimeDraft(draft, kind) {
+  const t = draft.trim()
+  if (!t) return null
+  const n = parseInt(t, 10)
+  if (Number.isNaN(n)) return null
+  return kind === 'hour' ? clampHour12(n) : clampMinute(n)
+}
+
+function formatTimeDraft(value, kind) {
+  if (kind === 'minute') return String(value).padStart(2, '0')
+  return String(value)
+}
+
+function TimeNumberField({
+  value,
+  onChange,
+  kind,
+  options,
+  dropdownKey,
+  activeDropdown,
+  dropdownRef,
+  onToggleDropdown,
+  ariaLabel,
+  className = '',
+}) {
+  const open = activeDropdown === dropdownKey
+  const [draft, setDraft] = useState(() => formatTimeDraft(value, kind))
+
+  useEffect(() => {
+    setDraft(formatTimeDraft(value, kind))
+  }, [value, kind])
+
+  const commitDraft = () => {
+    const parsed = parseTimeDraft(draft, kind)
+    if (parsed != null) {
+      if (parsed !== value) onChange(parsed)
+      setDraft(formatTimeDraft(parsed, kind))
+    } else {
+      setDraft(formatTimeDraft(value, kind))
+    }
+  }
+
+  const selectOption = (n) => {
+    onChange(n)
+    setDraft(formatTimeDraft(n, kind))
+    onToggleDropdown(null)
+  }
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-white/70 w-10 shrink-0">{label}</span>
-      <div className="relative" ref={hourOpen ? dropdownRef : undefined}>
+    <div className={`relative schedule-time-field ${className}`.trim()} ref={open ? dropdownRef : undefined}>
+      <div className="schedule-time-select-btn schedule-time-input-wrap flex items-stretch rounded-md overflow-hidden">
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={draft}
+          onChange={(e) => {
+            const maxLen = kind === 'minute' ? 2 : 2
+            setDraft(e.target.value.replace(/\D/g, '').slice(0, maxLen))
+          }}
+          onFocus={() => onToggleDropdown(null)}
+          onBlur={commitDraft}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commitDraft()
+              onToggleDropdown(null)
+              e.currentTarget.blur()
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              onToggleDropdown(open ? null : dropdownKey)
+            } else if (e.key === 'Escape') {
+              setDraft(formatTimeDraft(value, kind))
+              onToggleDropdown(null)
+            }
+          }}
+          className="schedule-time-input"
+          aria-label={ariaLabel}
+        />
         <button
           type="button"
-          onClick={() => onToggleDropdown(hourOpen ? null : hourDropdownKey)}
-          className="schedule-picker-btn flex items-center gap-1 px-2.5 py-1.5 text-sm rounded min-w-[3rem] justify-between"
+          onClick={() => onToggleDropdown(open ? null : dropdownKey)}
+          className="schedule-time-chevron-btn flex items-center justify-center shrink-0"
+          aria-label={`${ariaLabel} presets`}
+          aria-expanded={open}
         >
-          {hour}
-          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${hourOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
-        {hourOpen && (
-          <div
-            className="absolute left-0 bottom-full mb-1 z-[200] max-h-48 overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3rem]"
-            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
-          >
-            {HOURS_12.map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() => { onHourChange(h); onToggleDropdown(null) }}
-                className={`schedule-picker-menu-item block w-full px-2.5 py-2 text-sm text-left transition-colors ${hour === h ? 'is-selected' : ''}`}
-              >
-                {h}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
-      <span className="text-white/60">:</span>
-      <div className="relative" ref={minOpen ? dropdownRef : undefined}>
-        <button
-          type="button"
-          onClick={() => onToggleDropdown(minOpen ? null : minuteDropdownKey)}
-          className="schedule-picker-btn flex items-center gap-1 px-2.5 py-1.5 text-sm rounded min-w-[3.5rem] justify-between"
+      {open && (
+        <div
+          className="absolute left-0 bottom-full mb-1 z-[200] max-h-48 overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-full"
+          style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
         >
-          {String(minute).padStart(2, '0')}
-          <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${minOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {minOpen && (
-          <div
-            className="absolute left-0 bottom-full mb-1 z-[200] overflow-y-auto scrollbar-hide rounded-lg shadow-xl min-w-[3.5rem]"
-            style={{ ...DROP_STYLE, border: '1px solid rgba(255,255,255,0.4)' }}
-          >
-            {MINUTE_OPTIONS.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => { onMinuteChange(m); onToggleDropdown(null) }}
-                className={`schedule-picker-menu-item block w-full px-2.5 py-2 text-sm text-left transition-colors ${minute === m ? 'is-selected' : ''}`}
-              >
-                {String(m).padStart(2, '0')}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="schedule-ampm-group flex items-center ml-auto">
+          {options.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => selectOption(n)}
+              className={`schedule-picker-menu-item block w-full px-2.5 py-2 text-sm text-left transition-colors ${value === n ? 'is-selected' : ''}`}
+            >
+              {kind === 'minute' ? String(n).padStart(2, '0') : n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AmPmToggle({ isPM, onChange, disabled = false }) {
+  return (
+    <div className="schedule-ampm-switch shrink-0" role="group" aria-label="AM or PM">
+      <div className={`schedule-ampm-switch__track${isPM ? ' is-pm' : ''}`}>
+        <span className="schedule-ampm-switch__thumb" aria-hidden />
         <button
           type="button"
-          onClick={() => onAMPMChange(false)}
-          className={`schedule-ampm-btn px-2.5 py-1.5 text-xs font-medium transition-colors ${!isPM ? 'is-selected' : ''}`}
+          disabled={disabled}
+          onClick={() => onChange(false)}
+          className={`schedule-ampm-switch__option${!isPM ? ' is-active' : ''}`}
+          aria-pressed={!isPM}
         >
           AM
         </button>
         <button
           type="button"
-          onClick={() => onAMPMChange(true)}
-          className={`schedule-ampm-btn px-2.5 py-1.5 text-xs font-medium transition-colors ${isPM ? 'is-selected' : ''}`}
+          disabled={disabled}
+          onClick={() => onChange(true)}
+          className={`schedule-ampm-switch__option${isPM ? ' is-active' : ''}`}
+          aria-pressed={isPM}
         >
           PM
         </button>
@@ -114,12 +178,78 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
   )
 }
 
+function ScheduleFooterActions({ onClear, onPrimary, primaryLabel = 'Set', primaryDisabled = false }) {
+  return (
+    <div className="schedule-picker-footer flex gap-2 pt-1">
+      <button type="button" onClick={onClear} className="schedule-picker-footer-btn flex-1">
+        Clear
+      </button>
+      <button
+        type="button"
+        onClick={onPrimary}
+        disabled={primaryDisabled}
+        className="schedule-picker-footer-btn schedule-picker-footer-btn--primary flex-1"
+      >
+        {primaryLabel}
+      </button>
+    </div>
+  )
+}
+
+function ScheduleMonthNav({ viewYear, viewMonth, onPrev, onNext, monthFormat = 'short' }) {
+  return (
+    <div className="schedule-picker-month-nav flex items-center justify-between gap-2">
+      <button type="button" className="schedule-nav-btn" onClick={onPrev} aria-label="Previous month">
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span className="text-sm font-semibold tracking-tight text-white/95">
+        {new Date(viewYear, viewMonth).toLocaleString('default', { month: monthFormat, year: 'numeric' })}
+      </span>
+      <button type="button" className="schedule-nav-btn" onClick={onNext} aria-label="Next month">
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey, activeDropdown, dropdownRef, onToggleDropdown, onHourChange, onMinuteChange, onAMPMChange }) {
+  return (
+    <div className="schedule-time-row flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2">
+      <span className="text-xs font-medium text-white/65 w-9 shrink-0">{label}</span>
+      <TimeNumberField
+        kind="hour"
+        value={hour}
+        onChange={onHourChange}
+        options={HOURS_12}
+        dropdownKey={hourDropdownKey}
+        activeDropdown={activeDropdown}
+        dropdownRef={dropdownRef}
+        onToggleDropdown={onToggleDropdown}
+        ariaLabel={`${label} hour`}
+        className="min-w-[3.25rem]"
+      />
+      <span className="text-white/60">:</span>
+      <TimeNumberField
+        kind="minute"
+        value={minute}
+        onChange={onMinuteChange}
+        options={MINUTE_OPTIONS}
+        dropdownKey={minuteDropdownKey}
+        activeDropdown={activeDropdown}
+        dropdownRef={dropdownRef}
+        onToggleDropdown={onToggleDropdown}
+        ariaLabel={`${label} minute`}
+        className="min-w-[3.5rem]"
+      />
+      <AmPmToggle isPM={isPM} onChange={onAMPMChange} />
+    </div>
+  )
+}
+
 export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue = null, onEndChange, triggerClassName, title = 'Schedule', size = 'default', taskTitle, leadAddress, leadName, inline = false, hideLabel = false }) {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState(null)
-  const [hourDropdownOpen, setHourDropdownOpen] = useState(false)
-  const [minuteDropdownOpen, setMinuteDropdownOpen] = useState(false)
-  const [inlineDropdown, setInlineDropdown] = useState(null) // 'fromHour' | 'fromMin' | 'toHour' | 'toMin' | null
+  const [inlineDropdown, setInlineDropdown] = useState(null) // 'fromHour' | 'fromMin' | 'toHour' | 'toMin' | 'popupHour' | 'popupMin' | null
   const inlineDropdownRef = useRef(null)
 
   const base = value ? new Date(value) : new Date(Math.max(minDate, Date.now()))
@@ -130,14 +260,14 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
     const h24 = value ? new Date(value).getHours() : 9
     return h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
   })
-  const [minute, setMinute] = useState(() => roundToNearestMinute(value ? new Date(value).getMinutes() : 0))
+  const [minute, setMinute] = useState(() => (value ? new Date(value).getMinutes() : 0))
   const [isPM, setIsPM] = useState(() => (value ? new Date(value).getHours() : 9) >= 12)
   const [hour12End, setHour12End] = useState(() => {
     if (!endValue) return 10
     const h24 = new Date(endValue).getHours()
     return h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
   })
-  const [minuteEnd, setMinuteEnd] = useState(() => roundToNearestMinute(endValue ? new Date(endValue).getMinutes() : 0))
+  const [minuteEnd, setMinuteEnd] = useState(() => (endValue ? new Date(endValue).getMinutes() : 0))
   const [isPMEnd, setIsPMEnd] = useState(() => (endValue ? new Date(endValue).getHours() : 10) >= 12)
   const [expanded, setExpanded] = useState(true)
 
@@ -154,22 +284,19 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
       setViewMonth(b.getMonth())
       setSelectedDate(value ? new Date(value) : null)
       setHour12(h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24)
-      setMinute(roundToNearestMinute(value ? new Date(value).getMinutes() : 0))
+      setMinute(value ? new Date(value).getMinutes() : 0)
       setIsPM(h24 >= 12)
       if (inline && onEndChange) {
         const endH24 = endValue ? new Date(endValue).getHours() : (value ? new Date(value).getHours() : 9) + 1
         setHour12End(endH24 === 0 ? 12 : endH24 > 12 ? endH24 - 12 : endH24)
-        setMinuteEnd(roundToNearestMinute(endValue ? new Date(endValue).getMinutes() : 0))
+        setMinuteEnd(endValue ? new Date(endValue).getMinutes() : 0)
         setIsPMEnd((endValue ? new Date(endValue).getHours() : (value ? new Date(value).getHours() : 9) + 1) >= 12)
       }
     }
   }, [open, value, endValue, minDate, inline, onEndChange])
 
   useEffect(() => {
-    if (!open) {
-      setHourDropdownOpen(false)
-      setMinuteDropdownOpen(false)
-    }
+    if (!open) setInlineDropdown(null)
   }, [open])
 
   useEffect(() => {
@@ -266,38 +393,26 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
         </div>
       )}
       <div className="p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              if (viewMonth === 0) {
-                setViewMonth(11)
-                setViewYear((y) => y - 1)
-              } else setViewMonth((m) => m - 1)
-            }}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="text-sm font-medium">
-            {new Date(viewYear, viewMonth).toLocaleString('default', { month: 'long' })} {viewYear}
-          </span>
-          <button
-            type="button"
-            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              if (viewMonth === 11) {
-                setViewMonth(0)
-                setViewYear((y) => y + 1)
-              } else setViewMonth((m) => m + 1)
-            }}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="grid grid-cols-7 gap-0.5 text-[10px]">
+        <ScheduleMonthNav
+          viewYear={viewYear}
+          viewMonth={viewMonth}
+          monthFormat="long"
+          onPrev={() => {
+            if (viewMonth === 0) {
+              setViewMonth(11)
+              setViewYear((y) => y - 1)
+            } else setViewMonth((m) => m - 1)
+          }}
+          onNext={() => {
+            if (viewMonth === 11) {
+              setViewMonth(0)
+              setViewYear((y) => y + 1)
+            } else setViewMonth((m) => m + 1)
+          }}
+        />
+        <div className="calendar-days-grid schedule-picker-calendar grid grid-cols-7 gap-0.5 text-[10px]">
           {DAYS.map((d) => (
-            <div key={d} className="text-center text-white/60 py-1">
+            <div key={d} className="text-center text-white/55 py-1 font-medium uppercase tracking-wide">
               {d}
             </div>
           ))}
@@ -312,13 +427,13 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
                 type="button"
                 disabled={isPast}
                 onClick={() => handleDayClick(d)}
-                className={`py-1.5 rounded text-xs ${
+                className={`calendar-day-btn schedule-picker-day py-1.5 rounded-md text-xs transition-colors ${
                   isPast
                     ? 'text-white/30 cursor-not-allowed'
                     : isSelected
-                      ? 'bg-white/25 text-white font-medium'
+                      ? 'bg-white/25 text-white font-semibold ring-1 ring-white/40'
                       : isToday
-                        ? 'bg-white/15 text-white'
+                        ? 'bg-white/12 text-white font-medium'
                         : 'text-white/90 hover:bg-white/10'
                 }`}
               >
@@ -327,95 +442,22 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
             )
           })}
         </div>
-        <div className="flex items-center gap-2 pt-1 border-t border-white/20">
-          <span className="text-xs text-white/70">Time:</span>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => { setMinuteDropdownOpen(false); setHourDropdownOpen((o) => !o) }}
-              className="flex items-center gap-0.5 px-2 py-1 text-xs rounded bg-white/10 border border-white/20 text-white hover:bg-white/15 min-w-[2.5rem]"
-            >
-              {hour12}
-              <ChevronDown className={`h-3 w-3 transition-transform ${hourDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {hourDropdownOpen && (
-              <div
-                className="absolute left-0 top-full mt-0.5 z-50 max-h-32 overflow-y-auto scrollbar-hide rounded border border-white/20 bg-[rgba(30,35,50,0.98)] shadow-lg"
-                onWheel={(e) => e.stopPropagation()}
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
-                  <button
-                    key={h}
-                    type="button"
-                    onClick={() => { setHour12(h); setHourDropdownOpen(false) }}
-                    className={`block w-full px-2 py-1.5 text-xs text-left hover:bg-white/15 ${hour12 === h ? 'bg-white/20 text-white' : 'text-white/90'}`}
-                  >
-                    {h}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <span className="text-white/60">:</span>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => { setHourDropdownOpen(false); setMinuteDropdownOpen((o) => !o) }}
-              className="flex items-center gap-0.5 px-2 py-1 text-xs rounded bg-white/10 border border-white/20 text-white hover:bg-white/15 min-w-[2.5rem]"
-            >
-              {String(minute).padStart(2, '0')}
-              <ChevronDown className={`h-3 w-3 transition-transform ${minuteDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {minuteDropdownOpen && (
-              <div
-                className="absolute left-0 top-full mt-0.5 z-50 overflow-y-auto scrollbar-hide rounded border border-white/20 bg-[rgba(30,35,50,0.98)] shadow-lg"
-                onWheel={(e) => e.stopPropagation()}
-              >
-                {MINUTE_OPTIONS.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => { setMinute(m); setMinuteDropdownOpen(false) }}
-                    className={`block w-full px-2 py-1.5 text-xs text-left hover:bg-white/15 ${minute === m ? 'bg-white/20 text-white' : 'text-white/90'}`}
-                  >
-                    {String(m).padStart(2, '0')}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex rounded overflow-hidden border border-white/20">
-            <button
-              type="button"
-              onClick={() => setIsPM(false)}
-              className={`px-2 py-1 text-xs font-medium ${!isPM ? 'bg-white/25 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-            >
-              AM
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsPM(true)}
-              className={`px-2 py-1 text-xs font-medium ${isPM ? 'bg-white/25 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-            >
-              PM
-            </button>
-          </div>
-        </div>
-        <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            onClick={handleApply}
-            className="flex-1 py-1.5 text-xs font-medium rounded bg-white/20 hover:bg-white/30 text-white"
-          >
-            Apply
-          </button>
-          <button
-            type="button"
-            onClick={handleClear}
-            className="py-1.5 px-2 text-xs text-white/80 hover:text-white"
-          >
-            Clear
-          </button>
+        <div className="space-y-2 pt-1 border-t border-white/15">
+          <TimeRow
+            label="Time"
+            hour={hour12}
+            minute={minute}
+            isPM={isPM}
+            hourDropdownKey="popupHour"
+            minuteDropdownKey="popupMin"
+            activeDropdown={inlineDropdown}
+            dropdownRef={inlineDropdownRef}
+            onToggleDropdown={setInlineDropdown}
+            onHourChange={setHour12}
+            onMinuteChange={setMinute}
+            onAMPMChange={setIsPM}
+          />
+          <ScheduleFooterActions onClear={handleClear} onPrimary={handleApply} primaryLabel="Apply" />
         </div>
       </div>
     </div>
@@ -445,38 +487,25 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
     return (
       <div className={hideLabel ? 'space-y-3' : 'space-y-3 rounded-lg border border-white/20 p-3 bg-white/5'}>
         {!hideLabel && <label className="text-xs font-medium block opacity-90">Date & time</label>}
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              if (viewMonth === 0) {
-                setViewMonth(11)
-                setViewYear((y) => y - 1)
-              } else setViewMonth((m) => m - 1)
-            }}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="text-sm font-medium">
-            {new Date(viewYear, viewMonth).toLocaleString('default', { month: 'short' })} {viewYear}
-          </span>
-          <button
-            type="button"
-            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              if (viewMonth === 11) {
-                setViewMonth(0)
-                setViewYear((y) => y + 1)
-              } else setViewMonth((m) => m + 1)
-            }}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="calendar-days-grid grid grid-cols-7 text-[10px] border border-white/25 rounded overflow-hidden">
+        <ScheduleMonthNav
+          viewYear={viewYear}
+          viewMonth={viewMonth}
+          onPrev={() => {
+            if (viewMonth === 0) {
+              setViewMonth(11)
+              setViewYear((y) => y - 1)
+            } else setViewMonth((m) => m - 1)
+          }}
+          onNext={() => {
+            if (viewMonth === 11) {
+              setViewMonth(0)
+              setViewYear((y) => y + 1)
+            } else setViewMonth((m) => m + 1)
+          }}
+        />
+        <div className="calendar-days-grid schedule-picker-calendar grid grid-cols-7 text-[10px] border border-white/20 rounded-lg overflow-hidden">
           {DAYS.map((d) => (
-            <div key={d} className="text-center text-white/60 py-1 px-0.5 border-b border-r border-white/20 bg-white/5">{d}</div>
+            <div key={d} className="text-center text-white/55 py-1.5 px-0.5 border-b border-r border-white/15 bg-white/[0.04] font-medium uppercase tracking-wide text-[9px]">{d}</div>
           ))}
           {days.map((d, i) => {
             if (!d) return <div key={`pad-${i}`} className="min-h-[28px] border-b border-r border-white/20 bg-white/5" />
@@ -489,10 +518,10 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
                 type="button"
                 disabled={isPast}
                 onClick={() => handleDayClick(d)}
-                className={`calendar-day-btn py-1.5 text-xs transition-colors min-h-[28px] border-b border-r border-white/20 ${
-                  isPast ? 'text-white/30 cursor-not-allowed bg-white/5' :
-                  isSelected ? 'bg-white/25 text-white font-semibold ring-2 ring-white/50 ring-inset' :
-                  isToday ? 'bg-white/15 text-white' : 'text-white/90 hover:bg-white/10 bg-transparent'
+                className={`calendar-day-btn schedule-picker-day py-1.5 text-xs transition-colors min-h-[30px] border-b border-r border-white/15 ${
+                  isPast ? 'text-white/30 cursor-not-allowed bg-white/[0.02]' :
+                  isSelected ? 'bg-white/22 text-white font-semibold ring-2 ring-white/45 ring-inset' :
+                  isToday ? 'bg-white/10 text-white font-medium' : 'text-white/90 hover:bg-white/10 bg-transparent'
                 }`}
               >
                 {d.getDate()}
@@ -500,7 +529,7 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
             )
           })}
         </div>
-        <div className="space-y-3 pt-3 border-t border-white/20">
+        <div className="space-y-2 pt-3 border-t border-white/15">
           <TimeRow
             label="From"
             hour={hour12}
@@ -531,23 +560,11 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
               onAMPMChange={(pm) => { setIsPMEnd(pm); commitEndTimeChange(hour12End, minuteEnd, pm) }}
             />
           )}
-          <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={handleClear}
-              className="schedule-picker-btn py-1.5 px-3 text-xs font-medium rounded transition-colors"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={handleSet}
-              disabled={!isComplete}
-              className="schedule-picker-btn schedule-picker-btn--primary py-1.5 px-3 text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Set
-            </button>
-          </div>
+          <ScheduleFooterActions
+            onClear={handleClear}
+            onPrimary={handleSet}
+            primaryDisabled={!isComplete}
+          />
         </div>
       </div>
     )

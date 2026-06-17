@@ -347,7 +347,7 @@
 
 @media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
-  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel) {
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel) {
     width: auto !important;
     min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
@@ -982,13 +982,14 @@
     max-height: var(--ui-panel-height) !important;
   }
 
-  /* Desktop: New / Edit task — wider, shorter, sticky footer actions */
+  /* Desktop: New / Edit task — compact form panel */
+  html:has(#modal-root .map-panel-dialog.new-task-panel[data-state="open"]) .map-panel-dialog.new-task-panel.fullscreen-panel[data-state="open"],
   .new-task-panel.fullscreen-panel {
-    width: min(calc(var(--ui-panel-height) * 0.878), 52vw) !important;
-    min-width: calc(var(--ui-panel-height) * 0.585) !important;
-    max-width: min(calc(var(--ui-panel-height) * 0.976), 56vw) !important;
-    height: calc(var(--ui-panel-height) * 0.9) !important;
-    max-height: calc(var(--ui-panel-height) * 0.9375) !important;
+    width: min(calc(var(--ui-panel-height) * 0.585), 36vw) !important;
+    min-width: min(20rem, calc(100vw - 2rem)) !important;
+    max-width: min(calc(var(--ui-panel-height) * 0.658), 40vw) !important;
+    height: auto !important;
+    max-height: min(calc(var(--ui-panel-height) * 0.72), 72vh) !important;
     min-height: 0 !important;
     border-radius: 1rem !important;
     display: flex !important;
@@ -1015,7 +1016,7 @@
     top: var(--ui-panel-center-y) !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
     box-sizing: border-box !important;
     width: var(--ui-panel-width) !important;
     max-width: var(--ui-panel-width) !important;
@@ -1026,7 +1027,7 @@
     overflow-x: clip !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
     width: var(--ui-panel-width) !important;
     min-width: 0 !important;
     max-width: var(--ui-panel-width) !important;
@@ -2658,15 +2659,15 @@
 
 /* List panel - no fills on buttons (except delete, create form actions) */
 /* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams); action tiles (parcel/lead details) */
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled) {
   background: transparent !important;
 }
 
@@ -2802,42 +2803,161 @@
 }
 
 /* =========================================================================
-   SchedulePicker (inline) — hour/minute dropdowns, Clear/Set buttons, AM/PM
-   toggle. Re-applies outlines that the list-panel button stripper removes,
-   and makes the AM/PM selected choice read as solid white.
+   SchedulePicker — time selects, footer actions, AM/PM switch, calendar
    ========================================================================= */
 
-/* Hour / Minute dropdown triggers + Clear / Set buttons */
+/* Month navigation */
+.list-panel .schedule-nav-btn,
+.map-panel .schedule-nav-btn,
+.schedule-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(2rem * var(--ui-touch-scale, 1));
+  height: calc(2rem * var(--ui-touch-scale, 1));
+  border-radius: calc(0.5rem * var(--ui-touch-scale, 1)) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.list-panel .schedule-nav-btn:hover:not(:disabled),
+.map-panel .schedule-nav-btn:hover:not(:disabled),
+.schedule-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+}
+
+/* Hour / minute dropdown triggers */
+.list-panel .schedule-time-select-btn,
+.map-panel .schedule-time-select-btn,
+.schedule-time-select-btn,
 .list-panel .schedule-picker-btn,
 .map-panel .schedule-picker-btn,
 .schedule-picker-btn {
   background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
   color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(8px) saturate(160%);
   -webkit-backdrop-filter: blur(8px) saturate(160%);
+  font-variant-numeric: tabular-nums;
 }
+.list-panel .schedule-time-select-btn:hover:not(:disabled),
+.map-panel .schedule-time-select-btn:hover:not(:disabled),
+.schedule-time-select-btn:hover:not(:disabled),
 .list-panel .schedule-picker-btn:hover:not(:disabled),
 .map-panel .schedule-picker-btn:hover:not(:disabled),
 .schedule-picker-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.16) !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
 }
 
-/* Set (primary) button — emphasized but same outline treatment */
-.list-panel .schedule-picker-btn--primary,
-.map-panel .schedule-picker-btn--primary,
-.schedule-picker-btn--primary {
-  background: rgba(255, 255, 255, 0.22) !important;
+/* Clear / Set / Apply footer buttons */
+.list-panel button.schedule-picker-footer-btn,
+.map-panel button.schedule-picker-footer-btn,
+.schedule-picker-footer-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.38) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border-radius: calc(0.625rem * var(--ui-touch-scale, 1)) !important;
+  min-height: calc(2.375rem * var(--ui-touch-scale, 1));
+  padding: calc(0.375rem * var(--ui-touch-scale, 1)) calc(0.875rem * var(--ui-touch-scale, 1));
+  font-size: calc(0.8125rem * var(--ui-touch-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
-.list-panel .schedule-picker-btn--primary:hover:not(:disabled),
-.map-panel .schedule-picker-btn--primary:hover:not(:disabled),
-.schedule-picker-btn--primary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.32) !important;
+.list-panel button.schedule-picker-footer-btn:hover:not(:disabled),
+.map-panel button.schedule-picker-footer-btn:hover:not(:disabled),
+.schedule-picker-footer-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
+}
+.list-panel button.schedule-picker-footer-btn:active:not(:disabled),
+.map-panel button.schedule-picker-footer-btn:active:not(:disabled),
+.schedule-picker-footer-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.list-panel button.schedule-picker-footer-btn--primary,
+.map-panel button.schedule-picker-footer-btn--primary,
+.schedule-picker-footer-btn--primary {
+  background: rgba(255, 255, 255, 0.24) !important;
+  border-color: rgba(255, 255, 255, 0.52) !important;
+}
+.list-panel button.schedule-picker-footer-btn--primary:hover:not(:disabled),
+.map-panel button.schedule-picker-footer-btn--primary:hover:not(:disabled),
+.schedule-picker-footer-btn--primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.34) !important;
+  border-color: rgba(255, 255, 255, 0.68) !important;
+}
+.list-panel button.schedule-picker-footer-btn:disabled,
+.map-panel button.schedule-picker-footer-btn:disabled,
+.schedule-picker-footer-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-/* AM / PM segmented toggle: unselected is transparent/dim, selected matches
-   the Create/Cancel pill look (translucent white fill + 0.4 border). */
+/* AM / PM segmented switch */
+.schedule-ampm-switch__track {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  padding: 3px;
+  min-width: 5.75rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.schedule-ampm-switch__thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+.schedule-ampm-switch__track.is-pm .schedule-ampm-switch__thumb {
+  transform: translateX(100%);
+}
+.list-panel .schedule-ampm-switch__option,
+.map-panel .schedule-ampm-switch__option,
+.schedule-ampm-switch__option {
+  position: relative;
+  z-index: 1;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  border-radius: 9999px !important;
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  transition: color 0.15s ease;
+}
+.list-panel .schedule-ampm-switch__option.is-active,
+.map-panel .schedule-ampm-switch__option.is-active,
+.schedule-ampm-switch__option.is-active {
+  color: rgba(255, 255, 255, 0.98) !important;
+}
+.list-panel .schedule-ampm-switch__option:hover:not(:disabled):not(.is-active),
+.map-panel .schedule-ampm-switch__option:hover:not(:disabled):not(.is-active),
+.schedule-ampm-switch__option:hover:not(:disabled):not(.is-active) {
+  color: rgba(255, 255, 255, 0.78) !important;
+  background: transparent !important;
+}
+
+/* Legacy AM/PM buttons (kept for any stragglers) */
 .schedule-ampm-group {
   gap: 4px;
   overflow: visible;
@@ -2849,14 +2969,6 @@
   border: 1px solid transparent !important;
   color: rgba(255, 255, 255, 0.55) !important;
   border-radius: 6px !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-.list-panel .schedule-ampm-btn:hover:not(:disabled),
-.map-panel .schedule-ampm-btn:hover:not(:disabled),
-.schedule-ampm-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: rgba(255, 255, 255, 0.95) !important;
 }
 .list-panel .schedule-ampm-btn.is-selected,
 .map-panel .schedule-ampm-btn.is-selected,
@@ -2864,17 +2976,9 @@
   background: rgba(255, 255, 255, 0.15) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   color: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-}
-.list-panel .schedule-ampm-btn.is-selected:hover:not(:disabled),
-.map-panel .schedule-ampm-btn.is-selected:hover:not(:disabled),
-.schedule-ampm-btn.is-selected:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.22) !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
 }
 
-/* Dropdown items inside hour/minute menus — restore hover + selected look */
+/* Dropdown items inside hour/minute menus */
 .list-panel .schedule-picker-menu-item,
 .map-panel .schedule-picker-menu-item,
 .schedule-picker-menu-item {
@@ -2892,7 +2996,62 @@
 .schedule-picker-menu-item.is-selected {
   background: rgba(255, 255, 255, 0.2) !important;
   color: #ffffff !important;
+  font-weight: 600;
+}
+
+/* Time row container */
+.schedule-time-row .schedule-ampm-switch {
+  margin-left: auto;
+}
+
+.schedule-time-input-wrap {
+  padding: 0 !important;
+  min-height: calc(2rem * var(--ui-touch-scale, 1));
+}
+
+.schedule-time-input {
+  width: 2.25rem;
+  min-width: 0;
+  flex: 1;
+  padding: 0.375rem 0.25rem 0.375rem 0.5rem;
+  background: transparent !important;
+  border: none !important;
+  outline: none;
+  text-align: center;
+  font-size: 0.875rem;
   font-weight: 500;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-time-field:has(.schedule-time-input-wrap) .schedule-time-input-wrap {
+  width: 100%;
+}
+
+.schedule-time-chevron-btn {
+  width: calc(1.625rem * var(--ui-touch-scale, 1));
+  background: transparent !important;
+  border: none !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.schedule-time-input-wrap:hover .schedule-time-chevron-btn,
+.schedule-time-chevron-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+[data-ui-theme='light'] .schedule-time-input {
+  color: var(--map-panel-text);
+}
+
+[data-ui-theme='light'] .schedule-time-chevron-btn {
+  border-left-color: rgba(0, 0, 0, 0.12) !important;
+  color: var(--map-panel-ink-muted) !important;
 }
 
 /* Login panel - Forgot password and Sign up: no fill, no border */
@@ -3750,7 +3909,7 @@
 
 /* Icon-only buttons: no fills or outlines (except map buttons) */
 button.icon-only-btn:not(.map-controls-stack *):not(.map-search-stack *),
-button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-ampm-btn) {
+button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn) {
   background: none !important;
   border: none !important;
   backdrop-filter: none !important;
@@ -3758,7 +3917,7 @@ button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *)
   box-shadow: none !important;
 }
 button.icon-only-btn:hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *),
-button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-ampm-btn) {
+button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn) {
   background: none !important;
   border: none !important;
 }

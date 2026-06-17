@@ -288,20 +288,55 @@
 }
 
 /* Schedule picker controls */
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-time-select-btn,
+[data-ui-theme='light'] .schedule-time-select-btn,
 [data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-btn,
 [data-ui-theme='light'] .schedule-picker-btn {
   background: var(--map-panel-surface-muted) !important;
   border-color: var(--map-panel-stroke-strong) !important;
   color: var(--map-panel-text) !important;
 }
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-time-select-btn:hover:not(:disabled),
+[data-ui-theme='light'] .schedule-time-select-btn:hover:not(:disabled),
 [data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-btn:hover:not(:disabled),
 [data-ui-theme='light'] .schedule-picker-btn:hover:not(:disabled) {
   background: var(--map-panel-surface-hover) !important;
   border-color: rgba(0, 0, 0, 0.24) !important;
 }
-[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-btn--primary,
-[data-ui-theme='light'] .schedule-picker-btn--primary {
+[data-ui-theme='light'] :is(.list-panel, .map-panel) button.schedule-picker-footer-btn,
+[data-ui-theme='light'] button.schedule-picker-footer-btn {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) button.schedule-picker-footer-btn--primary,
+[data-ui-theme='light'] button.schedule-picker-footer-btn--primary {
   background: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-nav-btn,
+[data-ui-theme='light'] .schedule-nav-btn {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .schedule-ampm-switch__track {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: var(--map-panel-stroke-strong);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+[data-ui-theme='light'] .schedule-ampm-switch__thumb {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-ampm-switch__option,
+[data-ui-theme='light'] .schedule-ampm-switch__option {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-ampm-switch__option.is-active,
+[data-ui-theme='light'] .schedule-ampm-switch__option.is-active {
+  color: var(--map-panel-text) !important;
 }
 [data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-ampm-btn,
 [data-ui-theme='light'] .schedule-ampm-btn {

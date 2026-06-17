@@ -76,7 +76,30 @@ export function filterTeamMembers(members, query) {
 }
 
 export function memberPrimaryLabel(member) {
-  return (member?.email || member?.displayName || member?.name || member?.uid || 'Member').trim()
+  return (member?.displayName || member?.name || member?.email || member?.uid || 'Member').trim()
+}
+
+export function memberSecondaryLabel(member) {
+  const primary = memberPrimaryLabel(member)
+  const email = (member?.email || '').trim()
+  const name = (member?.displayName || member?.name || '').trim()
+  if (email && email !== primary) return email
+  if (name && name !== primary) return name
+  return ''
+}
+
+export function memberInitials(member) {
+  const name = (member?.displayName || member?.name || '').trim()
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      return `${parts[0][0] || ''}${parts[parts.length - 1][0] || ''}`.toUpperCase()
+    }
+    return name.slice(0, 2).toUpperCase()
+  }
+  const email = (member?.email || '').trim()
+  if (email) return email.slice(0, 2).toUpperCase()
+  return '?'
 }
 
 export { displayLeadName, formatLeadAddress }

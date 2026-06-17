@@ -238,6 +238,7 @@ export function NewTaskDialog({
           {showLeadField && (
             <LeadPickerField
               key={`lead-${pickerSession}`}
+              collapsible
               leads={leads}
               value={leadId}
               onChange={(l) => {
@@ -250,6 +251,7 @@ export function NewTaskDialog({
           {showDealField && (
             <DealPickerField
               key={`deal-${pickerSession}`}
+              collapsible
               deals={pickerDeals}
               value={dealId}
               onChange={handleDealChange}
@@ -300,6 +302,7 @@ export function NewTaskDialog({
               selectedUids={teamAssignUids}
               title={teamAssignTitle}
               description={teamAssignDescription}
+              onClearAll={() => setTeamAssignUids([])}
               onToggle={(uid) => {
                 setTeamAssignUids((prev) =>
                   prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
