@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import {
   Plus,
   Loader2,
@@ -12,7 +11,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
-import { ignoreRadixMapPanelDismiss } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from '../ui/panelDialogUtils'
 import {
   PanelHeader,
   PANEL_LIST_HEADER_CLASS,
@@ -81,8 +80,7 @@ export function ReportsPanel({
 
   const editorOpen = !!editorFrame
   const hasNested = editorOpen || !!detailReportId
-  const listPanelRef = useRef(null)
-  useObscuredPanelRoot(listPanelRef, hasNested)
+  const listDialogOpen = mapListDialogOpen(isOpen, hasNested)
 
   const editorMode = editorFrame?.mode ?? 'report'
   const editorTemplate = editorFrame?.template ?? null
@@ -260,13 +258,9 @@ export function ReportsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          ref={listPanelRef}
-          className={cn(
-            'map-panel list-panel reports-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNested && 'crm-panel-obscured'
-          )}
+          className="map-panel list-panel reports-panel fullscreen-panel flex flex-col min-h-0 p-0"
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay

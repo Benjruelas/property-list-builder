@@ -508,7 +508,7 @@ export function LeadDetails({
                         <button
                           type="button"
                           onClick={() => onOpenDeal?.(d, d.__pipelineId)}
-                          className="lead-detail-deal-card"
+                          className="lead-detail-deal-card lead-detail-list-card"
                         >
                           <Briefcase className="h-4 w-4 shrink-0 opacity-50" />
                           <div className="flex-1 min-w-0">

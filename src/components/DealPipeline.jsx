@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Check, Users } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelBackButton, PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle } from '@/utils/dealPipeline'
@@ -99,6 +98,9 @@ export function DealPipeline({
   onColumnsChange,
   onTitleChange,
   focusDealId = null,
+  promotedDealId = null,
+  promotedDealPipelineId = null,
+  promotedDealPanelDockSlot,
   pipesLeadOverlayId = null,
   onOpenDeal,
   onOpenLeadOverlay,
@@ -145,10 +147,11 @@ export function DealPipeline({
   const [isEditMode, setIsEditMode] = useState(false)
   const [pipelineTitle, setPipelineTitle] = useState('Pipes')
   const leadOverlayId = pipesLeadOverlayId
+  const activeDealId = promotedDealId ?? focusDealId
   const selectedDeal = useMemo(() => {
-    if (!focusDealId) return null
-    return displayDeals.find((d) => d.id === focusDealId || String(d.parcelId) === String(focusDealId)) ?? null
-  }, [focusDealId, displayDeals])
+    if (!activeDealId) return null
+    return displayDeals.find((d) => d.id === activeDealId || String(d.parcelId) === String(activeDealId)) ?? null
+  }, [activeDealId, displayDeals])
   const [allTasks, setAllTasks] = useState([])
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false)
   const [addTaskPrefill, setAddTaskPrefill] = useState(null)
@@ -300,8 +303,8 @@ export function DealPipeline({
   }, [apiMode, pipelines])
 
   useEffect(() => {
-    if (!focusDealId) refreshAllTasks()
-  }, [focusDealId, refreshAllTasks])
+    if (!activeDealId) refreshAllTasks()
+  }, [activeDealId, refreshAllTasks])
 
   const handleToggleTask = useCallback(
     createOptimisticTaskToggleHandler({
@@ -792,10 +795,10 @@ export function DealPipeline({
     setSharePipelineId(null)
   }
 
-  const hasNestedDetail = !!(focusDealId || leadOverlayId)
+  const hasNestedDetail = !!(activeDealId || leadOverlayId)
+  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedDetail)
   const pipelinePanelRef = useRef(null)
   const columnsScrollRef = useRef(null)
-  useObscuredPanelRoot(pipelinePanelRef, hasNestedDetail)
 
   useEffect(() => {
     if (!isOpen) return undefined
@@ -830,7 +833,7 @@ export function DealPipeline({
       onCloseLeadOverlay?.()
       return
     }
-    if (selectedDeal || focusDealId) {
+    if (selectedDeal || activeDealId) {
       onCloseDeal?.()
       return
     }
@@ -847,13 +850,10 @@ export function DealPipeline({
   }
 
   return (
-    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+    <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         ref={pipelinePanelRef}
-        className={cn(
-          'map-panel deal-pipeline-panel fullscreen-panel flex flex-col',
-          hasNestedDetail && 'crm-panel-obscured'
-        )}
+        className="map-panel deal-pipeline-panel fullscreen-panel flex flex-col"
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay
@@ -1230,8 +1230,15 @@ export function DealPipeline({
       {isOpen && selectedDeal && (
         <DealDetails
           obscuredByChild={!!leadOverlayId}
+          panelDockSlot={promotedDealPanelDockSlot}
+          topLayer
+          hideOverlay
+          suppressBackdrop
           deal={selectedDeal}
-          pipeline={activePipeline}
+          pipeline={
+            (promotedDealPipelineId && pipelines.find((p) => p.id === promotedDealPipelineId))
+            || activePipeline
+          }
           lead={leads.find((l) => l.id === selectedDeal.leadId) || null}
           pipelines={pipelines}
           leads={leads}

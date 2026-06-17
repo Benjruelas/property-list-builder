@@ -138,7 +138,11 @@ function popNavStack(state) {
 
   // 1. Nested child frames (leads.detail, pipes.deal, forms.edit, etc.)
   if (isNestedChildFrame(topType) && topType !== 'schedule') {
-    if (shouldReturnToActivityOnDetailPop(coreStack, topType)) {
+    if (top.returnToLeadsList) {
+      newCore = [...coreStack.slice(0, -1), { type: 'leads' }]
+    } else if (top.returnToDealsList) {
+      newCore = [...coreStack.slice(0, -1), { type: 'deals' }]
+    } else if (shouldReturnToActivityOnDetailPop(coreStack, topType)) {
       newCore = [{ type: 'activity' }]
     } else {
       newCore = coreStack.slice(0, -1)

@@ -99,6 +99,47 @@ export function shouldKeepTasksWhenOpening(stack) {
   return isDesktopTaskDockEnabled() && stackHasTasks(stack)
 }
 
+/** Lead/deal detail promoted from list — or opened from Tasks — docks beside Tasks as primary. */
+export function isPromotedCrmDetailDockFrame(frame) {
+  if (!frame) return false
+  if (frame.type === 'leads.detail' && (frame.returnToLeadsList || frame.dockBesideTasks)) return true
+  if (frame.type === 'deals.detail' && (frame.returnToDealsList || frame.returnToPipesList || frame.dockBesideTasks)) return true
+  if (frame.type === 'deals.closed' && frame.returnToDealsList) return true
+  return false
+}
+
+/** Detail destination opened from the activity feed (stacked above activity, before tasks). */
+export function isActivityFeedDestinationFrame(frame) {
+  const type = frame?.type
+  return (
+    type === 'leads.detail' ||
+    type === 'deals.detail' ||
+    type === 'deals.closed' ||
+    type === 'lists.parcels' ||
+    type === 'quotes.detail' ||
+    type === 'teams.detail' ||
+    type === 'forms.fill'
+  )
+}
+
+function findActivityFeedDestinationRoot(stack, tasksIndex) {
+  const activityIndex = stack.findIndex((f, i) => i < tasksIndex && f.type === 'activity')
+  if (activityIndex === -1) return null
+  for (let i = tasksIndex - 1; i > activityIndex; i--) {
+    if (isActivityFeedDestinationFrame(stack[i])) {
+      return frameRoot(stack[i].type)
+    }
+  }
+  return null
+}
+
+function stackHasActivityFeedDestination(stack) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(stack)
+  if (!tasksFrames.length) return false
+  const tasksIndex = coreStack.length
+  return findActivityFeedDestinationRoot(coreStack, tasksIndex) != null
+}
+
 /**
  * Standalone lead/deal detail opened beside Tasks (no list parent) — Tasks stays on the right rail.
  * @param {import('./types.js').NavFrame[]} stack
@@ -108,13 +149,20 @@ export function getStandaloneDetailBesideTasks(stack) {
   const { tasksFrames, coreStack } = splitTrailingTasks(stack)
   if (tasksFrames.length === 0) return null
 
+  // Activity + destination detail + tasks uses docked layout, not solo-detail rail
+  if (stackHasActivityFeedDestination(stack)) return null
+
   const hasLeadsList = stack.some((f) => f.type === 'leads')
   const hasDealsList = stack.some((f) => f.type === 'deals')
 
-  if (!hasDealsList && coreStack.some((f) => f.type === 'deals.detail' || f.type === 'deals.lead')) {
+  if (!hasDealsList && coreStack.some((f) =>
+    (f.type === 'deals.detail' && !f.returnToDealsList && !f.dockBesideTasks) || f.type === 'deals.lead'
+  )) {
     return 'deals'
   }
-  if (!hasLeadsList && coreStack.some((f) => f.type === 'leads.detail')) {
+  if (!hasLeadsList && coreStack.some((f) =>
+    f.type === 'leads.detail' && !f.returnToLeadsList && !f.dockBesideTasks
+  )) {
     return 'leads'
   }
   const hasListsPicker = stack.some((f) => f.type === 'lists')
@@ -142,7 +190,9 @@ export function collectDockableKeepFlags(stack) {
 }
 
 /** True when a frame can anchor Tasks dock layout (list/root panel, not a detail overlay). */
-function isDockPrimaryFrame(type) {
+function isDockPrimaryFrame(frame) {
+  if (isPromotedCrmDetailDockFrame(frame)) return true
+  const type = frame.type
   const root = frameRoot(type)
   if (!TASKS_DOCKABLE_ROOTS.has(root)) return false
   if (!isNestedChildFrame(type)) return true
@@ -209,24 +259,28 @@ export function findDockablePrimaryRoot(stack) {
   if (stackHasTasks(stack)) {
     const tasksIndex = stack.findLastIndex((f) => frameRoot(f.type) === 'tasks')
 
+    const activityDestinationRoot = findActivityFeedDestinationRoot(stack, tasksIndex)
+    if (activityDestinationRoot) return activityDestinationRoot
+
     // Activity feed stays the dock anchor when destinations are opened from it
     for (let i = 0; i < tasksIndex; i++) {
       if (stack[i].type === 'activity') return 'activity'
     }
 
     for (let i = tasksIndex - 1; i >= 0; i--) {
-      if (isDockPrimaryFrame(stack[i].type)) return frameRoot(stack[i].type)
+      if (isDockPrimaryFrame(stack[i])) return frameRoot(stack[i].type)
     }
     for (let i = tasksIndex + 1; i < stack.length; i++) {
-      if (isDockPrimaryFrame(stack[i].type)) return frameRoot(stack[i].type)
+      if (isDockPrimaryFrame(stack[i])) return frameRoot(stack[i].type)
     }
     return null
   }
 
   for (let i = stack.length - 1; i >= 0; i--) {
-    const type = stack[i].type
+    const frame = stack[i]
+    const type = frame.type
     if (frameRoot(type) === 'tasks' || frameRoot(type) === 'settings') continue
-    if (isDockPrimaryFrame(type)) return frameRoot(type)
+    if (isDockPrimaryFrame(frame)) return frameRoot(type)
   }
   return null
 }

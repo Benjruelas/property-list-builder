@@ -7,6 +7,14 @@ export function ignoreRadixMapPanelDismiss(open) {
 }
 
 /**
+ * Keep the panel mounted in nav while a nested detail/editor dialog is open, but close
+ * the list dialog so Radix runs the standard map-panel exit animation.
+ */
+export function mapListDialogOpen(isPanelOpen, hasNestedContent) {
+  return isPanelOpen && !hasNestedContent
+}
+
+/**
  * Handle Radix dialog dismiss for controlled map panels.
  * Only runs onPanelBack for user-initiated closes — when the parent already set
  * `open` false via navigation, ignore the matching onOpenChange(false) callback.

@@ -12,7 +12,7 @@ import {
   Search,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
-import { ignoreRadixMapPanelDismiss } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from '../ui/panelDialogUtils'
 import {
   PanelHeader,
   PANEL_LIST_HEADER_CLASS,
@@ -23,7 +23,6 @@ import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
 import { showConfirm } from '../ui/confirm-dialog'
 import { useAuth } from '../../contexts/AuthContext'
-import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { LeadSharingIcon } from '../ResourceSharePicker'
 import { ShareResourceDialog } from '../ShareResourceDialog'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
@@ -94,10 +93,8 @@ export function FormsPanel({
   const [search, setSearch] = useState('')
   const [openMenuId, setOpenMenuId] = useState(null)
   const menuTriggerRef = useRef(null)
-  const listPanelRef = useRef(null)
-
   const hasNestedView = view !== 'list'
-  useObscuredPanelRoot(listPanelRef, hasNestedView)
+  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedView)
 
   const [shareTemplateId, setShareTemplateId] = useState(null)
   const [localShareState, setLocalShareState] = useState(null)
@@ -402,13 +399,9 @@ export function FormsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          ref={listPanelRef}
-          className={cn(
-            'map-panel list-panel forms-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedView && 'crm-panel-obscured',
-          )}
+          className="map-panel list-panel forms-panel fullscreen-panel flex flex-col min-h-0 p-0"
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay

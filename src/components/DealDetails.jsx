@@ -407,7 +407,7 @@ export function DealDetails({
                             type="button"
                             disabled={!onOpenQuote}
                             onClick={() => onOpenQuote?.(q)}
-                            className="lead-detail-deal-card disabled:opacity-60 disabled:pointer-events-none"
+                            className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
                           >
                             <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
                             <div className="flex-1 min-w-0">

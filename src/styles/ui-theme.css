@@ -39,6 +39,22 @@
   --map-accent-green: rgba(134, 239, 172, 1);
   --map-accent-red: rgba(252, 165, 165, 1);
   --map-accent-amber: rgba(253, 230, 138, 1);
+
+  --lead-detail-list-card-border: rgba(147, 197, 253, 0.34);
+  --lead-detail-list-card-bg: rgba(255, 255, 255, 0.06);
+  --lead-detail-list-card-face: #121622;
+  --lead-detail-list-card-face-hover: #1a2030;
+  --lead-detail-list-card-hover-bg: rgba(255, 255, 255, 0.1);
+  --lead-detail-list-card-hover-border: rgba(147, 197, 253, 0.52);
+  --lead-detail-list-card-accent: rgba(96, 165, 250, 0.9);
+  --lead-detail-list-card-shadow: 0 2px 10px rgba(255, 255, 255, 0.12), 0 1px 4px rgba(147, 197, 253, 0.1);
+  --lead-detail-list-card-shadow-hover: 0 4px 16px rgba(255, 255, 255, 0.14), 0 2px 6px rgba(147, 197, 253, 0.12);
+  --lead-detail-list-card-shadow-glow: rgba(147, 197, 253, 0.42);
+  --lead-detail-list-card-shimmer-sweep: rgba(191, 219, 254, 0.55);
+  --lead-detail-list-card-shadow-shimmer-min: 0.34;
+  --lead-detail-list-card-shadow-shimmer-max: 0.58;
+  --lead-detail-list-card-shadow-shimmer-hover-min: 0.52;
+  --lead-detail-list-card-shadow-shimmer-hover-max: 0.9;
 }
 
 [data-ui-theme='light'] {
@@ -73,6 +89,22 @@
   --map-accent-green: #15803d;
   --map-accent-red: #dc2626;
   --map-accent-amber: #b45309;
+
+  --lead-detail-list-card-border: rgba(37, 99, 235, 0.24);
+  --lead-detail-list-card-bg: rgba(37, 99, 235, 0.05);
+  --lead-detail-list-card-face: #ffffff;
+  --lead-detail-list-card-face-hover: #f3f6fc;
+  --lead-detail-list-card-hover-bg: rgba(37, 99, 235, 0.09);
+  --lead-detail-list-card-hover-border: rgba(37, 99, 235, 0.4);
+  --lead-detail-list-card-accent: rgba(37, 99, 235, 0.72);
+  --lead-detail-list-card-shadow: 0 2px 10px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(37, 99, 235, 0.1);
+  --lead-detail-list-card-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(37, 99, 235, 0.12);
+  --lead-detail-list-card-shadow-glow: rgba(37, 99, 235, 0.32);
+  --lead-detail-list-card-shimmer-sweep: rgba(59, 130, 246, 0.42);
+  --lead-detail-list-card-shadow-shimmer-min: 0.24;
+  --lead-detail-list-card-shadow-shimmer-max: 0.46;
+  --lead-detail-list-card-shadow-shimmer-hover-min: 0.42;
+  --lead-detail-list-card-shadow-shimmer-hover-max: 0.78;
 }
 
 /* Glass — original translucent “liquid glass” over the map */
@@ -105,6 +137,22 @@
   --map-accent-green: rgba(134, 239, 172, 1);
   --map-accent-red: rgba(252, 165, 165, 1);
   --map-accent-amber: rgba(253, 230, 138, 1);
+
+  --lead-detail-list-card-border: rgba(147, 197, 253, 0.34);
+  --lead-detail-list-card-bg: rgba(255, 255, 255, 0.06);
+  --lead-detail-list-card-face: #121622;
+  --lead-detail-list-card-face-hover: #1a2030;
+  --lead-detail-list-card-hover-bg: rgba(255, 255, 255, 0.1);
+  --lead-detail-list-card-hover-border: rgba(147, 197, 253, 0.52);
+  --lead-detail-list-card-accent: rgba(96, 165, 250, 0.9);
+  --lead-detail-list-card-shadow: 0 2px 10px rgba(255, 255, 255, 0.12), 0 1px 4px rgba(147, 197, 253, 0.1);
+  --lead-detail-list-card-shadow-hover: 0 4px 16px rgba(255, 255, 255, 0.14), 0 2px 6px rgba(147, 197, 253, 0.12);
+  --lead-detail-list-card-shadow-glow: rgba(147, 197, 253, 0.42);
+  --lead-detail-list-card-shimmer-sweep: rgba(191, 219, 254, 0.55);
+  --lead-detail-list-card-shadow-shimmer-min: 0.34;
+  --lead-detail-list-card-shadow-shimmer-max: 0.58;
+  --lead-detail-list-card-shadow-shimmer-hover-min: 0.52;
+  --lead-detail-list-card-shadow-shimmer-hover-max: 0.9;
 }
 
 [data-ui-theme='glass'] .parcel-details-dialog {
@@ -237,7 +285,13 @@
 
 [data-ui-theme='light'] .map-panel .text-gray-500,
 [data-ui-theme='light'] .map-panel .text-gray-400,
-[data-ui-theme='light'] .map-panel .text-gray-200 {
+[data-ui-theme='light'] .map-panel .text-gray-200,
+[data-ui-theme='light'] .list-panel .text-gray-500,
+[data-ui-theme='light'] .list-panel .text-gray-400,
+[data-ui-theme='light'] .list-panel .text-gray-200,
+[data-ui-theme='light'] .email-panel .text-gray-500,
+[data-ui-theme='light'] .email-panel .text-gray-400,
+[data-ui-theme='light'] .email-panel .text-gray-200 {
   color: var(--map-panel-text-muted) !important;
 }
 
@@ -337,9 +391,9 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 [data-ui-theme='light'] .deal-pipeline-lead-card select {
-  background: rgba(15, 23, 42, 0.35) !important;
-  border-color: rgba(191, 219, 254, 0.4) !important;
-  color: rgba(255, 255, 255, 0.98) !important;
+  background: var(--map-panel-input-bg) !important;
+  border-color: var(--map-panel-input-border) !important;
+  color: var(--map-panel-text) !important;
 }
 [data-ui-theme='light'] .deal-pipeline-lead-card .pipeline-icon-btn {
   color: rgba(17, 24, 39, 0.75) !important;

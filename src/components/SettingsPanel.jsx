@@ -5,6 +5,7 @@ import { Input } from './ui/input'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { DEFAULT_SETTINGS } from '../utils/settings'
@@ -354,11 +355,12 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
   }, [getToken])
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         className="map-panel list-panel fullscreen-panel"
         showCloseButton={false}
         hideOverlay
+        suppressBackdrop
       >
         <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Application settings</DialogDescription>

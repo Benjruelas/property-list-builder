@@ -202,11 +202,12 @@ function App() {
     isDealsDetailStandalone,
     dealsDetailDealId,
     dealsDetailPipelineId,
+    dealsDetailReturnToPipes,
     dealsClosedRecordId,
     dealsLeadOverlayId,
     isDealPipelineOpen,
     pipesPipelineId,
-    pipesDealId,
+    pipesPromotedDealId,
     pipesLeadOverlayId,
     isTasksPanelOpen,
     tasksDockLayout,
@@ -268,7 +269,7 @@ function App() {
 
   const panelDockSlot = (root, isOpen) => resolvePanelDockSlot(root, isOpen, tasksDockLayout)
 
-  const dealPipelineMounted = useStickyPanelMount(isDealPipelineOpen, pipesDealId, pipesLeadOverlayId)
+  const dealPipelineMounted = useStickyPanelMount(isDealPipelineOpen, pipesPromotedDealId, pipesLeadOverlayId)
   const schedulePanelMounted = useStickyPanelMount(isSchedulePanelOpen, scheduleLeadId)
   const tasksPanelMounted = useStickyPanelMount(isTasksPanelOpen)
   const leadsPanelMounted = useStickyPanelMount(isLeadsPanelOpen, leadsDetailLeadId)
@@ -2870,7 +2871,7 @@ function App() {
     isOpen: isActivityPanelOpen,
     isFeedActive: isActivityPanelFocused,
     topLayer: isActivityPanelTopLayer,
-    panelDockSlot: panelDockSlot('activity', isActivityPanelOpen),
+    panelDockSlot: panelDockSlot('activity', isActivityPanelFocused),
     onOpenChange: (open) => {
       if (open) guardFeature('activity', () => nav.setActivityOpen(true))
       else nav.closeActivity()
@@ -3695,16 +3696,18 @@ function App() {
       }>
       <DealPipeline
         isOpen={isDealPipelineOpen}
-        panelDockSlot={panelDockSlot('pipes', isDealPipelineOpen)}
+        panelDockSlot={panelDockSlot('pipes', isDealPipelineOpen && !pipesPromotedDealId)}
+        promotedDealPanelDockSlot={panelDockSlot('deals', !!pipesPromotedDealId)}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
-        focusDealId={pipesDealId}
+        promotedDealId={pipesPromotedDealId}
+        promotedDealPipelineId={pipesPromotedDealId ? dealsDetailPipelineId : null}
         pipesLeadOverlayId={pipesLeadOverlayId}
         onOpenDeal={(dealId) => nav.pushPipesDeal(dealId)}
         onOpenLeadOverlay={(leadId) => nav.pushPipesLead(leadId)}
-        onCloseDeal={() => nav.popIfTop('pipes.deal')}
+        onCloseDeal={() => nav.popDealsDetail()}
         onCloseLeadOverlay={() => nav.popIfTop('pipes.lead')}
         addTaskRequestKey={dealPipelineAddTaskKey}
         addTaskRequestParcelId={dealPipelineAddTaskParcelId}
@@ -4171,7 +4174,7 @@ function App() {
         teamMembership={teamMembership}
         detailLeadId={leadsDetailLeadId}
         onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
-        onCloseLeadDetail={() => nav.popIfTop('leads.detail')}
+        onCloseLeadDetail={() => nav.popLeadsDetail()}
         currentUserId={currentUser?.uid}
         currentUser={currentUser}
         canSeeDealAmounts={showDealAmounts}
@@ -4224,6 +4227,7 @@ function App() {
         quotesRefreshKey={quotesRefreshEpoch}
         dealsDetailDealId={dealsDetailDealId}
         dealsDetailPipelineId={dealsDetailPipelineId}
+        dealsDetailReturnToPipes={dealsDetailReturnToPipes}
         dealsClosedRecordId={dealsClosedRecordId}
         dealsLeadOverlayId={dealsLeadOverlayId}
         leadsDetailLeadId={leadsDetailLeadId}
@@ -4231,9 +4235,9 @@ function App() {
         onOpenDealFromLead={(dealId, pipelineId) => nav.openDealFromLead(dealId, pipelineId)}
         onOpenClosedDeal={(closedRecordId) => nav.pushDealsClosed(closedRecordId)}
         onOpenLeadOverlay={(leadId) => nav.pushDealsLead(leadId)}
-        onCloseDealDetail={() => nav.popIfTop('deals.detail')}
+        onCloseDealDetail={() => nav.popDealsDetail()}
         onCloseLeadOverlay={() => nav.popIfTop('deals.lead')}
-        onCloseClosedDeal={() => nav.popIfTop('deals.closed')}
+        onCloseClosedDeal={() => nav.closeDealsClosed()}
         createDealPipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
         createDealSaving={createDealSaving}
         onCreateDealSubmit={handleCreateDealSubmit}

@@ -18,6 +18,10 @@ import {
   recipeOpenStandaloneLeadDetail,
   recipeOpenStandaloneDealDetail,
   recipeOpenDealFromLeadDetail,
+  recipeClosePromotedLeadDetail,
+  recipeClosePromotedDealDetail,
+  recipeClosePromotedPipesDealDetail,
+  recipeClosePromotedClosedDeal,
   recipeOpenLists,
   recipeOpenOutreach,
   recipeOpenPaths,
@@ -33,6 +37,7 @@ import {
   recipeOpenSettings,
   recipeOpenSkipTraced,
   recipeOpenTaskInPipes,
+  recipePushPipesDeal,
   recipeOpenTasks,
   recipeCloseTasks,
   recipeSwapPrimaryKeepTasks,
@@ -318,12 +323,37 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack])
 
   // Panel overlay navigation helpers
-  const pushLeadsDetail = useCallback((leadId) => push({ type: 'leads.detail', leadId }), [push])
-  const popLeadsDetail = useCallback(() => popIfTop('leads.detail'), [popIfTop])
+  const pushLeadsDetail = useCallback((leadId) => {
+    replaceStack(recipeOpenLeadDetails(state.navStack, leadId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
+
+  const closeLeadsDetail = useCallback(() => {
+    const next = recipeClosePromotedLeadDetail(state.navStack)
+    if (next) replaceStack(next)
+    else popIfTop('leads.detail')
+  }, [state.navStack, replaceStack, popIfTop])
+
+  const popLeadsDetail = closeLeadsDetail
 
   const pushDealsDetail = useCallback((dealId, pipelineId) => {
     replaceStack(recipePushDealsDetail(state.navStack, dealId, pipelineId, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
+
+  const closeDealsDetail = useCallback(() => {
+    const next =
+      recipeClosePromotedDealDetail(state.navStack) ??
+      recipeClosePromotedPipesDealDetail(state.navStack)
+    if (next) replaceStack(next)
+    else popIfTop('deals.detail')
+  }, [state.navStack, replaceStack, popIfTop])
+
+  const popDealsDetail = closeDealsDetail
+
+  const closeDealsClosed = useCallback(() => {
+    const next = recipeClosePromotedClosedDeal(state.navStack)
+    if (next) replaceStack(next)
+    else popIfTop('deals.closed')
+  }, [state.navStack, replaceStack, popIfTop])
 
   const pushDealsClosed = useCallback((closedRecordId) => {
     replaceStack(recipePushDealsClosed(state.navStack, closedRecordId))
@@ -334,8 +364,8 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const pushPipesDeal = useCallback((dealId) => {
-    push({ type: 'pipes.deal', dealId })
-  }, [push])
+    replaceStack(recipePushPipesDeal(state.navStack, dealId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const pushPipesLead = useCallback((leadId) => {
     push({ type: 'pipes.lead', leadId })
@@ -486,8 +516,12 @@ export function NavigationProvider({ children }) {
     setActivityOpen,
     pushLeadsDetail,
     popLeadsDetail,
+    closeLeadsDetail,
     pushDealsDetail,
+    popDealsDetail,
+    closeDealsDetail,
     pushDealsClosed,
+    closeDealsClosed,
     pushDealsLead,
     pushPipesDeal,
     pushPipesLead,
@@ -564,8 +598,12 @@ export function NavigationProvider({ children }) {
     setActivityOpen,
     pushLeadsDetail,
     popLeadsDetail,
+    closeLeadsDetail,
     pushDealsDetail,
+    popDealsDetail,
+    closeDealsDetail,
     pushDealsClosed,
+    closeDealsClosed,
     pushDealsLead,
     pushPipesDeal,
     pushPipesLead,

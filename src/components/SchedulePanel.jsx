@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { displayLeadName, leadToParcelData } from '@/utils/leads'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
@@ -556,11 +555,11 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
   }
 
   const hasNestedLeadDetail = !!scheduleLeadId
-  const scheduleRootRef = useRef(null)
-  useObscuredPanelRoot(scheduleRootRef, hasNestedLeadDetail)
+  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedLeadDetail)
 
   return (
-    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+    <>
+    <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
         panelDockSlot={panelDockSlot}
@@ -569,13 +568,6 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
         suppressBackdrop
         topLayer={stacked}
       >
-        <div
-          ref={scheduleRootRef}
-          className={cn(
-            'flex min-h-0 flex-1 flex-col overflow-hidden',
-            hasNestedLeadDetail && 'crm-panel-obscured'
-          )}
-        >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">View and manage scheduled tasks</DialogDescription>
           <PanelHeader onBack={handlePanelBack} title="Schedule">
@@ -896,7 +888,8 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
             )}
           </div>
         </div>
-        </div>
+      </DialogContent>
+    </Dialog>
 
         {/* Add Task Dialog */}
         <NewTaskDialog
@@ -990,7 +983,6 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
             if (payload) finalizeTaskCreate({ ...payload, pipelineId: null })
           }}
         />
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }

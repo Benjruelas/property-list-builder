@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Phone, ChevronDown, ChevronRight } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { getSkipTracedList } from '../utils/skipTracedList'
 
@@ -40,12 +41,8 @@ export function SkipTracedListPanel({
   }, [isOpen])
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) {
-        onClose()
-      }
-    }}>
-      <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay>
+    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <DialogContent className="map-panel list-panel fullscreen-panel" showCloseButton={false} hideOverlay suppressBackdrop>
         <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <PanelHeader onBack={onClose} title="Skiptraced Parcels" />
           <DialogDescription className="sr-only">

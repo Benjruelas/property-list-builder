@@ -347,7 +347,7 @@
 
 @media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
-  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel) {
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel) {
     width: auto !important;
     min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
@@ -712,6 +712,24 @@
       max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease);
   }
 
+  /* Activity-feed / promoted CRM detail as dock primary (replaces list beside Tasks) */
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.lead-details-panel[data-tasks-dock-slot="primary"],
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.deal-details-panel[data-tasks-dock-slot="primary"],
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"])[data-tasks-dock-root="leads"] .map-panel-dialog.lead-details-panel[data-state="open"],
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"])[data-tasks-dock-root="deals"] .map-panel-dialog.deal-details-panel[data-state="open"],
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"])[data-tasks-dock-root="lists"] .map-panel-dialog.parcel-list-panel[data-state="open"] {
+    width: var(--tasks-dock-primary-width) !important;
+    max-width: var(--tasks-dock-primary-width) !important;
+    min-width: 0 !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
+    transition:
+      transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease);
+  }
+
   html[data-tasks-solo-detail="1"] {
     --tasks-dock-width: min(300px, 24vw);
     --tasks-solo-detail-width: min(calc(var(--ui-panel-height) * 0.878), 48vw);
@@ -765,7 +783,11 @@
   }
 
   html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel),
-  html[data-tasks-dock-leave="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel) {
+  html[data-tasks-dock-leave="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel),
+  html[data-tasks-docked="1"] .map-panel-dialog.lead-details-panel[data-tasks-dock-slot="primary"][data-state="open"],
+  html[data-tasks-docked="1"] .map-panel-dialog.deal-details-panel[data-tasks-dock-slot="primary"][data-state="open"],
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.lead-details-panel[data-tasks-dock-slot="primary"][data-state="open"],
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.deal-details-panel[data-tasks-dock-slot="primary"][data-state="open"] {
     transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
     transition:
       transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
@@ -782,8 +804,8 @@
   }
 
   /* Nested CRM detail/editor overlays: viewport-centered above dock + blur */
-  html[data-tasks-docked="1"] .map-panel-dialog.lead-details-panel,
-  html[data-tasks-docked="1"] .map-panel-dialog.deal-details-panel,
+  html[data-tasks-docked="1"] .map-panel-dialog.lead-details-panel:not([data-tasks-dock-slot="primary"]),
+  html[data-tasks-docked="1"] .map-panel-dialog.deal-details-panel:not([data-tasks-dock-slot="primary"]),
   html[data-tasks-docked="1"] .map-panel-dialog.quote-details-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.quote-editor-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.report-details-panel,
@@ -813,6 +835,9 @@
   html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-fill-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="paths"] .map-panel-dialog.paths-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="lists"] .map-panel-dialog.lists-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="lists"] .map-panel-dialog.parcel-list-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="leads"] .map-panel-dialog.lead-details-panel[data-state="open"],
+  html[data-tasks-docked="1"][data-tasks-dock-root="deals"] .map-panel-dialog.deal-details-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="teams"] .map-panel-dialog.teams-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="activity"] .map-panel-dialog.activity-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="schedule"] .map-panel-dialog.schedule-panel[data-state="open"],
@@ -876,7 +901,16 @@
   html[data-tasks-dock-swap="1"] .map-panel-dialog.teams-panel[data-state="open"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.activity-panel[data-state="open"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.schedule-panel[data-state="open"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.outreach-panel[data-state="open"] {
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.outreach-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.lead-details-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.deal-details-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.quote-details-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.quote-editor-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.report-details-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.team-details-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-editor-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-fill-panel[data-state="open"] {
     animation: map-panel-primary-dock-fade-in 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
     transition: none !important;
   }
@@ -892,7 +926,16 @@
   html[data-tasks-dock-swap="1"] .map-panel-dialog.teams-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.activity-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.schedule-panel[data-state="closed"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.outreach-panel[data-state="closed"] {
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.outreach-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.lead-details-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.deal-details-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.quote-details-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.quote-editor-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.report-details-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.team-details-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-editor-panel[data-state="closed"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-fill-panel[data-state="closed"] {
     animation: map-panel-primary-dock-fade-out 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
     transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
     transition: none !important;
@@ -928,9 +971,9 @@
     animation: none !important;
   }
 
-  /* Desktop: CRM detail panels — readable width, same height as list panels */
-  .lead-details-panel.fullscreen-panel,
-  .deal-details-panel.fullscreen-panel {
+  /* Desktop: CRM detail beside solo Tasks rail — narrow width (full width when Tasks is closed) */
+  html[data-tasks-solo-detail="1"] .lead-details-panel.fullscreen-panel:not([data-tasks-dock-slot="primary"]),
+  html[data-tasks-solo-detail="1"] .deal-details-panel.fullscreen-panel:not([data-tasks-dock-slot="primary"]) {
     width: min(calc(var(--ui-panel-height) * 0.878), 48vw) !important;
     min-width: calc(var(--ui-panel-height) * 0.512) !important;
     max-width: min(calc(var(--ui-panel-height) * 0.951), 52vw) !important;
@@ -972,7 +1015,7 @@
     top: var(--ui-panel-center-y) !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
     box-sizing: border-box !important;
     width: var(--ui-panel-width) !important;
     max-width: var(--ui-panel-width) !important;
@@ -983,7 +1026,7 @@
     overflow-x: clip !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .list-panel.fullscreen-panel:not(.tasks-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
     width: var(--ui-panel-width) !important;
     min-width: 0 !important;
     max-width: var(--ui-panel-width) !important;
@@ -1011,7 +1054,12 @@
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.teams-panel.fullscreen-panel,
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.activity-panel.fullscreen-panel,
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.schedule-panel.fullscreen-panel,
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.outreach-panel.fullscreen-panel {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.outreach-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.lead-details-panel[data-tasks-dock-slot="primary"].fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.deal-details-panel[data-tasks-dock-slot="primary"].fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"])[data-tasks-dock-root="leads"] .map-panel-dialog.lead-details-panel.fullscreen-panel[data-state="open"],
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"])[data-tasks-dock-root="deals"] .map-panel-dialog.deal-details-panel.fullscreen-panel[data-state="open"],
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"])[data-tasks-dock-root="lists"] .map-panel-dialog.parcel-list-panel.fullscreen-panel[data-state="open"] {
     width: var(--tasks-dock-primary-width) !important;
     max-width: var(--tasks-dock-primary-width) !important;
     min-width: 0 !important;
@@ -1452,7 +1500,8 @@
 }
 
 .map-panel input,
-.map-panel textarea {
+.map-panel textarea,
+.map-panel select {
   background: var(--map-panel-input-bg) !important;
   border-color: var(--map-panel-input-border) !important;
   color: var(--map-panel-text) !important;
@@ -1460,6 +1509,19 @@
 
 .map-panel input::placeholder,
 .map-panel textarea::placeholder {
+  color: var(--map-panel-text-muted) !important;
+}
+
+.list-panel input:not([type='checkbox']):not([type='radio']),
+.list-panel textarea,
+.list-panel select {
+  background: var(--map-panel-input-bg) !important;
+  border-color: var(--map-panel-input-border) !important;
+  color: var(--map-panel-text) !important;
+}
+
+.list-panel input::placeholder,
+.list-panel textarea::placeholder {
   color: var(--map-panel-text-muted) !important;
 }
 
@@ -1963,18 +2025,128 @@
   transition: background-color 0.15s, border-color 0.15s;
 }
 
-.lead-detail-deal-card:hover:not(:disabled) {
+.lead-detail-deal-card:not(.lead-detail-list-card):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08) !important;
 }
 
-.map-panel.lead-details-panel .lead-detail-deal-card,
-.map-panel.deal-details-panel .lead-detail-deal-card {
+/* Quote / deal list rows in lead & deal detail panels — accent border for visibility */
+@keyframes lead-detail-list-card-shadow-shimmer {
+  0%, 100% {
+    opacity: var(--lead-detail-list-card-shadow-shimmer-min);
+    background-position: 0% 50%, center;
+  }
+  50% {
+    opacity: var(--lead-detail-list-card-shadow-shimmer-max);
+    background-position: 100% 50%, center;
+  }
+}
+
+@keyframes lead-detail-list-card-shadow-shimmer-hover {
+  0%, 100% {
+    opacity: var(--lead-detail-list-card-shadow-shimmer-hover-min);
+    background-position: 0% 50%, center;
+  }
+  50% {
+    opacity: var(--lead-detail-list-card-shadow-shimmer-hover-max);
+    background-position: 100% 50%, center;
+  }
+}
+
+.lead-detail-list-card.lead-detail-deal-card {
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--lead-detail-list-card-border) !important;
+  border-left: 3px solid var(--lead-detail-list-card-accent) !important;
+  background-color: var(--lead-detail-list-card-face) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: var(--lead-detail-list-card-shadow);
+  transition: box-shadow 0.3s ease, background-color 0.15s ease, border-color 0.15s ease;
+  margin-bottom: 10px;
+  overflow: visible;
+}
+
+.lead-detail-list-card.lead-detail-deal-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Shimmer sits beneath the card — glow only below the bottom edge */
+.lead-detail-list-card.lead-detail-deal-card::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 10%;
+  right: 10%;
+  top: calc(100% + 2px);
+  height: 14px;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 40%,
+      var(--lead-detail-list-card-shimmer-sweep) 50%,
+      transparent 60%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 100% 100% at 50% 0%,
+      var(--lead-detail-list-card-shadow-glow) 0%,
+      transparent 72%
+    );
+  background-size: 220% 100%, 100% 100%;
+  filter: blur(14px);
+  animation: lead-detail-list-card-shadow-shimmer 9s ease-in-out infinite;
+}
+
+.lead-detail-list-card.lead-detail-deal-card:hover:not(:disabled) {
+  background-color: var(--lead-detail-list-card-face-hover) !important;
+  border-color: var(--lead-detail-list-card-hover-border) !important;
+  border-left-color: var(--lead-detail-list-card-accent) !important;
+  box-shadow: var(--lead-detail-list-card-shadow-hover);
+}
+
+.lead-detail-list-card.lead-detail-deal-card:hover:not(:disabled)::before {
+  animation-name: lead-detail-list-card-shadow-shimmer-hover;
+  filter: blur(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lead-detail-list-card.lead-detail-deal-card::before {
+    animation: none;
+    opacity: var(--lead-detail-list-card-shadow-shimmer-min);
+  }
+  .lead-detail-list-card.lead-detail-deal-card:hover:not(:disabled)::before {
+    opacity: var(--lead-detail-list-card-shadow-shimmer-hover-min);
+  }
+}
+
+.map-panel.lead-details-panel .lead-detail-list-card.lead-detail-deal-card,
+.map-panel.deal-details-panel .lead-detail-list-card.lead-detail-deal-card {
+  border: 1px solid var(--lead-detail-list-card-border) !important;
+  border-left: 3px solid var(--lead-detail-list-card-accent) !important;
+  background-color: var(--lead-detail-list-card-face) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-list-card.lead-detail-deal-card:hover:not(:disabled),
+.map-panel.deal-details-panel .lead-detail-list-card.lead-detail-deal-card:hover:not(:disabled) {
+  background-color: var(--lead-detail-list-card-face-hover) !important;
+  border-color: var(--lead-detail-list-card-hover-border) !important;
+  border-left-color: var(--lead-detail-list-card-accent) !important;
+}
+
+.map-panel.lead-details-panel .lead-detail-deal-card:not(.lead-detail-list-card),
+.map-panel.deal-details-panel .lead-detail-deal-card:not(.lead-detail-list-card) {
   border: 1px solid #ffffff !important;
   background: rgba(255, 255, 255, 0.04) !important;
 }
 
-.map-panel.lead-details-panel .lead-detail-deal-card:hover:not(:disabled),
-.map-panel.deal-details-panel .lead-detail-deal-card:hover:not(:disabled) {
+.map-panel.lead-details-panel .lead-detail-deal-card:not(.lead-detail-list-card):hover:not(:disabled),
+.map-panel.deal-details-panel .lead-detail-deal-card:not(.lead-detail-list-card):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: #ffffff !important;
 }
@@ -3336,14 +3508,23 @@
 }
 
 @media (min-width: 768px) {
-  .parcel-details-panel {
-    max-width: 36rem;
+  /* Desktop: parcel details — wide enough for all action tiles on one row */
+  .parcel-details-panel.fullscreen-panel {
+    width: min(44rem, 94vw) !important;
+    min-width: min(42rem, 92vw) !important;
+    max-width: min(44rem, 94vw) !important;
   }
 
   .parcel-details-actions-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(5.75rem, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
     gap: 0.625rem;
+  }
+
+  .parcel-details-actions-row > * {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .parcel-details-action-tile {

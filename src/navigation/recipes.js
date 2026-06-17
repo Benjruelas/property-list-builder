@@ -153,16 +153,22 @@ function activityPrefix(currentStack) {
   return currentStack[0]?.type === 'activity' ? [currentStack[0]] : []
 }
 
-/** Legacy: openLeadDetails */
+/** Open lead detail as the primary panel; restores Leads list on back when opened from it. */
 export function recipeOpenLeadDetails(currentStack, leadId, opts = {}) {
   const build = (stack) => {
     const fromActivity = stack[0]?.type === 'activity'
-    const keep = { leads: true, ...(fromActivity ? { activity: true } : {}) }
-    const withoutDetail = stack.filter((f) => f.type !== 'leads.detail')
-    const base = recipeClosePrimaryExcept(withoutDetail, keep, [])
-    const hasLeads = base.some((f) => f.type === 'leads')
-    const leadStack = hasLeads ? base : [...base, { type: 'leads' }]
-    return [...leadStack, { type: 'leads.detail', leadId }]
+    const hadLeadsList = stack.some((f) => f.type === 'leads')
+    const keep = { ...(fromActivity ? { activity: true } : {}) }
+    const withoutLeadFrames = stack.filter((f) => f.type !== 'leads' && f.type !== 'leads.detail')
+    const base = recipeClosePrimaryExcept(withoutLeadFrames, keep, [])
+    return [
+      ...base,
+      {
+        type: 'leads.detail',
+        leadId,
+        ...(hadLeadsList && !fromActivity ? { returnToLeadsList: true } : {}),
+      },
+    ]
   }
 
   if (opts.keepTasks && stackHasTasks(currentStack)) {
@@ -173,9 +179,18 @@ export function recipeOpenLeadDetails(currentStack, leadId, opts = {}) {
   return build(currentStack)
 }
 
+/** Back from promoted lead detail → Leads list when opened from it. */
+export function recipeClosePromotedLeadDetail(currentStack) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const top = coreStack[coreStack.length - 1]
+  if (top?.type !== 'leads.detail' || !top.returnToLeadsList) return null
+  const withoutDetail = coreStack.slice(0, -1)
+  return appendTrailingTasks([...withoutDetail, { type: 'leads' }], tasksFrames)
+}
+
 /** Open lead detail only — no Leads list panel (e.g. from Tasks). */
 export function recipeOpenStandaloneLeadDetail(currentStack, leadId, opts = {}) {
-  const detailStack = [{ type: 'leads.detail', leadId }]
+  const detailStack = [{ type: 'leads.detail', leadId, dockBesideTasks: true }]
   if (opts.keepTasks && stackHasTasks(currentStack)) {
     const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
     return appendTrailingTasks(detailStack, tasksFrames)
@@ -185,7 +200,7 @@ export function recipeOpenStandaloneLeadDetail(currentStack, leadId, opts = {}) 
 
 /** Open deal detail only — no Deals list panel (e.g. from Tasks). */
 export function recipeOpenStandaloneDealDetail(currentStack, dealId, pipelineId, opts = {}) {
-  const detailStack = [{ type: 'deals.detail', dealId, pipelineId }]
+  const detailStack = [{ type: 'deals.detail', dealId, pipelineId, dockBesideTasks: true }]
   if (opts.keepTasks && stackHasTasks(currentStack)) {
     const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
     return appendTrailingTasks(detailStack, tasksFrames)
@@ -221,15 +236,27 @@ export function recipeOpenScheduleAtDate(currentStack, initialDate) {
   return [...withoutSchedule, { type: 'schedule', initialDate: initialDate ?? undefined }]
 }
 
-/** Push active deal detail — replaces any competing closed/lead overlays. */
+/** Open deal detail as the primary panel; restores Deals list on back when opened from it. */
 export function recipePushDealsDetail(currentStack, dealId, pipelineId, opts = {}) {
   const build = (stack) => {
+    const fromActivity = stack[0]?.type === 'activity'
+    const hadDealsList = stack.some((f) => f.type === 'deals')
     const filtered = stack.filter(
-      (f) => f.type !== 'deals.closed' && f.type !== 'deals.lead' && f.type !== 'deals.detail',
+      (f) =>
+        f.type !== 'deals.closed' &&
+        f.type !== 'deals.lead' &&
+        f.type !== 'deals.detail' &&
+        f.type !== 'deals',
     )
-    const hasDeals = filtered.some((f) => f.type === 'deals')
-    const withDeals = hasDeals ? filtered : [...filtered, { type: 'deals' }]
-    return [...withDeals, { type: 'deals.detail', dealId, pipelineId }]
+    return [
+      ...filtered,
+      {
+        type: 'deals.detail',
+        dealId,
+        pipelineId,
+        ...(hadDealsList && !fromActivity ? { returnToDealsList: true } : {}),
+      },
+    ]
   }
 
   if (opts.keepTasks && stackHasTasks(currentStack)) {
@@ -240,12 +267,43 @@ export function recipePushDealsDetail(currentStack, dealId, pipelineId, opts = {
   return build(currentStack)
 }
 
-/** Push closed deal view — replaces any competing active deal/lead overlays. */
+/** Back from promoted deal detail → Deals list when opened from it. */
+export function recipeClosePromotedDealDetail(currentStack) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const top = coreStack[coreStack.length - 1]
+  if (top?.type !== 'deals.detail' || !top.returnToDealsList) return null
+  const withoutDetail = coreStack.slice(0, -1)
+  return appendTrailingTasks([...withoutDetail, { type: 'deals' }], tasksFrames)
+}
+
+/** Push closed deal view as primary panel — replaces competing deal/lead overlays. */
 export function recipePushDealsClosed(currentStack, closedRecordId) {
+  const fromActivity = currentStack[0]?.type === 'activity'
+  const hadDealsList = currentStack.some((f) => f.type === 'deals')
   const filtered = currentStack.filter(
-    (f) => f.type !== 'deals.detail' && f.type !== 'deals.lead' && f.type !== 'deals.closed',
+    (f) =>
+      f.type !== 'deals.detail' &&
+      f.type !== 'deals.lead' &&
+      f.type !== 'deals.closed' &&
+      f.type !== 'deals',
   )
-  return [...filtered, { type: 'deals.closed', closedRecordId }]
+  return [
+    ...filtered,
+    {
+      type: 'deals.closed',
+      closedRecordId,
+      ...(hadDealsList && !fromActivity ? { returnToDealsList: true } : {}),
+    },
+  ]
+}
+
+/** Back from promoted closed deal → Deals list when opened from it. */
+export function recipeClosePromotedClosedDeal(currentStack) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const top = coreStack[coreStack.length - 1]
+  if (top?.type !== 'deals.closed' || !top.returnToDealsList) return null
+  const withoutClosed = coreStack.slice(0, -1)
+  return appendTrailingTasks([...withoutClosed, { type: 'deals' }], tasksFrames)
 }
 
 /**
@@ -290,20 +348,51 @@ export function recipeOpenDealFromLeadDetail(currentStack, dealId, pipelineId, o
 
 /** Legacy: Leads → open deal in pipes */
 export function recipeOpenDealInPipes(currentStack, pipelineId, dealId) {
-  return [
-    ...activityPrefix(currentStack),
-    { type: 'pipes', pipelineId },
-    { type: 'pipes.deal', dealId },
-  ]
+  const prefix = activityPrefix(currentStack)
+  return recipePushPipesDeal([...prefix, { type: 'pipes', pipelineId }], dealId)
 }
 
 /** Legacy: handleOpenTaskInDealPipeline */
 export function recipeOpenTaskInPipes(currentStack, pipelineId, dealId) {
-  return [
-    ...activityPrefix(currentStack),
-    { type: 'pipes', pipelineId },
-    { type: 'pipes.deal', dealId },
-  ]
+  return recipeOpenDealInPipes(currentStack, pipelineId, dealId)
+}
+
+/** Open deal detail as primary panel; Pipes kanban stays in stack for back navigation. */
+export function recipePushPipesDeal(currentStack, dealId, opts = {}) {
+  const build = (stack) => {
+    const pipesFrame = stack.find((f) => f.type === 'pipes')
+    const pipelineId = pipesFrame?.pipelineId
+    const withoutDealFrames = stack.filter(
+      (f) =>
+        f.type !== 'pipes.deal' &&
+        f.type !== 'deals.detail' &&
+        f.type !== 'deals.lead',
+    )
+    return [
+      ...withoutDealFrames,
+      {
+        type: 'deals.detail',
+        dealId,
+        pipelineId,
+        returnToPipesList: true,
+      },
+    ]
+  }
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
+}
+
+/** Back from deal detail opened from Pipes → kanban (pipes frame remains). */
+export function recipeClosePromotedPipesDealDetail(currentStack) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const top = coreStack[coreStack.length - 1]
+  if (top?.type !== 'deals.detail' || !top.returnToPipesList) return null
+  return appendTrailingTasks(coreStack.slice(0, -1), tasksFrames)
 }
 
 /** Legacy: handleActivityNavigate — prefix activity, optionally keep docked Tasks */

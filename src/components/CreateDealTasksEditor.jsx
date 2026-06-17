@@ -182,8 +182,7 @@ export function CreateDealTasksEditor({
                     <TaskRow
                       task={pendingTaskForDisplay(task, lead, isTeamPipeline)}
                       displayLeads={displayLeads}
-                      teams={teams}
-                      hideLeadLine
+                      context="minimal"
                       onToggle={handleToggle}
                       onActivate={null}
                       onEdit={() => openEditTask(task)}

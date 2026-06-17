@@ -1,19 +1,16 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User } from 'lucide-react'
+import { Plus, Square, CheckSquare, ChevronDown, ChevronRight, Eye, EyeOff, Check, MoreVertical, Pencil, Trash2, Calendar, User, Briefcase } from 'lucide-react'
 import { TeamSharedIcon } from './ResourceSharePicker'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { handlePanelDialogOpenChange, ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
-import { displayLeadName } from '@/utils/leads'
 import {
   getAllTasks,
   getPersonalTasks,
   deleteLeadTask,
   removeLocalTaskById,
-  formatTaskScheduledDate,
-  formatTaskCompletedDate,
   groupOpenTasksByPipeline,
   groupCompletedTasksByPipeline,
   addTask,
@@ -30,7 +27,8 @@ import {
 import { addTeamTask, updateTeamTask, removeTeamTask } from '@/utils/teamTasks'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { buildVisibleTaskListFresh } from '@/utils/taskListSync'
-import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline, formatAssigneeList, resolveTeamTaskLeadId, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline, resolveTeamTaskLeadId, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { getTaskRowDisplayFields } from '@/utils/taskRowDisplay'
 import { flattenDealsFromPipelines, findDealInPipelines } from '@/utils/deals'
 import { fetchTeamTasks, updateTeamTask as updateServerTeamTask, deleteTeamTask } from '@/utils/tasks'
 import { createServerAssignedTask, normalizeServerTask, resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
@@ -41,12 +39,6 @@ import { showToast } from './ui/toast'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 
 import { cn } from '@/lib/utils'
-
-function getLeadLabel(lead, parcelId) {
-  if (!lead && !parcelId) return 'Standalone'
-  if (lead) return displayLeadName(lead) || lead.address || parcelId || 'Lead'
-  return parcelId || 'Lead'
-}
 
 export function TasksPanel({
   isOpen,
@@ -634,7 +626,7 @@ export function TasksPanel({
                     <TaskRow
                       task={task}
                       displayLeads={displayLeads}
-                      teams={teams}
+                      allDeals={allDeals}
                       onToggle={handleToggle}
                       onActivate={() => handleRowActivate(task)}
                       onEdit={() => setEditingTask(task)}
@@ -674,7 +666,7 @@ export function TasksPanel({
                         <TaskRow
                           task={task}
                           displayLeads={displayLeads}
-                          teams={teams}
+                          allDeals={allDeals}
                           onToggle={handleToggle}
                           onActivate={() => handleRowActivate(task)}
                           onEdit={() => setEditingTask(task)}
@@ -700,7 +692,7 @@ export function TasksPanel({
                         <TaskRow
                           task={task}
                           displayLeads={displayLeads}
-                          teams={teams}
+                          allDeals={allDeals}
                           onToggle={handleToggle}
                           onActivate={() => handleRowActivate(task)}
                           onEdit={() => setEditingTask(task)}
@@ -740,7 +732,7 @@ export function TasksPanel({
                             <TaskRow
                               task={task}
                               displayLeads={displayLeads}
-                              teams={teams}
+                              allDeals={allDeals}
                               onToggle={handleToggle}
                               onActivate={() => handleRowActivate(task)}
                               onEdit={() => setEditingTask(task)}
@@ -847,17 +839,25 @@ function getModalPortalContainer() {
   return document.getElementById('modal-root') || document.body
 }
 
-export function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, onEdit, onDelete, onViewOnSchedule, onOpenLead, hideLeadLine = false }) {
-  const lead = task.parcelId
-    ? displayLeads.find((l) => l.parcelId === task.parcelId || l.id === task.parcelId)
-    : (task.leadId ? displayLeads.find((l) => l.id === task.leadId) : null)
-  const leadLine = !hideLeadLine && (task.parcelId || task.leadId)
-    ? `Lead: ${getLeadLabel(lead, task.parcelId || task.leadId)}`
-    : null
-  const isAssignedTask = task.__source === 'team' || task.__source === 'server'
-  const assigneeStr = isAssignedTask && (task.assignedUids?.length > 0)
-    ? formatAssigneeList(task.assignedUids, teams)
-    : null
+export function TaskRow({
+  task,
+  displayLeads,
+  allDeals = [],
+  context = 'panel',
+  onToggle,
+  onActivate,
+  onEdit,
+  onDelete,
+  onViewOnSchedule,
+  onOpenLead,
+  /** @deprecated use `context` instead */
+  hideLeadLine = false,
+}) {
+  const rowContext = hideLeadLine && context === 'panel' ? 'lead' : context
+  const { showShared, leadLabel, dealLabel, dueLabel, overdue } = getTaskRowDisplayFields(task, rowContext, {
+    displayLeads,
+    allDeals,
+  })
   const isDone = task.completed
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuFixed, setMenuFixed] = useState(null)
@@ -945,28 +945,29 @@ export function TaskRow({ task, displayLeads, teams = [], onToggle, onActivate, 
             <span className={cn('font-medium panel-item-title text-white/95', isDone && 'line-through text-white/55')}>
               {task.title || '(untitled)'}
             </span>
-            {isAssignedTask && (
-              <TeamSharedIcon title="Team task" />
-            )}
           </div>
-          {leadLine && (
-            <div className="panel-item-body text-white/55 mt-0.5 truncate" title={leadLine}>
-              {leadLine}
-            </div>
-          )}
-          {assigneeStr && (
-            <div className="panel-item-body text-white/45 mt-0.5 truncate" title={assigneeStr}>
-              {assigneeStr}
-            </div>
-          )}
-          {isDone && task.completedAt != null && (
-            <div className="panel-item-meta text-white/50 mt-0.5 truncate">
-              Completed {formatTaskCompletedDate(task.completedAt)}
-            </div>
-          )}
-          {!isDone && task.scheduledAt && (
-            <div className={cn('panel-item-meta mt-0.5 truncate', task.scheduledAt < Date.now() ? 'text-red-400' : 'text-white/55')}>
-              {formatTaskScheduledDate(task.scheduledAt)}
+          {(showShared || leadLabel || dealLabel || dueLabel) && (
+            <div className="flex items-center gap-2 flex-wrap min-w-0 mt-0.5 panel-item-meta text-white/55">
+              {showShared && (
+                <TeamSharedIcon title="Shared task" size="xs" />
+              )}
+              {leadLabel && (
+                <span className="inline-flex items-center gap-1 min-w-0 max-w-full truncate" title={`Lead: ${leadLabel}`}>
+                  <User className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                  <span className="truncate">{leadLabel}</span>
+                </span>
+              )}
+              {dealLabel && (
+                <span className="inline-flex items-center gap-1 min-w-0 max-w-full truncate" title={`Deal: ${dealLabel}`}>
+                  <Briefcase className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                  <span className="truncate">{dealLabel}</span>
+                </span>
+              )}
+              {dueLabel && (
+                <span className={cn('truncate', overdue && 'text-red-400')} title={dueLabel}>
+                  {dueLabel}
+                </span>
+              )}
             </div>
           )}
         </div>

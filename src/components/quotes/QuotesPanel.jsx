@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import {
   Plus,
   Loader2,
@@ -13,7 +12,7 @@ import {
 } from 'lucide-react'
 import { QuoteIcon } from '../icons/QuoteIcon'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
-import { ignoreRadixMapPanelDismiss } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from '../ui/panelDialogUtils'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -82,8 +81,7 @@ export function QuotesPanel({
   const headerMenuTriggerRef = useRef(null)
   const editorOpen = !!editorFrame
   const hasNestedQuoteView = editorOpen || !!detailQuoteId
-  const listPanelRef = useRef(null)
-  useObscuredPanelRoot(listPanelRef, hasNestedQuoteView)
+  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedQuoteView)
   const [fetchedDetailQuote, setFetchedDetailQuote] = useState(null)
   const editorSeed = editorFrame?.prefill ?? editorFrame?.quote ?? null
   const editorTemplate = editorFrame?.template ?? null
@@ -288,13 +286,9 @@ export function QuotesPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          ref={listPanelRef}
-          className={cn(
-            'map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedQuoteView && 'crm-panel-obscured'
-          )}
+          className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0"
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay

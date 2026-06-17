@@ -72,7 +72,7 @@ function renderTaskGroups(taskGroups, taskRowProps) {
 
 function renderTaskRow(task, {
   displayLeads,
-  teams,
+  allDeals,
   handleToggle,
   openEditTask,
   handleDeleteTask,
@@ -82,8 +82,8 @@ function renderTaskRow(task, {
     <TaskRow
       task={task}
       displayLeads={displayLeads}
-      teams={teams}
-      hideLeadLine
+      allDeals={allDeals}
+      context="lead"
       onToggle={handleToggle}
       onActivate={null}
       onEdit={() => openEditTask(task)}
@@ -184,6 +184,18 @@ export function LeadTasksSection({
       (d) => String(d.parcelId) === String(lead.parcelId)
     )
   }, [lead, pipelines])
+
+  const allDeals = useMemo(() => {
+    const fromPipelines = pipelines.flatMap((p) =>
+      (p.deals || []).map((d) => ({
+        ...d,
+        __pipelineId: p.id,
+        __pipelineTitle: p.title || 'Pipes',
+      }))
+    )
+    if (fromPipelines.length > 0) return fromPipelines
+    return leadDeals
+  }, [pipelines, leadDeals])
 
   const editTaskPipeline = useMemo(() => {
     if (!editingTask?.pipelineId) return null
@@ -440,7 +452,7 @@ export function LeadTasksSection({
 
   const taskRowProps = {
     displayLeads,
-    teams,
+    allDeals,
     handleToggle,
     openEditTask,
     handleDeleteTask,

@@ -25,6 +25,8 @@
  * @typedef {object} LeadsDetailFrame
  * @property {'leads.detail'} type
  * @property {string} leadId
+ * @property {boolean} [returnToLeadsList]
+ * @property {boolean} [dockBesideTasks] — detail is primary beside Tasks (no list parent); back stays on Tasks
  */
 
 /**
@@ -37,12 +39,16 @@
  * @property {'deals.detail'} type
  * @property {string} dealId
  * @property {string} [pipelineId]
+ * @property {boolean} [returnToDealsList]
+ * @property {boolean} [returnToPipesList] — back restores Pipes kanban when opened from it
+ * @property {boolean} [dockBesideTasks] — detail is primary beside Tasks (no list parent); back stays on Tasks
  */
 
 /**
  * @typedef {object} DealsClosedFrame
  * @property {'deals.closed'} type
  * @property {string} closedRecordId
+ * @property {boolean} [returnToDealsList]
  */
 
 /**

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useObscuredPanelRoot } from '../hooks/useObscuredPanelRoot'
 import { Bell, ChevronDown, Loader2, Search, UserSearch, Briefcase, CheckSquare, List, Route, FileText, ScrollText, Users2, Activity } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { mapListDialogOpen } from './ui/panelDialogUtils'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 const ACTIVITY_FEED_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer w-full text-left'
@@ -161,17 +161,17 @@ export function ActivityPanel({
 }) {
   const [tab, setTab] = useState('all')
   const [search, setSearch] = useState('')
+  /** In stack but covered by destination — keep nav, hide dialog */
+  const dialogOpen = mapListDialogOpen(isOpen, !isFocused)
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!dialogOpen) {
       setTab('all')
       setSearch('')
     }
-  }, [isOpen])
+  }, [dialogOpen])
 
-  const obscured = isOpen && !isFocused
   const panelRef = useRef(null)
-  useObscuredPanelRoot(panelRef, obscured)
 
   const tabCounts = useMemo(() => countFeedItemsByTab(items), [items])
 
@@ -182,7 +182,7 @@ export function ActivityPanel({
 
   return (
     <Dialog
-      open={isOpen}
+      open={dialogOpen}
       modal={false}
       onOpenChange={(open) => {
         // Ignore Radix dismiss when destination panels close — back button calls onClose directly.
@@ -191,16 +191,12 @@ export function ActivityPanel({
     >
       <DialogContent
         ref={panelRef}
-        className={cn(
-          'map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0',
-          obscured && 'crm-panel-obscured'
-        )}
+        className="map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0"
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
         topLayer={topLayer}
-        aria-hidden={obscured || undefined}
         onEscapeKeyDown={(e) => {
           if (!isFocused) {
             e.preventDefault()

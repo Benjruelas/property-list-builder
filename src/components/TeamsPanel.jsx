@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, Users2, Shield, Mail, Check, X } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { showToast } from './ui/toast'
 import {
@@ -144,18 +143,13 @@ export function TeamsPanel({
   }
 
   const hasNestedDetail = !!openTeamId
-  const listPanelRef = useRef(null)
-  useObscuredPanelRoot(listPanelRef, hasNestedDetail)
+  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedDetail)
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          ref={listPanelRef}
-          className={cn(
-            'map-panel list-panel teams-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedDetail && 'crm-panel-obscured'
-          )}
+          className="map-panel list-panel teams-panel fullscreen-panel flex flex-col min-h-0 p-0"
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay

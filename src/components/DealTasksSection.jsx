@@ -19,6 +19,7 @@ import {
 import { addTeamTask, removeTeamTask, updateTeamTask } from '@/utils/teamTasks'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { getAllTeamMembers, getMembersForTeamSharedPipeline, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { flattenDealsFromPipelines } from '@/utils/deals'
 import { collectTasksForDealFresh } from '@/utils/dealTaskMatching'
 import { createServerAssignedTask } from '@/utils/taskCreateFlow'
 import { TaskRow } from './TasksPanel'
@@ -72,6 +73,12 @@ export function DealTasksSection({
     if (displayLeads.some((l) => l.id === taskLead.id)) return displayLeads
     return [taskLead, ...displayLeads]
   }, [taskLead, displayLeads])
+
+  const allDeals = useMemo(() => {
+    const fromPipelines = flattenDealsFromPipelines(pipelines)
+    if (fromPipelines.length > 0) return fromPipelines
+    return deal ? [deal] : []
+  }, [pipelines, deal])
 
   const refreshTasks = useCallback(async () => {
     if (!deal) {
@@ -346,8 +353,8 @@ export function DealTasksSection({
                     <TaskRow
                       task={task}
                       displayLeads={displayLeads}
-                      teams={teams}
-                      hideLeadLine
+                      allDeals={allDeals}
+                      context="deal"
                       onToggle={canMutate ? handleToggle : () => {}}
                       onActivate={null}
                       onEdit={canMutate ? () => openEditTask(task) : null}
@@ -374,8 +381,8 @@ export function DealTasksSection({
                       <TaskRow
                         task={task}
                         displayLeads={displayLeads}
-                        teams={teams}
-                        hideLeadLine
+                        allDeals={allDeals}
+                        context="deal"
                         onToggle={canMutate ? handleToggle : () => {}}
                         onActivate={null}
                         onEdit={canMutate ? () => openEditTask(task) : null}

@@ -1,0 +1,903 @@
+/**
+ * Light mode readability — remaps dark-theme Tailwind utilities and hardcoded
+ * rgba whites inside panel surfaces so text/fields stay legible on white UI.
+ *
+ * Panel scope: any CRM/dialog surface (map-panel, list-panel, portaled menus).
+ */
+
+[data-ui-theme='light'] {
+  --map-panel-ink-faint: rgba(17, 24, 39, 0.38);
+  --map-panel-ink-muted: rgba(17, 24, 39, 0.52);
+  --map-panel-ink-soft: rgba(17, 24, 39, 0.62);
+  --map-panel-ink-secondary: rgba(17, 24, 39, 0.78);
+  --map-panel-ink-strong: rgba(17, 24, 39, 0.88);
+  --map-panel-ink-emphasis: rgba(17, 24, 39, 0.94);
+  --map-panel-surface-subtle: rgba(0, 0, 0, 0.03);
+  --map-panel-surface-muted: rgba(0, 0, 0, 0.05);
+  --map-panel-surface-hover: rgba(0, 0, 0, 0.07);
+  --map-panel-stroke: rgba(0, 0, 0, 0.1);
+  --map-panel-stroke-strong: rgba(0, 0, 0, 0.16);
+}
+
+/* Surfaces that use dark-theme utility classes */
+[data-ui-theme='light'] :is(
+  .map-panel,
+  .list-panel,
+  .parcel-details-dialog,
+  .parcel-details-panel,
+  .confirm-dialog,
+  .login-panel,
+  .auth-dialog,
+  .share-dialog-inner,
+  .share-list-dialog,
+  .schedule-picker-panel,
+  .mobile-action-bar-menu,
+  .hamburger-menu,
+  .email-panel,
+  .phone-action-panel,
+  .text-templates-panel,
+  [data-tag-picker-menu],
+  [data-panel-filter-menu],
+  [data-options-menu]
+) {
+  color: var(--map-panel-text);
+}
+
+/* ---- text-white/* → dark ink scale (all panel surfaces) ---- */
+[data-ui-theme='light'] :is(
+  .map-panel,
+  .list-panel,
+  .parcel-details-panel,
+  .parcel-details-dialog,
+  .confirm-dialog,
+  .login-panel,
+  .auth-dialog,
+  .share-dialog-inner,
+  .share-list-dialog,
+  .schedule-picker-panel,
+  .email-panel,
+  .phone-action-panel,
+  [data-tag-picker-menu],
+  [data-panel-filter-menu]
+) .text-white {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/95 {
+  color: var(--map-panel-ink-emphasis) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/90 {
+  color: var(--map-panel-ink-emphasis) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/85 {
+  color: var(--map-panel-ink-strong) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/80 {
+  color: var(--map-panel-ink-secondary) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/75 {
+  color: var(--map-panel-ink-secondary) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/70 {
+  color: var(--map-panel-ink-soft) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/65 {
+  color: var(--map-panel-ink-soft) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/60 {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/55 {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/50 {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/45 {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/42 {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/40 {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/35 {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .parcel-details-panel, .parcel-details-dialog, .confirm-dialog, .login-panel, .auth-dialog, .share-dialog-inner, .share-list-dialog, .schedule-picker-panel, .email-panel, .phone-action-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-white\/30 {
+  color: var(--map-panel-ink-faint) !important;
+}
+
+/* Pale accent text on white backgrounds */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-blue-200 {
+  color: #1d4ed8 !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-blue-300 {
+  color: #2563eb !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-amber-200 {
+  color: #b45309 !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-amber-300 {
+  color: #b45309 !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-sky-200,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-sky-300 {
+  color: #0369a1 !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-green-200 {
+  color: #15803d !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-red-200,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-red-300 {
+  color: #dc2626 !important;
+}
+
+/* Placeholders */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .placeholder\:text-white\/40::placeholder {
+  color: var(--map-panel-text-muted) !important;
+}
+
+/* bg-white/* glass fills → light gray fills */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/5,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.02\],
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.03\],
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.04\],
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.05\] {
+  background-color: var(--map-panel-surface-subtle) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/10,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.06\],
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.07\],
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.08\] {
+  background-color: var(--map-panel-surface-muted) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/15,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.12\] {
+  background-color: var(--map-panel-surface-hover) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/20,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/25,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/30,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/40 {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:bg-white\/5:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:bg-white\/10:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:bg-white\/15:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:bg-white\/20:hover {
+  background-color: var(--map-panel-surface-hover) !important;
+}
+
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-black\/10,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-black\/\[0\.10\] {
+  background-color: var(--map-panel-surface-muted) !important;
+}
+
+/* Borders */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/5,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/10,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/15,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/20,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/25,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/\[0\.08\] {
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-dashed.border-white\/25,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-dashed.border-white\/40 {
+  border-color: var(--map-panel-stroke-strong) !important;
+}
+
+/* Menus & portaled dropdowns */
+[data-ui-theme='light'] .hamburger-menu.map-panel,
+[data-ui-theme='light'] .mobile-action-bar-menu.map-panel {
+  background: #ffffff !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-ui-theme='light'] [data-options-menu] .map-panel.hamburger-menu,
+[data-ui-theme='light'] [data-panel-filter-menu] .map-panel.list-panel,
+[data-ui-theme='light'] [data-tag-picker-menu],
+[data-ui-theme='light'] .map-panel.hamburger-menu.bg-black\/90,
+[data-ui-theme='light'] .map-panel.list-panel.bg-\[\#1a1f2e\] {
+  background: #ffffff !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14) !important;
+}
+
+[data-ui-theme='light'] [data-tag-picker-menu] .text-white,
+[data-ui-theme='light'] [data-tag-picker-menu] [class*='text-white/'] {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] [data-tag-picker-menu] .text-white\/50,
+[data-ui-theme='light'] [data-tag-picker-menu] .text-white\/45,
+[data-ui-theme='light'] [data-tag-picker-menu] .text-white\/40 {
+  color: var(--map-panel-ink-muted) !important;
+}
+
+[data-ui-theme='light'] .map-panel .address-autocomplete-menu,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) ul.absolute.z-\[2000\] {
+  background: #ffffff !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Lead / deal detail structural classes (index.css defaults are dark) */
+[data-ui-theme='light'] .lead-detail-section {
+  border-color: var(--map-panel-stroke) !important;
+  background: var(--map-panel-surface-subtle) !important;
+}
+[data-ui-theme='light'] .lead-detail-section-title {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] .lead-detail-action-tile,
+[data-ui-theme='light'] .parcel-details-action-tile {
+  color: var(--map-panel-text) !important;
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+}
+[data-ui-theme='light'] .lead-detail-action-tile:hover:not(:disabled),
+[data-ui-theme='light'] .parcel-details-action-tile:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-field,
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) textarea.lead-detail-field {
+  background: var(--map-panel-input-bg) !important;
+  border-color: var(--map-panel-input-border) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-field:focus {
+  border-color: rgba(0, 0, 0, 0.28) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.panel-filter-option),
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-status-btn,
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section .panel-filter-option,
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section .inline-flex.rounded-full.border-dashed {
+  border-color: var(--map-panel-stroke-strong) !important;
+  background: var(--map-panel-surface-muted) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Filter / tag pills */
+[data-ui-theme='light'] .panel-filter-option {
+  border-color: var(--map-panel-stroke-strong) !important;
+  background: var(--map-panel-surface-muted) !important;
+  color: var(--map-panel-ink-soft) !important;
+}
+[data-ui-theme='light'] .panel-filter-option:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .panel-filter-option--active {
+  border-color: rgba(0, 0, 0, 0.28) !important;
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .tag-chip-add {
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] .tag-chip-add:hover {
+  border-color: rgba(0, 0, 0, 0.28) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Schedule picker controls */
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-btn,
+[data-ui-theme='light'] .schedule-picker-btn {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-btn:hover:not(:disabled),
+[data-ui-theme='light'] .schedule-picker-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.24) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-btn--primary,
+[data-ui-theme='light'] .schedule-picker-btn--primary {
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-ampm-btn,
+[data-ui-theme='light'] .schedule-ampm-btn {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-ampm-btn.is-selected,
+[data-ui-theme='light'] .schedule-ampm-btn.is-selected {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-menu-item,
+[data-ui-theme='light'] .schedule-picker-menu-item {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-menu-item.is-selected,
+[data-ui-theme='light'] .schedule-picker-menu-item.is-selected {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Schedule panel calendar */
+[data-ui-theme='light'] .schedule-panel .schedule-calendar-weekday-header {
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] .schedule-panel .schedule-calendar-month-grid > button.schedule-calendar-day-cell {
+  color: var(--map-panel-text) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .schedule-panel .schedule-task-pill {
+  background: var(--map-panel-surface-muted) !important;
+  color: var(--map-panel-ink-secondary) !important;
+  border-left-color: rgba(37, 99, 235, 0.55) !important;
+  box-shadow: none !important;
+}
+[data-ui-theme='light'] .schedule-panel .schedule-week-time-label {
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] .schedule-panel button.schedule-week-grid-cell {
+  border-color: var(--map-panel-stroke) !important;
+}
+
+/* Share dialog */
+[data-ui-theme='light'] .share-dialog-title {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .share-dialog-close {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] .share-dialog-close:hover {
+  color: var(--map-panel-text) !important;
+  background: var(--map-panel-surface-hover) !important;
+}
+[data-ui-theme='light'] .share-dialog-intro,
+[data-ui-theme='light'] .share-dialog-section-label {
+  color: var(--map-panel-ink-muted) !important;
+}
+
+/* Confirm dialog */
+[data-ui-theme='light'] .confirm-dialog .confirm-dialog-confirm,
+[data-ui-theme='light'] .confirm-dialog button[class*='bg-destructive'] {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .confirm-dialog .confirm-dialog-cancel {
+  background: var(--map-panel-surface-muted) !important;
+  color: var(--map-panel-ink-soft) !important;
+}
+[data-ui-theme='light'] .confirm-dialog .confirm-dialog-cancel:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Login panel chrome (dark-theme rules in index.css) */
+[data-ui-theme='light'] .login-panel .login-google-btn-wrapper {
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+[data-ui-theme='light'] .login-panel button.login-google-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Parcel list dropdown borders */
+[data-ui-theme='light'] .parcel-list-panel button,
+[data-ui-theme='light'] .parcel-list-panel .parcel-dropdown-btn {
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Panel headers inherit readable subtitle opacity */
+[data-ui-theme='light'] .map-panel .panel-list-header {
+  border-color: var(--map-panel-header-border) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* SVG icons inherit unless explicitly colored */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) svg:not([class*='text-']) {
+  color: inherit;
+}
+
+/* Forms builder palette */
+[data-ui-theme='light'] .map-panel .form-palette-btn {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .map-panel .form-palette-btn.is-armed {
+  background: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.24) !important;
+  color: var(--map-panel-text) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Task / pipeline dropdowns */
+[data-ui-theme='light'] .add-task-lead-dropdown,
+[data-ui-theme='light'] .add-task-lead-dropdown li {
+  background: #ffffff !important;
+  color: var(--map-panel-text) !important;
+  border-color: var(--map-panel-stroke) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+[data-ui-theme='light'] .map-panel .pipeline-dropdown-trigger {
+  background: var(--map-panel-input-bg) !important;
+  border-color: var(--map-panel-input-border) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .pipeline-dropdown-menu,
+[data-ui-theme='light'] .pipeline-dropdown-item {
+  background: #ffffff !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .pipeline-dropdown-item:hover {
+  background: var(--map-panel-surface-hover) !important;
+}
+
+/* Parcel expanded glass card in list */
+[data-ui-theme='light'] .map-panel .parcel-expanded-glass {
+  background: var(--map-panel-surface-subtle) !important;
+  border-color: var(--map-panel-stroke) !important;
+  box-shadow: none !important;
+}
+[data-ui-theme='light'] .map-panel .parcel-expanded-glass .parcel-dropdown-btn {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Deal detail linked lead card */
+[data-ui-theme='light'] .deal-detail-lead-name {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .deal-detail-lead-address {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] .deal-detail-lead-hint {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-deal-card:not(.lead-detail-list-card) {
+  border-color: var(--map-panel-stroke) !important;
+  background: var(--map-panel-surface-subtle) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-deal-card:not(.lead-detail-list-card):hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-list-card.lead-detail-deal-card {
+  border-color: var(--lead-detail-list-card-border) !important;
+  border-left-color: var(--lead-detail-list-card-accent) !important;
+  background-color: var(--lead-detail-list-card-face) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-list-card.lead-detail-deal-card:hover:not(:disabled) {
+  background-color: var(--lead-detail-list-card-face-hover) !important;
+  border-color: var(--lead-detail-list-card-hover-border) !important;
+  border-left-color: var(--lead-detail-list-card-accent) !important;
+}
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-file-action-btn {
+  border-color: var(--map-panel-stroke-strong) !important;
+  background: var(--map-panel-surface-muted) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Schedule panel chrome */
+[data-ui-theme='light'] .schedule-view-seg {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .schedule-view-seg button {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] .schedule-view-seg button.schedule-view-seg-active {
+  background: #ffffff !important;
+  color: var(--map-panel-text) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+[data-ui-theme='light'] .schedule-nav-btn,
+[data-ui-theme='light'] .schedule-today-btn {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-ink-soft) !important;
+}
+[data-ui-theme='light'] .schedule-nav-btn:hover,
+[data-ui-theme='light'] .schedule-today-btn:hover {
+  background: var(--map-panel-surface-hover) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .schedule-panel .schedule-calendar-month-grid > .schedule-calendar-pad-cell {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Create-list / task form meridiem toggle */
+[data-ui-theme='light'] .list-panel .create-list-form .schedule-time-meridiem-group button.schedule-time-meridiem--unselected {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] .list-panel .create-list-form .schedule-time-meridiem-group button.schedule-time-meridiem--selected {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: var(--map-panel-text) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16) !important;
+}
+
+/* Entity pickers */
+[data-ui-theme='light'] .entity-picker-body {
+  background: var(--map-panel-surface-subtle) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+
+/* Autocomplete menus (address, etc.) */
+[data-ui-theme='light'] #modal-root ul.bg-black\/90,
+[data-ui-theme='light'] #modal-root .bg-\[\#1a1f2e\] {
+  background: #ffffff !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Notification type badge (pale blue on white) */
+[data-ui-theme='light'] .map-panel .text-\[\#93c5fd\] {
+  color: #2563eb !important;
+}
+
+/* CRM column headers / dividers */
+[data-ui-theme='light'] .crm-col-divider {
+  background: var(--map-panel-stroke) !important;
+}
+
+/* Opacity-only muted text inherits dark ink — bump contrast vs white-on-white */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) :is(.opacity-40, .opacity-50, .opacity-60) {
+  color: var(--map-panel-ink-muted);
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-body {
+  color: var(--map-panel-text-secondary);
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-body.opacity-60,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-body.opacity-70 {
+  color: var(--map-panel-text-muted);
+}
+
+/* Schedule picker panel shell */
+[data-ui-theme='light'] .schedule-picker-panel {
+  border-color: var(--map-panel-stroke) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+[data-ui-theme='light'] :is(.list-panel, .map-panel) .schedule-picker-menu-item.is-selected,
+[data-ui-theme='light'] .schedule-picker-menu-item.is-selected {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Week/day task blocks */
+[data-ui-theme='light'] .schedule-task-block {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border-color: rgba(59, 130, 246, 0.22) !important;
+  color: var(--map-panel-text) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+[data-ui-theme='light'] .schedule-task-block:hover {
+  background: rgba(59, 130, 246, 0.16) !important;
+}
+
+/* List panel create/cancel buttons */
+[data-ui-theme='light'] .list-panel button.create-list-btn {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .list-panel button.create-list-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Quote / report footer action pills */
+[data-ui-theme='light'] :is(.quote-details-panel, .map-panel, .list-panel) .quote-details-actions :is(button[data-panel-action], .panel-action-btn) {
+  border-color: var(--map-panel-stroke-strong) !important;
+  background: var(--map-panel-surface-muted) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.quote-details-panel, .map-panel, .list-panel) .quote-details-actions :is(button[data-panel-action], .panel-action-btn):hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Share dialog — fields, rows, picker */
+[data-ui-theme='light'] .share-dialog-email-row {
+  background: var(--map-panel-surface-subtle) !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .share-dialog-email-remove {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] .share-dialog-input {
+  background: var(--map-panel-input-bg) !important;
+  border-color: var(--map-panel-input-border) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .share-dialog-input::placeholder {
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .share-dialog-hint,
+[data-ui-theme='light'] .share-picker-section-label,
+[data-ui-theme='light'] .share-picker-hint,
+[data-ui-theme='light'] .share-picker-empty,
+[data-ui-theme='light'] .share-picker-summary {
+  color: var(--map-panel-ink-muted) !important;
+}
+[data-ui-theme='light'] .share-list-dialog .share-dialog-btn--primary {
+  border-color: var(--map-panel-stroke-strong) !important;
+  background: var(--map-panel-surface-muted) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .share-list-dialog .share-dialog-btn--secondary {
+  border-color: var(--map-panel-stroke) !important;
+  background: var(--map-panel-surface-subtle) !important;
+  color: var(--map-panel-ink-secondary) !important;
+}
+[data-ui-theme='light'] .share-picker-option {
+  border-color: var(--map-panel-stroke) !important;
+  background: var(--map-panel-surface-subtle) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .share-picker-option:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+}
+[data-ui-theme='light'] .share-picker-option--selected {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+}
+[data-ui-theme='light'] .share-picker-radio {
+  border-color: var(--map-panel-stroke-strong) !important;
+}
+[data-ui-theme='light'] .share-picker-member--selected {
+  color: #1d4ed8 !important;
+}
+
+/* Pipeline edit mode indicator */
+[data-ui-theme='light'] .map-panel .deal-pipeline-settings-btn.deal-pipeline-edit-active {
+  color: var(--map-accent-blue) !important;
+}
+
+/* Deal pipeline column wells */
+[data-ui-theme='light'] .deal-pipeline-panel .deal-pipeline-column {
+  border-color: var(--map-panel-stroke) !important;
+  background: var(--map-panel-surface-subtle) !important;
+}
+
+/* Confirm + login dialogs inherit panel text */
+[data-ui-theme='light'] :is(.confirm-dialog, .login-panel, .auth-dialog) {
+  color: var(--map-panel-text) !important;
+}
+
+/* =========================================================================
+   Systematic companions for index.css dark-theme structural rules
+   ========================================================================= */
+
+/* Schedule picker shell (index.css hardcodes white text) */
+[data-ui-theme='light'] .schedule-picker-panel {
+  color: var(--map-panel-text) !important;
+  border-color: var(--map-panel-stroke) !important;
+  background: var(--map-panel-surface) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Calendar day grid in list panels */
+[data-ui-theme='light'] .list-panel button.calendar-day-btn {
+  color: var(--map-panel-text) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .list-panel button.calendar-day-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+}
+
+/* Panel list item typography */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-title,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-meta {
+  color: var(--map-panel-text-secondary);
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-title.text-white\/95 {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-meta.text-white\/50,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .panel-item-meta.text-white\/55 {
+  color: var(--map-panel-text-muted) !important;
+}
+
+/* Hover text utilities */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:text-white:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:text-white\/80:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:text-white\/90:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:text-white\/50:hover {
+  color: var(--map-panel-text) !important;
+}
+
+/* Extra border opacities used in forms */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/30,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/35,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/40,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/45,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/60,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/65,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .border-white\/90,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:border-white\/25:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:border-white\/30:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:border-white\/40:hover {
+  border-color: var(--map-panel-stroke-strong) !important;
+}
+
+/* Extra background opacities */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .bg-white\/\[0\.08\],
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:bg-white\/\[0\.07\]:hover,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:bg-white\/\[0\.08\]:hover {
+  background-color: var(--map-panel-surface-muted) !important;
+}
+
+/* Dark dropdown / menu shells → white card */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]).bg-black\/90,
+[data-ui-theme='light'] .map-panel.hamburger-menu.bg-black\/90,
+[data-ui-theme='light'] [data-options-menu] .map-panel,
+[data-ui-theme='light'] #modal-root .bg-black\/90.map-panel {
+  background: #ffffff !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Pale sky / gray text on white */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-sky-100,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-sky-100\/90,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-sky-300 {
+  color: #0369a1 !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .hover\:text-sky-200:hover {
+  color: #0284c7 !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-gray-200,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .text-gray-300 {
+  color: var(--map-panel-text-muted) !important;
+}
+
+/* Login / auth chrome */
+[data-ui-theme='light'] .login-panel .login-google-btn-wrapper,
+[data-ui-theme='light'] .auth-dialog .login-google-btn-wrapper {
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+[data-ui-theme='light'] .login-panel button.border-white,
+[data-ui-theme='light'] .auth-dialog button.border-white {
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Parcel details panel */
+[data-ui-theme='light'] .parcel-details-panel,
+[data-ui-theme='light'] .parcel-details-dialog {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-data-label,
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-stat-label,
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-section-title,
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-owner {
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-note-input,
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-note-display {
+  color: var(--map-panel-text) !important;
+  background: var(--map-panel-input-bg) !important;
+  border-color: var(--map-panel-input-border) !important;
+}
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-note-empty {
+  color: var(--map-panel-text-muted) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-note-btn.text-white\/80 {
+  color: var(--map-panel-text) !important;
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .parcel-details-panel .parcel-details-stat-card {
+  background: var(--map-panel-surface-subtle) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .parcel-details-action-tile {
+  color: var(--map-panel-text) !important;
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke-strong) !important;
+}
+[data-ui-theme='light'] .parcel-details-action-tile:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+}
+[data-ui-theme='light'] .parcel-details-action-tile--contact.parcel-details-action-tile--active {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.24) !important;
+}
+
+/* Share picker (index.css structural classes) */
+[data-ui-theme='light'] .share-picker-option-icon {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] .share-picker-option-label {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .share-picker-option-desc,
+[data-ui-theme='light'] .share-picker-members-label {
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .share-picker-member {
+  color: var(--map-panel-text-secondary) !important;
+}
+[data-ui-theme='light'] .share-picker-member:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+}
+[data-ui-theme='light'] .share-picker-member-check {
+  border-color: var(--map-panel-stroke-strong) !important;
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .share-picker-collapse-trigger {
+  color: var(--map-panel-text) !important;
+}
+
+/* Deal pipeline cards (dark wells in index.css) */
+[data-ui-theme='light'] .deal-pipeline-panel .deal-pipeline-lead-card.lead-detail-deal-card {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .deal-pipeline-lead-card select {
+  color: var(--map-panel-text) !important;
+}
+
+/* Confirm dialog body preview */
+[data-ui-theme='light'] .confirm-dialog .border-white\/20.bg-white\/5 {
+  background: var(--map-panel-surface-subtle) !important;
+  border-color: var(--map-panel-stroke) !important;
+  color: var(--map-panel-text) !important;
+}
+
+/* Opacity-only labels (no text-white class) — force readable muted ink */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) label.opacity-60,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) :is(h1, h2, h3, h4, p, span, div, li).opacity-60:not([class*='text-red']):not([class*='text-green']):not([class*='text-blue']),
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) :is(h1, h2, h3, h4, p, span, div, li).opacity-50:not([class*='text-red']):not([class*='text-green']):not([class*='text-blue']),
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) :is(h1, h2, h3, h4, p, span, div, li).opacity-70:not([class*='text-red']):not([class*='text-green']):not([class*='text-blue']) {
+  color: var(--map-panel-text-muted);
+}
+
+/* Focus rings that assume dark glass */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .focus\:ring-white\/25:focus,
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) .focus\:border-white\/25:focus {
+  --tw-ring-color: rgba(0, 0, 0, 0.15) !important;
+  border-color: rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Keep white text on saturated action buttons */
+[data-ui-theme='light'] :is(.map-panel, .list-panel, .share-list-dialog, .email-panel, .phone-action-panel, .parcel-details-panel, [data-tag-picker-menu], [data-panel-filter-menu]) :is(
+  [class*='bg-blue-6'],
+  [class*='bg-blue-7'],
+  [class*='bg-red-6'],
+  [class*='bg-red-7'],
+  [class*='bg-green-6'],
+  [class*='bg-green-7']
+).text-white {
+  color: #ffffff !important;
+}
+
+/* Storage usage bar — Deal files, Lead photo storage (index.css uses white glass) */
+[data-ui-theme='light'] .storage-usage-label {
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .storage-usage-track {
+  background: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+[data-ui-theme='light'] .storage-usage-fill:not(.storage-usage-fill--warn):not(.storage-usage-fill--full) {
+  background: linear-gradient(90deg, #60a5fa, #2563eb) !important;
+}
+[data-ui-theme='light'] .storage-usage-fill--warn {
+  background: linear-gradient(90deg, #fbbf24, #d97706) !important;
+}
+[data-ui-theme='light'] .storage-usage-fill--full {
+  background: linear-gradient(90deg, #f87171, #dc2626) !important;
+}

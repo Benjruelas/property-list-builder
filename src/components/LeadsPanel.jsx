@@ -3,7 +3,7 @@ import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
 const LeadDetails = lazy(() => import('./LeadDetails').then((m) => ({ default: m.LeadDetails })))
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
@@ -200,10 +200,11 @@ export function LeadsPanel({
     setCreateDealPrefill(null)
   }, [onCreateDealSubmit])
 
-  const hasNestedDetail = !!detailLeadId
-  const hasNestedOverlay = hasNestedDetail || createOpen || dealPickerOpen || createDealOpen
+  const showingLeadDetail = !!(detailLeadId && selectedLead)
+  const listDialogOpen = mapListDialogOpen(isOpen, showingLeadDetail)
+  const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
-  useObscuredPanelRoot(listPanelRef, hasNestedDetail)
+  useObscuredPanelRoot(listPanelRef, false)
 
   const handlePanelBack = () => {
     if (selectedLead) {
@@ -215,13 +216,10 @@ export function LeadsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
-          className={cn(
-            'map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedDetail && 'crm-panel-obscured'
-          )}
+          className="map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0"
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
@@ -389,8 +387,8 @@ export function LeadsPanel({
           <LeadDetails
             isOpen={!!selectedLead}
             instantDismiss={instantDismiss}
-            panelDockSlot={!isOpen ? panelDockSlot : undefined}
-            nestedOverlay={isOpen}
+            panelDockSlot={panelDockSlot}
+            nestedOverlay={false}
             topLayer
             onClose={() => onCloseLeadDetail?.()}
             lead={selectedLead}

@@ -1,13 +1,21 @@
+import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './dialog'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './panel-header'
+import { ignoreRadixMapPanelDismiss } from './panelDialogUtils'
 import { cn } from '@/lib/utils'
 
 /** Visible panel chrome while a lazy list panel chunk is still loading. */
 export function PanelListLoadingShell({ open, title, onBack, className, panelDockSlot }) {
-  if (!open) return null
+  const [mounted, setMounted] = useState(open)
+  useEffect(() => {
+    if (open) setMounted(true)
+  }, [open])
+
+  if (!mounted && !open) return null
+
   return (
-    <Dialog open modal={false} onOpenChange={() => onBack?.()}>
+    <Dialog open={open} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         className={cn('map-panel list-panel fullscreen-panel flex flex-col min-h-0 p-0', className)}
         panelDockSlot={panelDockSlot}

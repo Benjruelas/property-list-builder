@@ -35,7 +35,7 @@ export function feedDataToFrames(data, ctx, opts = {}) {
       ok: true,
       frames: standaloneDetail
         ? [{ type: 'leads.detail', leadId: data.leadId }]
-        : [{ type: 'leads' }, { type: 'leads.detail', leadId: data.leadId }],
+        : [{ type: 'leads.detail', leadId: data.leadId, returnToLeadsList: true }],
     }
   }
 
@@ -51,7 +51,7 @@ export function feedDataToFrames(data, ctx, opts = {}) {
         ? [{ type: 'deals.detail', dealId: data.dealId, pipelineId }]
         : [
             { type: 'pipes', pipelineId },
-            { type: 'pipes.deal', dealId: data.dealId },
+            { type: 'deals.detail', dealId: data.dealId, pipelineId, returnToPipesList: true },
           ],
     }
   }

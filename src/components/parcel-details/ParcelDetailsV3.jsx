@@ -92,7 +92,7 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
     <Dialog open={isOpen} modal={false} onOpenChange={(open) => { if (!open && isOpen && !suspendClose && !obscuredByPanel) handleClose(false) }}>
       <DialogContent
         className={cn(
-          'map-panel parcel-details-panel list-panel fullscreen-panel max-w-2xl md:max-h-[80vh] p-0 gap-0',
+          'map-panel parcel-details-panel list-panel fullscreen-panel md:max-h-[80vh] p-0 gap-0',
           obscuredByPanel && 'invisible opacity-0 pointer-events-none',
         )}
         showCloseButton={false}

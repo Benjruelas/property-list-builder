@@ -4,7 +4,7 @@ import { Search, Briefcase, ChevronDown, ChevronRight, Archive, Plus } from 'luc
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { flattenDealsFromPipelines } from '@/utils/deals'
 import { aggregateDealFinancials, formatDealMoney } from '@/utils/dealFinances'
@@ -79,6 +79,7 @@ export function DealsPanel({
   quotesRefreshKey = 0,
   dealsDetailDealId = null,
   dealsDetailPipelineId = null,
+  dealsDetailReturnToPipes = false,
   dealsClosedRecordId = null,
   dealsLeadOverlayId = null,
   leadsDetailLeadId = null,
@@ -279,10 +280,14 @@ export function DealsPanel({
     }
   }, [allPipelineData, totalDeals, closedDeals])
 
-  const hasNestedDetail = !!(dealsDetailDealId || dealsClosedRecordId || dealsLeadOverlayId)
-  const hasNestedOverlay = hasNestedDetail || dealPickerOpen || createDealOpen
+  const showingActiveDeal = !!(dealsDetailDealId && !dealsDetailReturnToPipes && selectedDeal && selectedPipeline && !dealsClosedRecordId)
+  const showingClosedDeal = !!(dealsClosedRecordId && selectedClosed && !dealsDetailDealId)
+  const showingLeadOverlay = !!leadOverlay
+  const showingPrimaryDetail = showingActiveDeal || showingClosedDeal || showingLeadOverlay
+  const listDialogOpen = mapListDialogOpen(isOpen, showingPrimaryDetail)
+  const hasNestedOverlay = showingPrimaryDetail || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
-  useObscuredPanelRoot(listPanelRef, hasNestedDetail)
+  useObscuredPanelRoot(listPanelRef, false)
 
   const handlePanelBack = () => {
     if (leadOverlayId) {
@@ -302,13 +307,10 @@ export function DealsPanel({
 
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
-          className={cn(
-            'map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0',
-            hasNestedDetail && 'crm-panel-obscured'
-          )}
+          className="map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0"
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
@@ -580,10 +582,10 @@ export function DealsPanel({
       {selectedDeal && selectedPipeline && dealsDetailDealId && !dealsClosedRecordId && (
         <Suspense fallback={null}>
         <DealDetails
-          obscuredByChild={!!leadOverlayId}
-          panelDockSlot={!isOpen ? panelDockSlot : undefined}
-          nestedOverlay={isOpen}
-          topLayer={!isOpen}
+          obscuredByChild={!!leadOverlayId && showingLeadOverlay}
+          panelDockSlot={panelDockSlot}
+          nestedOverlay={false}
+          topLayer
           hideOverlay
           suppressBackdrop
           deal={selectedDeal}
@@ -620,8 +622,8 @@ export function DealsPanel({
         <LeadDetails
           isOpen
           instantDismiss={instantDismiss}
-          panelDockSlot={!isOpen ? panelDockSlot : undefined}
-          nestedOverlay={isOpen}
+          panelDockSlot={panelDockSlot}
+          nestedOverlay={false}
           topLayer
           onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
@@ -657,10 +659,15 @@ export function DealsPanel({
         </Suspense>
       )}
 
-      {isOpen && selectedClosed && dealsClosedRecordId && !dealsDetailDealId && (
+      {selectedClosed && dealsClosedRecordId && !dealsDetailDealId && (
         <Suspense fallback={null}>
         <DealDetails
-          obscuredByChild={!!leadOverlayId}
+          obscuredByChild={!!leadOverlayId && showingLeadOverlay}
+          panelDockSlot={panelDockSlot}
+          nestedOverlay={false}
+          topLayer
+          hideOverlay
+          suppressBackdrop
           deal={selectedClosed.deal}
           pipeline={{ columns: selectedClosed.closedFrom?.columns, id: selectedClosed.closedFrom?.id, title: selectedClosed.closedFrom?.title }}
           lead={selectedClosedLead}
