@@ -821,6 +821,18 @@
     z-index: 10020 !important;
   }
 
+  /* Stacked lead overlay — dock primary width/shift, above obscured deal beneath */
+  html[data-tasks-docked="1"] .map-panel-dialog.lead-details-panel.lead-details-stacked-overlay[data-state="open"] {
+    width: var(--tasks-dock-primary-width) !important;
+    max-width: var(--tasks-dock-primary-width) !important;
+    min-width: 0 !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
+    transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
+    z-index: 10021 !important;
+  }
+
   html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="tasks"] {
     z-index: 10002 !important;
   }

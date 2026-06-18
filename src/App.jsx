@@ -272,6 +272,9 @@ function App() {
     if (dealDetailOverLead && (root === 'deals' || root === 'leads')) return 'primary'
     return resolvePanelDockSlot(root, isOpen, tasksDockLayout)
   }
+  const leadOverlayPanelDockSlot =
+    panelDockSlot('leads', !!(leadsDetailLeadId || dealsLeadOverlayId))
+    ?? panelDockSlot('deals', !!(isDealsPanelOpen || isDealsDetailStandalone || dealsLeadOverlayId))
 
   const dealPipelineMounted = useStickyPanelMount(isDealPipelineOpen, pipesPromotedDealId, pipesLeadOverlayId)
   const schedulePanelMounted = useStickyPanelMount(isSchedulePanelOpen, scheduleLeadId)
@@ -4170,6 +4173,7 @@ function App() {
         teamMembership={teamMembership}
         detailLeadId={leadsDetailLeadId}
         dealsDetailDealId={dealsDetailDealId}
+        dealsLeadOverlayId={dealsLeadOverlayId}
         onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
         onCloseLeadDetail={() => nav.popLeadsDetail()}
         currentUserId={currentUser?.uid}
@@ -4243,6 +4247,7 @@ function App() {
         onEditLead={handleEditLead}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
+        leadOverlayPanelDockSlot={leadOverlayPanelDockSlot}
       />
       </Suspense>
       )}

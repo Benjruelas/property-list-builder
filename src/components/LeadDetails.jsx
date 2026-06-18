@@ -157,6 +157,7 @@ export function LeadDetails({
   onLeadDeleted,
   nestedOverlay = true,
   topLayer = true,
+  stackedOverlay = false,
   hideOverlay = true,
   suppressBackdrop = true,
   teams = [],
@@ -314,6 +315,7 @@ export function LeadDetails({
       <DialogContent
         className={cn(
           'map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0',
+          stackedOverlay && 'lead-details-stacked-overlay',
           obscuredByChild && 'crm-panel-obscured',
         )}
         panelDockSlot={panelDockSlot}

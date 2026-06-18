@@ -312,6 +312,18 @@ export function recipeClosePromotedClosedDeal(currentStack) {
  */
 export function recipePushDealsLead(currentStack, leadId, opts = {}) {
   const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const leadsDetail = coreStack.find((f) => f.type === 'leads.detail')
+  if (leadsDetail?.leadId === leadId) {
+    const withoutDealLayers = coreStack.filter(
+      (f) => f.type !== 'deals.detail' && f.type !== 'deals.lead',
+    )
+    if (withoutDealLayers.length !== coreStack.length) {
+      if (opts.keepTasks && tasksFrames.length) {
+        return appendTrailingTasks(withoutDealLayers, tasksFrames)
+      }
+      return withoutDealLayers
+    }
+  }
   const withoutLead = coreStack.filter((f) => f.type !== 'deals.lead')
   const withLead = [...withoutLead, { type: 'deals.lead', leadId }]
   if (opts.keepTasks && tasksFrames.length) {
@@ -330,7 +342,9 @@ export function recipeOpenDealFromLeadDetail(currentStack, dealId, pipelineId, o
   const hasDealsLead = coreStack.some((f) => f.type === 'deals.lead')
 
   if (hasDealsLead) {
-    const withoutDealDetail = coreStack.filter((f) => f.type !== 'deals.detail')
+    const withoutDealDetail = coreStack.filter(
+      (f) => f.type !== 'deals.detail' && f.type !== 'deals.lead',
+    )
     const withDeal = [
       ...withoutDealDetail,
       { type: 'deals.detail', dealId, pipelineId, dockBesideTasks: true },

@@ -53,6 +53,7 @@ export function LeadsPanel({
   teamMembership = null,
   detailLeadId = null,
   dealsDetailDealId = null,
+  dealsLeadOverlayId = null,
   onOpenLeadDetail,
   onCloseLeadDetail,
   currentUserId = null,
@@ -203,6 +204,7 @@ export function LeadsPanel({
   }, [onCreateDealSubmit])
 
   const showingLeadDetail = !!(detailLeadId && selectedLead)
+  const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
   const listDialogOpen = mapListDialogOpen(isOpen, showingLeadDetail)
   const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
@@ -385,7 +387,7 @@ export function LeadsPanel({
         canSeeDealAmounts={canSeeDealAmounts}
       />
 
-      {selectedLead ? (
+      {showLeadDetailPanel ? (
         <Suspense fallback={null}>
           <LeadDetails
             isOpen={!!selectedLead}
@@ -393,7 +395,6 @@ export function LeadsPanel({
             panelDockSlot={panelDockSlot}
             nestedOverlay={false}
             topLayer
-            obscuredByChild={!!dealsDetailDealId}
             onClose={() => onCloseLeadDetail?.()}
             lead={selectedLead}
             pipelines={pipelines}

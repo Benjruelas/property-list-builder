@@ -711,7 +711,7 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'deals.detail'])
   })
 
-  it('recipeOpenDealFromLeadDetail from deals lead overlay keeps deals list and lead', () => {
+  it('recipeOpenDealFromLeadDetail from deals lead overlay closes lead and opens deal', () => {
     const stack = recipeOpenDealFromLeadDetail(
       [
         { type: 'deals' },
@@ -723,8 +723,8 @@ describe('recipes', () => {
       'p1',
       { keepTasks: true },
     )
-    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.lead', 'deals.detail', 'tasks'])
-    expect(stack[2].dealId).toBe('d1')
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.detail', 'tasks'])
+    expect(stack[1].dealId).toBe('d1')
   })
 
   it('pop deals.detail from deals lead overlay returns to lead not map', () => {
@@ -757,6 +757,20 @@ describe('recipes', () => {
       { keepTasks: true },
     )
     expect(stack.map((f) => f.type)).toEqual(['deals.detail', 'deals.lead', 'tasks'])
+  })
+
+  it('recipePushDealsLead from leads lead detail pops deal instead of overlaying', () => {
+    const stack = recipePushDealsLead(
+      [
+        { type: 'leads' },
+        { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true },
+        { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1', dockBesideTasks: true },
+        { type: 'tasks' },
+      ],
+      'l1',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'leads.detail', 'tasks'])
   })
 
   it('pop deals.lead returns to standalone deal with tasks still trailing', () => {

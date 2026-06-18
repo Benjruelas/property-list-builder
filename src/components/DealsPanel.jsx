@@ -98,6 +98,7 @@ export function DealsPanel({
   onEditLead,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
+  leadOverlayPanelDockSlot,
 }) {
   const [search, setSearch] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState([])
@@ -209,8 +210,20 @@ export function DealsPanel({
   const openLeadFromDeal = useCallback((lead) => {
     if (!lead?.id) return
     if (leadOverlayId === lead.id) return
+    // Leads → lead → deal: return to the existing lead detail instead of a second overlay.
+    if (leadsDetailLeadId === lead.id) {
+      if (leadOverlayId) onCloseLeadOverlay?.()
+      onCloseDealDetail?.()
+      return
+    }
     onOpenLeadOverlay?.(lead.id)
-  }, [leadOverlayId, onOpenLeadOverlay])
+  }, [leadOverlayId, leadsDetailLeadId, onOpenLeadOverlay, onCloseLeadOverlay, onCloseDealDetail])
+
+  const isLeadLinkActive = useCallback((lead) => {
+    if (!lead?.id) return false
+    if (leadOverlayId === lead.id) return true
+    return leadsDetailLeadId === lead.id && !!dealsDetailDealId && !leadOverlayId
+  }, [leadOverlayId, leadsDetailLeadId, dealsDetailDealId])
 
   const handleDealUpdate = useCallback((updated) => {
     onDealUpdate?.(updated, selectedPipelineId)
@@ -603,7 +616,7 @@ export function DealsPanel({
           onClose={() => onCloseDealDetail?.()}
           onDealUpdate={handleDealUpdate}
           onOpenLead={openLeadFromDeal}
-          leadLinkActive={!!leadOverlayId && leadOverlayId === selectedLead?.id}
+          leadLinkActive={isLeadLinkActive(selectedLead)}
           onRequestMoveDeal={onRequestMoveDeal}
           onRequestCloseDeal={handleCloseDealFromPanel}
           onRequestRemoveDeal={handleRemoveDealFromPanel}
@@ -623,10 +636,10 @@ export function DealsPanel({
         <LeadDetails
           isOpen
           instantDismiss={instantDismiss}
-          panelDockSlot={panelDockSlot}
-          nestedOverlay={false}
+          panelDockSlot={leadOverlayPanelDockSlot}
+          nestedOverlay
           topLayer
-          obscuredByChild={!!dealsDetailDealId}
+          stackedOverlay
           onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
           pipelines={pipelines}
@@ -640,6 +653,7 @@ export function DealsPanel({
           onLeadUpdate={handleLeadUpdate}
           onCreateDeal={startCreateDealFromLead}
           onOpenDeal={(deal, pipelineId) => {
+            onCloseLeadOverlay?.()
             onOpenDealFromLead?.(deal.id, pipelineId || deal.__pipelineId || selectedPipelineId)
           }}
           onLeadDeleted={() => {
@@ -678,7 +692,7 @@ export function DealsPanel({
           readOnly
           onClose={() => onCloseClosedDeal?.()}
           onOpenLead={openLeadFromDeal}
-          leadLinkActive={!!leadOverlayId && leadOverlayId === selectedClosedLead?.id}
+          leadLinkActive={isLeadLinkActive(selectedClosedLead)}
           getToken={getToken}
           onOpenQuote={onOpenQuoteFromDeal}
           quotesRefreshKey={quotesRefreshKey}
