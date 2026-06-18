@@ -9,7 +9,9 @@ import {
 } from '@/utils/leads'
 import { LeadSharingIcon } from './ResourceSharePicker'
 import { EntityTagPills } from './tags/EntityTagPills'
+import { CrmPhoneCell, CrmEmailCell } from './crm/CrmTableCells'
 import { cn } from '@/lib/utils'
+import { formatPhoneDisplay } from '@/utils/phoneFormat'
 
 export const LEAD_LIST_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item crm-lead-row flex flex-col px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
@@ -66,7 +68,7 @@ export function LeadRow({ lead, dealCount = 0, onClick, className, tagRegistry }
           {lead.phone && (
             <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
               <Phone className="h-3 w-3 shrink-0 opacity-60" />
-              <span className="truncate">{lead.phone}</span>
+              <span className="truncate">{formatPhoneDisplay(lead.phone)}</span>
             </span>
           )}
           {lead.email && (
@@ -114,23 +116,8 @@ export function LeadRow({ lead, dealCount = 0, onClick, className, tagRegistry }
           {address}
         </div>
 
-        <div className="crm-col-contact min-w-0 space-y-0.5">
-          {lead.phone && (
-            <div className="inline-flex items-center gap-1 truncate">
-              <Phone className="h-3 w-3 shrink-0 opacity-60" />
-              <span className="truncate">{lead.phone}</span>
-            </div>
-          )}
-          {lead.email && (
-            <div className="inline-flex items-center gap-1 truncate">
-              <Mail className="h-3 w-3 shrink-0 opacity-60" />
-              <span className="truncate">{lead.email}</span>
-            </div>
-          )}
-          {!hasContact && (
-            <span className="opacity-40">No contact info</span>
-          )}
-        </div>
+        <CrmPhoneCell phone={lead.phone} />
+        <CrmEmailCell email={lead.email} />
 
         <div className="crm-col-meta min-w-0 space-y-0.5">
           {lastContact ? (

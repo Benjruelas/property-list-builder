@@ -4,6 +4,7 @@ import { resolveParcelId } from '@/utils/parcelPropertyMap'
 import { getParcelNote, saveParcelNote } from '@/utils/parcelNotes'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { computeOwnerOccupied } from '@/utils/ownerOccupied'
+import { normalizePhoneForStorage, normalizePhoneForTel } from '@/utils/phoneFormat'
 
 const PROPERTY_LABELS = {
   PROP_ID: 'Parcel ID', PROPID: 'Property ID', PARCEL_ID: 'Parcel ID', PARCEL_ID_ALT: 'Alternate Parcel ID', PIN: 'Parcel Number', APN: 'Assessor Parcel Number',
@@ -270,7 +271,7 @@ export function useParcelDetailsData({ isOpen, parcelData, lists = [], enableAut
     isQOZ,
   }
 
-  const normalizePhoneNumber = (phone) => (phone || '').replace(/[^\d+]/g, '')
+  const normalizePhoneNumber = normalizePhoneForTel
   const cycleVerified = (current) => (current === 'good' ? 'bad' : current === 'bad' ? null : 'good')
 
   const handleSetVerified = (type, value, next) => {
@@ -299,8 +300,9 @@ export function useParcelDetailsData({ isOpen, parcelData, lists = [], enableAut
   }
 
   const addPhone = () => {
-    if (newPhone.trim()) {
-      updateSkipTracedContacts(parcelId, 'phone', [...phoneDetails, { value: newPhone.trim(), primary: phoneDetails.length === 0 }])
+    const formatted = normalizePhoneForStorage(newPhone)
+    if (formatted) {
+      updateSkipTracedContacts(parcelId, 'phone', [...phoneDetails, { value: formatted, primary: phoneDetails.length === 0 }])
       setNewPhone(''); refreshSkipTrace(); scheduleSync()
     }
   }

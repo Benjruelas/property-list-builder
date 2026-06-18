@@ -14,6 +14,7 @@ import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotificatio
 import { cn } from '@/lib/utils'
 import { getSkipTracedList } from '../utils/skipTracedList'
 import { useAuth } from '@/contexts/AuthContext'
+import { TeamSettingsSection, TeamSettingsMemberRow, TeamSettingsInvitesOnly } from './TeamSettingsSection'
 
 const MAP_STYLES = [
   { value: 'satellite', label: 'Satellite' },
@@ -220,11 +221,30 @@ const LS_DATA_KEYS = [
   'email_templates', 'text_templates', 'skip_trace_jobs', 'skip_traced_list',
 ]
 
-export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, parcelBoundaryColor, onBoundaryColorChange, onBoundaryOpacityChange, getToken, onRestartTour, onLogout, onOpenParcelDetails }) {
+export function SettingsPanel({
+  isOpen,
+  onClose,
+  settings,
+  onSettingsChange,
+  parcelBoundaryColor,
+  onBoundaryColorChange,
+  onBoundaryOpacityChange,
+  getToken,
+  onRestartTour,
+  onLogout,
+  onOpenParcelDetails,
+  teams = [],
+  teamMembership = null,
+  pendingTeamInvites = [],
+  onTeamsChange,
+  onOpenTeamDetail,
+  settingsTeamSectionOpen = false,
+}) {
   const { devPersona, switchDevPersona, DEV_PERSONA_A, DEV_PERSONA_B, currentUser, updateDisplayName } = useAuth()
   const [displayNameDraft, setDisplayNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
   const showDevPersonaSwitcher = import.meta.env.DEV && typeof switchDevPersona === 'function'
+  const isTeamAdmin = teamMembership?.role === 'admin'
   const [syncing, setSyncing] = useState(false)
   const [skipTracedList, setSkipTracedList] = useState(null)
   const [expandedSkipTracedLists, setExpandedSkipTracedLists] = useState(new Set())
@@ -357,7 +377,7 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
   return (
     <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
-        className="map-panel list-panel fullscreen-panel"
+        className="map-panel list-panel settings-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
@@ -390,6 +410,31 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange, par
                 </div>
               </SettingRow>
             </Section>
+          )}
+
+          {currentUser && isTeamAdmin && (
+            <TeamSettingsSection
+              currentUser={currentUser}
+              getToken={getToken}
+              teams={teams}
+              teamMembership={teamMembership}
+              pendingInvites={pendingTeamInvites}
+              onTeamsChange={onTeamsChange}
+              onOpenTeamDetail={onOpenTeamDetail}
+              defaultOpen={settingsTeamSectionOpen}
+            />
+          )}
+
+          {currentUser && !isTeamAdmin && teamMembership && (
+            <TeamSettingsMemberRow teamName={teamMembership.teamName} />
+          )}
+
+          {currentUser && !teamMembership && (
+            <TeamSettingsInvitesOnly
+              getToken={getToken}
+              pendingInvites={pendingTeamInvites}
+              onTeamsChange={onTeamsChange}
+            />
           )}
 
           <Section icon={Palette} title="Appearance">

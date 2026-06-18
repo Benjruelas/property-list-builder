@@ -48,7 +48,26 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
     closeDetails(false)
   }, [suspendClose, obscuredByPanel, closeDetails])
 
-  if (!data) return null
+  if (!data) {
+    if (!isOpen) return null
+    return (
+      <Dialog open={isOpen} modal={false} onOpenChange={(open) => { if (!open && isOpen && !suspendClose && !obscuredByPanel) closeDetails(false) }}>
+        <DialogContent
+          className="map-panel parcel-details-panel list-panel fullscreen-panel md:max-h-[80vh] p-0 gap-0"
+          showCloseButton={false}
+          hideOverlay
+          suppressBackdrop
+          onPointerDownOutside={handleOutsideClose}
+          onInteractOutside={handleOutsideClose}
+        >
+          <DialogHeader className="px-6 pt-5 pb-3 border-b-0 text-left">
+            <PanelBackButton onClick={() => closeDetails(true)} className="mt-1" />
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   const { normalized, address, ownerName, ownerOccupied, quickStats, categorizedProps, handleClose, containerRef, scrollContainerRef } = data
 
   const overviewItems = []
@@ -97,7 +116,7 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
         )}
         showCloseButton={false}
         hideOverlay
-        suppressBackdrop={obscuredByPanel}
+        suppressBackdrop
         onPointerDownOutside={handleOutsideClose}
         onInteractOutside={handleOutsideClose}
       >

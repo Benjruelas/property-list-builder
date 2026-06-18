@@ -2,6 +2,7 @@ import { Clock, Archive, Briefcase, ArrowRight, Trash2 } from 'lucide-react'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { formatTimeInState } from '@/utils/dealPipeline'
 import { EntityTagPills } from './tags/EntityTagPills'
+import { CrmPhoneCell, CrmEmailCell } from './crm/CrmTableCells'
 import { DealProfitBadge } from './DealLineItemsSection'
 import { dealHasFinancials } from '@/utils/dealFinances'
 import { cn } from '@/lib/utils'
@@ -146,6 +147,9 @@ export function DealRow({
         >
           {leadAddress || '—'}
         </div>
+
+        <CrmPhoneCell phone={lead?.phone} />
+        <CrmEmailCell email={lead?.email} />
 
         <div className="crm-col-meta min-w-0">
           {timeStr ? (
@@ -373,6 +377,9 @@ export function ClosedDealRow({
         >
           {leadAddress || '—'}
         </div>
+
+        <CrmPhoneCell phone={record.lead?.phone} />
+        <CrmEmailCell email={record.lead?.email} />
 
         <div className="crm-col-meta min-w-0">
           {closedDate ? (

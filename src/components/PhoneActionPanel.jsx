@@ -5,8 +5,7 @@ import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { getTextTemplates } from '@/utils/textTemplates'
 import { replaceTemplateTags } from '@/utils/emailTemplates'
-
-const normalizePhone = (p) => (p || '').replace(/[^\d+]/g, '')
+import { normalizePhoneForTel } from '@/utils/phoneFormat'
 
 export function PhoneActionPanel({ isOpen, onClose, phone, parcelData, leadId = null, onOutreach, initialStep = 1 }) {
   const [step, setStep] = useState(1) // 1: Text/Call, 2: Template selection (only for Text)
@@ -20,7 +19,7 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData, leadId = 
   }, [isOpen, initialStep])
 
   const handleCall = () => {
-    const tel = normalizePhone(phone)
+    const tel = normalizePhoneForTel(phone)
     if (tel) {
       if (leadId && onOutreach) onOutreach('call')
       window.location.href = `tel:${tel}`
@@ -29,7 +28,7 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData, leadId = 
   }
 
   const handleText = (body = '') => {
-    const tel = normalizePhone(phone)
+    const tel = normalizePhoneForTel(phone)
     if (!tel) return
     if (leadId && onOutreach) onOutreach('text')
     const url = body

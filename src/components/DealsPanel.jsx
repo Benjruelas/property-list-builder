@@ -462,6 +462,8 @@ export function DealsPanel({
                     <span>Stage</span>
                     <span>Lead</span>
                     <span>Property</span>
+                    <span>Phone</span>
+                    <span>Email</span>
                     <span>In stage</span>
                     <span>Amount</span>
                   </div>
@@ -524,6 +526,8 @@ export function DealsPanel({
                   <span>Status</span>
                   <span>Lead</span>
                   <span>Property</span>
+                  <span>Phone</span>
+                  <span>Email</span>
                   <span>Closed</span>
                   <span>Amount</span>
                 </div>
@@ -596,10 +600,7 @@ export function DealsPanel({
           teams={teams}
           onPipelinesChange={onPipelinesChange}
           onOpenScheduleAtDate={onOpenScheduleAtDate}
-          onClose={() => {
-            if (leadOverlayId) onCloseLeadOverlay?.()
-            onCloseDealDetail?.()
-          }}
+          onClose={() => onCloseDealDetail?.()}
           onDealUpdate={handleDealUpdate}
           onOpenLead={openLeadFromDeal}
           leadLinkActive={!!leadOverlayId && leadOverlayId === selectedLead?.id}
@@ -625,6 +626,7 @@ export function DealsPanel({
           panelDockSlot={panelDockSlot}
           nestedOverlay={false}
           topLayer
+          obscuredByChild={!!dealsDetailDealId}
           onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
           pipelines={pipelines}
@@ -638,7 +640,6 @@ export function DealsPanel({
           onLeadUpdate={handleLeadUpdate}
           onCreateDeal={startCreateDealFromLead}
           onOpenDeal={(deal, pipelineId) => {
-            onCloseLeadOverlay?.()
             onOpenDealFromLead?.(deal.id, pipelineId || deal.__pipelineId || selectedPipelineId)
           }}
           onLeadDeleted={() => {
@@ -675,10 +676,7 @@ export function DealsPanel({
           leads={leads}
           closedRecord={selectedClosed}
           readOnly
-          onClose={() => {
-            if (leadOverlayId) onCloseLeadOverlay?.()
-            onCloseClosedDeal?.()
-          }}
+          onClose={() => onCloseClosedDeal?.()}
           onOpenLead={openLeadFromDeal}
           leadLinkActive={!!leadOverlayId && leadOverlayId === selectedClosedLead?.id}
           getToken={getToken}

@@ -10,6 +10,7 @@ import { createLead, updateLead } from '@/utils/leads'
 import { mergeLeadFormWithParcel, ensureLeadParcelLink } from '@/utils/resolveLeadParcel'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from './ui/toast'
+import { formatPhoneAsYouType, formatPhoneDisplay, normalizePhoneForStorage } from '@/utils/phoneFormat'
 
 const emptyForm = {
   firstName: '',
@@ -29,7 +30,7 @@ function normalizeLeadForm(data = {}) {
     firstName: data.firstName ?? '',
     lastName: data.lastName ?? '',
     address: data.address ?? '',
-    phone: data.phone ?? '',
+    phone: formatPhoneDisplay(data.phone ?? '') || '',
     email: data.email ?? '',
     notes: data.notes ?? '',
     parcelId: data.parcelId ?? null,
@@ -143,7 +144,7 @@ export function CreateLeadDialog({
         firstName,
         lastName,
         address: linked.address || address,
-        phone: (form.phone ?? '').trim() || null,
+        phone: normalizePhoneForStorage(form.phone),
         email: (form.email ?? '').trim() || null,
         notes: (form.notes ?? '').trim(),
         parcelId: linked.parcelId,
@@ -258,7 +259,7 @@ export function CreateLeadDialog({
             <input
               type="tel"
               value={form.phone ?? ''}
-              onChange={(e) => setField('phone', e.target.value)}
+              onChange={(e) => setField('phone', formatPhoneAsYouType(e.target.value))}
               className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
               autoComplete="tel"
             />

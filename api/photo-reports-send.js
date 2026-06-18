@@ -1,11 +1,13 @@
 import { Resend } from 'resend'
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import {
   generateReportToken,
   REPORT_INVITE_EXPIRY_DAYS,
   getAllReportInvites,
   saveAllReportInvites,
+  isValidReportEmail,
+  supersedePendingReportInvites,
+  hasPriorReportInvite,
 } from './lib/reportInvites.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.js'
 import { getLeadWithAccess } from './lib/leadAccess.js'
@@ -15,28 +17,11 @@ import {
   buildFromAddress,
   escapeHtml,
 } from './lib/senderBranding.js'
+import { leadDisplayName } from './lib/publicReportPayload.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
 const FROM_ADDRESS = process.env.FORMS_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || DEFAULT_FROM
-
-let _s3
-function s3() {
-  if (_s3) return _s3
-  _s3 = new S3Client({
-    region: 'auto',
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-  })
-  return _s3
-}
-
-function isValidEmail(e) {
-  return typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())
-}
 
 async function verifyFirebaseToken(idToken) {
   const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
@@ -95,87 +80,109 @@ export default async function handler(req, res) {
     if (!report || report.ownerId !== user.uid) {
       return res.status(404).json({ error: 'Report not found' })
     }
-    if (!report.pdfKey) {
-      return res.status(400).json({ error: 'Generate PDF before sending' })
+
+    const trimmedRecipient = String(recipientEmail || '').trim().toLowerCase()
+    if (!generateOnly && !isValidReportEmail(trimmedRecipient)) {
+      return res.status(400).json({ error: 'Valid recipientEmail is required' })
+    }
+    if (generateOnly && !isValidReportEmail(trimmedRecipient)) {
+      return res.status(400).json({ error: 'Valid recipientEmail is required for link generation' })
     }
 
     const token = generateReportToken()
     const now = new Date()
     const expiresAt = new Date(now.getTime() + REPORT_INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const publicUrl = `${resolveOrigin(req)}/?report=${token}`
+    const appOrigin = resolveOrigin(req)
+    const publicUrl = `${appOrigin}/?report=${encodeURIComponent(token)}`
+    const safeMessage = String(message || '').slice(0, 4000)
+    const reportTitle = String(report.title || 'Photo Report').trim()
 
-    const invites = await getAllReportInvites()
-    invites.push({
+    const allInvites = await getAllReportInvites()
+    const isResend = hasPriorReportInvite(allInvites, {
+      reportId: report.id,
+      recipientEmail: trimmedRecipient,
+    })
+
+    const invite = {
+      id: `rinv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
       token,
       reportId: report.id,
       ownerId: user.uid,
+      recipientEmail: trimmedRecipient,
+      message: safeMessage,
       status: 'pending',
       createdAt: now.toISOString(),
       expiresAt,
+    }
+
+    const { invites: nextInvites } = supersedePendingReportInvites(allInvites, {
+      reportId: report.id,
+      recipientEmail: trimmedRecipient,
+      keepToken: token,
     })
-    await saveAllReportInvites(invites)
+    nextInvites.push(invite)
+    await saveAllReportInvites(nextInvites)
 
     const updated = {
       ...report,
       publicToken: token,
-      status: 'sent',
+      status: report.status === 'draft' ? 'sent' : report.status,
       sentAt: now.toISOString(),
       updatedAt: now.toISOString(),
     }
     await updatePhotoReportAtIndex(all, index, updated)
 
     if (generateOnly) {
-      return res.status(200).json({ report: updated, publicUrl, token })
+      return res.status(200).json({
+        report: updated,
+        publicUrl,
+        token,
+        inviteId: invite.id,
+        expiresAt: invite.expiresAt,
+      })
     }
 
-    if (!isValidEmail(recipientEmail)) {
-      return res.status(400).json({ error: 'Valid recipientEmail is required' })
-    }
     if (!process.env.RESEND_API_KEY) {
       return res.status(500).json({ error: 'Email service not configured' })
     }
 
     const branding = await resolveSenderBranding(user)
-    const safeSubject = String(subject || `Photo report: ${report.title}`).slice(0, 200)
-    const safeMessage = String(message || '').slice(0, 4000)
-    const innerHtml = `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>
-        <p><a href="${publicUrl}">View photo report</a></p>`
+    const senderLabel = branding.senderName
+    const { lead } = await getLeadWithAccess(user, report.leadId)
+    const propertyLabel = lead ? leadDisplayName(lead) : 'your property'
+    const safeSubject = String(subject || `Photo report: ${reportTitle}`).slice(0, 200)
+
+    const innerHtml = `
+      <p>${escapeHtml(senderLabel)} has sent you a photo report${reportTitle ? `: <strong>${escapeHtml(reportTitle)}</strong>` : ''} for ${escapeHtml(propertyLabel)}.</p>
+      ${isResend ? '<p><strong>This is a new link.</strong> Any previous link for this report is no longer valid.</p>' : ''}
+      ${safeMessage ? `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>` : ''}
+      <p><a href="${escapeHtml(publicUrl)}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">View photo report</a></p>
+      <p style="color:#666;font-size:13px;">This link is for ${escapeHtml(trimmedRecipient)} and expires in ${REPORT_INVITE_EXPIRY_DAYS} days.</p>
+    `
     const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
-    let pdfAttachment = null
-    try {
-      const r = await s3().send(new GetObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: report.pdfKey,
-      }))
-      const chunks = []
-      for await (const c of r.Body) chunks.push(c)
-      const pdfBuf = Buffer.concat(chunks)
-      pdfAttachment = {
-        filename: `${(report.title || 'report').replace(/[^a-z0-9-_ ]/gi, '_')}.pdf`,
-        content: pdfBuf.toString('base64'),
-      }
-    } catch (e) {
-      console.warn('pdf attach failed', e.message)
-    }
+    const userEmail = isValidReportEmail(user.email) ? user.email.trim() : null
+    const replyTo =
+      branding.companyEmail && isValidReportEmail(branding.companyEmail)
+        ? branding.companyEmail.trim()
+        : userEmail
 
-    const emailPayload = {
+    await resend.emails.send({
       from: buildFromAddress(FROM_ADDRESS, branding.businessName),
-      to: recipientEmail.trim(),
+      to: [trimmedRecipient],
+      ...(replyTo ? { replyTo } : {}),
       subject: safeSubject,
       html: htmlBody,
-    }
-    if (pdfAttachment) {
-      emailPayload.attachments = [pdfAttachment]
-    }
-
-    await resend.emails.send(emailPayload)
+      headers: { 'X-Entity-Ref-ID': invite.id },
+    })
 
     return res.status(200).json({
       report: updated,
       publicUrl,
       token,
-      sentTo: recipientEmail.trim(),
+      sentTo: trimmedRecipient,
+      inviteId: invite.id,
+      expiresAt: invite.expiresAt,
     })
   } catch (err) {
     console.error('photo-reports-send error', err)

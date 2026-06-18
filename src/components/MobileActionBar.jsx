@@ -84,7 +84,6 @@ export function MobileActionBar({
   isPathTrackingActive,
   onOpenOutreach,
   onOpenForms,
-  onOpenTeamsPanel,
   onOpenSettings,
   currentUser,
   onLogin,
@@ -126,7 +125,6 @@ export function MobileActionBar({
     if (!showMenu) return
     prefetchPanel('outreach')
     prefetchPanel('paths')
-    prefetchPanel('teams')
     prefetchPanel('settings')
   }, [showMenu])
 
@@ -167,7 +165,6 @@ export function MobileActionBar({
         isPathTrackingActive={isPathTrackingActive}
         onOpenOutreach={onOpenOutreach}
         onOpenForms={onOpenForms}
-        onOpenTeamsPanel={onOpenTeamsPanel}
         onOpenSettings={onOpenSettings}
         currentUser={currentUser}
         onLogin={onLogin}

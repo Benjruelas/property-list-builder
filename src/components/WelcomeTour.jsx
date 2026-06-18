@@ -198,9 +198,10 @@ const ALL_STEPS = [
   {
     id: 'teams',
     title: 'Teams',
-    desc: 'Share lists and pipelines so your crew stays in sync.',
-    target: '[data-tour="menu-teams"]',
+    desc: 'Share lists and pipelines so your crew stays in sync — manage your team in Settings.',
+    target: '[data-tour="settings-team-section"]',
     menuRequired: true,
+    settingsRequired: true,
   },
   {
     id: 'settings-menu',

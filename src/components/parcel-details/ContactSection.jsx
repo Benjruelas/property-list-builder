@@ -1,6 +1,7 @@
 import { Phone, Mail, User, Star, Pencil, Trash2, Plus, CheckCircle, XCircle, HelpCircle, BadgeCheck, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { formatPhoneAsYouType, formatPhoneDisplay } from '@/utils/phoneFormat'
 
 function VerifiedIcon({ verified, onClick, title }) {
   if (verified === 'good') return <CheckCircle className="h-4 w-4 text-green-600 cursor-pointer hover:opacity-80" onClick={onClick} title={title || 'Verified good'} />
@@ -81,7 +82,7 @@ export function ContactSection({
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
-            <input type="tel" placeholder="Add phone" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addPhone()} />
+            <input type="tel" placeholder="Add phone" value={newPhone} onChange={(e) => setNewPhone(formatPhoneAsYouType(e.target.value))} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addPhone()} />
             <Button variant="outline" size="sm" className="h-7" onClick={addPhone} disabled={!newPhone.trim()} title="Add phone"><Plus className="h-3.5 w-3.5" /></Button>
           </div>
           <div className="flex items-center gap-2">
@@ -136,9 +137,9 @@ export function ContactSection({
               </div>
               <div className="flex items-center gap-1">
                 {onPhoneClick ? (
-                  <button type="button" onClick={(e) => { e.stopPropagation(); onPhoneClick(p.value, normalized) }} className="parcel-details-link-btn text-inherit hover:underline truncate text-left">{p.value}</button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); onPhoneClick(p.value, normalized) }} className="parcel-details-link-btn text-inherit hover:underline truncate text-left">{formatPhoneDisplay(p.value)}</button>
                 ) : (
-                  <a href={`tel:${normalizePhoneNumber(p.value)}`} className="parcel-details-link-btn text-inherit hover:underline truncate">{p.value}</a>
+                  <a href={`tel:${normalizePhoneNumber(p.value)}`} className="parcel-details-link-btn text-inherit hover:underline truncate">{formatPhoneDisplay(p.value)}</a>
                 )}
                 {editContacts && (
                   <button type="button" onClick={() => deletePhone(idx)} className="text-red-500 hover:text-red-600 p-0.5 flex-shrink-0" title="Delete">
@@ -176,7 +177,7 @@ export function ContactSection({
         ))}
         {editContacts && (
           <div className="flex items-center gap-2 py-2">
-            <input type="tel" placeholder="Add phone" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addPhone()} />
+            <input type="tel" placeholder="Add phone" value={newPhone} onChange={(e) => setNewPhone(formatPhoneAsYouType(e.target.value))} className="border rounded px-2 py-1 text-sm flex-1" onKeyDown={(e) => e.key === 'Enter' && addPhone()} />
             <Button variant="outline" size="sm" className="h-7" onClick={addPhone}><Plus className="h-3.5 w-3.5" /></Button>
           </div>
         )}

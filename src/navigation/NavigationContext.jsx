@@ -41,7 +41,6 @@ import {
   recipeOpenTasks,
   recipeCloseTasks,
   recipeSwapPrimaryKeepTasks,
-  recipeOpenTeams,
   recipeOpenLeads,
   recipeReturnToActivity,
   recipeViewListContents,
@@ -204,14 +203,6 @@ export function NavigationProvider({ children }) {
     replaceStack(recipeOpenReports(state.navStack, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
-  const openTeams = useCallback(() => {
-    if (stackHasPrimaryRoot(state.navStack, 'teams')) {
-      replaceStack(recipeClosePrimaryRoot(state.navStack, 'teams'))
-      return
-    }
-    replaceStack(recipeOpenTeams(state.navStack, taskDockOpts()))
-  }, [state.navStack, replaceStack, taskDockOpts])
-
   const openSettings = useCallback(() => {
     if (state.navStack.some((f) => f.type === 'settings')) {
       replaceStack(state.navStack.filter((f) => f.type !== 'settings'))
@@ -219,6 +210,10 @@ export function NavigationProvider({ children }) {
     }
     replaceStack(recipeOpenSettings(state.navStack))
   }, [state.navStack, replaceStack])
+
+  const openTeams = useCallback(() => {
+    openSettings()
+  }, [openSettings])
 
   const openActivity = useCallback(() => {
     if (shouldKeepTasksWhenOpening(state.navStack)) {
@@ -402,8 +397,13 @@ export function NavigationProvider({ children }) {
   }, [push])
 
   const pushTeamsDetail = useCallback((teamId) => {
-    push({ type: 'teams.detail', teamId })
-  }, [push])
+    const withoutDetail = state.navStack.filter((f) => f.type !== 'teams.detail')
+    const hasSettings = withoutDetail.some((f) => f.type === 'settings')
+    const nextStack = hasSettings
+      ? [...withoutDetail, { type: 'teams.detail', teamId }]
+      : recipeOpenSettings(withoutDetail).concat([{ type: 'teams.detail', teamId }])
+    replaceStack(nextStack)
+  }, [state.navStack, replaceStack])
 
   const openTaskInPipes = useCallback((pipelineId, dealId) => {
     replaceStack(recipeOpenTaskInPipes(state.navStack, pipelineId, dealId))

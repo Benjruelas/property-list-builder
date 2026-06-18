@@ -21,6 +21,7 @@ import { filterByTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
+import { phoneMatchesQuery } from '@/utils/phoneFormat'
 import { buildDealCountByLeadId } from '@/utils/deals'
 import { showToast } from './ui/toast'
 import { LeadRow } from './LeadRow'
@@ -51,6 +52,7 @@ export function LeadsPanel({
   teams = [],
   teamMembership = null,
   detailLeadId = null,
+  dealsDetailDealId = null,
   onOpenLeadDetail,
   onCloseLeadDetail,
   currentUserId = null,
@@ -128,7 +130,7 @@ export function LeadsPanel({
         return (
           name.includes(q) ||
           (l.address || '').toLowerCase().includes(q) ||
-          (l.phone || '').includes(q) ||
+          phoneMatchesQuery(l.phone, q) ||
           (l.email || '').toLowerCase().includes(q)
         )
       })
@@ -323,7 +325,8 @@ export function LeadsPanel({
                   <span>Tags</span>
                   <span>Status</span>
                   <span>Property</span>
-                  <span>Contact</span>
+                  <span>Phone</span>
+                  <span>Email</span>
                   <span>Activity</span>
                 </div>
                 {filteredLeads.map((lead) => (
@@ -390,6 +393,7 @@ export function LeadsPanel({
             panelDockSlot={panelDockSlot}
             nestedOverlay={false}
             topLayer
+            obscuredByChild={!!dealsDetailDealId}
             onClose={() => onCloseLeadDetail?.()}
             lead={selectedLead}
             pipelines={pipelines}

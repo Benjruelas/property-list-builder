@@ -12,6 +12,7 @@ import { logLeadPhotosAdded } from '@/utils/leadActivity'
 import { VISIBILITY } from '@/utils/access'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from '../ui/toast'
+import { formatPhoneAsYouType, formatPhoneDisplay } from '@/utils/phoneFormat'
 import { StorageUsageBar } from '../ui/StorageUsageBar'
 import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 import { cn } from '@/lib/utils'
@@ -57,7 +58,7 @@ function normalizeDraftForm(data = {}) {
     firstName: data.firstName ?? '',
     lastName: data.lastName ?? '',
     address: data.address ?? '',
-    phone: data.phone ?? '',
+    phone: formatPhoneDisplay(data.phone ?? '') || '',
     email: data.email ?? '',
     notes: data.notes ?? '',
     parcelId: data.parcelId ?? null,
@@ -522,7 +523,7 @@ export function PhotoMode({
               <input
                 type="tel"
                 value={draftForm.phone ?? ''}
-                onChange={(e) => setDraftField('phone', e.target.value)}
+                onChange={(e) => setDraftField('phone', formatPhoneAsYouType(e.target.value))}
                 className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
               />
             </div>

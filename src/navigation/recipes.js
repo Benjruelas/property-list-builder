@@ -323,8 +323,24 @@ export function recipePushDealsLead(currentStack, leadId, opts = {}) {
 /**
  * Open deal detail from lead context — no Deals list or Pipes panel.
  * Keeps lead detail (and optional leads list) in the stack for back navigation.
+ * When opened from Deals → deal → lead overlay, preserves deals.lead (and deals list).
  */
 export function recipeOpenDealFromLeadDetail(currentStack, dealId, pipelineId, opts = {}) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const hasDealsLead = coreStack.some((f) => f.type === 'deals.lead')
+
+  if (hasDealsLead) {
+    const withoutDealDetail = coreStack.filter((f) => f.type !== 'deals.detail')
+    const withDeal = [
+      ...withoutDealDetail,
+      { type: 'deals.detail', dealId, pipelineId, dockBesideTasks: true },
+    ]
+    if (opts.keepTasks && tasksFrames.length) {
+      return appendTrailingTasks(withDeal, tasksFrames)
+    }
+    return withDeal
+  }
+
   const stripDealAndPipeFrames = (f) =>
     f.type !== 'deals.detail' &&
     f.type !== 'deals.lead' &&
@@ -335,11 +351,10 @@ export function recipeOpenDealFromLeadDetail(currentStack, dealId, pipelineId, o
 
   const build = (stack) => [
     ...stack.filter(stripDealAndPipeFrames),
-    { type: 'deals.detail', dealId, pipelineId },
+    { type: 'deals.detail', dealId, pipelineId, dockBesideTasks: true },
   ]
 
   if (opts.keepTasks && stackHasTasks(currentStack)) {
-    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
     const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
     return appendTrailingTasks(build(withoutTasks), tasksFrames)
   }

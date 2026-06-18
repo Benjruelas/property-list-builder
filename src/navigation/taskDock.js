@@ -256,6 +256,14 @@ export function primeTasksPanelOpen({ docked = false, primaryRoot = null } = {})
 export function findDockablePrimaryRoot(stack) {
   if (!stack?.length) return null
 
+  const finalize = (root) => {
+    if (root !== 'deals') return root
+    const hasLeadDetail = stack.some((f) => f.type === 'leads.detail')
+    const hasDealDetail = stack.some((f) => f.type === 'deals.detail')
+    // Deal opened from lead detail: keep lead as dock anchor so back is instant (no swap/fade).
+    return hasLeadDetail && hasDealDetail ? 'leads' : root
+  }
+
   if (stackHasTasks(stack)) {
     const tasksIndex = stack.findLastIndex((f) => frameRoot(f.type) === 'tasks')
 
@@ -268,10 +276,10 @@ export function findDockablePrimaryRoot(stack) {
     }
 
     for (let i = tasksIndex - 1; i >= 0; i--) {
-      if (isDockPrimaryFrame(stack[i])) return frameRoot(stack[i].type)
+      if (isDockPrimaryFrame(stack[i])) return finalize(frameRoot(stack[i].type))
     }
     for (let i = tasksIndex + 1; i < stack.length; i++) {
-      if (isDockPrimaryFrame(stack[i])) return frameRoot(stack[i].type)
+      if (isDockPrimaryFrame(stack[i])) return finalize(frameRoot(stack[i].type))
     }
     return null
   }
@@ -280,7 +288,7 @@ export function findDockablePrimaryRoot(stack) {
     const frame = stack[i]
     const type = frame.type
     if (frameRoot(type) === 'tasks' || frameRoot(type) === 'settings') continue
-    if (isDockPrimaryFrame(frame)) return frameRoot(type)
+    if (isDockPrimaryFrame(frame)) return finalize(frameRoot(type))
   }
   return null
 }

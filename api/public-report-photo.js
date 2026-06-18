@@ -1,8 +1,8 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { findReportInviteByToken } from './lib/reportInvites.js'
-import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.js'
+import { getPhotoReportById } from './lib/reportStore.js'
 import { getAllLeads } from './lib/leadAccess.js'
-import { publicReportPayload, recordReportView } from './lib/publicReportPayload.js'
+import { allowedReportPhotoIds } from './lib/publicReportPayload.js'
 
 let _s3
 function s3() {
@@ -27,7 +27,11 @@ export default async function handler(req, res) {
 
   try {
     const token = String(req.query.token || '').trim()
+    const photoId = String(req.query.photoId || '').trim()
+    const variant = String(req.query.variant || 'full').trim()
+
     if (!token) return res.status(400).json({ error: 'token is required' })
+    if (!photoId) return res.status(400).json({ error: 'photoId is required' })
 
     const { invite, error } = await findReportInviteByToken(token)
     if (error === 'not_found') return res.status(404).json({ error: 'Report link not found' })
@@ -35,32 +39,42 @@ export default async function handler(req, res) {
       return res.status(410).json({ error: 'This report link has expired' })
     }
 
-    const { report, index, all } = await getPhotoReportById(invite.reportId)
+    const { report } = await getPhotoReportById(invite.reportId)
     if (!report) return res.status(404).json({ error: 'Report not found' })
 
-    const download = req.query.download === '1'
-    if (download && report.pdfKey) {
-      const r = await s3().send(new GetObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: report.pdfKey,
-      }))
-      const chunks = []
-      for await (const c of r.Body) chunks.push(c)
-      const body = Buffer.concat(chunks)
-      res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="${(report.title || 'report').replace(/"/g, '')}.pdf"`)
-      return res.status(200).send(body)
+    const allowed = allowedReportPhotoIds(report)
+    if (!allowed.has(photoId)) {
+      return res.status(403).json({ error: 'Photo not in this report' })
     }
 
     const allLeads = await getAllLeads()
     const lead = allLeads.find((l) => l.id === report.leadId)
+    const photo = (lead?.photos || []).find((p) => p.id === photoId)
+    if (!photo) return res.status(404).json({ error: 'Photo not found' })
 
-    const updatedReport = await recordReportView(report, index, all, updatePhotoReportAtIndex)
-    const payload = await publicReportPayload(updatedReport, invite, lead, token)
+    const imgKey =
+      variant === 'thumb'
+        ? photo.thumbnailKey || photo.annotatedKey || photo.key
+        : photo.annotatedKey || photo.key
 
-    return res.status(200).json(payload)
+    if (!imgKey) return res.status(404).json({ error: 'Photo file not found' })
+
+    const r = await s3().send(new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: imgKey,
+    }))
+    const chunks = []
+    for await (const c of r.Body) chunks.push(c)
+    const body = Buffer.concat(chunks)
+
+    res.setHeader('Content-Type', r.ContentType || 'image/jpeg')
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    return res.status(200).send(body)
   } catch (err) {
-    console.error('public-report error', err)
+    if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+      return res.status(404).json({ error: 'Photo file not found' })
+    }
+    console.error('public-report-photo error', err)
     return res.status(500).json({ error: 'Internal server error' })
   }
 }

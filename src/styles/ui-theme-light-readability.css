@@ -244,6 +244,21 @@
   background: var(--map-panel-surface-hover) !important;
   border-color: rgba(0, 0, 0, 0.22) !important;
 }
+[data-ui-theme='light'] .lead-detail-contact-row {
+  color: var(--map-panel-text) !important;
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .lead-detail-contact-row:not(.lead-detail-contact-row--static):hover:not(:disabled) {
+  background: var(--map-panel-surface-hover) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+}
+[data-ui-theme='light'] .lead-detail-contact-row .text-white\/40 {
+  color: var(--map-panel-ink-faint) !important;
+}
+[data-ui-theme='light'] .lead-detail-contact-row .text-white\/90 {
+  color: var(--map-panel-text) !important;
+}
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-field,
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) textarea.lead-detail-field {
   background: var(--map-panel-input-bg) !important;
@@ -253,7 +268,7 @@
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-field:focus {
   border-color: rgba(0, 0, 0, 0.28) !important;
 }
-[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.panel-filter-option),
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option),
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-status-btn,
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section .panel-filter-option,
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section .inline-flex.rounded-full.border-dashed {
@@ -582,6 +597,100 @@
 /* CRM column headers / dividers */
 [data-ui-theme='light'] .crm-col-divider {
   background: var(--map-panel-stroke) !important;
+}
+
+/* Leads / Deals — summary bar (index.css hardcodes white on rgba hero) */
+[data-ui-theme='light'] .map-panel .leads-analytics-hero {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.16) 0%, rgba(0, 0, 0, 0.03) 100%) !important;
+  border-color: rgba(180, 83, 9, 0.22) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-hero-value {
+  color: #b45309 !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-hero-label {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-hero-hint {
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-stat {
+  background: var(--map-panel-surface-muted) !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-stat-value {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-stat-label {
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-stat:last-child .leads-analytics-stat-value {
+  color: #15803d !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-row--financial .leads-analytics-stat:last-child .leads-analytics-stat-value:not(.deal-profit-positive):not(.deal-profit-negative) {
+  color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-total {
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .map-panel .leads-analytics-total strong {
+  color: var(--map-panel-text-secondary) !important;
+}
+
+/* Leads / Deals — CRM table headers + muted columns (index.css uses white + opacity) */
+[data-ui-theme='light'] .map-panel .crm-column-headers {
+  color: var(--map-panel-text-muted) !important;
+  border-bottom-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .map-panel .crm-lead-row .crm-col-property,
+[data-ui-theme='light'] .map-panel .crm-lead-row .crm-col-phone,
+[data-ui-theme='light'] .map-panel .crm-lead-row .crm-col-email,
+[data-ui-theme='light'] .map-panel .crm-lead-row .crm-col-meta,
+[data-ui-theme='light'] .map-panel .crm-deal-row .crm-col-property,
+[data-ui-theme='light'] .map-panel .crm-deal-row .crm-col-phone,
+[data-ui-theme='light'] .map-panel .crm-deal-row .crm-col-email,
+[data-ui-theme='light'] .map-panel .crm-deal-row .crm-col-meta,
+[data-ui-theme='light'] .map-panel .crm-deal-row .crm-col-lead .panel-item-body {
+  opacity: 1 !important;
+  color: var(--map-panel-text-muted) !important;
+}
+[data-ui-theme='light'] .map-panel .crm-cell-empty {
+  opacity: 1 !important;
+  color: var(--map-panel-ink-faint) !important;
+}
+
+/* Lead status badges (LEAD_STATUSES — pale *-200 text on white) */
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .text-slate-200 {
+  color: #475569 !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .bg-slate-500\/25 {
+  background-color: rgba(100, 116, 139, 0.12) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .border-slate-400\/40 {
+  border-color: rgba(100, 116, 139, 0.32) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .bg-blue-500\/20 {
+  background-color: rgba(37, 99, 235, 0.1) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .border-blue-400\/40 {
+  border-color: rgba(37, 99, 235, 0.28) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .bg-amber-500\/20 {
+  background-color: rgba(180, 83, 9, 0.1) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .border-amber-400\/40 {
+  border-color: rgba(180, 83, 9, 0.28) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .bg-green-500\/20 {
+  background-color: rgba(21, 128, 61, 0.1) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .border-green-400\/40 {
+  border-color: rgba(21, 128, 61, 0.28) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .bg-red-500\/20 {
+  background-color: rgba(220, 38, 38, 0.08) !important;
+}
+[data-ui-theme='light'] :is(.map-panel, .list-panel) .border-red-400\/40 {
+  border-color: rgba(220, 38, 38, 0.28) !important;
 }
 
 /* Opacity-only muted text inherits dark ink — bump contrast vs white-on-white */
@@ -935,4 +1044,14 @@
 }
 [data-ui-theme='light'] .storage-usage-fill--full {
   background: linear-gradient(90deg, #f87171, #dc2626) !important;
+}
+
+/* Public photo report page */
+[data-ui-theme='light'] .public-form-page .public-report-section {
+  background: #ffffff !important;
+  border-color: var(--map-panel-stroke) !important;
+}
+[data-ui-theme='light'] .public-form-page .public-report-photo-tile {
+  border-color: var(--map-panel-stroke) !important;
+  background: var(--map-panel-surface-muted) !important;
 }

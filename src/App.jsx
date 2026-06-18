@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
+import { getModalPortalContainer } from './utils/modalPortal'
 import MapGL, { Marker as MapMarker, Source, Layer } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { CompassOrientation } from './components/CompassOrientation'
@@ -41,8 +42,8 @@ const TasksPanel = lazy(panelLazy.tasks)
 const PathsPanel = lazy(panelLazy.paths)
 const QuotesPanel = lazy(panelLazy.quotes)
 const ReportsPanel = lazy(panelLazy.reports)
-const TeamsPanel = lazy(panelLazy.teams)
 const SettingsPanel = lazy(panelLazy.settings)
+const TeamDetails = lazy(() => import('./components/TeamDetails').then((m) => ({ default: m.TeamDetails })))
 const LeadsPanel = lazy(panelLazy.leads)
 const DealsPanel = lazy(panelLazy.deals)
 const OutreachPanel = lazy(panelLazy.outreach)
@@ -228,7 +229,6 @@ function App() {
     isReportsPanelOpen,
     reportsEditorFrame,
     reportsDetailReportId,
-    isTeamsPanelOpen,
     teamsDetailTeamId,
     isSettingsPanelOpen,
     isSkipTracedListPanelOpen,
@@ -267,7 +267,11 @@ function App() {
     isTasksPanelOpen,
   )
 
-  const panelDockSlot = (root, isOpen) => resolvePanelDockSlot(root, isOpen, tasksDockLayout)
+  const dealDetailOverLead = !!(dealsDetailDealId && (leadsDetailLeadId || dealsLeadOverlayId))
+  const panelDockSlot = (root, isOpen) => {
+    if (dealDetailOverLead && (root === 'deals' || root === 'leads')) return 'primary'
+    return resolvePanelDockSlot(root, isOpen, tasksDockLayout)
+  }
 
   const dealPipelineMounted = useStickyPanelMount(isDealPipelineOpen, pipesPromotedDealId, pipesLeadOverlayId)
   const schedulePanelMounted = useStickyPanelMount(isSchedulePanelOpen, scheduleLeadId)
@@ -289,7 +293,7 @@ function App() {
     reportsEditorFrame,
     reportsDetailReportId,
   )
-  const teamsPanelMounted = useStickyPanelMount(isTeamsPanelOpen, teamsDetailTeamId)
+  const teamDetailMounted = useStickyPanelMount(!!teamsDetailTeamId)
   const formsPanelMounted = useStickyPanelMount(isFormsPanelOpen)
   const pathsPanelMounted = useStickyPanelMount(isPathsPanelOpen)
   const outreachPanelMounted = useStickyPanelMount(isOutreachPanelOpen)
@@ -403,6 +407,10 @@ function App() {
   const [teams, setTeams] = useState([])
   const [teamMembership, setTeamMembership] = useState(null)
   const [pendingTeamInvites, setPendingTeamInvites] = useState([])
+  const activeTeamForDetail = useMemo(
+    () => (teamsDetailTeamId ? teams.find((t) => t.id === teamsDetailTeamId) : null),
+    [teams, teamsDetailTeamId],
+  )
   const [selectedHailEvent, setSelectedHailEvent] = useState(null)
   /** Parcel context for storm map view after hail/parcel panels are dismissed */
   const [hailStormParcel, setHailStormParcel] = useState(null)
@@ -472,13 +480,14 @@ function App() {
     onTileUrlRefresh: refreshBasemapTiles,
   })
   const showAppLoading = authLoading || basemapStatus === 'loading'
-  const [viewState, setViewState] = useState({
+  const mapInitialViewState = useMemo(() => ({
     longitude: -96.7970,
     latitude: 32.7767,
     zoom: settings.defaultZoom || 15,
     bearing: 0,
     pitch: 0,
-  })
+  }), [])
+  const viewStateRef = useRef(mapInitialViewState)
 
   useEffect(() => {
     if (basemapStatus !== 'ready') {
@@ -625,7 +634,6 @@ function App() {
       const map = mapInstanceRef.current
       map.jumpTo({ center: [userLocation.lng, userLocation.lat], zoom: initZoom, pitch: 0 })
       map.fire('moveend')
-      setViewState(prev => ({ ...prev, longitude: userLocation.lng, latitude: userLocation.lat, zoom: initZoom, pitch: 0 }))
     }
   }, [userLocation])
 
@@ -2538,15 +2546,18 @@ function App() {
   }, [nav, cancelParcelPopupWork])
 
   const handleParcelDetailsClose = useCallback((options = {}) => {
-    if (isHailDataOpen || hailOpening) return
+    setHailOpening(false)
     if (selectedHailEvent) {
       nav.popMapOverlay()
       return
     }
     returnToParcelDetailsAfterHailEventRef.current = false
-    // Overlay may already be replaced (e.g. new parcel popup) — don't pop the stack again.
     if (!isParcelDetailsOpenRef.current) return
-    if (suppressParcelDetailsDataClearRef.current) return
+    if (suppressParcelDetailsDataClearRef.current) {
+      clearListAddMode()
+      suppressParcelDetailsDataClearRef.current = false
+    }
+    if (isHailDataOpen) nav.popMapOverlay()
     nav.popMapOverlay()
     const openedFromMap = parcelDetailsSource === 'map'
     if (options.reopenPopup && openedFromMap && clickedParcelData) {
@@ -2554,7 +2565,7 @@ function App() {
     } else {
       nav.clearMapOverlays()
     }
-  }, [clickedParcelData, openParcelPopup, nav, parcelDetailsSource, isHailDataOpen, hailOpening, selectedHailEvent])
+  }, [clickedParcelData, openParcelPopup, nav, parcelDetailsSource, isHailDataOpen, selectedHailEvent, clearListAddMode])
 
   const handleEmailClick = useCallback((email, parcelData, leadId = null) => {
     if (authLoading) return
@@ -2795,11 +2806,6 @@ function App() {
       nav.openQuoteEditorFromDeal(prefill)
     })
   }, [nav, guardFeature])
-
-  const openTeamsPanel = useCallback(() => {
-    if (!requireAuth()) return
-    nav.openTeams()
-  }, [requireAuth, nav])
 
   const handleNotificationNavigate = useCallback((data) => {
     const featureId = featureIdForFeedNav(data)
@@ -3380,9 +3386,10 @@ function App() {
         {basemapStatus === 'ready' && basemapStyle ? (
         <MapGL
           key={settings.mapStyle}
-          {...viewState}
+          initialViewState={mapInitialViewState}
+          maxTileCacheSize={80}
           onMove={(evt) => {
-            setViewState(evt.viewState)
+            viewStateRef.current = evt.viewState
           }}
           onDragStart={() => {
             if (!programmaticMoveRef.current) setIsFollowing(false)
@@ -3404,13 +3411,6 @@ function App() {
                 pitch: 0,
               })
               map.fire('moveend')
-              setViewState(prev => ({
-                ...prev,
-                longitude: userLocation.lng,
-                latitude: userLocation.lat,
-                zoom: initZoom,
-                pitch: 0,
-              }))
             }
           }}
           style={{ width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}
@@ -3577,7 +3577,6 @@ function App() {
         isPathTrackingActive={isPathTrackingActive}
         onOpenOutreach={handleOpenOutreach}
         onOpenForms={openFormsPanel}
-        onOpenTeamsPanel={openTeamsPanel}
         onOpenSettings={openSettingsPanel}
         currentUser={currentUser}
         onLogin={openLogin}
@@ -3681,7 +3680,7 @@ function App() {
           }}
           */
         />,
-        document.body
+        getModalPortalContainer() || document.body
       )}
 
       <SkipTracedListPanel
@@ -4094,31 +4093,22 @@ function App() {
       </Suspense>
       )}
 
-      {teamsPanelMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell open={isTeamsPanelOpen} title="Teams" onBack={handlePanelBack} className="teams-panel lists-panel" />
-      }>
-      <TeamsPanel
-        isOpen={isTeamsPanelOpen}
-        panelDockSlot={panelDockSlot('teams', isTeamsPanelOpen)}
-        onClose={handlePanelBack}
-        onBack={handlePanelBack}
-        detailTeamId={teamsDetailTeamId}
-        onOpenTeamDetail={(teamId) => nav.pushTeamsDetail(teamId)}
-        onCloseTeamDetail={() => nav.popIfTop('teams.detail')}
+      {teamDetailMounted && activeTeamForDetail && (
+      <Suspense fallback={null}>
+      <TeamDetails
+        team={activeTeamForDetail}
         currentUser={currentUser}
         getToken={getToken}
-        teams={teams}
+        onClose={() => nav.popIfTop('teams.detail')}
         onTeamsChange={refreshTeams}
         pendingInvites={pendingTeamInvites}
-        teamMembership={teamMembership}
       />
       </Suspense>
       )}
 
       {settingsPanelMounted && (
       <Suspense fallback={
-        <PanelListLoadingShell open={isSettingsPanelOpen} title="Settings" onBack={() => nav.pop()} className="lists-panel" />
+        <PanelListLoadingShell open={isSettingsPanelOpen} title="Settings" onBack={() => nav.pop()} className="settings-panel" />
       }>
       <SettingsPanel
         isOpen={isSettingsPanelOpen}
@@ -4126,6 +4116,12 @@ function App() {
         settings={settings}
         onSettingsChange={handleSettingsChange}
         getToken={getToken}
+        teams={teams}
+        teamMembership={teamMembership}
+        pendingTeamInvites={pendingTeamInvites}
+        onTeamsChange={refreshTeams}
+        onOpenTeamDetail={(teamId) => nav.pushTeamsDetail(teamId)}
+        settingsTeamSectionOpen={!!teamsDetailTeamId}
         onRestartTour={() => {
           nav.pop()
           nav.setShowMenu(false)
@@ -4173,6 +4169,7 @@ function App() {
         teams={teams}
         teamMembership={teamMembership}
         detailLeadId={leadsDetailLeadId}
+        dealsDetailDealId={dealsDetailDealId}
         onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
         onCloseLeadDetail={() => nav.popLeadsDetail()}
         currentUserId={currentUser?.uid}

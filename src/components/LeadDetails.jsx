@@ -47,6 +47,7 @@ import { showConfirm } from './ui/confirm-dialog'
 import { TagPicker } from './tags/TagPicker'
 import { LeadPhotoGallery } from './photos/LeadPhotoGallery'
 import { fetchPhotoReports } from '@/utils/photoReports'
+import { formatPhoneDisplay } from '@/utils/phoneFormat'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -90,6 +91,33 @@ function LeadActionTile({ icon: Icon, label, value, onClick, disabled }) {
   )
 }
 
+function LeadContactRow({ icon: Icon, label, value, onClick, multiline = false }) {
+  const content = (
+    <>
+      <Icon className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-medium uppercase tracking-wide text-white/40">{label}</div>
+        <div
+          className={cn('text-sm text-white/90', multiline ? 'whitespace-normal leading-snug' : 'truncate')}
+          title={value}
+        >
+          {value}
+        </div>
+      </div>
+    </>
+  )
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className="lead-detail-contact-row">
+        {content}
+      </button>
+    )
+  }
+
+  return <div className="lead-detail-contact-row lead-detail-contact-row--static">{content}</div>
+}
+
 function formatActivityWhen(iso) {
   if (!iso) return ''
   try {
@@ -111,6 +139,7 @@ export function LeadDetails({
   isOpen,
   panelDockSlot,
   instantDismiss = false,
+  obscuredByChild = false,
   onClose,
   lead,
   pipelines = [],
@@ -203,6 +232,8 @@ export function LeadDetails({
   const parcelLng = Number(lead.lng ?? parcelData?.lng ?? parcelData?.properties?.LONGITUDE ?? parcelData?.properties?.longitude)
   const hasCoords = Number.isFinite(parcelLat) && Number.isFinite(parcelLng)
   const canViewOnMap = !!(lead.parcelId || hasCoords)
+  const phoneDisplay = formatPhoneDisplay(lead.phone)
+  const hasContactInfo = !!(address || phoneDisplay || lead.email)
 
   const saveNotes = () => {
     if (!notesDirty) return
@@ -274,14 +305,17 @@ export function LeadDetails({
   }
 
   const standaloneDocked = !!panelDockSlot || (topLayer && !nestedOverlay)
-  const effectiveTopLayer = topLayer || nestedOverlay
+  const effectiveTopLayer = obscuredByChild ? false : (topLayer || nestedOverlay)
   const effectiveHideOverlay = hideOverlay || standaloneDocked
   const effectiveSuppressBackdrop = suppressBackdrop || standaloneDocked
 
   return (
     <Dialog open={isOpen} modal={false} onOpenChange={(open) => handlePanelDialogOpenChange(open, false, onClose, isOpen)}>
       <DialogContent
-        className="map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0"
+        className={cn(
+          'map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0',
+          obscuredByChild && 'crm-panel-obscured',
+        )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
         detailFocusOverlay={false}
@@ -301,9 +335,6 @@ export function LeadDetails({
               <PanelBackButton onClick={onClose} />
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-xl font-semibold truncate leading-tight">{name}</DialogTitle>
-                {address && (
-                  <p className="text-xs text-white/50 truncate mt-0.5" title={lead.address || undefined}>{address}</p>
-                )}
                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                   <span
                     className={cn(
@@ -341,7 +372,7 @@ export function LeadDetails({
                 <LeadActionTile
                   icon={Phone}
                   label="Call"
-                  value={lead.phone}
+                  value={formatPhoneDisplay(lead.phone)}
                   onClick={() => onPhoneClick?.(lead.phone, parcelData, lead.id)}
                 />
               ) : (
@@ -351,7 +382,7 @@ export function LeadDetails({
                 <LeadActionTile
                   icon={MessageSquare}
                   label="Text"
-                  value={lead.phone}
+                  value={formatPhoneDisplay(lead.phone)}
                   onClick={() => onTextClick?.(lead.phone, parcelData, lead.id)}
                 />
               ) : (
@@ -390,6 +421,61 @@ export function LeadDetails({
 
           <div className="px-5 py-4 lead-detail-columns-wrap">
             <div className="space-y-3">
+              <section className="lead-detail-section">
+                <LeadDetailSectionTitle
+                  action={onEditLead ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-white/50 hover:text-white/80"
+                      onClick={() => onEditLead(lead)}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit
+                    </Button>
+                  ) : null}
+                >
+                  Contact
+                </LeadDetailSectionTitle>
+                {!hasContactInfo ? (
+                  <p className="text-xs text-white/40">
+                    No contact info on file.
+                    {onEditLead ? ' Tap Edit to add details.' : ''}
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {address && (
+                      <LeadContactRow
+                        icon={MapPin}
+                        label="Address"
+                        value={address}
+                        multiline
+                        onClick={canViewOnMap ? () => {
+                          onClose?.()
+                          onGoToParcelOnMap?.(parcelData || lead)
+                        } : undefined}
+                      />
+                    )}
+                    {phoneDisplay && (
+                      <LeadContactRow
+                        icon={Phone}
+                        label="Phone"
+                        value={phoneDisplay}
+                        onClick={() => onPhoneClick?.(lead.phone, parcelData, lead.id)}
+                      />
+                    )}
+                    {lead.email && (
+                      <LeadContactRow
+                        icon={Mail}
+                        label="Email"
+                        value={lead.email}
+                        onClick={() => onEmailClick?.(lead.email, parcelData, lead.id)}
+                      />
+                    )}
+                  </div>
+                )}
+              </section>
+
               <section className="lead-detail-section">
                 <LeadDetailSectionTitle>Status</LeadDetailSectionTitle>
                 <div className="flex flex-wrap gap-1.5">

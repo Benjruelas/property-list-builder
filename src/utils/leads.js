@@ -5,6 +5,7 @@
 import { splitOwnerName } from './ownerName'
 import { getFullAddress } from './dealPipeline'
 import { collectParcelIdCandidates, resolveParcelId } from './parcelPropertyMap'
+import { formatPhoneDisplay, normalizePhoneForStorage } from './phoneFormat'
 
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
@@ -97,11 +98,17 @@ export async function fetchLeads(getToken) {
   return leads
 }
 
+function withNormalizedPhone(data) {
+  if (!data || typeof data !== 'object' || !('phone' in data)) return data
+  return { ...data, phone: normalizePhoneForStorage(data.phone) }
+}
+
 export async function createLead(getToken, leadData) {
+  const normalizedData = withNormalizedPhone(leadData)
   const token = await getToken()
   if (!token) {
     const leads = loadLocalLeads()
-    if (leadData.parcelId && leads.some((l) => l.parcelId === leadData.parcelId)) {
+    if (normalizedData.parcelId && leads.some((l) => l.parcelId === normalizedData.parcelId)) {
       throw new Error('A lead already exists for this parcel')
     }
     const now = new Date().toISOString()
@@ -110,7 +117,7 @@ export async function createLead(getToken, leadData) {
       status: 'new',
       statusUpdatedAt: now,
       activity: [],
-      ...leadData,
+      ...normalizedData,
       createdAt: now,
       updatedAt: now,
     }
@@ -120,7 +127,7 @@ export async function createLead(getToken, leadData) {
   const res = await fetch(`${getApiBase()}/leads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(leadData)
+    body: JSON.stringify(normalizedData)
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -131,12 +138,13 @@ export async function createLead(getToken, leadData) {
 }
 
 export async function updateLead(getToken, leadId, updates) {
+  const normalizedUpdates = withNormalizedPhone(updates)
   const token = await getToken()
   if (!token) {
     const leads = loadLocalLeads()
     const idx = leads.findIndex((l) => l.id === leadId)
     if (idx === -1) throw new Error('Lead not found')
-    const lead = { ...leads[idx], ...updates, updatedAt: new Date().toISOString() }
+    const lead = { ...leads[idx], ...normalizedUpdates, updatedAt: new Date().toISOString() }
     leads[idx] = lead
     saveLocalLeads(leads)
     return lead
@@ -144,7 +152,7 @@ export async function updateLead(getToken, leadId, updates) {
   const res = await fetch(`${getApiBase()}/leads`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ leadId, ...updates })
+    body: JSON.stringify({ leadId, ...normalizedUpdates })
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -345,7 +353,7 @@ export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {
     parcelId: resolveParcelId(parcelData) || parcelData?.id || null,
     lat: parcelData?.lat ?? (parcelData?.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
     lng: parcelData?.lng ?? (parcelData?.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
-    phone: skipTrace?.phone || skipTrace?.phoneNumbers?.[0] || '',
+    phone: formatPhoneDisplay(skipTrace?.phone || skipTrace?.phoneNumbers?.[0] || ''),
     email: skipTrace?.email || skipTrace?.emails?.[0] || '',
     notes: '',
     properties: parcelData?.properties || null,
@@ -364,7 +372,7 @@ export function buildAutoLeadPayloadFromParcel(parcelData, skipTrace = null) {
     firstName,
     lastName,
     address,
-    phone: (prefill.phone || '').trim() || null,
+    phone: normalizePhoneForStorage(prefill.phone),
     email: (prefill.email || '').trim() || null,
     notes: '',
     parcelId: prefill.parcelId,

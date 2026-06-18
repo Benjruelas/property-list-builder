@@ -81,3 +81,40 @@ export async function findReportInviteByToken(token) {
   if (isReportInviteExpired(invite)) return { invite, index, error: 'expired' }
   return { invite, index, error: null }
 }
+
+export function isValidReportEmail(e) {
+  return typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())
+}
+
+export function supersedePendingReportInvites(allInvites, { reportId, recipientEmail, keepToken }) {
+  const normalizedRecipient = String(recipientEmail || '').trim().toLowerCase()
+  const normalizedReportId = String(reportId || '')
+  const now = new Date().toISOString()
+  let supersededCount = 0
+
+  const next = (allInvites || []).map((inv) => {
+    if (
+      inv.token !== keepToken &&
+      String(inv.reportId) === normalizedReportId &&
+      String(inv.recipientEmail || '').trim().toLowerCase() === normalizedRecipient &&
+      inv.status === 'pending' &&
+      !isReportInviteExpired(inv)
+    ) {
+      supersededCount++
+      return { ...inv, status: 'revoked', revokedAt: now, revokedReason: 'superseded' }
+    }
+    return inv
+  })
+
+  return { invites: next, supersededCount }
+}
+
+export function hasPriorReportInvite(allInvites, { reportId, recipientEmail }) {
+  const normalizedRecipient = String(recipientEmail || '').trim().toLowerCase()
+  const normalizedReportId = String(reportId || '')
+  return (allInvites || []).some(
+    (inv) =>
+      String(inv.reportId) === normalizedReportId &&
+      String(inv.recipientEmail || '').trim().toLowerCase() === normalizedRecipient
+  )
+}

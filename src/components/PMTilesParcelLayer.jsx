@@ -262,6 +262,7 @@ export function PMTilesParcelLayer({
     let labelUpdateTimer = null
     let lastLabelKey = ''
     let lastLabelRefreshAt = 0
+    let idleLabelHandler = null
     const LABEL_DEBOUNCE_MS = 200
     const LABEL_MIN_INTERVAL_MS = 400
 
@@ -300,7 +301,12 @@ export function PMTilesParcelLayer({
 
     function scheduleLabelRefreshAfterMove() {
       refreshLabels()
-      map.once('idle', refreshLabels)
+      if (idleLabelHandler) return
+      idleLabelHandler = () => {
+        idleLabelHandler = null
+        refreshLabels()
+      }
+      map.once('idle', idleLabelHandler)
     }
 
     function ensureLayers() {
@@ -454,6 +460,10 @@ export function PMTilesParcelLayer({
       if (labelUpdateTimer) clearTimeout(labelUpdateTimer)
       map.off('moveend', scheduleLabelRefreshAfterMove)
       map.off('zoomend', scheduleLabelRefreshAfterMove)
+      if (idleLabelHandler) {
+        map.off('idle', idleLabelHandler)
+        idleLabelHandler = null
+      }
       map.off('click', FILL_LAYER, onClick)
       map.off('mouseenter', FILL_LAYER, onEnter)
       map.off('mouseleave', FILL_LAYER, onLeave)

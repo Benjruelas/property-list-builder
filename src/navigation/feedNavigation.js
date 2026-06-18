@@ -128,11 +128,11 @@ export function feedDataToFrames(data, ctx, opts = {}) {
       return {
         ok: true,
         frames: standaloneDetail
-          ? [{ type: 'teams.detail', teamId: data.teamId }]
-          : [{ type: 'teams' }, { type: 'teams.detail', teamId: data.teamId }],
+          ? [{ type: 'settings' }, { type: 'teams.detail', teamId: data.teamId }]
+          : [{ type: 'settings' }, { type: 'teams.detail', teamId: data.teamId }],
       }
     }
-    return { ok: true, frames: [{ type: 'teams' }] }
+    return { ok: true, frames: [{ type: 'settings' }] }
   }
 
   return { ok: false }

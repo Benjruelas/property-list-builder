@@ -288,9 +288,12 @@ describe('feedNavigation', () => {
     expect(r.frames).toEqual([{ type: 'forms.fill', templateId: 'tpl1' }])
   })
 
-  it('maps team activity to standalone teams.detail', () => {
+  it('maps team activity to settings with team detail', () => {
     const r = feedDataToFrames({ type: 'team', teamId: 'team1' }, ctx, { standaloneDetail: true })
-    expect(r.frames).toEqual([{ type: 'teams.detail', teamId: 'team1' }])
+    expect(r.frames).toEqual([
+      { type: 'settings' },
+      { type: 'teams.detail', teamId: 'team1' },
+    ])
   })
 
   it('maps quote activity to standalone quotes.detail', () => {
@@ -681,6 +684,22 @@ describe('recipes', () => {
       { keepTasks: true },
     )
     expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'deals.detail', 'tasks'])
+    expect(stack[1].dockBesideTasks).toBe(true)
+  })
+
+  it('deal opened from lead detail keeps lead as dock anchor beside tasks', () => {
+    const state = createInitialState()
+    state.navStack = [
+      { type: 'leads.detail', leadId: 'l1', dockBesideTasks: true },
+      { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1', dockBesideTasks: true },
+      { type: 'tasks' },
+    ]
+    expect(selectTasksDockLayout(state)).toEqual({
+      tasksDocked: true,
+      primaryRoot: 'leads',
+      tasksSoloDetail: false,
+      soloDetailRoot: null,
+    })
   })
 
   it('recipeOpenDealFromLeadDetail replaces pipes stack when opening from lead', () => {
@@ -690,6 +709,36 @@ describe('recipes', () => {
       'p1',
     )
     expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'deals.detail'])
+  })
+
+  it('recipeOpenDealFromLeadDetail from deals lead overlay keeps deals list and lead', () => {
+    const stack = recipeOpenDealFromLeadDetail(
+      [
+        { type: 'deals' },
+        { type: 'deals.detail', dealId: 'd0', pipelineId: 'p1', returnToDealsList: true },
+        { type: 'deals.lead', leadId: 'l1' },
+        { type: 'tasks' },
+      ],
+      'd1',
+      'p1',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.lead', 'deals.detail', 'tasks'])
+    expect(stack[2].dealId).toBe('d1')
+  })
+
+  it('pop deals.detail from deals lead overlay returns to lead not map', () => {
+    const stack = [
+      { type: 'deals' },
+      { type: 'deals.lead', leadId: 'l1' },
+      { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1', dockBesideTasks: true },
+      { type: 'tasks' },
+    ]
+    expect(popFrameIfTopOfCore(stack, 'deals.detail').map((f) => f.type)).toEqual([
+      'deals',
+      'deals.lead',
+      'tasks',
+    ])
   })
 
   it('pop deals.detail returns to lead detail', () => {

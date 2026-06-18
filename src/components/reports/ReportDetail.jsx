@@ -110,12 +110,10 @@ export function ReportDetail({
                   Download PDF
                 </Button>
               )}
-              {report.pdfKey && (
-                <Button type="button" className="min-h-[44px]" onClick={() => setSendOpen(true)}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send report
-                </Button>
-              )}
+              <Button type="button" className="min-h-[44px]" onClick={() => setSendOpen(true)}>
+                <Send className="h-4 w-4 mr-2" />
+                Send report
+              </Button>
             </div>
           </div>
         </DialogContent>
