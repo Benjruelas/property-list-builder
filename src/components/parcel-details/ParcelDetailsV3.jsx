@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Phone, ListPlus, UserPlus, CloudRain, Camera, /* Telescope, */ CheckCircle2, Loader2 } from 'lucide-react'
+import { X, Phone, ListPlus, UserPlus, User, CloudRain, Camera, /* Telescope, */ CheckCircle2, Loader2 } from 'lucide-react'
 import { PanelBackButton } from '../ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { DirectionsPicker } from '../DirectionsPicker'
@@ -24,7 +24,7 @@ const TABS = [
  */
 const OUTSIDE_CLOSE_GRACE_MS = 500
 
-export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onOpenPhotos, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false, obscuredByPanel = false }) {
+export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onPhoneClick, lists = [], enableAutoClose = true, onSkipTrace, onAddToList, onConvertToLead, onViewLead, onOpenPhotos, onHailData, /* onRoofInspector, */ isLead, popupData, suspendClose = false, obscuredByPanel = false }) {
   const data = useParcelDetailsData({ isOpen, parcelData, lists, enableAutoClose, onClose })
   const [activeTab, setActiveTab] = useState('overview')
   const openedAtRef = useRef(0)
@@ -188,14 +188,21 @@ export function ParcelDetailsV3({ isOpen, onClose, parcelData, onEmailClick, onP
                 onClick={() => onAddToList()}
               />
             )}
-            {!isLead && onConvertToLead && (
+            {isLead && onViewLead ? (
+              <ParcelDetailsActionTile
+                icon={User}
+                label="View Lead"
+                variant="lead"
+                onClick={() => onViewLead()}
+              />
+            ) : !isLead && onConvertToLead ? (
               <ParcelDetailsActionTile
                 icon={UserPlus}
                 label="Add Lead"
                 variant="lead"
                 onClick={() => onConvertToLead()}
               />
-            )}
+            ) : null}
             {onOpenPhotos && (
               <ParcelDetailsActionTile
                 icon={Camera}

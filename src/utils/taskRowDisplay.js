@@ -1,7 +1,11 @@
 import { displayLeadName } from './leads'
-import { formatTaskCompletedDate, formatTaskScheduledDate } from './leadTasks'
+import {
+  formatTaskCompletedDate,
+  formatTaskScheduledDate,
+  getTaskDueTimestamp,
+} from './leadTasks'
 
-/** @typedef {'panel' | 'lead' | 'deal' | 'minimal'} TaskRowContext */
+export { getTaskDueTimestamp }
 
 export function taskHasLeadLink(task) {
   return !!(task?.parcelId || task?.leadId)
@@ -28,10 +32,6 @@ export function resolveTaskDealLabel(task, allDeals = []) {
   if (!task?.dealId) return null
   const deal = allDeals.find((d) => d.id === task.dealId)
   return (deal?.title || deal?.leadName || deal?.leadAddress || 'Deal').trim()
-}
-
-export function getTaskDueTimestamp(task) {
-  return task?.scheduledAt ?? task?.dueAt ?? null
 }
 
 export function formatTaskDueLabel(task) {

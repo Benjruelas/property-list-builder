@@ -478,8 +478,12 @@ export function DealPipeline({
   const handleDeleteDeal = async (dealId, e) => {
     e?.stopPropagation()
     const deal = displayDeals.find((d) => d.id === dealId)
-    const dealLabel = deal ? (deal.title || deal.leadName || deal.leadAddress || 'Unknown') : 'Unknown'
-    const confirmed = await showConfirm('Remove this deal from the pipeline?', 'Remove deal', { detail: dealLabel })
+    const confirmed = await showConfirm({
+      title: 'Delete deal?',
+      message: 'Tasks and files on this deal will be lost.\nThis cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
     if (!confirmed) return
     if (apiMode && !canCollaboratePipeline) {
       persistDeals(displayDeals.filter(d => d.id !== dealId))

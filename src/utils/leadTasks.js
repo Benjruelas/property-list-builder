@@ -75,15 +75,22 @@ function saveStore(store) {
   }
 }
 
+export function getTaskDueTimestamp(task) {
+  const due = task?.scheduledAt ?? task?.dueAt ?? null
+  return due != null && due !== '' ? Number(due) : null
+}
+
+export function compareTasksByDueDate(a, b) {
+  const aDue = getTaskDueTimestamp(a)
+  const bDue = getTaskDueTimestamp(b)
+  if (aDue != null && bDue != null && aDue !== bDue) return aDue - bDue
+  if (aDue != null && bDue == null) return -1
+  if (aDue == null && bDue != null) return 1
+  return (b.createdAt || 0) - (a.createdAt || 0)
+}
+
 function sortTasksFlat(arr) {
-  return [...arr].sort((a, b) => {
-    const aSched = a.scheduledAt ?? 0
-    const bSched = b.scheduledAt ?? 0
-    if (aSched && bSched) return aSched - bSched
-    if (aSched) return -1
-    if (bSched) return 1
-    return (b.createdAt || 0) - (a.createdAt || 0)
-  })
+  return [...arr].sort(compareTasksByDueDate)
 }
 
 /**

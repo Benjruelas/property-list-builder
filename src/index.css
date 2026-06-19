@@ -1044,7 +1044,7 @@
     top: var(--ui-panel-center-y) !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel) {
     box-sizing: border-box !important;
     width: var(--ui-panel-width) !important;
     max-width: var(--ui-panel-width) !important;
@@ -1055,7 +1055,7 @@
     overflow-x: clip !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-list-panel):not(.parcel-details-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel) {
     width: var(--ui-panel-width) !important;
     min-width: 0 !important;
     max-width: var(--ui-panel-width) !important;
@@ -1283,9 +1283,21 @@
 }
 .confirm-dialog.map-panel-dialog,
 .map-panel.confirm-dialog {
-  width: min(calc(100vw - 2rem), 20rem) !important;
+  width: min(calc(100vw - 2rem), 22rem) !important;
   height: auto !important;
   max-height: min(90vh, 24rem) !important;
+}
+
+.confirm-dialog .confirm-dialog-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.625rem;
+}
+
+.confirm-dialog .confirm-dialog-actions .confirm-dialog-cancel,
+.confirm-dialog .confirm-dialog-actions .confirm-dialog-confirm {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .login-panel.map-panel-dialog,
 .map-panel.login-panel,
@@ -3569,20 +3581,28 @@
   background: rgba(248, 113, 113, 0.35) !important;
 }
 
-/* Confirm dialog - primary confirm button sits visually "above" the cancel by
-   using a brighter translucent white with a visible border. */
-.confirm-dialog button[class*="bg-destructive"],
-.confirm-dialog .confirm-dialog-confirm {
+/* Confirm dialog — neutral confirm vs destructive delete */
+.confirm-dialog .confirm-dialog-confirm:not(.confirm-dialog-confirm--destructive) {
   background: rgba(255, 255, 255, 0.22) !important;
   border: 1px solid rgba(255, 255, 255, 0.5) !important;
   color: rgba(255, 255, 255, 0.98) !important;
   font-weight: 600 !important;
   box-shadow: none !important;
 }
-.confirm-dialog button[class*="bg-destructive"]:hover:not(:disabled),
-.confirm-dialog .confirm-dialog-confirm:hover:not(:disabled) {
+.confirm-dialog .confirm-dialog-confirm:not(.confirm-dialog-confirm--destructive):hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.3) !important;
   border-color: rgba(255, 255, 255, 0.65) !important;
+}
+.confirm-dialog .confirm-dialog-confirm--destructive {
+  background: rgba(220, 38, 38, 0.92) !important;
+  border: 1px solid rgba(248, 113, 113, 0.45) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+.confirm-dialog .confirm-dialog-confirm--destructive:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.96) !important;
+  border-color: rgba(252, 165, 165, 0.55) !important;
 }
 .confirm-dialog .confirm-dialog-cancel {
   background: rgba(255, 255, 255, 0.06) !important;
@@ -5453,15 +5473,20 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   display: none;
 }
 
-.crm-list-rows {
+.crm-list-rows,
+.crm-list-rows-group {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
 @media (min-width: 768px) {
-  .crm-list-rows {
+  .crm-list-rows,
+  .crm-list-rows-group {
     gap: 0.375rem;
+  }
+
+  .crm-list-rows {
     overflow-x: auto;
     scrollbar-width: thin;
   }

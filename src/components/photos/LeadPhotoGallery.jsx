@@ -5,7 +5,6 @@ import { leadPhotoUrl, deleteLeadPhoto, fetchLeadPhotoBlob, sumLeadPhotoBytes, L
 import { StorageUsageBar } from '../ui/StorageUsageBar'
 import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 import { showToast } from '../ui/toast'
-import { showConfirm } from '../ui/confirm-dialog'
 import { PhotoMode } from './PhotoMode'
 import { PhotoAnnotator } from './PhotoAnnotator'
 import { cn } from '@/lib/utils'
@@ -86,13 +85,6 @@ export function LeadPhotoGallery({
   }
 
   const handleDelete = async (photo) => {
-    const ok = await showConfirm({
-      title: 'Delete photo?',
-      description: 'This cannot be undone.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    })
-    if (!ok) return
     setDeletingId(photo.id)
     try {
       const { lead: updated } = await deleteLeadPhoto(getToken, { leadId: lead.id, photoId: photo.id })

@@ -413,11 +413,19 @@
 }
 
 /* Confirm dialog */
-[data-ui-theme='light'] .confirm-dialog .confirm-dialog-confirm,
-[data-ui-theme='light'] .confirm-dialog button[class*='bg-destructive'] {
+[data-ui-theme='light'] .confirm-dialog .confirm-dialog-confirm:not(.confirm-dialog-confirm--destructive) {
   background: rgba(0, 0, 0, 0.08) !important;
   border-color: rgba(0, 0, 0, 0.22) !important;
   color: var(--map-panel-text) !important;
+}
+[data-ui-theme='light'] .confirm-dialog .confirm-dialog-confirm--destructive {
+  background: #dc2626 !important;
+  border-color: #b91c1c !important;
+  color: #fff !important;
+}
+[data-ui-theme='light'] .confirm-dialog .confirm-dialog-confirm--destructive:hover:not(:disabled) {
+  background: #b91c1c !important;
+  border-color: #991b1b !important;
 }
 [data-ui-theme='light'] .confirm-dialog .confirm-dialog-cancel {
   background: var(--map-panel-surface-muted) !important;

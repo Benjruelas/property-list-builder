@@ -46,6 +46,27 @@ function filterListsByTab(lists, tab, ownerId, highlightedIds) {
   }
 }
 
+function formatListCreatedAt(iso) {
+  if (!iso) return null
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  } catch {
+    return null
+  }
+}
+
+function sortListsNewestFirst(lists) {
+  return [...lists].sort((a, b) => {
+    const ta = new Date(a.createdAt || a.updatedAt || 0).getTime()
+    const tb = new Date(b.createdAt || b.updatedAt || 0).getTime()
+    return tb - ta
+  })
+}
+
 export function ListPanel({ 
   currentUser,
   isOpen,
@@ -289,7 +310,7 @@ export function ListPanel({
     if (q) {
       result = result.filter((l) => (l.name || '').toLowerCase().includes(q))
     }
-    return filterByTags(result, selectedTagIds)
+    return sortListsNewestFirst(filterByTags(result, selectedTagIds))
   }, [allLists, tab, ownerId, selectedListIds, search, selectedTagIds])
 
   const isListOwnedByUser = (list) => list?.ownerId === ownerId
@@ -473,6 +494,7 @@ export function ListPanel({
               const listColor = listColorIndex >= 0 ? LIST_HIGHLIGHT_COLORS[listColorIndex] : undefined
               const parcelCount = list.parcels?.length ?? 0
               const rowDisabled = !isAddingSingleParcel && !isBulkEmailMode && parcelCount === 0
+              const createdLabel = formatListCreatedAt(list.createdAt)
 
               return (
                 <div
@@ -541,6 +563,11 @@ export function ListPanel({
                       )}
                       <LeadSharingIcon resource={list} collaboratorHint={!isListOwnedByUser(list)} />
                     </div>
+                    {createdLabel ? (
+                      <p className="text-sm panel-item-meta text-white/55 truncate">
+                        {createdLabel}
+                      </p>
+                    ) : null}
                     <p className="text-sm opacity-70 truncate">
                       {parcelCount} parcel{parcelCount !== 1 ? 's' : ''}
                     </p>

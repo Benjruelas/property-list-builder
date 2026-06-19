@@ -1361,6 +1361,23 @@ function App() {
     })
   }, [currentUser, isParcelALeadCheck, nav, guardFeature])
 
+  const handleViewLeadFromParcel = useCallback((parcelData) => {
+    if (!currentUser?.uid) {
+      nav.openLogin()
+      showToast('Please sign in to view leads', 'info')
+      return
+    }
+    guardFeature('leads', () => {
+      const lead = findLeadByParcelId(leads, parcelData)
+      if (!lead?.id) {
+        showToast('Lead not found', 'error')
+        return
+      }
+      nav.clearMapOverlays()
+      nav.openLeadDetailFromTasks(lead.id)
+    })
+  }, [currentUser, leads, nav, guardFeature])
+
   const handleLeadCreated = useCallback((lead) => {
     setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
     refreshLeads()
@@ -1583,11 +1600,12 @@ function App() {
 
   const handleRemoveDeal = useCallback(async (deal, pipelineOrId) => {
     if (!deal) return false
-    const confirmed = await showConfirm(
-      'Remove this deal from the pipeline? Tasks and files on the deal will be lost.',
-      'Remove Deal',
-      { detail: deal.title || 'Deal', confirmText: 'Remove' }
-    )
+    const confirmed = await showConfirm({
+      title: 'Delete deal?',
+      message: 'Tasks and files on this deal will be lost.\nThis cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
     if (!confirmed) return false
     const pipelineId = resolvePipelineId(pipelineOrId)
     try {
@@ -3664,6 +3682,7 @@ function App() {
           onSkipTrace={() => { if (clickedParcelData) handleSkipTraceParcel(clickedParcelData) }}
           onAddToList={() => beginAddParcelToList(clickedParcelData)}
           onConvertToLead={() => { if (clickedParcelData) handleConvertToLead(clickedParcelData) }}
+          onViewLead={() => { if (clickedParcelData) handleViewLeadFromParcel(clickedParcelData) }}
           onOpenPhotos={handleParcelPhotos}
           onHailData={() => {
             if (!clickedParcelData) return

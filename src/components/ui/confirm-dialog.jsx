@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './dialog'
 import { Button } from './button'
+import { cn } from '@/lib/utils'
 
 let confirmQueue = []
 let confirmListeners = new Set()
@@ -12,10 +13,22 @@ const processQueue = () => {
 export const showConfirm = (messageOrObj, title = 'Confirm', options = {}) => {
   return new Promise((resolve) => {
     if (typeof messageOrObj === 'object' && messageOrObj !== null) {
-      const { message, title: t, onConfirm, ...rest } = messageOrObj
-      confirmQueue.push({ message, title: t || 'Confirm', resolve: onConfirm ? (v) => { if (v) onConfirm(); resolve(v) } : resolve, ...rest })
+      const { message, description, title: t, onConfirm, destructive, variant, ...rest } = messageOrObj
+      confirmQueue.push({
+        message: message ?? description ?? null,
+        title: t || 'Confirm',
+        destructive: destructive || variant === 'danger',
+        resolve: onConfirm ? (v) => { if (v) onConfirm(); resolve(v) } : resolve,
+        ...rest,
+      })
     } else {
-      confirmQueue.push({ message: messageOrObj, title, resolve, ...options })
+      confirmQueue.push({
+        message: messageOrObj,
+        title,
+        resolve,
+        destructive: options.destructive || options.variant === 'danger',
+        ...options,
+      })
     }
     processQueue()
   })
@@ -74,6 +87,11 @@ export const ConfirmDialog = () => {
 
   if (!currentConfirm) return null
 
+  const isDestructive = currentConfirm.destructive === true
+  const bodyMessage = currentConfirm.message
+  const useDetailTitle = !!currentConfirm.detailSubtitle
+  const confirmLabel = currentConfirm.confirmLabel || currentConfirm.confirmText || 'Confirm'
+
   return (
     <Dialog open={open} modal onOpenChange={(isOpen) => {
       if (!isOpen) {
@@ -81,44 +99,53 @@ export const ConfirmDialog = () => {
       }
     }}>
       <DialogContent
-        className="map-panel confirm-dialog max-w-[320px] rounded-2xl"
+        className={cn(
+          'map-panel confirm-dialog overflow-hidden rounded-2xl border border-white/15 p-0 gap-0',
+          isDestructive && 'confirm-dialog--destructive',
+        )}
         showCloseButton={false}
         focusOverlay
         topLayer
         confirmLayer
         data-confirm-dialog
       >
-        <DialogHeader>
-          <DialogTitle>
-            {currentConfirm.detailSubtitle
-              ? (currentConfirm.detail || currentConfirm.title)
-              : currentConfirm.title}
-          </DialogTitle>
-          {currentConfirm.detailSubtitle && (
-            <DialogDescription className="text-xs opacity-70 mt-0.5">
-              {currentConfirm.detailSubtitle}
-            </DialogDescription>
-          )}
-          {!currentConfirm.detailSubtitle && (
-            <DialogDescription className="sr-only">
-              {currentConfirm.message}
-            </DialogDescription>
-          )}
-        </DialogHeader>
-        <p className="text-sm text-white/80 py-2 text-center">{currentConfirm.message}</p>
-        {currentConfirm.detail && !currentConfirm.detailSubtitle && (
-          <div className="mt-3 rounded-lg border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white/95">
-            {currentConfirm.detail}
-          </div>
-        )}
-        <DialogFooter className="gap-2 sm:gap-3 pt-2">
-          <Button variant="outline" onClick={handleCancel} className="confirm-dialog-cancel w-full sm:w-auto">
+        <div className="confirm-dialog-body px-5 pt-6 pb-2 text-center">
+          <DialogHeader className="items-center space-y-2 text-center sm:text-center">
+            <DialogTitle className="text-base font-semibold leading-snug text-white/95">
+              {useDetailTitle ? (currentConfirm.detail || currentConfirm.title) : currentConfirm.title}
+            </DialogTitle>
+            {useDetailTitle && currentConfirm.detailSubtitle ? (
+              <DialogDescription className="whitespace-pre-line text-sm leading-relaxed text-white/60">
+                {currentConfirm.detailSubtitle}
+              </DialogDescription>
+            ) : null}
+            {!useDetailTitle && bodyMessage ? (
+              <DialogDescription className="whitespace-pre-line text-sm leading-relaxed text-white/60">
+                {bodyMessage}
+              </DialogDescription>
+            ) : null}
+          </DialogHeader>
+          {currentConfirm.detail && !useDetailTitle ? (
+            <div className="confirm-dialog-detail mt-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-left text-sm leading-relaxed text-white/90">
+              {currentConfirm.detail}
+            </div>
+          ) : null}
+        </div>
+        <div className="confirm-dialog-actions flex gap-2.5 px-5 pb-5 pt-2">
+          <Button variant="outline" onClick={handleCancel} className="confirm-dialog-cancel min-w-0 flex-1">
             Cancel
           </Button>
-          <Button variant="destructive" onClick={handleConfirm} className="confirm-dialog-confirm w-full sm:w-auto">
-            {currentConfirm.confirmLabel || currentConfirm.confirmText || 'Confirm'}
+          <Button
+            variant={isDestructive ? 'destructive' : 'default'}
+            onClick={handleConfirm}
+            className={cn(
+              'confirm-dialog-confirm min-w-0 flex-1',
+              isDestructive && 'confirm-dialog-confirm--destructive',
+            )}
+          >
+            {confirmLabel}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )

@@ -347,7 +347,7 @@ export function DealsPanel({
           </DialogHeader>
 
           <div
-            className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 space-y-1.5 min-h-0"
+            className="flex-1 overflow-y-auto scrollbar-hide px-6 py-3 min-h-0"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           >
             <div className="mb-3 space-y-2">
@@ -485,7 +485,7 @@ export function DealsPanel({
                     const collapsed = collapsedPipelines[pipeline.id]
                     const showHeader = allPipelineData.length > 1
                     return (
-                      <div key={pipeline.id}>
+                      <div key={pipeline.id} className="crm-list-rows-group">
                         {showHeader && (
                           <button
                             type="button"

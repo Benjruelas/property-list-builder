@@ -243,12 +243,14 @@ export function LeadDetails({
   }
 
   const handleDelete = async () => {
-    const ok = await showConfirm(
-      'Delete this lead?',
-      linkedDeals.length > 0
-        ? `This lead has ${linkedDeals.length} deal(s) in pipes. Delete anyway?`
-        : 'This cannot be undone.'
-    )
+    const ok = await showConfirm({
+      title: 'Delete lead?',
+      message: linkedDeals.length > 0
+        ? `This lead has ${linkedDeals.length} deal(s) in pipes. This cannot be undone.`
+        : 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
     if (!ok) return
     try {
       await deleteLead(getToken, lead.id)
