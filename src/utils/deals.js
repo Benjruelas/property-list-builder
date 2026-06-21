@@ -33,6 +33,7 @@ export function buildDealFromLead(lead, columns, pipelineId = null, overrides = 
     costs: normalizeDealLineItems(overrides.costs),
     tasks: [],
     files: [],
+    photos: [],
     leadName,
     leadAddress,
     parcelId: lead.parcelId || null,

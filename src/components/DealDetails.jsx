@@ -5,7 +5,7 @@ import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { handlePanelDialogOpenChange } from './ui/panelDialogUtils'
+import { handleChildPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { formatLeadAddress, displayLeadName } from '@/utils/leads'
 import { formatTimeInState } from '@/utils/dealPipeline'
@@ -21,6 +21,7 @@ import { fetchQuotes, getCachedDealQuotes, setCachedDealQuotes } from '@/utils/q
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatQuoteMoney } from '@/utils/quoteMath'
 import { TagPicker } from './tags/TagPicker'
+import { DealPhotoGallery } from './photos/DealPhotoGallery'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -56,6 +57,7 @@ export function DealDetails({
   panelDockSlot,
   obscuredByChild = false,
   leadLinkActive = false,
+  primaryDetail = false,
   pipelines = [],
   leads = [],
   teams = [],
@@ -68,6 +70,8 @@ export function DealDetails({
   canSeeDealAmounts = true,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
+  canAccessPhotos = true,
+  currentUser = null,
 }) {
   const d = closedRecord?.deal || deal
   const pipelineMeta = closedRecord?.closedFrom || pipeline
@@ -100,6 +104,8 @@ export function DealDetails({
   const [dealQuotesLoading, setDealQuotesLoading] = useState(false)
   const fileInputRef = useRef(null)
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
+  const [tasksNestedOverlay, setTasksNestedOverlay] = useState(false)
+  const [photosNestedOverlay, setPhotosNestedOverlay] = useState(false)
 
   useEffect(() => {
     if (!d?.id || !getToken) {
@@ -145,6 +151,9 @@ export function DealDetails({
   const effectiveTopLayer = topLayer || nestedOverlay
   const effectiveHideOverlay = true
   const effectiveSuppressBackdrop = true
+  const suppressClickOutDismiss = primaryDetail || panelDockSlot === 'primary'
+  const hasNestedOverlay =
+    menuOpen || previewFileIndex !== null || leadLinkActive || tasksNestedOverlay || photosNestedOverlay
 
   const closeMenu = () => {
     setMenuOpen(false)
@@ -236,7 +245,11 @@ export function DealDetails({
     <Dialog
       open
       modal={false}
-      onOpenChange={(open) => handlePanelDialogOpenChange(open, leadLinkActive, onClose, true)}
+      onOpenChange={(open) => handleChildPanelDismiss(open, onClose, {
+        suppress: suppressClickOutDismiss,
+        hasNestedOverlay,
+        wasOpen: true,
+      })}
     >
       <DialogContent
         className={cn(
@@ -374,91 +387,18 @@ export function DealDetails({
                 />
               </section>
 
-              {(onOpenQuote || (!readOnly && !isClosed && onCreateQuoteForDeal)) && (
-                <section className="lead-detail-section">
-                  <DealDetailSectionTitle
-                    action={
-                      !readOnly && !isClosed && onCreateQuoteForDeal ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => onCreateQuoteForDeal({ deal: d, pipeline, lead })}
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Create
-                        </Button>
-                      ) : null
-                    }
-                  >
-                    Quotes
-                  </DealDetailSectionTitle>
-                  {dealQuotesLoading ? (
-                    <div className="flex items-center gap-2 py-2 text-xs opacity-50">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                      Loading quotes…
-                    </div>
-                  ) : dealQuotes.length === 0 ? (
-                    <p className="text-xs text-white/40 py-1">No quotes linked to this deal</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {dealQuotes.map((q) => (
-                        <li key={q.id}>
-                          <button
-                            type="button"
-                            disabled={!onOpenQuote}
-                            onClick={() => onOpenQuote?.(q)}
-                            className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
-                          >
-                            <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{q.title || 'Quote'}</div>
-                              <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
-                                <QuoteStatusBadge status={q.status} />
-                                {canSeeDealAmounts && (
-                                  <span className="tabular-nums">{formatQuoteMoney(q.total)}</span>
-                                )}
-                              </div>
-                            </div>
-                            <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
+              {canAccessPhotos && pipelineMeta?.id && (
+                <DealPhotoGallery
+                  deal={d}
+                  pipelineId={pipelineMeta.id}
+                  lead={lead}
+                  getToken={getToken}
+                  currentUser={currentUser}
+                  readOnly={readOnly || isClosed}
+                  onDealUpdate={onDealUpdate}
+                  onNestedOverlayChange={setPhotosNestedOverlay}
+                />
               )}
-            </div>
-
-            <div className="space-y-3">
-              {canSeeDealAmounts && (
-                <section className="lead-detail-section">
-                  <DealDetailSectionTitle>Finances</DealDetailSectionTitle>
-                  <DealFinancesPanel
-                    payments={payments}
-                    costs={costs}
-                    onPaymentsChange={handlePaymentsChange}
-                    onCostsChange={handleCostsChange}
-                    onPaymentsCommit={handlePaymentsBlur}
-                    onCostsCommit={handleCostsBlur}
-                    readOnly={readOnly || isClosed}
-                    canSeeDealAmounts={canSeeDealAmounts}
-                  />
-                </section>
-              )}
-
-              <DealTasksSection
-                deal={d}
-                lead={lead}
-                pipeline={pipelineMeta}
-                leads={leads}
-                pipelines={pipelines}
-                teams={teams}
-                getToken={getToken}
-                onPipelinesChange={onPipelinesChange}
-                onOpenScheduleAtDate={onOpenScheduleAtDate}
-                refreshKey={taskListEpoch}
-                readOnly={readOnly || isClosed}
-              />
 
               <section className="lead-detail-section">
                 <DealDetailSectionTitle
@@ -539,6 +479,93 @@ export function DealDetails({
                   ))}
                 </ul>
               </section>
+            </div>
+
+            <div className="space-y-3">
+              <DealTasksSection
+                deal={d}
+                lead={lead}
+                pipeline={pipelineMeta}
+                leads={leads}
+                pipelines={pipelines}
+                teams={teams}
+                getToken={getToken}
+                onPipelinesChange={onPipelinesChange}
+                onOpenScheduleAtDate={onOpenScheduleAtDate}
+                refreshKey={taskListEpoch}
+                readOnly={readOnly || isClosed}
+                onNestedOverlayChange={setTasksNestedOverlay}
+              />
+
+              {(onOpenQuote || (!readOnly && !isClosed && onCreateQuoteForDeal)) && (
+                <section className="lead-detail-section">
+                  <DealDetailSectionTitle
+                    action={
+                      !readOnly && !isClosed && onCreateQuoteForDeal ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => onCreateQuoteForDeal({ deal: d, pipeline, lead })}
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" /> Create
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    Quotes
+                  </DealDetailSectionTitle>
+                  {dealQuotesLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-xs opacity-50">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                      Loading quotes…
+                    </div>
+                  ) : dealQuotes.length === 0 ? (
+                    <p className="text-xs text-white/40 py-1">No quotes linked to this deal</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {dealQuotes.map((q) => (
+                        <li key={q.id}>
+                          <button
+                            type="button"
+                            disabled={!onOpenQuote}
+                            onClick={() => onOpenQuote?.(q)}
+                            className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
+                          >
+                            <QuoteIcon className="h-4 w-4 shrink-0 opacity-50" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{q.title || 'Quote'}</div>
+                              <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
+                                <QuoteStatusBadge status={q.status} />
+                                {canSeeDealAmounts && (
+                                  <span className="tabular-nums">{formatQuoteMoney(q.total)}</span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {canSeeDealAmounts && (
+                <section className="lead-detail-section">
+                  <DealDetailSectionTitle>Finances</DealDetailSectionTitle>
+                  <DealFinancesPanel
+                    payments={payments}
+                    costs={costs}
+                    onPaymentsChange={handlePaymentsChange}
+                    onCostsChange={handleCostsChange}
+                    onPaymentsCommit={handlePaymentsBlur}
+                    onCostsCommit={handleCostsBlur}
+                    readOnly={readOnly || isClosed}
+                    canSeeDealAmounts={canSeeDealAmounts}
+                  />
+                </section>
+              )}
             </div>
           </div>
         </div>

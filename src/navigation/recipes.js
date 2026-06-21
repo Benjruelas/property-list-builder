@@ -198,6 +198,18 @@ export function recipeOpenStandaloneLeadDetail(currentStack, leadId, opts = {}) 
   return detailStack
 }
 
+/** Open lead detail as primary panel; keeps Schedule in stack for back. */
+export function recipeOpenLeadDetailFromSchedule(currentStack, leadId, opts = {}) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const withoutLeadFrames = coreStack.filter(
+    (f) => f.type !== 'schedule.lead' && f.type !== 'leads.detail',
+  )
+  const hasSchedule = withoutLeadFrames.some((f) => frameRoot(f.type) === 'schedule')
+  const stackBase = hasSchedule ? withoutLeadFrames : [...withoutLeadFrames, { type: 'schedule' }]
+  const detail = { type: 'leads.detail', leadId, dockBesideTasks: true }
+  return appendTrailingTasks([...stackBase, detail], opts.keepTasks ? tasksFrames : [])
+}
+
 /** Open deal detail only — no Deals list panel (e.g. from Tasks). */
 export function recipeOpenStandaloneDealDetail(currentStack, dealId, pipelineId, opts = {}) {
   const detailStack = [{ type: 'deals.detail', dealId, pipelineId, dockBesideTasks: true }]
@@ -217,6 +229,15 @@ export function recipeOpenQuoteEditorFromDeal(currentStack, prefill) {
     ...stack.filter((f) => f.type !== 'quotes.editor' && f.type !== 'quotes.detail'),
     { type: 'quotes.editor', prefill },
   ]
+}
+
+/** Open quote detail while keeping the Quotes list frame when it was already open. */
+export function recipePushQuotesDetail(currentStack, quoteId) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const hadQuotesList = coreStack.some((f) => f.type === 'quotes')
+  const withoutDetail = coreStack.filter((f) => f.type !== 'quotes.detail')
+  const withList = hadQuotesList ? withoutDetail : [...withoutDetail, { type: 'quotes' }]
+  return appendTrailingTasks([...withList, { type: 'quotes.detail', quoteId }], tasksFrames)
 }
 
 /** Open quote details from deal/pipes while keeping deal visible underneath */

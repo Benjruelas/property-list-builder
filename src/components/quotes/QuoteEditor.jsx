@@ -3,6 +3,7 @@ import { Loader2, Search, X, Calendar, ChevronDown } from 'lucide-react'
 import { PipelineDropdown } from '../PipelineDropdown'
 import { InlineDropdown } from '../InlineDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
+import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
@@ -288,9 +289,9 @@ export function QuoteEditor({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.() }}>
+    <Dialog open={open} onOpenChange={(o) => handleChildPanelDismiss(o, onClose, { wasOpen: open })}>
       <DialogContent
-        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
+        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0"
         showCloseButton={false}
         nestedOverlay
         topLayer

@@ -11,7 +11,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from '../ui/panelDialogUtils'
 import {
   PanelHeader,
   PANEL_LIST_HEADER_CLASS,
@@ -46,6 +46,7 @@ import { getSettings, updateSettings } from '../../utils/settings'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { ReportBuilder } from './ReportBuilder'
 import { ReportDetail } from './ReportDetail'
+import { ReportTemplatePickerDialog } from './ReportTemplatePickerDialog'
 import { LeadPickerDialog } from '../photos/LeadPickerDialog'
 
 const MENU_WIDTH = 180
@@ -59,6 +60,7 @@ export function ReportsPanel({
   editorFrame = null,
   detailReportId = null,
   onOpenEditor,
+  onPatchEditor,
   onOpenDetail,
   onCloseEditor,
   onCloseDetail,
@@ -76,21 +78,36 @@ export function ReportsPanel({
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
   const headerMenuTriggerRef = useRef(null)
   const [leadPickerOpen, setLeadPickerOpen] = useState(false)
-  const [pendingLayoutTemplate, setPendingLayoutTemplate] = useState(null)
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const [pendingReportLeadId, setPendingReportLeadId] = useState(null)
+  const [pendingPreferredTemplate, setPendingPreferredTemplate] = useState(null)
 
   const editorOpen = !!editorFrame
-  const hasNested = editorOpen || !!detailReportId
-  const listDialogOpen = mapListDialogOpen(isOpen, hasNested)
-
+  const hasReportDetail = !!detailReportId
   const editorMode = editorFrame?.mode ?? 'report'
   const editorTemplate = editorFrame?.template ?? null
   const editorReport = editorMode === 'report' ? (editorFrame?.report ?? null) : null
   const editorLeadId = editorMode === 'report'
     ? (editorFrame?.leadId || editorReport?.leadId || null)
     : null
-  const layoutTemplate = editorMode === 'report' && !editorReport
-    ? (editorFrame?.layoutTemplate || editorFrame?.template || null)
+  const layoutTemplate = editorMode === 'report' && !editorReport && editorFrame?.awaitingTemplate !== true
+    ? (editorFrame?.layoutTemplate ?? editorFrame?.template ?? null)
     : null
+
+  const awaitingTemplatePick = !!(
+    editorOpen
+    && editorMode === 'report'
+    && !editorReport
+    && editorLeadId
+    && editorFrame?.awaitingTemplate
+  )
+
+  const showReportTemplatePicker = templatePickerOpen || awaitingTemplatePick
+  const reportBuilderOpen = editorOpen && !showReportTemplatePicker
+
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByEditor = listPanelObscuredByDetail(isOpen, reportBuilderOpen)
+  const listBesideReportDetail = listPanelObscuredByDetail(isOpen, hasReportDetail)
 
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
@@ -129,7 +146,9 @@ export function ReportsPanel({
       setOpenMenuId(null)
       setHeaderMenuOpen(false)
       setLeadPickerOpen(false)
-      setPendingLayoutTemplate(null)
+      setTemplatePickerOpen(false)
+      setPendingReportLeadId(null)
+      setPendingPreferredTemplate(null)
     }
   }, [isOpen])
 
@@ -169,9 +188,48 @@ export function ReportsPanel({
   )
 
   const openNewReport = () => {
-    setPendingLayoutTemplate(null)
+    setPendingPreferredTemplate(null)
+    setPendingReportLeadId(null)
     setLeadPickerOpen(true)
   }
+
+  const resetReportCreateFlow = () => {
+    setLeadPickerOpen(false)
+    setTemplatePickerOpen(false)
+    setPendingReportLeadId(null)
+    setPendingPreferredTemplate(null)
+  }
+
+  const openTemplatePickerForLead = (leadId) => {
+    setPendingReportLeadId(leadId)
+    setTemplatePickerOpen(true)
+  }
+
+  const finalizeNewReport = (template) => {
+    const leadId = pendingReportLeadId || editorLeadId
+    const wasAwaitingTemplate = awaitingTemplatePick
+    resetReportCreateFlow()
+    if (!leadId) return
+
+    if (wasAwaitingTemplate) {
+      onPatchEditor?.({
+        layoutTemplate: template ?? null,
+        awaitingTemplate: false,
+      })
+      return
+    }
+
+    onOpenEditor?.({
+      mode: 'report',
+      leadId,
+      layoutTemplate: template ?? null,
+    })
+  }
+
+  const templatePickerLead = useMemo(() => {
+    const id = pendingReportLeadId || editorLeadId
+    return id ? leads.find((l) => l.id === id) : null
+  }, [pendingReportLeadId, editorLeadId, leads])
 
   const openNewTemplate = () => {
     onOpenEditor?.({ mode: 'template' })
@@ -187,9 +245,7 @@ export function ReportsPanel({
     }
   }
 
-  const handleDeleteReport = async (report) => {
-    const ok = await showConfirm({ title: 'Delete report?', destructive: true, confirmLabel: 'Delete' })
-    if (!ok) return
+  const performDeleteReport = async (report) => {
     try {
       await deletePhotoReport(getToken, report.id)
       if (detailReportId === report.id) onCloseDetail?.()
@@ -198,6 +254,12 @@ export function ReportsPanel({
     } catch (e) {
       showToast(e.message || 'Delete failed', 'error')
     }
+  }
+
+  const handleDeleteReport = async (report) => {
+    const ok = await showConfirm({ title: 'Delete report?', destructive: true, confirmLabel: 'Delete' })
+    if (!ok) return
+    await performDeleteReport(report)
   }
 
   const handleDeleteTemplate = async (t) => {
@@ -260,7 +322,11 @@ export function ReportsPanel({
     <>
       <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          className="map-panel list-panel reports-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel reports-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            listObscuredByEditor && 'crm-list-under-detail',
+            listBesideReportDetail && 'reports-list-with-detail',
+          )}
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
@@ -410,7 +476,8 @@ export function ReportsPanel({
                       className="p-2 opacity-60 hover:opacity-100 text-xs"
                       title="New report from template"
                       onClick={() => {
-                        setPendingLayoutTemplate(t)
+                        setPendingPreferredTemplate(t)
+                        setPendingReportLeadId(null)
                         setLeadPickerOpen(true)
                       }}
                     >
@@ -487,25 +554,40 @@ export function ReportsPanel({
 
       <LeadPickerDialog
         open={leadPickerOpen}
-        onClose={() => {
-          setLeadPickerOpen(false)
-          setPendingLayoutTemplate(null)
-        }}
+        onClose={resetReportCreateFlow}
         leads={leads}
-        title={pendingLayoutTemplate ? 'Select lead for report from template' : 'Select lead for report'}
+        title="Select lead for report"
+        panelClassName="square-picker-panel"
+        nestedOverlay
         onSelectLead={(lead) => {
           setLeadPickerOpen(false)
-          if (pendingLayoutTemplate) {
-            onOpenEditor?.({ mode: 'report', leadId: lead.id, layoutTemplate: pendingLayoutTemplate })
-            setPendingLayoutTemplate(null)
-          } else {
-            onOpenEditor?.({ mode: 'report', leadId: lead.id })
-          }
+          openTemplatePickerForLead(lead.id)
         }}
       />
 
+      <ReportTemplatePickerDialog
+        open={showReportTemplatePicker}
+        onOpenChange={(open) => {
+          if (open) return
+          if (awaitingTemplatePick) {
+            onCloseEditor?.()
+            return
+          }
+          const hadPendingLead = pendingReportLeadId != null
+          setTemplatePickerOpen(false)
+          if (!hadPendingLead) return
+          setPendingReportLeadId(null)
+          setPendingPreferredTemplate(null)
+          setLeadPickerOpen(true)
+        }}
+        templates={templates}
+        preferredTemplateId={pendingPreferredTemplate?.id ?? null}
+        leadLabel={templatePickerLead ? displayLeadName(templatePickerLead) : ''}
+        onSelect={finalizeNewReport}
+      />
+
       <ReportBuilder
-        open={editorOpen}
+        open={reportBuilderOpen}
         mode={editorMode}
         report={editorReport}
         template={editorMode === 'template' ? editorTemplate : null}
@@ -544,6 +626,7 @@ export function ReportsPanel({
         onClose={onCloseDetail}
         onBack={onCloseDetail}
         onEdit={(r) => onOpenEditor?.({ mode: 'report', report: r })}
+        onDelete={performDeleteReport}
         onReportUpdated={(r) => {
           setReports((prev) => prev.map((x) => (x.id === r.id ? r : x)))
         }}

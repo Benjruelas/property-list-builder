@@ -9,6 +9,9 @@ import { showConfirm } from '../ui/confirm-dialog'
 import { QuoteBrandHeader } from './QuoteBrandHeader'
 import { getTeamEmailBranding, getTeamForMembership, getSenderDisplayName } from '@/utils/profile'
 import { useAuth } from '@/contexts/AuthContext'
+import { ViewAsClientButton } from '../ViewAsClientButton'
+import { PanelActionButton } from '../ui/panel-action-button'
+import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -31,8 +34,10 @@ export function QuoteDetails({
   canSeeDealAmounts = true,
   teams = [],
   teamMembership = null,
+  getToken,
 }) {
-  const { currentUser } = useAuth()
+  const { getToken: authGetToken, currentUser } = useAuth()
+  const resolveToken = getToken || authGetToken
   if (!quote) return null
 
   const team = getTeamForMembership(teams, teamMembership)
@@ -52,7 +57,10 @@ export function QuoteDetails({
   const canEditQuote = isQuoteEditable(quote.status)
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.() }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => handleChildPanelDismiss(o, onClose, { wasOpen: open })}
+    >
       <DialogContent
         className="map-panel list-panel quotes-panel quote-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,32rem)] max-w-lg"
         showCloseButton={false}
@@ -146,33 +154,30 @@ export function QuoteDetails({
 
           <div className="quote-details-actions flex flex-col gap-2.5 pt-2">
             {quote.status !== 'paid' && (
-              <>
-                <button type="button" data-panel-action className="panel-action-btn" onClick={() => onSend?.(quote)}>
-                  <Send className="h-4 w-4 mr-2 shrink-0" /> Send quote
-                </button>
-                {canEditQuote && (
-                  <button type="button" data-panel-action className="panel-action-btn" onClick={() => onEdit?.(quote)}>
-                    <Pencil className="h-4 w-4 mr-2 shrink-0" /> Edit
-                  </button>
-                )}
-              </>
+              <PanelActionButton variant="primary" onClick={() => onSend?.(quote)}>
+                <Send className="h-4 w-4 shrink-0" /> Send quote
+              </PanelActionButton>
+            )}
+            <ViewAsClientButton getToken={resolveToken} type="quote" entityId={quote.id} />
+            {quote.status !== 'paid' && canEditQuote && (
+              <PanelActionButton onClick={() => onEdit?.(quote)}>
+                <Pencil className="h-4 w-4 shrink-0" /> Edit
+              </PanelActionButton>
             )}
             {quote.dealId && onOpenDeal && (
-              <button type="button" data-panel-action className="panel-action-btn" onClick={() => onOpenDeal(quote)}>
-                <ExternalLink className="h-4 w-4 mr-2 shrink-0" /> Open linked deal
-              </button>
+              <PanelActionButton onClick={() => onOpenDeal(quote)}>
+                <ExternalLink className="h-4 w-4 shrink-0" /> Open linked deal
+              </PanelActionButton>
             )}
-            <button
-              type="button"
-              data-panel-action
-              className="panel-action-btn panel-action-btn--danger"
+            <PanelActionButton
+              variant="danger"
               onClick={async () => {
                 const ok = await showConfirm({ title: 'Delete quote?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })
                 if (ok) onDelete?.(quote)
               }}
             >
-              <Trash2 className="h-4 w-4 mr-2 shrink-0" /> Delete
-            </button>
+              <Trash2 className="h-4 w-4 shrink-0" /> Delete
+            </PanelActionButton>
           </div>
         </div>
       </DialogContent>

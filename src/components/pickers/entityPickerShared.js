@@ -1,4 +1,5 @@
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { getLeadPhones, getLeadEmails } from '@/utils/leadContact'
 
 export const ENTITY_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item flex flex-col gap-0.5 w-full text-left px-3.5 py-3 rounded-lg border transition-all cursor-pointer'
@@ -13,9 +14,12 @@ export function filterLeads(leads, query) {
   return sorted.filter((lead) => {
     const name = displayLeadName(lead).toLowerCase()
     const address = (lead.address || '').toLowerCase()
-    const email = (lead.email || '').toLowerCase()
-    const phone = (lead.phone || '').toLowerCase()
-    const searchable = [name, address, email, phone].filter(Boolean).join(' ')
+    const searchable = [
+      name,
+      address,
+      ...getLeadEmails(lead),
+      ...getLeadPhones(lead),
+    ].filter(Boolean).join(' ').toLowerCase()
     return tokens.every((tok) => searchable.includes(tok))
   })
 }

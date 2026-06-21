@@ -5,7 +5,8 @@ import {
   saveAllQuoteInvites,
   escapeHtml,
 } from './lib/quoteInvites.js'
-import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
+import { getQuoteById, getAllQuotes, updateQuoteAtIndex } from './lib/quoteStore.js'
+import { parseQuotePreviewToken } from './lib/previewToken.js'
 import { syncQuotePaymentOnPaid, syncQuoteToDealOnAccept } from './lib/syncQuoteToDeal.js'
 import {
   computeQuoteTotals,
@@ -14,6 +15,7 @@ import {
 } from './lib/quoteMath.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 import { resolveSenderBranding } from './lib/senderBranding.js'
+import { buildQuotePdfBuffer, safeQuotePdfFilename } from './lib/buildQuotePdf.js'
 
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const stripe = stripeKey ? new Stripe(stripeKey) : null
@@ -25,7 +27,7 @@ function resolveOrigin(req) {
   return req.headers.origin || 'https://localhost'
 }
 
-async function publicQuotePayload(quote, invite, { selectedOptionalIds = [] } = {}) {
+async function publicQuotePayload(quote, invite, { selectedOptionalIds = [], token = '' } = {}) {
   const optionalIds = (quote.lineItems || []).filter((l) => l.isOptional).map((l) => l.id)
   const totals = computeQuoteTotals(quote.lineItems || [], quote.taxRate || 0, {
     selectedOptionalIds: quote.status === 'accepted' || quote.status === 'paid'
@@ -70,6 +72,10 @@ async function publicQuotePayload(quote, invite, { selectedOptionalIds = [] } = 
     paidAt: quote.paidAt || null,
     acceptedLineIds: quote.acceptedLineIds || null,
     viewCount: quote.viewTracking?.viewCount || 0,
+    preview: invite.preview === true,
+    pdfDownloadUrl: invite.preview !== true && token
+      ? `/api/public-quote?token=${encodeURIComponent(token)}&download=1`
+      : null,
     branding: branding
       ? {
           businessName: branding.businessName,
@@ -126,15 +132,54 @@ async function recordQuoteView(quote, index, all, invite) {
 }
 
 async function loadQuoteContext(token) {
-  const { invite, index: invIdx, error } = await findQuoteInviteByToken(token)
-  if (error === 'not_found') return { error: 'not_found', status: 404 }
-  if (error === 'revoked') return { error: 'This quote link is no longer active.', status: 410 }
-  if (error === 'expired') return { error: 'This quote link has expired.', status: 410 }
+  const normalized = String(token || '').trim()
+  const { invite, index: invIdx, error } = await findQuoteInviteByToken(normalized)
 
-  const { quote, index, all } = await getQuoteById(invite.quoteId)
-  if (!quote) return { error: 'Quote not found', status: 404 }
+  if (error && error !== 'not_found') {
+    if (error === 'revoked') return { error: 'This quote link is no longer active.', status: 410 }
+    if (error === 'expired') return { error: 'This quote link has expired.', status: 410 }
+  }
 
-  return { invite, invIdx, quote, index, all, error: null }
+  if (!error && invite) {
+    const { quote, index, all } = await getQuoteById(invite.quoteId)
+    if (!quote) return { error: 'Quote not found', status: 404 }
+    return { invite, invIdx, quote, index, all, error: null }
+  }
+
+  const signedQuoteId = parseQuotePreviewToken(normalized)
+  if (signedQuoteId) {
+    const { quote, index, all } = await getQuoteById(signedQuoteId)
+    if (!quote) return { error: 'Quote not found', status: 404 }
+    const previewInvite = {
+      token: normalized,
+      quoteId: quote.id,
+      preview: true,
+      recipientEmail: '',
+      message: '',
+      status: 'pending',
+    }
+    return { invite: previewInvite, invIdx: -1, quote, index, all, error: null }
+  }
+
+  const all = await getAllQuotes()
+  const index = all.findIndex((q) => q.previewToken === normalized)
+  if (index === -1) return { error: 'Quote link not found', status: 404 }
+
+  const quote = all[index]
+  const previewInvite = {
+    token: normalized,
+    quoteId: quote.id,
+    preview: true,
+    recipientEmail: '',
+    message: '',
+    status: 'pending',
+  }
+  return { invite: previewInvite, invIdx: -1, quote, index, all, error: null }
+}
+
+export const config = {
+  maxDuration: 60,
+  memory: 512,
 }
 
 export default async function handler(req, res) {
@@ -152,8 +197,35 @@ export default async function handler(req, res) {
       const ctx = await loadQuoteContext(token)
       if (ctx.error) return res.status(ctx.status).json({ error: ctx.error })
 
-      const updated = await recordQuoteView(ctx.quote, ctx.index, ctx.all, ctx.invite)
-      return res.status(200).json(await publicQuotePayload(updated, ctx.invite))
+      const download = req.query.download === '1'
+      if (download) {
+        if (ctx.invite.preview) {
+          return res.status(403).json({ error: 'PDF download is disabled for preview links' })
+        }
+
+        const { quote, invite } = ctx
+        let branding = null
+        if (quote.ownerId) {
+          try {
+            branding = await resolveSenderBranding({
+              uid: quote.ownerId,
+              email: quote.ownerEmail || '',
+            })
+          } catch {
+            branding = null
+          }
+        }
+
+        const pdfBuf = await buildQuotePdfBuffer({ quote, invite, branding })
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', `attachment; filename="${safeQuotePdfFilename(quote.title)}"`)
+        return res.status(200).send(pdfBuf)
+      }
+
+      const updated = ctx.invite.preview
+        ? ctx.quote
+        : await recordQuoteView(ctx.quote, ctx.index, ctx.all, ctx.invite)
+      return res.status(200).json(await publicQuotePayload(updated, ctx.invite, { token }))
     }
 
     if (req.method === 'POST') {
@@ -162,6 +234,10 @@ export default async function handler(req, res) {
 
       const ctx = await loadQuoteContext(body.token || token)
       if (ctx.error) return res.status(ctx.status).json({ error: ctx.error })
+
+      if (ctx.invite.preview) {
+        return res.status(403).json({ error: 'This preview link is read-only' })
+      }
 
       let { quote, index, all, invite } = ctx
       const now = new Date().toISOString()
@@ -325,7 +401,7 @@ export default async function handler(req, res) {
         status: quote.status,
         canPay,
         stripeConfigured: !!stripeKey,
-        quote: await publicQuotePayload(quote, invite),
+        quote: await publicQuotePayload(quote, invite, { token: body.token || token }),
       })
     }
 

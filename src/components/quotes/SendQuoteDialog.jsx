@@ -23,6 +23,8 @@ import { formatQuoteMoney } from '../../utils/quoteMath'
 import { getSettings, updateSettings } from '../../utils/settings'
 import { getSenderDisplayName, getCompanyNameForSends } from '../../utils/profile'
 import { cn } from '@/lib/utils'
+import { AutoResizeTextarea } from '../ui/auto-resize-textarea'
+import { findLeadById } from '../../utils/leads'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -40,9 +42,21 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
   const [lastLink, setLastLink] = useState('')
 
   const linkedLead = useMemo(
-    () => (quote?.leadId ? leads.find((l) => l.id === quote.leadId) : null),
+    () => findLeadById(leads, quote?.leadId),
     [quote?.leadId, leads]
   )
+
+  const defaultRecipientEmail = useMemo(() => {
+    const leadEmail = (linkedLead?.email || '').trim()
+    if (leadEmail) return leadEmail
+    return (quote?.clientEmail || '').trim()
+  }, [linkedLead?.email, quote?.clientEmail])
+
+  const defaultPhone = useMemo(() => {
+    const leadPhone = (linkedLead?.phone || '').trim()
+    if (leadPhone) return leadPhone
+    return (quote?.clientPhone || '').trim()
+  }, [linkedLead?.phone, quote?.clientPhone])
 
   const tagData = useMemo(() => ({
     clientName: linkedLead
@@ -58,17 +72,23 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
   }), [quote, linkedLead, recipient, lastLink, currentUser, teams, teamMembership])
 
   useEffect(() => {
-    if (!open || !quote) return
+    if (!open || !quote?.id) return
     setTab('email')
-    setRecipient(linkedLead?.email || quote.clientEmail || '')
-    setPhone(linkedLead?.phone || quote.clientPhone || '')
+    setRecipient('')
+    setPhone('')
     setSentTo(null)
     setLastLink('')
     const templates = getQuoteSendTemplatesFromSettings(getSettings())
     setSubject(templates.email.subject)
     setBody(templates.email.body)
     setTextBody(templates.text.body)
-  }, [open, quote, linkedLead])
+  }, [open, quote?.id])
+
+  useEffect(() => {
+    if (!open || !quote?.id) return
+    setRecipient((prev) => prev.trim() || defaultRecipientEmail)
+    setPhone((prev) => prev.trim() || defaultPhone)
+  }, [open, quote?.id, defaultRecipientEmail, defaultPhone])
 
   const resetAndClose = () => {
     if (sending) return
@@ -173,7 +193,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose() }}>
       <DialogContent
-        className="map-panel list-panel share-list-dialog w-[min(92vw,24rem)] max-w-md max-h-[min(88vh,680px)] overflow-y-auto rounded-xl p-6 gap-4"
+        className="map-panel list-panel share-list-dialog send-quote-dialog w-[min(96vw,40rem)] max-w-2xl max-h-[min(90vh,820px)] overflow-y-auto rounded-xl p-6 gap-4"
         focusOverlay
         topLayer
         confirmLayer
@@ -243,22 +263,23 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
               <div className="space-y-3">
                 <Input placeholder="Recipient email" value={recipient} onChange={(e) => setRecipient(e.target.value)} />
                 <Input placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
-                <textarea
-                  className="w-full min-h-[120px] bg-white/5 border border-white/15 rounded-md px-3 py-2 text-sm"
+                <AutoResizeTextarea
+                  className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 text-sm"
                   placeholder="Email body"
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
+                  minRows={3}
                 />
-                <p className="text-xs opacity-50">Preview: {replaceQuoteTags(body, tagData).slice(0, 120)}…</p>
               </div>
             ) : (
               <div className="space-y-3">
                 <Input placeholder="Client phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                <textarea
-                  className="w-full min-h-[100px] bg-white/5 border border-white/15 rounded-md px-3 py-2 text-sm"
+                <AutoResizeTextarea
+                  className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 text-sm"
                   placeholder="Text message"
                   value={textBody}
                   onChange={(e) => setTextBody(e.target.value)}
+                  minRows={3}
                 />
                 <p className="text-xs opacity-60">Opens your device SMS app. Send email first to generate the quote link, or copy link after email send.</p>
               </div>

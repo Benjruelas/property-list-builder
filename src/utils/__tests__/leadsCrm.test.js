@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getLeadStatus, lastContactedAt, formatLastContacted, findLeadByParcelId, isParcelALead } from '../leads'
+import { getLeadStatus, lastContactedAt, formatLastContacted, findLeadById, findLeadByParcelId, isParcelALead, formatLeadAddress, formatAddressProperCase } from '../leads'
 import { buildActivityEntry } from '../leadActivity'
 
 describe('lead CRM helpers', () => {
@@ -35,6 +35,43 @@ describe('lead CRM helpers', () => {
   it('formatLastContacted handles recent dates', () => {
     const today = new Date().toISOString()
     expect(formatLastContacted(today)).toBe('Contacted today')
+  })
+})
+
+describe('formatLeadAddress', () => {
+  it('title-cases all-caps parcel addresses', () => {
+    const lead = {
+      address: '123 MAIN ST, DALLAS, TX 75201, United States',
+    }
+    expect(formatLeadAddress(lead)).toBe('123 Main St, Dallas, TX')
+  })
+
+  it('title-cases addresses built from parcel properties', () => {
+    const lead = {
+      address: '123 MAIN ST, DALLAS, TX',
+      properties: {
+        STREET: '123 MAIN ST',
+        SITUS_CITY: 'DALLAS',
+        state2: 'TX',
+      },
+    }
+    expect(formatLeadAddress(lead)).toBe('123 Main St, Dallas, TX')
+  })
+
+  it('preserves directionals and ordinals', () => {
+    expect(formatAddressProperCase('4521 NW 42ND ST, OKLAHOMA CITY, OK')).toBe(
+      '4521 NW 42nd St, Oklahoma City, OK',
+    )
+  })
+})
+
+describe('findLeadById', () => {
+  const leads = [{ id: 'lead_1', email: 'a@example.com' }, { id: 2, email: 'b@example.com' }]
+
+  it('matches string and numeric ids', () => {
+    expect(findLeadById(leads, 'lead_1')?.email).toBe('a@example.com')
+    expect(findLeadById(leads, 2)?.email).toBe('b@example.com')
+    expect(findLeadById(leads, '2')?.email).toBe('b@example.com')
   })
 })
 

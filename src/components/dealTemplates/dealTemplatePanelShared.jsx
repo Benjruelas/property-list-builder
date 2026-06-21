@@ -131,13 +131,14 @@ export function DealTemplatePanelShell({
   listMode = false,
   nestedOverlay = true,
   topLayer = true,
+  panelClassName,
   children,
   footer,
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={DEAL_TEMPLATE_PANEL_CLASS}
+        className={cn(DEAL_TEMPLATE_PANEL_CLASS, panelClassName)}
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}

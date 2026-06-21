@@ -1,10 +1,10 @@
-import { useState, useMemo, useCallback, useRef, lazy, Suspense } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
-const LeadDetails = lazy(() => import('./LeadDetails').then((m) => ({ default: m.LeadDetails })))
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
+import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
@@ -14,14 +14,13 @@ import {
   updateLead,
   getLeadStatus,
   lastContactedAt,
-  LEAD_STATUSES,
   leadToParcelData,
 } from '@/utils/leads'
 import { filterByTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
-import { phoneMatchesQuery } from '@/utils/phoneFormat'
+import { getLeadPhones, getLeadEmails, leadContactMatchesQuery } from '@/utils/leadContact'
 import { buildDealCountByLeadId } from '@/utils/deals'
 import { showToast } from './ui/toast'
 import { LeadRow } from './LeadRow'
@@ -70,6 +69,10 @@ export function LeadsPanel({
   onEditLead,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
+  leadStatuses = [],
+  leadsDetailTopLayer = false,
+  isLeadsDetailStandalone = false,
+  editLeadId = null,
 }) {
   const [search, setSearch] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState([])
@@ -93,15 +96,15 @@ export function LeadsPanel({
 
   const leadAnalytics = useMemo(() => {
     const counts = { all: leads.length }
-    for (const s of LEAD_STATUSES) counts[s.id] = 0
+    for (const s of leadStatuses) counts[s.id] = 0
     let inPipeline = 0
     let needsFollowUp = 0
 
     for (const l of leads) {
       const dealCount = dealCountByLead.get(l.id) || 0
-      const st = getLeadStatus(l, dealCount)
+      const st = getLeadStatus(l, dealCount, leadStatuses)
       if (counts[st] !== undefined) counts[st]++
-      const active = st === 'new' || st === 'contacted' || st === 'qualified'
+      const active = st !== 'converted' && st !== 'lost'
       if (active) {
         inPipeline++
         if (!lastContactedAt(l)) needsFollowUp++
@@ -109,7 +112,7 @@ export function LeadsPanel({
     }
 
     return { counts, inPipeline, needsFollowUp }
-  }, [leads, dealCountByLead])
+  }, [leads, dealCountByLead, leadStatuses])
 
   const statusCounts = leadAnalytics.counts
 
@@ -120,7 +123,7 @@ export function LeadsPanel({
     let list = [...leads]
 
     if (statusFilter) {
-      list = list.filter((l) => getLeadStatus(l, dealCountByLead.get(l.id) || 0) === statusFilter)
+      list = list.filter((l) => getLeadStatus(l, dealCountByLead.get(l.id) || 0, leadStatuses) === statusFilter)
     }
 
     list = filterByTags(list, selectedTagIds)
@@ -131,16 +134,15 @@ export function LeadsPanel({
         return (
           name.includes(q) ||
           (l.address || '').toLowerCase().includes(q) ||
-          phoneMatchesQuery(l.phone, q) ||
-          (l.email || '').toLowerCase().includes(q)
+          leadContactMatchesQuery(l, q)
         )
       })
     }
 
     if (sortMode === 'followup') {
       list.sort((a, b) => {
-        const statusA = getLeadStatus(a, dealCountByLead.get(a.id) || 0)
-        const statusB = getLeadStatus(b, dealCountByLead.get(b.id) || 0)
+        const statusA = getLeadStatus(a, dealCountByLead.get(a.id) || 0, leadStatuses)
+        const statusB = getLeadStatus(b, dealCountByLead.get(b.id) || 0, leadStatuses)
         const inactive = new Set(['converted', 'lost'])
         if (inactive.has(statusA) && !inactive.has(statusB)) return 1
         if (!inactive.has(statusA) && inactive.has(statusB)) return -1
@@ -160,7 +162,7 @@ export function LeadsPanel({
     }
 
     return list
-  }, [leads, search, selectedTagIds, statusFilter, sortMode, dealCountByLead])
+  }, [leads, search, selectedTagIds, statusFilter, sortMode, dealCountByLead, leadStatuses])
 
 
   const handleLeadUpdate = useCallback(async (updated) => {
@@ -205,10 +207,11 @@ export function LeadsPanel({
 
   const showingLeadDetail = !!(detailLeadId && selectedLead)
   const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
-  const listDialogOpen = mapListDialogOpen(isOpen, showingLeadDetail)
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingLeadDetail)
   const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
-  useObscuredPanelRoot(listPanelRef, false)
+  useObscuredPanelRoot(listPanelRef, listObscuredByDetail)
 
   const handlePanelBack = () => {
     if (selectedLead) {
@@ -223,7 +226,10 @@ export function LeadsPanel({
       <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
-          className="map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel leads-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            listObscuredByDetail && 'crm-list-under-detail',
+          )}
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
@@ -294,7 +300,7 @@ export function LeadsPanel({
                 tags={tagRegistry.leads || []}
                 selectedTagIds={selectedTagIds}
                 onTagIdsChange={setSelectedTagIds}
-                statusOptions={LEAD_STATUSES}
+                statusOptions={leadStatuses}
                 statusFilter={statusFilter}
                 onStatusFilterChange={setStatusFilter}
                 statusCounts={statusCounts}
@@ -337,6 +343,9 @@ export function LeadsPanel({
                     lead={lead}
                     dealCount={dealCountByLead.get(lead.id) || 0}
                     tagRegistry={tagRegistry}
+                    leadStatuses={leadStatuses}
+                    currentUser={currentUser}
+                    currentUserId={currentUserId}
                     onClick={(l) => {
                     document.activeElement?.blur?.()
                     onOpenLeadDetail?.(l.id)
@@ -388,13 +397,18 @@ export function LeadsPanel({
       />
 
       {showLeadDetailPanel ? (
-        <Suspense fallback={null}>
           <LeadDetails
             isOpen={!!selectedLead}
             instantDismiss={instantDismiss}
             panelDockSlot={panelDockSlot}
             nestedOverlay={false}
-            topLayer
+            topLayer={leadsDetailTopLayer}
+            primaryDetail={isLeadsDetailStandalone}
+            externalNestedOverlay={
+              (!!editLeadId && editLeadId === selectedLead?.id)
+              || createDealOpen
+              || dealPickerOpen
+            }
             onClose={() => onCloseLeadDetail?.()}
             lead={selectedLead}
             pipelines={pipelines}
@@ -424,8 +438,8 @@ export function LeadsPanel({
             onOpenPhotoReport={onOpenPhotoReport}
             tagRegistry={tagRegistry}
             onRefreshTags={onRefreshTags}
+            leadStatuses={leadStatuses}
           />
-        </Suspense>
       ) : null}
     </>
   )

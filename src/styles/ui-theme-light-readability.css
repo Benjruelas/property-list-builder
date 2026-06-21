@@ -746,17 +746,6 @@
   border-color: rgba(0, 0, 0, 0.22) !important;
 }
 
-/* Quote / report footer action pills */
-[data-ui-theme='light'] :is(.quote-details-panel, .map-panel, .list-panel) .quote-details-actions :is(button[data-panel-action], .panel-action-btn) {
-  border-color: var(--map-panel-stroke-strong) !important;
-  background: var(--map-panel-surface-muted) !important;
-  color: var(--map-panel-text) !important;
-}
-[data-ui-theme='light'] :is(.quote-details-panel, .map-panel, .list-panel) .quote-details-actions :is(button[data-panel-action], .panel-action-btn):hover:not(:disabled) {
-  background: var(--map-panel-surface-hover) !important;
-  border-color: rgba(0, 0, 0, 0.22) !important;
-}
-
 /* Share dialog — fields, rows, picker */
 [data-ui-theme='light'] .share-dialog-email-row {
   background: var(--map-panel-surface-subtle) !important;

@@ -1,17 +1,17 @@
-import { useState, useMemo, useCallback, useRef, lazy, Suspense } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, Briefcase, ChevronDown, ChevronRight, Archive, Plus } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { flattenDealsFromPipelines } from '@/utils/deals'
 import { aggregateDealFinancials, formatDealMoney } from '@/utils/dealFinances'
 import { profitValueClass } from './DealLineItemsSection'
 import { DealRow, ClosedDealRow } from './DealRow'
-const DealDetails = lazy(() => import('./DealDetails').then((m) => ({ default: m.DealDetails })))
-const LeadDetails = lazy(() => import('./LeadDetails').then((m) => ({ default: m.LeadDetails })))
+import { DealDetails } from './DealDetails'
+import { LeadDetails } from './LeadDetails'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { updateLead } from '@/utils/leads'
@@ -74,6 +74,7 @@ export function DealsPanel({
   onTextClick,
   onGoToParcelOnMap,
   currentUserId = null,
+  currentUser = null,
   onCreateQuoteForDeal,
   onOpenQuoteFromDeal,
   quotesRefreshKey = 0,
@@ -95,10 +96,14 @@ export function DealsPanel({
   onCreateDealSubmit,
   pipelinesCount = 0,
   canSeeDealAmounts = true,
+  canAccessPhotos = true,
   onEditLead,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   leadOverlayPanelDockSlot,
+  leadStatuses = [],
+  isDealsDetailStandalone = false,
+  editLeadId = null,
 }) {
   const [search, setSearch] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState([])
@@ -297,10 +302,11 @@ export function DealsPanel({
   const showingClosedDeal = !!(dealsClosedRecordId && selectedClosed && !dealsDetailDealId)
   const showingLeadOverlay = !!leadOverlay
   const showingPrimaryDetail = showingActiveDeal || showingClosedDeal || showingLeadOverlay
-  const listDialogOpen = mapListDialogOpen(isOpen, showingPrimaryDetail)
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingPrimaryDetail)
   const hasNestedOverlay = showingPrimaryDetail || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
-  useObscuredPanelRoot(listPanelRef, false)
+  useObscuredPanelRoot(listPanelRef, listObscuredByDetail)
 
   const handlePanelBack = () => {
     if (leadOverlayId) {
@@ -323,7 +329,10 @@ export function DealsPanel({
       <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
           ref={listPanelRef}
-          className="map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            listObscuredByDetail && 'crm-list-under-detail',
+          )}
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
@@ -597,12 +606,12 @@ export function DealsPanel({
       />
 
       {selectedDeal && selectedPipeline && dealsDetailDealId && !dealsClosedRecordId && (
-        <Suspense fallback={null}>
         <DealDetails
           obscuredByChild={!!leadOverlayId && showingLeadOverlay}
           panelDockSlot={panelDockSlot}
           nestedOverlay={false}
           topLayer
+          primaryDetail={isDealsDetailStandalone}
           hideOverlay
           suppressBackdrop
           deal={selectedDeal}
@@ -627,12 +636,12 @@ export function DealsPanel({
           canSeeDealAmounts={canSeeDealAmounts}
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
+          currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
+          canAccessPhotos={canAccessPhotos}
         />
-        </Suspense>
       )}
 
       {leadOverlay && (
-        <Suspense fallback={null}>
         <LeadDetails
           isOpen
           instantDismiss={instantDismiss}
@@ -640,6 +649,7 @@ export function DealsPanel({
           nestedOverlay
           topLayer
           stackedOverlay
+          externalNestedOverlay={!!editLeadId && editLeadId === leadOverlay?.id}
           onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
           pipelines={pipelines}
@@ -670,17 +680,17 @@ export function DealsPanel({
           onEditLead={onEditLead}
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
+          leadStatuses={leadStatuses}
         />
-        </Suspense>
       )}
 
       {selectedClosed && dealsClosedRecordId && !dealsDetailDealId && (
-        <Suspense fallback={null}>
         <DealDetails
           obscuredByChild={!!leadOverlayId && showingLeadOverlay}
           panelDockSlot={panelDockSlot}
           nestedOverlay={false}
           topLayer
+          primaryDetail={isDealsDetailStandalone}
           hideOverlay
           suppressBackdrop
           deal={selectedClosed.deal}
@@ -697,8 +707,9 @@ export function DealsPanel({
           onOpenQuote={onOpenQuoteFromDeal}
           quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
+          currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
+          canAccessPhotos={canAccessPhotos}
         />
-        </Suspense>
       )}
     </>
   )

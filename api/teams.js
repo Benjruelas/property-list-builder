@@ -33,6 +33,7 @@ import {
   resolveMemberFeatures,
   isTeamAdminMember,
 } from './lib/teamFeatures.js'
+import { normalizeLeadStatuses } from './lib/leadStatuses.js'
 
 let kv = null
 let kvAvailable = false
@@ -112,6 +113,7 @@ function normalizeTeamForWire(team, viewerUid) {
     allowExternalSharing: team.allowExternalSharing === true,
     membersCanSeeDealAmounts: team.membersCanSeeDealAmounts !== false,
     emailBranding: normalizeEmailBranding(team.emailBranding || {}),
+    leadStatuses: team.leadStatuses?.length ? normalizeLeadStatuses(team.leadStatuses) : null,
     teamPipelineId: team.teamPipelineId || null,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
@@ -162,6 +164,9 @@ export default async function handler(req, res) {
               teamPipelineId: membership.teamPipelineId || null,
               allowExternalSharing: membership.allowExternalSharing === true,
               membersCanSeeDealAmounts: membership.membersCanSeeDealAmounts !== false,
+              leadStatuses: membership.leadStatuses?.length
+                ? normalizeLeadStatuses(membership.leadStatuses)
+                : null,
               features: resolveMemberFeatures(memberRecord, membership, user.uid),
             }
           : null,
@@ -293,6 +298,9 @@ export default async function handler(req, res) {
         }
         if (body.emailBranding !== undefined) {
           team.emailBranding = normalizeEmailBranding(body.emailBranding)
+        }
+        if (body.leadStatuses !== undefined) {
+          team.leadStatuses = normalizeLeadStatuses(body.leadStatuses)
         }
         team.updatedAt = new Date().toISOString()
         all[idx] = team

@@ -2,7 +2,8 @@
  * Lead CRM activity timeline — append entries and status updates.
  */
 
-import { updateLead, loadLocalLeads, saveLocalLeads, getLeadStatusMeta, LEAD_STATUSES } from './leads'
+import { updateLead, loadLocalLeads, saveLocalLeads, getLeadStatusMeta } from './leads'
+import { getPostContactStatusId } from './leadStatuses'
 
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
@@ -51,9 +52,9 @@ export async function appendLeadActivity(getToken, leadId, entry) {
   return data.lead
 }
 
-export async function setLeadStatus(getToken, leadId, status, { logActivity = true, fromStatus } = {}) {
+export async function setLeadStatus(getToken, leadId, status, { logActivity = true, fromStatus, leadStatuses } = {}) {
   const now = new Date().toISOString()
-  const meta = getLeadStatusMeta(status)
+  const meta = getLeadStatusMeta(status, leadStatuses)
   const updates = { status, statusUpdatedAt: now }
 
   const token = await getToken?.()
@@ -90,10 +91,12 @@ export async function setLeadStatus(getToken, leadId, status, { logActivity = tr
   return lead
 }
 
-/** Auto-bump new → contacted on first outreach. */
-export async function bumpLeadStatusOnContact(getToken, lead, currentEffectiveStatus) {
+/** Auto-bump new → next outreach status on first contact. */
+export async function bumpLeadStatusOnContact(getToken, lead, currentEffectiveStatus, leadStatuses) {
   if (!lead?.id || currentEffectiveStatus !== 'new') return lead
-  return setLeadStatus(getToken, lead.id, 'contacted', { fromStatus: 'new' })
+  const nextStatus = getPostContactStatusId(leadStatuses)
+  if (!nextStatus) return lead
+  return setLeadStatus(getToken, lead.id, nextStatus, { fromStatus: 'new', leadStatuses })
 }
 
 export async function logLeadOutreach(getToken, leadId, type, phoneOrEmail) {
@@ -139,4 +142,3 @@ export function sortActivitiesNewestFirst(lead) {
   return activities.sort((a, b) => (b.at || '').localeCompare(a.at || ''))
 }
 
-export { LEAD_STATUSES }

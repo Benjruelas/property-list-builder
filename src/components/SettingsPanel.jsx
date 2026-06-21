@@ -14,7 +14,8 @@ import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotificatio
 import { cn } from '@/lib/utils'
 import { getSkipTracedList } from '../utils/skipTracedList'
 import { useAuth } from '@/contexts/AuthContext'
-import { TeamSettingsSection, TeamSettingsMemberRow, TeamSettingsInvitesOnly } from './TeamSettingsSection'
+import { TeamSettingsSection } from './TeamSettingsSection'
+import { resolveLeadStatuses, canEditLeadStatuses } from '../utils/leadStatuses'
 
 const MAP_STYLES = [
   { value: 'satellite', label: 'Satellite' },
@@ -52,8 +53,11 @@ const DEADLINE_LEAD_OPTIONS = [
   { value: 60, label: '1h' },
 ]
 
-function Section({ icon: Icon, title, children, defaultOpen = true, dataTour }) {
+function Section({ icon: Icon, title, children, defaultOpen = false, dataTour, panelOpen }) {
   const [open, setOpen] = useState(defaultOpen)
+  useEffect(() => {
+    if (panelOpen) setOpen(defaultOpen)
+  }, [panelOpen, defaultOpen])
   return (
     <div className="settings-section border border-white/10 rounded-lg overflow-hidden" data-tour={dataTour || undefined}>
       <button
@@ -239,12 +243,12 @@ export function SettingsPanel({
   onTeamsChange,
   onOpenTeamDetail,
   settingsTeamSectionOpen = false,
+  topLayer = false,
 }) {
   const { devPersona, switchDevPersona, DEV_PERSONA_A, DEV_PERSONA_B, currentUser, updateDisplayName } = useAuth()
   const [displayNameDraft, setDisplayNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
   const showDevPersonaSwitcher = import.meta.env.DEV && typeof switchDevPersona === 'function'
-  const isTeamAdmin = teamMembership?.role === 'admin'
   const [syncing, setSyncing] = useState(false)
   const [skipTracedList, setSkipTracedList] = useState(null)
   const [expandedSkipTracedLists, setExpandedSkipTracedLists] = useState(new Set())
@@ -381,6 +385,7 @@ export function SettingsPanel({
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
+        topLayer={topLayer}
       >
         <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Application settings</DialogDescription>
@@ -389,7 +394,7 @@ export function SettingsPanel({
 
         <div className="px-4 py-4 overflow-y-auto scrollbar-hide flex-1 space-y-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           {currentUser && (
-            <Section icon={User} title="Your profile">
+            <Section panelOpen={isOpen} icon={User} title="Your profile">
               <SettingRow
                 label="Your name"
                 description="Used when you send quotes and forms to clients (instead of your email)"
@@ -412,7 +417,7 @@ export function SettingsPanel({
             </Section>
           )}
 
-          {currentUser && isTeamAdmin && (
+          {currentUser && (
             <TeamSettingsSection
               currentUser={currentUser}
               getToken={getToken}
@@ -422,22 +427,14 @@ export function SettingsPanel({
               onTeamsChange={onTeamsChange}
               onOpenTeamDetail={onOpenTeamDetail}
               defaultOpen={settingsTeamSectionOpen}
+              settingsPanelOpen={isOpen}
+              leadStatuses={resolveLeadStatuses({ settings: s, teams, teamMembership })}
+              canEditLeadStatuses={canEditLeadStatuses(teamMembership)}
+              onSaveUserStatuses={(normalized) => update({ leadStatuses: normalized })}
             />
           )}
 
-          {currentUser && !isTeamAdmin && teamMembership && (
-            <TeamSettingsMemberRow teamName={teamMembership.teamName} />
-          )}
-
-          {currentUser && !teamMembership && (
-            <TeamSettingsInvitesOnly
-              getToken={getToken}
-              pendingInvites={pendingTeamInvites}
-              onTeamsChange={onTeamsChange}
-            />
-          )}
-
-          <Section icon={Palette} title="Appearance">
+          <Section panelOpen={isOpen} icon={Palette} title="Appearance">
             <SettingRow label="Theme" description="Dark panels, light panels, or translucent glass over the map" stacked>
               <SegmentedControl
                 value={getUiThemeFromSettings(s)}
@@ -448,7 +445,7 @@ export function SettingsPanel({
           </Section>
 
           {/* ---- Map ---- */}
-          <Section icon={Map} title="Map">
+          <Section panelOpen={isOpen} icon={Map} title="Map">
             <SettingRow label="Map Style" description="Base map tile layer" stacked>
               <SegmentedControl value={s.mapStyle} onChange={v => update({ mapStyle: v })} options={MAP_STYLES} />
             </SettingRow>
@@ -493,7 +490,7 @@ export function SettingsPanel({
           </Section>
 
           {showDevPersonaSwitcher && (
-            <Section icon={Users} title="Local dev user" defaultOpen>
+            <Section panelOpen={isOpen} icon={Users} title="Local dev user">
               <p className="text-xs opacity-50 -mt-1">
                 Switch between two synthetic users to test list and pipe sharing. The page reloads; use two browser profiles with different personas for side-by-side testing.
               </p>
@@ -522,7 +519,7 @@ export function SettingsPanel({
           )}
 
           {/* ---- Path Recording ---- */}
-          <Section icon={Route} title="Path Recording">
+          <Section panelOpen={isOpen} icon={Route} title="Path Recording">
             <SettingRow label="Path Smoothing" description="How much to smooth recorded paths" stacked>
               <SegmentedControl value={s.pathSmoothing} onChange={v => update({ pathSmoothing: v })} options={SMOOTHING_OPTIONS} />
             </SettingRow>
@@ -532,7 +529,7 @@ export function SettingsPanel({
           </Section>
 
           {/* ---- Skip Traced Parcels ---- */}
-          <Section icon={Phone} title="Skip Traced Parcels" defaultOpen={false} dataTour="settings-skip-traced-section">
+          <Section panelOpen={isOpen} icon={Phone} title="Skip Traced Parcels" dataTour="settings-skip-traced-section">
             {(!skipTracedList || (skipTracedList.parcels.length === 0 && skipTracedList.listItems.length === 0)) ? (
               <p className="text-xs opacity-50 -mt-1">No skip traced parcels yet.</p>
             ) : (
@@ -628,7 +625,7 @@ export function SettingsPanel({
           </Section>
 
           {/* ---- Email & Export ---- */}
-          <Section icon={Mail} title="Email & Export">
+          <Section panelOpen={isOpen} icon={Mail} title="Email & Export">
             <SettingRow label="Email Test Mode" description="Route all emails to the address below instead of real recipients">
               <Toggle checked={s.emailTestMode} onChange={v => update({ emailTestMode: v })} />
             </SettingRow>
@@ -660,7 +657,7 @@ export function SettingsPanel({
           </Section>
 
           {/* ---- Notifications ---- */}
-          <Section icon={Bell} title="Notifications" defaultOpen dataTour="settings-notifications-section">
+          <Section panelOpen={isOpen} icon={Bell} title="Notifications" dataTour="settings-notifications-section">
             <p className="text-xs opacity-50 -mt-1 mb-2">
               Collaboration alerts use server push (sign in required). Device alerts work on this browser when permission is granted.
             </p>
@@ -727,7 +724,7 @@ export function SettingsPanel({
           </Section>
 
           {/* ---- Data Management ---- */}
-          <Section icon={Database} title="Data Management" defaultOpen={false}>
+          <Section panelOpen={isOpen} icon={Database} title="Data Management">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"

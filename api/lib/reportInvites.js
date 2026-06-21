@@ -118,3 +118,16 @@ export function hasPriorReportInvite(allInvites, { reportId, recipientEmail }) {
       String(inv.recipientEmail || '').trim().toLowerCase() === normalizedRecipient
   )
 }
+
+export function findActivePreviewReportInvite(allInvites, { reportId, ownerId }) {
+  const normalizedReportId = String(reportId || '')
+  const normalizedOwnerId = String(ownerId || '')
+  return (allInvites || []).find(
+    (inv) =>
+      inv.preview === true &&
+      inv.status === 'pending' &&
+      !isReportInviteExpired(inv) &&
+      String(inv.reportId) === normalizedReportId &&
+      String(inv.ownerId) === normalizedOwnerId
+  ) || null
+}

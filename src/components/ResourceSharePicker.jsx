@@ -183,8 +183,8 @@ export function TeamSharedIcon({
   )
 }
 
-export function VisibilityBadge({ resource, className = '' }) {
-  return <LeadSharingIcon resource={resource} className={className} />
+export function VisibilityBadge({ resource, className = '', collaboratorHint = false }) {
+  return <LeadSharingIcon resource={resource} className={className} collaboratorHint={collaboratorHint} />
 }
 
 /** Compact list-row indicator — icon only, label in tooltip */

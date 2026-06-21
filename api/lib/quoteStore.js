@@ -2,6 +2,8 @@
  * KV storage for quote templates and quote instances.
  */
 
+import { readLocalDevArray, writeLocalDevArray } from './localDevPersistence.js'
+
 export const TEMPLATES_KV_KEY = 'quote_templates'
 export const QUOTES_KV_KEY = 'user_quotes'
 
@@ -31,14 +33,17 @@ let fallbackTemplates = []
 let fallbackQuotes = []
 
 async function loadArray(key, fallback) {
-  if (!kvAvailable || !kv) return fallback
+  if (!kvAvailable || !kv) {
+    return readLocalDevArray(key, fallback)
+  }
   try {
     const data = await kv.get(key)
     const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
     const result = Array.isArray(parsed) ? parsed : []
-    return result
+    if (result.length > 0) return result
+    return readLocalDevArray(key, fallback)
   } catch {
-    return fallback
+    return readLocalDevArray(key, fallback)
   }
 }
 
@@ -50,6 +55,7 @@ export async function getAllQuoteTemplates() {
 
 export async function saveAllQuoteTemplates(templates) {
   fallbackTemplates = templates
+  await writeLocalDevArray(TEMPLATES_KV_KEY, templates)
   if (!kvAvailable || !kv) return
   try {
     await kv.set(TEMPLATES_KV_KEY, templates).catch(() => kv.set(TEMPLATES_KV_KEY, JSON.stringify(templates)))
@@ -66,6 +72,7 @@ export async function getAllQuotes() {
 
 export async function saveAllQuotes(quotes) {
   fallbackQuotes = quotes
+  await writeLocalDevArray(QUOTES_KV_KEY, quotes)
   if (!kvAvailable || !kv) return
   try {
     await kv.set(QUOTES_KV_KEY, quotes).catch(() => kv.set(QUOTES_KV_KEY, JSON.stringify(quotes)))

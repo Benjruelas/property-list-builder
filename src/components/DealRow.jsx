@@ -3,6 +3,7 @@ import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { formatTimeInState } from '@/utils/dealPipeline'
 import { EntityTagPills } from './tags/EntityTagPills'
 import { CrmPhoneCell, CrmEmailCell } from './crm/CrmTableCells'
+import { getLeadPhones, getLeadEmails } from '@/utils/leadContact'
 import { DealProfitBadge } from './DealLineItemsSection'
 import { dealHasFinancials } from '@/utils/dealFinances'
 import { cn } from '@/lib/utils'
@@ -16,7 +17,9 @@ export const PIPELINE_DEAL_CARD_CLASS =
 function resolveDealLead(deal, leads) {
   const lead = deal.leadId && leads?.length ? leads.find((l) => l.id === deal.leadId) : null
   const leadName = lead ? displayLeadName(lead) : (deal.leadName || '')
-  const leadAddress = lead ? formatLeadAddress(lead) : (deal.leadAddress || '')
+  const leadAddress = lead
+    ? formatLeadAddress(lead)
+    : formatLeadAddress(deal.leadAddress || '')
   return { leadName, leadAddress, hasLead: !!(leadName || leadAddress) }
 }
 
@@ -24,7 +27,7 @@ function DealStageBadge({ label, closed = false, className, title }) {
   return (
     <span
       className={cn(
-        'inline-flex max-w-full shrink-0 text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium',
+        'crm-row-status-badge inline-flex max-w-full shrink-0 rounded-md border uppercase tracking-wide',
         closed
           ? 'bg-white/10 text-white/70 border-white/20'
           : 'bg-blue-500/20 text-blue-200 border-blue-400/40',
@@ -62,7 +65,9 @@ export function DealRow({
   const stageName = getColumnName(deal.status, columns)
   const timeStr = formatTimeInState(deal)
   const leadName = lead ? displayLeadName(lead) : (deal.leadName || '')
-  const leadAddress = lead ? formatLeadAddress(lead) : (deal.leadAddress || '')
+  const leadAddress = lead
+    ? formatLeadAddress(lead)
+    : formatLeadAddress(deal.leadAddress || '')
   const hasLead = !!(leadName || leadAddress)
 
   return (
@@ -148,8 +153,8 @@ export function DealRow({
           {leadAddress || '—'}
         </div>
 
-        <CrmPhoneCell phone={lead?.phone} />
-        <CrmEmailCell email={lead?.email} />
+        <CrmPhoneCell phones={getLeadPhones(lead)} />
+        <CrmEmailCell emails={getLeadEmails(lead)} />
 
         <div className="crm-col-meta min-w-0">
           {timeStr ? (
@@ -293,7 +298,9 @@ export function ClosedDealRow({
     ? new Date(record.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
     : ''
   const leadName = record.lead ? displayLeadName(record.lead) : (d?.leadName || '')
-  const leadAddress = record.lead ? formatLeadAddress(record.lead) : (d?.leadAddress || '')
+  const leadAddress = record.lead
+    ? formatLeadAddress(record.lead)
+    : formatLeadAddress(d?.leadAddress || '')
   const hasLead = !!(leadName || leadAddress)
   const pipelineTitle = record.closedFrom?.title || ''
 
@@ -378,8 +385,8 @@ export function ClosedDealRow({
           {leadAddress || '—'}
         </div>
 
-        <CrmPhoneCell phone={record.lead?.phone} />
-        <CrmEmailCell email={record.lead?.email} />
+        <CrmPhoneCell phones={getLeadPhones(record.lead)} />
+        <CrmEmailCell emails={getLeadEmails(record.lead)} />
 
         <div className="crm-col-meta min-w-0">
           {closedDate ? (

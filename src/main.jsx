@@ -4,6 +4,7 @@ import App, { AppWithPublicFormRoute } from './App.jsx'
 import './styles/ui-theme.css'
 import './styles/ui-theme-light-readability.css'
 import './index.css'
+import './styles/quote-panel-actions.css'
 import { applyUiThemeFromStorage } from './utils/uiTheme'
 import { AuthProvider } from './contexts/AuthContext'
 

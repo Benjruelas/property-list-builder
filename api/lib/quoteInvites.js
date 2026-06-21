@@ -126,3 +126,16 @@ export function hasPriorQuoteInvite(allInvites, { quoteId, recipientEmail }) {
       String(inv.recipientEmail || '').trim().toLowerCase() === normalizedRecipient
   )
 }
+
+export function findActivePreviewQuoteInvite(allInvites, { quoteId, ownerId }) {
+  const normalizedQuoteId = String(quoteId || '')
+  const normalizedOwnerId = String(ownerId || '')
+  return (allInvites || []).find(
+    (inv) =>
+      inv.preview === true &&
+      inv.status === 'pending' &&
+      !isInviteExpired(inv) &&
+      String(inv.quoteId) === normalizedQuoteId &&
+      String(inv.ownerId) === normalizedOwnerId
+  ) || null
+}

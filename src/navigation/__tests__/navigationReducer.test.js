@@ -5,7 +5,7 @@ import {
   resetToMapFull,
 } from '../navigationReducer.js'
 import { NAV_ACTIONS } from '../types.js'
-import { selectPanelProps, selectIsStackedUnderSchedule, selectTasksDockLayout, selectActionBarActiveId } from '../selectors.js'
+import { selectPanelProps, selectIsStackedUnderSchedule, selectTasksDockLayout, selectActionBarActiveId, selectTopCoreFrame } from '../selectors.js'
 import { feedDataToFrames } from '../feedNavigation.js'
 import {
   recipeOpenLeads,
@@ -18,12 +18,14 @@ import {
   recipeOpenScheduleAtDate,
   recipeNavigateFromActivity,
   recipeOpenQuoteEditorFromDeal,
+  recipePushQuotesDetail,
   recipeOpenReports,
   recipeOpenDealInPipes,
   recipePushPipesDeal,
   recipeClosePromotedPipesDealDetail,
   recipeOpenLeadDetails,
   recipeOpenStandaloneLeadDetail,
+  recipeOpenLeadDetailFromSchedule,
   recipeOpenStandaloneDealDetail,
   recipeOpenDealFromLeadDetail,
   recipePushDealsClosed,
@@ -155,6 +157,17 @@ describe('navigationReducer', () => {
       { type: 'schedule' },
       { type: 'schedule.lead', leadId: 'l1' },
     ])
+    state = pop(state)
+    expect(state.navStack.map((f) => f.type)).toEqual(['schedule'])
+  })
+
+  it('recipeOpenLeadDetailFromSchedule keeps schedule and opens primary lead detail', () => {
+    const stack = recipeOpenLeadDetailFromSchedule([{ type: 'schedule' }], 'l1')
+    expect(stack.map((f) => f.type)).toEqual(['schedule', 'leads.detail'])
+    expect(stack[1].leadId).toBe('l1')
+    expect(stack[1].dockBesideTasks).toBe(true)
+
+    let state = replaceStack(createInitialState(), stack)
     state = pop(state)
     expect(state.navStack.map((f) => f.type)).toEqual(['schedule'])
   })
@@ -561,6 +574,48 @@ describe('recipes', () => {
     )
     expect(stack.some((f) => f.type === 'pipes')).toBe(true)
     expect(stack.some((f) => f.type === 'quotes.editor')).toBe(true)
+  })
+
+  it('quote detail keeps quotes list frame on stack', () => {
+    const stack = recipePushQuotesDetail([{ type: 'quotes' }], 'q1')
+    expect(stack.map((f) => f.type)).toEqual(['quotes', 'quotes.detail'])
+    expect(stack[1].quoteId).toBe('q1')
+
+    const swapped = recipePushQuotesDetail(
+      [{ type: 'quotes' }, { type: 'quotes.detail', quoteId: 'q1' }],
+      'q2',
+    )
+    expect(swapped.map((f) => f.type)).toEqual(['quotes', 'quotes.detail'])
+    expect(swapped[1].quoteId).toBe('q2')
+  })
+
+  it('quotes list open state is separate from quote detail', () => {
+    const state = createInitialState()
+    state.navStack = [{ type: 'quotes' }, { type: 'quotes.detail', quoteId: 'q1' }]
+    const props = selectPanelProps(state)
+    expect(props.isQuotesPanelOpen).toBe(true)
+    expect(props.isQuotesListOpen).toBe(true)
+    expect(props.quotesDetailQuoteId).toBe('q1')
+
+    state.navStack = [{ type: 'quotes.detail', quoteId: 'q1' }]
+    const solo = selectPanelProps(state)
+    expect(solo.isQuotesPanelOpen).toBe(true)
+    expect(solo.isQuotesListOpen).toBe(false)
+  })
+
+  it('settings top layer wins over lead detail and ignores trailing tasks', () => {
+    const state = createInitialState()
+    state.navStack = [
+      { type: 'leads.detail', leadId: 'l1' },
+      { type: 'settings' },
+      { type: 'tasks' },
+    ]
+    expect(selectTopCoreFrame(state)?.type).toBe('settings')
+    const props = selectPanelProps(state)
+    expect(props.isSettingsPanelOpen).toBe(true)
+    expect(props.isSettingsPanelTopLayer).toBe(true)
+    expect(props.isLeadsDetailTopLayer).toBe(false)
+    expect(props.isTasksPanelTopLayer).toBe(true)
   })
 
   it('openReports replaces other panels', () => {

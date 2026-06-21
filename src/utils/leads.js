@@ -6,6 +6,19 @@ import { splitOwnerName } from './ownerName'
 import { getFullAddress } from './dealPipeline'
 import { collectParcelIdCandidates, resolveParcelId } from './parcelPropertyMap'
 import { formatPhoneDisplay, normalizePhoneForStorage } from './phoneFormat'
+import {
+  normalizeLeadContactsForStorage,
+  getLeadPhones,
+  getLeadEmails,
+  leadContactMatchesQuery,
+  skipTraceContactDetails,
+} from './leadContact'
+
+export {
+  getLeadPhones,
+  getLeadEmails,
+  leadContactMatchesQuery,
+} from './leadContact'
 
 const getApiBase = () => {
   if (import.meta.env.DEV) return '/api'
@@ -16,29 +29,14 @@ const getApiBase = () => {
 const LOCAL_LEADS_KEY = 'user_leads_local'
 const MAX_LEAD_ACTIVITY = 200
 
-export const LEAD_STATUSES = [
-  { id: 'new', label: 'New', color: 'bg-slate-500/25 text-slate-200 border-slate-400/40' },
-  { id: 'contacted', label: 'Contacted', color: 'bg-blue-500/20 text-blue-200 border-blue-400/40' },
-  { id: 'qualified', label: 'Qualified', color: 'bg-amber-500/20 text-amber-200 border-amber-400/40' },
-  { id: 'converted', label: 'Converted', color: 'bg-green-500/20 text-green-200 border-green-400/40' },
-  { id: 'lost', label: 'Lost', color: 'bg-red-500/20 text-red-200 border-red-400/40' },
-]
+export {
+  DEFAULT_LEAD_STATUSES,
+  LEAD_STATUSES,
+  getLeadStatusMeta,
+  getLeadStatus,
+} from './leadStatuses'
 
-const LEAD_STATUS_IDS = new Set(LEAD_STATUSES.map((s) => s.id))
 const OUTREACH_ACTIVITY_TYPES = new Set(['call', 'text', 'email'])
-
-export function getLeadStatusMeta(statusId) {
-  return LEAD_STATUSES.find((s) => s.id === statusId) || LEAD_STATUSES[0]
-}
-
-/** Effective status — derives converted when lead has deals unless explicitly lost. */
-export function getLeadStatus(lead, dealCount = 0) {
-  if (!lead) return 'new'
-  if (lead.status === 'lost') return 'lost'
-  if (dealCount > 0) return 'converted'
-  const raw = lead.status || 'new'
-  return LEAD_STATUS_IDS.has(raw) ? raw : 'new'
-}
 
 export function lastContactedAt(lead) {
   const activities = Array.isArray(lead?.activity) ? lead.activity : []
@@ -98,13 +96,14 @@ export async function fetchLeads(getToken) {
   return leads
 }
 
-function withNormalizedPhone(data) {
-  if (!data || typeof data !== 'object' || !('phone' in data)) return data
-  return { ...data, phone: normalizePhoneForStorage(data.phone) }
+function withNormalizedLeadContact(data) {
+  if (!data || typeof data !== 'object') return data
+  const contact = normalizeLeadContactsForStorage(data)
+  return { ...data, ...contact }
 }
 
 export async function createLead(getToken, leadData) {
-  const normalizedData = withNormalizedPhone(leadData)
+  const normalizedData = withNormalizedLeadContact(leadData)
   const token = await getToken()
   if (!token) {
     const leads = loadLocalLeads()
@@ -138,7 +137,7 @@ export async function createLead(getToken, leadData) {
 }
 
 export async function updateLead(getToken, leadId, updates) {
-  const normalizedUpdates = withNormalizedPhone(updates)
+  const normalizedUpdates = withNormalizedLeadContact(updates)
   const token = await getToken()
   if (!token) {
     const leads = loadLocalLeads()
@@ -228,6 +227,12 @@ function coordsNear(aLat, aLng, bLat, bLng, eps = LEAD_COORD_EPS) {
   return Math.abs(aLat - bLat) <= eps && Math.abs(aLng - bLng) <= eps
 }
 
+export function findLeadById(leads, leadId) {
+  if (leadId == null || leadId === '' || !Array.isArray(leads)) return null
+  const key = String(leadId)
+  return leads.find((lead) => lead?.id != null && String(lead.id) === key) || null
+}
+
 export function findLeadByParcelId(leads, parcelOrId) {
   if (!leads?.length || parcelOrId == null || parcelOrId === '') return null
 
@@ -273,6 +278,85 @@ export function displayLeadName(lead) {
 }
 
 /** Strip zip, country, and extra segments — show street, city, state only. */
+const US_STATE_CODES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+])
+
+const STREET_SUFFIXES = new Set([
+  'ST', 'STREET', 'AVE', 'AV', 'AVENUE', 'BLVD', 'BOULEVARD', 'DR', 'DRIVE',
+  'RD', 'ROAD', 'LN', 'LANE', 'CT', 'COURT', 'PL', 'PLACE', 'WAY', 'CIR',
+  'CIRCLE', 'PKWY', 'PARKWAY', 'HWY', 'HIGHWAY', 'TER', 'TERRACE', 'TRL',
+  'TRAIL', 'LOOP', 'EXPY', 'EXPRESSWAY', 'PLZ', 'SQUARE', 'SQ', 'RUN',
+  'PATH', 'PASS', 'XING', 'CROSSING', 'BND', 'BEND', 'PT', 'POINT',
+])
+
+const DIRECTIONALS = new Set(['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'])
+
+function formatStreetSuffix(word) {
+  const upper = word.toUpperCase()
+  if (!STREET_SUFFIXES.has(upper)) return null
+  if (upper.length <= 2) return upper.charAt(0) + upper.slice(1).toLowerCase()
+  return upper.charAt(0) + upper.slice(1).toLowerCase()
+}
+
+function formatAddressWord(word) {
+  if (!word) return word
+  if (/^\d+$/.test(word)) return word
+
+  const ordinal = word.match(/^(\d+)(ST|ND|RD|TH)$/i)
+  if (ordinal) return `${ordinal[1]}${ordinal[2].toLowerCase()}`
+
+  const unit = word.match(/^(\d+)([A-Za-z])$/)
+  if (unit) return `${unit[1]}${unit[2].toUpperCase()}`
+
+  const upper = word.toUpperCase()
+  if (DIRECTIONALS.has(upper)) return upper
+  if (US_STATE_CODES.has(upper)) return upper
+
+  const suffix = formatStreetSuffix(word)
+  if (suffix) return suffix
+
+  if (upper === 'PO' || upper === 'P.O.' || upper === 'P.O') return 'PO'
+  if (upper === 'BOX') return 'Box'
+  if (upper === 'APT' || upper === 'STE' || upper === 'UNIT') {
+    return upper.charAt(0) + upper.slice(1).toLowerCase()
+  }
+
+  const lower = word.toLowerCase()
+  return lower.charAt(0).toUpperCase() + lower.slice(1)
+}
+
+function formatAddressSegment(segment) {
+  const trimmed = String(segment || '').trim()
+  if (!trimmed) return trimmed
+
+  const stateOnly = trimmed.match(/^([A-Za-z]{2})$/)
+  if (stateOnly && US_STATE_CODES.has(stateOnly[1].toUpperCase())) {
+    return stateOnly[1].toUpperCase()
+  }
+
+  const cityState = trimmed.match(/^(.+?)\s+([A-Za-z]{2})$/)
+  if (cityState && US_STATE_CODES.has(cityState[2].toUpperCase())) {
+    return `${formatAddressSegment(cityState[1])} ${cityState[2].toUpperCase()}`
+  }
+
+  return trimmed.split(/\s+/).map(formatAddressWord).join(' ')
+}
+
+/** Title-case a normalized US address for display (street, city, state). */
+export function formatAddressProperCase(address) {
+  if (!address?.trim()) return address || ''
+  return address
+    .split(',')
+    .map((part) => formatAddressSegment(part.trim()))
+    .filter(Boolean)
+    .join(', ')
+}
+
 export function formatLeadAddress(leadOrAddress) {
   const lead = typeof leadOrAddress === 'object' && leadOrAddress !== null ? leadOrAddress : null
   const addr = lead?.address ?? (typeof leadOrAddress === 'string' ? leadOrAddress : '')
@@ -284,7 +368,7 @@ export function formatLeadAddress(leadOrAddress) {
     const state = p.state2 || p.PROP_STATE || p.SITUS_STATE || p.STATE || ''
     const street = p.STREET || p.ADDR_LINE1 || p.saddstr || ''
     if (street.trim() && (city || state)) {
-      return [street.trim(), city, state].filter(Boolean).join(', ')
+      return formatAddressProperCase([street.trim(), city, state].filter(Boolean).join(', '))
     }
   }
 
@@ -294,7 +378,7 @@ export function formatLeadAddress(leadOrAddress) {
   const stripZip = (segment) => segment.replace(/\s+\d{5}(?:-\d{4})?(?:\s.*)?$/, '').trim()
 
   if (parts.length >= 3) {
-    return [parts[0], parts[1], stripZip(parts[2])].filter(Boolean).join(', ')
+    return formatAddressProperCase([parts[0], parts[1], stripZip(parts[2])].filter(Boolean).join(', '))
   }
 
   if (parts.length === 2) {
@@ -302,9 +386,9 @@ export function formatLeadAddress(leadOrAddress) {
     const tail = parts[1]
     const cityStateZip = tail.match(/^(.+?)\s+([A-Z]{2})\s+\d{5}/)
     if (cityStateZip) {
-      return [street, cityStateZip[1].trim(), cityStateZip[2]].join(', ')
+      return formatAddressProperCase([street, cityStateZip[1].trim(), cityStateZip[2]].join(', '))
     }
-    return [street, stripZip(tail)].filter(Boolean).join(', ')
+    return formatAddressProperCase([street, stripZip(tail)].filter(Boolean).join(', '))
   }
 
   const stateZipMatch = str.match(/^(.+?)\s+([A-Z]{2})\s+\d{5}/)
@@ -314,14 +398,14 @@ export function formatLeadAddress(leadOrAddress) {
     if (words.length >= 3) {
       const city = words.slice(-2).join(' ')
       const street = words.slice(0, -2).join(' ')
-      return [street, city, stateZipMatch[2]].join(', ')
+      return formatAddressProperCase([street, city, stateZipMatch[2]].join(', '))
     }
     if (words.length === 2) {
-      return [words[0], words[1], stateZipMatch[2]].join(', ')
+      return formatAddressProperCase([words[0], words[1], stateZipMatch[2]].join(', '))
     }
   }
 
-  return str
+  return formatAddressProperCase(str)
 }
 
 /** Map lead record to parcel-shaped data for map navigation (no synthetic owner from contact name). */
@@ -346,6 +430,7 @@ export function leadToParcelData(lead) {
 export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {
   const rawOwner = parcelData?.properties?.OWNER_NAME || null
   const { firstName, lastName } = splitOwnerName(rawOwner)
+  const contact = skipTrace ? skipTraceContactDetails(skipTrace) : normalizeLeadContactsForStorage({})
   return {
     firstName,
     lastName,
@@ -353,8 +438,13 @@ export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {
     parcelId: resolveParcelId(parcelData) || parcelData?.id || null,
     lat: parcelData?.lat ?? (parcelData?.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
     lng: parcelData?.lng ?? (parcelData?.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
-    phone: formatPhoneDisplay(skipTrace?.phone || skipTrace?.phoneNumbers?.[0] || ''),
-    email: skipTrace?.email || skipTrace?.emails?.[0] || '',
+    phone: contact.phone ? formatPhoneDisplay(contact.phone) : '',
+    email: contact.email || '',
+    phoneDetails: contact.phoneDetails.map((d) => ({
+      ...d,
+      value: formatPhoneDisplay(d.value),
+    })),
+    emailDetails: contact.emailDetails,
     notes: '',
     properties: parcelData?.properties || null,
   }
@@ -368,16 +458,15 @@ export function buildAutoLeadPayloadFromParcel(parcelData, skipTrace = null) {
   let firstName = (prefill.firstName || '').trim()
   let lastName = (prefill.lastName || '').trim()
   if (!firstName && !lastName) lastName = 'Property'
-  return {
+  return withNormalizedLeadContact({
     firstName,
     lastName,
     address,
-    phone: normalizePhoneForStorage(prefill.phone),
-    email: (prefill.email || '').trim() || null,
+    ...skipTraceContactDetails(skipTrace),
     notes: '',
     parcelId: prefill.parcelId,
     lat: prefill.lat,
     lng: prefill.lng,
     properties: prefill.properties,
-  }
+  })
 }

@@ -1,13 +1,17 @@
 import { useState } from 'react'
-import { Loader2, Download, Send, Pencil, FileText } from 'lucide-react'
+import { Send, Pencil, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
+import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
-import { Button } from '../ui/button'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
-import { generatePhotoReportPdf } from '@/utils/photoReports'
 import { logLeadReportEvent } from '@/utils/leadActivity'
-import { showToast } from '../ui/toast'
 import { SendReportDialog } from './SendReportDialog'
+import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
+import { ViewAsClientButton } from '../ViewAsClientButton'
+import { PanelActionButton } from '../ui/panel-action-button'
+import { showConfirm } from '../ui/confirm-dialog'
+import { getTeamEmailBranding, getTeamForMembership, getSenderDisplayName } from '@/utils/profile'
+import { useAuth } from '@/contexts/AuthContext'
 
 export function ReportDetail({
   open,
@@ -16,57 +20,37 @@ export function ReportDetail({
   onClose,
   onBack,
   onEdit,
+  onDelete,
   onReportUpdated,
   getToken,
   leads = [],
   teams = [],
   teamMembership = null,
 }) {
-  const [generating, setGenerating] = useState(false)
+  const { getToken: authGetToken, currentUser } = useAuth()
+  const resolveToken = getToken || authGetToken
   const [sendOpen, setSendOpen] = useState(false)
 
   if (!open || !report) return null
 
-  const handleGenerate = async () => {
-    setGenerating(true)
-    try {
-      const res = await generatePhotoReportPdf(getToken, report.id)
-      onReportUpdated?.(res.report)
-      showToast('PDF generated', 'success')
-    } catch (e) {
-      showToast(e.message || 'Generation failed', 'error')
-    } finally {
-      setGenerating(false)
-    }
-  }
-
-  const handleDownload = async () => {
-    if (!report.pdfKey) {
-      showToast('Generate PDF first', 'error')
-      return
-    }
-    try {
-      const token = await getToken()
-      const base = import.meta.env.DEV ? '/api' : `${window.location.origin}/api`
-      const res = await fetch(`${base}/photo-reports?pdfKey=${encodeURIComponent(report.pdfKey)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) throw new Error('Download failed')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${report.title || 'report'}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      showToast(e.message || 'Download failed', 'error')
-    }
-  }
+  const team = getTeamForMembership(teams, teamMembership)
+  const teamBranding = getTeamEmailBranding(team)
+  const senderName = report.createdByName
+    || (report.ownerId === currentUser?.uid ? getSenderDisplayName(currentUser) : '')
+    || (report.ownerEmail || '').split('@')[0]
+    || ''
+  const senderEmail = report.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
 
   return (
     <>
-      <Dialog open={open} modal={false} onOpenChange={(o) => !o && onClose?.()}>
+      <Dialog
+        open={open}
+        modal={false}
+        onOpenChange={(o) => handleChildPanelDismiss(o, onClose, {
+          hasNestedOverlay: sendOpen,
+          wasOpen: open,
+        })}
+      >
         <DialogContent
           className="map-panel list-panel reports-panel report-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full w-[min(96vw,32rem)] max-w-lg"
           showCloseButton={false}
@@ -79,6 +63,14 @@ export function ReportDetail({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 space-y-4">
+            <QuoteBrandHeader
+              variant="panel"
+              businessName={teamBranding.businessName}
+              logoBase64={teamBranding.logoBase64}
+              senderName={senderName}
+              senderEmail={senderEmail}
+            />
+
             {lead && (
               <div>
                 <div className="text-sm font-medium">{displayLeadName(lead)}</div>
@@ -95,25 +87,30 @@ export function ReportDetail({
               </div>
             ))}
 
-            <div className="flex flex-col gap-2 pt-2">
-              <Button type="button" variant="outline" className="min-h-[44px]" onClick={() => onEdit?.(report)}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit report
-              </Button>
-              <Button type="button" className="min-h-[44px]" onClick={handleGenerate} disabled={generating}>
-                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                Generate PDF
-              </Button>
-              {report.pdfKey && (
-                <Button type="button" variant="outline" className="min-h-[44px]" onClick={handleDownload}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download PDF
-                </Button>
-              )}
-              <Button type="button" className="min-h-[44px]" onClick={() => setSendOpen(true)}>
-                <Send className="h-4 w-4 mr-2" />
+            <div className="quote-details-actions flex flex-col gap-2.5 pt-2">
+              <PanelActionButton variant="primary" onClick={() => setSendOpen(true)}>
+                <Send className="h-4 w-4 shrink-0" />
                 Send report
-              </Button>
+              </PanelActionButton>
+              <ViewAsClientButton getToken={resolveToken} type="report" entityId={report.id} />
+              <PanelActionButton onClick={() => onEdit?.(report)}>
+                <Pencil className="h-4 w-4 shrink-0" />
+                Edit report
+              </PanelActionButton>
+              <PanelActionButton
+                variant="danger"
+                onClick={async () => {
+                  const ok = await showConfirm({
+                    title: 'Delete report?',
+                    message: 'This cannot be undone.',
+                    confirmLabel: 'Delete',
+                    destructive: true,
+                  })
+                  if (ok) onDelete?.(report)
+                }}
+              >
+                <Trash2 className="h-4 w-4 shrink-0" /> Delete
+              </PanelActionButton>
             </div>
           </div>
         </DialogContent>
@@ -129,7 +126,7 @@ export function ReportDetail({
         onSent={async (updated) => {
           onReportUpdated?.(updated)
           if (lead?.id) {
-            await logLeadReportEvent(getToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })
+            await logLeadReportEvent(resolveToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })
           }
           setSendOpen(false)
         }}

@@ -5,6 +5,36 @@
 
 import { resolveAccess as legacyResolveAccess } from './teams.js'
 
+export function uidsMatch(a, b) {
+  if (a == null || b == null || a === '' || b === '') return false
+  return String(a) === String(b)
+}
+
+export function normalizedOwnerId(lead) {
+  const id = lead?.ownerId
+  if (id == null || id === '') return null
+  return String(id)
+}
+
+export function isLeadOwner(user, lead) {
+  if (!user?.uid || !lead) return false
+  const ownerId = normalizedOwnerId(lead)
+  if (ownerId && uidsMatch(ownerId, user.uid)) return true
+  const ownerEmail = (lead.ownerEmail || '').toLowerCase().trim()
+  const userEmail = (user.email || '').toLowerCase().trim()
+  return !!(ownerEmail && userEmail && ownerEmail === userEmail)
+}
+
+export function userCapturedPhoto(user, photo) {
+  return !!(photo?.capturedByUid && uidsMatch(photo.capturedByUid, user.uid))
+}
+
+export function userCapturedAllPhotos(user, lead) {
+  const photos = Array.isArray(lead?.photos) ? lead.photos : []
+  if (photos.length === 0) return false
+  return photos.every((p) => userCapturedPhoto(user, p))
+}
+
 export const VISIBILITY = {
   PRIVATE: 'private',
   TEAM: 'team',
@@ -98,7 +128,12 @@ export function resolveResourceAccess(resource, user, { team = null, teamsIndex 
   if (!resource || !user?.uid) return null
   const r = normalizeResourceVisibility(resource, team?.id)
 
-  if (r.ownerId === user.uid) return 'owner'
+  const ownerId = normalizedOwnerId(r)
+  if (ownerId && uidsMatch(ownerId, user.uid)) return 'owner'
+
+  const ownerEmail = (r.ownerEmail || '').toLowerCase().trim()
+  const userEmail = (user.email || '').toLowerCase().trim()
+  if (!ownerId && ownerEmail && userEmail && ownerEmail === userEmail) return 'owner'
 
   const memberRole = team ? getTeamMemberRole(team, user.uid) : null
   const isAdmin = memberRole === 'admin'

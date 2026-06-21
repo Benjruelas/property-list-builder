@@ -10,7 +10,7 @@ import {
   applyResourceVisibilityPatch,
   isTeamAdmin,
 } from './lib/resourceContext.js'
-import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
+import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline } from './lib/tagHelpers.js'
 import { normalizePipelineStore } from './lib/pipelineStore.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
 
@@ -484,6 +484,19 @@ export default async function handler(req, res) {
       pipeline.updatedAt = new Date().toISOString()
       all[idx] = pipeline
       await saveAllPipelines(all)
+
+      if (deals !== undefined) {
+        const dealTagMeta = collectDealTagMetaFromPipeline(pipeline)
+        if (dealTagMeta.length > 0) {
+          await syncTagMetaToCollaborators(kv, {
+            resource: pipeline,
+            type: 'deals',
+            tagMeta: dealTagMeta,
+            actorUid: user.uid,
+            ctx,
+          })
+        }
+      }
 
       await runPipelinePushNotifications({
         sharedWith,

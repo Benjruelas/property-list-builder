@@ -3,6 +3,7 @@ import { Loader2, CheckCircle2, AlertCircle, CreditCard } from 'lucide-react'
 import { fetchPublicQuote, respondToPublicQuote, createQuoteCheckout } from '../../utils/quotes'
 import { computeQuoteTotals, formatQuoteMoney } from '../../utils/quoteMath'
 import { PublicFormBrandBar } from '../forms/PublicFormBrand'
+import { PublicPdfDownload } from '../shared/PublicPdfDownload'
 import { QuoteBrandHeader } from './QuoteBrandHeader'
 import { QuoteCheckToggle } from './QuoteCheckToggle'
 import { cn } from '@/lib/utils'
@@ -51,12 +52,17 @@ export function PublicQuotePage({ token }) {
     })
   }, [data, selectedOptionalIds])
 
-  const canRespond = useMemo(() => {
+  const isPreview = !!data?.preview
+
+  const isRespondableStatus = useMemo(() => {
     if (!data) return false
     return !['accepted', 'declined', 'paid', 'change_requested'].includes(data.status)
   }, [data])
 
-  const showPay = data?.status === 'accepted' && data?.paymentEnabled && data?.status !== 'paid' && data?.stripeConfigured
+  const canRespond = isRespondableStatus && !isPreview
+
+  const showPayButton =
+    data?.status === 'accepted' && data?.paymentEnabled && data?.status !== 'paid' && data?.stripeConfigured
 
   const toggleOptional = (id) => {
     setSelectedOptionalIds((prev) =>
@@ -143,7 +149,8 @@ export function PublicQuotePage({ token }) {
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
           <h1 className="text-xl font-semibold mb-2">Payment received</h1>
-          <p className="text-sm text-gray-600">Thank you! Your payment for {data?.title || 'this quote'} has been recorded.</p>
+          <p className="text-sm text-gray-600 mb-6">Thank you! Your payment for {data?.title || 'this quote'} has been recorded.</p>
+          <PublicPdfDownload url={data?.pdfDownloadUrl} className="pb-0" />
         </div>
       </div>
     )
@@ -153,6 +160,14 @@ export function PublicQuotePage({ token }) {
     <div className={pageClass}>
       {brandChrome}
       <div className="flex-1 overflow-y-auto px-4 py-6 max-w-lg mx-auto w-full">
+        {isPreview && (
+          <div
+            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
+            role="status"
+          >
+            Preview only — this is how your client will see the quote. Buttons are shown for reference but cannot be used here.
+          </div>
+        )}
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">{data.title || 'Quote'}</h1>
           {data.recipientEmail && (
@@ -247,6 +262,8 @@ export function PublicQuotePage({ token }) {
           </div>
         )}
 
+        <PublicPdfDownload url={data.pdfDownloadUrl} />
+
         {data.clientResponse && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm">
             <p className="font-medium capitalize">You {data.clientResponse.action?.replace('_', ' ')}</p>
@@ -259,53 +276,78 @@ export function PublicQuotePage({ token }) {
 
         {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
-        {canRespond && (
+        {isRespondableStatus && (
           <div className="space-y-3 mb-6">
             <textarea
-              className="w-full min-h-[80px] border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={cn(
+                'w-full min-h-[80px] border border-gray-300 rounded-lg px-3 py-2 text-sm',
+                isPreview && 'bg-gray-50 text-gray-500 cursor-not-allowed'
+              )}
               placeholder="Optional message…"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              readOnly={isPreview}
+              tabIndex={isPreview ? -1 : undefined}
             />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <button
-                type="button"
-                disabled={submitting}
-                className="py-3 px-4 rounded-lg bg-green-600 text-white font-medium text-sm hover:bg-green-700 disabled:opacity-50"
-                onClick={() => handleRespond('accept')}
-              >
-                Accept {formatQuoteMoney(displayTotal)}
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                className="py-3 px-4 rounded-lg bg-amber-500 text-white font-medium text-sm hover:bg-amber-600 disabled:opacity-50"
-                onClick={() => handleRespond('request_change')}
-              >
-                Request changes
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                className="py-3 px-4 rounded-lg bg-gray-200 text-gray-800 font-medium text-sm hover:bg-gray-300 disabled:opacity-50"
-                onClick={() => handleRespond('decline')}
-              >
-                Decline
-              </button>
+              <div className={cn('relative', isPreview && 'pointer-events-none')}>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  className="w-full py-3 px-4 rounded-lg bg-green-600 text-white font-medium text-sm hover:bg-green-700 disabled:opacity-50"
+                  onClick={() => handleRespond('accept')}
+                >
+                  Accept {formatQuoteMoney(displayTotal)}
+                </button>
+                {isPreview && (
+                  <span className="absolute inset-0 rounded-lg bg-gray-500/45 pointer-events-none" aria-hidden />
+                )}
+              </div>
+              <div className={cn('relative', isPreview && 'pointer-events-none')}>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  className="w-full py-3 px-4 rounded-lg bg-amber-500 text-white font-medium text-sm hover:bg-amber-600 disabled:opacity-50"
+                  onClick={() => handleRespond('request_change')}
+                >
+                  Request changes
+                </button>
+                {isPreview && (
+                  <span className="absolute inset-0 rounded-lg bg-gray-500/45 pointer-events-none" aria-hidden />
+                )}
+              </div>
+              <div className={cn('relative', isPreview && 'pointer-events-none')}>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  className="w-full py-3 px-4 rounded-lg bg-gray-200 text-gray-800 font-medium text-sm hover:bg-gray-300 disabled:opacity-50"
+                  onClick={() => handleRespond('decline')}
+                >
+                  Decline
+                </button>
+                {isPreview && (
+                  <span className="absolute inset-0 rounded-lg bg-gray-500/45 pointer-events-none" aria-hidden />
+                )}
+              </div>
             </div>
           </div>
         )}
 
-        {showPay && (
-          <button
-            type="button"
-            disabled={submitting}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
-            onClick={handlePay}
-          >
-            <CreditCard className="h-5 w-5" />
-            Pay {formatQuoteMoney(data.total ?? displayTotal)}
-          </button>
+        {showPayButton && (
+          <div className={cn('relative', isPreview && 'pointer-events-none')}>
+            <button
+              type="button"
+              disabled={submitting}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
+              onClick={handlePay}
+            >
+              <CreditCard className="h-5 w-5" />
+              Pay {formatQuoteMoney(data.total ?? displayTotal)}
+            </button>
+            {isPreview && (
+              <span className="absolute inset-0 rounded-lg bg-gray-500/45 pointer-events-none" aria-hidden />
+            )}
+          </div>
         )}
 
         {data.status === 'accepted' && data.paymentEnabled && !data.stripeConfigured && (

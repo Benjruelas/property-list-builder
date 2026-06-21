@@ -345,9 +345,52 @@
   pointer-events: none !important;
 }
 
+/* List/source panel crossfade — stay open under detail instead of snapping closed */
+.map-panel-dialog.crm-list-under-detail[data-state='open'] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity var(--crm-panel-crossfade-duration, 280ms) cubic-bezier(0.4, 0, 0.2, 1) !important;
+  animation: none !important;
+}
+
+/* Quotes + reports list stays visible beside detail on desktop */
+@media (min-width: 768px) {
+  .map-panel-dialog.quotes-panel.quotes-list-with-detail[data-state='open']:not(.quote-details-panel):not(.quote-editor-panel),
+  .map-panel-dialog.reports-panel.reports-list-with-detail[data-state='open']:not(.report-details-panel):not(.report-editor-panel) {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 10001 !important;
+  }
+
+  html:not([data-tasks-docked="1"]):has(.quote-details-panel[data-state='open']) .map-panel-dialog.quotes-panel.quotes-list-with-detail[data-state='open']:not(.quote-details-panel),
+  html:not([data-tasks-docked="1"]):has(.report-details-panel[data-state='open']) .map-panel-dialog.reports-panel.reports-list-with-detail[data-state='open']:not(.report-details-panel) {
+    transform: translate3d(-50%, -50%, 0) !important;
+    pointer-events: none !important;
+  }
+
+  html:not([data-tasks-docked="1"]) .map-panel-dialog.quote-details-panel[data-state='open'],
+  html:not([data-tasks-docked="1"]) .map-panel-dialog.report-details-panel[data-state='open'] {
+    transform: translate3d(-50%, -50%, 0) !important;
+    z-index: 10021 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .map-panel-dialog.quotes-panel.quotes-list-with-detail[data-state='open']:not(.quote-details-panel),
+  .map-panel-dialog.reports-panel.reports-list-with-detail[data-state='open']:not(.report-details-panel) {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
+.map-panel-dialog.list-panel[data-state='open']:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel),
+.map-panel-dialog.deal-pipeline-panel[data-state='open']:not(.lead-details-panel):not(.deal-details-panel) {
+  transition: opacity var(--crm-panel-crossfade-duration, 280ms) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 @media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
-  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel) {
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.create-lead-panel) {
     width: auto !important;
     min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
@@ -399,10 +442,31 @@
 
   /* Desktop: form fill/editor — same footprint as other CRM panels */
   .form-fill-panel.fullscreen-panel,
-  .form-editor-panel.fullscreen-panel {
+  .form-editor-panel.fullscreen-panel,
+  .report-editor-panel.fullscreen-panel:not(.square-picker-panel) {
     width: var(--action-bar-width) !important;
     min-width: 0 !important;
     max-width: var(--action-bar-width) !important;
+    height: var(--ui-panel-height) !important;
+    min-height: var(--ui-panel-min-height) !important;
+    max-height: var(--ui-panel-height) !important;
+  }
+
+  /* Desktop: form fill — viewport-centered to match the action bar (not dock-primary shift) */
+  html[data-tasks-docked="1"] .map-panel-dialog.form-fill-panel[data-state="open"],
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.form-fill-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-fill-panel[data-state="open"],
+  html[data-tasks-docked="1"] .map-panel-dialog.report-editor-panel.square-picker-panel[data-state="open"],
+  html[data-tasks-dock-leave="1"] .map-panel-dialog.report-editor-panel.square-picker-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel.square-picker-panel[data-state="open"] {
+    transform: translate3d(-50%, -50%, 0) !important;
+  }
+
+  /* Desktop: quote editor — two-thirds of the viewport */
+  .quote-editor-panel.fullscreen-panel {
+    width: calc(100vw * 2 / 3) !important;
+    min-width: 0 !important;
+    max-width: calc(100vw * 2 / 3) !important;
     height: var(--ui-panel-height) !important;
     min-height: var(--ui-panel-min-height) !important;
     max-height: var(--ui-panel-height) !important;
@@ -653,6 +717,31 @@
     bottom: auto !important;
     transform: translate(-50%, -50%);
     overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Desktop upload — scrim + centered box */
+  .photo-mode-overlay--upload {
+    background: transparent;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+
+  .photo-mode-upload-box {
+    position: relative;
+    z-index: 1;
+    width: min(24rem, 100%);
+    height: auto;
+    max-height: min(34rem, calc(100vh - 3rem));
+    border-radius: 1rem;
+    overflow: hidden;
+  }
+
+  .photo-mode-overlay--upload .photo-mode-viewport {
+    flex: 0 1 auto;
+    min-height: 0;
   }
 
   /* Activity feed rows — same horizontal list layout as quotes/forms/reports */
@@ -694,6 +783,7 @@
   html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.reports-panel.fullscreen-panel:not(.report-details-panel):not(.report-editor-panel),
   html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.forms-panel.fullscreen-panel:not(.form-editor-panel):not(.form-fill-panel),
   html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.form-editor-panel.fullscreen-panel,
+  html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.report-editor-panel.fullscreen-panel:not(.square-picker-panel),
   html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.paths-panel.fullscreen-panel,
   html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.lists-panel.fullscreen-panel,
   html[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.teams-panel.fullscreen-panel,
@@ -760,9 +850,7 @@
     top: 50% !important;
     bottom: auto !important;
     transform: translate3d(calc(-50% - var(--tasks-solo-detail-shift)), -50%, 0) !important;
-    transition: transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease), opacity 220ms cubic-bezier(0.4, 0, 0.2, 1) !important;
-    animation: none !important;
-    opacity: 1 !important;
+    transition: transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) !important;
     z-index: 10001 !important;
   }
 
@@ -793,7 +881,6 @@
       transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
       width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
       max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) !important;
-    animation: none !important;
     z-index: 10001 !important;
   }
 
@@ -809,7 +896,6 @@
   html[data-tasks-docked="1"] .map-panel-dialog.quote-details-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.quote-editor-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.report-details-panel,
-  html[data-tasks-docked="1"] .map-panel-dialog.report-editor-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.parcel-list-panel,
   html[data-tasks-docked="1"] .map-panel-dialog.form-fill-panel {
     transform: translate3d(-50%, -50%, 0) !important;
@@ -842,9 +928,9 @@
   html[data-tasks-docked="1"][data-tasks-dock-root="pipes"] .map-panel-dialog.deal-pipeline-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="quotes"] .map-panel-dialog.quotes-panel[data-state="open"]:not(.quote-details-panel):not(.quote-editor-panel),
   html[data-tasks-docked="1"][data-tasks-dock-root="reports"] .map-panel-dialog.reports-panel[data-state="open"]:not(.report-details-panel):not(.report-editor-panel),
+  html[data-tasks-docked="1"][data-tasks-dock-root="reports"] .map-panel-dialog.report-editor-panel[data-state="open"]:not(.square-picker-panel),
   html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.forms-panel.list-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-editor-panel[data-state="open"],
-  html[data-tasks-docked="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-fill-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="paths"] .map-panel-dialog.paths-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="lists"] .map-panel-dialog.lists-panel[data-state="open"],
   html[data-tasks-docked="1"][data-tasks-dock-root="lists"] .map-panel-dialog.parcel-list-panel[data-state="open"],
@@ -919,10 +1005,9 @@
   html[data-tasks-dock-swap="1"] .map-panel-dialog.quote-details-panel[data-state="open"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.quote-editor-panel[data-state="open"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.report-details-panel[data-state="open"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel[data-state="open"],
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel[data-state="open"]:not(.square-picker-panel),
   html[data-tasks-dock-swap="1"] .map-panel-dialog.team-details-panel[data-state="open"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-editor-panel[data-state="open"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-fill-panel[data-state="open"] {
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-editor-panel[data-state="open"] {
     animation: map-panel-primary-dock-fade-in 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
     transition: none !important;
   }
@@ -946,8 +1031,7 @@
   html[data-tasks-dock-swap="1"] .map-panel-dialog.report-details-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.team-details-panel[data-state="closed"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-editor-panel[data-state="closed"],
-  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-fill-panel[data-state="closed"] {
+  html[data-tasks-dock-swap="1"] .map-panel-dialog.form-editor-panel[data-state="closed"] {
     animation: map-panel-primary-dock-fade-out 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
     transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
     transition: none !important;
@@ -960,9 +1044,9 @@
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="pipes"] .map-panel-dialog.deal-pipeline-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="quotes"] .map-panel-dialog.quotes-panel[data-state="open"]:not(.quote-details-panel):not(.quote-editor-panel),
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="reports"] .map-panel-dialog.reports-panel[data-state="open"]:not(.report-details-panel):not(.report-editor-panel),
+  html[data-tasks-dock-leave="1"][data-tasks-dock-root="reports"] .map-panel-dialog.report-editor-panel[data-state="open"]:not(.square-picker-panel),
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="forms"] .map-panel-dialog.forms-panel.list-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-editor-panel[data-state="open"],
-  html[data-tasks-dock-leave="1"][data-tasks-dock-root="forms"] .map-panel-dialog.form-fill-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="paths"] .map-panel-dialog.paths-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="lists"] .map-panel-dialog.lists-panel[data-state="open"],
   html[data-tasks-dock-leave="1"][data-tasks-dock-root="teams"] .map-panel-dialog.teams-panel[data-state="open"],
@@ -1022,6 +1106,65 @@
     background: inherit;
   }
 
+  /* Desktop: compact picker — contact pickers, small template-style panels */
+  .compact-picker-panel.fullscreen-panel {
+    width: min(22rem, calc(100vw - 2rem)) !important;
+    min-width: 0 !important;
+    max-width: min(22rem, calc(100vw - 2rem)) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: min(
+      calc(
+        100vh
+        - var(--ui-action-bar-block)
+        - 2 * var(--ui-chrome-inset)
+        - env(safe-area-inset-top, 0px)
+        - 1rem
+      ),
+      28rem
+    ) !important;
+    border-radius: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .compact-picker-panel .compact-picker-scroll {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .compact-picker-panel .compact-picker-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Desktop: square picker panels — quote/report template + lead pickers + report builder */
+  .square-picker-panel.fullscreen-panel {
+    --square-picker-size: min(
+      66rem,
+      calc(100vw - 2rem),
+      calc(
+        100vh
+        - var(--ui-action-bar-block)
+        - 2 * var(--ui-chrome-inset)
+        - env(safe-area-inset-top, 0px)
+        - 1rem
+      )
+    );
+    width: var(--square-picker-size) !important;
+    min-width: 0 !important;
+    max-width: var(--square-picker-size) !important;
+    height: var(--square-picker-size) !important;
+    min-height: 0 !important;
+    max-height: var(--square-picker-size) !important;
+    border-radius: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
   /* Desktop: Settings + Team detail — matching square panel */
   .map-panel-dialog.settings-panel.fullscreen-panel,
   .map-panel-dialog.team-details-panel.fullscreen-panel,
@@ -1038,13 +1181,47 @@
     overflow: hidden !important;
   }
 
+  /* Desktop: Create / Edit lead — compact width, height fits content (scrolls at max) */
+  .map-panel-dialog.create-lead-panel.fullscreen-panel,
+  .create-lead-panel.fullscreen-panel {
+    --create-lead-panel-width: calc(var(--ui-panel-height) * 0.5);
+    width: var(--create-lead-panel-width) !important;
+    min-width: min(var(--create-lead-panel-width), calc(100vw - 2rem)) !important;
+    max-width: var(--create-lead-panel-width) !important;
+    height: auto !important;
+    max-height: var(--ui-panel-height) !important;
+    min-height: 0 !important;
+    border-radius: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .create-lead-panel .create-lead-form {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+
+  .create-lead-panel .create-lead-form-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .create-lead-panel .create-lead-form-footer {
+    flex-shrink: 0;
+  }
+
   /* Maximized desktop panels — anchor below top inset, gap above action bar */
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel),
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog[data-state="closed"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not([data-tasks-panel-close-settled="1"]) {
     top: var(--ui-panel-center-y) !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel) {
     box-sizing: border-box !important;
     width: var(--ui-panel-width) !important;
     max-width: var(--ui-panel-width) !important;
@@ -1055,7 +1232,7 @@
     overflow-x: clip !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel) {
     width: var(--ui-panel-width) !important;
     min-width: 0 !important;
     max-width: var(--ui-panel-width) !important;
@@ -1078,6 +1255,7 @@
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.reports-panel.fullscreen-panel:not(.report-details-panel):not(.report-editor-panel),
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.forms-panel.fullscreen-panel:not(.form-editor-panel):not(.form-fill-panel),
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.form-editor-panel.fullscreen-panel,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.report-editor-panel.fullscreen-panel:not(.square-picker-panel),
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.paths-panel.fullscreen-panel,
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.lists-panel.fullscreen-panel,
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog))[data-tasks-docked="1"]:not([data-tasks-solo="1"]) .map-panel-dialog.teams-panel.fullscreen-panel,
@@ -1198,7 +1376,7 @@
 .map-panel-dialog:focus-visible {
   outline: none !important;
 }
-.map-panel-dialog:not(.tasks-panel)[data-state='open'] {
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel)[data-state='open'] {
   animation: map-panel-center-in 160ms ease-out forwards;
 }
 @media (max-width: 767px) {
@@ -1206,7 +1384,7 @@
     animation: map-panel-tasks-fade-in var(--tasks-panel-fade-duration) var(--tasks-panel-fade-ease) forwards;
   }
 }
-.map-panel-dialog:not(.tasks-panel)[data-state='closed'] {
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel)[data-state='closed'] {
   animation: map-panel-center-out 120ms ease-in forwards;
 }
 @media (max-width: 767px) {
@@ -1221,6 +1399,41 @@
   transform: translate3d(-50%, -50%, 0) scale(1);
 }
 
+/* CRM detail/editor panels — fade in on open (all sources and dock layouts) */
+@keyframes crm-detail-panel-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes crm-detail-panel-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.map-panel-dialog.lead-details-panel[data-state='open'],
+.map-panel-dialog.deal-details-panel[data-state='open'],
+.map-panel-dialog.quote-details-panel[data-state='open'],
+.map-panel-dialog.quote-editor-panel[data-state='open'],
+.map-panel-dialog.report-details-panel[data-state='open'],
+.map-panel-dialog.report-editor-panel[data-state='open'],
+.map-panel-dialog.team-details-panel[data-state='open'],
+.map-panel-dialog.form-editor-panel[data-state='open'],
+.map-panel-dialog.form-fill-panel[data-state='open'],
+.map-panel-dialog.parcel-list-panel[data-state='open'] {
+  animation: crm-detail-panel-enter var(--crm-panel-crossfade-duration, 280ms) cubic-bezier(0.4, 0, 0.2, 1) both !important;
+}
+.map-panel-dialog.lead-details-panel[data-state='closed'],
+.map-panel-dialog.deal-details-panel[data-state='closed'],
+.map-panel-dialog.quote-details-panel[data-state='closed'],
+.map-panel-dialog.quote-editor-panel[data-state='closed'],
+.map-panel-dialog.report-details-panel[data-state='closed'],
+.map-panel-dialog.report-editor-panel[data-state='closed'],
+.map-panel-dialog.team-details-panel[data-state='closed'],
+.map-panel-dialog.form-editor-panel[data-state='closed'],
+.map-panel-dialog.form-fill-panel[data-state='closed'],
+.map-panel-dialog.parcel-list-panel[data-state='closed'] {
+  animation: crm-detail-panel-exit var(--crm-panel-crossfade-duration, 280ms) cubic-bezier(0.4, 0, 0.2, 1) both !important;
+  pointer-events: none !important;
+}
+
 /* Desktop: smooth opacity fade on panel open/close (data-state driven — no re-trigger on Tasks dock layout) */
 @media (min-width: 768px) {
   .map-panel-dialog:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel) {
@@ -1228,12 +1441,12 @@
   }
 
   @starting-style {
-    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel) {
+    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel) {
       opacity: 0;
     }
   }
 
-  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel) {
+  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel) {
     opacity: 1;
     animation: none !important;
   }
@@ -1244,7 +1457,7 @@
     animation: none !important;
   }
 
-  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not([data-tasks-panel-close-settled="1"]) {
+  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not([data-tasks-panel-close-settled="1"]) {
     opacity: 0;
     transition-duration: 180ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -1960,6 +2173,91 @@
   hyphens: auto;
 }
 
+.lead-contact-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lead-contact-field-index {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lead-contact-source-slot {
+  flex-shrink: 0;
+  width: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lead-contact-source-icon {
+  color: rgba(125, 211, 252, 0.85);
+}
+
+.lead-contact-field-input {
+  min-width: 0;
+}
+
+.lead-contact-field-remove {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: rgba(255, 255, 255, 0.45);
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.lead-contact-field-remove:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lead-contact-field-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding: 0.125rem 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  transition: color 150ms ease;
+}
+
+.lead-contact-field-add:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.crm-contact-more-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.3rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .lead-detail-contact-row {
   display: flex;
   align-items: center;
@@ -2653,14 +2951,22 @@
   background: rgba(59, 130, 246, 0.08) !important;
 }
 
-/* Fade-in for task blocks */
+/* Fade-in for task blocks — initial load only */
 @keyframes scheduleBlockIn {
   from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.schedule-task-block,
-.schedule-task-pill {
+.schedule-panel-content:not(.schedule-panel-content--settled) .schedule-task-block,
+.schedule-panel-content:not(.schedule-panel-content--settled) .schedule-task-pill {
   animation: scheduleBlockIn 0.2s ease both;
+}
+
+@keyframes panel-data-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.panel-data-fade-in {
+  animation: panel-data-fade-in 0.28s ease both;
 }
 
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
@@ -2732,18 +3038,19 @@
 
 /* List panel - no fills on buttons (except delete, create form actions) */
 /* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams); action tiles (parcel/lead details) */
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled) {
   background: transparent !important;
 }
 
+/* Legacy panel-action-btn block — superseded by .quote-panel-action-btn at end of file */
 /* Calendar day buttons - need grid lines, keep transparent fill */
 .list-panel button.calendar-day-btn {
   background: transparent !important;
@@ -2803,52 +3110,7 @@
   background: rgba(255, 255, 255, 0.08) !important;
 }
 
-/* Quote details + other panel footers — rounded glass action buttons */
-.quote-details-panel .quote-details-actions button[data-panel-action],
-.quote-details-panel .quote-details-actions button.panel-action-btn,
-.map-panel .quote-details-actions button.panel-action-btn,
-.map-panel .quote-details-actions .panel-action-btn,
-.list-panel .quote-details-actions button.panel-action-btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
-  min-height: calc(2.75rem * var(--ui-touch-scale)) !important;
-  padding: calc(0.625rem * var(--ui-touch-scale)) calc(1rem * var(--ui-touch-scale)) !important;
-  border-radius: calc(0.75rem * var(--ui-touch-scale)) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.5) !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-  color: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(12px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
-  font-size: calc(0.875rem * var(--ui-touch-scale)) !important;
-  font-weight: 500 !important;
-  line-height: 1.25 !important;
-}
-.quote-details-panel .quote-details-actions button[data-panel-action]:hover:not(:disabled),
-.quote-details-panel .quote-details-actions button.panel-action-btn:hover:not(:disabled),
-.map-panel .quote-details-actions button.panel-action-btn:hover:not(:disabled),
-.list-panel .quote-details-actions button.panel-action-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2) !important;
-  border-color: rgba(255, 255, 255, 0.65) !important;
-  color: rgba(255, 255, 255, 0.98) !important;
-}
-.quote-details-panel .quote-details-actions button[data-panel-action].panel-action-btn--danger,
-.quote-details-panel .quote-details-actions button.panel-action-btn--danger,
-.map-panel .quote-details-actions button.panel-action-btn--danger,
-.list-panel .quote-details-actions button.panel-action-btn--danger {
-  background: rgba(127, 29, 29, 0.4) !important;
-  border-color: rgba(248, 113, 113, 0.5) !important;
-  color: rgba(254, 202, 202, 1) !important;
-}
-.quote-details-panel .quote-details-actions button[data-panel-action].panel-action-btn--danger:hover:not(:disabled),
-.quote-details-panel .quote-details-actions button.panel-action-btn--danger:hover:not(:disabled),
-.map-panel .quote-details-actions button.panel-action-btn--danger:hover:not(:disabled),
-.list-panel .quote-details-actions button.panel-action-btn--danger:hover:not(:disabled) {
-  background: rgba(185, 28, 28, 0.5) !important;
-  border-color: rgba(252, 165, 165, 0.6) !important;
-  color: rgba(254, 226, 226, 1) !important;
-}
+/* Quote + report details footers — see end-of-file panel-action-btn block */
 
 /* Schedule new-task: AM/PM segment (overrides list-panel transparent buttons) */
 .list-panel .create-list-form .schedule-time-meridiem-group button.schedule-time-meridiem {
@@ -5092,6 +5354,11 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   color: rgba(255, 255, 255, 0.96) !important;
   border-radius: 0.875rem !important;
 }
+.map-panel.send-quote-dialog {
+  width: min(96vw, 40rem) !important;
+  max-width: min(96vw, 40rem) !important;
+  max-height: min(90vh, 820px) !important;
+}
 .map-panel.forms-send-dialog {
   border-radius: 0.75rem !important;
 }
@@ -5536,6 +5803,28 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
+/* Main panel list rows — compact tag pills and status/stage badges (Leads, Deals, Lists, Paths, Pipes, etc.) */
+.map-panel :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card) .entity-tag-pills .tag-chip--pill,
+.map-panel :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card) .crm-row-status-badge,
+.crm-lead-row .entity-tag-pills .tag-chip--pill,
+.crm-deal-row .entity-tag-pills .tag-chip--pill,
+.crm-lead-row .crm-row-status-badge,
+.crm-deal-row .crm-row-status-badge {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.125rem !important;
+  padding: 0.125rem 0.5rem !important;
+  font-size: 0.625rem !important;
+  line-height: 1.25 !important;
+  font-weight: 500;
+  gap: 0.25rem;
+}
+
+.map-panel :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card) .entity-tag-pills {
+  gap: 0.25rem !important;
+}
+
 @media (min-width: 768px) {
   .tag-chip--pill {
     min-height: 2.75rem;
@@ -5655,7 +5944,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
   .map-panel
     :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card)
-    [class*='text-[11px]']:not(.uppercase):not([class*='border-t']) {
+    [class*='text-[11px]']:not(.uppercase):not([class*='border-t']):not(.tag-chip):not(.crm-row-status-badge) {
     font-size: 0.875rem;
     line-height: 1.375;
   }
@@ -5762,7 +6051,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
   .crm-lead-row .crm-col-tags,
   .crm-deal-row .crm-col-tags {
-    font-size: 0.75rem;
     line-height: 1.35;
     overflow: hidden;
   }
@@ -5773,24 +6061,31 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     overflow: hidden;
   }
 
-  /* CRM table tag pills — compact (desktop .tag-chip--pill defaults are touch-sized) */
-  .crm-lead-row .crm-col-tags .tag-chip--pill,
-  .crm-deal-row .crm-col-tags .tag-chip--pill {
-    min-height: 0;
+  /* Leads/Deals desktop table — tag pills and status/stage badges must match exactly */
+  .crm-lead-row .entity-tag-pills .tag-chip--pill,
+  .crm-deal-row .entity-tag-pills .tag-chip--pill,
+  .crm-lead-row .crm-row-status-badge,
+  .crm-deal-row .crm-row-status-badge {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.125rem !important;
     padding: 0.125rem 0.5rem !important;
     font-size: 0.625rem !important;
-    line-height: 1.25;
+    line-height: 1.25 !important;
+    font-weight: 500;
     gap: 0.25rem;
   }
 
-  .crm-lead-row .crm-col-tags .entity-tag-pills,
-  .crm-deal-row .crm-col-tags .entity-tag-pills {
+  .crm-lead-row .entity-tag-pills,
+  .crm-deal-row .entity-tag-pills {
     gap: 0.25rem !important;
   }
 
   .crm-lead-row .crm-col-status,
   .crm-deal-row .crm-col-stage {
-    font-size: 0.75rem;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .crm-lead-row .crm-col-property,
@@ -6905,38 +7200,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   color: rgba(255, 255, 255, 0.55);
 }
 
-/* Quote detail footer — last in file so list-panel resets cannot win */
-.quote-details-panel .quote-details-actions button[data-panel-action] {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
-  min-height: calc(2.75rem * var(--ui-touch-scale)) !important;
-  padding: calc(0.625rem * var(--ui-touch-scale)) calc(1rem * var(--ui-touch-scale)) !important;
-  border-radius: calc(0.75rem * var(--ui-touch-scale)) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.5) !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-  color: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(12px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
-  font-size: calc(0.875rem * var(--ui-touch-scale)) !important;
-  font-weight: 500 !important;
-  cursor: pointer !important;
-}
-.quote-details-panel .quote-details-actions button[data-panel-action]:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2) !important;
-  border-color: rgba(255, 255, 255, 0.65) !important;
-}
-.quote-details-panel .quote-details-actions button[data-panel-action].panel-action-btn--danger {
-  background: rgba(127, 29, 29, 0.4) !important;
-  border-color: rgba(248, 113, 113, 0.5) !important;
-  color: rgba(254, 202, 202, 1) !important;
-}
-.quote-details-panel .quote-details-actions button[data-panel-action].panel-action-btn--danger:hover:not(:disabled) {
-  background: rgba(185, 28, 28, 0.5) !important;
-  border-color: rgba(252, 165, 165, 0.6) !important;
-}
-
+/* Quote + report detail footer — see .quote-details-actions rules after list-panel reset */
 /* ---- Lead photos ---- */
 .lead-photo-grid {
   display: grid;
@@ -7263,6 +7527,37 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   margin: 1.5rem;
   max-width: 320px;
   width: 100%;
+}
+
+.photo-mode-scrim {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
+
+.photo-mode-overlay--upload {
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  padding: 1rem;
+}
+
+.photo-mode-upload-box {
+  position: relative;
+  z-index: 1;
+  width: min(24rem, 100%);
+  max-height: calc(100dvh - 2rem);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.photo-mode-overlay--upload .photo-mode-viewport {
+  flex: 0 1 auto;
+  min-height: 0;
 }
 
 .photo-mode-footer {

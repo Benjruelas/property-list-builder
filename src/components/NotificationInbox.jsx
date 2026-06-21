@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, ChevronDown, Loader2, Search, UserSearch, Briefcase, CheckSquare, List, Route, FileText, ScrollText, Users2, Activity } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { mapListDialogOpen } from './ui/panelDialogUtils'
+import { mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 const ACTIVITY_FEED_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer w-full text-left'
@@ -161,17 +162,19 @@ export function ActivityPanel({
 }) {
   const [tab, setTab] = useState('all')
   const [search, setSearch] = useState('')
-  /** In stack but covered by destination — keep nav, hide dialog */
-  const dialogOpen = mapListDialogOpen(isOpen, !isFocused)
+  /** In stack but covered by destination — keep nav, crossfade under destination */
+  const dialogOpen = mapListDialogOpen(isOpen)
+  const dialogObscured = listPanelObscuredByDetail(isOpen, !isFocused)
 
   useEffect(() => {
-    if (!dialogOpen) {
+    if (!isOpen) {
       setTab('all')
       setSearch('')
     }
-  }, [dialogOpen])
+  }, [isOpen])
 
   const panelRef = useRef(null)
+  useObscuredPanelRoot(panelRef, dialogObscured)
 
   const tabCounts = useMemo(() => countFeedItemsByTab(items), [items])
 
@@ -191,7 +194,10 @@ export function ActivityPanel({
     >
       <DialogContent
         ref={panelRef}
-        className="map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0"
+        className={cn(
+          'map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0',
+          dialogObscured && 'crm-list-under-detail',
+        )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay

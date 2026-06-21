@@ -91,6 +91,7 @@ export const ConfirmDialog = () => {
   const bodyMessage = currentConfirm.message
   const useDetailTitle = !!currentConfirm.detailSubtitle
   const confirmLabel = currentConfirm.confirmLabel || currentConfirm.confirmText || 'Confirm'
+  const visibleDescription = useDetailTitle ? currentConfirm.detailSubtitle : bodyMessage
 
   return (
     <Dialog open={open} modal onOpenChange={(isOpen) => {
@@ -114,16 +115,13 @@ export const ConfirmDialog = () => {
             <DialogTitle className="text-base font-semibold leading-snug text-white/95">
               {useDetailTitle ? (currentConfirm.detail || currentConfirm.title) : currentConfirm.title}
             </DialogTitle>
-            {useDetailTitle && currentConfirm.detailSubtitle ? (
+            {visibleDescription ? (
               <DialogDescription className="whitespace-pre-line text-sm leading-relaxed text-white/60">
-                {currentConfirm.detailSubtitle}
+                {visibleDescription}
               </DialogDescription>
-            ) : null}
-            {!useDetailTitle && bodyMessage ? (
-              <DialogDescription className="whitespace-pre-line text-sm leading-relaxed text-white/60">
-                {bodyMessage}
-              </DialogDescription>
-            ) : null}
+            ) : (
+              <DialogDescription className="sr-only">{currentConfirm.title}</DialogDescription>
+            )}
           </DialogHeader>
           {currentConfirm.detail && !useDetailTitle ? (
             <div className="confirm-dialog-detail mt-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-left text-sm leading-relaxed text-white/90">

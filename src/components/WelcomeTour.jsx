@@ -70,7 +70,7 @@ const ALL_STEPS = [
   {
     id: 'parcel-action-lead',
     title: 'Convert to Lead',
-    desc: 'Start tracking outreach and turn this property into a deal.',
+    desc: 'Add the property to Leads and start tracking outreach from one place.',
     target: '[data-tour="parcel-demo-convert-lead"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
@@ -110,11 +110,11 @@ const ALL_STEPS = [
   {
     id: 'navigation',
     title: 'Menu',
-    desc: 'Activity, CRM tools, lists, and settings — everything beyond the action bar lives here.',
+    desc: 'Lists, paths, outreach, and settings — anything not on the action bar lives here.',
     target: '[data-tour="action-bar-menu"]',
     mobileTarget: '[data-tour="action-bar-menu"]',
     mobileTitle: 'Menu',
-    mobileDesc: 'Activity, leads, photo reports, lists, and more — right from the bottom bar.',
+    mobileDesc: 'Lists, paths, outreach, and settings — right from the bottom bar.',
   },
   {
     id: 'activity',
@@ -146,7 +146,7 @@ const ALL_STEPS = [
   {
     id: 'quotes',
     title: 'Quotes',
-    desc: 'Build and send quotes tied right to your deals.',
+    desc: 'Build and send quotes from your deals — clients get a share link to review, accept, pay, and download a PDF.',
     target: '[data-tour="menu-quotes"]',
     mobileTarget: '[data-tour="action-bar-quotes"]',
     menuRequired: true,
@@ -164,7 +164,7 @@ const ALL_STEPS = [
   {
     id: 'reports',
     title: 'Photo Reports',
-    desc: 'Bundle lead photos into branded PDF reports — email or text a link to clients.',
+    desc: 'Turn lead photos into branded reports — email or text a link so clients can view and download a PDF.',
     target: '[data-tour="menu-reports"]',
     mobileTarget: '[data-tour="action-bar-reports"]',
     menuRequired: true,
@@ -197,16 +197,16 @@ const ALL_STEPS = [
   },
   {
     id: 'teams',
-    title: 'Teams',
-    desc: 'Share lists and pipelines so your crew stays in sync — manage your team in Settings.',
+    title: 'Team & Lead Statuses',
+    desc: 'Collaborate with your crew in Settings — create a team, invite members, and customize lead statuses for your pipeline.',
     target: '[data-tour="settings-team-section"]',
-    menuRequired: true,
     settingsRequired: true,
+    expandSettingsSection: 'team',
   },
   {
     id: 'settings-menu',
     title: 'Settings',
-    desc: 'Tune the map, alerts, and how the app works for you.',
+    desc: 'Map, appearance, notifications, and data — open Settings anytime; each section expands when you tap it.',
     target: '[data-tour="menu-settings"]',
     menuRequired: true,
   },
@@ -301,6 +301,7 @@ function isMajorTourTransition(prev, next, isMobile) {
 
 export default function WelcomeTour({
   onComplete,
+  onStepChange,
   setShowMenu,
   setSettingsOpen,
   canAccessFeature,
@@ -410,6 +411,8 @@ export default function WelcomeTour({
     const stepDef = visibleSteps[step]
     if (!stepDef) return
 
+    onStepChange?.(stepDef.id, stepDef.expandSettingsSection ?? null)
+
     const selector = resolveSelector(stepDef, isMobile)
     const isActionBarTarget = Boolean(selector?.includes('action-bar'))
 
@@ -431,12 +434,12 @@ export default function WelcomeTour({
       setSettingsOpenRef.current?.(wantSettings)
       uiStateRef.current = { ...uiStateRef.current, settings: wantSettings }
     }
-  }, [step, isMobile, visibleSteps])
+  }, [step, isMobile, visibleSteps, onStepChange])
 
   useEffect(() => {
     if (!currentStepId) return
     let delay = 60
-    if (current?.settingsRequired) delay = 320
+    if (current?.settingsRequired) delay = current?.expandSettingsSection ? 380 : 320
     else if (current?.menuRequired) delay = 200
     else if (current?.parcelDemo === 'show') delay = 150
     const timer = setTimeout(measureTarget, delay)
@@ -500,9 +503,10 @@ export default function WelcomeTour({
       if (uiStateRef.current.menu) setShowMenuRef.current(false)
       if (uiStateRef.current.settings) setSettingsOpenRef.current?.(false)
       uiStateRef.current = { menu: false, settings: false }
+      onStepChange?.(null, null)
       onComplete()
     }, 380)
-  }, [exiting, onComplete])
+  }, [exiting, onComplete, onStepChange])
 
   const handleNext = useCallback(() => {
     if (exiting) return

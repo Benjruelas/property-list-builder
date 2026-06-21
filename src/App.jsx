@@ -86,6 +86,7 @@ import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
 import { useTeamDataSync } from './hooks/useTeamDataSync'
 import { getSettings, updateSettings } from './utils/settings'
+import { resolveLeadStatuses } from './utils/leadStatuses'
 import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
 import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
@@ -114,6 +115,7 @@ import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeli
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
 import { useDeviceHeading } from './hooks/useDeviceHeading'
+import { applySkipTraceContactsToLead, applySkipTraceResultsToLeads } from './utils/leadSkipTraceSync'
 import WelcomeTour from './components/WelcomeTour'
 
 function nextDefaultPathName(paths) {
@@ -193,6 +195,9 @@ function App() {
     isActivityPanelFocused,
     isActivityPanelTopLayer,
     isTasksPanelTopLayer,
+    isSettingsPanelTopLayer,
+    isLeadsDetailTopLayer,
+    isTeamsDetailTopLayer,
     isListPanelOpen,
     isParcelListPanelOpen,
     viewingListId,
@@ -214,7 +219,6 @@ function App() {
     tasksDockLayout,
     isSchedulePanelOpen,
     scheduleInitialDate,
-    scheduleLeadId,
     scheduleStacked,
     hasScheduleOpener,
     isPathsPanelOpen,
@@ -222,6 +226,7 @@ function App() {
     formsView,
     formsTemplateId,
     isQuotesPanelOpen,
+    isQuotesListOpen,
     quotesEditorFrame,
     quotesDetailQuoteId,
     quotesDetailQuote,
@@ -277,7 +282,7 @@ function App() {
     ?? panelDockSlot('deals', !!(isDealsPanelOpen || isDealsDetailStandalone || dealsLeadOverlayId))
 
   const dealPipelineMounted = useStickyPanelMount(isDealPipelineOpen, pipesPromotedDealId, pipesLeadOverlayId)
-  const schedulePanelMounted = useStickyPanelMount(isSchedulePanelOpen, scheduleLeadId)
+  const schedulePanelMounted = useStickyPanelMount(isSchedulePanelOpen)
   const tasksPanelMounted = useStickyPanelMount(isTasksPanelOpen)
   const leadsPanelMounted = useStickyPanelMount(isLeadsPanelOpen, leadsDetailLeadId)
   const dealsPanelMounted = useStickyPanelMount(
@@ -916,6 +921,11 @@ function App() {
     [teamMembership, teams, currentUser]
   )
 
+  const leadStatuses = useMemo(
+    () => resolveLeadStatuses({ settings, teams, teamMembership }),
+    [settings, teams, teamMembership]
+  )
+
   const canAccessFeature = useCallback(
     (featureId) => canAccessTeamFeature(teamMembership, teamMemberFeatures, featureId),
     [teamMembership, teamMemberFeatures]
@@ -925,6 +935,12 @@ function App() {
     if (open) nav.openSettings()
     else nav.pop()
   }, [nav])
+
+  const [tourExpandSettingsSection, setTourExpandSettingsSection] = useState(null)
+
+  const handleTourStepChange = useCallback((_stepId, expandSection) => {
+    setTourExpandSettingsSection(expandSection ?? null)
+  }, [])
 
   const showDealAmounts = useMemo(
     () => canSeeDealAmounts(teamMembership, teamMemberFeatures, teams),
@@ -1398,13 +1414,14 @@ function App() {
     try {
       let saved = await setLeadStatus(getToken, lead.id, 'converted', {
         fromStatus: lead.status || 'new',
+        leadStatuses,
       })
       saved = await logLeadDealCreated(getToken, lead.id, deal.title || deal.leadAddress, deal.id)
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? saved : l)))
     } catch (e) {
       console.warn('Could not update lead CRM status after deal', e)
     }
-  }, [getToken])
+  }, [getToken, leadStatuses])
 
   const handleLogLeadOutreach = useCallback(async (leadId, type, contact) => {
     if (!leadId) return
@@ -1413,12 +1430,17 @@ function App() {
     try {
       let saved = await logLeadOutreach(getToken, leadId, type, contact)
       const dealCount = findDealsForLead(pipelines, leadId).length
-      saved = await bumpLeadStatusOnContact(getToken, saved, getLeadStatus(saved, dealCount))
+      saved = await bumpLeadStatusOnContact(
+        getToken,
+        saved,
+        getLeadStatus(saved, dealCount, leadStatuses),
+        leadStatuses,
+      )
       setLeads((prev) => prev.map((l) => (l.id === leadId ? saved : l)))
     } catch (e) {
       console.warn('Lead outreach log failed', e)
     }
-  }, [leads, pipelines, getToken])
+  }, [leads, pipelines, getToken, leadStatuses])
 
   const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks } = {}) => {
     if (!lead?.id) return
@@ -1848,6 +1870,34 @@ function App() {
         saveSkipTracedParcels(resultsWithParcelIds)
         scheduleUserDataSync(getToken)
 
+        if (currentUser?.uid && canAccessFeature('leads')) {
+          try {
+            const enriched = resultsWithParcelIds.map((r) => getSkipTracedParcel(r.parcelId) || r)
+            const { leads: nextLeads } = await applySkipTraceResultsToLeads({
+              results: enriched,
+              leads,
+              getToken,
+              resolveParcelData: (parcelId) => {
+                for (const listItem of lists) {
+                  for (const parcel of listItem.parcels || []) {
+                    const pid = parcel?.id || parcel?.properties?.PROP_ID || parcel
+                    if (String(pid) === String(parcelId)) {
+                      return typeof parcel === 'object'
+                        ? { ...parcel, id: parcelId, properties: parcel.properties || parcel }
+                        : { id: parcelId, properties: { PROP_ID: parcelId } }
+                    }
+                  }
+                }
+                return null
+              },
+            })
+            if (nextLeads?.length) setLeads(nextLeads)
+            refreshLeads()
+          } catch (error) {
+            console.warn('Bulk skip trace lead sync failed', error)
+          }
+        }
+
         // Get list to add to skip traced list
         let list = null
         list = lists.find(l => l.id === job.listId)
@@ -1926,7 +1976,7 @@ function App() {
     return () => {
       clearInterval(pollInterval)
     }
-  }, [lists, getToken])
+  }, [lists, getToken, currentUser, canAccessFeature, leads, refreshLeads])
 
 
   const handleSharePipeline = useCallback(async (pipelineId, sharedWith) => {
@@ -2752,8 +2802,13 @@ function App() {
 
   const handleCreatePhotoReport = useCallback((leadId) => {
     if (!leadId) return
-    guardFeature('reports', () => nav.pushReportsEditor({ mode: 'report', leadId }))
-  }, [guardFeature, nav])
+    guardFeature('reports', () => {
+      if (!isReportsPanelOpen) {
+        nav.openReports()
+      }
+      nav.pushReportsEditor({ mode: 'report', leadId, awaitingTemplate: true })
+    })
+  }, [guardFeature, nav, isReportsPanelOpen])
 
   const handleOpenPhotoReport = useCallback((reportId) => {
     if (!reportId) return
@@ -3201,6 +3256,41 @@ function App() {
     showToast(`Skip trace queued for "${list.name}" (${parcelsToTrace.length} parcels)`, 'info')
   }, [authLoading, currentUser, lists, getToken])
 
+  const resolveParcelDataForSkipTrace = useCallback((parcelId) => {
+    for (const list of lists) {
+      for (const parcel of list.parcels || []) {
+        const pid = parcel?.id || parcel?.properties?.PROP_ID || parcel
+        if (String(pid) === String(parcelId)) {
+          return typeof parcel === 'object'
+            ? { ...parcel, id: parcelId, properties: parcel.properties || parcel }
+            : { id: parcelId, properties: { PROP_ID: parcelId } }
+        }
+      }
+    }
+    return null
+  }, [lists])
+
+  const syncSkipTraceToLeads = useCallback(async ({ parcelId, parcelData = null, skipTraceData }) => {
+    if (!currentUser?.uid || !canAccessFeature('leads')) return null
+    try {
+      const outcome = await applySkipTraceContactsToLead({
+        parcelId,
+        parcelData,
+        skipTraceData,
+        leads,
+        getToken,
+      })
+      if (outcome.lead) {
+        setLeads((prev) => [...prev.filter((l) => l.id !== outcome.lead.id), outcome.lead])
+        refreshLeads()
+      }
+      return outcome
+    } catch (error) {
+      console.warn('Skip trace lead sync failed', error)
+      return null
+    }
+  }, [currentUser?.uid, canAccessFeature, leads, getToken, refreshLeads])
+
   // Handle skip tracing a single parcel (from popup or list)
   const handleSkipTraceParcel = useCallback(async (parcelData) => {
     if (!parcelData) {
@@ -3285,7 +3375,11 @@ function App() {
 
       // If the provider responded OK but found no contacts, say so explicitly.
       const hasAnyContact = (contactInfo.phoneNumbers?.length || 0) > 0 ||
-                            (contactInfo.emails?.length || 0) > 0
+                            (contactInfo.emails?.length || 0) > 0 ||
+                            (contactInfo.phoneDetails?.length || 0) > 0 ||
+                            (contactInfo.emailDetails?.length || 0) > 0 ||
+                            contactInfo.phone ||
+                            contactInfo.email
       if (!hasAnyContact) {
         const warnings = Array.isArray(contactInfo.warnings) ? contactInfo.warnings : []
         const hasInvalidAddress = warnings.some((w) => /invalid address/i.test(w))
@@ -3344,7 +3438,19 @@ function App() {
       addParcelToSkipTracedList(parcelData)
       scheduleUserDataSync(getToken)
 
-      showToast(isRefresh ? 'Contact info refreshed!' : 'Skip trace completed successfully!', 'success')
+      const leadOutcome = await syncSkipTraceToLeads({
+        parcelId,
+        parcelData,
+        skipTraceData: saved,
+      })
+
+      let successMessage = isRefresh ? 'Contact info refreshed!' : 'Skip trace completed successfully!'
+      if (leadOutcome?.action === 'created') {
+        successMessage = 'Skip trace complete — lead created with contact info'
+      } else if (leadOutcome?.action === 'updated') {
+        successMessage = 'Skip trace complete — contacts added to lead'
+      }
+      showToast(successMessage, 'success')
       notifySkipTraceEvent(requestParcel.address || parcelId, isRefresh ? 'contact info refreshed' : 'contacts found')
       
       // Update clicked parcel data if it's the current parcel (for both map popup and list)
@@ -3371,7 +3477,7 @@ function App() {
         return next
       })
     }
-  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup, isParcelDetailsOpen, nav])
+  }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup, isParcelDetailsOpen, nav, authLoading, currentUser, getToken, syncSkipTraceToLeads])
 
   return (
     <UserDataSyncProvider getToken={getToken}>
@@ -3393,6 +3499,7 @@ function App() {
       {currentUser && permissionsReady && !settings.tourCompleted && (
         <WelcomeTour
           onComplete={() => handleSettingsChange({ tourCompleted: true })}
+          onStepChange={handleTourStepChange}
           setShowMenu={nav.setShowMenu}
           setSettingsOpen={setTourSettingsOpen}
           canAccessFeature={canAccessFeature}
@@ -3789,9 +3896,12 @@ function App() {
         onOpenQuoteFromDeal={handleOpenQuoteFromDeal}
         quotesRefreshKey={quotesRefreshEpoch}
         canSeeDealAmounts={showDealAmounts}
+        canAccessPhotos={canAccessFeature('photos')}
         onEditLead={handleEditLead}
+        editLeadId={editLead?.id ?? null}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
+        leadStatuses={leadStatuses}
       />
       </Suspense>
       )}
@@ -3809,9 +3919,10 @@ function App() {
         hasScheduleOpener={hasScheduleOpener}
         initialDate={scheduleInitialDate}
         onInitialDateConsumed={() => nav.consumeScheduleInitialDate()}
-        scheduleLeadId={scheduleLeadId}
-        onOpenScheduleLead={(leadId) => nav.pushScheduleLead(leadId)}
-        onCloseScheduleLead={() => nav.popIfTop('schedule.lead')}
+        obscuredByLeadDetail={isSchedulePanelOpen && isLeadsDetailStandalone && !!leadsDetailLeadId}
+        onOpenScheduleLead={(leadId) => {
+          guardFeature('leads', () => nav.openLeadDetailFromSchedule(leadId))
+        }}
         leads={leads}
         pipelines={pipelines}
         activePipelineId={activePipelineId}
@@ -3978,11 +4089,11 @@ function App() {
 
       {quotesPanelMounted && (
         <Suspense fallback={
-          <PanelListLoadingShell open={isQuotesPanelOpen} title="Quotes" onBack={handlePanelBack} className="quotes-panel lists-panel" />
+          <PanelListLoadingShell open={isQuotesListOpen} title="Quotes" onBack={handlePanelBack} className="quotes-panel lists-panel" />
         }>
           <QuotesPanel
-            isOpen={isQuotesPanelOpen}
-            panelDockSlot={panelDockSlot('quotes', isQuotesPanelOpen)}
+            isOpen={isQuotesListOpen || !!quotesDetailQuoteId}
+            panelDockSlot={panelDockSlot('quotes', isQuotesListOpen || !!quotesDetailQuoteId)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             pipelines={pipelines}
@@ -4008,13 +4119,14 @@ function App() {
         }>
           <ReportsPanel
             isOpen={isReportsPanelOpen}
-            panelDockSlot={panelDockSlot('reports', isReportsPanelOpen)}
+            panelDockSlot={panelDockSlot('reports', isReportsPanelOpen || !!reportsDetailReportId)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             leads={leads}
             editorFrame={reportsEditorFrame}
             detailReportId={reportsDetailReportId}
             onOpenEditor={(frame) => nav.pushReportsEditor(frame)}
+            onPatchEditor={(patch) => nav.patchReportsEditor(patch)}
             onOpenDetail={(reportId) => nav.pushReportsDetail(reportId)}
             onCloseEditor={handleCloseReportsEditor}
             onCloseDetail={handleCloseReportsDetail}
@@ -4134,6 +4246,7 @@ function App() {
       }>
       <SettingsPanel
         isOpen={isSettingsPanelOpen}
+        topLayer={isSettingsPanelTopLayer}
         onClose={() => nav.pop()}
         settings={settings}
         onSettingsChange={handleSettingsChange}
@@ -4143,10 +4256,11 @@ function App() {
         pendingTeamInvites={pendingTeamInvites}
         onTeamsChange={refreshTeams}
         onOpenTeamDetail={(teamId) => nav.pushTeamsDetail(teamId)}
-        settingsTeamSectionOpen={!!teamsDetailTeamId}
+        settingsTeamSectionOpen={!!teamsDetailTeamId || tourExpandSettingsSection === 'team'}
         onRestartTour={() => {
           nav.pop()
           nav.setShowMenu(false)
+          setTourExpandSettingsSection(null)
           handleSettingsChange({ tourCompleted: false })
         }}
         onLogout={currentUser ? handleLogout : undefined}
@@ -4205,6 +4319,10 @@ function App() {
         onOpenPhotoReport={handleOpenPhotoReport}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('leads', tag)}
+        leadStatuses={leadStatuses}
+        leadsDetailTopLayer={isLeadsDetailTopLayer}
+        isLeadsDetailStandalone={isLeadsDetailStandalone}
+        editLeadId={editLead?.id ?? null}
       />
       </Suspense>
       )}
@@ -4263,10 +4381,15 @@ function App() {
         onCreateDealSubmit={handleCreateDealSubmit}
         pipelinesCount={pipelines.length}
         canSeeDealAmounts={showDealAmounts}
+        canAccessPhotos={canAccessFeature('photos')}
+        currentUser={currentUser}
         onEditLead={handleEditLead}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
         leadOverlayPanelDockSlot={leadOverlayPanelDockSlot}
+        leadStatuses={leadStatuses}
+        isDealsDetailStandalone={isDealsDetailStandalone}
+        editLeadId={editLead?.id ?? null}
       />
       </Suspense>
       )}

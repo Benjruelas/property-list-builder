@@ -59,8 +59,32 @@ export function reconcilePendingTaskToggles(tasks) {
   return mergePendingTaskToggles(tasks)
 }
 
+/** Stable fingerprint for comparing task list snapshots (ignores object identity). */
+export function taskListContentKey(tasks) {
+  if (!Array.isArray(tasks) || tasks.length === 0) return ''
+  return tasks
+    .map((t) =>
+      [
+        t.id,
+        t.__source || '',
+        t.completed ? '1' : '0',
+        t.completedAt ?? '',
+        t.title || '',
+        t.scheduledAt ?? '',
+        t.dueAt ?? '',
+        t.scheduledEndAt ?? '',
+        t.dealId ?? '',
+      ].join(':')
+    )
+    .join('|')
+}
+
 export function setTasksWithPendingMerge(setTaskList, freshTasks) {
-  setTaskList(reconcilePendingTaskToggles(freshTasks))
+  setTaskList((prev) => {
+    const merged = reconcilePendingTaskToggles(freshTasks)
+    if (taskListContentKey(prev) === taskListContentKey(merged)) return prev
+    return merged
+  })
 }
 
 /** Persist toggle to API or localStorage (call after optimistic UI update). */

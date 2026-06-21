@@ -16,6 +16,7 @@ import {
   recipePushDealsLead,
   recipeOpenLeadDetails,
   recipeOpenStandaloneLeadDetail,
+  recipeOpenLeadDetailFromSchedule,
   recipeOpenStandaloneDealDetail,
   recipeOpenDealFromLeadDetail,
   recipeClosePromotedLeadDetail,
@@ -30,6 +31,7 @@ import {
   recipeOpenPipes,
   recipeOpenQuoteEditorFromDeal,
   recipeOpenQuoteDetailFromDeal,
+  recipePushQuotesDetail,
   recipeOpenQuotes,
   recipeOpenReports,
   recipeOpenSchedule,
@@ -239,6 +241,10 @@ export function NavigationProvider({ children }) {
     replaceStack(recipeOpenStandaloneLeadDetail(state.navStack, leadId, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
+  const openLeadDetailFromSchedule = useCallback((leadId) => {
+    replaceStack(recipeOpenLeadDetailFromSchedule(state.navStack, leadId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
+
   const openDealDetailFromTasks = useCallback((dealId, pipelineId) => {
     replaceStack(recipeOpenStandaloneDealDetail(state.navStack, dealId, pipelineId, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
@@ -367,8 +373,8 @@ export function NavigationProvider({ children }) {
   }, [push])
 
   const pushScheduleLead = useCallback((leadId) => {
-    push({ type: 'schedule.lead', leadId })
-  }, [push])
+    openLeadDetailFromSchedule(leadId)
+  }, [openLeadDetailFromSchedule])
 
   const pushFormsEdit = useCallback((templateId) => {
     push({ type: 'forms.edit', templateId })
@@ -385,12 +391,19 @@ export function NavigationProvider({ children }) {
   }, [push])
 
   const pushQuotesDetail = useCallback((quoteId) => {
-    push({ type: 'quotes.detail', quoteId })
-  }, [push])
+    replaceStack(recipePushQuotesDetail(state.navStack, quoteId))
+  }, [state.navStack, replaceStack])
 
   const pushReportsEditor = useCallback((editorFrame) => {
     push({ type: 'reports.editor', ...editorFrame })
   }, [push])
+
+  const patchReportsEditor = useCallback((patch) => {
+    dispatch({
+      type: NAV_ACTIONS.PATCH_NAV_FRAME,
+      payload: { frameType: 'reports.editor', patch },
+    })
+  }, [])
 
   const pushReportsDetail = useCallback((reportId) => {
     push({ type: 'reports.detail', reportId })
@@ -500,6 +513,7 @@ export function NavigationProvider({ children }) {
     toggleActivityFromActionBar,
     openLeadDetails,
     openLeadDetailFromTasks,
+    openLeadDetailFromSchedule,
     openDealDetailFromTasks,
     openDealFromLead,
     openDealInPipes,
@@ -532,6 +546,7 @@ export function NavigationProvider({ children }) {
     pushQuotesEditor,
     pushQuotesDetail,
     pushReportsEditor,
+    patchReportsEditor,
     pushReportsDetail,
     pushTeamsDetail,
     openTaskInPipes,
@@ -582,6 +597,7 @@ export function NavigationProvider({ children }) {
     toggleActivityFromActionBar,
     openLeadDetails,
     openLeadDetailFromTasks,
+    openLeadDetailFromSchedule,
     openDealDetailFromTasks,
     openDealFromLead,
     openDealInPipes,
@@ -614,6 +630,7 @@ export function NavigationProvider({ children }) {
     pushQuotesEditor,
     pushQuotesDetail,
     pushReportsEditor,
+    patchReportsEditor,
     pushReportsDetail,
     pushTeamsDetail,
     openTaskInPipes,

@@ -84,9 +84,10 @@ export async function publicReportPayload(report, invite, lead, token) {
           senderEmail: branding.senderEmail || report.ownerEmail || '',
         }
       : null,
-    pdfDownloadUrl: report.pdfKey
+    pdfDownloadUrl: invite?.preview !== true
       ? `/api/public-report?token=${encodeURIComponent(token)}&download=1`
       : null,
+    preview: invite?.preview === true,
   }
 }
 

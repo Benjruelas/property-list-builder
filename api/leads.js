@@ -15,36 +15,28 @@ import {
   actorLabel,
   teamIdsFromResource,
 } from './lib/activityLog.js'
-import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
+import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline } from './lib/tagHelpers.js'
+import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './lib/leadStatuses.js'
+import { normalizeLeadContactsForStorage } from './lib/leadContact.js'
+import { getAllLeads, saveAllLeads } from './lib/leadStore.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
 
 /**
  * User-scoped leads CRM with team sharing v2. Firebase Bearer auth.
  */
 
-const KV_KEY = 'user_leads'
-let fallbackStore = []
-
-async function getAllLeads() {
-  if (!kvAvailable || !kv) return fallbackStore
-  try {
-    const data = await kv.get(KV_KEY)
-    const leads = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    const result = Array.isArray(leads) ? leads : []
-    fallbackStore = result
-    return result
-  } catch {
-    return fallbackStore
-  }
+function userDataKey(uid) {
+  return `user_data_${uid}`
 }
 
-async function saveAllLeads(leads) {
-  fallbackStore = leads
-  if (!kvAvailable || !kv) return
+async function loadUserAppSettings(uid) {
+  if (!kvAvailable || !kv || !uid) return null
   try {
-    await kv.set(KV_KEY, leads).catch(() => kv.set(KV_KEY, JSON.stringify(leads)))
-  } catch (e) {
-    console.warn('KV save failed', e.message)
+    const data = await kv.get(userDataKey(uid))
+    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
+    return parsed?.appSettings || null
+  } catch {
+    return null
   }
 }
 
@@ -71,7 +63,6 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
-const LEAD_STATUSES = new Set(['new', 'contacted', 'qualified', 'converted', 'lost'])
 const ACTIVITY_TYPES = new Set(['call', 'text', 'email', 'note', 'status', 'deal', 'photo', 'report'])
 const MAX_LEAD_ACTIVITY = 200
 
@@ -81,15 +72,8 @@ function leadDisplayName(lead) {
   return (lead?.address || 'Lead').trim()
 }
 
-function normalizeLeadStatus(value, existing) {
-  if (value === undefined || value === null || value === '') {
-    return existing?.status || 'new'
-  }
-  const status = String(value).trim()
-  if (!LEAD_STATUSES.has(status)) {
-    throw new Error(`Invalid lead status: ${status}`)
-  }
-  return status
+function normalizeLeadStatus(value, existing, allowedIds) {
+  return normalizeLeadStatusValue(value, existing, allowedIds)
 }
 
 function normalizeActivityEntry(entry, user, now) {
@@ -112,13 +96,15 @@ function normalizeActivityEntry(entry, user, now) {
   }
 }
 
-function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry = null) {
+function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry = null, allowedStatusIds = null) {
   const now = new Date().toISOString()
   const firstName = String(body.firstName ?? existing?.firstName ?? '').trim()
   const lastName = String(body.lastName ?? existing?.lastName ?? '').trim()
   const address = String(body.address ?? existing?.address ?? '').trim()
   if (!address) throw new Error('Address is required')
   if (!firstName && !lastName) throw new Error('First or last name is required')
+
+  const contact = normalizeLeadContactsForStorage(body, existing)
 
   const base = {
     id: existing?.id || `lead_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
@@ -128,8 +114,12 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
     parcelId: body.parcelId !== undefined ? (body.parcelId || null) : (existing?.parcelId ?? null),
     lat: body.lat !== undefined ? body.lat : (existing?.lat ?? null),
     lng: body.lng !== undefined ? body.lng : (existing?.lng ?? null),
-    phone: body.phone !== undefined ? String(body.phone || '').trim() || null : (existing?.phone ?? null),
-    email: body.email !== undefined ? String(body.email || '').trim() || null : (existing?.email ?? null),
+    phone: contact.phone,
+    email: contact.email,
+    phones: contact.phones,
+    emails: contact.emails,
+    phoneDetails: contact.phoneDetails,
+    emailDetails: contact.emailDetails,
     notes: body.notes !== undefined ? String(body.notes || '') : (existing?.notes ?? ''),
     properties: body.properties !== undefined ? body.properties : (existing?.properties ?? null),
     ownerId: existing?.ownerId || user.uid,
@@ -147,7 +137,8 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
   base.tagIds = tags.tagIds
   base.tagMeta = tags.tagMeta
 
-  const nextStatus = normalizeLeadStatus(body.status, existing)
+  const allowedIds = allowedStatusIds || resolveAllowedLeadStatusIds(ctx, null)
+  const nextStatus = normalizeLeadStatus(body.status, existing, allowedIds)
   base.status = nextStatus
   if (body.status !== undefined && (!existing || nextStatus !== existing.status)) {
     base.statusUpdatedAt = now
@@ -158,6 +149,9 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
   base.photos = body.photos !== undefined
     ? (Array.isArray(body.photos) ? body.photos : existing?.photos || [])
     : (existing?.photos || [])
+  base.files = body.files !== undefined
+    ? (Array.isArray(body.files) ? body.files : existing?.files || [])
+    : (existing?.files || [])
 
   if (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined) {
     return applyResourceVisibilityPatch(base, body, ctx)
@@ -199,8 +193,13 @@ export default async function handler(req, res) {
   const { method, body = {} } = req
 
   try {
-    const [all, allTeams] = await Promise.all([getAllLeads(), getAllTeams()])
+    const [all, allTeams, userAppSettings] = await Promise.all([
+      getAllLeads(),
+      getAllTeams(),
+      loadUserAppSettings(user.uid),
+    ])
     const ctx = buildAccessContext(allTeams, user)
+    const allowedStatusIds = resolveAllowedLeadStatusIds(ctx, userAppSettings)
 
     if (method === 'GET') {
       const leads = filterVisibleResources(all, user, ctx)
@@ -213,7 +212,7 @@ export default async function handler(req, res) {
         : null
       let lead
       try {
-        lead = normalizeLeadInput(body, user, null, ctx, tagRegistry)
+        lead = normalizeLeadInput(body, user, null, ctx, tagRegistry, allowedStatusIds)
       } catch (e) {
         return res.status(400).json({ error: e.message })
       }
@@ -228,6 +227,16 @@ export default async function handler(req, res) {
 
       all.push(lead)
       await saveAllLeads(all)
+
+      if (lead.tagMeta?.length) {
+        await syncTagMetaToCollaborators(kv, {
+          resource: lead,
+          type: 'leads',
+          tagMeta: lead.tagMeta,
+          actorUid: user.uid,
+          ctx,
+        })
+      }
 
       const label = actorLabel(user)
       const name = leadDisplayName(lead)
@@ -285,7 +294,7 @@ export default async function handler(req, res) {
         : null
       let lead
       try {
-        lead = normalizeLeadInput(body, user, existing, ctx, tagRegistry)
+        lead = normalizeLeadInput(body, user, existing, ctx, tagRegistry, allowedStatusIds)
       } catch (e) {
         return res.status(400).json({ error: e.message })
       }
@@ -311,6 +320,16 @@ export default async function handler(req, res) {
 
       all[idx] = lead
       await saveAllLeads(all)
+
+      if (body.tagIds !== undefined || body.tagMeta !== undefined) {
+        await syncTagMetaToCollaborators(kv, {
+          resource: lead,
+          type: 'leads',
+          tagMeta: lead.tagMeta,
+          actorUid: user.uid,
+          ctx,
+        })
+      }
 
       const label = actorLabel(user)
       const name = leadDisplayName(lead)

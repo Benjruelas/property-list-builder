@@ -42,6 +42,7 @@ export function DealTasksSection({
   onOpenScheduleAtDate,
   refreshKey = 0,
   readOnly = false,
+  onNestedOverlayChange,
 }) {
   const { scheduleSync } = useUserDataSync()
   const [tasks, setTasks] = useState([])
@@ -53,6 +54,10 @@ export function DealTasksSection({
   const showTaskDialog = showAddTask || !!editingTask
   const isEditMode = !!editingTask
   const canMutate = !readOnly
+
+  useEffect(() => {
+    onNestedOverlayChange?.(showTaskDialog)
+  }, [showTaskDialog, onNestedOverlayChange])
 
   const displayLeads = useMemo(() => leads, [leads])
   const leadLabel = lead ? displayLeadName(lead) : (deal?.leadName || '')

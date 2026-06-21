@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { QuoteIcon } from '../icons/QuoteIcon'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from '../ui/panelDialogUtils'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -81,7 +81,10 @@ export function QuotesPanel({
   const headerMenuTriggerRef = useRef(null)
   const editorOpen = !!editorFrame
   const hasNestedQuoteView = editorOpen || !!detailQuoteId
-  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedQuoteView)
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByEditor = listPanelObscuredByDetail(isOpen, editorOpen)
+  const hasQuoteDetail = !!detailQuoteId
+  const listBesideQuoteDetail = listPanelObscuredByDetail(isOpen, hasQuoteDetail)
   const [fetchedDetailQuote, setFetchedDetailQuote] = useState(null)
   const editorSeed = editorFrame?.prefill ?? editorFrame?.quote ?? null
   const editorTemplate = editorFrame?.template ?? null
@@ -288,7 +291,11 @@ export function QuotesPanel({
     <>
       <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          className="map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel quotes-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            listObscuredByEditor && 'crm-list-under-detail',
+            listBesideQuoteDetail && 'quotes-list-with-detail',
+          )}
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay
@@ -535,6 +542,7 @@ export function QuotesPanel({
         onDelete={handleDeleteQuote}
         teams={teams}
         teamMembership={teamMembership}
+        getToken={getToken}
       />
 
       <QuoteTemplatePickerDialog

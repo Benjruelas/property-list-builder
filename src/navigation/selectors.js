@@ -1,5 +1,5 @@
 import { frameRoot, STACKABLE_SCHEDULE_OPENERS } from './types.js'
-import { findDockablePrimaryRoot, getStandaloneDetailBesideTasks, stackHasTasks } from './taskDock.js'
+import { findDockablePrimaryRoot, getStandaloneDetailBesideTasks, splitTrailingTasks, stackHasTasks } from './taskDock.js'
 
 /**
  * @param {ReturnType<import('./navigationReducer.js').createInitialState>} state
@@ -7,6 +7,12 @@ import { findDockablePrimaryRoot, getStandaloneDetailBesideTasks, stackHasTasks 
 export function selectTopFrame(state) {
   const stack = state.navStack
   return stack.length ? stack[stack.length - 1] : null
+}
+
+/** Top frame for panel z-index — ignores trailing Tasks dock frame. */
+export function selectTopCoreFrame(state) {
+  const { coreStack } = splitTrailingTasks(state.navStack)
+  return coreStack.length ? coreStack[coreStack.length - 1] : null
 }
 
 /**
@@ -132,6 +138,7 @@ export function isActivityFeedFocused(state) {
 export function selectPanelProps(state) {
   const stack = state.navStack
   const top = selectTopFrame(state)
+  const topCore = selectTopCoreFrame(state)
   const overlay = selectTopOverlay(state)
 
   const activityFrame = stack.find((f) => f.type === 'activity')
@@ -143,7 +150,6 @@ export function selectPanelProps(state) {
   const pipesDeal = findFrame(state, 'pipes.deal')
   const pipesLead = findFrame(state, 'pipes.lead')
   const scheduleFrame = findFrame(state, 'schedule')
-  const scheduleLead = findFrame(state, 'schedule.lead')
   const listsParcels = findFrame(state, 'lists.parcels')
   const formsEdit = findFrame(state, 'forms.edit')
   const formsFill = findFrame(state, 'forms.fill')
@@ -169,6 +175,9 @@ export function selectPanelProps(state) {
     /** Visual stack order: only the top nav frame gets dialog topLayer (z-index). */
     isActivityPanelTopLayer: top?.type === 'activity',
     isTasksPanelTopLayer: top?.type === 'tasks',
+    isSettingsPanelTopLayer: topCore?.type === 'settings',
+    isLeadsDetailTopLayer: topCore?.type === 'leads.detail',
+    isTeamsDetailTopLayer: topCore?.type === 'teams.detail',
     isListPanelOpen: hasFrameRoot(state, 'lists'),
     isParcelListPanelOpen: !!listsParcels,
     viewingListId: listsParcels?.listId ?? null,
@@ -191,7 +200,6 @@ export function selectPanelProps(state) {
     tasksDockLayout: selectTasksDockLayout(state),
     isSchedulePanelOpen: hasFrameRoot(state, 'schedule'),
     scheduleInitialDate: scheduleFrame?.initialDate ?? null,
-    scheduleLeadId: scheduleLead?.leadId ?? null,
     scheduleStacked: selectIsStackedUnderSchedule(state),
     hasScheduleOpener: selectHasScheduleOpener(state),
     isPathsPanelOpen: hasFrameRoot(state, 'paths'),
@@ -199,6 +207,7 @@ export function selectPanelProps(state) {
     formsView: formsFill ? 'fill' : formsEdit ? 'edit' : 'list',
     formsTemplateId: formsFill?.templateId ?? formsEdit?.templateId ?? null,
     isQuotesPanelOpen: hasFrameRoot(state, 'quotes'),
+    isQuotesListOpen: hasExactFrame(state, 'quotes'),
     quotesEditorFrame: quotesEditor ?? null,
     quotesDetailQuoteId: quotesDetail?.quoteId ?? null,
     quotesDetailQuote: quotesDetail?.quote ?? null,

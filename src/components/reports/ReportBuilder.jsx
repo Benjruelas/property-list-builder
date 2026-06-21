@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Loader2, Plus, Trash2, ChevronUp, ChevronDown, Image as ImageIcon } from 'lucide-react'
+import { Loader2, Plus, Trash2, ChevronUp, ChevronDown, Image as ImageIcon, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
+import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
@@ -81,6 +82,19 @@ export function ReportBuilder({
       setSections([newReportSection(0)])
     }
   }, [open, initialReport, initialTemplate, layoutTemplate, isTemplate])
+
+  useEffect(() => {
+    if (!open) setPickerSectionId(null)
+  }, [open])
+
+  useEffect(() => {
+    if (!pickerSectionId) return undefined
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setPickerSectionId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [pickerSectionId])
 
   useEffect(() => {
     if (!open || !getToken || isTemplate) return
@@ -233,9 +247,12 @@ export function ReportBuilder({
 
   return (
     <>
-      <Dialog open={open} modal={false} onOpenChange={(o) => !o && onClose?.()}>
+      <Dialog open={open} modal={false} onOpenChange={(o) => handleChildPanelDismiss(o, onClose, { wasOpen: open })}>
         <DialogContent
-          className="map-panel list-panel reports-panel report-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full w-[min(96vw,32rem)] max-w-lg"
+          className={cn(
+            'map-panel list-panel reports-panel report-editor-panel fullscreen-panel relative flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full',
+            !isTemplate && 'square-picker-panel',
+          )}
           showCloseButton={false}
           nestedOverlay
           topLayer
@@ -314,44 +331,75 @@ export function ReportBuilder({
               </Button>
             )}
           </div>
+
+          {!isTemplate && pickerSectionId && (
+            <div
+              className="absolute inset-0 z-30 flex items-center justify-center p-4 bg-black/60"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="report-photo-picker-title"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setPickerSectionId(null)
+              }}
+            >
+              <div
+                className="w-full max-w-md rounded-xl border border-white/15 bg-[var(--map-panel-detail-surface)] p-4 shadow-xl max-h-[min(85vh,560px)] flex flex-col"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-2 mb-3 shrink-0">
+                  <h3 id="report-photo-picker-title" className="text-sm font-semibold">
+                    Select photos
+                  </h3>
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-md opacity-70 hover:opacity-100 hover:bg-white/10"
+                    onClick={() => setPickerSectionId(null)}
+                    aria-label="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
+                  {photos.length === 0 ? (
+                    <p className="text-xs opacity-50">No photos on this lead yet.</p>
+                  ) : (
+                    <div className="lead-photo-grid">
+                      {photos.map((p) => {
+                        const sec = sections.find((s) => s.id === pickerSectionId)
+                        const selected = sec?.photoIds?.includes(p.id)
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className={cn(
+                              'aspect-square rounded-lg border overflow-hidden',
+                              selected ? 'border-white/40 bg-white/10' : 'border-white/10'
+                            )}
+                            onClick={() => togglePhoto(pickerSectionId, p.id)}
+                          >
+                            {thumbUrls[p.id] ? (
+                              <img src={thumbUrls[p.id]} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-white/5" />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  className="w-full mt-3 min-h-[44px] shrink-0"
+                  onClick={() => setPickerSectionId(null)}
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
-
-      {!isTemplate && (
-        <Dialog open={!!pickerSectionId} onOpenChange={(o) => !o && setPickerSectionId(null)}>
-          <DialogContent className="map-panel max-w-md p-4" nestedOverlay topLayer>
-            <h3 className="text-sm font-semibold mb-3">Select photos</h3>
-            {photos.length === 0 ? (
-              <p className="text-xs opacity-50">No photos on this lead yet.</p>
-            ) : (
-              <div className="lead-photo-grid max-h-[50vh] overflow-y-auto">
-                {photos.map((p) => {
-                  const sec = sections.find((s) => s.id === pickerSectionId)
-                  const selected = sec?.photoIds?.includes(p.id)
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className={cn(
-                        'aspect-square rounded-lg border overflow-hidden',
-                        selected ? 'border-white/40 bg-white/10' : 'border-white/10'
-                      )}
-                      onClick={() => togglePhoto(pickerSectionId, p.id)}
-                    >
-                      {thumbUrls[p.id] ? (
-                        <img src={thumbUrls[p.id]} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-white/5" />
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-            <Button type="button" className="w-full mt-3 min-h-[44px]" onClick={() => setPickerSectionId(null)}>Done</Button>
-          </DialogContent>
-        </Dialog>
-      )}
     </>
   )
 }

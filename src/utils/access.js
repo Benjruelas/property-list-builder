@@ -8,6 +8,36 @@ export const VISIBILITY = {
   MEMBERS: 'members',
 }
 
+export function uidsMatch(a, b) {
+  if (a == null || b == null || a === '' || b === '') return false
+  return String(a) === String(b)
+}
+
+export function normalizedOwnerId(lead) {
+  const id = lead?.ownerId
+  if (id == null || id === '') return null
+  return String(id)
+}
+
+export function isLeadOwner(user, lead) {
+  if (!user?.uid || !lead) return false
+  const ownerId = normalizedOwnerId(lead)
+  if (ownerId && uidsMatch(ownerId, user.uid)) return true
+  const ownerEmail = (lead.ownerEmail || '').toLowerCase().trim()
+  const userEmail = (user.email || '').toLowerCase().trim()
+  return !!(ownerEmail && userEmail && ownerEmail === userEmail)
+}
+
+export function userCapturedPhoto(user, photo) {
+  return !!(photo?.capturedByUid && uidsMatch(photo.capturedByUid, user.uid))
+}
+
+export function userCapturedAllPhotos(user, lead) {
+  const photos = Array.isArray(lead?.photos) ? lead.photos : []
+  if (photos.length === 0) return false
+  return photos.every((p) => userCapturedPhoto(user, p))
+}
+
 export function normalizeResourceVisibility(resource) {
   if (!resource) return resource
   const r = { ...resource }
@@ -83,7 +113,13 @@ function sharedWithUser(resource, uid, activeTeam, teams = []) {
 export function resolveResourceAccess(resource, user, team = null, teams = []) {
   if (!resource || !user?.uid) return null
   const r = normalizeResourceVisibility(resource)
-  if (r.ownerId === user.uid) return 'owner'
+
+  const ownerId = normalizedOwnerId(r)
+  if (ownerId && uidsMatch(ownerId, user.uid)) return 'owner'
+
+  const ownerEmail = (r.ownerEmail || '').toLowerCase().trim()
+  const userEmail = (user.email || '').toLowerCase().trim()
+  if (!ownerId && ownerEmail && userEmail && ownerEmail === userEmail) return 'owner'
 
   const contextTeam = teamById(teams, r.teamId) || team
   const role = contextTeam ? getTeamMemberRole(contextTeam, user.uid) : null
@@ -111,6 +147,16 @@ export function canView(access) {
 
 export function canEdit(access) {
   return access === 'owner' || access === 'admin' || access === 'collaborator'
+}
+
+/** Mirror of api/lib/leadAccess.js canMutateLeadPhotos for UI gating. */
+export function canMutateLeadPhotos(user, lead, access, photo = null) {
+  if (!user?.uid || !lead) return false
+  if (isLeadOwner(user, lead)) return true
+  if (canEdit(access)) return true
+  if (photo && userCapturedPhoto(user, photo)) return true
+  if (userCapturedAllPhotos(user, lead)) return true
+  return false
 }
 
 export function canDelete(access) {

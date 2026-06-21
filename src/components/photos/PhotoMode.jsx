@@ -574,15 +574,32 @@ export function PhotoMode({
   }
 
   const showUploadFallback = !useCamera || (!cameraReady && !cameraStarting)
+  const isUploadLayout = showUploadFallback && !cameraStarting
 
   return (
     <>
     {createPortal(
     <div
-      className="photo-mode-overlay map-panel list-panel photos-panel fullscreen-panel"
+      className={cn(
+        'photo-mode-overlay flex flex-col min-h-0',
+        isUploadLayout
+          ? 'photo-mode-overlay--upload'
+          : 'map-panel list-panel photos-panel fullscreen-panel',
+      )}
       role="dialog"
       aria-label="Photo mode"
     >
+      {isUploadLayout && (
+        <button type="button" className="photo-mode-scrim" onClick={handleBack} aria-label="Close" />
+      )}
+      <div
+        className={cn(
+          'flex flex-col min-h-0 min-w-0',
+          isUploadLayout
+            ? 'map-panel list-panel photos-panel photo-mode-upload-box'
+            : 'flex-1',
+        )}
+      >
       <div className="photo-mode-header">
         <PanelBackButton onClick={handleBack} title="Exit photo mode" />
         <div className="min-w-0 flex-1 px-2">
@@ -671,17 +688,7 @@ export function PhotoMode({
             <Camera className="h-7 w-7" />
           </button>
         )}
-        {showUploadFallback && !cameraStarting && (
-          <Button
-            type="button"
-            className="photo-mode-btn photo-mode-btn--primary min-h-[44px]"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || photosStorageFull}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Add photos
-          </Button>
-        )}
+      </div>
       </div>
     </div>,
     getModalPortalContainer()

@@ -42,55 +42,45 @@ function interactionTarget(e) {
   return e?.detail?.originalEvent?.target ?? target
 }
 
-/** Prevents Radix Dialog from closing when the user interacts inside portaled UI (schedule picker, lead task/pipe menus, toasts). */
+/**
+ * Prevents Radix Dialog from closing when the user interacts inside genuinely nested
+ * UI (menus, pickers, toasts, confirm, deeper child dialogs, dock/action chrome).
+ * Parent/sibling panel surfaces are intentionally excluded so click-out on a map
+ * backdrop or parent list can dismiss the topmost child overlay.
+ */
+const NESTED_DISMISS_GUARD_SELECTORS = [
+  '.schedule-picker-panel',
+  '[data-task-menu]',
+  '[data-lead-details-menu]',
+  '[data-deal-details-menu]',
+  '[data-deal-line-items-menu]',
+  '[data-options-menu]',
+  '[data-confirm-dialog]',
+  '[data-send-quote-dialog]',
+  '[data-send-report-dialog]',
+  '[data-lead-picker-dialog]',
+  '[data-pipe-menu]',
+  '[data-deals-panel-menu]',
+  '[data-quotes-panel-menu]',
+  '[data-reports-panel-menu]',
+  '[data-deal-template-menu]',
+  '[data-tag-picker-menu]',
+  '[data-tag-picker-trigger]',
+  '[data-create-pipeline-dialog]',
+  '[data-panel-filter-menu]',
+  '[data-directions-picker-menu]',
+  '[data-toast-container]',
+  '[data-toast-item]',
+  '[data-team-member-features-dialog]',
+  '.mobile-action-bar',
+  '.mobile-action-bar-menu',
+  '.mobile-action-bar-menu-backdrop',
+  '[data-tasks-dock-slot]',
+]
+
 const preventCloseWhenNestedOverlay = (e, existing) => {
   const target = interactionTarget(e)
-  if (
-    target?.closest?.('.schedule-picker-panel') ||
-    target?.closest?.('[data-task-menu]') ||
-    target?.closest?.('[data-lead-details-menu]') ||
-    target?.closest?.('[data-deal-details-menu]') ||
-    target?.closest?.('[data-deal-line-items-menu]') ||
-    target?.closest?.('[data-options-menu]') ||
-    target?.closest?.('[data-confirm-dialog]') ||
-    target?.closest?.('[data-send-quote-dialog]') ||
-    target?.closest?.('[data-send-report-dialog]') ||
-    target?.closest?.('[data-lead-picker-dialog]') ||
-    target?.closest?.('[data-pipe-menu]') ||
-    target?.closest?.('[data-deals-panel-menu]') ||
-    target?.closest?.('[data-quotes-panel-menu]') ||
-    target?.closest?.('[data-reports-panel-menu]') ||
-    target?.closest?.('[data-deal-template-menu]') ||
-    target?.closest?.('[data-tag-picker-menu]') ||
-    target?.closest?.('[data-tag-picker-trigger]') ||
-    target?.closest?.('[data-create-pipeline-dialog]') ||
-    target?.closest?.('[data-panel-filter-menu]') ||
-    target?.closest?.('[data-directions-picker-menu]') ||
-    target?.closest?.('[data-toast-container]') ||
-    target?.closest?.('[data-toast-item]') ||
-    target?.closest?.('.hail-data-panel') ||
-    target?.closest?.('.parcel-popup-card') ||
-    target?.closest?.('.parcel-details-panel') ||
-    target?.closest?.('.lead-details-panel') ||
-    target?.closest?.('.phone-action-panel') ||
-    target?.closest?.('.email-panel') ||
-    target?.closest?.('.outreach-panel') ||
-    target?.closest?.('.create-lead-panel') ||
-    target?.closest?.('.create-deal-panel') ||
-    target?.closest?.('.new-task-panel') ||
-    target?.closest?.('.deal-details-panel') ||
-    target?.closest?.('[data-team-member-features-dialog]') ||
-    target?.closest?.('.team-details-panel') ||
-    target?.closest?.('.activity-panel') ||
-    target?.closest?.('.reports-panel') ||
-    target?.closest?.('.photo-mode-overlay') ||
-    target?.closest?.('.photo-annotator-overlay') ||
-    target?.closest?.('.file-preview-overlay') ||
-    target?.closest?.('.mobile-action-bar') ||
-    target?.closest?.('.mobile-action-bar-menu') ||
-    target?.closest?.('.mobile-action-bar-menu-backdrop') ||
-    target?.closest?.('[data-tasks-dock-slot]')
-  ) {
+  if (NESTED_DISMISS_GUARD_SELECTORS.some((sel) => target?.closest?.(sel))) {
     e.preventDefault()
   }
   existing?.(e)

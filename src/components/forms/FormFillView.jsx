@@ -870,21 +870,21 @@ export function FormFillView({
   }, [allFieldsFilled, exitFillMode, fillMode, isPublic])
 
   const publicReviewMode = isPublic && !fillMode
-  const publicFitReady = publicReviewMode && unscaledSize.w > 0 && unscaledSize.h > 0
+  const viewFitReady = !fillMode && unscaledSize.w > 0 && unscaledSize.h > 0
 
-  // Keep completed public forms centered — clear fill-mode scroll offset after layout.
+  // View mode: keep form centered — clear scroll offset after zoom/layout changes.
   useEffect(() => {
-    if (!publicReviewMode) return
+    if (fillMode || !viewFitReady) return
     const scroller = scrollContainerRef.current
     if (!scroller) return
     scroller.scrollLeft = 0
     scroller.scrollTop = 0
     setScrollPos({ top: 0, left: 0 })
-  }, [publicReviewMode, fillZoom, unscaledSize.w, unscaledSize.h])
+  }, [fillMode, viewFitReady, fillZoom, unscaledSize.w, unscaledSize.h])
 
   // Re-fit after the submit footer appears so the form stays fully visible.
   useEffect(() => {
-    if (!publicReviewMode || !submitReady) return
+    if (fillMode || !viewFitReady || !submitReady) return
     let cancelled = false
     ;(async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -895,11 +895,11 @@ export function FormFillView({
       setReviewFitZoom(z)
     })()
     return () => { cancelled = true }
-  }, [publicReviewMode, submitReady, computeViewModeZoom])
+  }, [fillMode, viewFitReady, submitReady, computeViewModeZoom])
 
-  // Only vertically center when the form fits; otherwise align to top so nothing is clipped.
+  // Vertically center when the form fits; otherwise align to top so nothing is clipped.
   useEffect(() => {
-    if (!publicReviewMode) return
+    if (fillMode || !viewFitReady) return
     const scroller = scrollContainerRef.current
     if (!scroller) return
     const measure = () => {
@@ -916,7 +916,7 @@ export function FormFillView({
     const ro = new ResizeObserver(measure)
     ro.observe(scroller)
     return () => ro.disconnect()
-  }, [publicReviewMode, unscaledSize.h, fillZoom])
+  }, [fillMode, viewFitReady, unscaledSize.h, fillZoom])
 
   const renderSubmitButton = (className) => {
     const label = isPublic
@@ -1007,8 +1007,7 @@ export function FormFillView({
         className={cn(
           'fill-scroll-container scrollbar-hide flex-1 min-h-0 overscroll-behavior-contain bg-gray-200/50',
           fillMode && 'p-4 overflow-y-auto overflow-x-auto',
-          !fillMode && !publicReviewMode && 'px-2 py-3 overflow-y-auto overflow-x-auto',
-          publicReviewMode && 'form-fill-fit-scroll',
+          !fillMode && 'form-fill-fit-scroll px-2 py-3',
         )}
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
@@ -1025,16 +1024,16 @@ export function FormFillView({
           <>
             <div
               className={cn(
-                publicFitReady && 'form-fill-fit-frame',
-                publicFitReady && (reviewFitsViewport
+                viewFitReady && 'form-fill-fit-frame',
+                viewFitReady && (reviewFitsViewport
                   ? 'form-fill-fit-frame--fits'
                   : 'form-fill-fit-frame--scroll')
               )}
             >
               <div
-                className={cn(publicFitReady && 'form-fill-fit-stage')}
+                className={cn(viewFitReady && 'form-fill-fit-stage')}
                 style={
-                  publicFitReady
+                  viewFitReady
                     ? {
                         width: unscaledSize.w * fillZoom,
                         minHeight: unscaledSize.h * fillZoom,
@@ -1044,11 +1043,11 @@ export function FormFillView({
               >
                 <div
                   ref={zoomInnerRef}
-                  className={cn('form-fill-zoom-inner space-y-4', !publicReviewMode && 'w-full')}
+                  className={cn('form-fill-zoom-inner space-y-4', !viewFitReady && 'w-full')}
                   style={{
                     transform: `scale(${fillZoom})`,
                     transformOrigin: 'top left',
-                    width: publicFitReady ? unscaledSize.w : undefined,
+                    width: viewFitReady ? unscaledSize.w : undefined,
                     minWidth: fillMode ? `${fillZoom * 100}%` : undefined,
                   }}
                 >
@@ -1056,7 +1055,7 @@ export function FormFillView({
                     const fieldsHere = fieldsByPage.get(pageIndex) || []
                     const displayW = size.width
                     const displayH = size.height
-                    const pageMaxWidth = fillMode || isPublic ? `${displayW}px` : undefined
+                    const pageMaxWidth = `${displayW}px`
                     return (
                       <div
                         key={pageIndex}

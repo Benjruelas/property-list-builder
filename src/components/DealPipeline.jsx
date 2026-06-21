@@ -4,7 +4,8 @@ import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, S
 import { Button } from './ui/button'
 import { PanelBackButton, PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
+import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle } from '@/utils/dealPipeline'
@@ -119,9 +120,12 @@ export function DealPipeline({
   onOpenQuoteFromDeal,
   quotesRefreshKey = 0,
   canSeeDealAmounts = true,
+  canAccessPhotos = true,
   onEditLead,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
+  leadStatuses = [],
+  editLeadId = null,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
@@ -800,8 +804,10 @@ export function DealPipeline({
   }
 
   const hasNestedDetail = !!(activeDealId || leadOverlayId)
-  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedDetail)
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, hasNestedDetail)
   const pipelinePanelRef = useRef(null)
+  useObscuredPanelRoot(pipelinePanelRef, listObscuredByDetail)
   const columnsScrollRef = useRef(null)
 
   useEffect(() => {
@@ -857,7 +863,10 @@ export function DealPipeline({
     <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         ref={pipelinePanelRef}
-        className="map-panel deal-pipeline-panel fullscreen-panel flex flex-col"
+        className={cn(
+          'map-panel deal-pipeline-panel fullscreen-panel flex flex-col',
+          listObscuredByDetail && 'crm-list-under-detail',
+        )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay
@@ -1235,6 +1244,7 @@ export function DealPipeline({
         <DealDetails
           obscuredByChild={!!leadOverlayId}
           panelDockSlot={promotedDealPanelDockSlot}
+          primaryDetail={!!promotedDealId}
           topLayer
           hideOverlay
           suppressBackdrop
@@ -1277,6 +1287,8 @@ export function DealPipeline({
           canSeeDealAmounts={canSeeDealAmounts}
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
+          currentUser={currentUser}
+          canAccessPhotos={canAccessPhotos}
         />
       )}
 
@@ -1312,9 +1324,11 @@ export function DealPipeline({
           canSeeDealAmounts={canSeeDealAmounts}
           nestedOverlay
           topLayer
+          externalNestedOverlay={!!editLeadId && editLeadId === leadOverlay?.id}
           onEditLead={onEditLead}
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
+          leadStatuses={leadStatuses}
         />
       )}
 

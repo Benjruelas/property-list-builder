@@ -2,6 +2,8 @@
  * KV storage for lead photo reports.
  */
 
+import { readLocalDevArray, writeLocalDevArray } from './localDevPersistence.js'
+
 export const REPORTS_KV_KEY = 'user_photo_reports'
 export const REPORT_TEMPLATES_KV_KEY = 'report_templates'
 
@@ -31,14 +33,17 @@ let fallbackReports = []
 let fallbackTemplates = []
 
 async function loadArray(key, fallback) {
-  if (!kvAvailable || !kv) return fallback
+  if (!kvAvailable || !kv) {
+    return readLocalDevArray(key, fallback)
+  }
   try {
     const data = await kv.get(key)
     const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
     const result = Array.isArray(parsed) ? parsed : []
-    return result
+    if (result.length > 0) return result
+    return readLocalDevArray(key, fallback)
   } catch {
-    return fallback
+    return readLocalDevArray(key, fallback)
   }
 }
 
@@ -50,6 +55,7 @@ export async function getAllPhotoReports() {
 
 export async function saveAllPhotoReports(reports) {
   fallbackReports = reports
+  await writeLocalDevArray(REPORTS_KV_KEY, reports)
   if (!kvAvailable || !kv) return
   try {
     await kv.set(REPORTS_KV_KEY, reports).catch(() => kv.set(REPORTS_KV_KEY, JSON.stringify(reports)))

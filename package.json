@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "dev:api": "vercel dev --listen 3001",
+    "dev:all": "npm run dev:api & npm run dev",
     "dev:vercel": "vercel dev",
     "build": "vite build",
     "preview": "vite preview",

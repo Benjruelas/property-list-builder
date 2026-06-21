@@ -3,6 +3,7 @@ import { UserPlus, Trash2, LogOut, Pencil, Shield, ArrowRightLeft, Mail, Setting
 import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { handleChildPanelDismiss } from './ui/panelDialogUtils'
 import { Input } from './ui/input'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { cn } from '@/lib/utils'
@@ -239,9 +240,14 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
   const seatLimit = team.seatLimit || 10
   const menuMember = memberMenuUid ? members.find((m) => m.uid === memberMenuUid) : null
   const menuMemberMeta = menuMember ? getMemberMeta(menuMember, team, currentUser) : null
+  const hasNestedOverlay = !!transferTarget || !!featuresMember || !!memberMenuUid
 
   return (
-    <Dialog open={true} modal={false} onOpenChange={(open) => { if (!open) onClose() }}>
+    <Dialog
+      open={true}
+      modal={false}
+      onOpenChange={(open) => handleChildPanelDismiss(open, onClose, { hasNestedOverlay })}
+    >
       <DialogContent
         className="map-panel list-panel team-details-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}

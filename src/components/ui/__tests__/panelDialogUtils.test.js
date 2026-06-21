@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { handlePanelDialogOpenChange } from '../panelDialogUtils'
+import { handlePanelDialogOpenChange, handleChildPanelDismiss } from '../panelDialogUtils'
 
 describe('handlePanelDialogOpenChange', () => {
   it('calls onPanelBack when user dismisses an open panel', () => {
@@ -26,4 +26,24 @@ describe('handlePanelDialogOpenChange', () => {
     expect(onPanelBack).not.toHaveBeenCalled()
   })
 
+})
+
+describe('handleChildPanelDismiss', () => {
+  it('calls onClose when user dismisses an open child overlay', () => {
+    const onClose = vi.fn()
+    handleChildPanelDismiss(false, onClose, { wasOpen: true })
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('ignores dismiss while nested overlay is open', () => {
+    const onClose = vi.fn()
+    handleChildPanelDismiss(false, onClose, { hasNestedOverlay: true, wasOpen: true })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('ignores dismiss for promoted primary detail panels', () => {
+    const onClose = vi.fn()
+    handleChildPanelDismiss(false, onClose, { suppress: true, wasOpen: true })
+    expect(onClose).not.toHaveBeenCalled()
+  })
 })

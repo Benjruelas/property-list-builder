@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from './ui/button'
 import { CompletedTasksToggleButton } from './CompletedTasksToggleButton'
@@ -111,10 +111,12 @@ export function LeadTasksSection({
   onPipelinesChange,
   onOpenScheduleAtDate,
   refreshKey = 0,
+  onNestedOverlayChange,
 }) {
   const { scheduleSync } = useUserDataSync()
   const [tasks, setTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(false)
+  const tasksLoadedForLeadId = useRef(null)
   const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
@@ -123,6 +125,10 @@ export function LeadTasksSection({
   const showTaskDialog = showAddTask || !!editingTask
   const isEditMode = !!editingTask
 
+  useEffect(() => {
+    onNestedOverlayChange?.(showTaskDialog || !!pipePickerState?.open)
+  }, [showTaskDialog, pipePickerState, onNestedOverlayChange])
+
   const apiMode = pipelines.length > 0
   const displayLeads = useMemo(() => leads, [leads])
   const parcelKey = leadTaskKey(lead)
@@ -130,15 +136,18 @@ export function LeadTasksSection({
   const refreshTasks = useCallback(async () => {
     if (!lead) {
       setTasks([])
+      tasksLoadedForLeadId.current = null
       return
     }
-    setTasksLoading(true)
+    const isInitialLoad = tasksLoadedForLeadId.current !== lead.id
+    if (isInitialLoad) setTasksLoading(true)
     try {
       // Lead detail — only tasks linked to this lead (TASK_LIST_SCOPE.LEAD).
       const list = await collectTasksForLeadFresh(lead, pipelines, { getToken, teams })
       setTasksWithPendingMerge(setTasks, list)
+      tasksLoadedForLeadId.current = lead.id
     } finally {
-      setTasksLoading(false)
+      if (isInitialLoad) setTasksLoading(false)
     }
   }, [lead, pipelines, getToken, teams])
 
@@ -165,6 +174,8 @@ export function LeadTasksSection({
     setShowAddTask(false)
     setEditingTask(null)
     setShowCompletedTasks(false)
+    setTasks([])
+    tasksLoadedForLeadId.current = null
   }, [lead?.id])
 
   const closeTaskDialog = () => {

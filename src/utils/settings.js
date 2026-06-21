@@ -62,6 +62,9 @@ export const DEFAULT_SETTINGS = {
 
   /** Default email/text templates when sending photo reports */
   reportSendTemplates: null,
+
+  /** Custom lead status labels/order (solo users without a team) */
+  leadStatuses: null,
 }
 
 export function getSettings() {
@@ -84,6 +87,9 @@ export function getSettings() {
       }
       if (saved.reportSendTemplates && typeof saved.reportSendTemplates === 'object') {
         merged.reportSendTemplates = saved.reportSendTemplates
+      }
+      if (Array.isArray(saved.leadStatuses)) {
+        merged.leadStatuses = saved.leadStatuses
       }
       if (!Object.prototype.hasOwnProperty.call(saved, 'uiTheme')) {
         merged.uiTheme = DEFAULT_UI_THEME
@@ -122,6 +128,9 @@ export function updateSettings(partial, getToken) {
   }
   if (partial.reportSendTemplates && typeof partial.reportSendTemplates === 'object') {
     next = { ...next, reportSendTemplates: partial.reportSendTemplates }
+  }
+  if (partial.leadStatuses !== undefined) {
+    next = { ...next, leadStatuses: partial.leadStatuses }
   }
   next.uiTheme = normalizeUiTheme(next.uiTheme)
   try {

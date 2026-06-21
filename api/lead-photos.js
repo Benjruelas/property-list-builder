@@ -3,7 +3,8 @@ import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import {
   getLeadWithAccess,
   saveAllLeads,
-  canEditLead,
+  canMutateLeadPhotos,
+  withRepairedLeadOwnership,
 } from './lib/leadAccess.js'
 
 /**
@@ -114,7 +115,7 @@ export default async function handler(req, res) {
 
       const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
       if (!lead) return res.status(404).json({ error: 'Lead not found' })
-      if (!canEditLead(access)) return res.status(403).json({ error: 'No permission to add photos' })
+      if (!canMutateLeadPhotos(user, lead, access)) return res.status(403).json({ error: 'No permission to add photos' })
 
       const photos = Array.isArray(lead.photos) ? lead.photos : []
 
@@ -175,11 +176,13 @@ export default async function handler(req, res) {
         updatedAt: now,
       }
 
-      const updatedLead = {
+      const updatedLead = withRepairedLeadOwnership({
         ...lead,
+        ownerId: lead.ownerId || user.uid,
+        ownerEmail: lead.ownerEmail || user.email || null,
         photos: [...photos, photoRecord],
         updatedAt: now,
-      }
+      }, user)
       const nextAll = [...all]
       nextAll[index] = updatedLead
       await saveAllLeads(nextAll)
@@ -195,11 +198,14 @@ export default async function handler(req, res) {
 
       const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
       if (!lead) return res.status(404).json({ error: 'Lead not found' })
-      if (!canEditLead(access)) return res.status(403).json({ error: 'No permission to edit photos' })
 
       const photos = Array.isArray(lead.photos) ? [...lead.photos] : []
       const pIdx = photos.findIndex((p) => p.id === photoId)
       if (pIdx === -1) return res.status(404).json({ error: 'Photo not found' })
+
+      if (!canMutateLeadPhotos(user, lead, access, photos[pIdx])) {
+        return res.status(403).json({ error: 'No permission to edit photos' })
+      }
 
       const existing = photos[pIdx]
       const ownerUid = lead.ownerId || user.uid
@@ -279,11 +285,17 @@ export default async function handler(req, res) {
 
       const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
       if (!lead) return res.status(404).json({ error: 'Lead not found' })
-      if (!canEditLead(access)) return res.status(403).json({ error: 'No permission to delete photos' })
 
       const photos = Array.isArray(lead.photos) ? lead.photos : []
       const photo = photos.find((p) => p.id === photoId)
       if (!photo) return res.status(404).json({ error: 'Photo not found' })
+
+      if (!canMutateLeadPhotos(user, lead, access, photo)) {
+        const message = access === 'admin_view'
+          ? 'This private lead is view-only. You can delete photos you captured, but not photos added by the lead owner.'
+          : 'No permission to delete photos'
+        return res.status(403).json({ error: message })
+      }
 
       for (const k of [photo.key, photo.thumbnailKey, photo.annotatedKey].filter(Boolean)) {
         try {
@@ -296,11 +308,11 @@ export default async function handler(req, res) {
         }
       }
 
-      const updatedLead = {
+      const updatedLead = withRepairedLeadOwnership({
         ...lead,
         photos: photos.filter((p) => p.id !== photoId),
         updatedAt: new Date().toISOString(),
-      }
+      }, user)
       const nextAll = [...all]
       nextAll[index] = updatedLead
       await saveAllLeads(nextAll)

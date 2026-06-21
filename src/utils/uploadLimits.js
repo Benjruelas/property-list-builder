@@ -4,7 +4,9 @@
 
 export const ENTITY_STORAGE_LIMITS = {
   deal: 10 * 1024 * 1024,
-  lead: 10 * 1024 * 1024,
+  dealPhotos: 100 * 1024 * 1024,
+  lead: 100 * 1024 * 1024,
+  leadFiles: 10 * 1024 * 1024,
 }
 
 export const MAX_SINGLE_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -35,7 +37,13 @@ export function storageUsagePercent(used, limit) {
 }
 
 export function entityStorageError(entityType, limit) {
-  const label = entityType === 'deal' ? 'Deal' : 'Lead'
+  const label = entityType === 'deal'
+    ? 'Deal'
+    : entityType === 'dealPhotos'
+      ? 'Deal photo'
+    : entityType === 'leadFiles'
+      ? 'Lead file'
+      : 'Lead photo'
   return `${label} storage limit reached (${formatStorageBytes(limit)} total)`
 }
 

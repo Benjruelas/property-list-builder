@@ -12,7 +12,7 @@ import {
   Search,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from '../ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from '../ui/panelDialogUtils'
 import {
   PanelHeader,
   PANEL_LIST_HEADER_CLASS,
@@ -94,7 +94,8 @@ export function FormsPanel({
   const [openMenuId, setOpenMenuId] = useState(null)
   const menuTriggerRef = useRef(null)
   const hasNestedView = view !== 'list'
-  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedView)
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, hasNestedView)
 
   const [shareTemplateId, setShareTemplateId] = useState(null)
   const [localShareState, setLocalShareState] = useState(null)
@@ -401,7 +402,10 @@ export function FormsPanel({
     <>
       <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          className="map-panel list-panel forms-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel forms-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            listObscuredByDetail && 'crm-list-under-detail',
+          )}
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay

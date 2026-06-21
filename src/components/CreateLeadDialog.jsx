@@ -10,14 +10,22 @@ import { createLead, updateLead } from '@/utils/leads'
 import { mergeLeadFormWithParcel, ensureLeadParcelLink } from '@/utils/resolveLeadParcel'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from './ui/toast'
-import { formatPhoneAsYouType, formatPhoneDisplay, normalizePhoneForStorage } from '@/utils/phoneFormat'
+import { LeadContactFieldList } from './leads/LeadContactFieldList'
+import {
+  contactDetailsFromForm,
+  phoneDetailsForLeadForm,
+  emailDetailsForLeadForm,
+  CONTACT_SOURCE_USER,
+} from '@/utils/leadContact'
+
+const emptyContactEntry = { value: '', source: CONTACT_SOURCE_USER, callerId: '', primary: false }
 
 const emptyForm = {
   firstName: '',
   lastName: '',
   address: '',
-  phone: '',
-  email: '',
+  phoneDetails: [emptyContactEntry],
+  emailDetails: [emptyContactEntry],
   notes: '',
   parcelId: null,
   lat: null,
@@ -30,8 +38,8 @@ function normalizeLeadForm(data = {}) {
     firstName: data.firstName ?? '',
     lastName: data.lastName ?? '',
     address: data.address ?? '',
-    phone: formatPhoneDisplay(data.phone ?? '') || '',
-    email: data.email ?? '',
+    phoneDetails: phoneDetailsForLeadForm(data),
+    emailDetails: emailDetailsForLeadForm(data),
     notes: data.notes ?? '',
     parcelId: data.parcelId ?? null,
     lat: data.lat ?? null,
@@ -144,8 +152,7 @@ export function CreateLeadDialog({
         firstName,
         lastName,
         address: linked.address || address,
-        phone: normalizePhoneForStorage(form.phone),
-        email: (form.email ?? '').trim() || null,
+        ...contactDetailsFromForm(form),
         notes: (form.notes ?? '').trim(),
         parcelId: linked.parcelId,
         lat: linked.lat,
@@ -180,7 +187,7 @@ export function CreateLeadDialog({
   return (
     <Dialog open={open} modal={false} onOpenChange={onOpenChange}>
       <DialogContent
-        className="map-panel list-panel create-lead-panel fullscreen-panel flex flex-col min-h-0 p-0"
+        className="map-panel list-panel create-lead-panel fullscreen-panel flex flex-col p-0"
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
@@ -200,9 +207,9 @@ export function CreateLeadDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <form onSubmit={handleSubmit} className="create-lead-form">
           <div
-            className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-5 py-4 space-y-3"
+            className="create-lead-form-body scrollbar-hide px-5 py-4 space-y-3"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           >
           <div className="grid grid-cols-2 gap-3">
@@ -254,28 +261,21 @@ export function CreateLeadDialog({
             )}
           </div>
 
-          <div>
-            <label className="text-xs opacity-60 mb-1 block">Phone</label>
-            <input
-              type="tel"
-              value={form.phone ?? ''}
-              onChange={(e) => setField('phone', formatPhoneAsYouType(e.target.value))}
-              className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
-              autoComplete="tel"
-            />
-          </div>
+          <LeadContactFieldList
+            kind="phone"
+            entries={form.phoneDetails}
+            onChange={(phoneDetails) => setForm((f) => ({ ...f, phoneDetails }))}
+            disabled={saving}
+          />
 
-          <div>
-            <label className="text-xs opacity-60 mb-1 block">Email</label>
-            <input
-              type="email"
-              value={form.email ?? ''}
-              onChange={(e) => setField('email', e.target.value)}
-              className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15"
-              autoComplete="email"
-            />
-          </div>
+          <LeadContactFieldList
+            kind="email"
+            entries={form.emailDetails}
+            onChange={(emailDetails) => setForm((f) => ({ ...f, emailDetails }))}
+            disabled={saving}
+          />
 
+          {!isEdit && (
           <div>
             <label className="text-xs opacity-60 mb-1 block">Notes</label>
             <textarea
@@ -285,6 +285,7 @@ export function CreateLeadDialog({
               className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none"
             />
           </div>
+          )}
 
           <ResourceSharePicker
             key={open ? (isEdit ? `edit-${editLead.id}` : fromParcel ? `parcel-${prefill.parcelId}` : 'new') : 'closed'}
@@ -301,7 +302,7 @@ export function CreateLeadDialog({
           </div>
 
           <div
-            className="flex justify-end gap-2 px-5 py-4 border-t border-white/20 flex-shrink-0"
+            className="create-lead-form-footer flex justify-end gap-2 px-5 py-4 border-t border-white/20"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           >
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>

@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { getLeadPhones, getLeadEmails } from '@/utils/leadContact'
 import { ENTITY_ROW_CLASS } from '../pickers/entityPickerShared'
 import { cn } from '@/lib/utils'
 
@@ -17,7 +18,7 @@ function filterLeads(leads, query) {
   return sorted.filter((lead) => {
     const name = displayLeadName(lead).toLowerCase()
     const address = (lead.address || '').toLowerCase()
-    const searchable = [name, address, lead.email, lead.phone].filter(Boolean).join(' ')
+    const searchable = [name, address, ...getLeadEmails(lead), ...getLeadPhones(lead)].filter(Boolean).join(' ')
     return tokens.every((tok) => searchable.includes(tok))
   })
 }
@@ -30,6 +31,8 @@ export function LeadPickerDialog({
   onSelectLead,
   onCreateLead,
   title = 'Select lead for photos',
+  panelClassName,
+  nestedOverlay = false,
 }) {
   const [search, setSearch] = useState('')
 
@@ -44,30 +47,42 @@ export function LeadPickerDialog({
     return list
   }, [leads, search, parcelId])
 
+  const isSquarePanel = !!panelClassName
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose?.()}>
       <DialogContent
-        className="map-panel share-list-dialog lead-picker-dialog w-[min(92vw,24rem)] max-w-md max-h-[min(88vh,680px)] rounded-xl p-0 gap-0 overflow-hidden flex flex-col"
+        className={cn(
+          isSquarePanel
+            ? 'map-panel list-panel lead-picker-dialog fullscreen-panel flex flex-col min-h-0 p-0 gap-0 overflow-hidden'
+            : 'map-panel share-list-dialog lead-picker-dialog w-[min(92vw,24rem)] max-w-md max-h-[min(88vh,680px)] rounded-xl p-0 gap-0 overflow-hidden flex flex-col',
+          panelClassName,
+        )}
         showCloseButton={false}
         focusOverlay
         topLayer
+        nestedOverlay={nestedOverlay}
         data-lead-picker-dialog
       >
-        <div className="share-dialog-inner flex flex-col min-h-0 flex-1">
-          <DialogHeader className="share-dialog-header shrink-0">
-            <DialogTitle className="share-dialog-title">{title}</DialogTitle>
+        <div className={cn('flex flex-col min-h-0 flex-1', isSquarePanel ? 'px-0' : 'share-dialog-inner')}>
+          <DialogHeader className={cn('shrink-0 relative', isSquarePanel ? 'px-5 pt-5 pb-3 border-b border-white/10 text-left' : 'share-dialog-header')}>
+            <DialogTitle className={isSquarePanel ? 'text-lg font-semibold leading-tight' : 'share-dialog-title'}>{title}</DialogTitle>
             <DialogDescription className="sr-only">{title}</DialogDescription>
             <button
               type="button"
               onClick={() => onClose?.()}
-              className="share-dialog-close"
+              className={isSquarePanel ? 'absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100' : 'share-dialog-close'}
               aria-label="Close"
+              style={isSquarePanel ? { top: 'calc(1rem + env(safe-area-inset-top, 0px))' } : undefined}
             >
               <X className="h-4 w-4" />
             </button>
           </DialogHeader>
 
-          <div className="share-dialog-body flex flex-col min-h-0 flex-1 space-y-3">
+          <div
+            className={cn('flex flex-col min-h-0 flex-1', isSquarePanel ? 'px-5 py-4 space-y-3' : 'share-dialog-body space-y-3')}
+            style={isSquarePanel ? { paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' } : undefined}
+          >
             <div className="relative shrink-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
               <Input

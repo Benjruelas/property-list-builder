@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
-import { displayLeadName, leadToParcelData } from '@/utils/leads'
+import { displayLeadName } from '@/utils/leads'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
 import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
 import { addTeamTask } from '@/utils/teamTasks'
@@ -18,7 +18,6 @@ import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { TaskListLoading } from './ui/PanelListLoadingShell'
-import { LeadDetails } from './LeadDetails'
 import { EditLeadTaskDialog } from './EditLeadTaskDialog'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -97,11 +96,13 @@ function NowIndicator({ viewMode, weekStart, dayViewDate }) {
   return null
 }
 
-export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasScheduleOpener = false, stacked = false, scheduleLeadId = null, onOpenScheduleLead, onCloseScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
+export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasScheduleOpener = false, stacked = false, obscuredByLeadDetail = false, onOpenScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(false)
+  const tasksLoadedOnce = useRef(false)
+  const [calendarReady, setCalendarReady] = useState(false)
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth())
   const [viewMode, setViewMode] = useState('day') // 'month' | 'week' | 'day'
@@ -110,14 +111,9 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), n.getDate())
   })
-  const selectedLead = useMemo(
-    () => (scheduleLeadId ? leads.find((l) => l.id === scheduleLeadId) : null),
-    [scheduleLeadId, leads],
-  )
   const [showAddTask, setShowAddTask] = useState(false)
   const [addTaskPrefill, setAddTaskPrefill] = useState(null)
   const [editTaskContext, setEditTaskContext] = useState(null)
-  const [leadDetailsTaskEpoch, setLeadDetailsTaskEpoch] = useState(0)
   const [adminTeamView, setAdminTeamView] = useState(false)
 
   const apiMode = pipelines.length > 0
@@ -125,7 +121,8 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
   const isTeamAdmin = teamMembership?.role === 'admin'
 
   const refreshTasks = useCallback(async () => {
-    setTasksLoading(true)
+    const isInitialLoad = !tasksLoadedOnce.current
+    if (isInitialLoad) setTasksLoading(true)
     try {
       if (apiMode) {
         let tasks = [
@@ -147,30 +144,22 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
       } else {
         setAllTasks(getAllTasks())
       }
+      tasksLoadedOnce.current = true
+      setCalendarReady(true)
     } finally {
-      setTasksLoading(false)
+      if (isInitialLoad) setTasksLoading(false)
     }
   }, [apiMode, pipelines, getToken, teams])
-
-  const selectedLeadPipelineId = useMemo(() => {
-    if (!selectedLead) return null
-    if (selectedLead.__pipelineId) return selectedLead.__pipelineId
-    if (pipelines.length > 0) {
-      const p = pipelines.find((pipe) => pipe.leads?.some((l) => l.parcelId === selectedLead.parcelId))
-      return p?.id ?? null
-    }
-    return null
-  }, [selectedLead, pipelines])
 
   useEffect(() => {
     if (isOpen) {
       refreshTasks()
+    } else {
+      tasksLoadedOnce.current = false
+      setCalendarReady(false)
+      setTasksLoading(false)
     }
   }, [isOpen, refreshTasks])
-
-  useEffect(() => {
-    if (!isOpen) { /* lead overlay driven by nav stack */ }
-  }, [isOpen])
 
   useEffect(() => {
     if (isOpen && initialDate != null) {
@@ -526,19 +515,11 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
   const handlePanelBack = () => {
     setShowAddTask(false)
     setEditTaskContext(null)
-    if (scheduleLeadId) {
-      onCloseScheduleLead?.()
-      return
-    }
     if (hasScheduleOpener) {
       onClose?.()
       return
     }
     onBack?.() ?? onClose?.()
-  }
-
-  const handleLeadDetailClose = () => {
-    onCloseScheduleLead?.()
   }
 
   const switchViewMode = (mode) => {
@@ -554,14 +535,17 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
     setViewMode(mode)
   }
 
-  const hasNestedLeadDetail = !!scheduleLeadId
-  const listDialogOpen = mapListDialogOpen(isOpen, hasNestedLeadDetail)
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, obscuredByLeadDetail)
 
   return (
     <>
     <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
-        className="map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden"
+        className={cn(
+          'map-panel deal-pipeline-panel schedule-panel fullscreen-panel flex min-h-0 flex-col overflow-hidden',
+          listObscuredByDetail && 'crm-list-under-detail',
+        )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay
@@ -583,9 +567,11 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
           </PanelHeader>
         </DialogHeader>
         <div
-          className={`flex-1 min-h-0 flex flex-col deal-pipeline-content schedule-panel-content overflow-hidden pt-2 px-4 max-md:px-0 max-md:pb-0 pb-4 ${
-            viewMode === 'month' ? 'schedule-panel-content--month-edge' : ''
-          }`}
+          className={cn(
+            'flex-1 min-h-0 flex flex-col deal-pipeline-content schedule-panel-content overflow-hidden pt-2 px-4 max-md:px-0 max-md:pb-0 pb-4',
+            viewMode === 'month' && 'schedule-panel-content--month-edge',
+            calendarReady && 'panel-data-fade-in schedule-panel-content--settled',
+          )}
         >
           <div className="flex justify-center mb-3 flex-shrink-0 max-md:px-4">
             <div className="schedule-view-seg" role="tablist">
@@ -645,7 +631,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
             className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/12 bg-white/[0.03] max-md:rounded-none max-md:border-x-0 max-md:border-b-0"
             style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}
           >
-            {tasksLoading ? (
+            {tasksLoading && allTasks.length === 0 ? (
               <TaskListLoading className="flex-1 min-h-[12rem] items-center" />
             ) : viewMode === 'month' ? (
               <div className="schedule-calendar-month-grid grid grid-cols-7 grid-rows-[auto_repeat(6,minmax(0,1fr))] flex-1 min-h-0 min-w-0">
@@ -911,39 +897,6 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
           nestedOverlay
         />
 
-        <LeadDetails
-          isOpen={!!selectedLead}
-          onClose={handleLeadDetailClose}
-          lead={selectedLead}
-          pipelines={pipelines}
-          getToken={getToken}
-          parcelData={selectedLead ? leadToParcelData(selectedLead) : null}
-          onOpenParcelDetails={onOpenParcelDetails}
-          onEmailClick={onEmailClick}
-          onPhoneClick={onPhoneClick}
-          onTextClick={onTextClick}
-          onGoToParcelOnMap={onGoToParcelOnMap}
-          onLeadUpdate={() => {
-            onLeadsChange?.()
-          }}
-          onCreateDeal={() => {}}
-          teams={teams}
-          teamMembership={teamMembership}
-          onPipelinesChange={onPipelinesChange}
-          onOpenScheduleAtDate={(ts) => {
-            if (!ts) return
-            onCloseScheduleLead?.()
-            const d = new Date(ts)
-            setViewYear(d.getFullYear())
-            setViewMonth(d.getMonth())
-            setDayViewDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
-            setViewMode('day')
-          }}
-          leads={displayLeads}
-          taskListEpoch={leadDetailsTaskEpoch}
-          onEditLead={onEditLead}
-        />
-
         <EditLeadTaskDialog
           open={!!editTaskContext}
           onOpenChange={(o) => { if (!o) setEditTaskContext(null) }}
@@ -957,7 +910,6 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
           scheduleSync={scheduleSync}
           onSaved={() => {
             refreshTasks()
-            setLeadDetailsTaskEpoch((e) => e + 1)
           }}
         />
 

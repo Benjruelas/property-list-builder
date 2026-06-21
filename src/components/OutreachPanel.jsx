@@ -27,6 +27,7 @@ import {
 } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
@@ -500,7 +501,7 @@ export function OutreachPanel({ isOpen, onClose, onUseTemplate, initialTab = 'em
   if (!isOpen) return null
 
   return (
-    <Dialog open={isOpen} modal={false} onOpenChange={(open) => { if (!open) onClose() }}>
+    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
         className="map-panel list-panel outreach-panel fullscreen-panel flex flex-col min-h-0 p-0"
         panelDockSlot={panelDockSlot}

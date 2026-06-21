@@ -1,14 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'url'
+import { viteApiDevPlugin } from './scripts/viteApiDevPlugin.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.js'],
+    include: ['src/**/*.test.js', 'api/**/*.test.js'],
   },
   plugins: [
     react(),
+    viteApiDevPlugin({ apiDir: path.join(__dirname, 'api') }),
     // Serve init.json and proxy auth for Firebase (fixes 404 that breaks sign-in)
     {
       name: 'firebase-auth-proxy',

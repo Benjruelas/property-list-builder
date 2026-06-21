@@ -64,6 +64,8 @@ export function TasksPanel({
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(false)
+  const tasksLoadedOnce = useRef(false)
+  const [listReady, setListReady] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
 
   const [collapsedSections, setCollapsedSections] = useState({})
@@ -77,7 +79,8 @@ export function TasksPanel({
   const [pipePickerState, setPipePickerState] = useState(null)
 
   const refreshTasks = useCallback(async () => {
-    setTasksLoading(true)
+    const isInitialLoad = !tasksLoadedOnce.current
+    if (isInitialLoad) setTasksLoading(true)
     try {
       // Tasks panel always shows the full merged list (TASK_LIST_SCOPE.ALL).
       if (apiMode) {
@@ -86,8 +89,10 @@ export function TasksPanel({
       } else {
         setTasksWithPendingMerge(setAllTasks, getAllTasks())
       }
+      tasksLoadedOnce.current = true
+      setListReady(true)
     } finally {
-      setTasksLoading(false)
+      if (isInitialLoad) setTasksLoading(false)
     }
   }, [apiMode, pipelines, getToken, teams])
 
@@ -97,6 +102,9 @@ export function TasksPanel({
       setShowAddTask(false)
       setEditingTask(null)
       setShowClosedTasks(false)
+      tasksLoadedOnce.current = false
+      setListReady(false)
+      setTasksLoading(false)
     }
   }, [isOpen, refreshTasks])
 
@@ -614,7 +622,7 @@ export function TasksPanel({
           {tasksLoading && allTasks.length === 0 ? (
             <PanelListBodyLoading />
           ) : (
-            <>
+            <div className={cn(listReady && 'panel-data-fade-in')}>
           {showEmptyOpen && (
             <p className="text-sm text-white/60 py-8 text-center">No open tasks</p>
           )}
@@ -749,7 +757,7 @@ export function TasksPanel({
               })}
             </div>
           )}
-            </>
+            </div>
           )}
         </div>
       </DialogContent>
