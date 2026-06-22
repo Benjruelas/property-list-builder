@@ -5,7 +5,6 @@ import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from '.
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
-import { displayLeadName } from '@/utils/leads'
 import { getAllTasks, getPersonalTasks, addTask } from '@/utils/leadTasks'
 import { addPipelineTask, flattenPipelineTasks, pipelinesContainingParcel } from '@/utils/pipelineTasks'
 import { addTeamTask } from '@/utils/teamTasks'
@@ -19,6 +18,7 @@ import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { TaskListLoading } from './ui/PanelListLoadingShell'
 import { EditLeadTaskDialog } from './EditLeadTaskDialog'
+import { getScheduleTaskDisplay } from '@/utils/taskRowDisplay'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -50,25 +50,24 @@ function getSundayOfWeek(date) {
   return d
 }
 
-function getLeadLabel(lead, parcelId) {
-  if (!lead && !parcelId) return 'Standalone'
-  if (lead) return displayLeadName(lead) || lead.address || parcelId || 'Lead'
-  return parcelId || 'Lead'
-}
-
-function getTaskCalendarSubtitle(task, pipelines, displayLeads) {
-  if (task.pipelineId == null && task.parcelId == null) return 'Standalone'
-  const bits = []
-  if (task.__source === 'team') bits.push('Team task')
-  const pipe = pipelines.find((p) => p.id === task.pipelineId)
-  if (pipe?.title) bits.push(pipe.title)
-  if (task.parcelId) {
-    const lead = displayLeads.find((l) => l.parcelId === task.parcelId)
-    bits.push(getLeadLabel(lead, task.parcelId))
-  } else if (task.pipelineId) {
-    bits.push('Pipeline task')
+function ScheduleTaskItem({ task, displayLeads, allDeals, variant = 'pill', className, style, onClick }) {
+  const { title, contextLabel, tooltip } = getScheduleTaskDisplay(task, { displayLeads, allDeals })
+  if (variant === 'block') {
+    return (
+      <div className={cn('schedule-task-block', className)} style={style} onClick={onClick} title={tooltip}>
+        <div className="schedule-task-block-content">
+          <div className="schedule-task-block-title">{title}</div>
+          {contextLabel ? <div className="schedule-task-block-meta">{contextLabel}</div> : null}
+        </div>
+      </div>
+    )
   }
-  return bits.join(' · ') || 'Task'
+  return (
+    <div className={cn('schedule-task-pill', className)} style={style} onClick={onClick} title={tooltip}>
+      <div className="schedule-task-pill-title">{title}</div>
+      {contextLabel ? <div className="schedule-task-pill-meta">{contextLabel}</div> : null}
+    </div>
+  )
 }
 
 function NowIndicator({ viewMode, weekStart, dayViewDate }) {
@@ -672,19 +671,22 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
                       )}
                       <div className="mt-0.5 min-h-0 shrink overflow-hidden space-y-0.5">
                         {dayTasks.slice(0, 5).map((task) => {
-                          const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
+                          const lead = task.leadId
+                            ? displayLeads.find((l) => l.id === task.leadId)
+                            : task.parcelId
+                              ? displayLeads.find((l) => l.parcelId === task.parcelId)
+                              : null
                           return (
-                            <div
+                            <ScheduleTaskItem
                               key={task.id}
+                              task={task}
+                              displayLeads={displayLeads}
+                              allDeals={allDeals}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 if (lead) onOpenScheduleLead?.(lead.id)
                               }}
-                              className="schedule-task-pill"
-                              title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
-                            >
-                              {task.title || 'Task'}
-                            </div>
+                            />
                           )
                         })}
                         {dayTasks.length > 5 && (
@@ -758,28 +760,31 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
                     <NowIndicator viewMode="week" weekStart={effectiveWeekStart} dayViewDate={null} />
                     <div className="absolute top-0 left-0 right-0 pointer-events-none" style={{ height: 24 * 36 }}>
                       {spanningTasks.map(({ task, dayIndex, top, height }) => {
-                        const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
+                        const lead = task.leadId
+                          ? displayLeads.find((l) => l.id === task.leadId)
+                          : task.parcelId
+                            ? displayLeads.find((l) => l.parcelId === task.parcelId)
+                            : null
                         return (
-                          <div
+                          <ScheduleTaskItem
                             key={task.id}
-                            className="schedule-task-block absolute pointer-events-auto"
+                            task={task}
+                            displayLeads={displayLeads}
+                            allDeals={allDeals}
+                            variant="block"
+                            className="absolute pointer-events-auto"
                             style={{
                               left: `calc(48px + ${dayIndex} * (100% - 48px) / 7 + 2px)`,
                               width: `calc((100% - 48px) / 7 - 6px)`,
                               top: top + 1,
                               height: Math.max(24, height - 3),
-                              minHeight: 24
+                              minHeight: 24,
                             }}
                             onClick={(e) => {
                               e.stopPropagation()
                               if (lead) onOpenScheduleLead?.(lead.id)
                             }}
-                            title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
-                          >
-                            <div className="text-[10px] px-2 py-1 truncate leading-tight font-medium">
-                              {task.title || 'Task'}
-                            </div>
-                          </div>
+                          />
                         )
                       })}
                     </div>
@@ -843,28 +848,31 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
                     <NowIndicator viewMode="day" weekStart={null} dayViewDate={dayViewDate} />
                     <div className="absolute top-0 left-0 right-0 pointer-events-none" style={{ height: 24 * 36 }}>
                       {daySpanningTasks.map(({ task, top, height }) => {
-                        const lead = task.parcelId ? displayLeads.find((l) => l.parcelId === task.parcelId) : null
+                        const lead = task.leadId
+                          ? displayLeads.find((l) => l.id === task.leadId)
+                          : task.parcelId
+                            ? displayLeads.find((l) => l.parcelId === task.parcelId)
+                            : null
                         return (
-                          <div
+                          <ScheduleTaskItem
                             key={task.id}
-                            className="schedule-task-block absolute pointer-events-auto"
+                            task={task}
+                            displayLeads={displayLeads}
+                            allDeals={allDeals}
+                            variant="block"
+                            className="absolute pointer-events-auto"
                             style={{
                               left: 'calc(48px + 4px)',
                               width: 'calc(100% - 48px - 12px)',
                               top: top + 1,
                               height: Math.max(24, height - 3),
-                              minHeight: 24
+                              minHeight: 24,
                             }}
                             onClick={(e) => {
                               e.stopPropagation()
                               if (lead) onOpenScheduleLead?.(lead.id)
                             }}
-                            title={`${task.title || 'Task'} – ${getTaskCalendarSubtitle(task, pipelines, displayLeads)}`}
-                          >
-                            <div className="text-[10px] px-2 py-1 truncate leading-tight font-medium">
-                              {task.title || 'Task'}
-                            </div>
-                          </div>
+                          />
                         )
                       })}
                     </div>

@@ -2911,6 +2911,21 @@
   cursor: pointer;
   transition: background 0.15s ease;
   overflow: hidden;
+  min-width: 0;
+}
+.schedule-task-pill-title {
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schedule-task-pill-meta {
+  margin-top: 1px;
+  font-size: 9px;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.58);
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2964,6 +2979,32 @@
   background: rgba(59, 130, 246, 0.25);
   border-color: rgba(59, 130, 246, 0.4);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.schedule-task-block-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 0;
+  height: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
+}
+.schedule-task-block-title {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schedule-task-block-meta {
+  margin-top: 1px;
+  font-size: 9px;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.62);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Current time indicator */

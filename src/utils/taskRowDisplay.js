@@ -89,3 +89,18 @@ export function getTaskRowDisplayFields(task, context, { displayLeads = [], allD
     overdue,
   }
 }
+
+/** Compact title + lead/deal line for schedule calendar cells. */
+export function getScheduleTaskDisplay(task, { displayLeads = [], allDeals = [] } = {}) {
+  const { leadLabel, dealLabel, showShared } = getTaskRowDisplayFields(task, 'panel', {
+    displayLeads,
+    allDeals,
+  })
+  const title = (task?.title || '').trim() || '(untitled)'
+  const contextParts = []
+  if (leadLabel) contextParts.push(leadLabel)
+  if (dealLabel) contextParts.push(dealLabel)
+  const contextLabel = contextParts.length > 0 ? contextParts.join(' · ') : (showShared ? 'Team task' : null)
+  const tooltip = contextLabel ? `${title} · ${contextLabel}` : title
+  return { title, contextLabel, tooltip }
+}

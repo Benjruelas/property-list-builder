@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getTaskRowDisplayFields } from '@/utils/taskRowDisplay'
+import { getTaskRowDisplayFields, getScheduleTaskDisplay } from '@/utils/taskRowDisplay'
 
 const leads = [{ id: 'l1', firstName: 'Jane', lastName: 'Doe', parcelId: 'p1' }]
 const deals = [{ id: 'd1', title: 'Roof job' }]
@@ -49,5 +49,26 @@ describe('getTaskRowDisplayFields', () => {
     expect(fields.leadLabel).toBeNull()
     expect(fields.dealLabel).toBeNull()
     expect(fields.dueLabel).toBeTruthy()
+  })
+})
+
+describe('getScheduleTaskDisplay', () => {
+  it('includes title and lead/deal context', () => {
+    const task = {
+      title: 'Site visit',
+      leadId: 'l1',
+      dealId: 'd1',
+      scheduledAt: Date.now() + 86400000,
+    }
+    const display = getScheduleTaskDisplay(task, { displayLeads: leads, allDeals: deals })
+    expect(display.title).toBe('Site visit')
+    expect(display.contextLabel).toBe('Jane Doe · Roof job')
+    expect(display.tooltip).toBe('Site visit · Jane Doe · Roof job')
+  })
+
+  it('falls back to team task label when no lead or deal', () => {
+    const task = { title: 'Standup', __source: 'team', scheduledAt: Date.now() + 86400000 }
+    const display = getScheduleTaskDisplay(task, {})
+    expect(display.contextLabel).toBe('Team task')
   })
 })
