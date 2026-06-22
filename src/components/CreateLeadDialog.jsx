@@ -187,7 +187,7 @@ export function CreateLeadDialog({
   return (
     <Dialog open={open} modal={false} onOpenChange={onOpenChange}>
       <DialogContent
-        className="map-panel list-panel create-lead-panel fullscreen-panel flex flex-col p-0"
+        className="map-panel list-panel create-lead-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}
         nestedOverlay={nestedOverlay}
         topLayer={topLayer}
@@ -207,11 +207,8 @@ export function CreateLeadDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="create-lead-form">
-          <div
-            className="create-lead-form-body scrollbar-hide px-5 py-4 space-y-3"
-            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
-          >
+        <form onSubmit={handleSubmit} className="create-lead-form flex flex-col flex-1 min-h-0">
+          <div className="create-lead-form-body scrollbar-hide px-5 py-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs opacity-60 mb-1 block">First Name</label>

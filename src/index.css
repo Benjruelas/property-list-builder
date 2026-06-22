@@ -334,8 +334,49 @@
 }
 
 @media (max-width: 767px) {
-  .new-task-panel .new-task-form-body {
+  /* Fullscreen form panels: fixed header + scrollable body + pinned footer */
+  .create-lead-panel.fullscreen-panel,
+  .create-deal-panel.fullscreen-panel,
+  .create-list-panel.fullscreen-panel,
+  .create-pipeline-panel.fullscreen-panel,
+  .new-task-panel.fullscreen-panel,
+  .outreach-template-panel.fullscreen-panel {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 0 !important;
+  }
+
+  .create-lead-panel .create-lead-form,
+  .create-deal-panel.fullscreen-panel > form,
+  .create-list-panel.fullscreen-panel > form,
+  .create-pipeline-panel.fullscreen-panel > form,
+  .outreach-template-panel .outreach-template-form,
+  .create-deal-panel.fullscreen-panel > .flex.flex-col.flex-1.min-h-0 {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .create-lead-panel .create-lead-form-body,
+  .new-task-panel .new-task-form-body,
+  .create-deal-panel.fullscreen-panel > form > .overflow-y-auto,
+  .create-list-panel.fullscreen-panel > form > .overflow-y-auto,
+  .create-pipeline-panel.fullscreen-panel > form > .overflow-y-auto,
+  .outreach-template-panel .outreach-template-form-body,
+  .create-deal-panel.fullscreen-panel > .flex.flex-col.flex-1.min-h-0 > .overflow-y-auto {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .create-lead-panel .create-lead-form-footer,
+  .new-task-panel .new-task-form-footer,
+  .outreach-template-panel .outreach-template-form-footer {
+    flex-shrink: 0;
   }
 }
 
