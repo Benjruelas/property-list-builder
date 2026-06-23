@@ -5,6 +5,8 @@ import { PublicFormBrandBar } from '../forms/PublicFormBrand'
 import { PublicPdfDownload } from '../shared/PublicPdfDownload'
 import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
 import { cn } from '@/lib/utils'
+import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
+import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
 
 function resolvePhotoUrl(url) {
   if (!url) return ''
@@ -51,6 +53,7 @@ export function PublicReportPage({ token }) {
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
   const [lightboxPhoto, setLightboxPhoto] = useState(null)
+  const showOwnerBack = shouldShowOwnerPreviewBack({ preview: data?.preview })
 
   useEffect(() => {
     let cancelled = false
@@ -113,6 +116,7 @@ export function PublicReportPage({ token }) {
 
   return (
     <div className={pageClass}>
+      {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
       {brandChrome}
       <div className="flex-1 overflow-y-auto px-4 py-6 max-w-2xl mx-auto w-full">
         {data?.preview && (

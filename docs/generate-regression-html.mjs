@@ -1,305 +1,16 @@
 #!/usr/bin/env node
 /**
- * One-off generator for docs/regression-test-procedure.html
- * Run: node docs/generate-regression-html.mjs
+ * Generates docs/regression-test-procedure.html from structured test cases.
+ * Run: node docs/build-regression-cases.mjs && node docs/generate-regression-html.mjs
  */
 
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { TEST_CASES, SECTIONS } from './regression-test-cases.mjs'
+import { FAILURE_NOTE_TEMPLATE } from './regression-test-schema.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-function tc(id, section, title, roles, viewport, preconditions, steps, expected) {
-  return { id, section, title, roles, viewport, preconditions, steps, expected }
-}
-
-const SECTIONS = [
-  { id: '01', title: 'Auth and bootstrap' },
-  { id: '02', title: 'Map and parcels' },
-  { id: '03', title: 'Navigation and action bar' },
-  { id: '04', title: 'Lists and parcels' },
-  { id: '05', title: 'Leads CRM' },
-  { id: '06', title: 'Deals and pipes' },
-  { id: '07', title: 'Tasks and schedule' },
-  { id: '08', title: 'Paths, activity, and settings' },
-  { id: '09', title: 'Forms, quotes, and reports' },
-  { id: '10', title: 'Teams and outreach' },
-  { id: '11', title: 'Cross-panel flows' },
-  { id: '12', title: 'Public routes and edge cases' },
-]
-
-const ALL = ['solo', 'team-admin', 'team-member', 'logged-out']
-const IN = ['solo', 'team-admin', 'team-member']
-const ADM = ['solo', 'team-admin']
-
-const TEST_CASES = [
-  // ── 01 Auth and bootstrap ──
-  tc('AUTH-001', '01', 'Login with valid credentials', IN, 'both', 'Logged out', ['Open Menu → Sign In', 'Enter email and password', 'Submit'], 'User lands on map; action bar visible'),
-  tc('AUTH-002', '01', 'Login with invalid credentials', ['logged-out'], 'both', 'Logged out', ['Open Sign In', 'Enter wrong password', 'Submit'], 'Error message shown; still logged out'),
-  tc('AUTH-003', '01', 'Sign up new account', ['logged-out'], 'both', 'Logged out', ['Open Sign Up from login', 'Complete registration form', 'Submit'], 'Account created or verification step shown'),
-  tc('AUTH-004', '01', 'Forgot password flow', ['logged-out'], 'both', 'Logged out', ['Sign In → Forgot password', 'Enter email', 'Submit'], 'Reset instructions sent message'),
-  tc('AUTH-005', '01', 'Switch login ↔ sign up ↔ forgot', ['logged-out'], 'both', 'Logged out', ['Navigate between auth modals via links'], 'Each modal opens without error'),
-  tc('AUTH-006', '01', 'Sign out', IN, 'both', 'Logged in', ['Menu → Settings → Logout'], 'Returned to logged-out state; Sign In available'),
-  tc('AUTH-007', '01', 'Gated action opens login when logged out', ['logged-out'], 'both', 'Logged out', ['Tap Leads or other gated panel from menu'], 'Login modal opens instead of panel'),
-  tc('AUTH-008', '01', 'Location/orientation permission prompt', IN, 'both', 'Fresh session or reset permissions', ['Load app first time or after clearing site data'], 'Permission prompt appears; grant/deny handled gracefully'),
-  tc('AUTH-009', '01', 'Notification permission prompt', IN, 'both', 'Logged in, notifications not granted', ['Load app or trigger notification prompt'], 'Prompt shown; choice persisted'),
-  tc('AUTH-010', '01', 'Complete welcome tour', IN, 'both', 'New user or restart tour from Settings', ['Step through all tour slides', 'Finish tour'], 'Tour dismisses; map usable'),
-  tc('AUTH-011', '01', 'Restart tour from Settings', IN, 'both', 'Logged in', ['Settings → Help → Restart tour'], 'Welcome tour relaunches'),
-  tc('AUTH-012', '01', 'Feature gate denies panel for restricted member', ['team-member'], 'both', 'Member without leads feature', ['Menu → Leads'], 'Toast: access denied; panel does not open'),
-
-  // ── 02 Map and parcels ──
-  tc('MAP-001', '02', 'Map loads with parcels visible', IN, 'both', 'Logged in', ['Open app at localhost'], 'Satellite/street basemap renders; parcel outlines visible'),
-  tc('MAP-002', '02', 'Address search fly-to', IN, 'both', 'Logged in', ['Enter address in search', 'Select result'], 'Map flies to location; marker/parcel context updates'),
-  tc('MAP-003', '02', 'Zoom in/out controls', IN, 'both', 'Logged in', ['Use +/− zoom buttons'], 'Map zoom level changes'),
-  tc('MAP-004', '02', 'Recenter to user location', IN, 'both', 'Location permission granted', ['Tap recenter/locate control'], 'Map centers on user position'),
-  tc('MAP-005', '02', 'Compass orient map', IN, 'both', 'Orientation permission granted', ['Tap compass control'], 'Map rotates to device heading'),
-  tc('MAP-006', '02', 'Parcel click opens popup', IN, 'both', 'Logged in, parcel on map', ['Click a parcel polygon'], 'Parcel popup appears at click location'),
-  tc('MAP-007', '02', 'Popup → Details opens Parcel Details', IN, 'both', 'Popup open', ['Tap Details in popup'], 'Full Parcel Details overlay opens'),
-  tc('MAP-008', '02', 'Popup → Add to list', IN, 'both', 'Popup open', ['Tap Add to list'], 'Lists panel opens in pick-list mode with banner'),
-  tc('MAP-009', '02', 'Popup → Convert to lead', IN, 'both', 'Popup open, parcel not a lead', ['Tap Convert to lead'], 'Create Lead dialog opens with parcel prefill'),
-  tc('MAP-010', '02', 'Popup → Photos', IN, 'both', 'Popup open', ['Tap Photos'], 'Lead picker or photo mode flow starts'),
-  tc('MAP-011', '02', 'Close parcel popup', IN, 'both', 'Popup open', ['Tap close or click map away'], 'Popup dismisses'),
-  tc('MAP-012', '02', 'Parcel Details — Overview tab', IN, 'both', 'Details open', ['Review Overview tab content'], 'Address and summary fields visible'),
-  tc('MAP-013', '02', 'Parcel Details — Contact tab', IN, 'both', 'Details open', ['Open Contact tab'], 'Phone/email actions available'),
-  tc('MAP-014', '02', 'Parcel Details — Property tab', IN, 'both', 'Details open', ['Open Property tab'], 'Property fields display'),
-  tc('MAP-015', '02', 'Parcel Details — Value tab', IN, 'both', 'Details open', ['Open Value tab'], 'Value/assessment data shows or empty state'),
-  tc('MAP-016', '02', 'Parcel Details — Owner tab', IN, 'both', 'Details open', ['Open Owner tab'], 'Owner info displays'),
-  tc('MAP-017', '02', 'Parcel Details — Legal tab', IN, 'both', 'Details open', ['Open Legal tab'], 'Legal fields display'),
-  tc('MAP-018', '02', 'Edit parcel note in details', IN, 'both', 'Details open', ['Edit note field', 'Save'], 'Note persists after close/reopen'),
-  tc('MAP-019', '02', 'Edit contacts in details', IN, 'both', 'Details open', ['Add phone or email', 'Mark primary/verified'], 'Contact saved and shown'),
-  tc('MAP-020', '02', 'Phone action from parcel contact', IN, 'both', 'Details open with phone', ['Tap phone number'], 'PhoneActionPanel opens (text/call)'),
-  tc('MAP-021', '02', 'Email action from parcel contact', IN, 'both', 'Details open with email', ['Tap email'], 'Outreach/EmailComposer flow starts'),
-  tc('MAP-022', '02', 'Skip trace single parcel', IN, 'both', 'Details or popup', ['Trigger Skip trace', 'Wait for completion'], 'Progress indicator then success/fail toast; badge if traced'),
-  tc('MAP-023', '02', 'Hail data panel from parcel', IN, 'both', 'Details open', ['Open Hail data'], 'HailDataPanel lists events near parcel'),
-  tc('MAP-024', '02', 'Hail storm overlay timeline', IN, 'both', 'Hail panel open, event selected', ['Select event', 'Scrub timeline prev/next', 'Exit storm'], 'Radar overlay animates; exit returns to hail panel'),
-  tc('MAP-025', '02', 'Multi-select parcels and add to list', IN, 'both', 'Logged in', ['Enable multi-select on map', 'Tap several parcels', 'Tap + Add to list', 'Pick list'], 'Parcels added; banner shows count in Lists panel'),
-  tc('MAP-026', '02', 'Cancel multi-select mode', IN, 'both', 'Multi-select active', ['Tap cancel/X on multi-select UI'], 'Selection cleared; mode exits'),
-  tc('MAP-027', '02', 'Start and stop path recording', IN, 'both', 'Logged in', ['Start path recording from map control', 'Move/walk briefly', 'Stop recording'], 'Path saved; visible in Paths panel'),
-
-  // ── 03 Navigation and action bar ──
-  tc('NAV-001', '03', 'Open Pipes from action bar', IN, 'both', 'Logged in', ['Tap Pipes on action bar'], 'Deal pipeline panel opens'),
-  tc('NAV-002', '03', 'Open Tasks from action bar', IN, 'both', 'Logged in', ['Tap Tasks'], 'Tasks panel opens'),
-  tc('NAV-003', '03', 'Open Schedule from action bar', IN, 'both', 'Logged in', ['Tap Schedule'], 'Schedule panel opens'),
-  tc('NAV-004', '03', 'Open Leads from action bar', IN, 'both', 'Logged in with leads access', ['Tap Leads'], 'Leads list opens'),
-  tc('NAV-005', '03', 'Open Deals from action bar', IN, 'both', 'Logged in with deals access', ['Tap Deals'], 'Deals panel opens'),
-  tc('NAV-006', '03', 'Open Quotes from action bar', IN, 'desktop', 'Wide viewport ≥1440px', ['Tap Quotes on bar'], 'Quotes panel opens'),
-  tc('NAV-007', '03', 'Open Forms from overflow menu', IN, 'mobile', 'Narrow viewport <768px', ['Menu → Forms'], 'Forms panel opens'),
-  tc('NAV-008', '03', 'Open Reports from overflow menu', IN, 'mobile', 'Forms not on bar', ['Menu → Reports'], 'Reports panel opens'),
-  tc('NAV-009', '03', 'Open Lists from menu', IN, 'both', 'Logged in', ['Menu → Lists'], 'Lists panel opens'),
-  tc('NAV-010', '03', 'Open Paths from menu', IN, 'both', 'Logged in', ['Menu → Paths'], 'Paths panel opens'),
-  tc('NAV-011', '03', 'Open Outreach from menu', IN, 'both', 'Logged in', ['Menu → Outreach'], 'Outreach panel opens'),
-  tc('NAV-012', '03', 'Open Teams from menu', IN, 'both', 'Logged in', ['Menu → Teams'], 'Teams panel opens'),
-  tc('NAV-013', '03', 'Open Activity from menu with badge', IN, 'both', 'Unread activity exists', ['Menu → Activity'], 'Activity feed opens; unread count visible on bar when applicable'),
-  tc('NAV-014', '03', 'Open Settings from menu', IN, 'both', 'Logged in', ['Menu → Settings'], 'Settings panel stacks on top'),
-  tc('NAV-015', '03', 'Panel back returns to previous view', IN, 'both', 'Nested detail open', ['Open lead detail', 'Tap back'], 'Returns to leads list not map'),
-  tc('NAV-016', '03', 'Tasks dock beside primary panel (desktop)', IN, 'desktop', 'Width ≥768px', ['Open Leads', 'Open Tasks'], 'Leads left, Tasks right, centered group'),
-  tc('NAV-017', '03', 'Close Tasks while keeping primary panel', IN, 'desktop', 'Tasks docked', ['Close Tasks panel'], 'Primary panel remains; Tasks dismisses'),
-  tc('NAV-018', '03', 'Solo Tasks rail when no primary panel', IN, 'desktop', 'Only Tasks open', ['Open Tasks alone'], 'Tasks on right rail'),
-  tc('NAV-019', '03', 'Activity → lead keeps Activity+Tasks docked', IN, 'desktop', 'Activity and Tasks open', ['Open Activity item for a lead'], 'Lead detail overlay; Activity+Tasks stay docked'),
-  tc('NAV-020', '03', 'Back from Activity-origin detail returns to Activity', IN, 'both', 'Opened lead from Activity', ['Close/back from lead detail'], 'Activity feed focused again'),
-
-  // ── 04 Lists ──
-  tc('LST-001', '04', 'Lists tabs All/Mine/Shared/On map', IN, 'both', 'Lists panel open', ['Click each tab'], 'List filters correctly; counts update'),
-  tc('LST-002', '04', 'Search lists by name', IN, 'both', 'Lists exist', ['Type in search box'], 'Matching lists only'),
-  tc('LST-003', '04', 'Tag filter on lists', IN, 'both', 'Tagged lists exist', ['Open filter menu', 'Select tag'], 'Only tagged lists shown'),
-  tc('LST-004', '04', 'Create new list', ADM, 'both', 'Logged in', ['Tap + create', 'Enter name', 'Save'], 'List appears in All/Mine'),
-  tc('LST-005', '04', 'Open list parcel view', IN, 'both', 'List with parcels', ['Click list row'], 'ParcelListPanel opens'),
-  tc('LST-006', '04', 'Highlight list on map (eye open)', IN, 'both', 'List with parcels', ['Click eye icon to highlight'], 'Open eye; list colored on map; row highlighted'),
-  tc('LST-007', '04', 'Remove map highlight (eye closed)', IN, 'both', 'List highlighted', ['Click eye again'], 'Closed eye; highlight removed from map'),
-  tc('LST-008', '04', 'Max 20 highlights toast', IN, 'both', '20 lists already highlighted', ['Try highlight 21st'], 'Warning toast about maximum'),
-  tc('LST-009', '04', 'Export list CSV from menu', ADM, 'both', 'Own list', ['⋮ → Export'], 'CSV download or email flow completes'),
-  tc('LST-010', '04', 'Share list via email', ADM, 'both', 'Own list', ['⋮ → Share', 'Add email', 'Save'], 'Email added to share list'),
-  tc('LST-011', '04', 'Rename list inline', ADM, 'both', 'Own list', ['⋮ → Rename', 'Edit name', 'Save'], 'Name updates in list'),
-  tc('LST-012', '04', 'Edit list tags', ADM, 'both', 'Own list', ['⋮ → Tags', 'Add/remove tags'], 'Tags persist on list'),
-  tc('LST-013', '04', 'Delete list with confirm', ADM, 'both', 'Own list', ['⋮ → Delete', 'Confirm'], 'List removed'),
-  tc('LST-014', '04', 'Shared list — no owner menu actions', IN, 'both', 'Shared list not owned', ['Verify ⋮ menu on shared row'], 'Export may show; rename/delete hidden per ownership'),
-  tc('LST-015', '04', 'Add single parcel from map banner mode', IN, 'both', 'Add-to-list from popup', ['Select target list in banner mode'], 'Parcel added; toast or confirmation'),
-  tc('LST-016', '04', 'Multi-select add parcels to list', IN, 'both', 'Multi-select mode active', ['Complete add flow'], 'All selected parcels in list'),
-  tc('LST-017', '04', 'Parcel list expand row', IN, 'both', 'ParcelListPanel open', ['Expand a parcel row'], 'Expanded details and actions visible'),
-  tc('LST-018', '04', 'Parcel list — open details', IN, 'both', 'Expanded row', ['Tap Details'], 'Parcel Details opens'),
-  tc('LST-019', '04', 'Parcel list — skip trace from row', IN, 'both', 'Expanded row', ['Tap Skip trace'], 'Skip trace runs'),
-  tc('LST-020', '04', 'Parcel list — remove parcel from list', ADM, 'both', 'Own list', ['Remove parcel action', 'Confirm if prompted'], 'Parcel removed from list'),
-
-  // ── 05 Leads ──
-  tc('LED-001', '05', 'Create lead from panel +', ADM, 'both', 'Leads access', ['Tap +', 'Fill required fields', 'Save'], 'Lead appears in list'),
-  tc('LED-002', '05', 'Search leads', IN, 'both', 'Leads exist', ['Search by name/address'], 'Filtered results'),
-  tc('LED-003', '05', 'Filter leads by status', IN, 'both', 'Leads exist', ['Change status filter'], 'List filters'),
-  tc('LED-004', '05', 'Filter leads by tags', IN, 'both', 'Tagged leads', ['Tag filter menu'], 'Filtered list'),
-  tc('LED-005', '05', 'Sort leads recent vs follow-up', IN, 'both', 'Leads exist', ['Toggle sort'], 'Order changes'),
-  tc('LED-006', '05', 'Analytics strip counts', IN, 'both', 'Leads exist', ['View status counts strip'], 'Counts match list'),
-  tc('LED-007', '05', 'Open lead detail', IN, 'both', 'Leads exist', ['Click lead row'], 'LeadDetails opens'),
-  tc('LED-008', '05', 'Change lead status', ADM, 'both', 'Lead detail open', ['Tap status button', 'Select new status'], 'Status updates'),
-  tc('LED-009', '05', 'Add lead note', ADM, 'both', 'Lead detail open', ['Add note in activity/notes'], 'Note appears in timeline'),
-  tc('LED-010', '05', 'Lead phone/text/email actions', IN, 'both', 'Lead with contact info', ['Tap phone, text, or email'], 'Correct outreach panel opens'),
-  tc('LED-011', '05', 'Open linked deal from lead', IN, 'both', 'Lead with deal', ['Tap deal in Deals section'], 'Deal detail opens'),
-  tc('LED-012', '05', 'Create deal from lead', ADM, 'both', 'Lead detail open', ['Create deal', 'Pick template/pipe', 'Submit'], 'Deal created and linked'),
-  tc('LED-013', '05', 'Lead tasks — add task', ADM, 'both', 'Lead detail open', ['Add task in Tasks section'], 'Task appears'),
-  tc('LED-014', '05', 'Lead tasks — toggle complete', ADM, 'both', 'Task exists', ['Toggle checkbox'], 'Task moves to completed when hidden toggle off'),
-  tc('LED-015', '05', 'Lead tasks — show completed toggle', IN, 'both', 'Completed tasks exist', ['Toggle show completed'], 'Completed tasks visible'),
-  tc('LED-016', '05', 'Schedule at date from lead', IN, 'both', 'Lead detail open', ['Open schedule link/action'], 'Schedule opens at date'),
-  tc('LED-017', '05', 'Go to parcel on map from lead', IN, 'both', 'Lead with parcel', ['Go to map action'], 'Map centers on parcel'),
-  tc('LED-018', '05', 'Edit lead via menu', ADM, 'both', 'Lead detail open', ['⋮ → Edit'], 'CreateLeadDialog in edit mode'),
-  tc('LED-019', '05', 'Delete lead via menu', ADM, 'both', 'Lead detail open', ['⋮ → Delete', 'Confirm'], 'Lead removed'),
-  tc('LED-020', '05', 'Photo reports section', IN, 'both', 'Photos feature enabled', ['Create or open photo report'], 'Report builder or detail opens'),
-  tc('LED-021', '05', 'Lead photos gallery', IN, 'both', 'Photos on lead', ['Open photos section'], 'Gallery displays'),
-  tc('LED-022', '05', 'Convert parcel to lead creates lead', IN, 'both', 'Parcel not lead', ['Convert from map flow'], 'Lead created with parcel link'),
-
-  // ── 06 Deals and pipes ──
-  tc('DPL-001', '06', 'Deals Active tab', IN, 'both', 'Deals exist', ['Open Deals panel'], 'Active deals grouped by pipeline'),
-  tc('DPL-002', '06', 'Deals Closed tab', IN, 'both', 'Closed deals exist', ['Switch to Closed'], 'Closed records listed'),
-  tc('DPL-003', '06', 'Collapse/expand pipeline group', IN, 'both', 'Deals panel', ['Toggle pipeline header'], 'Group collapses/expands'),
-  tc('DPL-004', '06', 'Open deal detail from Deals list', IN, 'both', 'Active deal', ['Click deal row'], 'DealDetails opens'),
-  tc('DPL-005', '06', 'Open closed deal record', IN, 'both', 'Closed deal', ['Click closed row'], 'Closed deal view opens'),
-  tc('DPL-006', '06', 'Create deal from Deals panel', ADM, 'both', 'Deals access', ['Create deal action'], 'Create deal dialog'),
-  tc('DPL-007', '06', 'Manage deal templates from Deals menu', ADM, 'both', 'Deals panel', ['Header ⋮ → Manage templates'], 'Template manager opens'),
-  tc('DPL-008', '06', 'Deal detail — edit title/notes', ADM, 'both', 'Deal detail open', ['Edit fields', 'Save'], 'Changes persist'),
-  tc('DPL-009', '06', 'Deal detail — upload file', ADM, 'both', 'Deal detail open', ['Upload file'], 'File appears in files list'),
-  tc('DPL-010', '06', 'Deal detail — preview/delete file', ADM, 'both', 'File attached', ['Preview then delete'], 'Preview works; file removed'),
-  tc('DPL-011', '06', 'Deal detail — create quote', ADM, 'both', 'Deal detail open', ['Create quote'], 'Quote editor opens'),
-  tc('DPL-012', '06', 'Deal detail — open linked quote', IN, 'both', 'Quote linked', ['Open quote from list'], 'Quote detail opens'),
-  tc('DPL-013', '06', 'Deal detail — move deal', ADM, 'both', 'Deal detail open', ['⋮ → Move deal', 'Pick pipeline'], 'Deal moves to target pipe'),
-  tc('DPL-014', '06', 'Deal detail — close deal', ADM, 'both', 'Open deal', ['⋮ → Close deal'], 'Deal archived to closed'),
-  tc('DPL-015', '06', 'Deal detail — remove deal', ADM, 'both', 'Open deal', ['⋮ → Remove', 'Confirm'], 'Deal removed from pipeline'),
-  tc('DPL-016', '06', 'Deal detail — open lead overlay', IN, 'both', 'Deal with lead', ['View lead'], 'LeadDetails overlays; back returns to deal'),
-  tc('DPL-017', '06', 'Open Pipes kanban', IN, 'both', 'Pipeline exists', ['Action bar → Pipes'], 'Columns and deal cards visible'),
-  tc('DPL-018', '06', 'Switch pipeline dropdown', ADM, 'both', 'Multiple pipelines', ['Select different pipeline'], 'Deals/columns update'),
-  tc('DPL-019', '06', 'Create new pipeline', ADM, 'both', 'Owner/admin', ['Create pipeline dialog'], 'New pipeline appears'),
-  tc('DPL-020', '06', 'Share pipeline', ADM, 'both', 'Own pipeline', ['Share pipeline', 'Add email/team'], 'Sharing updated'),
-  tc('DPL-021', '06', 'Edit mode — rename column', ADM, 'both', 'Pipeline owner', ['Edit mode → rename column'], 'Column name updates'),
-  tc('DPL-022', '06', 'Edit mode — add/delete column', ADM, 'both', 'Edit mode', ['Add column', 'Delete empty column'], 'Columns update'),
-  tc('DPL-023', '06', 'Drag deal between columns', ADM, 'both', 'Collaborate permission', ['Drag deal to new column'], 'Deal status updates; persists on refresh'),
-  tc('DPL-024', '06', 'Move deal to next stage button', ADM, 'both', 'Deal in pipe', ['Click → on deal card'], 'Deal advances one column'),
-  tc('DPL-025', '06', 'Open deal from pipe card click', IN, 'both', 'Deal in column', ['Click deal card body'], 'DealDetails overlay opens'),
-  tc('DPL-026', '06', 'Pipe tasks sidebar — toggle complete', IN, 'both', 'Tasks in pipe sidebar', ['Toggle task checkbox'], 'Task completion updates'),
-  tc('DPL-027', '06', 'Pipe tasks — open deal from task', IN, 'both', 'Task linked to deal', ['Click task row'], 'Deal opens'),
-  tc('DPL-028', '06', 'Deal cards visually distinct from columns', IN, 'both', 'Deals in pipe', ['Compare card vs column background'], 'Cards readable and contrast with column wells'),
-
-  // ── 07 Tasks and schedule ──
-  tc('TSK-001', '07', 'Tasks panel — pipeline groups', IN, 'both', 'Pipeline tasks exist', ['Open Tasks'], 'Tasks grouped by pipeline'),
-  tc('TSK-002', '07', 'Tasks panel — unlabeled tasks section', IN, 'both', 'Standalone tasks', ['View unlabeled section'], 'Personal tasks listed'),
-  tc('TSK-003', '07', 'Toggle show completed tasks', IN, 'both', 'Completed tasks exist', ['Eye toggle for completed'], 'Completed tasks show/hide'),
-  tc('TSK-004', '07', 'Create new task', ADM, 'both', 'Tasks panel open', ['+ New task', 'Fill form', 'Save'], 'Task appears in list'),
-  tc('TSK-005', '07', 'Edit existing task', ADM, 'both', 'Task exists', ['Open edit on task'], 'Edit dialog saves changes'),
-  tc('TSK-006', '07', 'Delete task', ADM, 'both', 'Task exists', ['Delete task', 'Confirm'], 'Task removed'),
-  tc('TSK-007', '07', 'Open deal from task', IN, 'both', 'Task with dealId', ['Activate/open deal from task'], 'Deal detail opens (standalone beside Tasks if docked)'),
-  tc('TSK-008', '07', 'Open lead from task', IN, 'both', 'Task with leadId', ['Open lead from task'], 'Lead detail opens'),
-  tc('TSK-009', '07', 'Open schedule from task', IN, 'both', 'Scheduled task', ['View on schedule'], 'Schedule opens at task time'),
-  tc('TSK-010', '07', 'Schedule month view', IN, 'both', 'Schedule open', ['Month view'], 'Calendar grid renders'),
-  tc('TSK-011', '07', 'Schedule week view', IN, 'both', 'Schedule open', ['Week view'], 'Week grid renders'),
-  tc('TSK-012', '07', 'Schedule day view', IN, 'both', 'Schedule open', ['Day view'], 'Hour slots render'),
-  tc('TSK-013', '07', 'Click schedule slot — new task', ADM, 'both', 'Schedule open', ['Click empty hour slot'], 'New task dialog with time prefill'),
-  tc('TSK-014', '07', 'Click existing schedule task — edit', ADM, 'both', 'Task on calendar', ['Click task block'], 'Edit task dialog'),
-  tc('TSK-015', '07', 'Schedule lead overlay', IN, 'both', 'Task with lead on schedule', ['Open lead from schedule'], 'Lead detail overlay; back to schedule'),
-  tc('TSK-016', '07', 'Schedule stacked from leads — back', IN, 'both', 'Opened schedule from leads', ['Back from schedule'], 'Returns to leads not map'),
-  tc('TSK-017', '07', 'Navigate months in schedule', IN, 'both', 'Month view', ['Prev/next month'], 'Calendar updates'),
-  tc('TSK-018', '07', 'Today/now indicator', IN, 'both', 'Schedule on today', ['View current day'], 'Now line or highlight visible'),
-
-  // ── 08 Paths, activity, settings ──
-  tc('PTH-001', '08', 'Paths tabs All/Mine/Shared/On map', IN, 'both', 'Paths exist', ['Click each tab'], 'Filtering works'),
-  tc('PTH-002', '08', 'Search paths', IN, 'both', 'Paths exist', ['Search by name/city'], 'Filtered results'),
-  tc('PTH-003', '08', 'Toggle path visibility on map', IN, 'both', 'Path exists', ['Eye icon toggle'], 'Open/closed eye; path shows/hides on map'),
-  tc('PTH-004', '08', 'Center path on map from row click', IN, 'both', 'Path exists', ['Click path row'], 'Map centers on path'),
-  tc('PTH-005', '08', 'Owned path — rename via menu', ADM, 'both', 'Own path', ['⋮ → Rename'], 'Inline rename works'),
-  tc('PTH-006', '08', 'Owned path — share', ADM, 'both', 'Own path', ['⋮ → Share'], 'Share dialog'),
-  tc('PTH-007', '08', 'Owned path — delete', ADM, 'both', 'Own path', ['⋮ → Delete', 'Confirm'], 'Path removed'),
-  tc('PTH-008', '08', 'Shared path — no options button', IN, 'both', 'Shared path not owned', ['Inspect row actions'], '⋮ hidden; eye still present'),
-  tc('PTH-009', '08', 'Owned path — tags via menu', ADM, 'both', 'Own path', ['⋮ → Tags'], 'Tag picker works'),
-  tc('ACT-001', '08', 'Activity tabs filter', IN, 'both', 'Activity items exist', ['All/Leads/Deals/Tasks/Other tabs'], 'Items filter correctly'),
-  tc('ACT-002', '08', 'Activity search', IN, 'both', 'Many items', ['Search feed'], 'Results filter'),
-  tc('ACT-003', '08', 'Activity — open lead item', IN, 'both', 'Lead activity item', ['Click item'], 'Standalone lead detail; Activity+Tasks docked'),
-  tc('ACT-004', '08', 'Activity — open deal item', IN, 'both', 'Deal activity item', ['Click item'], 'Standalone deal detail opens'),
-  tc('ACT-005', '08', 'Activity — open list item', IN, 'both', 'List activity item', ['Click item'], 'List parcels view; list highlighted on map'),
-  tc('ACT-006', '08', 'Activity — open path item', IN, 'both', 'Path activity item', ['Click item'], 'Map centers on path; Activity stays'),
-  tc('ACT-007', '08', 'Activity — open task item', IN, 'both', 'Task activity item', ['Click item'], 'Tasks panel focus'),
-  tc('ACT-008', '08', 'Activity — back to feed after detail', IN, 'both', 'Opened item from activity', ['Back/close detail'], 'Activity feed visible'),
-  tc('SET-001', '08', 'Settings — display name', IN, 'both', 'Settings open', ['Edit display name', 'Save'], 'Name persists'),
-  tc('SET-002', '08', 'Settings — UI theme toggle', IN, 'both', 'Settings open', ['Switch light/dark theme'], 'Theme applies app-wide'),
-  tc('SET-003', '08', 'Settings — map style', IN, 'both', 'Settings open', ['Change map style'], 'Basemap updates'),
-  tc('SET-004', '08', 'Settings — parcel boundary color', IN, 'both', 'Settings open', ['Change boundary color'], 'Map parcel outlines update'),
-  tc('SET-005', '08', 'Settings — path distance units', IN, 'both', 'Settings open', ['Toggle miles/km'], 'Paths panel distances update'),
-  tc('SET-006', '08', 'Settings — email test mode', ADM, 'both', 'Settings open', ['Enable test mode'], 'Composer redirects per setting'),
-  tc('SET-007', '08', 'Settings — notification toggles', IN, 'both', 'Settings open', ['Toggle notification types'], 'Preferences saved'),
-  tc('SET-008', '08', 'Settings — sync now', IN, 'both', 'Settings open', ['Tap Sync now'], 'Sync completes without error'),
-  tc('SET-009', '08', 'Settings — browse skip traced parcels', IN, 'both', 'Skip traced data exists', ['Open skip traced section', 'Open parcel'], 'Parcel details from settings path'),
-
-  // ── 09 Forms, quotes, reports ──
-  tc('FRM-001', '09', 'Forms — upload PDF template', ADM, 'both', 'Forms access', ['Upload PDF'], 'Template appears in list'),
-  tc('FRM-002', '09', 'Forms — search templates', IN, 'both', 'Templates exist', ['Search'], 'Filtered list'),
-  tc('FRM-003', '09', 'Forms — open fill view', IN, 'both', 'Template exists', ['Click row'], 'Form fill view opens'),
-  tc('FRM-004', '09', 'Forms — preview PDF from menu', IN, 'both', 'Template exists', ['⋮ → Preview'], 'PDF preview overlay'),
-  tc('FRM-005', '09', 'Forms — edit builder', ADM, 'both', 'Own template', ['⋮ → Edit'], 'Form builder with field overlays'),
-  tc('FRM-006', '09', 'Forms — share template', ADM, 'both', 'Own template', ['⋮ → Share'], 'Share dialog'),
-  tc('FRM-007', '09', 'Forms — send public link', ADM, 'both', 'Own template', ['⋮ → Send link'], 'Link dialog with ?form= URL'),
-  tc('FRM-008', '09', 'Forms — delete template', ADM, 'both', 'Own template', ['⋮ → Delete', 'Confirm'], 'Template removed'),
-  tc('QTE-001', '09', 'Quotes — create new quote', ADM, 'both', 'Quotes access', ['+ Create quote'], 'Quote editor opens'),
-  tc('QTE-002', '09', 'Quotes — tabs Quotes/Templates/Messages', IN, 'both', 'Quotes panel', ['Switch tabs'], 'Each tab renders'),
-  tc('QTE-003', '09', 'Quotes — open quote detail', IN, 'both', 'Quote exists', ['Click quote row'], 'Quote detail view'),
-  tc('QTE-004', '09', 'Quotes — edit quote', ADM, 'both', 'Quote exists', ['Edit from menu'], 'Editor opens with data'),
-  tc('QTE-005', '09', 'Quotes — send quote', ADM, 'both', 'Quote ready', ['Send quote dialog'], 'Send flow completes'),
-  tc('QTE-006', '09', 'Quotes — delete quote', ADM, 'both', 'Own quote', ['Delete', 'Confirm'], 'Quote removed'),
-  tc('QTE-007', '09', 'Quote templates CRUD', ADM, 'both', 'Templates tab', ['Create/edit/delete template'], 'Templates manage correctly'),
-  tc('RPT-001', '09', 'Reports — create photo report', ADM, 'both', 'Reports + lead with photos', ['Create report', 'Pick lead/template'], 'Report builder opens'),
-  tc('RPT-002', '09', 'Reports — open report detail', IN, 'both', 'Report exists', ['Click report'], 'Report detail/PDF view'),
-  tc('RPT-003', '09', 'Reports — edit report', ADM, 'both', 'Draft report', ['Edit in builder'], 'Changes save'),
-  tc('RPT-004', '09', 'Reports — send report', ADM, 'both', 'Report ready', ['Send report'], 'Send dialog works'),
-  tc('RPT-005', '09', 'Reports — delete report', ADM, 'both', 'Own report', ['Delete', 'Confirm'], 'Report removed'),
-  tc('RPT-006', '09', 'Report templates tab', IN, 'both', 'Templates exist', ['Templates tab actions'], 'Templates list/manage'),
-
-  // ── 10 Teams and outreach ──
-  tc('TEM-001', '10', 'Teams — accept invite', IN, 'both', 'Pending invite', ['Accept invite'], 'Member joins team'),
-  tc('TEM-002', '10', 'Teams — decline invite', IN, 'both', 'Pending invite', ['Decline invite'], 'Invite removed'),
-  tc('TEM-003', '10', 'Teams — create team', ADM, 'both', 'Can create teams', ['Create team'], 'Team appears in list'),
-  tc('TEM-004', '10', 'Team detail — invite member', ADM, 'both', 'Team admin', ['Invite by email'], 'Invite sent/pending shown'),
-  tc('TEM-005', '10', 'Team detail — remove member', ADM, 'both', 'Team admin', ['Remove member', 'Confirm'], 'Member removed'),
-  tc('TEM-006', '10', 'Team detail — feature toggles per member', ADM, 'both', 'Team admin', ['Toggle feature for member'], 'Member access changes'),
-  tc('TEM-007', '10', 'Team detail — transfer ownership', ADM, 'both', 'Team owner', ['Transfer ownership'], 'New owner assigned'),
-  tc('TEM-008', '10', 'Team detail — delete team', ADM, 'both', 'Team owner', ['Delete team', 'Confirm'], 'Team removed'),
-  tc('OUT-001', '10', 'Outreach — email templates tab', IN, 'both', 'Outreach open', ['Email templates tab'], 'Templates listed'),
-  tc('OUT-002', '10', 'Outreach — create email template', ADM, 'both', 'Outreach open', ['Create template'], 'Editor saves template'),
-  tc('OUT-003', '10', 'Outreach — text templates tab', IN, 'both', 'Outreach open', ['Text templates tab'], 'SMS templates listed'),
-  tc('OUT-004', '10', 'Outreach — use template → composer', IN, 'both', 'Template exists', ['Use template from parcel email flow'], 'EmailComposer opens with merge tags'),
-  tc('OUT-005', '10', 'PhoneActionPanel — text with template', IN, 'both', 'Parcel with phone', ['Phone → Text → pick template'], 'Template applied'),
-  tc('OUT-006', '10', 'PhoneActionPanel — call action', IN, 'both', 'Parcel with phone', ['Phone → Call'], 'Tel link or call UI'),
-  tc('OUT-007', '10', 'Bulk email — list pick → preview → send', ADM, 'both', 'Template + list with emails', ['Bulk flow from outreach'], 'Preview then confirm send'),
-
-  // ── 11 Cross-panel flows ──
-  tc('XFL-001', '11', 'Map popup → convert → lead detail', IN, 'both', 'Parcel not lead', ['Full convert flow'], 'Lead exists and opens in detail'),
-  tc('XFL-002', '11', 'Map → add to list → parcel list', IN, 'both', 'Parcel on map', ['Add to list flow'], 'Parcel in list; parcel list view works'),
-  tc('XFL-003', '11', 'Multi-select → list → verify on map', IN, 'both', 'Multiple parcels', ['Add all to list', 'Highlight list'], 'All parcels on map highlight'),
-  tc('XFL-004', '11', 'Lead → create deal → visible in Pipes', ADM, 'both', 'Lead without deal', ['Create deal from lead'], 'Deal card in correct pipeline column'),
-  tc('XFL-005', '11', 'Lead detail → open deal → back to lead', IN, 'both', 'Linked deal', ['Open deal', 'Back'], 'Returns to lead detail'),
-  tc('XFL-006', '11', 'Deal detail → lead overlay → back to deal', IN, 'both', 'Deal with lead', ['Open lead overlay', 'Back'], 'Deal detail restored'),
-  tc('XFL-007', '11', 'Deal → create quote → return to deal', ADM, 'both', 'Open deal', ['Create quote', 'Save', 'Back from quote'], 'Deal still visible under stack'),
-  tc('XFL-008', '11', 'Task → deal detail beside docked Tasks', IN, 'desktop', 'Tasks docked', ['Open deal from task'], 'Deal detail; Tasks remain on rail'),
-  tc('XFL-009', '11', 'Task → lead detail beside docked Tasks', IN, 'desktop', 'Tasks docked', ['Open lead from task'], 'Lead detail; Tasks on rail'),
-  tc('XFL-010', '11', 'Activity → lead → back to Activity+Tasks', IN, 'desktop', 'Activity+Tasks open', ['Open lead activity', 'Back'], 'Activity feed focused; dock intact'),
-  tc('XFL-011', '11', 'Activity → list → back to Activity', IN, 'both', 'Activity open', ['Open list activity', 'Back from parcels'], 'Activity feed'),
-  tc('XFL-012', '11', 'Activity → deal → back to Activity', IN, 'both', 'Activity open', ['Open deal activity', 'Back'], 'Activity feed'),
-  tc('XFL-013', '11', 'Pipes drag-drop persists after reload', ADM, 'both', 'Deal in pipe', ['Move deal column', 'Refresh page'], 'Deal stays in new column'),
-  tc('XFL-014', '11', 'Share list with team visibility', ADM, 'both', 'Team member account', ['Share list to team', 'Login as member'], 'Member sees list in Shared tab'),
-  tc('XFL-015', '11', 'Share path with team visibility', ADM, 'both', 'Team member account', ['Share path to team', 'Login as member'], 'Path in Shared tab; no ⋮ menu'),
-  tc('XFL-016', '11', 'Share pipeline with collaborator', ADM, 'both', 'Second user email', ['Share pipe', 'Other user opens Pipes'], 'Collaborator sees deals; can drag if permitted'),
-  tc('XFL-017', '11', 'Schedule from deal at specific date', IN, 'both', 'Deal detail open', ['Schedule action'], 'Schedule opens on chosen date'),
-  tc('XFL-018', '11', 'Email from parcel → outreach → composer', IN, 'both', 'Parcel with email', ['Full email chain'], 'Composer opens with template content'),
-  tc('XFL-019', '11', 'Photo mode — capture and attach to lead', IN, 'both', 'Lead exists', ['Photos from parcel', 'Capture/upload', 'Done'], 'Photos on lead gallery'),
-  tc('XFL-020', '11', 'Settings stacks over Leads panel', IN, 'both', 'Leads open', ['Open Settings', 'Close Settings'], 'Leads still open underneath'),
-  tc('XFL-021', '11', 'Leads → Schedule stacked → back to Leads', IN, 'both', 'Leads open', ['Open schedule from lead context', 'Back'], 'Leads panel returns'),
-  tc('XFL-022', '11', 'Deals list → detail → move deal dialog', ADM, 'both', 'Deal open', ['Move deal between pipes'], 'Deal appears in target pipeline'),
-  tc('XFL-023', '11', 'Closed deal from Deals → closed view', IN, 'both', 'Closed deal exists', ['Open from Closed tab'], 'Read-only closed record'),
-  tc('XFL-024', '11', 'List bulk email pick mode', ADM, 'both', 'Outreach template selected', ['Enter bulk mode', 'Pick list'], 'BulkEmailPreview opens'),
-  tc('XFL-025', '11', 'Lead from Activity does not open Leads list panel', IN, 'both', 'Activity+Tasks', ['Open lead from feed'], 'No Leads list underneath detail'),
-
-  // ── 12 Public and edge cases ──
-  tc('PUB-001', '12', 'Public form page loads and submits', IN, 'both', 'Valid ?form= link', ['Open public URL', 'Fill required fields', 'Submit'], 'Success/thank you state'),
-  tc('PUB-002', '12', 'Public quote page loads', IN, 'both', 'Valid ?quote= link', ['Open public URL'], 'Quote displays read-only'),
-  tc('PUB-003', '12', 'Public report page loads', IN, 'both', 'Valid ?report= link', ['Open public URL'], 'Report displays'),
-  tc('PUB-004', '12', 'Destructive delete shows confirm dialog', ADM, 'both', 'Deletable resource', ['Trigger delete'], 'Confirm dialog blocks until confirmed'),
-  tc('PUB-005', '12', 'Toast appears on success action', IN, 'both', 'Any save action', ['Perform save'], 'Green/success toast visible'),
-  tc('PUB-006', '12', 'Basemap error banner if tiles fail', IN, 'both', 'Simulate offline or block tiles', ['Load map'], 'Error banner or graceful degradation'),
-  tc('PUB-007', '12', 'Menu Sign In when logged out', ['logged-out'], 'both', 'Logged out', ['Menu shows Sign In'], 'Tapping opens login'),
-  tc('PUB-008', '12', 'Restricted member deal amounts hidden', ['team-member'], 'both', 'Member without dealAmounts', ['Open deal detail'], 'Amount/profit fields hidden or masked'),
-]
 
 const HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -318,6 +29,8 @@ const HTML = `<!DOCTYPE html>
       --fail: #ef4444;
       --blocked: #f59e0b;
       --pending: rgba(255,255,255,0.25);
+      --step-bg: rgba(255,255,255,0.03);
+      --step-fail: rgba(239,68,68,0.12);
     }
     * { box-sizing: border-box; }
     body {
@@ -351,12 +64,14 @@ const HTML = `<!DOCTYPE html>
     }
     .controls button { cursor: pointer; }
     .controls button:hover { background: #252525; }
+    .controls button.primary { border-color: var(--pass); color: var(--pass); }
     .progress-wrap { margin-top: 10px; }
     .progress-bar { height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
     .progress-fill { height: 100%; background: var(--pass); transition: width 0.2s; }
     main { max-width: 960px; margin: 0 auto; padding: 16px; }
     details.readme { margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
     details.readme summary { cursor: pointer; font-weight: 600; }
+    details.readme code { font-size: 0.85em; }
     .section { margin-bottom: 20px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
     .section-header {
       display: flex;
@@ -383,7 +98,8 @@ const HTML = `<!DOCTYPE html>
     .case-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; justify-content: space-between; }
     .case-id { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--muted); }
     .case-title { font-weight: 600; flex: 1; min-width: 200px; }
-    .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .case-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .tag { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--muted); text-transform: uppercase; }
     .status-btn {
       min-width: 88px;
@@ -398,14 +114,85 @@ const HTML = `<!DOCTYPE html>
     .status-pass { background: rgba(34,197,94,0.15); color: var(--pass); border-color: var(--pass); }
     .status-fail { background: rgba(239,68,68,0.15); color: var(--fail); border-color: var(--fail); }
     .status-blocked { background: rgba(245,158,11,0.15); color: var(--blocked); border-color: var(--blocked); }
-    .case-pre { font-size: 0.8rem; color: var(--muted); margin: 6px 0; }
-    .case ol { margin: 6px 0; padding-left: 1.25rem; }
-    .case-expected { font-size: 0.85rem; margin-top: 6px; }
-    .case-expected strong { color: var(--muted); font-weight: 500; }
+    .copy-btn {
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+    .case-pre, .case-expected { font-size: 0.85rem; margin: 8px 0 4px; }
+    .case-pre strong, .case-expected strong { color: var(--muted); font-weight: 500; }
+    .steps-heading {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin: 10px 0 6px;
+    }
+    .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .step {
+      display: flex;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--step-bg);
+    }
+    .step.step-failed { border-color: var(--fail); background: var(--step-fail); }
+    .step-num {
+      flex-shrink: 0;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .step.step-failed .step-num { background: rgba(239,68,68,0.25); color: var(--fail); }
+    .step-body { flex: 1; min-width: 0; }
+    .step-row { margin: 0 0 4px; font-size: 0.85rem; }
+    .step-row:last-child { margin-bottom: 0; }
+    .step-label {
+      display: inline-block;
+      min-width: 3.5rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+      vertical-align: top;
+    }
+    .step-label.do { color: #93c5fd; }
+    .step-label.check { color: #86efac; }
+    .step-label.ui { color: #fcd34d; }
+    .step-fail-marker {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+    }
+    .step-fail-marker input { accent-color: var(--fail); }
+    .case-notes-wrap { margin-top: 10px; }
+    .case-notes-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
     .case-notes {
       width: 100%;
-      margin-top: 8px;
-      min-height: 48px;
+      min-height: 88px;
       resize: vertical;
       font: inherit;
       padding: 6px 8px;
@@ -415,7 +202,7 @@ const HTML = `<!DOCTYPE html>
       color: var(--text);
     }
     @media print {
-      .header .controls, .status-btn, .case-notes { display: none !important; }
+      .header .controls, .status-btn, .copy-btn, .case-notes, .step-fail-marker { display: none !important; }
       .section-body { display: block !important; }
       .case::after {
         content: " [" attr(data-status-print) "]";
@@ -432,7 +219,7 @@ const HTML = `<!DOCTYPE html>
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     </div>
     <div class="controls" style="margin-top:10px">
-      <input type="search" id="searchInput" placeholder="Search cases…" aria-label="Search" />
+      <input type="search" id="searchInput" placeholder="Search cases, steps, UI…" aria-label="Search" />
       <select id="statusFilter" aria-label="Status filter">
         <option value="all">All statuses</option>
         <option value="pending">Not run</option>
@@ -450,6 +237,7 @@ const HTML = `<!DOCTYPE html>
       <button type="button" id="expandAll">Expand all</button>
       <button type="button" id="collapseAll">Collapse all</button>
       <button type="button" id="exportBtn">Export JSON</button>
+      <button type="button" id="exportAgentBtn" class="primary">Export agent bundle</button>
       <button type="button" id="importBtn">Import JSON</button>
       <input type="file" id="importFile" accept="application/json" hidden />
       <button type="button" id="resetAll">Reset all</button>
@@ -460,28 +248,45 @@ const HTML = `<!DOCTYPE html>
       <summary>How to use this checklist</summary>
       <ol>
         <li>Open the app at <code>http://localhost:3000</code> (or your deploy URL) in a separate window.</li>
-        <li>Pick a <strong>role filter</strong> matching the account you are testing (solo, team admin, restricted member, or logged-out).</li>
-        <li>Work through each section. Click the status button to cycle: <em>Not run → Pass → Fail → Blocked</em>.</li>
-        <li>Add notes on failures. Progress saves automatically in this browser via localStorage.</li>
-        <li>Use <strong>Export JSON</strong> to attach results to a bug report or share with the team.</li>
-        <li>Some cases are tagged <code>desktop</code> or <code>mobile</code> — resize the viewport or use device emulation as noted.</li>
+        <li>Pick a <strong>role filter</strong> matching the account you are testing.</li>
+        <li>Follow each test’s numbered steps in order. Each step has a <strong>Do</strong> action and a <strong>Verify</strong> checkpoint before continuing.</li>
+        <li>Click the status button to cycle: <em>Not run → Pass → Fail → Blocked</em>.</li>
+        <li>On failure, mark the failing step number, fill in notes using the template, and use <strong>Copy agent report</strong> to paste into a debugging agent.</li>
+        <li>Progress saves automatically in this browser via localStorage.</li>
+        <li>Use <strong>Export agent bundle</strong> to download all failures with full step context for batch debugging.</li>
       </ol>
     </details>
     <div id="sections"></div>
   </main>
   <script>
-    const STORAGE_KEY = 'knockscout-regression-v1';
+    const STORAGE_KEY = 'knockscout-regression-v2';
+    const FAILURE_NOTE_TEMPLATE = ${JSON.stringify(FAILURE_NOTE_TEMPLATE)};
     const SECTIONS = ${JSON.stringify(SECTIONS)};
     const TEST_CASES = ${JSON.stringify(TEST_CASES, null, 2)};
+
     const STATUSES = ['pending', 'pass', 'fail', 'blocked'];
     const STATUS_LABELS = { pending: 'Not run', pass: 'Pass', fail: 'Fail', blocked: 'Blocked' };
 
     let state = loadState();
 
+    function normalizeCaseSteps(steps) {
+      return steps.map((s, i) => {
+        if (typeof s === 'string') {
+          return { n: i + 1, action: s, verify: 'Step completes without error.', ui: '' };
+        }
+        return { n: i + 1, action: s.action, verify: s.verify, ui: s.ui || '' };
+      });
+    }
+
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) return JSON.parse(raw);
+        const legacy = localStorage.getItem('knockscout-regression-v1');
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          return { cases: parsed.cases || {}, exportedAt: parsed.exportedAt || null };
+        }
       } catch (_) {}
       return { cases: {}, exportedAt: null };
     }
@@ -492,23 +297,49 @@ const HTML = `<!DOCTYPE html>
       updateSummary();
     }
 
+    function defaultCaseState() {
+      return { status: 'pending', notes: '', failedAtStep: null };
+    }
+
     function getCaseState(id) {
-      return state.cases[id] || { status: 'pending', notes: '' };
+      return { ...defaultCaseState(), ...(state.cases[id] || {}) };
+    }
+
+    function setCaseState(id, patch) {
+      state.cases[id] = { ...getCaseState(id), ...patch };
+      saveState();
     }
 
     function cycleStatus(id) {
       const cur = getCaseState(id);
       const idx = STATUSES.indexOf(cur.status);
       const next = STATUSES[(idx + 1) % STATUSES.length];
-      state.cases[id] = { ...cur, status: next };
-      saveState();
+      const patch = { status: next };
+      if (next !== 'fail') patch.failedAtStep = null;
+      setCaseState(id, patch);
       render();
     }
 
     function setNotes(id, notes) {
+      setCaseState(id, { notes });
+    }
+
+    function setFailedStep(id, stepNum) {
       const cur = getCaseState(id);
-      state.cases[id] = { ...cur, notes };
-      saveState();
+      const failedAtStep = cur.failedAtStep === stepNum ? null : stepNum;
+      const patch = { failedAtStep };
+      if (failedAtStep && cur.status !== 'fail') patch.status = 'fail';
+      setCaseState(id, patch);
+      render();
+    }
+
+    function stepSearchHay(tc) {
+      const parts = [tc.id, tc.title, tc.preconditions, tc.expected];
+      tc.steps.forEach(s => {
+        if (typeof s === 'string') parts.push(s);
+        else parts.push(s.action, s.verify, s.ui || '');
+      });
+      return parts.join(' ').toLowerCase();
     }
 
     function matchesFilters(tc) {
@@ -518,10 +349,7 @@ const HTML = `<!DOCTYPE html>
       const cs = getCaseState(tc.id);
       if (statusF !== 'all' && cs.status !== statusF) return false;
       if (roleF !== 'all' && !tc.roles.includes(roleF)) return false;
-      if (q) {
-        const hay = [tc.id, tc.title, tc.preconditions, tc.expected, ...tc.steps].join(' ').toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
+      if (q && !stepSearchHay(tc).includes(q)) return false;
       return true;
     }
 
@@ -546,13 +374,85 @@ const HTML = `<!DOCTYPE html>
       document.getElementById('progressFill').style.width = pct + '%';
     }
 
+    function buildAgentReport(tc) {
+      const cs = getCaseState(tc.id);
+      const steps = normalizeCaseSteps(tc.steps);
+      const sec = SECTIONS.find(s => s.id === tc.section);
+      const failedStep = cs.failedAtStep ? steps.find(s => s.n === cs.failedAtStep) : null;
+      const lines = [
+        '# Regression failure report',
+        '',
+        '## Test case',
+        '- ID: ' + tc.id,
+        '- Title: ' + tc.title,
+        '- Section: ' + (sec ? sec.id + ' — ' + sec.title : tc.section),
+        '- Roles: ' + tc.roles.join(', '),
+        '- Viewport: ' + tc.viewport,
+        '- Status: ' + cs.status,
+        '',
+        '## Preconditions',
+        tc.preconditions,
+        '',
+        '## Steps performed',
+      ];
+      steps.forEach(s => {
+        const marker = cs.failedAtStep === s.n ? ' **[FAILED HERE]**' : '';
+        lines.push(s.n + '. **Do:** ' + s.action + marker);
+        lines.push('   **Verify:** ' + s.verify);
+        if (s.ui) lines.push('   **UI:** ' + s.ui);
+        lines.push('');
+      });
+      lines.push('## Overall expected outcome');
+      lines.push(tc.expected);
+      lines.push('');
+      if (failedStep) {
+        lines.push('## Failure at step ' + failedStep.n);
+        lines.push('- Action attempted: ' + failedStep.action);
+        lines.push('- Expected verify: ' + failedStep.verify);
+        if (failedStep.ui) lines.push('- UI surface: ' + failedStep.ui);
+        lines.push('');
+      }
+      lines.push('## Tester notes');
+      lines.push(cs.notes || '(none)');
+      lines.push('');
+      lines.push('## Agent task');
+      lines.push('Reproduce this regression test failure, identify root cause in the codebase, and fix it. Focus on the failed step UI surface and verify criteria above.');
+      return lines.join('\\n');
+    }
+
+    function renderSteps(tc, cs) {
+      const steps = normalizeCaseSteps(tc.steps);
+      return steps.map(s => {
+        const failed = cs.failedAtStep === s.n;
+        const uiRow = s.ui
+          ? '<div class="step-row"><span class="step-label ui">UI</span>' + escapeHtml(s.ui) + '</div>'
+          : '';
+        return '<li class="step' + (failed ? ' step-failed' : '') + '" data-step="' + s.n + '">' +
+          '<div class="step-num">' + s.n + '</div>' +
+          '<div class="step-body">' +
+            '<div class="step-row"><span class="step-label do">Do</span>' + escapeHtml(s.action) + '</div>' +
+            '<div class="step-row"><span class="step-label check">Verify</span>' + escapeHtml(s.verify) + '</div>' +
+            uiRow +
+            '<label class="step-fail-marker">' +
+              '<input type="radio" name="fail-' + tc.id + '" value="' + s.n + '"' + (failed ? ' checked' : '') + ' />' +
+              'Mark step ' + s.n + ' as failure point' +
+            '</label>' +
+          '</div>' +
+        '</li>';
+      }).join('');
+    }
+
+    function notesPlaceholder(tc) {
+      return FAILURE_NOTE_TEMPLATE.replace('Regression test ID:', 'Regression test ID: ' + tc.id);
+    }
+
     function render() {
       const root = document.getElementById('sections');
       root.innerHTML = '';
       SECTIONS.forEach(sec => {
         const cases = TEST_CASES.filter(tc => tc.section === sec.id);
         const visible = cases.filter(matchesFilters);
-        let secPass = 0, secTotal = cases.length;
+        let secPass = 0;
         cases.forEach(tc => { if (getCaseState(tc.id).status === 'pass') secPass++; });
 
         const sectionEl = document.createElement('div');
@@ -562,7 +462,7 @@ const HTML = `<!DOCTYPE html>
         const header = document.createElement('div');
         header.className = 'section-header';
         header.innerHTML = '<h2>' + sec.id + ' — ' + sec.title + '</h2>' +
-          '<span class="section-meta">' + secPass + '/' + secTotal + ' pass · ' + visible.length + ' shown</span>';
+          '<span class="section-meta">' + secPass + '/' + cases.length + ' pass · ' + visible.length + ' shown</span>';
         header.addEventListener('click', () => sectionEl.classList.toggle('open'));
 
         const body = document.createElement('div');
@@ -578,20 +478,25 @@ const HTML = `<!DOCTYPE html>
           const tags = tc.roles.map(r => '<span class="tag">' + r + '</span>').join('') +
             '<span class="tag">' + tc.viewport + '</span>';
 
-          const steps = tc.steps.map((s, i) => '<li>' + escapeHtml(s) + '</li>').join('');
-
           caseEl.innerHTML =
             '<div class="case-top">' +
               '<div><div class="case-id">' + tc.id + '</div><div class="case-title">' + escapeHtml(tc.title) + '</div>' +
               '<div class="tags">' + tags + '</div></div>' +
-              '<button type="button" class="status-btn status-' + cs.status + '" data-id="' + tc.id + '">' +
-                STATUS_LABELS[cs.status] + '</button>' +
+              '<div class="case-actions">' +
+                '<button type="button" class="copy-btn" data-copy="' + tc.id + '" title="Copy agent-friendly failure report">Copy agent report</button>' +
+                '<button type="button" class="status-btn status-' + cs.status + '" data-id="' + tc.id + '">' +
+                  STATUS_LABELS[cs.status] + '</button>' +
+              '</div>' +
             '</div>' +
-            '<div class="case-pre"><strong>Pre:</strong> ' + escapeHtml(tc.preconditions) + '</div>' +
-            '<ol>' + steps + '</ol>' +
-            '<div class="case-expected"><strong>Expected:</strong> ' + escapeHtml(tc.expected) + '</div>' +
-            '<textarea class="case-notes" placeholder="Notes (failures, blockers…)" data-id="' + tc.id + '">' +
-              escapeHtml(cs.notes || '') + '</textarea>';
+            '<div class="case-pre"><strong>Preconditions:</strong> ' + escapeHtml(tc.preconditions) + '</div>' +
+            '<div class="steps-heading">Procedure (' + normalizeCaseSteps(tc.steps).length + ' steps)</div>' +
+            '<ol class="steps">' + renderSteps(tc, cs) + '</ol>' +
+            '<div class="case-expected"><strong>Overall expected:</strong> ' + escapeHtml(tc.expected) + '</div>' +
+            '<div class="case-notes-wrap">' +
+              '<div class="case-notes-label"><span>Failure notes (for agent debugging)</span></div>' +
+              '<textarea class="case-notes" placeholder="' + escapeHtml(notesPlaceholder(tc)) + '" data-id="' + tc.id + '">' +
+                escapeHtml(cs.notes || '') + '</textarea>' +
+            '</div>';
 
           caseEl.querySelector('.status-btn').addEventListener('click', e => {
             e.stopPropagation();
@@ -599,6 +504,20 @@ const HTML = `<!DOCTYPE html>
           });
           caseEl.querySelector('.case-notes').addEventListener('input', e => {
             setNotes(tc.id, e.target.value);
+          });
+          caseEl.querySelector('[data-copy]').addEventListener('click', e => {
+            e.stopPropagation();
+            const text = buildAgentReport(tc);
+            navigator.clipboard.writeText(text).then(() => {
+              e.target.textContent = 'Copied!';
+              setTimeout(() => { e.target.textContent = 'Copy agent report'; }, 1500);
+            }).catch(() => alert(text));
+          });
+          caseEl.querySelectorAll('.step-fail-marker input').forEach(input => {
+            input.addEventListener('change', e => {
+              e.stopPropagation();
+              if (e.target.checked) setFailedStep(tc.id, Number(e.target.value));
+            });
           });
 
           body.appendChild(caseEl);
@@ -619,6 +538,56 @@ const HTML = `<!DOCTYPE html>
         .replace(/"/g, '&quot;');
     }
 
+    function buildExportPayload(version) {
+      const failures = TEST_CASES
+        .filter(tc => {
+          const s = getCaseState(tc.id);
+          return s.status === 'fail' || s.status === 'blocked';
+        })
+        .map(tc => {
+          const cs = getCaseState(tc.id);
+          const steps = normalizeCaseSteps(tc.steps);
+          const failedStep = cs.failedAtStep ? steps.find(s => s.n === cs.failedAtStep) : null;
+          return {
+            id: tc.id,
+            title: tc.title,
+            section: tc.section,
+            roles: tc.roles,
+            viewport: tc.viewport,
+            preconditions: tc.preconditions,
+            expected: tc.expected,
+            status: cs.status,
+            failedAtStep: cs.failedAtStep,
+            failedStep,
+            notes: cs.notes,
+            steps,
+            agentReport: buildAgentReport(tc),
+          };
+        });
+
+      return {
+        version,
+        exportedAt: new Date().toISOString(),
+        summary: {
+          total: TEST_CASES.length,
+          pass: TEST_CASES.filter(tc => getCaseState(tc.id).status === 'pass').length,
+          fail: TEST_CASES.filter(tc => getCaseState(tc.id).status === 'fail').length,
+          blocked: TEST_CASES.filter(tc => getCaseState(tc.id).status === 'blocked').length,
+        },
+        cases: state.cases,
+        failures,
+      };
+    }
+
+    function downloadJson(filename, payload) {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
     document.getElementById('searchInput').addEventListener('input', render);
     document.getElementById('statusFilter').addEventListener('change', render);
     document.getElementById('roleFilter').addEventListener('change', render);
@@ -631,18 +600,16 @@ const HTML = `<!DOCTYPE html>
     });
 
     document.getElementById('exportBtn').addEventListener('click', () => {
-      const payload = {
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        cases: state.cases,
-        summary: TEST_CASES.map(tc => ({ id: tc.id, ...getCaseState(tc.id) })),
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'knockscout-regression-' + new Date().toISOString().slice(0, 10) + '.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
+      downloadJson('knockscout-regression-' + new Date().toISOString().slice(0, 10) + '.json', buildExportPayload(2));
+    });
+
+    document.getElementById('exportAgentBtn').addEventListener('click', () => {
+      const payload = buildExportPayload(2);
+      if (!payload.failures.length) {
+        alert('No failed or blocked cases to export. Mark failures first.');
+        return;
+      }
+      downloadJson('knockscout-regression-agent-' + new Date().toISOString().slice(0, 10) + '.json', payload);
     });
 
     document.getElementById('importBtn').addEventListener('click', () => {

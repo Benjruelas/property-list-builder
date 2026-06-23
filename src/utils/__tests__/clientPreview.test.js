@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fetchClientPreviewUrl, openClientPreviewUrl } from '../clientPreview'
+import {
+  CLIENT_PREVIEW_RETURN_KEY,
+  fetchClientPreviewUrl,
+  markClientPreviewOpened,
+  openClientPreviewUrl,
+  returnToAppFromClientPreview,
+  shouldShowOwnerPreviewBack,
+} from '../clientPreview'
 
 describe('fetchClientPreviewUrl', () => {
   beforeEach(() => {
@@ -51,11 +58,53 @@ describe('fetchClientPreviewUrl', () => {
 })
 
 describe('openClientPreviewUrl', () => {
-  it('opens url in new tab', () => {
-    const open = vi.fn()
-    vi.stubGlobal('window', { open })
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('stores return url and opens a new tab when allowed', () => {
+    const open = vi.fn(() => ({}))
+    vi.stubGlobal('window', {
+      open,
+      location: { pathname: '/app', search: '?panel=quotes', hash: '', href: 'https://app.test/app?panel=quotes' },
+    })
+    markClientPreviewOpened()
     openClientPreviewUrl('https://app.test/?report=abc')
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBe('/app?panel=quotes')
     expect(open).toHaveBeenCalledWith('https://app.test/?report=abc', '_blank', 'noopener,noreferrer')
+    vi.unstubAllGlobals()
+  })
+
+  it('navigates same tab when popup is blocked', () => {
+    const open = vi.fn(() => null)
+    const location = { href: 'https://app.test/app', pathname: '/app', search: '', hash: '' }
+    vi.stubGlobal('window', { open, location })
+    openClientPreviewUrl('https://app.test/?quote=abc')
+    expect(location.href).toBe('https://app.test/?quote=abc')
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('owner preview back helpers', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('shouldShowOwnerPreviewBack only when API preview flag is true', () => {
+    expect(shouldShowOwnerPreviewBack({ preview: true })).toBe(true)
+    expect(shouldShowOwnerPreviewBack({ preview: false })).toBe(false)
+    expect(shouldShowOwnerPreviewBack()).toBe(false)
+    sessionStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, '/app')
+    expect(shouldShowOwnerPreviewBack()).toBe(false)
+  })
+
+  it('returnToAppFromClientPreview restores stored url', () => {
+    sessionStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, '/app?panel=reports')
+    const location = { href: 'https://app.test/?report=token', origin: 'https://app.test' }
+    vi.stubGlobal('window', { location })
+    returnToAppFromClientPreview()
+    expect(location.href).toBe('/app?panel=reports')
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBeNull()
     vi.unstubAllGlobals()
   })
 })

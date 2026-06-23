@@ -81,14 +81,18 @@ export function mergeEntityTags(body, existing, registry, type) {
 
   if (body.tagIds !== undefined && registry) {
     const existingIds = new Set(existing?.tagIds || [])
-    const metaIds = new Set(
-      (Array.isArray(body.tagMeta) ? body.tagMeta : existing?.tagMeta || [])
-        .map((t) => t?.id)
-        .filter(Boolean)
+    const bodyMetaById = new Map(
+      (Array.isArray(body.tagMeta) ? body.tagMeta : [])
+        .filter((t) => t?.id && t?.name)
+        .map((t) => [t.id, t]),
     )
-    const unknown = tagIds.filter(
-      (id) => !defs.some((t) => t.id === id) && !existingIds.has(id) && !metaIds.has(id)
-    )
+    const metaIds = new Set(bodyMetaById.keys())
+    const unknown = tagIds.filter((id) => {
+      if (defs.some((t) => t.id === id)) return false
+      if (existingIds.has(id)) return false
+      if (metaIds.has(id)) return false
+      return true
+    })
     if (unknown.length > 0) {
       throw new Error(`Unknown tag: ${unknown[0]}`)
     }
@@ -98,7 +102,9 @@ export function mergeEntityTags(body, existing, registry, type) {
   if (body.tagMeta !== undefined) {
     tagMeta = normalizeTagMetaArray(body.tagMeta, tagIds)
   } else if (body.tagIds !== undefined) {
-    tagMeta = buildTagMetaFromIds(tagIds, defs.length ? defs : existing?.tagMeta || [])
+    const bodyMeta = Array.isArray(body.tagMeta) ? body.tagMeta : []
+    const mergedDefs = mergeTagDefinitionLists(defs, [...(existing?.tagMeta || []), ...bodyMeta])
+    tagMeta = buildTagMetaFromIds(tagIds, mergedDefs.length ? mergedDefs : existing?.tagMeta || [])
   } else {
     tagMeta = existing?.tagMeta || []
   }
@@ -245,4 +251,66 @@ export function collectDealTagMetaFromPipeline(pipeline) {
     }
   }
   return [...byId.values()]
+}
+
+/** Collect unique tag definitions from an array of leads/deals/other tagged entities. */
+export function collectTagMetaFromEntities(entities) {
+  const byId = new Map()
+  for (const entity of entities || []) {
+    for (const t of entity?.tagMeta || []) {
+      if (t?.id && t?.name && !byId.has(t.id)) {
+        byId.set(t.id, {
+          id: t.id,
+          name: String(t.name).trim(),
+          color: typeof t.color === 'string' ? t.color : DEFAULT_TAG_COLORS[0],
+          createdAt: t.createdAt,
+        })
+      }
+    }
+  }
+  return [...byId.values()]
+}
+
+/** Union registry tags with extra definitions; registry wins on id conflict. */
+export function mergeTagDefinitionLists(registryTags, extraTags) {
+  const base = Array.isArray(registryTags) ? [...registryTags] : []
+  const byId = new Map(base.map((t) => [t.id, t]))
+  const byNameLower = new Map(base.map((t) => [t.name.toLowerCase(), t]))
+  const out = [...base]
+
+  for (const raw of extraTags || []) {
+    if (!raw?.id || !raw?.name) continue
+    if (byId.has(raw.id)) continue
+    const nameLower = String(raw.name).trim().toLowerCase()
+    if (byNameLower.has(nameLower)) continue
+    const def = {
+      id: raw.id,
+      name: String(raw.name).trim().slice(0, 40),
+      color: typeof raw.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(raw.color)
+        ? raw.color
+        : DEFAULT_TAG_COLORS[0],
+      createdAt: raw.createdAt || new Date().toISOString(),
+    }
+    out.push(def)
+    byId.set(def.id, def)
+    byNameLower.set(nameLower, def)
+  }
+
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Merge visible-entity tag meta into a user's registry and persist if changed. */
+export async function hydrateUserRegistryFromTagMeta(kv, uid, type, tagMeta) {
+  if (!kv || !uid || !TAG_TYPES.includes(type)) return { changed: false }
+  const tags = (Array.isArray(tagMeta) ? tagMeta : []).filter((t) => t?.id && t?.name)
+  if (tags.length === 0) return { changed: false }
+  const current = await loadTagRegistry(kv, uid)
+  const { registry: next, changed } = mergeTagDefinitionsIntoRegistry(current, type, tags)
+  if (changed) await saveTagRegistry(kv, uid, next)
+  return { changed, registry: next }
+}
+
+/** Adopt tag definitions from body.tagMeta into the acting user's registry. */
+export async function adoptTagMetaIntoUserRegistry(kv, uid, type, tagMeta) {
+  return hydrateUserRegistryFromTagMeta(kv, uid, type, tagMeta)
 }

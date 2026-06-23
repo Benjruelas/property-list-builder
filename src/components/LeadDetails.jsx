@@ -50,6 +50,7 @@ import { DealProfitBadge } from './DealLineItemsSection'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { TagPicker } from './tags/TagPicker'
+import { collectTagMetaFromEntities } from '@/utils/tags'
 import { LeadPhotoGallery } from './photos/LeadPhotoGallery'
 import { fetchPhotoReports } from '@/utils/photoReports'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
@@ -218,6 +219,11 @@ export function LeadDetails({
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
   const fileInputRef = useRef(null)
   const menuTriggerRef = useRef(null)
+
+  const extraTagDefinitions = useMemo(
+    () => collectTagMetaFromEntities(leads),
+    [leads],
+  )
 
   useEffect(() => {
     if (lead) {
@@ -638,6 +644,7 @@ export function LeadDetails({
                   type="leads"
                   entity={lead}
                   tagRegistry={tagRegistry}
+                  extraDefinitions={extraTagDefinitions}
                   getToken={getToken}
                   onRegistryChange={onRefreshTags}
                   disabled={!onLeadUpdate}

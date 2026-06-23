@@ -15,7 +15,7 @@ import {
   actorLabel,
   teamIdsFromResource,
 } from './lib/activityLog.js'
-import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline } from './lib/tagHelpers.js'
+import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './lib/tagHelpers.js'
 import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './lib/leadStatuses.js'
 import { normalizeLeadContactsForStorage } from './lib/leadContact.js'
 import { getAllLeads, saveAllLeads } from './lib/leadStore.js'
@@ -203,6 +203,10 @@ export default async function handler(req, res) {
 
     if (method === 'GET') {
       const leads = filterVisibleResources(all, user, ctx)
+      if (kvAvailable && kv) {
+        const tagMeta = collectTagMetaFromEntities(leads)
+        await hydrateUserRegistryFromTagMeta(kv, user.uid, 'leads', tagMeta)
+      }
       return res.status(200).json({ leads })
     }
 
@@ -236,6 +240,7 @@ export default async function handler(req, res) {
           actorUid: user.uid,
           ctx,
         })
+        await adoptTagMetaIntoUserRegistry(kv, user.uid, 'leads', lead.tagMeta)
       }
 
       const label = actorLabel(user)
@@ -322,6 +327,17 @@ export default async function handler(req, res) {
       await saveAllLeads(all)
 
       if (body.tagIds !== undefined || body.tagMeta !== undefined) {
+        await syncTagMetaToCollaborators(kv, {
+          resource: lead,
+          type: 'leads',
+          tagMeta: lead.tagMeta,
+          actorUid: user.uid,
+          ctx,
+        })
+        await adoptTagMetaIntoUserRegistry(kv, user.uid, 'leads', lead.tagMeta)
+      }
+
+      if (visibilityChanged && lead.tagMeta?.length) {
         await syncTagMetaToCollaborators(kv, {
           resource: lead,
           type: 'leads',

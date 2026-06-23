@@ -1128,20 +1128,6 @@ function App() {
     }
   }, [pipelinesLoading, pipelines.length])
 
-  const refreshLeads = useCallback(async () => {
-    if (!currentUser) return
-    const showSpinner = leadsRef.current.length === 0
-    if (showSpinner) setLeadsLoading(true)
-    try {
-      const next = await fetchLeads(getToken)
-      setLeads(next)
-    } catch (error) {
-      console.error('Error loading leads:', error)
-    } finally {
-      if (showSpinner) setLeadsLoading(false)
-    }
-  }, [currentUser, getToken])
-
   const refreshTags = useCallback(async () => {
     if (!currentUser) {
       setTagRegistry({ leads: [], deals: [], paths: [], lists: [] })
@@ -1154,6 +1140,21 @@ function App() {
       console.error('Error loading tags:', error)
     }
   }, [currentUser, getToken])
+
+  const refreshLeads = useCallback(async () => {
+    if (!currentUser) return
+    const showSpinner = leadsRef.current.length === 0
+    if (showSpinner) setLeadsLoading(true)
+    try {
+      const next = await fetchLeads(getToken)
+      setLeads(next)
+      await refreshTags()
+    } catch (error) {
+      console.error('Error loading leads:', error)
+    } finally {
+      if (showSpinner) setLeadsLoading(false)
+    }
+  }, [currentUser, getToken, refreshTags])
 
   const upsertRegistryTag = useCallback((type, tag) => {
     if (!tag?.id) {
@@ -1253,8 +1254,9 @@ function App() {
       setActivePipelineId(null)
     } finally {
       if (showSpinner) setPipelinesLoading(false)
+      refreshTags()
     }
-  }, [currentUser, getToken, pickActivePipelineId])
+  }, [currentUser, getToken, pickActivePipelineId, refreshTags])
 
   const teamsReadyForPipelinesRef = useRef(false)
   useEffect(() => {
@@ -3686,6 +3688,9 @@ function App() {
           : isReportsPanelOpen ? 'reports'
           : isListPanelOpen ? 'lists'
           : isActivityPanelOpen ? 'activity'
+          : isPathsPanelOpen ? 'paths'
+          : isOutreachPanelOpen ? 'outreach'
+          : isSettingsPanelOpen ? 'settings'
           : null
         }
         onOpenPipes={openDealPipeline}

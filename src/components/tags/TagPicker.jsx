@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { DismissableLayerBranch } from '@radix-ui/react-dismissable-layer'
 import { cn } from '@/lib/utils'
 import { TagChip } from './TagChip'
-import { createTag, resolveTagMeta, buildTagMetaFromIds } from '@/utils/tags'
+import { createTag, resolveTagMeta, buildTagMetaFromIds, mergeTagDefinitionLists } from '@/utils/tags'
 import { showToast } from '../ui/toast'
 
 function menuPositionFromAnchor(anchorEl, menuEl, fallbackPosition) {
@@ -31,6 +31,8 @@ export function TagPicker({
   entity,
   tagRegistry,
   onTagsChange,
+  /** Additional tag definitions from visible shared entities (unioned with registry). */
+  extraDefinitions = [],
   getToken,
   onRegistryChange,
   disabled = false,
@@ -62,7 +64,10 @@ export function TagPicker({
     if (!isControlled) setInternalOpen(value)
   }, [onOpenChange, isControlled])
 
-  const definitions = tagRegistry?.[type] || []
+  const definitions = useMemo(
+    () => mergeTagDefinitionLists(tagRegistry?.[type] || [], extraDefinitions),
+    [tagRegistry, type, extraDefinitions],
+  )
   const [appliedIds, setAppliedIds] = useState(() => entity?.tagIds || [])
 
   useEffect(() => {
@@ -84,10 +89,10 @@ export function TagPicker({
   }, [entity?.tagIds, entity?.id])
 
   const appliedMeta = useMemo(() => {
-    const fromIds = buildTagMetaFromIds(appliedIds, tagRegistry, type)
+    const fromIds = buildTagMetaFromIds(appliedIds, { [type]: definitions }, type)
     if (fromIds.length > 0) return fromIds
-    return resolveTagMeta(entity, tagRegistry, type)
-  }, [appliedIds, entity, tagRegistry, type])
+    return resolveTagMeta(entity, { [type]: definitions }, type)
+  }, [appliedIds, entity, definitions, type])
   const hasPills = appliedMeta.length > 0
 
   const position = useMemo(() => {
@@ -127,7 +132,7 @@ export function TagPicker({
 
   const applyTagIds = (nextIds) => {
     if (!entity || saving) return
-    const tagMeta = buildTagMetaFromIds(nextIds, tagRegistry, type)
+    const tagMeta = buildTagMetaFromIds(nextIds, { [type]: definitions }, type)
     tagSyncInFlightRef.current += 1
     const result = onTagsChange?.({ tagIds: nextIds, tagMeta })
     if (result?.then) {
@@ -170,7 +175,7 @@ export function TagPicker({
       setAppliedIds(nextIds)
       const mergedRegistry = {
         ...tagRegistry,
-        [type]: [...definitions.filter((t) => t.id !== tag.id), tag],
+        [type]: mergeTagDefinitionLists(definitions, [tag]),
       }
       const tagMeta = buildTagMetaFromIds(nextIds, mergedRegistry, type)
       const result = onTagsChange?.({ tagIds: nextIds, tagMeta })

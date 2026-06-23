@@ -270,5 +270,8 @@ export function selectActionBarActiveId(state) {
   if (p.isReportsPanelOpen) return 'reports'
   if (p.isListPanelOpen && !p.isParcelListPanelOpen) return 'lists'
   if (p.isActivityPanelOpen) return 'activity'
+  if (p.isPathsPanelOpen) return 'paths'
+  if (p.isOutreachPanelOpen) return 'outreach'
+  if (p.isSettingsPanelOpen) return 'settings'
   return null
 }

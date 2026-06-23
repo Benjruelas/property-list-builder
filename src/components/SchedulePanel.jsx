@@ -23,6 +23,9 @@ import { getScheduleTaskDisplay } from '@/utils/taskRowDisplay'
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const HOURS = Array.from({ length: 24 }, (_, i) => i) // 0-23 (12 AM - 11 PM)
+const SCHEDULE_WEEK_HOUR_HEIGHT = 36
+const SCHEDULE_DAY_HOUR_HEIGHT = 56
+const SCHEDULE_DAY_MIN_TASK_HEIGHT = 36
 
 function getDaysInMonth(year, month) {
   const first = new Date(year, month, 1)
@@ -70,15 +73,14 @@ function ScheduleTaskItem({ task, displayLeads, allDeals, variant = 'pill', clas
   )
 }
 
-function NowIndicator({ viewMode, weekStart, dayViewDate }) {
+function NowIndicator({ viewMode, weekStart, dayViewDate, hourHeight = SCHEDULE_WEEK_HOUR_HEIGHT }) {
   const [now, setNow] = useState(new Date())
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(id)
   }, [])
 
-  const ROW_HEIGHT = 36
-  const top = (now.getHours() + now.getMinutes() / 60) * ROW_HEIGHT
+  const top = (now.getHours() + now.getMinutes() / 60) * hourHeight
 
   if (viewMode === 'week' && weekStart) {
     const sunday = new Date(weekStart)
@@ -425,7 +427,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
     if (viewMode !== 'week' || !effectiveWeekStart || weekDays.length === 0) return []
     const sunday = new Date(effectiveWeekStart)
     sunday.setHours(0, 0, 0, 0)
-    const ROW_HEIGHT = 36
+    const ROW_HEIGHT = SCHEDULE_WEEK_HOUR_HEIGHT
     const result = []
     for (const t of allTasks) {
       if (!t.scheduledAt || t.completed) continue
@@ -446,7 +448,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
 
   const daySpanningTasks = useMemo(() => {
     if (viewMode !== 'day' || !dayViewDate) return []
-    const ROW_HEIGHT = 36
+    const ROW_HEIGHT = SCHEDULE_DAY_HOUR_HEIGHT
     const dayStart = new Date(dayViewDate)
     dayStart.setHours(0, 0, 0, 0)
     const result = []
@@ -792,7 +794,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
                 </div>
               </div>
             ) : (
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="schedule-day-view flex-1 min-h-0 flex flex-col overflow-hidden">
                 <div
                   className="grid border-b border-white/12 flex-shrink-0"
                   style={{ gridTemplateColumns: '48px minmax(0, 1fr)' }}
@@ -818,20 +820,20 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
                   })()}
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
-                  <div className="relative" style={{ minHeight: 24 * 36 }}>
+                  <div className="relative" style={{ minHeight: 24 * SCHEDULE_DAY_HOUR_HEIGHT }}>
                     <div
                       className="schedule-day-grid-inner grid"
                       style={{
                         gridTemplateColumns: '48px minmax(0, 1fr)',
-                        gridAutoRows: 'minmax(36px, auto)',
-                        minHeight: 24 * 36
+                        gridAutoRows: `minmax(${SCHEDULE_DAY_HOUR_HEIGHT}px, auto)`,
+                        minHeight: 24 * SCHEDULE_DAY_HOUR_HEIGHT,
                       }}
                     >
                       {HOURS.flatMap((hour) => [
                         <div
                           key={`day-${hour}-label`}
                           className="schedule-week-time-label py-0.5 pr-2 text-right flex items-start justify-end"
-                          style={{ paddingTop: 2 }}
+                          style={{ paddingTop: 4 }}
                         >
                           {formatHour(hour)}
                         </div>,
@@ -839,14 +841,23 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
                           key={`day-${hour}-cell`}
                           type="button"
                           onClick={() => dayViewDate && handleHourCellClick(dayViewDate, hour)}
-                          className={`schedule-week-grid-cell min-h-[36px] p-0.5 text-left ${
+                          className={`schedule-week-grid-cell p-0.5 text-left ${
                             dayViewDate?.toDateString() === new Date().toDateString() ? 'bg-white/[0.03]' : ''
                           }`}
+                          style={{ minHeight: SCHEDULE_DAY_HOUR_HEIGHT }}
                         />
                       ])}
                     </div>
-                    <NowIndicator viewMode="day" weekStart={null} dayViewDate={dayViewDate} />
-                    <div className="absolute top-0 left-0 right-0 pointer-events-none" style={{ height: 24 * 36 }}>
+                    <NowIndicator
+                      viewMode="day"
+                      weekStart={null}
+                      dayViewDate={dayViewDate}
+                      hourHeight={SCHEDULE_DAY_HOUR_HEIGHT}
+                    />
+                    <div
+                      className="absolute top-0 left-0 right-0 pointer-events-none"
+                      style={{ height: 24 * SCHEDULE_DAY_HOUR_HEIGHT }}
+                    >
                       {daySpanningTasks.map(({ task, top, height }) => {
                         const lead = task.leadId
                           ? displayLeads.find((l) => l.id === task.leadId)
@@ -864,9 +875,9 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
                             style={{
                               left: 'calc(48px + 4px)',
                               width: 'calc(100% - 48px - 12px)',
-                              top: top + 1,
-                              height: Math.max(24, height - 3),
-                              minHeight: 24,
+                              top: top + 2,
+                              height: Math.max(SCHEDULE_DAY_MIN_TASK_HEIGHT, height - 4),
+                              minHeight: SCHEDULE_DAY_MIN_TASK_HEIGHT,
                             }}
                             onClick={(e) => {
                               e.stopPropagation()

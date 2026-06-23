@@ -10,7 +10,7 @@ import {
   applyResourceVisibilityPatch,
   isTeamAdmin,
 } from './lib/resourceContext.js'
-import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline } from './lib/tagHelpers.js'
+import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './lib/tagHelpers.js'
 import { normalizePipelineStore } from './lib/pipelineStore.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
 
@@ -267,6 +267,14 @@ export default async function handler(req, res) {
       const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
       const pipelines = filterVisibleResources(all.map(normalizePipelineDeals), user, ctx)
+      if (kvAvailable && kv) {
+        const dealTagMeta = pipelines.flatMap((p) => collectDealTagMetaFromPipeline(p))
+        const byId = new Map()
+        for (const t of dealTagMeta) {
+          if (t?.id && !byId.has(t.id)) byId.set(t.id, t)
+        }
+        await hydrateUserRegistryFromTagMeta(kv, user.uid, 'deals', [...byId.values()])
+      }
       return res.status(200).json({ pipelines })
     }
 
@@ -363,6 +371,8 @@ export default async function handler(req, res) {
       const pipeline = normalizePipelineDeals(all[idx])
       const prevDealsSnapshot = JSON.parse(JSON.stringify(pipeline.deals || []))
       const prevSharedMemberUids = [...(pipeline.sharedMemberUids || [])]
+      const prevVisibility = pipeline.visibility
+      const prevTeamSharesSnapshot = [...(pipeline.teamShares || [])]
       const prevSharedSet = new Set(
         (pipeline.sharedWith || []).map((e) => (e || '').toLowerCase().trim()).filter(Boolean)
       )
@@ -485,17 +495,34 @@ export default async function handler(req, res) {
       all[idx] = pipeline
       await saveAllPipelines(all)
 
-      if (deals !== undefined) {
-        const dealTagMeta = collectDealTagMetaFromPipeline(pipeline)
-        if (dealTagMeta.length > 0) {
-          await syncTagMetaToCollaborators(kv, {
-            resource: pipeline,
-            type: 'deals',
-            tagMeta: dealTagMeta,
-            actorUid: user.uid,
-            ctx,
-          })
-        }
+      const dealTagMeta = collectDealTagMetaFromPipeline(pipeline)
+      const sharingChanged =
+        sharedWith !== undefined ||
+        teamShares !== undefined ||
+        body.visibility !== undefined ||
+        body.sharedMemberUids !== undefined
+      const visibilityChanged =
+        pipeline.visibility !== prevVisibility ||
+        JSON.stringify(pipeline.sharedMemberUids || []) !== JSON.stringify(prevSharedMemberUids) ||
+        JSON.stringify(pipeline.teamShares || []) !== JSON.stringify(prevTeamSharesSnapshot)
+
+      if (deals !== undefined && dealTagMeta.length > 0) {
+        await syncTagMetaToCollaborators(kv, {
+          resource: pipeline,
+          type: 'deals',
+          tagMeta: dealTagMeta,
+          actorUid: user.uid,
+          ctx,
+        })
+        await adoptTagMetaIntoUserRegistry(kv, user.uid, 'deals', dealTagMeta)
+      } else if ((sharingChanged || visibilityChanged) && dealTagMeta.length > 0) {
+        await syncTagMetaToCollaborators(kv, {
+          resource: pipeline,
+          type: 'deals',
+          tagMeta: dealTagMeta,
+          actorUid: user.uid,
+          ctx,
+        })
       }
 
       await runPipelinePushNotifications({

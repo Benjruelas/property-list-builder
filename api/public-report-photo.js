@@ -1,8 +1,7 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { findReportInviteByToken } from './lib/reportInvites.js'
-import { getPhotoReportById } from './lib/reportStore.js'
 import { getAllLeads } from './lib/leadAccess.js'
 import { allowedReportPhotoIds } from './lib/publicReportPayload.js'
+import { loadReportContext } from './lib/publicReportAccess.js'
 
 let _s3
 function s3() {
@@ -33,14 +32,10 @@ export default async function handler(req, res) {
     if (!token) return res.status(400).json({ error: 'token is required' })
     if (!photoId) return res.status(400).json({ error: 'photoId is required' })
 
-    const { invite, error } = await findReportInviteByToken(token)
-    if (error === 'not_found') return res.status(404).json({ error: 'Report link not found' })
-    if (error === 'revoked' || error === 'expired') {
-      return res.status(410).json({ error: 'This report link has expired' })
-    }
+    const ctx = await loadReportContext(token)
+    if (ctx.error) return res.status(ctx.status || 404).json({ error: ctx.error })
 
-    const { report } = await getPhotoReportById(invite.reportId)
-    if (!report) return res.status(404).json({ error: 'Report not found' })
+    const { report } = ctx
 
     const allowed = allowedReportPhotoIds(report)
     if (!allowed.has(photoId)) {

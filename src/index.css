@@ -32,6 +32,7 @@
     --tasks-dock-width: min(300px, 24vw);
     --tasks-dock-gap: 14px;
     --tasks-panel-right-inset: calc(12px + env(safe-area-inset-right, 0px));
+    --map-chrome-btn-size: 3rem;
     --tasks-panel-fade-duration: 380ms;
     --tasks-panel-fade-ease: cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -62,7 +63,8 @@
     --tasks-dock-width: min(calc(var(--ui-action-bar-height-basis) * 0.366), 28vw);
     --tasks-dock-gap: calc(14px * var(--ui-touch-scale));
     --tasks-panel-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
-    --map-controls-stack-height: calc(4 * 2.5rem + 3 * 0.5rem);
+    --map-chrome-btn-size: var(--ui-action-bar-btn-height);
+    --map-controls-stack-height: calc(4 * var(--map-chrome-btn-size) + 3 * 0.5rem);
     --map-controls-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
     --tasks-panel-motion-duration: 380ms;
     --tasks-panel-motion-ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -256,17 +258,54 @@
   }
 }
 
-/* North indicator - below zoom buttons in left column
-   Mobile: 12 + (48+8)*3 = 180   Desktop: 12 + (40+8)*3 = 156 */
-.north-indicator {
-  top: calc(180px + env(safe-area-inset-top, 0px));
-  left: calc(16px + env(safe-area-inset-left, 0px));
+/* Map chrome icon buttons — square; desktop matches action bar button height */
+.map-controls-stack .map-chrome-btn,
+.map-search-stack .map-chrome-btn {
+  width: var(--map-chrome-btn-size) !important;
+  height: var(--map-chrome-btn-size) !important;
+  min-width: var(--map-chrome-btn-size);
+  min-height: var(--map-chrome-btn-size);
+  max-width: var(--map-chrome-btn-size);
+  max-height: var(--map-chrome-btn-size);
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
+  padding: 0 !important;
 }
-@media (min-width: 640px) {
-  .north-indicator {
-    top: calc(156px + env(safe-area-inset-top, 0px));
-    left: calc(12px + env(safe-area-inset-left, 0px));
-  }
+
+.map-chrome-slot {
+  width: var(--map-chrome-btn-size);
+  height: var(--map-chrome-btn-size);
+  flex-shrink: 0;
+}
+
+.map-controls-stack .map-chrome-btn svg,
+.map-search-stack .map-chrome-btn svg,
+.map-chrome-icon-slot svg {
+  width: calc(1.5rem * var(--ui-touch-scale, 1));
+  height: calc(1.5rem * var(--ui-touch-scale, 1));
+}
+
+.map-chrome-icon-slot {
+  width: var(--map-chrome-btn-size);
+  height: var(--map-chrome-btn-size);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-search-open-pill {
+  height: var(--map-chrome-btn-size);
+}
+
+.map-search-results-panel {
+  top: calc(var(--map-chrome-btn-size) + 0.5rem);
+}
+
+/* North indicator — below search + zoom column (3 square buttons + gaps) */
+.north-indicator {
+  top: calc(12px + (var(--map-chrome-btn-size) + 0.5rem) * 3 + env(safe-area-inset-top, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
 }
 
 /* User location marker */
@@ -3005,6 +3044,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Day view — taller hour rows and task blocks */
+.schedule-panel .schedule-day-view .schedule-week-time-label {
+  font-size: 12px;
+  padding-top: 6px;
+}
+.schedule-panel .schedule-day-view button.schedule-week-grid-cell {
+  min-height: 56px;
+}
+.schedule-panel .schedule-day-view .schedule-task-block {
+  border-radius: 10px;
+}
+.schedule-panel .schedule-day-view .schedule-task-block-content {
+  padding: 6px 10px;
+}
+.schedule-panel .schedule-day-view .schedule-task-block-title {
+  font-size: 13px;
+  line-height: 1.25;
+}
+.schedule-panel .schedule-day-view .schedule-task-block-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 /* Current time indicator */
@@ -6289,14 +6352,19 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     pointer-events: auto !important;
   }
   .mobile-action-bar-inner {
-    gap: calc(6px * var(--ui-touch-scale));
+    gap: calc(4px * var(--ui-touch-scale));
     padding: calc(8px * var(--ui-touch-scale));
   }
   .mobile-action-bar-btn {
-    min-width: calc(3.25rem * var(--ui-touch-scale));
+    min-width: 0;
+    padding-inline: calc(2px * var(--ui-touch-scale));
   }
   .mobile-action-bar-label {
-    font-size: calc(10px * var(--ui-touch-scale));
+    font-size: calc(9px * var(--ui-touch-scale));
+    line-height: 1.1;
+  }
+  .mobile-action-bar-inner[data-action-bar-count='13'] .mobile-action-bar-label {
+    font-size: calc(8px * var(--ui-touch-scale));
   }
 }
 
@@ -6370,6 +6438,24 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   line-height: 16px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.mobile-action-bar-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+.mobile-action-bar-dot--amber {
+  color: #fbbf24;
+}
+
+.mobile-action-bar-dot--red {
+  color: #ef4444;
 }
 
 .mobile-action-bar-label {

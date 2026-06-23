@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { ChevronRight, Archive, ArrowRightLeft, Trash2, Upload, Download, FileText, Loader2, User, MoreVertical, Plus } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { PanelBackButton } from './ui/panel-header'
@@ -21,6 +21,7 @@ import { fetchQuotes, getCachedDealQuotes, setCachedDealQuotes } from '@/utils/q
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatQuoteMoney } from '@/utils/quoteMath'
 import { TagPicker } from './tags/TagPicker'
+import { collectTagMetaFromEntities } from '@/utils/tags'
 import { DealPhotoGallery } from './photos/DealPhotoGallery'
 
 function getColumnName(colId, columns) {
@@ -70,12 +71,21 @@ export function DealDetails({
   canSeeDealAmounts = true,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
+  visibleDealsForTags = null,
   canAccessPhotos = true,
   currentUser = null,
 }) {
   const d = closedRecord?.deal || deal
   const pipelineMeta = closedRecord?.closedFrom || pipeline
   const columns = pipelineMeta?.columns || pipeline?.columns || []
+
+  const extraTagDefinitions = useMemo(() => {
+    if (Array.isArray(visibleDealsForTags) && visibleDealsForTags.length > 0) {
+      return collectTagMetaFromEntities(visibleDealsForTags)
+    }
+    return collectTagMetaFromEntities(pipelines.flatMap((p) => p.deals || []))
+  }, [visibleDealsForTags, pipelines])
+
   const [notes, setNotes] = useState(d?.notes || '')
   const [notesDirty, setNotesDirty] = useState(false)
   const [payments, setPayments] = useState(d?.payments || [])
@@ -375,6 +385,7 @@ export function DealDetails({
                   type="deals"
                   entity={d}
                   tagRegistry={tagRegistry}
+                  extraDefinitions={extraTagDefinitions}
                   getToken={getToken}
                   onRegistryChange={onRefreshTags}
                   disabled={readOnly || isClosed || !onDealUpdate}

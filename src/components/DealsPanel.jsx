@@ -17,7 +17,7 @@ import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { updateLead } from '@/utils/leads'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { loadClosedDeals } from '@/utils/closedDeals'
-import { filterByTags } from '@/utils/tags'
+import { filterByTags, buildFilterableTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { showToast } from './ui/toast'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
@@ -146,6 +146,17 @@ export function DealsPanel({
   }, [pipelines])
 
   const totalDeals = useMemo(() => allPipelineData.reduce((s, p) => s + p.deals.length, 0), [allPipelineData])
+
+  const visibleDealsForTags = useMemo(() => {
+    const active = allPipelineData.flatMap((p) => p.deals || [])
+    const closed = closedDeals.map((r) => r.deal).filter(Boolean)
+    return [...active, ...closed]
+  }, [allPipelineData, closedDeals])
+
+  const filterTags = useMemo(
+    () => buildFilterableTags('deals', tagRegistry, visibleDealsForTags),
+    [tagRegistry, visibleDealsForTags],
+  )
 
   const filteredPipelines = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -454,7 +465,7 @@ export function DealsPanel({
                   />
                 </div>
                 <PanelFilterMenu
-                  tags={tagRegistry.deals || []}
+                  tags={filterTags}
                   selectedTagIds={selectedTagIds}
                   onTagIdsChange={setSelectedTagIds}
                 />
@@ -636,6 +647,7 @@ export function DealsPanel({
           canSeeDealAmounts={canSeeDealAmounts}
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
+          visibleDealsForTags={visibleDealsForTags}
           currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
           canAccessPhotos={canAccessPhotos}
         />
@@ -707,6 +719,9 @@ export function DealsPanel({
           onOpenQuote={onOpenQuoteFromDeal}
           quotesRefreshKey={quotesRefreshKey}
           canSeeDealAmounts={canSeeDealAmounts}
+          tagRegistry={tagRegistry}
+          onRefreshTags={onRefreshTags}
+          visibleDealsForTags={visibleDealsForTags}
           currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
           canAccessPhotos={canAccessPhotos}
         />

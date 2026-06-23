@@ -28,6 +28,11 @@ import {
   Bell,
   FileText,
   ClipboardList,
+  Route,
+  Send,
+  Settings,
+  User,
+  Circle,
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { cn } from '@/lib/utils'
@@ -45,11 +50,15 @@ const BAR_PREFETCH_KEY = {
   quotes: 'quotes',
   forms: 'forms',
   reports: 'reports',
+  paths: 'paths',
+  outreach: 'outreach',
+  settings: 'settings',
 }
 
 /**
- * FloatingActionBar — responsive bottom dock (phone → wide desktop).
- * Surfaces more primary actions as the viewport widens; overflow lives in Menu.
+ * FloatingActionBar — responsive bottom dock (phone → desktop).
+ * Mobile: Pipes, Tasks, Schedule, and Menu overflow.
+ * Desktop (768+): every action on the bar — no Menu.
  */
 
 const ITEM_DEFS = {
@@ -63,6 +72,10 @@ const ITEM_DEFS = {
   reports: { label: 'Reports', Icon: FileText },
   lists: { label: 'Lists', Icon: List },
   activity: { label: 'Activity', Icon: Bell },
+  paths: { label: 'Paths', Icon: Route },
+  outreach: { label: 'Outreach', Icon: Send },
+  settings: { label: 'Settings', Icon: Settings },
+  login: { label: 'Sign In', Icon: User },
   menu: { label: 'Menu', Icon: Menu },
 }
 
@@ -90,9 +103,13 @@ export function MobileActionBar({
   activityUnreadCount = 0,
 }) {
   const elevateBar = useDesktopActionBarElevated()
-  const { barIds, overflowPrimaryIds } = useActionBarLayout()
+  const { barIds, overflowPrimaryIds, isDesktop } = useActionBarLayout()
   const menuBtnRef = useRef(null)
   const [menuAnchor, setMenuAnchor] = useState(null)
+
+  useEffect(() => {
+    if (isDesktop && showMenu) setShowMenu?.(false)
+  }, [isDesktop, showMenu, setShowMenu])
 
   const updateMenuAnchor = useCallback(() => {
     const el = menuBtnRef.current
@@ -122,11 +139,11 @@ export function MobileActionBar({
   }, [showMenu, barIds, updateMenuAnchor])
 
   useEffect(() => {
-    if (!showMenu) return
+    if (!showMenu || isDesktop) return
     prefetchPanel('outreach')
     prefetchPanel('paths')
     prefetchPanel('settings')
-  }, [showMenu])
+  }, [showMenu, isDesktop])
 
   const handlers = {
     pipes: onOpenPipes,
@@ -139,15 +156,19 @@ export function MobileActionBar({
     lists: onOpenListPanel,
     forms: onOpenForms,
     activity: onOpenActivity,
+    paths: onOpenPathsPanel,
+    outreach: onOpenOutreach,
+    settings: onOpenSettings,
+    login: onLogin,
     menu: () => setShowMenu?.(!showMenu),
   }
 
-  const computedActiveId = showMenu ? 'menu' : activeId
+  const computedActiveId = !isDesktop && showMenu ? 'menu' : activeId
 
   const chrome = (
     <>
       <ActionBarMenu
-        show={showMenu}
+        show={!isDesktop && showMenu}
         onClose={() => setShowMenu?.(false)}
         barIds={barIds}
         overflowPrimaryIds={overflowPrimaryIds}
@@ -179,17 +200,18 @@ export function MobileActionBar({
       >
         <div className="mobile-action-bar-inner">
           {barIds.map((id) => {
-            const def = ITEM_DEFS[id]
+            const resolvedId = id === 'settings' && !currentUser ? 'login' : id
+            const def = ITEM_DEFS[resolvedId]
             if (!def) return null
             const { label, Icon } = def
-            const active = computedActiveId === id
+            const active = computedActiveId === id || (id === 'settings' && computedActiveId === 'login')
             const tourId = id === 'menu' ? 'action-bar-menu' : `action-bar-${id}`
             return (
               <button
                 key={id}
                 ref={id === 'menu' ? menuBtnRef : undefined}
                 type="button"
-                onClick={() => handlers[id]?.()}
+                onClick={() => handlers[resolvedId]?.()}
                 onPointerEnter={() => {
                   const key = BAR_PREFETCH_KEY[id]
                   if (key) prefetchPanel(key)
@@ -206,6 +228,12 @@ export function MobileActionBar({
                     <span className="mobile-action-bar-badge" aria-hidden>
                       {activityUnreadCount > 99 ? '99+' : activityUnreadCount}
                     </span>
+                  )}
+                  {id === 'lists' && selectedListIds.length > 0 && (
+                    <Circle className="mobile-action-bar-dot mobile-action-bar-dot--amber" aria-hidden />
+                  )}
+                  {id === 'paths' && isPathTrackingActive && (
+                    <Circle className="mobile-action-bar-dot mobile-action-bar-dot--red" aria-hidden />
                   )}
                 </span>
                 <span className="mobile-action-bar-label">{label}</span>

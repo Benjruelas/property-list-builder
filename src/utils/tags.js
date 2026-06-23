@@ -197,3 +197,54 @@ export function filterByTags(items, selectedTagIds) {
 export function getEntityTagIds(entity) {
   return entity?.tagIds || []
 }
+
+export function collectTagMetaFromEntities(entities) {
+  const byId = new Map()
+  for (const entity of entities || []) {
+    for (const t of entity?.tagMeta || []) {
+      if (t?.id && t?.name && !byId.has(t.id)) {
+        byId.set(t.id, {
+          id: t.id,
+          name: String(t.name).trim(),
+          color: typeof t.color === 'string' ? t.color : DEFAULT_TAG_COLORS[0],
+          createdAt: t.createdAt,
+        })
+      }
+    }
+  }
+  return [...byId.values()]
+}
+
+export function mergeTagDefinitionLists(registryTags, extraTags) {
+  const base = Array.isArray(registryTags) ? [...registryTags] : []
+  const byId = new Map(base.map((t) => [t.id, t]))
+  const byNameLower = new Map(base.map((t) => [t.name.toLowerCase(), t]))
+  const out = [...base]
+
+  for (const raw of extraTags || []) {
+    if (!raw?.id || !raw?.name) continue
+    if (byId.has(raw.id)) continue
+    const nameLower = String(raw.name).trim().toLowerCase()
+    if (byNameLower.has(nameLower)) continue
+    const def = {
+      id: raw.id,
+      name: String(raw.name).trim().slice(0, 40),
+      color: typeof raw.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(raw.color)
+        ? raw.color
+        : DEFAULT_TAG_COLORS[0],
+      createdAt: raw.createdAt || new Date().toISOString(),
+    }
+    out.push(def)
+    byId.set(def.id, def)
+    byNameLower.set(nameLower, def)
+  }
+
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Union personal registry tags with tags on visible entities for filter/picker UI. */
+export function buildFilterableTags(type, registry, visibleEntities) {
+  const registryTags = registry?.[type] || []
+  const entityTags = collectTagMetaFromEntities(visibleEntities)
+  return mergeTagDefinitionLists(registryTags, entityTags)
+}

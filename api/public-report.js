@@ -1,9 +1,8 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
-import { findReportInviteByToken } from './lib/reportInvites.js'
-import { getPhotoReportById, getAllPhotoReports, updatePhotoReportAtIndex } from './lib/reportStore.js'
-import { parseReportPreviewToken } from './lib/previewToken.js'
+import { updatePhotoReportAtIndex } from './lib/reportStore.js'
 import { getAllLeads } from './lib/leadAccess.js'
 import { publicReportPayload, recordReportView } from './lib/publicReportPayload.js'
+import { loadReportContext } from './lib/publicReportAccess.js'
 import { resolveSenderBranding } from './lib/senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey, safePdfFilename } from './lib/buildReportPdf.js'
 
@@ -29,53 +28,6 @@ async function r2GetBuffer(key) {
   const chunks = []
   for await (const c of r.Body) chunks.push(c)
   return Buffer.concat(chunks)
-}
-
-async function loadReportContext(token) {
-  const normalized = String(token || '').trim()
-  const { invite, error } = await findReportInviteByToken(normalized)
-
-  if (error && error !== 'not_found') {
-    if (error === 'revoked' || error === 'expired') {
-      return { error: 'This report link has expired', status: 410 }
-    }
-  }
-
-  if (!error && invite) {
-    const { report, index, all } = await getPhotoReportById(invite.reportId)
-    if (!report) return { error: 'Report not found', status: 404 }
-    return { invite, report, index, all, error: null }
-  }
-
-  const signedReportId = parseReportPreviewToken(normalized)
-  if (signedReportId) {
-    const { report, index, all } = await getPhotoReportById(signedReportId)
-    if (!report) return { error: 'Report not found', status: 404 }
-    const previewInvite = {
-      token: normalized,
-      reportId: report.id,
-      preview: true,
-      recipientEmail: '',
-      message: '',
-      status: 'pending',
-    }
-    return { invite: previewInvite, report, index, all, error: null }
-  }
-
-  const all = await getAllPhotoReports()
-  const index = all.findIndex((r) => r.previewToken === normalized)
-  if (index === -1) return { error: 'Report link not found', status: 404 }
-
-  const report = all[index]
-  const previewInvite = {
-    token: normalized,
-    reportId: report.id,
-    preview: true,
-    recipientEmail: '',
-    message: '',
-    status: 'pending',
-  }
-  return { invite: previewInvite, report, index, all, error: null }
 }
 
 async function ensureReportPdf(report, index, all, lead) {

@@ -2,6 +2,8 @@ import { Navigation, CheckSquare, Square, Compass, Route, Plus, X } from 'lucide
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 
+const MAP_CHROME_BTN = 'map-chrome-btn shadow-lg touch-manipulation'
+
 export function MapControls({ 
   onRecenter, 
   onToggleCompass,
@@ -32,10 +34,10 @@ export function MapControls({
         onClick={runAction(onRecenter)}
         size="icon"
         variant="glass"
-        className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+        className={MAP_CHROME_BTN}
         title="Recenter map"
       >
-        <Navigation className="h-6 w-6 sm:h-5 sm:w-5" />
+        <Navigation />
       </Button>
       <Button
         data-tour="compass"
@@ -43,25 +45,27 @@ export function MapControls({
         size="icon"
         variant={isCompassActive ? "glass" : "glass-outline"}
         className={cn(
-          "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
+          MAP_CHROME_BTN,
           isCompassActive && "bg-amber-500/80 hover:bg-amber-600/90 border-amber-400/50 text-white"
         )}
         title={isCompassActive ? "Disable compass (map faces your direction)" : "Enable compass (orient map to face your direction)"}
       >
-        <Compass className="h-6 w-6 sm:h-5 sm:w-5" />
+        <Compass />
       </Button>
-      {/* Fixed slot size matches other controls; X is absolutely positioned so column width stays 48px */}
-      <div className="relative flex h-12 w-12 shrink-0 items-center justify-center sm:h-10 sm:w-10">
+      <div className="map-chrome-slot relative flex shrink-0 items-center justify-center">
         {multiSelectAddToListMode && (
           <Button
             type="button"
             size="icon"
             variant="glass"
             onClick={runAction(() => onCancelMultiSelect?.())}
-            className="absolute right-full top-1/2 z-10 mr-2 h-12 w-12 -translate-y-1/2 shadow-lg touch-manipulation bg-red-600/90 hover:bg-red-700/95 border-red-400/60 text-white sm:h-10 sm:w-10"
+            className={cn(
+              MAP_CHROME_BTN,
+              'absolute right-full top-1/2 z-10 mr-2 -translate-y-1/2 bg-red-600/90 hover:bg-red-700/95 border-red-400/60 text-white'
+            )}
             title="Cancel multi-select and clear selection"
           >
-            <X className="h-6 w-6 sm:h-5 sm:w-5" strokeWidth={2.5} />
+            <X strokeWidth={2.5} />
           </Button>
         )}
         {multiSelectAddToListMode ? (
@@ -70,10 +74,13 @@ export function MapControls({
             onClick={runAction(() => onOpenListPanel())}
             size="icon"
             variant="glass"
-            className="h-12 w-12 shrink-0 shadow-lg touch-manipulation bg-blue-600/90 hover:bg-blue-700/95 border-blue-400/60 text-white sm:h-10 sm:w-10"
+            className={cn(
+              MAP_CHROME_BTN,
+              'shrink-0 bg-blue-600/90 hover:bg-blue-700/95 border-blue-400/60 text-white'
+            )}
             title={`Add ${multiSelectParcelCount} selected parcel${multiSelectParcelCount === 1 ? "" : "s"} to a list`}
           >
-            <Plus className="h-6 w-6 sm:h-5 sm:w-5" strokeWidth={2.5} />
+            <Plus strokeWidth={2.5} />
           </Button>
         ) : (
           <Button
@@ -82,7 +89,8 @@ export function MapControls({
             size="icon"
             variant={isMultiSelectActive ? "glass" : "glass-outline"}
             className={cn(
-              "h-12 w-12 shrink-0 shadow-lg touch-manipulation sm:h-10 sm:w-10",
+              MAP_CHROME_BTN,
+              'shrink-0',
               isMultiSelectActive && "bg-green-600/80 hover:bg-green-700/90 border-green-400/50 text-white",
               !currentUser && "opacity-50 cursor-not-allowed"
             )}
@@ -95,11 +103,7 @@ export function MapControls({
                   : "Multi-select OFF - Click to turn on"
             }
           >
-            {isMultiSelectActive ? (
-              <CheckSquare className="h-6 w-6 sm:h-5 sm:w-5" />
-            ) : (
-              <Square className="h-6 w-6 sm:h-5 sm:w-5" />
-            )}
+            {isMultiSelectActive ? <CheckSquare /> : <Square />}
           </Button>
         )}
       </div>
@@ -109,7 +113,7 @@ export function MapControls({
         size="icon"
         variant={isPathTrackingActive ? "glass" : "glass-outline"}
         className={cn(
-          "h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation",
+          MAP_CHROME_BTN,
           isPathTrackingActive &&
             "path-tracking-active bg-red-600/80 hover:bg-red-700/90 border-red-400/50 text-white",
           !currentUser && "opacity-50 cursor-not-allowed"
@@ -121,9 +125,8 @@ export function MapControls({
             ? "Recording path - tap to stop & save"
             : "Start recording path"}
       >
-        <Route className="h-6 w-6 sm:h-5 sm:w-5" />
+        <Route />
       </Button>
     </div>
   )
 }
-

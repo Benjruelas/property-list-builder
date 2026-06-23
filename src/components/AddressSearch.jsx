@@ -59,14 +59,9 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
     }
   }
 
-  // Width of the expanded search pill:
-  // - Mobile: fill horizontally, leaving the right-side location button (48px) + the
-  //   same gap-2 (8px) spacing we use vertically between buttons.
-  //   Total reserved = 12px (left) + 8px (gap) + 48px (right button) + 12px (right) = 80px
-  // - Desktop (sm+): capped to just fit the placeholder text (~280px).
   const openPillStyle = {
     width:
-      'calc(100vw - 80px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))'
+      'calc(100vw - 12px - 0.5rem - var(--map-chrome-btn-size) - 12px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))'
   }
   const showResultsPanel =
     isOpen && (query.length > 0 || isSearching || error || results.length > 0)
@@ -88,20 +83,18 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           }}
           size="icon"
           variant="glass-outline"
-          className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+          className="map-chrome-btn shadow-lg touch-manipulation"
           title="Search address"
         >
-          <Search className="h-6 w-6 sm:h-5 sm:w-5" />
+          <Search />
         </Button>
       ) : (
         <div
-          className="relative flex items-center h-12 sm:h-10 rounded-md shadow-lg touch-manipulation sm:!w-[280px] border border-white/60 bg-white/30 text-gray-900 backdrop-blur-sm"
+          className="map-search-open-pill relative flex items-center rounded-md shadow-lg touch-manipulation md:!w-[280px] border border-white/60 bg-white/30 text-gray-900 backdrop-blur-sm"
           style={openPillStyle}
         >
-          {/* Fixed slot matching zoom button width so the search icon lines up
-              exactly with the +/- icons below. */}
-          <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 sm:h-10 sm:w-10">
-            <Search className="h-6 w-6 sm:h-5 sm:w-5 text-gray-700" />
+          <div className="map-chrome-icon-slot flex-shrink-0">
+            <Search className="text-gray-700" />
           </div>
           <input
             ref={inputRef}
@@ -135,10 +128,10 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           }}
           size="icon"
           variant="glass-outline"
-          className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+          className="map-chrome-btn shadow-lg touch-manipulation"
           title="Zoom in"
         >
-          <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
+          <Plus />
         </Button>
         <Button
           onClick={() => {
@@ -147,16 +140,16 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           }}
           size="icon"
           variant="glass-outline"
-          className="h-12 w-12 sm:h-10 sm:w-10 shadow-lg touch-manipulation"
+          className="map-chrome-btn shadow-lg touch-manipulation"
           title="Zoom out"
         >
-          <Minus className="h-6 w-6 sm:h-5 sm:w-5" />
+          <Minus />
         </Button>
       </div>
 
       {showResultsPanel && (
         <div
-          className="map-panel absolute top-[calc(48px+8px)] sm:top-[calc(40px+8px)] left-0 rounded-xl overflow-hidden z-50 sm:!w-[280px]"
+          className="map-search-results-panel map-panel absolute left-0 rounded-xl overflow-hidden z-50 md:!w-[280px]"
           style={openPillStyle}
         >
           {error && (

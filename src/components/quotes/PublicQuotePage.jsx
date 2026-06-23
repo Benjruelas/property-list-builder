@@ -7,6 +7,8 @@ import { PublicPdfDownload } from '../shared/PublicPdfDownload'
 import { QuoteBrandHeader } from './QuoteBrandHeader'
 import { QuoteCheckToggle } from './QuoteCheckToggle'
 import { cn } from '@/lib/utils'
+import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
+import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
 
 export function PublicQuotePage({ token }) {
   const [loading, setLoading] = useState(true)
@@ -53,6 +55,7 @@ export function PublicQuotePage({ token }) {
   }, [data, selectedOptionalIds])
 
   const isPreview = !!data?.preview
+  const showOwnerBack = shouldShowOwnerPreviewBack({ preview: isPreview })
 
   const isRespondableStatus = useMemo(() => {
     if (!data) return false
@@ -145,6 +148,7 @@ export function PublicQuotePage({ token }) {
   if (data?.status === 'paid' || paymentParam === 'success') {
     return (
       <div className={pageClass}>
+        {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
         {brandChrome}
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
@@ -158,6 +162,7 @@ export function PublicQuotePage({ token }) {
 
   return (
     <div className={pageClass}>
+      {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
       {brandChrome}
       <div className="flex-1 overflow-y-auto px-4 py-6 max-w-lg mx-auto w-full">
         {isPreview && (

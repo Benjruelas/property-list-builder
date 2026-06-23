@@ -4,6 +4,10 @@ import {
   mergeTagDefinitionsIntoRegistry,
   syncTagMetaToCollaborators,
   collectDealTagMetaFromPipeline,
+  collectTagMetaFromEntities,
+  mergeTagDefinitionLists,
+  hydrateUserRegistryFromTagMeta,
+  mergeEntityTags,
   emptyTagRegistry,
 } from '../tagHelpers.js'
 
@@ -127,5 +131,72 @@ describe('syncTagMetaToCollaborators', () => {
       ctx,
     })
     expect(kv.set).not.toHaveBeenCalled()
+  })
+})
+
+describe('collectTagMetaFromEntities', () => {
+  it('dedupes tagMeta across entities', () => {
+    const tags = collectTagMetaFromEntities([
+      { tagMeta: [{ id: 't1', name: 'Hot', color: '#2563eb' }] },
+      { tagMeta: [{ id: 't1', name: 'Hot', color: '#2563eb' }, { id: 't2', name: 'Warm', color: '#16a34a' }] },
+    ])
+    expect(tags.map((t) => t.id).sort()).toEqual(['t1', 't2'])
+  })
+})
+
+describe('mergeTagDefinitionLists', () => {
+  it('unions registry tags with entity tags by id', () => {
+    const merged = mergeTagDefinitionLists(
+      [{ id: 'mine', name: 'Mine', color: '#2563eb', createdAt: '2020-01-01' }],
+      [{ id: 'shared', name: 'Shared', color: '#16a34a' }],
+    )
+    expect(merged.map((t) => t.id).sort()).toEqual(['mine', 'shared'])
+  })
+
+  it('prefers registry entry when id already exists', () => {
+    const merged = mergeTagDefinitionLists(
+      [{ id: 't1', name: 'Registry Name', color: '#2563eb', createdAt: '2020-01-01' }],
+      [{ id: 't1', name: 'Other Name', color: '#16a34a' }],
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0].name).toBe('Registry Name')
+  })
+})
+
+describe('hydrateUserRegistryFromTagMeta', () => {
+  it('persists visible tags into user registry', async () => {
+    const store = new Map()
+    const kv = {
+      get: vi.fn(async (key) => store.get(key) ?? null),
+      set: vi.fn(async (key, val) => { store.set(key, val) }),
+    }
+
+    const { changed } = await hydrateUserRegistryFromTagMeta(kv, 'user-b', 'leads', [
+      { id: 'tag_shared', name: 'Follow up', color: '#2563eb' },
+    ])
+    expect(changed).toBe(true)
+    expect(kv.set).toHaveBeenCalledWith(
+      'user_tags_user-b',
+      expect.objectContaining({
+        leads: [expect.objectContaining({ id: 'tag_shared', name: 'Follow up' })],
+      }),
+    )
+  })
+})
+
+describe('mergeEntityTags', () => {
+  it('allows tag ids provided in body.tagMeta even when not in registry', () => {
+    const registry = emptyTagRegistry()
+    const result = mergeEntityTags(
+      {
+        tagIds: ['tag_shared'],
+        tagMeta: [{ id: 'tag_shared', name: 'Shared', color: '#2563eb' }],
+      },
+      { tagIds: [], tagMeta: [] },
+      registry,
+      'leads',
+    )
+    expect(result.tagIds).toEqual(['tag_shared'])
+    expect(result.tagMeta[0].name).toBe('Shared')
   })
 })

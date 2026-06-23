@@ -7,6 +7,7 @@ import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { getAllTeams, fullTeamsIndex } from './lib/teams.js'
 import { userHasTeamMembership } from './lib/access.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
+import { taskVisibleToUser, canManageTask, sharedViewerMayPatch } from './lib/taskAccess.js'
 
 let kv = null
 let kvAvailable = false
@@ -72,17 +73,6 @@ async function verifyFirebaseToken(idToken) {
   } catch {
     return null
   }
-}
-
-function taskVisibleToUser(task, user, membership) {
-  if (!task || !user) return false
-  if (task.ownerId === user.uid) return true
-  if ((task.assignedUids || []).includes(user.uid)) return true
-  if (membership && task.teamId === membership.id) {
-    if (task.visibility === 'team') return true
-    if (task.visibility === 'members' && (task.sharedMemberUids || []).includes(user.uid)) return true
-  }
-  return false
 }
 
 function normalizeAssignedUids(body, existing, membership) {
@@ -186,34 +176,40 @@ export default async function handler(req, res) {
       const idx = all.findIndex((t) => t.id === taskId)
       if (idx === -1) return res.status(404).json({ error: 'Task not found' })
       const task = all[idx]
-      if (task.ownerId !== user.uid && !(task.assignedUids || []).includes(user.uid)) {
+      if (!taskVisibleToUser(task, user, membership)) {
         return res.status(403).json({ error: 'No access to this task' })
       }
-      if (body.title !== undefined) task.title = String(body.title || '').trim() || task.title
-      if (body.scheduledAt !== undefined) task.scheduledAt = body.scheduledAt
-      if (body.scheduledEndAt !== undefined) task.scheduledEndAt = body.scheduledEndAt
-      if (body.notes !== undefined) task.notes = String(body.notes || '').trim() || null
-      if (body.assignedUids !== undefined) {
-        const prevAssigned = new Set(task.assignedUids || [])
-        try {
-          task.assignedUids = normalizeAssignedUids(body, task, membership)
-        } catch (e) {
-          return res.status(400).json({ error: e.message })
-        }
-        const newlyAssigned = (task.assignedUids || []).filter(
-          (uid) => uid !== user.uid && !prevAssigned.has(uid)
-        )
-        if (newlyAssigned.length) {
+      const isManager = canManageTask(task, user)
+      if (!isManager && !sharedViewerMayPatch(body)) {
+        return res.status(403).json({ error: 'You can only mark this shared task complete or incomplete' })
+      }
+      if (isManager) {
+        if (body.title !== undefined) task.title = String(body.title || '').trim() || task.title
+        if (body.scheduledAt !== undefined) task.scheduledAt = body.scheduledAt
+        if (body.scheduledEndAt !== undefined) task.scheduledEndAt = body.scheduledEndAt
+        if (body.notes !== undefined) task.notes = String(body.notes || '').trim() || null
+        if (body.assignedUids !== undefined) {
+          const prevAssigned = new Set(task.assignedUids || [])
           try {
-            const allTeams = await getAllTeams()
-            const { notifyTaskAssigned } = await import('./push-utils.js')
-            await notifyTaskAssigned(newlyAssigned, {
-              taskTitle: task.title,
-              taskId: task.id,
-              actorEmail: user.email,
-            }, fullTeamsIndex(allTeams))
-          } catch {
-            /* ignore */
+            task.assignedUids = normalizeAssignedUids(body, task, membership)
+          } catch (e) {
+            return res.status(400).json({ error: e.message })
+          }
+          const newlyAssigned = (task.assignedUids || []).filter(
+            (uid) => uid !== user.uid && !prevAssigned.has(uid)
+          )
+          if (newlyAssigned.length) {
+            try {
+              const allTeams = await getAllTeams()
+              const { notifyTaskAssigned } = await import('./push-utils.js')
+              await notifyTaskAssigned(newlyAssigned, {
+                taskTitle: task.title,
+                taskId: task.id,
+                actorEmail: user.email,
+              }, fullTeamsIndex(allTeams))
+            } catch {
+              /* ignore */
+            }
           }
         }
       }

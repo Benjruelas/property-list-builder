@@ -16,7 +16,7 @@ import {
   lastContactedAt,
   leadToParcelData,
 } from '@/utils/leads'
-import { filterByTags } from '@/utils/tags'
+import { filterByTags, buildFilterableTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
@@ -117,6 +117,11 @@ export function LeadsPanel({
   const statusCounts = leadAnalytics.counts
 
   const hasActiveFilters = !!(search.trim() || statusFilter || selectedTagIds.length > 0 || sortMode !== 'recent')
+
+  const filterTags = useMemo(
+    () => buildFilterableTags('leads', tagRegistry, leads),
+    [tagRegistry, leads],
+  )
 
   const filteredLeads = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -297,7 +302,7 @@ export function LeadsPanel({
                 />
               </div>
               <PanelFilterMenu
-                tags={tagRegistry.leads || []}
+                tags={filterTags}
                 selectedTagIds={selectedTagIds}
                 onTagIdsChange={setSelectedTagIds}
                 statusOptions={leadStatuses}
