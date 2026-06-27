@@ -49,7 +49,7 @@ export default async function handler(req, res) {
 
     const imgKey =
       variant === 'thumb'
-        ? photo.thumbnailKey || photo.annotatedKey || photo.key
+        ? photo.annotatedThumbnailKey || photo.thumbnailKey || photo.annotatedKey || photo.key
         : photo.annotatedKey || photo.key
 
     if (!imgKey) return res.status(404).json({ error: 'Photo file not found' })

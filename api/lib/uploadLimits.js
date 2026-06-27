@@ -23,6 +23,7 @@ export function sumLeadPhotoBytes(photos) {
       + (Number(p.size) || 0)
       + (Number(p.thumbnailSize) || 0)
       + (Number(p.annotatedSize) || 0)
+      + (Number(p.annotatedThumbnailSize) || 0)
   }, 0)
 }
 

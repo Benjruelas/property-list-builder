@@ -106,6 +106,7 @@ export async function saveLeadPhotoAnnotations(getToken, {
   photoId,
   annotations,
   annotatedBlob,
+  annotatedThumbnailBlob,
   existingPhotos = [],
 }) {
   const token = await getToken()
@@ -117,11 +118,16 @@ export async function saveLeadPhotoAnnotations(getToken, {
       throw new Error(`Annotated image must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`)
     }
     const existing = existingPhotos.find((p) => p.id === photoId)
-    const withoutAnnotated = sumLeadPhotoBytes(existingPhotos) - (Number(existing?.annotatedSize) || 0)
-    if (withoutAnnotated + annotatedBlob.size > ENTITY_STORAGE_LIMITS.lead) {
+    const oldAnnotatedBytes = (Number(existing?.annotatedSize) || 0) + (Number(existing?.annotatedThumbnailSize) || 0)
+    const newAnnotatedBytes = annotatedBlob.size + (annotatedThumbnailBlob?.size || 0)
+    const withoutAnnotated = sumLeadPhotoBytes(existingPhotos) - oldAnnotatedBytes
+    if (withoutAnnotated + newAnnotatedBytes > ENTITY_STORAGE_LIMITS.lead) {
       throw new Error(entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead))
     }
     body.annotatedBase64 = await blobToBase64(annotatedBlob)
+    if (annotatedThumbnailBlob) {
+      body.annotatedThumbnailBase64 = await blobToBase64(annotatedThumbnailBlob)
+    }
   }
 
   const res = await fetch(`${getApiBase()}/lead-photos`, {

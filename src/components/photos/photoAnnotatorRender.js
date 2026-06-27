@@ -1,15 +1,10 @@
 import { getTextLayoutLines, DEFAULT_TEXT_FONT_SIZE } from './annotationGeometry'
+import { exportCanvasVariants } from '@/utils/imageCompress'
 
 const DEFAULT_COLOR = '#ef4444'
 const DEFAULT_STROKE = 3
 
-export function renderFlatImage(image, objects, width, height) {
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  ctx.drawImage(image, 0, 0, width, height)
-
+function drawAnnotations(ctx, objects) {
   for (const obj of objects) {
     ctx.strokeStyle = obj.stroke || DEFAULT_COLOR
     ctx.fillStyle = obj.fill || 'transparent'
@@ -55,8 +50,20 @@ export function renderFlatImage(image, objects, width, height) {
       })
     }
   }
+}
 
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.9)
-  })
+export async function renderFlatImage(image, objects, width, height) {
+  const { file } = await renderFlatImageBlobs(image, objects, width, height)
+  return file
+}
+
+export async function renderFlatImageBlobs(image, objects, width, height) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(image, 0, 0, width, height)
+  drawAnnotations(ctx, objects)
+  const { file, thumbnail } = await exportCanvasVariants(canvas, width, height)
+  return { file, thumbnail }
 }

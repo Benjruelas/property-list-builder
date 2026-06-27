@@ -3,20 +3,37 @@ import {
   getPhotoAnnotationBaseKey,
   getPhotoPreviewKey,
   getPhotoThumbnailKey,
+  getPhotoThumbnailFetchKeys,
   getPhotoThumbSourceToken,
   shouldUseLocalPhotoPreview,
 } from '../photoDisplay'
 
 describe('photoDisplay', () => {
-  it('prefers annotated key for gallery preview and thumbnail', () => {
+  it('prefers annotated thumbnail key for gallery thumbnail', () => {
+    const photo = {
+      key: 'original',
+      thumbnailKey: 'thumb',
+      annotatedKey: 'annotated',
+      annotatedThumbnailKey: 'annotated-thumb',
+    }
+    expect(getPhotoPreviewKey(photo)).toBe('annotated')
+    expect(getPhotoThumbnailKey(photo)).toBe('annotated-thumb')
+    expect(getPhotoAnnotationBaseKey(photo)).toBe('original')
+    expect(getPhotoThumbnailFetchKeys(photo)).toEqual([
+      'annotated-thumb',
+      'annotated',
+      'thumb',
+      'original',
+    ])
+  })
+
+  it('falls back to annotated key when no annotated thumbnail', () => {
     const photo = {
       key: 'original',
       thumbnailKey: 'thumb',
       annotatedKey: 'annotated',
     }
-    expect(getPhotoPreviewKey(photo)).toBe('annotated')
     expect(getPhotoThumbnailKey(photo)).toBe('annotated')
-    expect(getPhotoAnnotationBaseKey(photo)).toBe('original')
   })
 
   it('falls back to thumbnail then original', () => {

@@ -1,7 +1,14 @@
-/** Prefer annotated flat render, then thumbnail/original for grid display. */
+/** Prefer small annotated thumb for grids, then fall back to larger keys. */
 export function getPhotoThumbnailKey(photo) {
   if (!photo) return null
-  return photo.annotatedKey || photo.thumbnailKey || photo.key || null
+  return photo.annotatedThumbnailKey || photo.annotatedKey || photo.thumbnailKey || photo.key || null
+}
+
+export function getPhotoThumbnailFetchKeys(photo) {
+  if (!photo) return []
+  return [...new Set(
+    [photo.annotatedThumbnailKey, photo.annotatedKey, photo.thumbnailKey, photo.key].filter(Boolean),
+  )]
 }
 
 /** Full-size preview: annotated render when available. */

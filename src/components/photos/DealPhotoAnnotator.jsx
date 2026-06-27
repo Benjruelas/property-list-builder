@@ -4,7 +4,7 @@ import { updatePhotoInList } from '@/utils/optimisticPhotoUpload'
 import { showToast } from '../ui/toast'
 import { normalizeAnnotationObjects } from '@/utils/photoAnnotations'
 import { PhotoAnnotatorEditor } from './PhotoAnnotatorEditor'
-import { renderFlatImage } from './photoAnnotatorRender'
+import { renderFlatImageBlobs } from './photoAnnotatorRender'
 import { getPhotoAnnotationBaseKey } from '@/utils/photoDisplay'
 
 export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, onClose, onSaved }) {
@@ -54,9 +54,10 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
     const snapshotDeal = deal
     setSaving(true)
 
+    let annotatedPreviewUrl = null
     try {
-      const annotatedBlob = await renderFlatImage(image, objects, image.width, image.height)
-      const annotatedPreviewUrl = URL.createObjectURL(annotatedBlob)
+      const { file, thumbnail } = await renderFlatImageBlobs(image, objects, image.width, image.height)
+      annotatedPreviewUrl = URL.createObjectURL(thumbnail)
       const optimisticPhoto = {
         ...photo,
         annotations,
@@ -76,12 +77,13 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
         dealId: deal.id,
         photoId: photo.id,
         annotations,
-        annotatedBlob,
+        annotatedBlob: file,
+        annotatedThumbnailBlob: thumbnail,
         existingPhotos: deal.photos || [],
       })
-      URL.revokeObjectURL(annotatedPreviewUrl)
       onSaved?.(updated, { complete: true })
     } catch (e) {
+      if (annotatedPreviewUrl) URL.revokeObjectURL(annotatedPreviewUrl)
       onSaved?.(snapshotDeal, { complete: true })
       showToast(e.message || 'Save failed', 'error')
     } finally {

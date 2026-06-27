@@ -212,12 +212,19 @@ export default async function handler(req, res) {
       const now = new Date().toISOString()
       let annotatedKey = existing.annotatedKey
       let annotatedSize = existing.annotatedSize || 0
+      let annotatedThumbnailKey = existing.annotatedThumbnailKey || null
+      let annotatedThumbnailSize = existing.annotatedThumbnailSize || 0
 
       if (body.annotatedBase64) {
         const annBuf = decodeBase64(body.annotatedBase64)
         if (!annBuf) return res.status(400).json({ error: 'Invalid annotated image' })
-        const withoutAnnotated = sumLeadPhotoBytes(photos) - (Number(existing.annotatedSize) || 0)
-        if (withoutAnnotated + annBuf.length > ENTITY_STORAGE_LIMITS.lead) {
+        const thumbBuf = body.annotatedThumbnailBase64
+          ? decodeBase64(body.annotatedThumbnailBase64, 512 * 1024)
+          : null
+        const oldAnnotatedBytes = (Number(existing.annotatedSize) || 0) + (Number(existing.annotatedThumbnailSize) || 0)
+        const newAnnotatedBytes = annBuf.length + (thumbBuf?.length || 0)
+        const withoutAnnotated = sumLeadPhotoBytes(photos) - oldAnnotatedBytes
+        if (withoutAnnotated + newAnnotatedBytes > ENTITY_STORAGE_LIMITS.lead) {
           return res.status(413).json({ error: entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead) })
         }
         annotatedKey = photoKey(ownerUid, leadId, photoId, 'annotated')
@@ -228,8 +235,20 @@ export default async function handler(req, res) {
           Body: annBuf,
           ContentType: 'image/jpeg',
         }))
+        if (thumbBuf) {
+          annotatedThumbnailKey = photoKey(ownerUid, leadId, photoId, 'annotated-thumb')
+          annotatedThumbnailSize = thumbBuf.length
+          await s3().send(new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: annotatedThumbnailKey,
+            Body: thumbBuf,
+            ContentType: 'image/jpeg',
+          }))
+        }
       } else if (body.clearAnnotated) {
         annotatedSize = 0
+        annotatedThumbnailSize = 0
+        annotatedThumbnailKey = null
       }
 
       photos[pIdx] = {
@@ -239,6 +258,12 @@ export default async function handler(req, res) {
           : existing.annotations,
         annotatedKey: body.annotatedBase64 ? annotatedKey : (body.clearAnnotated ? null : existing.annotatedKey),
         annotatedSize,
+        annotatedThumbnailKey: body.annotatedBase64
+          ? annotatedThumbnailKey
+          : (body.clearAnnotated ? null : existing.annotatedThumbnailKey),
+        annotatedThumbnailSize: body.annotatedBase64
+          ? annotatedThumbnailSize
+          : (body.clearAnnotated ? 0 : existing.annotatedThumbnailSize),
         updatedAt: now,
       }
 
@@ -297,7 +322,7 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: message })
       }
 
-      for (const k of [photo.key, photo.thumbnailKey, photo.annotatedKey].filter(Boolean)) {
+      for (const k of [photo.key, photo.thumbnailKey, photo.annotatedKey, photo.annotatedThumbnailKey].filter(Boolean)) {
         try {
           await s3().send(new DeleteObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME,
