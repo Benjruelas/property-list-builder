@@ -27,15 +27,16 @@ export {
 
 export { getCurrentPosition } from './leadPhotos'
 
-export function dealPhotoUrl(key) {
+export function dealPhotoUrl(key, cacheVersion = '') {
   if (!key) return ''
-  return `${getApiBase()}/deal-photos?key=${encodeURIComponent(key)}`
+  const base = `${getApiBase()}/deal-photos?key=${encodeURIComponent(key)}`
+  return cacheVersion ? `${base}&v=${encodeURIComponent(cacheVersion)}` : base
 }
 
-export async function fetchDealPhotoBlob(getToken, key) {
+export async function fetchDealPhotoBlob(getToken, key, cacheVersion = '') {
   const token = await getToken()
   if (!token) throw new Error('Sign in required')
-  const res = await fetch(dealPhotoUrl(key), {
+  const res = await fetch(dealPhotoUrl(key, cacheVersion), {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error('Could not load photo')

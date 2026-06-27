@@ -3,7 +3,9 @@
  * Loaded after index.css so list-panel transparent-button resets cannot win.
  */
 #modal-root .list-panel .quote-details-actions :is(button, a).quote-panel-action-btn,
-#modal-root .map-panel.list-panel .quote-details-actions :is(button, a).quote-panel-action-btn {
+#modal-root .map-panel.list-panel .quote-details-actions :is(button, a).quote-panel-action-btn,
+#modal-root .list-panel .report-editor-panel .quote-details-actions :is(button, a).quote-panel-action-btn,
+#modal-root .map-panel.list-panel.report-editor-panel .quote-details-actions :is(button, a).quote-panel-action-btn {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -101,4 +103,21 @@
   background-color: transparent !important;
   border-color: rgba(248, 113, 113, 0.58) !important;
   color: rgb(185, 28, 28) !important;
+}
+
+/* Report builder footer — horizontal action row */
+#modal-root .map-panel.list-panel.report-editor-panel .report-editor-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+#modal-root .map-panel.list-panel.report-editor-panel .report-editor-actions :is(button, a).quote-panel-action-btn {
+  width: auto !important;
+  flex: 1 1 6.5rem;
+  min-width: 0;
+  padding-inline: calc(0.5rem * var(--ui-touch-scale, 1)) !important;
+  font-size: calc(0.8125rem * var(--ui-touch-scale, 1)) !important;
 }

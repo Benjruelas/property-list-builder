@@ -11,9 +11,16 @@ export function taskVisibleToUser(task, user, membership) {
   return false
 }
 
-export function canManageTask(task, user) {
+export function canManageTask(task, user, membership = null) {
   if (!task || !user) return false
-  return task.ownerId === user.uid || (task.assignedUids || []).includes(user.uid)
+  if (task.ownerId === user.uid) return true
+  if ((task.assignedUids || []).includes(user.uid)) return true
+  if (!membership || task.teamId !== membership.id) return false
+  if (task.visibility === 'team') return true
+  if (task.visibility === 'members' && (task.sharedMemberUids || []).includes(user.uid)) {
+    return true
+  }
+  return false
 }
 
 const MANAGER_ONLY_PATCH_KEYS = [

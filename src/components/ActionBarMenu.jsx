@@ -206,13 +206,6 @@ export function ActionBarMenu({
         <MenuDivider />
 
         {currentUser ? (
-          <>
-            <div className="px-4 py-2 border-b hamburger-menu-user">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {currentUser.displayName || 'User'}
-              </p>
-              <p className="text-xs text-gray-600 truncate">{currentUser.email}</p>
-            </div>
             <button
               type="button"
               data-tour="menu-settings"
@@ -223,7 +216,6 @@ export function ActionBarMenu({
               <Settings className="h-4 w-4 flex-shrink-0" />
               <span>Settings</span>
             </button>
-          </>
         ) : (
           <button
             type="button"

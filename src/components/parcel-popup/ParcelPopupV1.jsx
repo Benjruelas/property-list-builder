@@ -56,7 +56,7 @@ export function ParcelPopupV1({
     <div
       ref={cardRef}
       className="fixed z-[10000] transition-all duration-300 ease-out"
-      style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)' }}
+      style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, calc(-100% - 40px))' }}
     >
       <div className="parcel-popup-card rounded-xl overflow-hidden min-w-[240px] max-w-[300px]">
         <div className="px-3 pt-3 pb-2 flex items-start gap-2">

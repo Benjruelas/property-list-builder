@@ -11,6 +11,8 @@ import { LeadPickerField } from './pickers/LeadPickerField'
 import { displayLeadName } from '@/utils/leads'
 import { filterDealsForLead } from './pickers/entityPickerShared'
 import { showToast } from './ui/toast'
+import { handleChildPanelDismiss } from './ui/panelDialogUtils'
+import { useNavigationOptional } from '@/navigation/NavigationContext'
 
 /**
  * Shared New task / Edit task panel — create mode matches Tasks panel (title, deal, lead, schedule, assign).
@@ -46,6 +48,7 @@ export function NewTaskDialog({
   leadAddress = '',
   headerSubtitle = null,
   onSubmit,
+  onCreateLead,
   nestedOverlay = true,
   topLayer = false,
 }) {
@@ -58,6 +61,11 @@ export function NewTaskDialog({
   const [teamAssignUids, setTeamAssignUids] = useState([])
   const wasOpenRef = useRef(false)
   const [pickerSession, setPickerSession] = useState(0)
+  const [pendingCreatedLead, setPendingCreatedLead] = useState(null)
+  const suppressDismissAfterCreateLeadRef = useRef(false)
+  const scheduleRef = useRef({ scheduledAt: null, scheduledEndAt: null })
+  const nav = useNavigationOptional()
+  const createLeadOpen = nav?.panelProps?.createLeadOpen ?? false
 
   const resolveLeadFromDeal = (deal) => {
     if (!deal) return null
@@ -96,11 +104,13 @@ export function NewTaskDialog({
   useEffect(() => {
     if (!open) {
       wasOpenRef.current = false
+      setPendingCreatedLead(null)
       return
     }
     if (wasOpenRef.current) return
     wasOpenRef.current = true
     setPickerSession((n) => n + 1)
+    setPendingCreatedLead(null)
     setTitle(initialTitle || '')
     const deal = initialDealId ? deals.find((d) => d.id === initialDealId) : null
     const leadFromDeal = deal ? resolveLeadFromDeal(deal) : null
@@ -108,6 +118,10 @@ export function NewTaskDialog({
     setDealId(initialDealId || null)
     setScheduledAt(initialScheduledAt ?? null)
     setScheduledEndAt(initialScheduledEndAt ?? null)
+    scheduleRef.current = {
+      scheduledAt: initialScheduledAt ?? null,
+      scheduledEndAt: initialScheduledEndAt ?? null,
+    }
     setDateTimeExpanded(
       initialDateTimeExpanded || !!(initialScheduledAt || initialScheduledEndAt)
     )
@@ -122,13 +136,29 @@ export function NewTaskDialog({
     if (lead && lead.id !== leadId) setLeadId(lead.id)
   }, [open, dealId, deals, leads, leadId])
 
-  const minScheduleDate = useMemo(() => (open ? Date.now() : 0), [open])
+  useEffect(() => {
+    if (!pendingCreatedLead?.id) return
+    if (leads.some((l) => l.id === pendingCreatedLead.id)) {
+      setPendingCreatedLead(null)
+    }
+  }, [leads, pendingCreatedLead])
 
-  const usesTeamStorage = teamAssignUids.length > 0
-  const isTeamContext = teamContextActive || usesTeamStorage
+  const minScheduleDate = useMemo(() => {
+    if (!open) return 0
+    if (isEditMode) return 0
+    return Date.now()
+  }, [open, isEditMode])
+
+  const pickerLeads = useMemo(() => {
+    if (!pendingCreatedLead?.id) return leads
+    if (leads.some((l) => l.id === pendingCreatedLead.id)) return leads
+    return [pendingCreatedLead, ...leads]
+  }, [leads, pendingCreatedLead])
+
+  const isDueAtOnlyTask = teamContextActive
   const selectedLead = useMemo(
-    () => (leadId ? leads.find((l) => l.id === leadId) : null),
-    [leads, leadId]
+    () => (leadId ? pickerLeads.find((l) => l.id === leadId) : null),
+    [pickerLeads, leadId]
   )
   const dealsForSelectedLead = useMemo(
     () => (leadId ? filterDealsForLead(deals, selectedLead) : deals),
@@ -140,18 +170,51 @@ export function NewTaskDialog({
   const showLeadField = showLeadPicker && !dealId
   const showDealField = showDealPicker && (!leadId || leadHasDeals || !!dealId)
   const pickerDeals = dealId ? deals : (leadId ? dealsForSelectedLead : deals)
+  const canCreateLead = showLeadField && onCreateLead && !lockLead
+
+  const handleDialogOpenChange = (nextOpen) => {
+    if (!nextOpen) {
+      if (suppressDismissAfterCreateLeadRef.current) {
+        suppressDismissAfterCreateLeadRef.current = false
+        return
+      }
+      handleChildPanelDismiss(nextOpen, () => onOpenChange?.(false), {
+        wasOpen: open,
+        hasNestedOverlay: createLeadOpen,
+      })
+      return
+    }
+    onOpenChange?.(true)
+  }
 
   const close = () => onOpenChange?.(false)
 
+  const setScheduledAtTracked = (value) => {
+    scheduleRef.current = { ...scheduleRef.current, scheduledAt: value }
+    setScheduledAt(value)
+  }
+
+  const setScheduledEndAtTracked = (value) => {
+    scheduleRef.current = { ...scheduleRef.current, scheduledEndAt: value }
+    setScheduledEndAt(value)
+  }
+
+  const flushScheduleFocus = () => {
+    const active = document.activeElement
+    if (active instanceof HTMLElement) active.blur()
+  }
+
   const handleSave = () => {
+    flushScheduleFocus()
     const trimmed = title.trim()
     if (!trimmed) {
       showToast('Enter a task title', 'error')
       return
     }
-    const endAt =
-      scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
-    if (!isTeamContext && endAt && scheduledAt && endAt <= scheduledAt) {
+    const at = scheduleRef.current.scheduledAt
+    const endRaw = scheduleRef.current.scheduledEndAt
+    const endAt = endRaw && endRaw > (at || 0) ? endRaw : null
+    if (!isDueAtOnlyTask && endAt && at && endAt <= at) {
       showToast('End time must be after start time', 'error')
       return
     }
@@ -159,7 +222,7 @@ export function NewTaskDialog({
     const resolvedLeadId = leadId || resolveLeadFromDeal(deal)?.id || null
     onSubmit?.({
       title: trimmed,
-      scheduledAt,
+      scheduledAt: at,
       scheduledEndAt: endAt,
       assignedUids: teamAssignUids,
       leadId: resolvedLeadId,
@@ -170,7 +233,7 @@ export function NewTaskDialog({
   const panelTitle = isEditMode ? 'Edit task' : 'New task'
 
   return (
-    <Dialog open={open} modal={false} onOpenChange={onOpenChange}>
+    <Dialog open={open} modal={false} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         className="map-panel list-panel new-task-panel fullscreen-panel flex flex-col min-h-0 p-0"
         showCloseButton={false}
@@ -239,13 +302,24 @@ export function NewTaskDialog({
             <LeadPickerField
               key={`lead-${pickerSession}`}
               collapsible
-              leads={leads}
+              leads={pickerLeads}
               value={leadId}
               onChange={(l) => {
                 if (dealId || lockLead) return
                 setLeadId(l?.id || null)
               }}
               readOnly={lockLead || !!dealId}
+              onCreateLead={
+                canCreateLead
+                  ? () => {
+                      suppressDismissAfterCreateLeadRef.current = true
+                      onCreateLead((lead) => {
+                        setPendingCreatedLead(lead)
+                        setLeadId(lead?.id ?? null)
+                      })
+                    }
+                  : undefined
+              }
             />
           )}
           {showDealField && (
@@ -286,9 +360,9 @@ export function NewTaskDialog({
                   inline
                   hideLabel
                   value={scheduledAt}
-                  onChange={setScheduledAt}
-                  endValue={isTeamContext ? null : scheduledEndAt}
-                  onEndChange={isTeamContext ? undefined : setScheduledEndAt}
+                  onChange={setScheduledAtTracked}
+                  endValue={isDueAtOnlyTask ? null : scheduledEndAt}
+                  onEndChange={isDueAtOnlyTask ? undefined : setScheduledEndAtTracked}
                   minDate={minScheduleDate}
                   leadName={leadName || contextPrimary}
                   leadAddress={leadAddress || contextTertiary || contextSecondary}
@@ -315,7 +389,13 @@ export function NewTaskDialog({
           className="new-task-form-footer shrink-0 flex gap-2 px-6 py-3 border-t border-white/20"
           style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          <Button size="sm" variant="outline" className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]" onClick={handleSave}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]"
+            onMouseDown={flushScheduleFocus}
+            onClick={handleSave}
+          >
             {isEditMode ? 'Save' : 'Create'}
           </Button>
           <Button size="sm" variant="outline" className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]" onClick={close}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Search, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -55,6 +55,7 @@ export function LeadPickerField({
   readOnly = false,
   collapsible = false,
   defaultExpanded = false,
+  onCreateLead,
   className = '',
 }) {
   const [search, setSearch] = useState('')
@@ -66,8 +67,11 @@ export function LeadPickerField({
   const filteredLeads = useMemo(() => filterLeads(leads, search), [leads, search])
 
   useEffect(() => {
-    if (value && selectedLead) setPickerOpen(false)
-  }, [value, selectedLead])
+    if (value && selectedLead) {
+      setPickerOpen(false)
+      if (collapsible) setSectionExpanded(false)
+    }
+  }, [value, selectedLead, collapsible])
 
   const selectLead = (lead) => {
     onChange?.(lead)
@@ -160,34 +164,51 @@ export function LeadPickerField({
     return (
       <div className={cn('entity-picker-field', className)}>
         <div className="rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setSectionExpanded((v) => !v)}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-white/90 hover:bg-white/5 transition-colors min-w-0"
-            aria-expanded={sectionExpanded}
-          >
-            {sectionExpanded ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
-            ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
-            )}
-            <span className="shrink-0">
-              {label}
-              {required && (
-                <>
-                  {' '}
-                  <span className="text-red-400" aria-label="required">
-                    *
-                  </span>
-                </>
+          <div className="flex items-center min-w-0">
+            <button
+              type="button"
+              onClick={() => setSectionExpanded((v) => !v)}
+              className="flex flex-1 items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-white/90 hover:bg-white/5 transition-colors min-w-0"
+              aria-expanded={sectionExpanded}
+            >
+              {sectionExpanded ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
               )}
-            </span>
-            {!sectionExpanded && selectedLead && (
-              <span className="ml-auto text-xs font-normal text-white/60 truncate min-w-0">
-                {displayLeadName(selectedLead)}
+              <span className="shrink-0">
+                {label}
+                {required && (
+                  <>
+                    {' '}
+                    <span className="text-red-400" aria-label="required">
+                      *
+                    </span>
+                  </>
+                )}
               </span>
+              {!sectionExpanded && selectedLead && (
+                <span className="ml-auto text-xs font-normal text-white/60 truncate min-w-0">
+                  {displayLeadName(selectedLead)}
+                </span>
+              )}
+            </button>
+            {sectionExpanded && onCreateLead && !readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 mr-1 opacity-60 hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCreateLead()
+                }}
+                aria-label="Create lead"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             )}
-          </button>
+          </div>
           {sectionExpanded && (
             <div className="border-t border-white/15 px-3 pb-3 pt-2">{pickerContent}</div>
           )}

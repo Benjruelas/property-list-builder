@@ -594,24 +594,31 @@ export function ReportsPanel({
         layoutTemplate={layoutTemplate}
         leadId={editorLeadId}
         leads={leads}
+        teams={teams}
+        teamMembership={teamMembership}
         getToken={getToken}
         onClose={onCloseEditor}
         onBack={onCloseEditor}
-        onSaved={(saved) => {
+        onSaved={(saved, options = {}) => {
           if (editorMode === 'template') {
             refresh()
-          } else {
-            setReports((prev) => {
-              const idx = prev.findIndex((r) => r.id === saved.id)
-              if (idx >= 0) {
-                const next = [...prev]
-                next[idx] = saved
-                return next
-              }
-              return [saved, ...prev]
-            })
+            onCloseEditor?.()
+            return
           }
-          onCloseEditor?.()
+          setReports((prev) => {
+            const idx = prev.findIndex((r) => r.id === saved.id)
+            if (idx >= 0) {
+              const next = [...prev]
+              next[idx] = saved
+              return next
+            }
+            return [saved, ...prev]
+          })
+          if (options.keepOpen) {
+            onPatchEditor?.({ report: saved, leadId: saved.leadId, awaitingTemplate: false })
+          } else {
+            onCloseEditor?.()
+          }
         }}
       />
 

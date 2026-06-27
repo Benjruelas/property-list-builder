@@ -179,7 +179,7 @@ export default async function handler(req, res) {
       if (!taskVisibleToUser(task, user, membership)) {
         return res.status(403).json({ error: 'No access to this task' })
       }
-      const isManager = canManageTask(task, user)
+      const isManager = canManageTask(task, user, membership)
       if (!isManager && !sharedViewerMayPatch(body)) {
         return res.status(403).json({ error: 'You can only mark this shared task complete or incomplete' })
       }

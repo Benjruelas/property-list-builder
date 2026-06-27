@@ -394,7 +394,15 @@ export function SettingsPanel({
 
         <div className="px-4 py-4 overflow-y-auto scrollbar-hide flex-1 space-y-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           {currentUser && (
-            <Section panelOpen={isOpen} icon={User} title="Your profile">
+            <Section panelOpen={isOpen} icon={User} title="Your profile" defaultOpen>
+              <div className="settings-profile-account rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5">
+                <p className="text-sm font-semibold truncate">
+                  {(currentUser.displayName || '').trim() || currentUser.email?.split('@')[0] || 'User'}
+                </p>
+                {currentUser.email && (
+                  <p className="text-xs opacity-60 truncate mt-0.5">{currentUser.email}</p>
+                )}
+              </div>
               <SettingRow
                 label="Your name"
                 description="Used when you send quotes and forms to clients (instead of your email)"

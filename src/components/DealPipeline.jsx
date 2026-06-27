@@ -23,7 +23,7 @@ import { DealDetails } from './DealDetails'
 import { LeadDetails } from './LeadDetails'
 import { canCollaborateOnPipeline, pipelinesUserCanWorkIn } from '@/utils/pipelines'
 import { CreatePipelineDialog } from './CreatePipelineDialog'
-import { displayLeadName, updateLead } from '@/utils/leads'
+import { displayLeadName, updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch } from '@/utils/leads'
 import { LeadSharingIcon, TeamSharedIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
 import { PipelineDealCard } from './DealRow'
@@ -126,6 +126,7 @@ export function DealPipeline({
   onRefreshTags,
   leadStatuses = [],
   editLeadId = null,
+  onCreateLead,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
@@ -338,8 +339,10 @@ export function DealPipeline({
 
   const handleLeadUpdate = useCallback(async (updated) => {
     onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
+    const payload = toLeadPatchBody(updated)
+    if (isLeadPhotosOnlyPatch(payload)) return
     try {
-      const saved = await updateLead(getToken, updated.id, updated)
+      const saved = await updateLead(getToken, updated.id, payload)
       onLeadsChange?.((prev) => prev.map((l) => (l.id === saved.id ? saved : l)))
     } catch (e) {
       showToast(e.message || 'Could not update lead', 'error')
@@ -1350,6 +1353,7 @@ export function DealPipeline({
         showTeamAssign={newTaskTeamMembers.length > 0}
         teamMembers={newTaskTeamMembers}
         onSubmit={commitNewTask}
+        onCreateLead={onCreateLead}
         nestedOverlay
       />
 
@@ -1363,6 +1367,7 @@ export function DealPipeline({
         initialTitle={editTask?.task?.title || ''}
         initialLeadId={editTaskFormIds.leadId}
         initialDealId={editTaskFormIds.dealId}
+        onCreateLead={onCreateLead}
         initialScheduledAt={
           editTask?.task
             ? editTask.task.__source === 'team'

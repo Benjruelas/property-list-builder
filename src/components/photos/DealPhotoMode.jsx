@@ -5,12 +5,12 @@ import { PanelBackButton } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { formatLeadAddress } from '@/utils/leads'
 import {
-  uploadDealPhoto,
   getCurrentPosition,
   sumDealPhotoBytes,
   DEAL_PHOTO_STORAGE_LIMIT_BYTES,
 } from '@/utils/dealPhotos'
 import { estimateDataUrlBytes } from '@/utils/uploadLimits'
+import { estimatePhotoBytes } from '@/utils/optimisticPhotoUpload'
 import { showToast } from '../ui/toast'
 import { StorageUsageBar } from '../ui/StorageUsageBar'
 import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
@@ -43,15 +43,6 @@ async function bindStreamToVideo(video, stream) {
   await video.play()
 }
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 export function DealPhotoMode({
   open,
   deal,
@@ -61,17 +52,20 @@ export function DealPhotoMode({
   currentUser,
   onClose,
   onPhotosUploaded,
+  onEnqueueUpload,
+  uploadingCount = 0,
 }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const fileInputRef = useRef(null)
   const [sessionThumbs, setSessionThumbs] = useState([])
-  const [uploading, setUploading] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
   const [useCamera, setUseCamera] = useState(false)
   const [cameraStarting, setCameraStarting] = useState(false)
   const [viewerIndex, setViewerIndex] = useState(null)
   const [currentPhotos, setCurrentPhotos] = useState(() => (Array.isArray(deal?.photos) ? deal.photos : []))
+
+  const canOptimisticUpload = typeof onEnqueueUpload === 'function'
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -150,39 +144,30 @@ export function DealPhotoMode({
     return canvas.toDataURL('image/jpeg', 0.92)
   }, [])
 
-  const buildMetadata = useCallback(async () => {
+  const buildUploadMeta = useCallback(async () => {
     const pos = await getCurrentPosition()
     const name = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User'
-    const addressLabel = deal.leadAddress || (lead ? formatLeadAddress(lead) : '') || ''
+    const addressLabel = deal?.leadAddress || (lead ? formatLeadAddress(lead) : '') || ''
     return {
+      capturedByUid: currentUser?.uid ?? null,
       capturedByName: name,
       lat: pos?.lat ?? lead?.lat ?? null,
       lng: pos?.lng ?? lead?.lng ?? null,
       addressLabel,
-      parcelId: deal.parcelId || lead?.parcelId || null,
+      parcelId: deal?.parcelId || lead?.parcelId || null,
     }
   }, [currentUser, deal, lead])
 
-  const uploadOne = useCallback(async (dataUrl, existingPhotos) => {
-    const metadata = await buildMetadata()
-    return uploadDealPhoto(getToken, {
-      pipelineId,
-      dealId: deal.id,
-      dataUrl,
-      existingPhotos,
-      metadata,
-    })
-  }, [getToken, pipelineId, deal.id, buildMetadata])
-
+  const basePhotos = canOptimisticUpload ? (deal?.photos || []) : currentPhotos
   const pendingSessionBytes = useMemo(
-    () => sessionThumbs.reduce((sum, src) => {
+    () => (canOptimisticUpload ? 0 : sessionThumbs.reduce((sum, src) => {
       if (src.startsWith('blob:')) return sum
       return sum + estimateDataUrlBytes(src)
-    }, 0),
-    [sessionThumbs],
+    }, 0)),
+    [sessionThumbs, canOptimisticUpload],
   )
 
-  const photosUsed = sumDealPhotoBytes(currentPhotos) + pendingSessionBytes
+  const photosUsed = sumDealPhotoBytes(basePhotos) + pendingSessionBytes
   const photosStorageFull = photosUsed >= DEAL_PHOTO_STORAGE_LIMIT_BYTES
 
   const sessionPreviewItems = useMemo(
@@ -203,17 +188,40 @@ export function DealPhotoMode({
 
   const addSessionDataUrl = useCallback((dataUrl) => {
     const nextPending = pendingSessionBytes + estimateDataUrlBytes(dataUrl)
-    if (sumDealPhotoBytes(currentPhotos) + nextPending > DEAL_PHOTO_STORAGE_LIMIT_BYTES) {
+    const usedPhotos = canOptimisticUpload ? (deal?.photos || []) : currentPhotos
+    if (sumDealPhotoBytes(usedPhotos) + nextPending > DEAL_PHOTO_STORAGE_LIMIT_BYTES) {
       showToast('Deal photo storage limit reached', 'error')
       return false
     }
     setSessionThumbs((prev) => [...prev, dataUrl])
     return true
-  }, [currentPhotos, pendingSessionBytes])
+  }, [currentPhotos, deal?.photos, pendingSessionBytes, canOptimisticUpload])
+
+  const enqueueSource = useCallback(async (source, entityOverride = null, extraMeta = {}) => {
+    if (!onEnqueueUpload) return false
+    const target = entityOverride || deal
+    const usedPhotos = target?.photos || currentPhotos
+    const bytes = estimatePhotoBytes(source)
+    if (sumDealPhotoBytes(usedPhotos) + bytes > DEAL_PHOTO_STORAGE_LIMIT_BYTES) {
+      showToast('Deal photo storage limit reached', 'error')
+      return false
+    }
+    const meta = { ...(await buildUploadMeta()), ...extraMeta, estimatedBytes: bytes }
+    if (!meta.localPreviewUrl && typeof source !== 'string' && typeof File !== 'undefined' && source instanceof File) {
+      meta.localPreviewUrl = URL.createObjectURL(source)
+    }
+    onEnqueueUpload(source, meta, target)
+    return true
+  }, [onEnqueueUpload, buildUploadMeta, deal, currentPhotos])
 
   const handleCapture = async () => {
     const dataUrl = captureFromVideo()
     if (!dataUrl) return
+    if (canOptimisticUpload) {
+      if (!addSessionDataUrl(dataUrl)) return
+      await enqueueSource(dataUrl)
+      return
+    }
     addSessionDataUrl(dataUrl)
   }
 
@@ -222,61 +230,25 @@ export function DealPhotoMode({
     e.target.value = ''
     if (!files.length) return
 
-    setUploading(true)
-    try {
-      let lastDeal = deal
-      let runningPhotos = currentPhotos
-      for (const file of files) {
-        const metadata = await buildMetadata()
-        const result = await uploadDealPhoto(getToken, {
-          pipelineId,
-          dealId: deal.id,
-          file,
-          existingPhotos: runningPhotos,
-          metadata,
-        })
-        lastDeal = result.deal
-        runningPhotos = result.deal?.photos || runningPhotos
-        setSessionThumbs((prev) => [...prev, URL.createObjectURL(file)])
+    if (canOptimisticUpload) {
+      try {
+        for (const file of files) {
+          const preview = URL.createObjectURL(file)
+          if (!addSessionDataUrl(preview)) {
+            URL.revokeObjectURL(preview)
+            break
+          }
+          await enqueueSource(file, null, { localPreviewUrl: preview })
+        }
+      } catch (err) {
+        showToast(err.message || 'Could not add photo', 'error')
       }
-      setCurrentPhotos(runningPhotos)
-      onPhotosUploaded?.(lastDeal)
-      showToast(files.length === 1 ? 'Photo uploaded' : `${files.length} photos uploaded`, 'success')
-    } catch (err) {
-      showToast(err.message || 'Upload failed', 'error')
-    } finally {
-      setUploading(false)
+      return
     }
   }
 
-  const handleDone = async () => {
-    if (sessionThumbs.length === 0) {
-      onClose?.()
-      return
-    }
-    setUploading(true)
-    try {
-      let lastDeal = deal
-      let runningPhotos = currentPhotos
-      let count = 0
-      for (const dataUrl of sessionThumbs) {
-        if (dataUrl.startsWith('blob:')) continue
-        const result = await uploadOne(dataUrl, runningPhotos)
-        lastDeal = result.deal
-        runningPhotos = result.deal?.photos || runningPhotos
-        count += 1
-      }
-      setCurrentPhotos(runningPhotos)
-      if (count > 0) {
-        onPhotosUploaded?.(lastDeal)
-        showToast(count === 1 ? 'Photo uploaded' : `${count} photos uploaded`, 'success')
-      }
-      onClose?.()
-    } catch (err) {
-      showToast(err.message || 'Upload failed', 'error')
-    } finally {
-      setUploading(false)
-    }
+  const handleDone = () => {
+    onClose?.()
   }
 
   const handleBack = () => {
@@ -319,16 +291,17 @@ export function DealPhotoMode({
               <PanelBackButton onClick={handleBack} title="Exit photo mode" />
               <div className="min-w-0 flex-1 px-2">
                 <div className="text-sm font-semibold truncate">{headerTitle}</div>
-                <div className="text-xs opacity-50 truncate">{headerSubtitle}</div>
+                <div className="text-xs opacity-50 truncate">
+                  {headerSubtitle}
+                  {uploadingCount > 0 && ` · ${uploadingCount} uploading`}
+                </div>
               </div>
               <Button
                 type="button"
-                size="sm"
-                className="photo-mode-btn photo-mode-btn--primary shrink-0 min-h-[36px]"
+                className="photo-overlay-header-btn photo-mode-btn photo-mode-btn--primary shrink-0"
                 onClick={handleDone}
-                disabled={uploading}
               >
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+                <Check className="h-4 w-4 mr-1" />
                 Done
               </Button>
             </div>
@@ -358,7 +331,7 @@ export function DealPhotoMode({
                     type="button"
                     className="photo-mode-btn min-h-[44px]"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading || photosStorageFull}
+                    disabled={photosStorageFull}
                   >
                     Choose photos
                   </Button>

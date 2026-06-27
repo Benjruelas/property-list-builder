@@ -29,6 +29,7 @@ import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validat
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
 import { resolveParcelId } from './utils/parcelPropertyMap'
+import { resolveParcelCenter } from './utils/parcelGeometry'
 import { resolveLeadParcelAtLocation, parcelDataFromLandRecords } from './utils/resolveLeadParcel'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { computeOwnerOccupied } from './utils/ownerOccupied'
@@ -55,7 +56,7 @@ import { PublicFormPage } from './components/forms/PublicFormPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
 import { PublicReportPage } from './components/reports/PublicReportPage'
 import { LeadPickerDialog } from './components/photos/LeadPickerDialog'
-import { PhotoMode } from './components/photos/PhotoMode'
+import { LeadPhotoModeContainer } from './components/photos/LeadPhotoModeContainer'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
 import { buildPathColorMap } from './utils/pathColors'
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
@@ -389,6 +390,7 @@ function App() {
   const [leads, setLeads] = useState([])
   const [leadsLoading, setLeadsLoading] = useState(false)
   const leadsRef = useRef(leads)
+  const leadPickerCreateCallbackRef = useRef(null)
   const [tagRegistry, setTagRegistry] = useState({ leads: [], deals: [], paths: [], lists: [] })
   const [editLead, setEditLead] = useState(null)
   const [closedDeals, setClosedDeals] = useState(() => loadClosedDeals())
@@ -445,6 +447,29 @@ function App() {
   const parcelFetchAbortRef = useRef(null)
   const parcelRecenterTimerRef = useRef(null)
   const programmaticMoveRef = useRef(false)
+
+  const centerMapOnParcel = useCallback(({
+    lat,
+    lng,
+    zoom,
+    duration = 500,
+    mode = 'ease',
+    onComplete,
+  } = {}) => {
+    const map = mapInstanceRef.current
+    if (!map || lat == null || lng == null) return
+    programmaticMoveRef.current = true
+    const opts = { center: [lng, lat], duration, essential: true }
+    if (zoom != null) opts.zoom = zoom
+    if (mode === 'fly') map.flyTo(opts)
+    else map.easeTo(opts)
+    const clearProgrammatic = () => { programmaticMoveRef.current = false }
+    map.once('moveend', () => {
+      clearProgrammatic()
+      onComplete?.()
+    })
+    setTimeout(clearProgrammatic, duration + 150)
+  }, [])
 
   const cancelParcelPopupWork = useCallback(() => {
     currentPopupRef.current = null
@@ -1396,11 +1421,19 @@ function App() {
     })
   }, [currentUser, leads, nav, guardFeature])
 
-  const handleLeadCreated = useCallback((lead) => {
+  const handleLeadCreated = useCallback(async (lead) => {
+    const pickerCb = leadPickerCreateCallbackRef.current
+    leadPickerCreateCallbackRef.current = null
     setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
-    refreshLeads()
-    nav.popModal()
-  }, [refreshLeads, nav])
+    pickerCb?.(lead)
+    await refreshLeads()
+    setLeads((prev) => (prev.some((l) => l.id === lead.id) ? prev : [...prev, lead]))
+  }, [refreshLeads])
+
+  const openCreateLeadForPicker = useCallback((onCreated) => {
+    leadPickerCreateCallbackRef.current = typeof onCreated === 'function' ? onCreated : null
+    guardFeature('leads', () => nav.pushModal({ type: 'createLead', prefill: null }))
+  }, [guardFeature, nav])
 
   const handleLeadUpdated = useCallback((lead) => {
     setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)))
@@ -2139,7 +2172,6 @@ function App() {
   }, [lists, skipTracingInProgress])
 
   const openParcelPopup = useCallback((data) => {
-    setMapHighlightedParcelId(null)
     const overlay = buildPopupOverlay(data)
     if (overlay) nav.showParcelPopup(overlay)
   }, [buildPopupOverlay, nav])
@@ -2173,10 +2205,12 @@ function App() {
       return
     }
 
-    const { latlng, properties: tileProperties = {}, parcelId: eventParcelId } = event
+    const { latlng, properties: tileProperties = {}, parcelId: eventParcelId, geometry } = event
     const tileParcelId = eventParcelId || tileProperties.PROP_ID || `${latlng.lat.toFixed(6)}-${latlng.lng.toFixed(6)}`
     const requestId = tileParcelId
     currentPopupRef.current = requestId
+    const parcelCenter = resolveParcelCenter({ latlng, properties: tileProperties, geometry })
+      ?? { lat: latlng.lat, lng: latlng.lng }
 
     const tileDisplay = resolveParcelDisplayAddress(tileProperties)
     const hasTileData = tileDisplay.hasStreetAddress || !!(tileProperties.OWNER_NAME || '').trim()
@@ -2185,8 +2219,8 @@ function App() {
       properties: tileProperties,
       address: hasTileData ? tileDisplay.title : 'Loading…',
       addressDisplay: hasTileData ? tileDisplay : undefined,
-      lat: latlng.lat,
-      lng: latlng.lng,
+      lat: parcelCenter.lat,
+      lng: parcelCenter.lng,
     })
 
     const applyLandRecordsParcel = (result) => {
@@ -2199,12 +2233,12 @@ function App() {
         properties: apiProperties,
         address: display.title,
         addressDisplay: display,
-        lat: latlng.lat,
-        lng: latlng.lng,
+        lat: parcelCenter.lat,
+        lng: parcelCenter.lng,
       }
     }
 
-    const loadLandRecordsParcel = () => {
+    const loadLandRecordsParcel = (onParcelReady) => {
       parcelFetchAbortRef.current?.abort()
       const controller = new AbortController()
       parcelFetchAbortRef.current = controller
@@ -2228,13 +2262,13 @@ function App() {
             newMap.set(key, {
               id: parcelData.id,
               properties: parcelData.properties,
-              latlng,
+              latlng: parcelCenter,
               address: parcelData.address,
             })
             return newMap
           })
         } else {
-          presentParcelOnMap(parcelData)
+          onParcelReady?.(parcelData)
         }
       }).catch((err) => {
         if (err?.name === 'AbortError') return
@@ -2261,7 +2295,7 @@ function App() {
             newMap.set(tileParcelId, {
               id: tileParcelId,
               properties: initial.properties,
-              latlng: latlng,
+              latlng: parcelCenter,
               address: initial.address,
             })
             return newMap
@@ -2271,21 +2305,37 @@ function App() {
         return newSet
       })
     } else {
-      presentParcelOnMap(buildTileParcelData())
-      loadLandRecordsParcel()
+      nav.clearMapOverlays()
+      const featureStateId = event.lrid || tileProperties.lrid || tileParcelId
+      parcelLayerRef.current?.applyClickedHighlight?.(featureStateId, tileParcelId)
+
+      let pendingParcelData = buildTileParcelData()
+      let recentered = false
+
+      const presentWhenCentered = (data) => {
+        if (currentPopupRef.current !== requestId || !data) return
+        pendingParcelData = data
+        if (!recentered) return
+        presentParcelOnMap(data)
+      }
+
+      loadLandRecordsParcel(presentWhenCentered)
+
       if (parcelRecenterTimerRef.current) clearTimeout(parcelRecenterTimerRef.current)
-      parcelRecenterTimerRef.current = setTimeout(() => {
-        parcelRecenterTimerRef.current = null
-        if (currentPopupRef.current !== requestId) return
-        const map = mapInstanceRef.current
-        if (!map) return
-        programmaticMoveRef.current = true
-        map.easeTo({ center: [latlng.lng, latlng.lat], duration: 500 })
-        setTimeout(() => { programmaticMoveRef.current = false }, 600)
-      }, 300)
+      centerMapOnParcel({
+        lat: parcelCenter.lat,
+        lng: parcelCenter.lng,
+        duration: 500,
+        mode: 'ease',
+        onComplete: () => {
+          recentered = true
+          parcelLayerRef.current?.reapplyClickedHighlight?.()
+          presentWhenCentered(pendingParcelData)
+        },
+      })
     }
     
-  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, presentParcelOnMap, nav])
+  }, [isMultiSelectActive, lists, currentUser, authLoading, mapInstanceRef, skipTracingInProgress, showToast, presentParcelOnMap, nav, centerMapOnParcel])
 
   // Add single parcel to list (called from popup button)
   const handleAddSingleParcelToList = useCallback(async (listId) => {
@@ -2457,9 +2507,13 @@ function App() {
   const scheduleParcelHighlight = useCallback((lat, lng, preferredId = null) => {
     const attempt = () => {
       const hit = parcelLayerRef.current?.queryParcelFeatureAtLocation?.(lat, lng)
-      const id = preferredId || hit?.id
-      if (id) {
-        setMapHighlightedParcelId(id)
+      const paintId = preferredId || hit?.id
+      const featureId = hit?.lrid || hit?.id || paintId
+      if (paintId) {
+        setMapHighlightedParcelId(paintId)
+        if (featureId) {
+          parcelLayerRef.current?.applyClickedHighlight?.(featureId, paintId)
+        }
         return true
       }
       return false
@@ -2483,12 +2537,12 @@ function App() {
 
   const handleGoToParcelOnMap = useCallback((raw) => {
     if (!raw) return
-    const lat = Number(raw.lat ?? raw.latlng?.lat ?? raw.properties?.LATITUDE ?? raw.properties?.latitude)
-    const lng = Number(raw.lng ?? raw.latlng?.lng ?? raw.properties?.LONGITUDE ?? raw.properties?.longitude)
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    const parcelCenter = resolveParcelCenter(raw)
+    if (!parcelCenter) {
       showToast('No map location for this lead', 'error')
       return
     }
+    const { lat, lng } = parcelCenter
 
     const parcelId = raw.parcelId || raw.id || resolveParcelId(raw) || ''
 
@@ -2501,17 +2555,16 @@ function App() {
       setMapHighlightedParcelId(parcelId)
     }
 
-    const map = mapInstanceRef.current
     const flyZoom = 18
-    if (map) {
-      programmaticMoveRef.current = true
-      map.flyTo({ center: [lng, lat], zoom: flyZoom, duration: 700, essential: true })
-      map.once('moveend', () => {
-        programmaticMoveRef.current = false
-        scheduleParcelHighlight(lat, lng, parcelId || null)
-      })
-      setTimeout(() => { programmaticMoveRef.current = false }, 800)
-    } else {
+    centerMapOnParcel({
+      lat,
+      lng,
+      zoom: flyZoom,
+      duration: 700,
+      mode: 'fly',
+      onComplete: () => scheduleParcelHighlight(lat, lng, parcelId || null),
+    })
+    if (!mapInstanceRef.current) {
       scheduleParcelHighlight(lat, lng, parcelId || null)
     }
 
@@ -2535,7 +2588,7 @@ function App() {
       .catch((err) => {
         if (err?.name === 'AbortError') return
       })
-  }, [cancelParcelPopupWork, closeAllPanelsForMap, nav, scheduleParcelHighlight, showToast])
+  }, [cancelParcelPopupWork, closeAllPanelsForMap, nav, scheduleParcelHighlight, showToast, centerMapOnParcel])
 
   const handleOpenParcelDetails = useCallback((parcelData = null) => {
     if (authLoading) return
@@ -2612,6 +2665,7 @@ function App() {
     if (!isParcelDetailsOpenRef.current) {
       cancelParcelPopupWork()
       setMapHighlightedParcelId(null)
+      parcelLayerRef.current?.clearClickedHighlight?.()
       nav.clearMapOverlays()
     } else {
       nav.patchTopOverlay({ popupData: null })
@@ -3904,6 +3958,7 @@ function App() {
         canAccessPhotos={canAccessFeature('photos')}
         onEditLead={handleEditLead}
         editLeadId={editLead?.id ?? null}
+        onCreateLead={openCreateLeadForPicker}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
         leadStatuses={leadStatuses}
@@ -3947,6 +4002,7 @@ function App() {
         teams={teams}
         teamMembership={teamMembership}
         onEditLead={handleEditLead}
+        onCreateLead={openCreateLeadForPicker}
       />
       </Suspense>
       )}
@@ -3987,6 +4043,7 @@ function App() {
           if (!lead?.id) return
           guardFeature('leads', () => nav.openLeadDetailFromTasks(lead.id))
         }}
+        onCreateLead={openCreateLeadForPicker}
       />
       </Suspense>
       )}
@@ -4177,15 +4234,14 @@ function App() {
       />
 
       {photoModeLead && (
-        <PhotoMode
-          open
+        <LeadPhotoModeContainer
           lead={photoModeLead}
           parcelId={photoModeParcelId}
           addressLabel={photoModeAddress}
           getToken={getToken}
           currentUser={currentUser}
           onClose={closePhotoMode}
-          onPhotosUploaded={(updatedLead) => {
+          onLeadChange={(updatedLead) => {
             setLeads((prev) => prev.map((l) => (l.id === updatedLead.id ? updatedLead : l)))
             setPhotoModeLead(updatedLead)
           }}
@@ -4404,6 +4460,7 @@ function App() {
         onOpenChange={(v) => {
           if (!v) {
             setEditLead(null)
+            leadPickerCreateCallbackRef.current = null
             if (createLeadOpen) nav.popModal()
           }
         }}
@@ -4417,7 +4474,7 @@ function App() {
         teams={teams}
         teamMembership={teamMembership}
         nestedOverlay={!!editLead || createLeadOpen}
-        topLayer={!!editLead}
+        topLayer={createLeadOpen || !!editLead}
         confirmLayer={!!editLead}
       />
 

@@ -53,6 +53,7 @@ import { TagPicker } from './tags/TagPicker'
 import { collectTagMetaFromEntities } from '@/utils/tags'
 import { LeadPhotoGallery } from './photos/LeadPhotoGallery'
 import { fetchPhotoReports } from '@/utils/photoReports'
+import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
 import { getLeadPhones, getLeadEmails, getLeadPhoneDetails, getLeadEmailDetails } from '@/utils/leadContact'
 import { LeadContactActionTile } from './leads/LeadContactActionTile'
@@ -208,6 +209,7 @@ export function LeadDetails({
   const [savingNote, setSavingNote] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
   const [leadReports, setLeadReports] = useState([])
+  const [leadReportsLoading, setLeadReportsLoading] = useState(false)
   const [contactPickerOpen, setContactPickerOpen] = useState(false)
   const contactPickerDepthRef = useRef(0)
   const handleContactPickerOpenChange = useCallback((open) => {
@@ -239,15 +241,19 @@ export function LeadDetails({
   useEffect(() => {
     if (!lead?.id || !getToken || !canAccessReports || !onOpenPhotoReport) {
       setLeadReports([])
+      setLeadReportsLoading(false)
       return undefined
     }
     let cancelled = false
+    setLeadReportsLoading(true)
     ;(async () => {
       try {
         const list = await fetchPhotoReports(getToken, { leadId: lead.id })
         if (!cancelled) setLeadReports(Array.isArray(list) ? list : [])
       } catch {
         if (!cancelled) setLeadReports([])
+      } finally {
+        if (!cancelled) setLeadReportsLoading(false)
       }
     })()
     return () => { cancelled = true }
@@ -804,32 +810,47 @@ export function LeadDetails({
                         onClick={() => onCreatePhotoReport(lead.id)}
                       >
                         <Plus className="h-3.5 w-3.5 mr-1" />
-                        Create report
+                        Create
                       </Button>
                     )}
                   >
                     Reports
                   </LeadDetailSectionTitle>
-                  {leadReports.length === 0 ? (
-                    <p className="text-xs text-white/40 py-1">No reports yet</p>
+                  {leadReportsLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-xs opacity-50">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                      Loading reports…
+                    </div>
+                  ) : leadReports.length === 0 ? (
+                    <p className="text-xs text-white/40">No reports yet</p>
                   ) : (
                     <ul className="space-y-1.5">
-                      {leadReports.map((report) => (
-                        <li key={report.id}>
-                          <button
-                            type="button"
-                            onClick={() => onOpenPhotoReport?.(report.id)}
-                            className="lead-detail-deal-card w-full"
-                          >
-                            <FileText className="h-4 w-4 shrink-0 opacity-50" />
-                            <div className="flex-1 min-w-0 text-left">
-                              <div className="text-sm font-medium truncate">{report.title || 'Report'}</div>
-                              <div className="text-[11px] text-white/45 mt-0.5">{report.status || 'draft'}</div>
-                            </div>
-                            <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
-                          </button>
-                        </li>
-                      ))}
+                      {leadReports.map((report) => {
+                        const sectionCount = (report.sections || []).length
+                        return (
+                          <li key={report.id}>
+                            <button
+                              type="button"
+                              disabled={!onOpenPhotoReport}
+                              onClick={() => onOpenPhotoReport?.(report.id)}
+                              className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
+                            >
+                              <FileText className="h-4 w-4 shrink-0 opacity-50" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{report.title || 'Report'}</div>
+                                <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
+                                  <QuoteStatusBadge status={report.status || 'draft'} />
+                                  <span>{sectionCount} section{sectionCount === 1 ? '' : 's'}</span>
+                                  {report.updatedAt && (
+                                    <span>{new Date(report.updatedAt).toLocaleDateString()}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
+                            </button>
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
                 </section>

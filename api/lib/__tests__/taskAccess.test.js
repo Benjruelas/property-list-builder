@@ -22,11 +22,18 @@ describe('taskAccess', () => {
     sharedMemberUids: ['shared-1'],
   }
 
-  it('allows owner and assignees to manage tasks', () => {
+  it('allows owner, assignees, and shared viewers to manage tasks', () => {
     expect(canManageTask(baseTask, owner)).toBe(true)
     expect(canManageTask(baseTask, assignee)).toBe(true)
-    expect(canManageTask(baseTask, sharedMember)).toBe(false)
-    expect(canManageTask(baseTask, teammate)).toBe(false)
+    expect(canManageTask(baseTask, sharedMember, team)).toBe(true)
+    expect(canManageTask(baseTask, teammate, team)).toBe(false)
+    expect(canManageTask(baseTask, outsider, null)).toBe(false)
+  })
+
+  it('allows all teammates to manage team-visible tasks', () => {
+    const task = { ...baseTask, visibility: 'team', sharedMemberUids: [], assignedUids: [] }
+    expect(canManageTask(task, teammate, team)).toBe(true)
+    expect(canManageTask(task, owner, team)).toBe(true)
   })
 
   it('shows team-visible tasks to all teammates', () => {

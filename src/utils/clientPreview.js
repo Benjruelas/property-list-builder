@@ -84,11 +84,38 @@ export async function fetchClientPreviewUrl(getToken, { type, id }) {
   return data.publicUrl
 }
 
-export function openClientPreviewUrl(publicUrl) {
-  if (!publicUrl || typeof window === 'undefined') return
+/** Open a blank tab synchronously during the user click (before any await). */
+export function prepareClientPreviewTab() {
+  if (typeof window === 'undefined') return null
   markClientPreviewOpened()
-  const opened = window.open(publicUrl, '_blank', 'noopener,noreferrer')
-  if (!opened) {
-    window.location.href = publicUrl
+  // Do not pass noopener — the opener must navigate this tab after async work.
+  return window.open('about:blank', '_blank')
+}
+
+export function closeClientPreviewTab(previewWindow) {
+  try {
+    previewWindow?.close()
+  } catch {
+    /* ignore */
   }
+}
+
+export function openClientPreviewUrl(publicUrl, previewWindow = null) {
+  if (!publicUrl || typeof window === 'undefined') return false
+  markClientPreviewOpened()
+  if (previewWindow && !previewWindow.closed) {
+    try {
+      previewWindow.location.href = publicUrl
+      try {
+        previewWindow.opener = null
+      } catch {
+        /* ignore */
+      }
+      return true
+    } catch {
+      /* fall through to window.open */
+    }
+  }
+  const opened = window.open(publicUrl, '_blank', 'noopener,noreferrer')
+  return !!opened
 }

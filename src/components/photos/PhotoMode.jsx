@@ -6,9 +6,9 @@ import { Button } from '../ui/button'
 import { AddressAutocompleteField } from '../AddressAutocompleteField'
 import { ResourceSharePicker } from '../ResourceSharePicker'
 import { displayLeadName, formatLeadAddress, createLead } from '@/utils/leads'
-import { uploadLeadPhoto, getCurrentPosition, sumLeadPhotoBytes, LEAD_STORAGE_LIMIT_BYTES } from '@/utils/leadPhotos'
+import { getCurrentPosition, sumLeadPhotoBytes, LEAD_STORAGE_LIMIT_BYTES } from '@/utils/leadPhotos'
 import { estimateDataUrlBytes } from '@/utils/uploadLimits'
-import { logLeadPhotosAdded } from '@/utils/leadActivity'
+import { estimatePhotoBytes } from '@/utils/optimisticPhotoUpload'
 import { VISIBILITY } from '@/utils/access'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from '../ui/toast'
@@ -77,6 +77,8 @@ export function PhotoMode({
   currentUser,
   onClose,
   onPhotosUploaded,
+  onEnqueueUpload,
+  uploadingCount = 0,
   onLeadCreated,
   teams = [],
   teamMembership = null,
@@ -202,32 +204,31 @@ export function PhotoMode({
     return canvas.toDataURL('image/jpeg', 0.92)
   }, [])
 
-  const uploadOne = useCallback(async (dataUrl, existingPhotos, leadId) => {
+  const buildUploadMeta = useCallback(async () => {
     const pos = await getCurrentPosition()
     const name = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User'
-    return uploadLeadPhoto(getToken, {
-      leadId,
-      dataUrl,
-      existingPhotos,
-      metadata: {
-        capturedByName: name,
-        lat: pos?.lat ?? lead.lat ?? null,
-        lng: pos?.lng ?? lead.lng ?? null,
-        addressLabel: addressLabel || formatLeadAddress(lead) || lead.address || '',
-        parcelId: parcelId || lead.parcelId || null,
-      },
-    })
-  }, [getToken, lead, parcelId, addressLabel, currentUser])
+    return {
+      capturedByUid: currentUser?.uid ?? null,
+      capturedByName: name,
+      lat: pos?.lat ?? lead?.lat ?? null,
+      lng: pos?.lng ?? lead?.lng ?? null,
+      addressLabel: addressLabel || formatLeadAddress(lead) || lead?.address || '',
+      parcelId: parcelId || lead?.parcelId || null,
+    }
+  }, [currentUser, lead, parcelId, addressLabel])
 
+  const canOptimisticUpload = !isDraft && typeof onEnqueueUpload === 'function'
+
+  const basePhotos = canOptimisticUpload ? (lead?.photos || []) : currentPhotos
   const pendingSessionBytes = useMemo(
-    () => sessionThumbs.reduce((sum, src) => {
+    () => (canOptimisticUpload ? 0 : sessionThumbs.reduce((sum, src) => {
       if (src.startsWith('blob:')) return sum
       return sum + estimateDataUrlBytes(src)
-    }, 0),
-    [sessionThumbs],
+    }, 0)),
+    [sessionThumbs, canOptimisticUpload],
   )
 
-  const photosUsed = sumLeadPhotoBytes(currentPhotos) + pendingSessionBytes
+  const photosUsed = sumLeadPhotoBytes(basePhotos) + pendingSessionBytes
   const photosStorageFull = photosUsed >= LEAD_STORAGE_LIMIT_BYTES
 
   const sessionPreviewItems = useMemo(
@@ -248,17 +249,39 @@ export function PhotoMode({
 
   const addSessionDataUrl = useCallback((dataUrl) => {
     const nextPending = pendingSessionBytes + estimateDataUrlBytes(dataUrl)
-    if (sumLeadPhotoBytes(currentPhotos) + nextPending > LEAD_STORAGE_LIMIT_BYTES) {
+    const usedPhotos = canOptimisticUpload ? (lead?.photos || []) : currentPhotos
+    if (sumLeadPhotoBytes(usedPhotos) + nextPending > LEAD_STORAGE_LIMIT_BYTES) {
       showToast('Lead photo storage limit reached', 'error')
       return false
     }
     setSessionThumbs((prev) => [...prev, dataUrl])
     return true
-  }, [currentPhotos, pendingSessionBytes])
+  }, [currentPhotos, lead?.photos, pendingSessionBytes, canOptimisticUpload])
+
+  const enqueueSource = useCallback(async (source, entityOverride = null, extraMeta = {}) => {
+    if (!onEnqueueUpload) return false
+    const usedPhotos = entityOverride?.photos || lead?.photos || currentPhotos
+    const bytes = estimatePhotoBytes(source)
+    if (sumLeadPhotoBytes(usedPhotos) + bytes > LEAD_STORAGE_LIMIT_BYTES) {
+      showToast('Lead photo storage limit reached', 'error')
+      return false
+    }
+    const meta = { ...(await buildUploadMeta()), ...extraMeta, estimatedBytes: bytes }
+    if (!meta.localPreviewUrl && typeof source !== 'string' && typeof File !== 'undefined' && source instanceof File) {
+      meta.localPreviewUrl = URL.createObjectURL(source)
+    }
+    onEnqueueUpload(source, meta, entityOverride || lead)
+    return true
+  }, [onEnqueueUpload, buildUploadMeta, lead, currentPhotos])
 
   const handleCapture = async () => {
     const dataUrl = captureFromVideo()
     if (!dataUrl) return
+    if (canOptimisticUpload) {
+      if (!addSessionDataUrl(dataUrl)) return
+      await enqueueSource(dataUrl)
+      return
+    }
     addSessionDataUrl(dataUrl)
   }
 
@@ -282,65 +305,27 @@ export function PhotoMode({
       return
     }
 
-    setUploading(true)
-    try {
-      let lastLead = lead
-      let runningPhotos = currentPhotos
-      for (const file of files) {
-        const pos = await getCurrentPosition()
-        const name = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User'
-        const result = await uploadLeadPhoto(getToken, {
-          leadId: lead.id,
-          file,
-          existingPhotos: runningPhotos,
-          metadata: {
-            capturedByName: name,
-            lat: pos?.lat ?? lead.lat ?? null,
-            lng: pos?.lng ?? lead.lng ?? null,
-            addressLabel: addressLabel || formatLeadAddress(lead) || lead.address || '',
-            parcelId: parcelId || lead.parcelId || null,
-          },
-        })
-        lastLead = result.lead
-        runningPhotos = result.lead?.photos || runningPhotos
-        setSessionThumbs((prev) => [...prev, URL.createObjectURL(file)])
+    if (canOptimisticUpload) {
+      try {
+        for (const file of files) {
+          const preview = URL.createObjectURL(file)
+          if (!addSessionDataUrl(preview)) {
+            URL.revokeObjectURL(preview)
+            break
+          }
+          await enqueueSource(file, null, { localPreviewUrl: preview })
+        }
+      } catch (err) {
+        showToast(err.message || 'Could not add photo', 'error')
       }
-      setCurrentPhotos(runningPhotos)
-      await logLeadPhotosAdded(getToken, lead.id, files.length)
-      onPhotosUploaded?.(lastLead)
-      showToast(files.length === 1 ? 'Photo uploaded' : `${files.length} photos uploaded`, 'success')
-    } catch (err) {
-      showToast(err.message || 'Upload failed', 'error')
-    } finally {
-      setUploading(false)
+      return
     }
   }
-
-  const uploadSessionPhotos = useCallback(async (leadId, basePhotos = []) => {
-    let lastLead = { ...lead, id: leadId, photos: basePhotos }
-    let runningPhotos = basePhotos
-    let count = 0
-    for (const dataUrl of sessionThumbs) {
-      if (dataUrl.startsWith('blob:')) continue
-      const result = await uploadOne(dataUrl, runningPhotos, leadId)
-      lastLead = result.lead
-      runningPhotos = result.lead?.photos || runningPhotos
-      count += 1
-    }
-    if (count > 0) {
-      await logLeadPhotosAdded(getToken, leadId, count)
-    }
-    return { lead: lastLead, count }
-  }, [sessionThumbs, uploadOne, getToken, lead])
 
   const handleSaveDraftLead = async () => {
     let firstName = (draftForm.firstName ?? '').trim()
     let lastName = (draftForm.lastName ?? '').trim()
     const address = (draftForm.address ?? '').trim()
-    if (!address) {
-      showToast('Property address is required', 'error')
-      return
-    }
     if (!firstName && !lastName) lastName = 'Property'
     if (draftForm.parcelId && existingLeads.some((l) => l.parcelId === draftForm.parcelId)) {
       showToast('A lead already exists for this parcel', 'warning')
@@ -366,10 +351,21 @@ export function PhotoMode({
         teamShares: shareState.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
       }
       const created = await createLead(getToken, payload)
-      const { lead: withPhotos, count } = await uploadSessionPhotos(created.id, created.photos || [])
-      onLeadCreated?.(withPhotos)
-      onPhotosUploaded?.(withPhotos)
-      showToast(count > 0 ? 'Lead saved with photos' : 'Lead saved', 'success')
+      onLeadCreated?.(created)
+      if (onEnqueueUpload) {
+        for (const src of sessionThumbs) {
+          if (src.startsWith('blob:')) {
+            const res = await fetch(src)
+            const blob = await res.blob()
+            const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+            await enqueueSource(file, created)
+          } else {
+            await enqueueSource(src, created)
+          }
+        }
+      }
+      onPhotosUploaded?.(created)
+      showToast(sessionThumbs.length > 0 ? 'Lead saved — photos uploading' : 'Lead saved', 'success')
       onClose?.()
     } catch (err) {
       showToast(err.message || 'Could not save lead', 'error')
@@ -389,34 +385,7 @@ export function PhotoMode({
       return
     }
 
-    if (sessionThumbs.length === 0) {
-      onClose?.()
-      return
-    }
-    setUploading(true)
-    try {
-      let lastLead = lead
-      let runningPhotos = currentPhotos
-      let count = 0
-      for (const dataUrl of sessionThumbs) {
-        if (dataUrl.startsWith('blob:')) continue
-        const result = await uploadOne(dataUrl, runningPhotos, lead.id)
-        lastLead = result.lead
-        runningPhotos = result.lead?.photos || runningPhotos
-        count += 1
-      }
-      setCurrentPhotos(runningPhotos)
-      if (count > 0) {
-        await logLeadPhotosAdded(getToken, lead.id, count)
-        onPhotosUploaded?.(lastLead)
-        showToast(count === 1 ? 'Photo uploaded' : `${count} photos uploaded`, 'success')
-      }
-      onClose?.()
-    } catch (err) {
-      showToast(err.message || 'Upload failed', 'error')
-    } finally {
-      setUploading(false)
-    }
+    onClose?.()
   }
 
   const handleBack = () => {
@@ -550,13 +519,13 @@ export function PhotoMode({
           </div>
 
           <div
-            className="flex justify-end gap-2 px-5 py-4 border-t border-white/20 flex-shrink-0"
+            className="photo-mode-save-footer flex justify-end gap-2 px-5 py-4 border-t border-white/20 flex-shrink-0"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           >
-            <Button type="button" variant="ghost" onClick={handleBack} disabled={uploading}>
+            <Button type="button" variant="ghost" className="photo-overlay-header-btn photo-mode-btn" onClick={handleBack} disabled={uploading}>
               Back
             </Button>
-            <Button type="button" onClick={handleSaveDraftLead} disabled={uploading}>
+            <Button type="button" className="photo-overlay-header-btn photo-mode-btn photo-mode-btn--primary create-list-btn" onClick={handleSaveDraftLead} disabled={uploading}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save lead'}
             </Button>
           </div>
@@ -604,12 +573,14 @@ export function PhotoMode({
         <PanelBackButton onClick={handleBack} title="Exit photo mode" />
         <div className="min-w-0 flex-1 px-2">
           <div className="text-sm font-semibold truncate">{headerTitle}</div>
-          <div className="text-xs opacity-50 truncate">{headerSubtitle}</div>
+          <div className="text-xs opacity-50 truncate">
+            {headerSubtitle}
+            {uploadingCount > 0 && ` · ${uploadingCount} uploading`}
+          </div>
         </div>
         <Button
           type="button"
-          size="sm"
-          className="photo-mode-btn photo-mode-btn--primary shrink-0 min-h-[36px]"
+          className="photo-overlay-header-btn photo-mode-btn photo-mode-btn--primary shrink-0"
           onClick={handleDone}
           disabled={uploading}
         >
@@ -643,7 +614,7 @@ export function PhotoMode({
               type="button"
               className="photo-mode-btn min-h-[44px]"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || photosStorageFull}
+              disabled={(uploading && isDraft) || photosStorageFull}
             >
               Choose photos
             </Button>

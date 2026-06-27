@@ -4,6 +4,8 @@ import {
   fetchClientPreviewUrl,
   markClientPreviewOpened,
   openClientPreviewUrl,
+  prepareClientPreviewTab,
+  closeClientPreviewTab,
   returnToAppFromClientPreview,
   shouldShowOwnerPreviewBack,
 } from '../clientPreview'
@@ -75,12 +77,37 @@ describe('openClientPreviewUrl', () => {
     vi.unstubAllGlobals()
   })
 
-  it('navigates same tab when popup is blocked', () => {
+  it('returns false when popup is blocked', () => {
     const open = vi.fn(() => null)
-    const location = { href: 'https://app.test/app', pathname: '/app', search: '', hash: '' }
-    vi.stubGlobal('window', { open, location })
-    openClientPreviewUrl('https://app.test/?quote=abc')
-    expect(location.href).toBe('https://app.test/?quote=abc')
+    vi.stubGlobal('window', { open, location: { href: 'https://app.test/app' } })
+    expect(openClientPreviewUrl('https://app.test/?quote=abc')).toBe(false)
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('prepareClientPreviewTab', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('opens a blank tab and stores return url', () => {
+    const previewWindow = {}
+    const open = vi.fn(() => previewWindow)
+    vi.stubGlobal('window', {
+      open,
+      location: { pathname: '/app', search: '', hash: '' },
+    })
+    expect(prepareClientPreviewTab()).toBe(previewWindow)
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBe('/app')
+    vi.unstubAllGlobals()
+  })
+
+  it('navigates a prepared tab when url is ready', () => {
+    const previewWindow = { closed: false, location: { href: 'about:blank' } }
+    vi.stubGlobal('window', { open: vi.fn(), location: { pathname: '/', search: '', hash: '' } })
+    expect(openClientPreviewUrl('https://app.test/?report=abc', previewWindow)).toBe(true)
+    expect(previewWindow.location.href).toBe('https://app.test/?report=abc')
     vi.unstubAllGlobals()
   })
 })

@@ -100,20 +100,24 @@ function pickBestFeature(features) {
 }
 
 function pidMatch(pid) {
+  const id = String(pid)
   return ['any',
-    ['==', ['get', 'parcelid'], pid],
-    ['==', ['get', 'lrid'], pid],
+    ['==', ['to-string', ['get', 'parcelid']], id],
+    ['==', ['to-string', ['get', 'lrid']], id],
+    ['==', ['to-string', ['get', 'parcelid2']], id],
   ]
 }
 
 // Multi-select uses feature-state ('selected') so toggling a selection doesn't
-// trigger bucket re-tessellation in the worker. Clicked + list highlights stay
-// in the case expression because they change infrequently.
+// trigger bucket re-tessellation in the worker. Clicked highlight also uses
+// feature-state so it survives tile reloads after recenter animations.
 const FS_SELECTED = ['boolean', ['feature-state', 'selected'], false]
+const FS_CLICKED = ['boolean', ['feature-state', 'clicked'], false]
 
 function buildColorExpression(clickedParcelId, parcelIdToColorIndex, baseColor = '#2563eb') {
   const cases = []
   cases.push(FS_SELECTED, '#059669')
+  cases.push(FS_CLICKED, baseColor)
   if (clickedParcelId) {
     cases.push(pidMatch(clickedParcelId), baseColor)
   }
@@ -126,6 +130,7 @@ function buildColorExpression(clickedParcelId, parcelIdToColorIndex, baseColor =
 function buildFillColorExpression(clickedParcelId, parcelIdToColorIndex, baseColor = '#2563eb') {
   const cases = []
   cases.push(FS_SELECTED, '#10b981')
+  cases.push(FS_CLICKED, baseColor)
   if (clickedParcelId) {
     cases.push(pidMatch(clickedParcelId), baseColor)
   }
@@ -139,9 +144,19 @@ function buildFillColorExpression(clickedParcelId, parcelIdToColorIndex, baseCol
 function buildWidthExpression(clickedParcelId, parcelIdToColorIndex) {
   const cases = []
   cases.push(FS_SELECTED, 3)
+  cases.push(FS_CLICKED, 3)
   if (clickedParcelId) cases.push(pidMatch(clickedParcelId), 3)
   for (const [pid] of parcelIdToColorIndex) cases.push(pidMatch(pid), 3)
   return ['case', ...cases, 2]
+}
+
+function buildFillOpacityExpression(clickedParcelId, parcelIdToColorIndex) {
+  const cases = []
+  cases.push(FS_SELECTED, 0.5)
+  cases.push(FS_CLICKED, 0.5)
+  if (clickedParcelId) cases.push(pidMatch(clickedParcelId), 0.5)
+  for (const [pid] of parcelIdToColorIndex) cases.push(pidMatch(pid), 0.5)
+  return ['case', ...cases, 0.3]
 }
 
 export function PMTilesParcelLayer({
@@ -172,11 +187,59 @@ export function PMTilesParcelLayer({
   // Tracks which feature ids currently have selected=true feature-state so we
   // can diff and reconcile when selectedParcels changes from the parent.
   const featureStateIdsRef = useRef(new Set())
+  /** promoteId target (lrid) for clicked feature-state — survives tile reloads */
+  const clickedFeatureIdRef = useRef(null)
 
   colorRef.current = boundaryColor || '#2563eb'
   opacityRef.current = boundaryOpacity ?? 80
-  clickedRef.current = clickedParcelId
   selectedRef.current = selectedParcels
+
+  const setClickedFeatureState = useCallback((map, featureId, clicked) => {
+    if (!map || !featureId) return
+    try {
+      map.setFeatureState(
+        { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureId },
+        { clicked: !!clicked }
+      )
+    } catch { /* feature not in loaded tiles yet */ }
+  }, [])
+
+  const applyClickedHighlight = useCallback((featureId, paintId = featureId) => {
+    const map = mapRef?.current
+    if (!featureId) return
+    if (map && clickedFeatureIdRef.current && clickedFeatureIdRef.current !== featureId) {
+      setClickedFeatureState(map, clickedFeatureIdRef.current, false)
+    }
+    clickedFeatureIdRef.current = featureId
+    clickedRef.current = paintId || featureId
+    if (map) setClickedFeatureState(map, featureId, true)
+    repaint()
+  }, [mapRef, setClickedFeatureState])
+
+  const clearClickedHighlight = useCallback(() => {
+    const map = mapRef?.current
+    if (map && clickedFeatureIdRef.current) {
+      setClickedFeatureState(map, clickedFeatureIdRef.current, false)
+    }
+    clickedFeatureIdRef.current = null
+    clickedRef.current = null
+    repaint()
+  }, [mapRef, setClickedFeatureState])
+
+  const reapplyClickedHighlight = useCallback(() => {
+    const map = mapRef?.current
+    if (!map || !clickedFeatureIdRef.current) {
+      repaint()
+      return
+    }
+    setClickedFeatureState(map, clickedFeatureIdRef.current, true)
+    repaint()
+  }, [mapRef, setClickedFeatureState])
+
+  const applyClickedHighlightRef = useRef(applyClickedHighlight)
+  applyClickedHighlightRef.current = applyClickedHighlight
+  const reapplyClickedHighlightRef = useRef(reapplyClickedHighlight)
+  reapplyClickedHighlightRef.current = reapplyClickedHighlight
 
   useEffect(() => {
     const next = new Map()
@@ -209,19 +272,27 @@ export function PMTilesParcelLayer({
         buildColorExpression(clicked, idxMap, color))
       map.setPaintProperty(LINE_LAYER, 'line-width',
         buildWidthExpression(clicked, idxMap))
+      map.setPaintProperty(FILL_LAYER, 'fill-opacity',
+        buildFillOpacityExpression(clicked, idxMap))
       map.setPaintProperty(LINE_LAYER, 'line-opacity',
         (opacityRef.current ?? 80) / 100)
       map.triggerRepaint()
     } catch { /* ignore if layers not ready */ }
   }
 
-  // Repaint when paint-expression-affecting props change. selectedParcels does
-  // not affect the paint expression (it's driven by feature-state via the
-  // reconciliation effect below), but we don't depend on it here so we don't
-  // run the full repaint on every selection toggle.
+  // Repaint + sync clicked feature-state when parent parcel id changes.
   useEffect(() => {
-    repaint()
-  }, [boundaryColor, boundaryOpacity, clickedParcelId])
+    if (!clickedParcelId) {
+      clearClickedHighlight()
+      return
+    }
+    clickedRef.current = clickedParcelId
+    if (!clickedFeatureIdRef.current) {
+      applyClickedHighlight(clickedParcelId, clickedParcelId)
+    } else {
+      repaint()
+    }
+  }, [boundaryColor, boundaryOpacity, clickedParcelId, applyClickedHighlight, clearClickedHighlight])
 
   // Reconcile feature-state with selectedParcels prop. This handles external
   // selection changes (list operations, etc.) and keeps the optimistic
@@ -301,6 +372,7 @@ export function PMTilesParcelLayer({
 
     function scheduleLabelRefreshAfterMove() {
       refreshLabels()
+      reapplyClickedHighlightRef.current?.()
       if (idleLabelHandler) return
       idleLabelHandler = () => {
         idleLabelHandler = null
@@ -436,8 +508,8 @@ export function PMTilesParcelLayer({
           else featureStateIdsRef.current.delete(parcelId)
         } catch { /* ignore */ }
       } else {
-        clickedRef.current = parcelId
-        repaint()
+        const featureStateId = raw.lrid || raw.parcelid || parcelId
+        applyClickedHighlightRef.current?.(featureStateId, parcelId)
       }
       onParcelClickRef.current({
         latlng: { lat: e.lngLat.lat, lng: e.lngLat.lng },
@@ -604,8 +676,28 @@ export function PMTilesParcelLayer({
 
   useEffect(() => {
     if (!onLayerReady) return
-    onLayerReady({ findParcelAtLocation, queryParcelFeatureAtLocation, setBoundaryColor, setBoundaryOpacity, repaint, reload })
-  }, [onLayerReady, findParcelAtLocation, queryParcelFeatureAtLocation, setBoundaryColor, setBoundaryOpacity, reload])
+    onLayerReady({
+      findParcelAtLocation,
+      queryParcelFeatureAtLocation,
+      setBoundaryColor,
+      setBoundaryOpacity,
+      repaint,
+      reload,
+      applyClickedHighlight,
+      clearClickedHighlight,
+      reapplyClickedHighlight,
+    })
+  }, [
+    onLayerReady,
+    findParcelAtLocation,
+    queryParcelFeatureAtLocation,
+    setBoundaryColor,
+    setBoundaryOpacity,
+    reload,
+    applyClickedHighlight,
+    clearClickedHighlight,
+    reapplyClickedHighlight,
+  ])
 
   return null
 }

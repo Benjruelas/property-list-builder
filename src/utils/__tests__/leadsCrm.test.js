@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { getLeadStatus, lastContactedAt, formatLastContacted, findLeadById, findLeadByParcelId, isParcelALead, formatLeadAddress, formatAddressProperCase } from '../leads'
+import {
+  getLeadStatus,
+  lastContactedAt,
+  formatLastContacted,
+  findLeadById,
+  findLeadByParcelId,
+  isParcelALead,
+  formatLeadAddress,
+  formatAddressProperCase,
+  toLeadPatchBody,
+  isLeadPhotosOnlyPatch,
+} from '../leads'
 import { buildActivityEntry } from '../leadActivity'
 
 describe('lead CRM helpers', () => {
@@ -35,6 +46,27 @@ describe('lead CRM helpers', () => {
   it('formatLastContacted handles recent dates', () => {
     const today = new Date().toISOString()
     expect(formatLastContacted(today)).toBe('Contacted today')
+  })
+
+  it('toLeadPatchBody strips sharing fields from full lead sync', () => {
+    const payload = toLeadPatchBody({
+      id: 'lead_1',
+      firstName: 'Jane',
+      photos: [{ id: 'p1' }],
+      visibility: 'members',
+      sharedMemberUids: ['user_2'],
+      ownerId: 'user_1',
+    })
+    expect(payload.firstName).toBe('Jane')
+    expect(payload.photos).toHaveLength(1)
+    expect(payload.visibility).toBeUndefined()
+    expect(payload.sharedMemberUids).toBeUndefined()
+    expect(payload.ownerId).toBeUndefined()
+  })
+
+  it('isLeadPhotosOnlyPatch detects photo gallery sync payloads', () => {
+    expect(isLeadPhotosOnlyPatch({ photos: [], updatedAt: '2026-01-01' })).toBe(true)
+    expect(isLeadPhotosOnlyPatch({ photos: [], firstName: 'Jane' })).toBe(false)
   })
 })
 

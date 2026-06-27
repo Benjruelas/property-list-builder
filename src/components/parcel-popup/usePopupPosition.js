@@ -1,51 +1,60 @@
 import { useState, useEffect, useCallback } from 'react'
 
-function getViewportCenter() {
-  if (typeof window === 'undefined') return { x: 0, y: 0 }
-  const vv = window.visualViewport
-  if (vv) {
-    return {
-      x: vv.offsetLeft + vv.width / 2,
-      y: vv.offsetTop + vv.height / 2,
-    }
-  }
-  return {
-    x: window.innerWidth / 2,
-    y: window.innerHeight / 2,
-  }
-}
-
 /**
- * Screen position for the parcel popup: always the viewport center (not tied to map projection).
- * Updates on resize / visualViewport so it stays centered on mobile (URL bar, etc.).
+ * Screen position for the parcel popup: anchored above the parcel on the map.
+ * Updates on map move/zoom and viewport resize.
  */
-export function usePopupPosition(_mapRef, lat, lng) {
+export function usePopupPosition(mapRef, lat, lng) {
   const [pos, setPos] = useState(null)
 
   const update = useCallback(() => {
-    if (lat == null || lng == null) {
+    const map = mapRef?.current
+    if (!map || lat == null || lng == null) {
       setPos(null)
       return
     }
-    setPos(getViewportCenter())
-  }, [lat, lng])
+    try {
+      const point = map.project([lng, lat])
+      const rect = map.getCanvas().getBoundingClientRect()
+      setPos({
+        x: rect.left + point.x,
+        y: rect.top + point.y,
+      })
+    } catch {
+      setPos(null)
+    }
+  }, [mapRef, lat, lng])
 
   useEffect(() => {
+    const map = mapRef?.current
+    if (!map || lat == null || lng == null) {
+      setPos(null)
+      return undefined
+    }
+
     update()
+    map.on('move', update)
+    map.on('zoom', update)
+    map.on('resize', update)
+
     window.addEventListener('resize', update)
     const vv = window.visualViewport
     if (vv) {
       vv.addEventListener('resize', update)
       vv.addEventListener('scroll', update)
     }
+
     return () => {
+      map.off('move', update)
+      map.off('zoom', update)
+      map.off('resize', update)
       window.removeEventListener('resize', update)
       if (vv) {
         vv.removeEventListener('resize', update)
         vv.removeEventListener('scroll', update)
       }
     }
-  }, [update])
+  }, [update, mapRef, lat, lng])
 
   return pos
 }

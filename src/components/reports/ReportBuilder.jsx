@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Loader2, Plus, Trash2, ChevronUp, ChevronDown, Image as ImageIcon, X } from 'lucide-react'
+import { Loader2, Plus, Trash2, ChevronUp, ChevronDown, Image as ImageIcon, X, Eye, Check, Send, Save } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
+import { PanelActionButton } from '../ui/panel-action-button'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
@@ -16,7 +17,10 @@ import {
 } from '@/utils/photoReports'
 import { logLeadReportEvent } from '@/utils/leadActivity'
 import { leadPhotoUrl } from '@/utils/leadPhotos'
+import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
+import { getPhotoThumbnailKey } from '@/utils/photoDisplay'
 import { cn } from '@/lib/utils'
+import { SendReportDialog } from './SendReportDialog'
 
 const FIELD = 'w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[44px]'
 
@@ -30,6 +34,8 @@ export function ReportBuilder({
   layoutTemplate = null,
   leadId: initialLeadId = null,
   leads = [],
+  teams = [],
+  teamMembership = null,
   getToken,
   onSaved,
 }) {
@@ -38,6 +44,10 @@ export function ReportBuilder({
   const [title, setTitle] = useState('Photo Report')
   const [sections, setSections] = useState([newReportSection(0)])
   const [saving, setSaving] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
+  const [sendReport, setSendReport] = useState(null)
   const [pickerSectionId, setPickerSectionId] = useState(null)
   const [thumbUrls, setThumbUrls] = useState({})
 
@@ -48,6 +58,12 @@ export function ReportBuilder({
   }, [leads, initialReport, initialLeadId, isTemplate])
 
   const photos = useMemo(() => (Array.isArray(lead?.photos) ? lead.photos : []), [lead])
+
+  const photosById = useMemo(() => {
+    const map = new Map()
+    photos.forEach((p) => map.set(p.id, p))
+    return map
+  }, [photos])
 
   useEffect(() => {
     if (!open) return
@@ -88,6 +104,13 @@ export function ReportBuilder({
   }, [open])
 
   useEffect(() => {
+    if (!open) {
+      setSendOpen(false)
+      setSendReport(null)
+    }
+  }, [open])
+
+  useEffect(() => {
     if (!pickerSectionId) return undefined
     const onKeyDown = (e) => {
       if (e.key === 'Escape') setPickerSectionId(null)
@@ -102,7 +125,8 @@ export function ReportBuilder({
       if (thumbUrls[p.id]) return
       try {
         const token = await getToken()
-        const key = p.thumbnailKey || p.key
+        const key = getPhotoThumbnailKey(p)
+        if (!key) return
         const res = await fetch(leadPhotoUrl(key), { headers: { Authorization: `Bearer ${token}` } })
         if (!res.ok) return
         const blob = await res.blob()
@@ -204,6 +228,51 @@ export function ReportBuilder({
     }
   }
 
+  const buildReportPayload = useCallback(() => ({
+    leadId: lead.id,
+    title: title.trim() || 'Photo Report',
+    sections: sections.map((s, i) => ({ ...s, order: i })),
+    templateId: layoutTemplate?.id || initialReport?.templateId || null,
+  }), [lead, title, sections, layoutTemplate, initialReport])
+
+  const persistReport = useCallback(async () => {
+    if (!lead) throw new Error('Lead is required')
+    const payload = buildReportPayload()
+    if (initialReport?.id) {
+      return updatePhotoReport(getToken, initialReport.id, payload)
+    }
+    const report = await createPhotoReport(getToken, payload)
+    await logLeadReportEvent(getToken, lead.id, `Photo report created: ${report.title}`, { reportId: report.id })
+    return report
+  }, [lead, buildReportPayload, initialReport, getToken])
+
+  const handlePreview = async () => {
+    if (!lead) {
+      showToast('Lead is required', 'error')
+      return
+    }
+    const previewWindow = prepareClientPreviewTab()
+    if (!previewWindow) {
+      showToast('Allow popups to preview the report', 'error')
+      return
+    }
+    setPreviewing(true)
+    try {
+      const report = await persistReport()
+      onSaved?.(report, { keepOpen: true })
+      const url = await fetchClientPreviewUrl(getToken, { type: 'report', id: report.id })
+      if (!openClientPreviewUrl(url, previewWindow)) {
+        closeClientPreviewTab(previewWindow)
+        showToast('Could not open preview tab', 'error')
+      }
+    } catch (e) {
+      closeClientPreviewTab(previewWindow)
+      showToast(e.message || 'Preview failed', 'error')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   const handleSaveReport = async () => {
     if (!lead) {
       showToast('Lead is required', 'error')
@@ -211,19 +280,7 @@ export function ReportBuilder({
     }
     setSaving(true)
     try {
-      const payload = {
-        leadId: lead.id,
-        title: title.trim() || 'Photo Report',
-        sections: sections.map((s, i) => ({ ...s, order: i })),
-        templateId: layoutTemplate?.id || initialReport?.templateId || null,
-      }
-      let report
-      if (initialReport?.id) {
-        report = await updatePhotoReport(getToken, initialReport.id, payload)
-      } else {
-        report = await createPhotoReport(getToken, payload)
-        await logLeadReportEvent(getToken, lead.id, `Photo report created: ${report.title}`, { reportId: report.id })
-      }
+      const report = await persistReport()
       showToast('Report saved', 'success')
       onSaved?.(report)
       onClose?.()
@@ -231,6 +288,24 @@ export function ReportBuilder({
       showToast(e.message || 'Save failed', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSend = async () => {
+    if (!lead) {
+      showToast('Lead is required', 'error')
+      return
+    }
+    setSending(true)
+    try {
+      const report = await persistReport()
+      onSaved?.(report, { keepOpen: true })
+      setSendReport(report)
+      setSendOpen(true)
+    } catch (e) {
+      showToast(e.message || 'Could not prepare report to send', 'error')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -247,7 +322,14 @@ export function ReportBuilder({
 
   return (
     <>
-      <Dialog open={open} modal={false} onOpenChange={(o) => handleChildPanelDismiss(o, onClose, { wasOpen: open })}>
+      <Dialog
+        open={open}
+        modal={false}
+        onOpenChange={(o) => handleChildPanelDismiss(o, onClose, {
+          wasOpen: open,
+          hasNestedOverlay: Boolean(pickerSectionId || sendOpen),
+        })}
+      >
         <DialogContent
           className={cn(
             'map-panel list-panel reports-panel report-editor-panel fullscreen-panel relative flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full',
@@ -307,10 +389,35 @@ export function ReportBuilder({
                   onChange={(e) => updateSection(section.id, { description: e.target.value })}
                 />
                 {!isTemplate && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setPickerSectionId(section.id)}>
-                    <ImageIcon className="h-3.5 w-3.5 mr-1" />
-                    {section.photoIds.length ? `${section.photoIds.length} photos` : 'Add photos'}
-                  </Button>
+                  <>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setPickerSectionId(section.id)}>
+                      <ImageIcon className="h-3.5 w-3.5 mr-1" />
+                      {section.photoIds.length ? `${section.photoIds.length} photos` : 'Add photos'}
+                    </Button>
+                    {section.photoIds.length > 0 && (
+                      <div className="report-section-photo-grid">
+                        {section.photoIds.map((photoId) => {
+                          const photo = photosById.get(photoId)
+                          if (!photo) return null
+                          return (
+                            <button
+                              key={photoId}
+                              type="button"
+                              className="report-section-photo-tile aspect-square rounded-lg border border-white/15 overflow-hidden relative"
+                              onClick={() => setPickerSectionId(section.id)}
+                              aria-label="Edit section photos"
+                            >
+                              {thumbUrls[photo.id] ? (
+                                <img src={thumbUrls[photo.id]} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-white/5" />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -321,15 +428,35 @@ export function ReportBuilder({
             </Button>
           </div>
 
-          <div className="sticky bottom-0 border-t border-white/10 px-5 py-3 bg-[var(--map-panel-detail-surface)] space-y-2" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
-            <Button type="button" className="w-full min-h-[44px]" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : (isTemplate ? 'Save template' : 'Save report')}
-            </Button>
-            {!isTemplate && !initialReport?.id && (
-              <Button type="button" variant="outline" className="w-full min-h-[44px]" disabled={saving} onClick={handleSaveAsTemplate}>
-                Save as template
-              </Button>
-            )}
+          <div className="sticky bottom-0 border-t border-white/10 px-5 py-3 bg-[var(--map-panel-detail-surface)]" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
+            <div className="report-editor-actions quote-details-actions flex flex-row flex-wrap gap-2">
+              {isTemplate ? (
+                <PanelActionButton variant="primary" onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 shrink-0" />}
+                  Save template
+                </PanelActionButton>
+              ) : (
+                <>
+                  <PanelActionButton variant="primary" onClick={handleSaveReport} disabled={saving || previewing || sending || !lead}>
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 shrink-0" />}
+                    Save report
+                  </PanelActionButton>
+                  <PanelActionButton onClick={handleSend} disabled={saving || previewing || sending || !lead}>
+                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 shrink-0" />}
+                    Send report
+                  </PanelActionButton>
+                  <PanelActionButton onClick={handlePreview} disabled={saving || previewing || sending || !lead}>
+                    {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4 shrink-0" />}
+                    Preview report
+                  </PanelActionButton>
+                  {!initialReport?.id && (
+                    <PanelActionButton onClick={handleSaveAsTemplate} disabled={saving || previewing || sending}>
+                      Save as template
+                    </PanelActionButton>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {!isTemplate && pickerSectionId && (
@@ -347,9 +474,17 @@ export function ReportBuilder({
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between gap-2 mb-3 shrink-0">
-                  <h3 id="report-photo-picker-title" className="text-sm font-semibold">
-                    Select photos
-                  </h3>
+                  <div>
+                    <h3 id="report-photo-picker-title" className="text-sm font-semibold">
+                      Select photos
+                    </h3>
+                    {(() => {
+                      const count = sections.find((s) => s.id === pickerSectionId)?.photoIds?.length || 0
+                      return count > 0 ? (
+                        <p className="text-xs opacity-60 mt-0.5">{count} selected</p>
+                      ) : null
+                    })()}
+                  </div>
                   <button
                     type="button"
                     className="p-1.5 rounded-md opacity-70 hover:opacity-100 hover:bg-white/10"
@@ -363,7 +498,7 @@ export function ReportBuilder({
                   {photos.length === 0 ? (
                     <p className="text-xs opacity-50">No photos on this lead yet.</p>
                   ) : (
-                    <div className="lead-photo-grid">
+                    <div className="lead-photo-grid report-photo-picker-grid">
                       {photos.map((p) => {
                         const sec = sections.find((s) => s.id === pickerSectionId)
                         const selected = sec?.photoIds?.includes(p.id)
@@ -372,15 +507,23 @@ export function ReportBuilder({
                             key={p.id}
                             type="button"
                             className={cn(
-                              'aspect-square rounded-lg border overflow-hidden',
-                              selected ? 'border-white/40 bg-white/10' : 'border-white/10'
+                              'report-photo-picker-tile aspect-square rounded-lg border overflow-hidden relative',
+                              selected
+                                ? 'report-photo-picker-tile--selected border-blue-400 ring-2 ring-blue-400/80'
+                                : 'border-white/15 hover:border-white/30'
                             )}
+                            aria-pressed={selected}
                             onClick={() => togglePhoto(pickerSectionId, p.id)}
                           >
                             {thumbUrls[p.id] ? (
                               <img src={thumbUrls[p.id]} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full bg-white/5" />
+                            )}
+                            {selected && (
+                              <span className="report-photo-picker-check" aria-hidden="true">
+                                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                              </span>
                             )}
                           </button>
                         )
@@ -400,6 +543,25 @@ export function ReportBuilder({
           )}
         </DialogContent>
       </Dialog>
+
+      {!isTemplate && (
+        <SendReportDialog
+          open={sendOpen}
+          report={sendReport}
+          onClose={() => setSendOpen(false)}
+          leads={leads}
+          teams={teams}
+          teamMembership={teamMembership}
+          onSent={async (updated) => {
+            onSaved?.(updated, { keepOpen: true })
+            setSendReport(updated)
+            if (lead?.id) {
+              await logLeadReportEvent(getToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })
+            }
+            setSendOpen(false)
+          }}
+        />
+      )}
     </>
   )
 }

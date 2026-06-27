@@ -131,10 +131,6 @@ export function CreateLeadDialog({
     const firstName = (form.firstName ?? '').trim()
     const lastName = (form.lastName ?? '').trim()
     const address = (form.address ?? '').trim()
-    if (!address) {
-      showToast('Property address is required', 'error')
-      return
-    }
     if (!firstName && !lastName) {
       showToast('Enter a first or last name', 'error')
       return

@@ -25,15 +25,16 @@ export {
   formatStorageBytes,
 }
 
-export function leadPhotoUrl(key) {
+export function leadPhotoUrl(key, cacheVersion = '') {
   if (!key) return ''
-  return `${getApiBase()}/lead-photos?key=${encodeURIComponent(key)}`
+  const base = `${getApiBase()}/lead-photos?key=${encodeURIComponent(key)}`
+  return cacheVersion ? `${base}&v=${encodeURIComponent(cacheVersion)}` : base
 }
 
-export async function fetchLeadPhotoBlob(getToken, key) {
+export async function fetchLeadPhotoBlob(getToken, key, cacheVersion = '') {
   const token = await getToken()
   if (!token) throw new Error('Sign in required')
-  const res = await fetch(leadPhotoUrl(key), {
+  const res = await fetch(leadPhotoUrl(key, cacheVersion), {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error('Could not load photo')

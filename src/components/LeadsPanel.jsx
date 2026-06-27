@@ -12,6 +12,8 @@ import {
   displayLeadName,
   formatLeadAddress,
   updateLead,
+  toLeadPatchBody,
+  isLeadPhotosOnlyPatch,
   getLeadStatus,
   lastContactedAt,
   leadToParcelData,
@@ -172,8 +174,10 @@ export function LeadsPanel({
 
   const handleLeadUpdate = useCallback(async (updated) => {
     onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
+    const payload = toLeadPatchBody(updated)
+    if (isLeadPhotosOnlyPatch(payload)) return
     try {
-      const saved = await updateLead(getToken, updated.id, updated)
+      const saved = await updateLead(getToken, updated.id, payload)
       onLeadsChange?.((prev) => prev.map((l) => (l.id === saved.id ? saved : l)))
     } catch (e) {
       showToast(e.message || 'Could not update lead', 'error')

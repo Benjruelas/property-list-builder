@@ -136,6 +136,31 @@ export async function createLead(getToken, leadData) {
   return data.lead
 }
 
+/** Strip owner/sharing fields when syncing a full lead record (e.g. after photo upload). */
+export function toLeadPatchBody(updates, { includeSharing = false } = {}) {
+  if (!updates || typeof updates !== 'object') return {}
+  const skip = new Set(['id', 'ownerId', 'ownerEmail', 'createdAt'])
+  if (!includeSharing) {
+    skip.add('visibility')
+    skip.add('sharedMemberUids')
+    skip.add('teamShares')
+    skip.add('sharedWith')
+    skip.add('teamId')
+  }
+  const out = {}
+  for (const [key, value] of Object.entries(updates)) {
+    if (skip.has(key)) continue
+    out[key] = value
+  }
+  return out
+}
+
+/** Photos are persisted via /lead-photos; no leads PATCH needed for photo-only sync. */
+export function isLeadPhotosOnlyPatch(payload) {
+  const keys = Object.keys(payload)
+  return keys.length > 0 && keys.every((k) => k === 'photos' || k === 'updatedAt')
+}
+
 export async function updateLead(getToken, leadId, updates) {
   const normalizedUpdates = withNormalizedLeadContact(updates)
   const token = await getToken()

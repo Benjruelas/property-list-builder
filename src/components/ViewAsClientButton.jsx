@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Eye } from 'lucide-react'
-import { fetchClientPreviewUrl, openClientPreviewUrl } from '@/utils/clientPreview'
+import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
 import { showToast } from './ui/toast'
 import { PanelActionButton } from './ui/panel-action-button'
 
@@ -18,11 +18,20 @@ export function ViewAsClientButton({
 
   const handleClick = async () => {
     if (disabled || loading || !entityId) return
+    const previewWindow = prepareClientPreviewTab()
+    if (!previewWindow) {
+      showToast('Allow popups to open the client preview', 'error')
+      return
+    }
     setLoading(true)
     try {
       const url = await fetchClientPreviewUrl(getToken, { type, id: entityId })
-      openClientPreviewUrl(url)
+      if (!openClientPreviewUrl(url, previewWindow)) {
+        closeClientPreviewTab(previewWindow)
+        showToast('Could not open client preview tab', 'error')
+      }
     } catch (e) {
+      closeClientPreviewTab(previewWindow)
       showToast(e.message || 'Could not load client preview link', 'error')
     } finally {
       setLoading(false)

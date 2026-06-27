@@ -101,7 +101,6 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
   const firstName = String(body.firstName ?? existing?.firstName ?? '').trim()
   const lastName = String(body.lastName ?? existing?.lastName ?? '').trim()
   const address = String(body.address ?? existing?.address ?? '').trim()
-  if (!address) throw new Error('Address is required')
   if (!firstName && !lastName) throw new Error('First or last name is required')
 
   const contact = normalizeLeadContactsForStorage(body, existing)
@@ -157,6 +156,28 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
     return applyResourceVisibilityPatch(base, body, ctx)
   }
   return base
+}
+
+function leadSharingPatchChanges(existing, body) {
+  if (body.visibility !== undefined && body.visibility !== (existing.visibility || 'private')) {
+    return true
+  }
+  if (body.sharedMemberUids !== undefined) {
+    const next = JSON.stringify([...(body.sharedMemberUids || [])].sort())
+    const prev = JSON.stringify([...(existing.sharedMemberUids || [])].sort())
+    if (next !== prev) return true
+  }
+  if (body.teamShares !== undefined) {
+    const next = JSON.stringify([...(body.teamShares || [])].sort())
+    const prev = JSON.stringify([...(existing.teamShares || [])].sort())
+    if (next !== prev) return true
+  }
+  if (body.sharedWith !== undefined) {
+    const next = JSON.stringify(body.sharedWith || [])
+    const prev = JSON.stringify(existing.sharedWith || [])
+    if (next !== prev) return true
+  }
+  return false
 }
 
 async function logLeadActivity(type, lead, user, summary, { audience } = {}) {
@@ -287,10 +308,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ lead })
       }
 
-      if (
-        (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined || body.sharedWith !== undefined) &&
-        !canChangeVisibility(access)
-      ) {
+      if (leadSharingPatchChanges(existing, body) && !canChangeVisibility(access)) {
         return res.status(403).json({ error: 'Only the lead owner can change sharing' })
       }
 

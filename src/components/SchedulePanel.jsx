@@ -97,7 +97,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate, hourHeight = SCHEDULE_
   return null
 }
 
-export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasScheduleOpener = false, stacked = false, obscuredByLeadDetail = false, onOpenScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead }) {
+export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasScheduleOpener = false, stacked = false, obscuredByLeadDetail = false, onOpenScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead, onCreateLead }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
@@ -913,6 +913,7 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
           initialDateTimeExpanded={addTaskPrefill?.dateTimeExpanded ?? false}
           headerSubtitle={addTaskPrefill?.headerSubtitle ?? null}
           onSubmit={handleCreateTask}
+          onCreateLead={onCreateLead}
           nestedOverlay
         />
 

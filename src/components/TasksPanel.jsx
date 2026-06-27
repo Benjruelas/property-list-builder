@@ -59,7 +59,8 @@ export function TasksPanel({
   getToken = null,
   currentUser = null,
   onPipelinesChange,
-  teams = []
+  teams = [],
+  onCreateLead,
 }) {
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
@@ -134,7 +135,7 @@ export function TasksPanel({
     return newTaskMemberList
   }, [editingTask, teams, pipelines, newTaskMemberList])
 
-  const editTeamContext = editingTask?.__source === 'team' || editingTask?.__source === 'server'
+  const editTeamContext = editingTask?.__source === 'team'
 
   const openAddTask = () => {
     setShowAddTask(true)
@@ -473,6 +474,7 @@ export function TasksPanel({
         await onPipelinesChange?.()
         showToast('Task updated', 'success')
         setEditingTask(null)
+        refreshTasks()
       } catch (err) {
         showToast(err.message || 'Could not update task', 'error')
       }
@@ -567,6 +569,7 @@ export function TasksPanel({
       }
       showToast('Task updated', 'success')
       setEditingTask(null)
+      refreshTasks()
     } catch (err) {
       showToast(err.message || 'Could not update task', 'error')
     }
@@ -772,6 +775,7 @@ export function TasksPanel({
         showTeamAssign={newTaskMemberList.length > 0}
         teamMembers={newTaskMemberList}
         onSubmit={handleCreateTask}
+        onCreateLead={onCreateLead}
         nestedOverlay
         topLayer
       />
@@ -789,6 +793,7 @@ export function TasksPanel({
         initialTitle={editingTask?.title || ''}
         initialLeadId={editingTaskFormIds.leadId}
         initialDealId={editingTaskFormIds.dealId}
+        onCreateLead={onCreateLead}
         initialScheduledAt={
           editingTask
             ? editingTask.__source === 'team'
