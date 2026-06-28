@@ -3,6 +3,7 @@ import {
   getLeadStatus,
   lastContactedAt,
   formatLastContacted,
+  mergeListViewLeads,
   findLeadById,
   findLeadByParcelId,
   isParcelALead,
@@ -33,6 +34,30 @@ describe('lead CRM helpers', () => {
       ],
     }
     expect(lastContactedAt(lead)).toBe('2026-02-01T00:00:00.000Z')
+  })
+
+  it('lastContactedAt prefers server-provided lastContactedAt from list view', () => {
+    expect(lastContactedAt({ lastContactedAt: '2026-03-01T00:00:00.000Z', activity: [] }))
+      .toBe('2026-03-01T00:00:00.000Z')
+  })
+
+  it('mergeListViewLeads preserves photos and activity from existing client state', () => {
+    const existing = [{
+      id: 'l1',
+      firstName: 'A',
+      photos: [{ id: 'p1' }],
+      activity: [{ type: 'call', at: '2026-01-01T00:00:00.000Z' }],
+    }]
+    const incoming = [{
+      id: 'l1',
+      firstName: 'A',
+      _listView: true,
+      photoCount: 1,
+    }]
+    const merged = mergeListViewLeads(existing, incoming)
+    expect(merged[0].photos).toEqual([{ id: 'p1' }])
+    expect(merged[0].activity).toHaveLength(1)
+    expect(merged[0]._listView).toBe(true)
   })
 
   it('buildActivityEntry creates valid entry shape', () => {

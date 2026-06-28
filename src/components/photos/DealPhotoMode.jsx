@@ -17,6 +17,15 @@ import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 import { cn } from '@/lib/utils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 function canUseCamera() {
   return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
 }
@@ -208,7 +217,7 @@ export function DealPhotoMode({
     }
     const meta = { ...(await buildUploadMeta()), ...extraMeta, estimatedBytes: bytes }
     if (!meta.localPreviewUrl && typeof source !== 'string' && typeof File !== 'undefined' && source instanceof File) {
-      meta.localPreviewUrl = URL.createObjectURL(source)
+      meta.localPreviewUrl = await fileToDataUrl(source)
     }
     onEnqueueUpload(source, meta, target)
     return true
@@ -233,11 +242,8 @@ export function DealPhotoMode({
     if (canOptimisticUpload) {
       try {
         for (const file of files) {
-          const preview = URL.createObjectURL(file)
-          if (!addSessionDataUrl(preview)) {
-            URL.revokeObjectURL(preview)
-            break
-          }
+          const preview = await fileToDataUrl(file)
+          if (!addSessionDataUrl(preview)) break
           await enqueueSource(file, null, { localPreviewUrl: preview })
         }
       } catch (err) {

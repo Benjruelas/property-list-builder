@@ -268,7 +268,7 @@ export function PhotoMode({
     }
     const meta = { ...(await buildUploadMeta()), ...extraMeta, estimatedBytes: bytes }
     if (!meta.localPreviewUrl && typeof source !== 'string' && typeof File !== 'undefined' && source instanceof File) {
-      meta.localPreviewUrl = URL.createObjectURL(source)
+      meta.localPreviewUrl = await fileToDataUrl(source)
     }
     onEnqueueUpload(source, meta, entityOverride || lead)
     return true
@@ -308,11 +308,8 @@ export function PhotoMode({
     if (canOptimisticUpload) {
       try {
         for (const file of files) {
-          const preview = URL.createObjectURL(file)
-          if (!addSessionDataUrl(preview)) {
-            URL.revokeObjectURL(preview)
-            break
-          }
+          const preview = await fileToDataUrl(file)
+          if (!addSessionDataUrl(preview)) break
           await enqueueSource(file, null, { localPreviewUrl: preview })
         }
       } catch (err) {
@@ -354,14 +351,7 @@ export function PhotoMode({
       onLeadCreated?.(created)
       if (onEnqueueUpload) {
         for (const src of sessionThumbs) {
-          if (src.startsWith('blob:')) {
-            const res = await fetch(src)
-            const blob = await res.blob()
-            const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
-            await enqueueSource(file, created)
-          } else {
-            await enqueueSource(src, created)
-          }
+          await enqueueSource(src, created)
         }
       }
       onPhotosUploaded?.(created)

@@ -12,7 +12,7 @@ import {
   UPLOAD_STATUS,
 } from '@/utils/optimisticPhotoUpload'
 import { showToast } from '@/components/ui/toast'
-import { deferRevokeObjectURL } from '@/utils/blobUrl'
+import { deferRevokeObjectURL, blobToDataUrl } from '@/utils/blobUrl'
 
 const MAX_CONCURRENT = 2
 // Keep a deleted photo hidden until any background list poll that was already
@@ -117,15 +117,17 @@ export function useBackgroundPhotoUploadQueue({
       // a server thumbnail fetch that competes with the rest of the batch upload —
       // the cause of a few photos spinning endlessly after a bulk capture.
       let serverPhoto = result.photo
-      if (result.thumbnailBlob && typeof URL !== 'undefined' && URL.createObjectURL) {
+      if (result.thumbnailBlob) {
         try {
-          serverPhoto = { ...serverPhoto, _freshThumbUrl: URL.createObjectURL(result.thumbnailBlob) }
+          // Data URL survives poll refreshes and can't be revoked like blob: URLs
+          // (which show "Not allowed to load local resource" when stale).
+          serverPhoto = { ...serverPhoto, _freshThumbUrl: await blobToDataUrl(result.thumbnailBlob) }
         } catch { /* ignore - fall back to server fetch */ }
       }
 
       const mergedPhotos = replacePhotoInList(latest?.photos || [], pendingId, serverPhoto)
       applyEntityPhotos(latest, mergedPhotos)
-      if (pendingPreviewUrl) deferRevokeObjectURL(pendingPreviewUrl)
+      if (pendingPreviewUrl?.startsWith('blob:')) deferRevokeObjectURL(pendingPreviewUrl)
 
       if (logActivity) {
         await logActivity(entityRef.current || result.entity)
@@ -171,9 +173,9 @@ export function useBackgroundPhotoUploadQueue({
     if (!localPreviewUrl) {
       if (typeof source === 'string') {
         localPreviewUrl = source
-      } else if (typeof File !== 'undefined' && source instanceof File) {
-        localPreviewUrl = URL.createObjectURL(source)
       }
+      // Never assign blob: URLs for File sources — they are revoked on upload
+      // complete while gallery <img> tags may still reference them.
     }
 
     const pending = createPendingPhoto({

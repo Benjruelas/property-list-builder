@@ -28,6 +28,11 @@ const getApiBase = () => {
 
 const LOCAL_LEADS_KEY = 'user_leads_local'
 const MAX_LEAD_ACTIVITY = 200
+let leadsListEtag = null
+
+export function resetLeadsListEtag() {
+  leadsListEtag = null
+}
 
 export {
   DEFAULT_LEAD_STATUSES,
@@ -39,6 +44,7 @@ export {
 const OUTREACH_ACTIVITY_TYPES = new Set(['call', 'text', 'email'])
 
 export function lastContactedAt(lead) {
+  if (lead?.lastContactedAt) return lead.lastContactedAt
   const activities = Array.isArray(lead?.activity) ? lead.activity : []
   let latest = null
   for (const entry of activities) {
@@ -82,18 +88,54 @@ export function saveLocalLeads(leads) {
   }
 }
 
-export async function fetchLeads(getToken) {
+/** Merge a list-view poll payload into existing client state without dropping heavy fields. */
+export function mergeListViewLeads(existing, incoming) {
+  const prevById = new Map((Array.isArray(existing) ? existing : []).map((l) => [l.id, l]))
+  return (Array.isArray(incoming) ? incoming : []).map((inc) => {
+    if (!inc?._listView) return inc
+    const prev = prevById.get(inc.id)
+    if (!prev) return inc
+    return {
+      ...inc,
+      activity: prev.activity ?? inc.activity,
+      photos: prev.photos ?? inc.photos,
+      files: prev.files ?? inc.files,
+    }
+  })
+}
+
+export async function fetchLeads(getToken, { view = 'list' } = {}) {
   const token = await getToken()
   if (!token) return loadLocalLeads()
-  const res = await fetch(`${getApiBase()}/leads`, {
+  const headers = { Authorization: `Bearer ${token}` }
+  if (leadsListEtag) headers['If-None-Match'] = leadsListEtag
+  const query = view ? `?view=${encodeURIComponent(view)}` : ''
+  const res = await fetch(`${getApiBase()}/leads${query}`, {
     method: 'GET',
-    headers: { Authorization: `Bearer ${token}` }
+    headers,
   })
+  if (res.status === 304) return { notModified: true }
   if (!res.ok) throw new Error('Failed to fetch leads')
+  const etag = res.headers.get('ETag')
+  if (etag) leadsListEtag = etag.replace(/^W\//, '').replace(/"/g, '')
   const data = await res.json()
   const leads = data.leads || []
-  saveLocalLeads(leads)
+  const existing = loadLocalLeads()
+  const toStore = leads.some((l) => l._listView) ? mergeListViewLeads(existing, leads) : leads
+  saveLocalLeads(toStore)
   return leads
+}
+
+export async function fetchLeadById(getToken, leadId) {
+  const token = await getToken()
+  if (!token || !leadId) return null
+  const res = await fetch(`${getApiBase()}/leads?leadId=${encodeURIComponent(leadId)}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to fetch lead')
+  const data = await res.json()
+  return data.lead || null
 }
 
 function withNormalizedLeadContact(data) {

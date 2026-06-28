@@ -95,6 +95,8 @@ import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
 import {
   fetchLeads,
+  fetchLeadById,
+  mergeListViewLeads,
   loadLocalLeads,
   createLead,
   buildLeadPrefillFromParcel,
@@ -1172,7 +1174,8 @@ function App() {
     if (showSpinner) setLeadsLoading(true)
     try {
       const next = await fetchLeads(getToken)
-      setLeads(next)
+      if (next?.notModified) return
+      setLeads((prev) => mergeListViewLeads(prev, next))
       await refreshTags()
     } catch (error) {
       console.error('Error loading leads:', error)
@@ -1219,6 +1222,7 @@ function App() {
     const migrationKey = localPipelineMigrationKey(currentUser.uid)
     try {
       const next = await fetchPipelines(getToken)
+      if (next?.notModified) return
       if (next.length > 0) {
         setPipelines(next)
         setActivePipelineId((prev) => pickActivePipelineId(next, prev))
@@ -3050,7 +3054,16 @@ function App() {
   const openLeadDetails = useCallback((lead) => {
     if (!lead?.id) return
     guardFeature('leads', () => nav.openLeadDetails(lead.id))
-  }, [nav, guardFeature])
+    if (lead._listView) {
+      fetchLeadById(getToken, lead.id)
+        .then((full) => {
+          if (full?.id) {
+            setLeads((prev) => prev.map((l) => (l.id === full.id ? full : l)))
+          }
+        })
+        .catch((err) => console.warn('Lead detail hydrate failed:', err?.message))
+    }
+  }, [nav, guardFeature, getToken])
 
   const openSettingsPanel = useCallback(() => nav.openSettings(), [nav])
   const openLogin = useCallback(() => nav.openLogin(), [nav])
