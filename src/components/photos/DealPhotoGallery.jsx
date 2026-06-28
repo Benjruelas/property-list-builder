@@ -76,6 +76,7 @@ export function DealPhotoGallery({
   const [thumbUrls, setThumbUrls] = useState({})
   const thumbLoadedRef = useRef({})
   const thumbRequestRef = useRef({})
+  const thumbInflightRef = useRef({})
   const annotatingPhotoIdRef = useRef(null)
   const pendingAnnotatedPreviewRef = useRef({})
   const thumbUrlsRef = useRef({})
@@ -140,6 +141,7 @@ export function DealPhotoGallery({
     setThumbUrls({})
     thumbLoadedRef.current = {}
     thumbRequestRef.current = {}
+    thumbInflightRef.current = {}
     pendingAnnotatedPreviewRef.current = {}
     thumbErrorRetryRef.current = {}
   }, [deal?.id])
@@ -147,6 +149,7 @@ export function DealPhotoGallery({
   const invalidatePhotoThumb = useCallback((photoId) => {
     thumbRequestRef.current[photoId] = (thumbRequestRef.current[photoId] || 0) + 1
     delete thumbLoadedRef.current[photoId]
+    delete thumbInflightRef.current[photoId]
     const pendingPreview = pendingAnnotatedPreviewRef.current[photoId]
     if (pendingPreview) {
       delete pendingAnnotatedPreviewRef.current[photoId]
@@ -189,6 +192,11 @@ export function DealPhotoGallery({
       && thumbUrlsRef.current[photo.id]
       && !annotatedPreviewUrl
     ) return
+    // A fetch for this exact photo version is already running. Don't start a new
+    // one — re-running on every background poll would otherwise cancel the
+    // in-flight request and slow thumbnails would never finish loading.
+    if (thumbInflightRef.current[photo.id] === sourceToken) return
+    thumbInflightRef.current[photo.id] = sourceToken
     const requestId = (thumbRequestRef.current[photo.id] || 0) + 1
     thumbRequestRef.current[photo.id] = requestId
     try {
@@ -223,6 +231,10 @@ export function DealPhotoGallery({
       })
     } catch {
       // Keep local annotated preview visible; allow retry on next photos update.
+    } finally {
+      if (thumbInflightRef.current[photo.id] === sourceToken) {
+        delete thumbInflightRef.current[photo.id]
+      }
     }
   }, [getToken])
 
@@ -231,6 +243,7 @@ export function DealPhotoGallery({
     if (retries > 5) return
     thumbErrorRetryRef.current[photo.id] = retries
     delete thumbLoadedRef.current[photo.id]
+    delete thumbInflightRef.current[photo.id]
     delete pendingAnnotatedPreviewRef.current[photo.id]
     thumbRequestRef.current[photo.id] = (thumbRequestRef.current[photo.id] || 0) + 1
     setThumbUrls((prev) => {
@@ -305,6 +318,7 @@ export function DealPhotoGallery({
 
     thumbRequestRef.current[savedPhoto.id] = (thumbRequestRef.current[savedPhoto.id] || 0) + 1
     delete thumbLoadedRef.current[savedPhoto.id]
+    delete thumbInflightRef.current[savedPhoto.id]
     delete pendingAnnotatedPreviewRef.current[savedPhoto.id]
     const { _annotatedPreviewUrl, _annotationSaving, ...serverPhoto } = savedPhoto
     loadThumb(serverPhoto, { skipLocalPreview: true })
