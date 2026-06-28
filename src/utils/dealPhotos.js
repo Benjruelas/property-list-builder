@@ -161,6 +161,13 @@ export async function deleteDealPhoto(getToken, { pipelineId, dealId, photoId })
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    // The photo is already gone server-side (a rapid/duplicate delete, or a
+    // record the server never persisted). Deleting something that no longer
+    // exists is the desired end state, so treat it as success rather than
+    // surfacing a misleading "Photo not found" error.
+    if (res.status === 404 && err.error === 'Photo not found') {
+      return { notFound: true }
+    }
     throw new Error(err.error || 'Delete failed')
   }
   return res.json()
