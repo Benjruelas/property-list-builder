@@ -112,7 +112,18 @@ export function useBackgroundPhotoUploadQueue({
       const pending = (latest?.photos || []).find((p) => p.id === pendingId)
       const pendingPreviewUrl = pending?._localPreviewUrl
 
-      const mergedPhotos = replacePhotoInList(latest?.photos || [], pendingId, result.photo)
+      // Carry the just-uploaded thumbnail forward so the photo keeps showing its
+      // image instantly. Otherwise it would briefly have no preview and depend on
+      // a server thumbnail fetch that competes with the rest of the batch upload —
+      // the cause of a few photos spinning endlessly after a bulk capture.
+      let serverPhoto = result.photo
+      if (result.thumbnailBlob && typeof URL !== 'undefined' && URL.createObjectURL) {
+        try {
+          serverPhoto = { ...serverPhoto, _freshThumbUrl: URL.createObjectURL(result.thumbnailBlob) }
+        } catch { /* ignore - fall back to server fetch */ }
+      }
+
+      const mergedPhotos = replacePhotoInList(latest?.photos || [], pendingId, serverPhoto)
       applyEntityPhotos(latest, mergedPhotos)
       if (pendingPreviewUrl) deferRevokeObjectURL(pendingPreviewUrl)
 

@@ -98,7 +98,11 @@ export async function uploadLeadPhoto(getToken, {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || 'Upload failed')
   }
-  return res.json()
+  const json = await res.json()
+  // Hand back the thumbnail we just compressed so the gallery can display it
+  // immediately instead of waiting on a server round-trip that competes with
+  // the rest of a batch upload.
+  return { ...json, thumbnailBlob: compressed.thumbnail }
 }
 
 export async function saveLeadPhotoAnnotations(getToken, {

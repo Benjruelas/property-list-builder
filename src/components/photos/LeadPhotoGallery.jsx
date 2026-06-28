@@ -79,7 +79,7 @@ export function LeadPhotoGallery({
         parcelId: entity.parcelId || null,
       },
     })
-    return { entity: result.lead, photo: result.photo }
+    return { entity: result.lead, photo: result.photo, thumbnailBlob: result.thumbnailBlob }
   }, [getToken, currentUser])
 
   const { enqueue, retry, optimisticDelete, setEntity, uploadingCount, pendingDeleteIds } = useBackgroundPhotoUploadQueue({

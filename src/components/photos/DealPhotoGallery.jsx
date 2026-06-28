@@ -91,7 +91,7 @@ export function DealPhotoGallery({
         parcelId: entity.parcelId || lead?.parcelId || null,
       },
     })
-    return { entity: result.deal, photo: result.photo }
+    return { entity: result.deal, photo: result.photo, thumbnailBlob: result.thumbnailBlob }
   }, [getToken, currentUser, pipelineId, lead])
 
   const { enqueue, retry, optimisticDelete, setEntity, uploadingCount, pendingDeleteIds } = useBackgroundPhotoUploadQueue({

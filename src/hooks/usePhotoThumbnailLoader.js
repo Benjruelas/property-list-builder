@@ -66,6 +66,16 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       setThumbUrls((prev) => (prev[photo.id] === localUrl ? prev : { ...prev, [photo.id]: localUrl }))
       return
     }
+    // A photo that just finished uploading carries the thumbnail we already
+    // compressed locally. Show it immediately instead of fetching from the
+    // server (which competes with the rest of a batch upload). The canonical
+    // server thumbnail loads later once the photo object loses this field on a
+    // background refresh.
+    if (!skipLocalPreview && photo._freshThumbUrl) {
+      const freshUrl = photo._freshThumbUrl
+      setThumbUrls((prev) => (prev[photo.id] === freshUrl ? prev : { ...prev, [photo.id]: freshUrl }))
+      return
+    }
     const keys = getPhotoThumbnailFetchKeys(photo).filter((key) => key && key !== '__pending__')
     if (!keys.length) return
     const sourceToken = getPhotoThumbSourceToken(photo)
