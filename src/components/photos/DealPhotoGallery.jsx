@@ -176,7 +176,7 @@ export function DealPhotoGallery({
       setThumbUrls((prev) => (prev[photo.id] === annotatedPreviewUrl ? prev : { ...prev, [photo.id]: annotatedPreviewUrl }))
       return
     }
-    if (shouldUseLocalPhotoPreview(photo)) {
+    if (!skipLocalPreview && shouldUseLocalPhotoPreview(photo)) {
       const localUrl = photo._localPreviewUrl
       setThumbUrls((prev) => (prev[photo.id] === localUrl ? prev : { ...prev, [photo.id]: localUrl }))
       return

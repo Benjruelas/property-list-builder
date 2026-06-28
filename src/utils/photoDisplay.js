@@ -40,7 +40,15 @@ export function getAnnotatedDataPreviewUrl(photo, pendingPreviewUrl, { skipLocal
 }
 
 export function shouldUseLocalPhotoPreview(photo) {
-  return Boolean(photo?._localPreviewUrl && !photo?.annotatedKey && !photo?._annotatedPreviewUrl)
+  // Only trust an in-memory local preview before the photo has a real server key.
+  // A persisted photo (has key/annotatedKey) must always fetch from the server —
+  // a leftover _localPreviewUrl can be stale or revoked and would never load.
+  return Boolean(
+    photo?._localPreviewUrl
+    && !photo?.key
+    && !photo?.annotatedKey
+    && !photo?._annotatedPreviewUrl,
+  )
 }
 
 export function shouldUseAnnotatedPreviewUrl(photo) {

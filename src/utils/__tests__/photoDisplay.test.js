@@ -48,6 +48,13 @@ describe('photoDisplay', () => {
     expect(shouldUseLocalPhotoPreview({ _localPreviewUrl: 'blob:1', _annotatedPreviewUrl: 'blob:2' })).toBe(false)
   })
 
+  it('ignores a leftover local preview once the photo has a server key', () => {
+    expect(shouldUseLocalPhotoPreview({
+      _localPreviewUrl: 'data:image/jpeg;base64,stale',
+      key: 'lead-photos/u/lead/photo/original.jpg',
+    })).toBe(false)
+  })
+
   it('uses a short thumb source token for local annotated preview', () => {
     const token = getPhotoThumbSourceToken({
       _annotatedPreviewUrl: 'data:image/jpeg;base64,abc',
