@@ -11,6 +11,7 @@ import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 import { PhotoMode } from './PhotoMode'
 import { PhotoAnnotator } from './PhotoAnnotator'
 import { cn } from '@/lib/utils'
+import { deferRevokeObjectURL } from '@/utils/blobUrl'
 import {
   getPhotoPreviewKey,
   getPhotoThumbnailFetchKeys,
@@ -69,6 +70,7 @@ export function LeadPhotoGallery({
   const pendingAnnotatedPreviewRef = useRef({})
   const thumbUrlsRef = useRef({})
   const photosRef = useRef([])
+  const thumbErrorRetryRef = useRef({})
 
   const uploadOne = useCallback(async (source, existingPhotos, entity) => {
     const pos = await getCurrentPosition()
@@ -126,25 +128,24 @@ export function LeadPhotoGallery({
     delete thumbLoadedRef.current[photoId]
     const pendingPreview = pendingAnnotatedPreviewRef.current[photoId]
     if (pendingPreview) {
-      URL.revokeObjectURL(pendingPreview)
       delete pendingAnnotatedPreviewRef.current[photoId]
     }
     setThumbUrls((prev) => {
       const previous = prev[photoId]
-      if (previous?.startsWith('blob:')) {
-        const photo = photos.find((p) => p.id === photoId)
-        if (!photo?._localPreviewUrl && previous !== photo?._annotatedPreviewUrl && previous !== pendingPreview) {
-          URL.revokeObjectURL(previous)
-        }
+      if (previous?.startsWith('blob:')) deferRevokeObjectURL(previous)
+      if (pendingPreview?.startsWith('blob:') && pendingPreview !== previous) {
+        deferRevokeObjectURL(pendingPreview)
       }
       const next = { ...prev }
       delete next[photoId]
       return next
     })
-  }, [photos])
+  }, [])
 
-  const loadThumb = useCallback(async (photo) => {
-    const annotatedPreviewUrl = photo._annotatedPreviewUrl || pendingAnnotatedPreviewRef.current[photo.id] || null
+  const loadThumb = useCallback(async (photo, { skipLocalPreview = false } = {}) => {
+    const annotatedPreviewUrl = skipLocalPreview
+      ? null
+      : (photo._annotatedPreviewUrl || pendingAnnotatedPreviewRef.current[photo.id] || null)
     if (annotatedPreviewUrl) {
       setThumbUrls((prev) => (prev[photo.id] === annotatedPreviewUrl ? prev : { ...prev, [photo.id]: annotatedPreviewUrl }))
     } else if (shouldUseAnnotatedPreviewUrl(photo)) {
@@ -178,16 +179,15 @@ export function LeadPhotoGallery({
       if (!blob) return
       if (thumbRequestRef.current[photo.id] !== requestId) return
       thumbLoadedRef.current[photo.id] = sourceToken
+      thumbErrorRetryRef.current[photo.id] = 0
       const url = URL.createObjectURL(blob)
       const pendingPreview = pendingAnnotatedPreviewRef.current[photo.id]
-      if (pendingPreview) {
-        URL.revokeObjectURL(pendingPreview)
-        delete pendingAnnotatedPreviewRef.current[photo.id]
-      }
+      if (pendingPreview) delete pendingAnnotatedPreviewRef.current[photo.id]
       setThumbUrls((prev) => {
         const previous = prev[photo.id]
-        if (previous?.startsWith('blob:') && previous !== photo._localPreviewUrl && previous !== annotatedPreviewUrl && previous !== pendingPreview) {
-          URL.revokeObjectURL(previous)
+        if (previous?.startsWith('blob:') && previous !== url) deferRevokeObjectURL(previous)
+        if (pendingPreview?.startsWith('blob:') && pendingPreview !== url && pendingPreview !== previous) {
+          deferRevokeObjectURL(pendingPreview)
         }
         return { ...prev, [photo.id]: url }
       })
@@ -195,6 +195,23 @@ export function LeadPhotoGallery({
       // Keep local annotated preview visible; allow retry on next photos update.
     }
   }, [getToken])
+
+  const handleThumbLoadError = useCallback((photo) => {
+    const retries = (thumbErrorRetryRef.current[photo.id] || 0) + 1
+    if (retries > 5) return
+    thumbErrorRetryRef.current[photo.id] = retries
+    delete thumbLoadedRef.current[photo.id]
+    delete pendingAnnotatedPreviewRef.current[photo.id]
+    thumbRequestRef.current[photo.id] = (thumbRequestRef.current[photo.id] || 0) + 1
+    setThumbUrls((prev) => {
+      const bad = prev[photo.id]
+      if (bad?.startsWith('blob:')) deferRevokeObjectURL(bad)
+      const next = { ...prev }
+      delete next[photo.id]
+      return next
+    })
+    loadThumb({ ...photo, _annotatedPreviewUrl: undefined }, { skipLocalPreview: true })
+  }, [loadThumb])
 
   useEffect(() => {
     photos.forEach((p) => loadThumb(p))
@@ -206,15 +223,11 @@ export function LeadPhotoGallery({
   photosRef.current = photos
 
   useEffect(() => () => {
-    const currentPhotos = photosRef.current
-    Object.entries(thumbUrlsRef.current).forEach(([id, url]) => {
-      const photo = currentPhotos.find((p) => p.id === id)
-      if (url?.startsWith('blob:') && url !== photo?._localPreviewUrl && url !== photo?._annotatedPreviewUrl) {
-        URL.revokeObjectURL(url)
-      }
+    Object.entries(thumbUrlsRef.current).forEach(([, url]) => {
+      if (url?.startsWith('blob:')) deferRevokeObjectURL(url)
     })
     Object.values(pendingAnnotatedPreviewRef.current).forEach((url) => {
-      if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
+      if (url?.startsWith('blob:')) deferRevokeObjectURL(url)
     })
   }, [])
 
@@ -331,7 +344,12 @@ export function LeadPhotoGallery({
                     title={isFailed ? 'Tap to retry upload' : 'Preview photo'}
                   >
                     {thumbUrls[photo.id] ? (
-                      <img src={thumbUrls[photo.id]} alt="" className="w-full h-full object-cover" />
+                      <img
+                        src={thumbUrls[photo.id]}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={() => handleThumbLoadError(photo)}
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <Loader2 className="h-5 w-5 animate-spin opacity-40" />

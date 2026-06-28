@@ -12,6 +12,7 @@ import {
   UPLOAD_STATUS,
 } from '@/utils/optimisticPhotoUpload'
 import { showToast } from '@/components/ui/toast'
+import { deferRevokeObjectURL } from '@/utils/blobUrl'
 
 const MAX_CONCURRENT = 2
 
@@ -67,10 +68,11 @@ export function useBackgroundPhotoUploadQueue({
 
       const latest = entityRef.current || entityAtEnqueue
       const pending = (latest?.photos || []).find((p) => p.id === pendingId)
-      if (pending) revokeLocalPreview(pending)
+      const pendingPreviewUrl = pending?._localPreviewUrl
 
       const mergedPhotos = replacePhotoInList(latest?.photos || [], pendingId, result.photo)
       applyEntityPhotos(latest, mergedPhotos)
+      if (pendingPreviewUrl) deferRevokeObjectURL(pendingPreviewUrl)
 
       if (logActivity) {
         await logActivity(entityRef.current || result.entity)

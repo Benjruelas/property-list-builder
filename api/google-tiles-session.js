@@ -54,6 +54,16 @@ export default async function handler(req, res) {
     if (!resp.ok) {
       const errText = await resp.text()
       console.error('Google Map Tiles session error:', resp.status, errText)
+      if (cached) {
+        res.setHeader('Cache-Control', 'public, max-age=300')
+        return res.status(200).json({
+          tileUrl: tileUrlForSession(cached.session, key),
+          expiry: cached.expiry,
+          provider: 'google',
+          mapType,
+          stale: true,
+        })
+      }
       return res.status(502).json({ error: `Google API error: ${resp.status}` })
     }
 
@@ -70,6 +80,16 @@ export default async function handler(req, res) {
     })
   } catch (e) {
     console.error('Google Map Tiles session error:', e)
+    if (cached) {
+      res.setHeader('Cache-Control', 'public, max-age=300')
+      return res.status(200).json({
+        tileUrl: tileUrlForSession(cached.session, key),
+        expiry: cached.expiry,
+        provider: 'google',
+        mapType,
+        stale: true,
+      })
+    }
     return res.status(500).json({ error: e.message || 'Internal server error' })
   }
 }
