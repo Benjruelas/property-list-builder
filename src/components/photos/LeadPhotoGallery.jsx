@@ -92,7 +92,7 @@ export function LeadPhotoGallery({
     return { entity: result.lead, photo: result.photo }
   }, [getToken, currentUser])
 
-  const { enqueue, retry, optimisticDelete, setEntity, uploadingCount } = useBackgroundPhotoUploadQueue({
+  const { enqueue, retry, optimisticDelete, setEntity, uploadingCount, pendingDeleteIds } = useBackgroundPhotoUploadQueue({
     getToken,
     uploadOne,
     onEntityUpdated: onLeadUpdate,
@@ -105,7 +105,10 @@ export function LeadPhotoGallery({
     if (lead) setEntity(lead)
   }, [lead, setEntity])
 
-  const photos = Array.isArray(lead?.photos) ? lead.photos : []
+  const photos = useMemo(() => {
+    const all = Array.isArray(lead?.photos) ? lead.photos : []
+    return pendingDeleteIds.size ? all.filter((p) => !pendingDeleteIds.has(p.id)) : all
+  }, [lead?.photos, pendingDeleteIds])
   const photosUsed = sumLeadPhotoBytes(photos)
   const photosStorageFull = photosUsed >= LEAD_STORAGE_LIMIT_BYTES
 

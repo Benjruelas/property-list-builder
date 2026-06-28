@@ -15,6 +15,9 @@ import { showToast } from '@/components/ui/toast'
 import { deferRevokeObjectURL } from '@/utils/blobUrl'
 
 const MAX_CONCURRENT = 2
+// Keep a deleted photo hidden until any background list poll that was already
+// in flight has resolved, so a stale refresh can't briefly resurface it.
+const DELETE_SETTLE_MS = 35000
 
 /**
  * Background photo upload queue with optimistic gallery updates.
@@ -37,21 +40,60 @@ export function useBackgroundPhotoUploadQueue({
   const queueRef = useRef([])
   const activeCountRef = useRef(0)
   const [uploadingCount, setUploadingCount] = useState(0)
+  // Photos the user has deleted but whose removal may not yet be reflected by
+  // background list refreshes. Display + entity writes filter these out so a
+  // deleted photo never flickers back into the grid.
+  const [pendingDeleteIds, setPendingDeleteIds] = useState(() => new Set())
+  const pendingDeleteIdsRef = useRef(pendingDeleteIds)
+  pendingDeleteIdsRef.current = pendingDeleteIds
+  // Serialize server deletes so concurrent read-modify-write requests can't
+  // clobber each other and leave a "deleted" photo on the server.
+  const deleteChainRef = useRef(Promise.resolve())
+  const deleteTimersRef = useRef(new Map())
 
   const syncUploadingCount = useCallback(() => {
     setUploadingCount(activeCountRef.current + queueRef.current.length)
+  }, [])
+
+  const markDeleting = useCallback((id) => {
+    setPendingDeleteIds((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }, [])
+
+  const unmarkDeleting = useCallback((id) => {
+    const timer = deleteTimersRef.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      deleteTimersRef.current.delete(id)
+    }
+    setPendingDeleteIds((prev) => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+  }, [])
+
+  const filterDeleting = useCallback((photos) => {
+    const deleting = pendingDeleteIdsRef.current
+    if (!deleting.size) return photos
+    return (Array.isArray(photos) ? photos : []).filter((p) => !deleting.has(p.id))
   }, [])
 
   const applyEntityPhotos = useCallback((entity, photos) => {
     if (!entity) return
     const next = {
       ...entity,
-      photos,
+      photos: filterDeleting(photos),
       updatedAt: new Date().toISOString(),
     }
     entityRef.current = next
     onEntityUpdated?.(next)
-  }, [onEntityUpdated])
+  }, [onEntityUpdated, filterDeleting])
 
   const runJob = useCallback(async (job) => {
     const { pendingId, source, entityAtEnqueue } = job
@@ -173,38 +215,58 @@ export function useBackgroundPhotoUploadQueue({
     startUpload(photoId, job.source, entityRef.current)
   }, [applyEntityPhotos, startUpload])
 
-  const optimisticDelete = useCallback(async (photo, deleteOne) => {
-    if (!photo?.id) return
+  const optimisticDelete = useCallback((photo, deleteOne) => {
+    if (!photo?.id) return Promise.resolve({ ok: true })
     if (isPendingPhoto(photo)) {
       cancel(photo.id)
-      return
+      return Promise.resolve({ ok: true })
     }
 
     const entity = entityRef.current
-    if (!entity) return
+    if (!entity) return Promise.resolve({ ok: false })
 
     const photos = entity.photos || []
     const index = photos.findIndex((p) => p.id === photo.id)
-    if (index === -1) return
+    if (index === -1) return Promise.resolve({ ok: true })
 
     const snapshot = { photo, index }
+    markDeleting(photo.id)
     applyEntityPhotos(entity, removePhotoFromList(photos, photo.id))
 
-    try {
-      const result = await deleteOne()
-      if (result?.entity) {
-        entityRef.current = result.entity
-        onEntityUpdated?.(result.entity)
+    const run = deleteChainRef.current.then(async () => {
+      try {
+        const result = await deleteOne()
+        if (result?.entity) {
+          applyEntityPhotos(result.entity, result.entity.photos || [])
+        }
+        // Keep it filtered briefly so an already in-flight poll can't resurface it.
+        const timer = setTimeout(() => {
+          deleteTimersRef.current.delete(photo.id)
+          unmarkDeleting(photo.id)
+        }, DELETE_SETTLE_MS)
+        deleteTimersRef.current.set(photo.id, timer)
+        return { ok: true }
+      } catch (err) {
+        unmarkDeleting(photo.id)
+        const latest = entityRef.current || entity
+        applyEntityPhotos(latest, insertPhotoInList(latest.photos || [], snapshot.photo, snapshot.index))
+        showToast(err?.message || 'Delete failed', 'error')
+        return { ok: false }
       }
-    } catch (err) {
-      const latest = entityRef.current || entity
-      applyEntityPhotos(latest, insertPhotoInList(latest.photos || [], snapshot.photo, snapshot.index))
-      showToast(err?.message || 'Delete failed', 'error')
-    }
-  }, [applyEntityPhotos, cancel, onEntityUpdated])
+    })
+    deleteChainRef.current = run.catch(() => {})
+    return run
+  }, [applyEntityPhotos, cancel, markDeleting, unmarkDeleting])
 
   const setEntity = useCallback((entity) => {
-    entityRef.current = entity
+    if (!entity) {
+      entityRef.current = entity
+      return
+    }
+    const deleting = pendingDeleteIdsRef.current
+    entityRef.current = deleting.size
+      ? { ...entity, photos: (entity.photos || []).filter((p) => !deleting.has(p.id)) }
+      : entity
   }, [])
 
   useEffect(() => () => {
@@ -212,6 +274,8 @@ export function useBackgroundPhotoUploadQueue({
     ;(latest?.photos || []).forEach((photo) => {
       if (isPendingPhoto(photo)) revokeLocalPreview(photo)
     })
+    deleteTimersRef.current.forEach((timer) => clearTimeout(timer))
+    deleteTimersRef.current.clear()
   }, [])
 
   return {
@@ -221,5 +285,6 @@ export function useBackgroundPhotoUploadQueue({
     optimisticDelete,
     setEntity,
     uploadingCount,
+    pendingDeleteIds,
   }
 }

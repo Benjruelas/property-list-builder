@@ -104,7 +104,7 @@ export function DealPhotoGallery({
     return { entity: result.deal, photo: result.photo }
   }, [getToken, currentUser, pipelineId, lead])
 
-  const { enqueue, retry, optimisticDelete, setEntity, uploadingCount } = useBackgroundPhotoUploadQueue({
+  const { enqueue, retry, optimisticDelete, setEntity, uploadingCount, pendingDeleteIds } = useBackgroundPhotoUploadQueue({
     getToken,
     uploadOne,
     onEntityUpdated: onDealUpdate,
@@ -114,7 +114,10 @@ export function DealPhotoGallery({
     if (deal) setEntity(deal)
   }, [deal, setEntity])
 
-  const photos = Array.isArray(deal?.photos) ? deal.photos : []
+  const photos = useMemo(() => {
+    const all = Array.isArray(deal?.photos) ? deal.photos : []
+    return pendingDeleteIds.size ? all.filter((p) => !pendingDeleteIds.has(p.id)) : all
+  }, [deal?.photos, pendingDeleteIds])
   const photosUsed = sumDealPhotoBytes(photos)
   const photosStorageFull = photosUsed >= DEAL_PHOTO_STORAGE_LIMIT_BYTES
 
