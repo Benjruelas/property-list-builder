@@ -8,6 +8,7 @@ import { CompassOrientation } from './components/CompassOrientation'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { MapControls } from './components/MapControls'
 import { MobileActionBar } from './components/MobileActionBar'
+import { QuickCreateFab } from './components/QuickCreateFab'
 import { AddressSearch } from './components/AddressSearch'
 import { ListPanel } from './components/ListPanel'
 import { SkipTracedListPanel } from './components/SkipTracedListPanel'
@@ -412,6 +413,10 @@ function App() {
   /** When set, user is choosing a target pipeline to move a deal into. */
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [quickCreateTaskKey, setQuickCreateTaskKey] = useState(0)
+  const [quickCreateQuoteKey, setQuickCreateQuoteKey] = useState(0)
+  const [quickCreateReportKey, setQuickCreateReportKey] = useState(0)
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
   const [paths, setPaths] = useState([])
   const pathColorMap = useMemo(() => buildPathColorMap(paths), [paths])
@@ -1563,6 +1568,50 @@ function App() {
       nav.pushModal({ type: 'dealTemplatePicker', prefill })
     })
   }, [currentUser, pipelines, teams, nav, guardFeature])
+
+  const handleQuickCreateOpenChange = useCallback((open) => {
+    setQuickCreateOpen(open)
+    if (open) nav.setShowMenu(false)
+  }, [nav])
+
+  const handleActionBarMenuChange = useCallback((valueOrFn) => {
+    const next = typeof valueOrFn === 'function' ? valueOrFn(showMenu) : valueOrFn
+    if (next) setQuickCreateOpen(false)
+    nav.setShowMenu(next)
+  }, [nav, showMenu])
+
+  const openQuickCreateTask = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('tasks', () => {
+      nav.openTasks()
+      setQuickCreateTaskKey((k) => k + 1)
+    })
+  }, [requireAuth, guardFeature, nav])
+
+  const openQuickCreateLead = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('leads', () => nav.pushModal({ type: 'createLead', prefill: null }))
+  }, [requireAuth, guardFeature, nav])
+
+  const openQuickCreateDeal = useCallback(() => {
+    openCreateDealDialog()
+  }, [openCreateDealDialog])
+
+  const openQuickCreateQuote = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('quotes', () => {
+      nav.openQuotes()
+      setQuickCreateQuoteKey((k) => k + 1)
+    })
+  }, [requireAuth, guardFeature, nav])
+
+  const openQuickCreateReport = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('reports', () => {
+      nav.openReports()
+      setQuickCreateReportKey((k) => k + 1)
+    })
+  }, [requireAuth, guardFeature, nav])
 
   const handleDealTemplatePicked = useCallback((template) => {
     const pending = pendingCreateDealPrefill || {}
@@ -3770,7 +3819,7 @@ function App() {
         onOpenActivity={() => guardFeature('activity', () => nav.toggleActivityFromActionBar())}
         activityUnreadCount={notificationInbox.unreadCount}
         showMenu={showMenu}
-        setShowMenu={nav.setShowMenu}
+        setShowMenu={handleActionBarMenuChange}
         onOpenListPanel={openListPanel}
         selectedListIds={selectedListIds}
         onOpenPathsPanel={openPathsPanel}
@@ -3780,6 +3829,19 @@ function App() {
         onOpenSettings={openSettingsPanel}
         currentUser={currentUser}
         onLogin={openLogin}
+      />
+
+      <QuickCreateFab
+        open={quickCreateOpen}
+        onOpenChange={handleQuickCreateOpenChange}
+        onCreateTask={openQuickCreateTask}
+        onCreateLead={openQuickCreateLead}
+        onCreateDeal={openQuickCreateDeal}
+        onCreateQuote={openQuickCreateQuote}
+        onCreateReport={openQuickCreateReport}
+        canAccessFeature={canAccessFeature}
+        accentColor={settings.parcelBoundaryColor || '#2563eb'}
+        actionBarMenuOpen={showMenu}
       />
 
       <ListPanel
@@ -4057,6 +4119,7 @@ function App() {
           guardFeature('leads', () => nav.openLeadDetailFromTasks(lead.id))
         }}
         onCreateLead={openCreateLeadForPicker}
+        quickCreateRequestKey={quickCreateTaskKey}
       />
       </Suspense>
       )}
@@ -4184,6 +4247,7 @@ function App() {
             canSeeDealAmounts={showDealAmounts}
             teams={teams}
             teamMembership={teamMembership}
+            quickCreateRequestKey={quickCreateQuoteKey}
           />
         </Suspense>
       )}
@@ -4207,6 +4271,7 @@ function App() {
             onCloseDetail={handleCloseReportsDetail}
             teams={teams}
             teamMembership={teamMembership}
+            quickCreateRequestKey={quickCreateReportKey}
           />
         </Suspense>
       )}

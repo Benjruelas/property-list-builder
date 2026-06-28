@@ -29,6 +29,14 @@
     --ui-panel-width-ratio: 1.365;
     --ui-touch-scale: 1;
     --action-bar-width: min(92vw, 400px);
+    --ui-action-bar-btn-height: calc(3.5rem * var(--ui-touch-scale));
+    --ui-action-bar-inner-v-pad: calc(12px * var(--ui-touch-scale));
+    --ui-action-bar-block: calc(
+      var(--ui-action-bar-btn-height)
+      + var(--ui-action-bar-inner-v-pad)
+      + 12px
+      + env(safe-area-inset-bottom, 0px)
+    );
     --tasks-dock-width: min(300px, 24vw);
     --tasks-dock-gap: 14px;
     --tasks-panel-right-inset: calc(12px + env(safe-area-inset-right, 0px));
@@ -3116,7 +3124,7 @@
 
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
 /* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle, form-fill buttons - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):not(.quick-create-fab-btn),
 .map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action) {
   background: var(--map-panel-btn-bg) !important;
   border-color: var(--map-panel-btn-border) !important;
@@ -3135,9 +3143,9 @@
 }
 
 /* Hamburger menu - no fills on options, match user section (transparent) */
-.hamburger-menu button,
+.hamburger-menu button:not(.quick-create-fab-btn),
 .hamburger-menu .hamburger-menu-btn,
-.map-controls-stack .hamburger-menu button,
+.map-controls-stack .hamburger-menu button:not(.quick-create-fab-btn),
 .map-controls-stack .hamburger-menu .hamburger-menu-btn {
   background: none !important;
   background-color: transparent !important;
@@ -3147,9 +3155,9 @@
   box-shadow: none !important;
   color: var(--map-panel-text) !important;
 }
-.hamburger-menu button:hover,
+.hamburger-menu button:not(.quick-create-fab-btn):hover,
 .hamburger-menu .hamburger-menu-btn:hover,
-.map-controls-stack .hamburger-menu button:hover,
+.map-controls-stack .hamburger-menu button:not(.quick-create-fab-btn):hover,
 .map-controls-stack .hamburger-menu .hamburger-menu-btn:hover {
   background: none !important;
   background-color: transparent !important;
@@ -4396,16 +4404,16 @@
 }
 
 /* Icon-only buttons: no fills or outlines (except map buttons) */
-button.icon-only-btn:not(.map-controls-stack *):not(.map-search-stack *),
-button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn) {
+button.icon-only-btn:not(.map-controls-stack *):not(.map-search-stack *):not(.quick-create-fab-btn),
+button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.quick-create-fab-btn) {
   background: none !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   box-shadow: none !important;
 }
-button.icon-only-btn:hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *),
-button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn) {
+button.icon-only-btn:hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.quick-create-fab-btn),
+button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.quick-create-fab-btn) {
   background: none !important;
   border: none !important;
 }
@@ -6514,6 +6522,94 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 @keyframes mobile-action-bar-menu-pop {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---- Quick Create FAB (above action bar, right) ---- */
+#modal-root button.quick-create-fab-btn {
+  position: fixed !important;
+  right: 12px !important;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 8px) !important;
+  z-index: 10004 !important;
+  pointer-events: auto !important;
+  -webkit-tap-highlight-color: transparent;
+  appearance: none !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: var(--map-chrome-btn-size, 3rem) !important;
+  height: var(--map-chrome-btn-size, 3rem) !important;
+  min-width: var(--map-chrome-btn-size, 3rem) !important;
+  min-height: var(--map-chrome-btn-size, 3rem) !important;
+  max-width: var(--map-chrome-btn-size, 3rem) !important;
+  max-height: var(--map-chrome-btn-size, 3rem) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
+  border: 3px solid var(--quick-create-fab-accent, #2563eb) !important;
+  background: var(--quick-create-fab-accent, #2563eb) !important;
+  background-color: var(--quick-create-fab-accent, #2563eb) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32), 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: transform 140ms ease, filter 140ms ease, opacity 160ms ease, visibility 160ms ease;
+}
+
+#modal-root button.quick-create-fab-btn.quick-create-fab-btn--hidden {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+#modal-root button.quick-create-fab-btn:hover {
+  filter: brightness(1.05);
+}
+
+#modal-root button.quick-create-fab-btn:active {
+  transform: scale(0.96);
+}
+
+#modal-root button.quick-create-fab-btn.is-open {
+  transform: rotate(45deg);
+}
+
+#modal-root button.quick-create-fab-btn.is-open:active {
+  transform: rotate(45deg) scale(0.96);
+}
+
+#modal-root button.quick-create-fab-btn .quick-create-fab-icon {
+  width: calc(1.5rem * var(--ui-touch-scale, 1)) !important;
+  height: calc(1.5rem * var(--ui-touch-scale, 1)) !important;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.quick-create-fab-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10057;
+}
+
+.quick-create-fab-menu {
+  position: fixed;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 8px + var(--map-chrome-btn-size, 3rem) + 8px);
+  min-width: 200px;
+  max-width: min(280px, calc(100vw - 24px));
+  z-index: 10058;
+  padding: 8px 0;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  transform-origin: bottom right;
+  animation: mobile-action-bar-menu-pop 140ms ease-out;
+  pointer-events: auto;
+}
+
+
+#modal-root .quick-create-fab-menu,
+#modal-root .quick-create-fab-menu-backdrop {
+  pointer-events: auto !important;
 }
 
 /* Legacy: map-controls hamburger removed; keep rule harmless if class lingers */

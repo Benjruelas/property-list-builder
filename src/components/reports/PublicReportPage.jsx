@@ -72,7 +72,7 @@ export function PublicReportPage({ token }) {
     return () => { cancelled = true }
   }, [token])
 
-  const pageClass = cn('public-form-page flex flex-col min-h-screen bg-gray-100 text-gray-900')
+  const pageClass = cn('public-form-page flex flex-col h-[100dvh] overflow-hidden bg-gray-100 text-gray-900')
   const branding = data?.branding
   const report = data?.report
   const lead = data?.lead
@@ -118,7 +118,7 @@ export function PublicReportPage({ token }) {
     <div className={pageClass}>
       {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
       {brandChrome}
-      <div className="flex-1 overflow-y-auto px-4 py-6 max-w-2xl mx-auto w-full">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 max-w-2xl mx-auto w-full">
         {data?.preview && (
           <div
             className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"

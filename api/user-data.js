@@ -10,28 +10,7 @@
  */
 
 import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-}
+import { kv, kvAvailable } from './lib/kvBootstrap.js'
 
 function kvKey(uid) {
   return `user_data_${uid}`

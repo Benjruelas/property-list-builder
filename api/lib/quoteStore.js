@@ -3,31 +3,10 @@
  */
 
 import { readLocalDevArray, writeLocalDevArray } from './localDevPersistence.js'
+import { kv, kvAvailable } from './kvBootstrap.js'
 
 export const TEMPLATES_KV_KEY = 'quote_templates'
 export const QUOTES_KV_KEY = 'user_quotes'
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
 
 let fallbackTemplates = []
 let fallbackQuotes = []

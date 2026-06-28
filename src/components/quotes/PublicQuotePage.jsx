@@ -103,7 +103,7 @@ export function PublicQuotePage({ token }) {
     }
   }
 
-  const pageClass = cn('public-form-page flex flex-col min-h-screen bg-gray-100 text-gray-900')
+  const pageClass = cn('public-form-page flex flex-col h-[100dvh] overflow-hidden bg-gray-100 text-gray-900')
   const displayTotal = liveTotals?.total ?? data?.total ?? 0
   const optionalIds = new Set(data?.optionalLineIds || [])
   const branding = data?.branding
@@ -164,7 +164,7 @@ export function PublicQuotePage({ token }) {
     <div className={pageClass}>
       {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
       {brandChrome}
-      <div className="flex-1 overflow-y-auto px-4 py-6 max-w-lg mx-auto w-full">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 max-w-lg mx-auto w-full">
         {isPreview && (
           <div
             className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"

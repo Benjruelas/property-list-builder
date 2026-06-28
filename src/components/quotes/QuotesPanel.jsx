@@ -68,6 +68,7 @@ export function QuotesPanel({
   canSeeDealAmounts = true,
   teams = [],
   teamMembership = null,
+  quickCreateRequestKey = 0,
 }) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('quotes')
@@ -97,6 +98,7 @@ export function QuotesPanel({
         : editorTemplate
   const [sendQuote, setSendQuote] = useState(null)
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const lastQuickCreateKeyRef = useRef(0)
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
   const [msgTextBody, setMsgTextBody] = useState('')
@@ -200,6 +202,12 @@ export function QuotesPanel({
   const openNewQuote = () => {
     setTemplatePickerOpen(true)
   }
+
+  useEffect(() => {
+    if (!isOpen || !quickCreateRequestKey || quickCreateRequestKey === lastQuickCreateKeyRef.current) return
+    lastQuickCreateKeyRef.current = quickCreateRequestKey
+    setTemplatePickerOpen(true)
+  }, [isOpen, quickCreateRequestKey])
 
   const handleTemplatePicked = (template) => {
     onOpenEditor?.({

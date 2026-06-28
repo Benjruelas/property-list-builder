@@ -61,6 +61,7 @@ export function TasksPanel({
   onPipelinesChange,
   teams = [],
   onCreateLead,
+  quickCreateRequestKey = 0,
 }) {
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
@@ -68,6 +69,7 @@ export function TasksPanel({
   const tasksLoadedOnce = useRef(false)
   const [listReady, setListReady] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
+  const lastQuickCreateKeyRef = useRef(0)
 
   const [collapsedSections, setCollapsedSections] = useState({})
   const [showClosedTasks, setShowClosedTasks] = useState(false)
@@ -108,6 +110,12 @@ export function TasksPanel({
       setTasksLoading(false)
     }
   }, [isOpen, refreshTasks])
+
+  useEffect(() => {
+    if (!isOpen || !quickCreateRequestKey || quickCreateRequestKey === lastQuickCreateKeyRef.current) return
+    lastQuickCreateKeyRef.current = quickCreateRequestKey
+    setShowAddTask(true)
+  }, [isOpen, quickCreateRequestKey])
 
   const allDeals = useMemo(() => {
     const fromPipelines = flattenDealsFromPipelines(pipelines)

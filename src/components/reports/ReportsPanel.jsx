@@ -66,6 +66,7 @@ export function ReportsPanel({
   onCloseDetail,
   teams = [],
   teamMembership = null,
+  quickCreateRequestKey = 0,
 }) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('reports')
@@ -81,6 +82,7 @@ export function ReportsPanel({
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
   const [pendingReportLeadId, setPendingReportLeadId] = useState(null)
   const [pendingPreferredTemplate, setPendingPreferredTemplate] = useState(null)
+  const lastQuickCreateKeyRef = useRef(0)
 
   const editorOpen = !!editorFrame
   const hasReportDetail = !!detailReportId
@@ -192,6 +194,14 @@ export function ReportsPanel({
     setPendingReportLeadId(null)
     setLeadPickerOpen(true)
   }
+
+  useEffect(() => {
+    if (!isOpen || !quickCreateRequestKey || quickCreateRequestKey === lastQuickCreateKeyRef.current) return
+    lastQuickCreateKeyRef.current = quickCreateRequestKey
+    setPendingPreferredTemplate(null)
+    setPendingReportLeadId(null)
+    setLeadPickerOpen(true)
+  }, [isOpen, quickCreateRequestKey])
 
   const resetReportCreateFlow = () => {
     setLeadPickerOpen(false)
