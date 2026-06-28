@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -189,8 +189,14 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
-  const getToken = () =>
-    isDev ? Promise.resolve('dev-bypass') : (auth.currentUser?.getIdToken?.() ?? Promise.resolve(null))
+  // Stable identity: reads auth.currentUser live at call time, so it never needs
+  // to be recreated. A new identity on every render would churn any effect that
+  // depends on getToken (e.g. photo thumbnail loaders), cancelling in-flight
+  // fetches and leaving spinners stuck even when the request succeeds.
+  const getToken = useCallback(
+    () => (isDev ? Promise.resolve('dev-bypass') : (auth.currentUser?.getIdToken?.() ?? Promise.resolve(null))),
+    [],
+  )
 
   const updateDisplayName = async (displayName) => {
     const trimmed = (displayName || '').trim()
