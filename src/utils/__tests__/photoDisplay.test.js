@@ -49,9 +49,9 @@ describe('photoDisplay', () => {
 
   it('tracks annotated preview url in thumb source token', () => {
     const token = getPhotoThumbSourceToken({
-      _annotatedPreviewUrl: 'blob:annotated',
+      _annotatedPreviewUrl: 'data:image/jpeg;base64,abc',
       updatedAt: '2026-01-01',
     })
-    expect(token).toContain('blob:annotated')
+    expect(token).toContain('data:image/jpeg;base64,abc')
   })
 })

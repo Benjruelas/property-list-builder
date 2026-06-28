@@ -11,7 +11,7 @@ import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 import { PhotoMode } from './PhotoMode'
 import { PhotoAnnotator } from './PhotoAnnotator'
 import { cn } from '@/lib/utils'
-import { deferRevokeObjectURL } from '@/utils/blobUrl'
+import { deferRevokeObjectURL, isRevocableBlobUrl } from '@/utils/blobUrl'
 import {
   getPhotoPreviewKey,
   getPhotoThumbnailFetchKeys,
@@ -40,7 +40,7 @@ function photoPreviewName(photo, index) {
 }
 
 async function loadPhotoPreviewBlob(getToken, photo) {
-  if (shouldUseAnnotatedPreviewUrl(photo)) {
+  if (photo._annotatedPreviewUrl?.startsWith('data:')) {
     const res = await fetch(photo._annotatedPreviewUrl)
     return res.blob()
   }
@@ -133,7 +133,7 @@ export function LeadPhotoGallery({
     setThumbUrls((prev) => {
       const previous = prev[photoId]
       if (previous?.startsWith('blob:')) deferRevokeObjectURL(previous)
-      if (pendingPreview?.startsWith('blob:') && pendingPreview !== previous) {
+      if (pendingPreview && isRevocableBlobUrl(pendingPreview) && pendingPreview !== previous) {
         deferRevokeObjectURL(pendingPreview)
       }
       const next = { ...prev }
@@ -143,9 +143,13 @@ export function LeadPhotoGallery({
   }, [])
 
   const loadThumb = useCallback(async (photo, { skipLocalPreview = false } = {}) => {
-    const annotatedPreviewUrl = skipLocalPreview
+    const rawPreview = skipLocalPreview
       ? null
       : (photo._annotatedPreviewUrl || pendingAnnotatedPreviewRef.current[photo.id] || null)
+    if (isRevocableBlobUrl(rawPreview)) {
+      delete pendingAnnotatedPreviewRef.current[photo.id]
+    }
+    const annotatedPreviewUrl = rawPreview?.startsWith('data:') ? rawPreview : null
     if (annotatedPreviewUrl) {
       setThumbUrls((prev) => (prev[photo.id] === annotatedPreviewUrl ? prev : { ...prev, [photo.id]: annotatedPreviewUrl }))
     } else if (shouldUseAnnotatedPreviewUrl(photo)) {
@@ -186,7 +190,7 @@ export function LeadPhotoGallery({
       setThumbUrls((prev) => {
         const previous = prev[photo.id]
         if (previous?.startsWith('blob:') && previous !== url) deferRevokeObjectURL(previous)
-        if (pendingPreview?.startsWith('blob:') && pendingPreview !== url && pendingPreview !== previous) {
+        if (pendingPreview && isRevocableBlobUrl(pendingPreview) && pendingPreview !== url && pendingPreview !== previous) {
           deferRevokeObjectURL(pendingPreview)
         }
         return { ...prev, [photo.id]: url }

@@ -24,10 +24,33 @@ function tileUrlForSession(session, key) {
   return `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${session}&key=${key}`
 }
 
+function clientFallbackResponse(res, mapType) {
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({
+    useClientFallback: true,
+    mapType,
+    provider: 'mapbox',
+  })
+}
+
+async function createGoogleSession(key, mapType) {
+  const resp = await fetch(`https://tile.googleapis.com/v1/createSession?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(googleSessionBody(mapType)),
+  })
+  if (!resp.ok) {
+    const errText = await resp.text()
+    console.error('Google Map Tiles session error:', resp.status, errText)
+    return null
+  }
+  return resp.json()
+}
+
 export default async function handler(req, res) {
   const key = process.env.GOOGLE_MAPS_TILES_KEY || process.env.GOOGLE_SOLAR_API_KEY
   if (!key) {
-    return res.status(404).json({ error: 'GOOGLE_MAPS_TILES_KEY not configured' })
+    return clientFallbackResponse(res, req.query.mapType || 'satellite')
   }
 
   const rawType = req.query.mapType || 'satellite'
@@ -45,15 +68,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const resp = await fetch(`https://tile.googleapis.com/v1/createSession?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(googleSessionBody(mapType)),
-    })
+    let data = await createGoogleSession(key, mapType)
+    if (!data) {
+      await new Promise((resolve) => { setTimeout(resolve, 400) })
+      data = await createGoogleSession(key, mapType)
+    }
 
-    if (!resp.ok) {
-      const errText = await resp.text()
-      console.error('Google Map Tiles session error:', resp.status, errText)
+    if (!data) {
       if (cached) {
         res.setHeader('Cache-Control', 'public, max-age=300')
         return res.status(200).json({
@@ -64,10 +85,9 @@ export default async function handler(req, res) {
           stale: true,
         })
       }
-      return res.status(502).json({ error: `Google API error: ${resp.status}` })
+      return clientFallbackResponse(res, mapType)
     }
 
-    const data = await resp.json()
     const expiry = new Date(data.expiry).getTime()
     sessionCache[mapType] = { session: data.session, expiry }
 
@@ -90,6 +110,6 @@ export default async function handler(req, res) {
         stale: true,
       })
     }
-    return res.status(500).json({ error: e.message || 'Internal server error' })
+    return clientFallbackResponse(res, mapType)
   }
 }

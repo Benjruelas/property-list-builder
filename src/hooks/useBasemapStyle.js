@@ -11,7 +11,8 @@ function readPersistedSession(mapStyleSetting) {
     if (!raw) return null
     const all = JSON.parse(raw)
     const entry = all[mapStyleSetting]
-    if (!entry?.expiry || Date.now() > entry.expiry - SESSION_REFRESH_BUFFER_MS) return null
+    if (!entry?.expiry || entry.useClientFallback) return null
+    if (Date.now() > entry.expiry - SESSION_REFRESH_BUFFER_MS) return null
     return entry
   } catch {
     return null
@@ -66,6 +67,15 @@ export function useBasemapStyle(mapStyleSetting, options = {}) {
     })
   }, [mapStyleSetting])
 
+  const applyMapboxFallback = useCallback((background) => {
+    const fallback = getMapboxFallbackSource(mapStyleSetting)
+    if (!fallback) return false
+    if (!background) {
+      applyBasemapSource(fallback, 'mapbox')
+    }
+    return true
+  }, [mapStyleSetting, applyBasemapSource])
+
   const loadBasemap = useCallback(async ({ background = false } = {}) => {
     const loadId = ++loadIdRef.current
 
@@ -78,6 +88,15 @@ export function useBasemapStyle(mapStyleSetting, options = {}) {
       if (res.ok) {
         const data = await res.json()
         if (loadId !== loadIdRef.current) return
+
+        if (data.useClientFallback) {
+          if (background) return
+          if (!applyMapboxFallback(false)) {
+            setState({ mapStyle: null, basemapStatus: 'error', basemapProvider: null })
+          }
+          return
+        }
+
         sessionCacheRef.current[mapStyleSetting] = data
         persistSession(mapStyleSetting, data)
 
@@ -95,22 +114,16 @@ export function useBasemapStyle(mapStyleSetting, options = {}) {
 
     if (loadId !== loadIdRef.current) return
 
-    const fallback = getMapboxFallbackSource(mapStyleSetting)
-    if (fallback) {
+    if (!applyMapboxFallback(background)) {
       if (!background) {
-        applyBasemapSource(fallback, 'mapbox')
+        setState({
+          mapStyle: null,
+          basemapStatus: 'error',
+          basemapProvider: null,
+        })
       }
-      return
     }
-
-    if (!background) {
-      setState({
-        mapStyle: null,
-        basemapStatus: 'error',
-        basemapProvider: null,
-      })
-    }
-  }, [mapStyleSetting, applyBasemapSource])
+  }, [mapStyleSetting, applyBasemapSource, applyMapboxFallback])
 
   useEffect(() => {
     const persisted = readPersistedSession(mapStyleSetting)

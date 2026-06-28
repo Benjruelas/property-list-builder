@@ -5,6 +5,7 @@ import { showToast } from '../ui/toast'
 import { normalizeAnnotationObjects } from '@/utils/photoAnnotations'
 import { PhotoAnnotatorEditor } from './PhotoAnnotatorEditor'
 import { renderFlatImageBlobs } from './photoAnnotatorRender'
+import { blobToDataUrl } from '@/utils/blobUrl'
 import { getPhotoAnnotationBaseKey } from '@/utils/photoDisplay'
 
 export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, onClose, onSaved }) {
@@ -57,7 +58,7 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
     let annotatedPreviewUrl = null
     try {
       const { file, thumbnail } = await renderFlatImageBlobs(image, objects, image.width, image.height)
-      annotatedPreviewUrl = URL.createObjectURL(thumbnail)
+      annotatedPreviewUrl = await blobToDataUrl(thumbnail)
       const optimisticPhoto = {
         ...photo,
         annotations,
@@ -83,7 +84,6 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
       })
       onSaved?.(updated, { complete: true })
     } catch (e) {
-      if (annotatedPreviewUrl) URL.revokeObjectURL(annotatedPreviewUrl)
       onSaved?.(snapshotDeal, { complete: true })
       showToast(e.message || 'Save failed', 'error')
     } finally {

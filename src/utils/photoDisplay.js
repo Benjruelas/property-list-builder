@@ -36,5 +36,5 @@ export function shouldUseLocalPhotoPreview(photo) {
 }
 
 export function shouldUseAnnotatedPreviewUrl(photo) {
-  return Boolean(photo?._annotatedPreviewUrl)
+  return Boolean(photo?._annotatedPreviewUrl?.startsWith('data:'))
 }
