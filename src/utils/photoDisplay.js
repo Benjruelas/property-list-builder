@@ -25,8 +25,9 @@ export function getPhotoAnnotationBaseKey(photo) {
 
 export function getPhotoThumbSourceToken(photo) {
   if (!photo) return ''
+  // Never embed _annotatedPreviewUrl in query params — data URLs exceed URI limits.
   if (photo._annotatedPreviewUrl) {
-    return `local-annotated:${photo._annotatedPreviewUrl}:${photo.updatedAt || ''}`
+    return `local-annotated:${photo.updatedAt || 'pending'}`
   }
   return `${getPhotoThumbnailKey(photo) || ''}:${photo.updatedAt || ''}`
 }

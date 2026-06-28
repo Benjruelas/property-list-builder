@@ -47,11 +47,12 @@ describe('photoDisplay', () => {
     expect(shouldUseLocalPhotoPreview({ _localPreviewUrl: 'blob:1', _annotatedPreviewUrl: 'blob:2' })).toBe(false)
   })
 
-  it('tracks annotated preview url in thumb source token', () => {
+  it('uses a short thumb source token for local annotated preview', () => {
     const token = getPhotoThumbSourceToken({
       _annotatedPreviewUrl: 'data:image/jpeg;base64,abc',
       updatedAt: '2026-01-01',
     })
-    expect(token).toContain('data:image/jpeg;base64,abc')
+    expect(token).toBe('local-annotated:2026-01-01')
+    expect(token.length).toBeLessThan(100)
   })
 })

@@ -165,7 +165,9 @@ export function DealPhotoGallery({
     const annotatedPreviewUrl = rawPreview?.startsWith('data:') ? rawPreview : null
     if (annotatedPreviewUrl) {
       setThumbUrls((prev) => (prev[photo.id] === annotatedPreviewUrl ? prev : { ...prev, [photo.id]: annotatedPreviewUrl }))
-    } else if (shouldUseAnnotatedPreviewUrl(photo)) {
+      return
+    }
+    if (shouldUseAnnotatedPreviewUrl(photo)) {
       return
     }
     if (shouldUseLocalPhotoPreview(photo)) {
