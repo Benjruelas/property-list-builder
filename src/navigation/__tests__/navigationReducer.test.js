@@ -489,6 +489,22 @@ describe('recipes', () => {
     expect(popFrameIfTopOfCore(stack, 'tasks')).toBe(stack)
   })
 
+  it('popFrameIfTopOfCore truncates target frame and everything above it when not top', () => {
+    const stack = [
+      { type: 'deals' },
+      { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' },
+      { type: 'deals.lead', leadId: 'l1' },
+      { type: 'tasks' },
+    ]
+    // Closing the detail while a lead overlay sits above it still returns to its parent.
+    expect(popFrameIfTopOfCore(stack, 'deals.detail').map((f) => f.type)).toEqual(['deals', 'tasks'])
+  })
+
+  it('popFrameIfTopOfCore is a no-op when the frame is absent (idempotent double dismiss)', () => {
+    const stack = [{ type: 'deals' }, { type: 'tasks' }]
+    expect(popFrameIfTopOfCore(stack, 'deals.detail')).toBe(stack)
+  })
+
   it('pop closing primary keeps trailing tasks open', () => {
     let state = replaceStack(createInitialState(), [{ type: 'leads' }, { type: 'tasks' }])
     state = pop(state)

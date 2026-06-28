@@ -67,6 +67,8 @@ export function LeadPhotoGallery({
   const thumbRequestRef = useRef({})
   const annotatingPhotoIdRef = useRef(null)
   const pendingAnnotatedPreviewRef = useRef({})
+  const thumbUrlsRef = useRef({})
+  const photosRef = useRef([])
 
   const uploadOne = useCallback(async (source, existingPhotos, entity) => {
     const pos = await getCurrentPosition()
@@ -198,18 +200,23 @@ export function LeadPhotoGallery({
     photos.forEach((p) => loadThumb(p))
   }, [photos, loadThumb])
 
+  // Keep latest values for the unmount-only cleanup below. Mirroring via refs
+  // avoids revoking object URLs that are still displayed whenever photos/thumbUrls change.
+  thumbUrlsRef.current = thumbUrls
+  photosRef.current = photos
+
   useEffect(() => () => {
-    Object.entries(thumbUrls).forEach(([id, url]) => {
-      const photo = photos.find((p) => p.id === id)
-      const pendingPreview = pendingAnnotatedPreviewRef.current[id]
-      if (url?.startsWith('blob:') && url !== photo?._localPreviewUrl && url !== photo?._annotatedPreviewUrl && url !== pendingPreview) {
+    const currentPhotos = photosRef.current
+    Object.entries(thumbUrlsRef.current).forEach(([id, url]) => {
+      const photo = currentPhotos.find((p) => p.id === id)
+      if (url?.startsWith('blob:') && url !== photo?._localPreviewUrl && url !== photo?._annotatedPreviewUrl) {
         URL.revokeObjectURL(url)
       }
     })
     Object.values(pendingAnnotatedPreviewRef.current).forEach((url) => {
       if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
     })
-  }, [thumbUrls, photos])
+  }, [])
 
   const handleEnqueueUpload = useCallback((source, meta = {}, entityOverride) => {
     const target = entityOverride || lead

@@ -85,14 +85,29 @@ export function appendTrailingTasks(coreStack, tasksFrames) {
 }
 
 /**
- * Pop a frame when it is top of the core stack (ignoring trailing Tasks dock frame).
+ * Close a route frame by type (ignoring the trailing Tasks dock frame).
+ *
+ * - Frame is top of core → pop it (the common case).
+ * - Frame exists deeper in core → truncate it and everything above it, so a
+ *   panel's back/close button always returns to that frame's parent instead of
+ *   silently doing nothing when the live stack shape differs from expectations.
+ * - Frame absent → no-op, preserving idempotency when a dismiss fires twice
+ *   (e.g. Radix `onOpenChange(false)` plus an explicit header back).
+ *
  * @param {import('./types.js').NavFrame[]} navStack
  * @param {string} frameType
  */
 export function popFrameIfTopOfCore(navStack, frameType) {
   const { tasksFrames, coreStack } = splitTrailingTasks(navStack)
-  if (coreStack[coreStack.length - 1]?.type !== frameType) return navStack
-  return appendTrailingTasks(coreStack.slice(0, -1), tasksFrames)
+  let idx = -1
+  for (let i = coreStack.length - 1; i >= 0; i -= 1) {
+    if (coreStack[i].type === frameType) {
+      idx = i
+      break
+    }
+  }
+  if (idx === -1) return navStack
+  return appendTrailingTasks(coreStack.slice(0, idx), tasksFrames)
 }
 
 export function shouldKeepTasksWhenOpening(stack) {
