@@ -26,10 +26,17 @@ export function getPhotoAnnotationBaseKey(photo) {
 export function getPhotoThumbSourceToken(photo) {
   if (!photo) return ''
   // Never embed _annotatedPreviewUrl in query params — data URLs exceed URI limits.
-  if (photo._annotatedPreviewUrl) {
+  if (photo._annotatedPreviewUrl?.startsWith('data:')) {
     return `local-annotated:${photo.updatedAt || 'pending'}`
   }
   return `${getPhotoThumbnailKey(photo) || ''}:${photo.updatedAt || ''}`
+}
+
+/** In-memory data URL preview shown while annotation save is in flight. */
+export function getAnnotatedDataPreviewUrl(photo, pendingPreviewUrl, { skipLocalPreview = false } = {}) {
+  if (skipLocalPreview) return null
+  const raw = photo?._annotatedPreviewUrl || pendingPreviewUrl || null
+  return raw?.startsWith('data:') ? raw : null
 }
 
 export function shouldUseLocalPhotoPreview(photo) {

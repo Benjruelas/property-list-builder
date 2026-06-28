@@ -16,7 +16,7 @@ import {
   getPhotoPreviewKey,
   getPhotoThumbnailFetchKeys,
   getPhotoThumbSourceToken,
-  shouldUseAnnotatedPreviewUrl,
+  getAnnotatedDataPreviewUrl,
   shouldUseLocalPhotoPreview,
 } from '@/utils/photoDisplay'
 
@@ -123,6 +123,14 @@ export function LeadPhotoGallery({
     if (annotating?.id) annotatingPhotoIdRef.current = annotating.id
   }, [annotating])
 
+  useEffect(() => {
+    setThumbUrls({})
+    thumbLoadedRef.current = {}
+    thumbRequestRef.current = {}
+    pendingAnnotatedPreviewRef.current = {}
+    thumbErrorRetryRef.current = {}
+  }, [lead?.id])
+
   const invalidatePhotoThumb = useCallback((photoId) => {
     thumbRequestRef.current[photoId] = (thumbRequestRef.current[photoId] || 0) + 1
     delete thumbLoadedRef.current[photoId]
@@ -143,28 +151,31 @@ export function LeadPhotoGallery({
   }, [])
 
   const loadThumb = useCallback(async (photo, { skipLocalPreview = false } = {}) => {
+    const pendingPreview = skipLocalPreview ? null : pendingAnnotatedPreviewRef.current[photo.id]
     const rawPreview = skipLocalPreview
       ? null
-      : (photo._annotatedPreviewUrl || pendingAnnotatedPreviewRef.current[photo.id] || null)
+      : (photo._annotatedPreviewUrl || pendingPreview || null)
     if (isRevocableBlobUrl(rawPreview)) {
       delete pendingAnnotatedPreviewRef.current[photo.id]
     }
-    const annotatedPreviewUrl = rawPreview?.startsWith('data:') ? rawPreview : null
+    const annotatedPreviewUrl = getAnnotatedDataPreviewUrl(photo, pendingPreview, { skipLocalPreview })
     if (annotatedPreviewUrl) {
       setThumbUrls((prev) => (prev[photo.id] === annotatedPreviewUrl ? prev : { ...prev, [photo.id]: annotatedPreviewUrl }))
       return
     }
-    if (shouldUseAnnotatedPreviewUrl(photo)) {
-      return
-    }
     if (shouldUseLocalPhotoPreview(photo)) {
-      setThumbUrls((prev) => (prev[photo.id] ? prev : { ...prev, [photo.id]: photo._localPreviewUrl }))
+      const localUrl = photo._localPreviewUrl
+      setThumbUrls((prev) => (prev[photo.id] === localUrl ? prev : { ...prev, [photo.id]: localUrl }))
       return
     }
     const keys = getPhotoThumbnailFetchKeys(photo).filter((key) => key && key !== '__pending__')
     if (!keys.length) return
     const sourceToken = getPhotoThumbSourceToken(photo)
-    if (thumbLoadedRef.current[photo.id] === sourceToken && !annotatedPreviewUrl) return
+    if (
+      thumbLoadedRef.current[photo.id] === sourceToken
+      && thumbUrlsRef.current[photo.id]
+      && !annotatedPreviewUrl
+    ) return
     const requestId = (thumbRequestRef.current[photo.id] || 0) + 1
     thumbRequestRef.current[photo.id] = requestId
     try {
@@ -187,13 +198,13 @@ export function LeadPhotoGallery({
       thumbLoadedRef.current[photo.id] = sourceToken
       thumbErrorRetryRef.current[photo.id] = 0
       const url = URL.createObjectURL(blob)
-      const pendingPreview = pendingAnnotatedPreviewRef.current[photo.id]
-      if (pendingPreview) delete pendingAnnotatedPreviewRef.current[photo.id]
+      const pendingDataPreview = pendingAnnotatedPreviewRef.current[photo.id]
+      if (pendingDataPreview) delete pendingAnnotatedPreviewRef.current[photo.id]
       setThumbUrls((prev) => {
         const previous = prev[photo.id]
         if (previous?.startsWith('blob:') && previous !== url) deferRevokeObjectURL(previous)
-        if (pendingPreview && isRevocableBlobUrl(pendingPreview) && pendingPreview !== url && pendingPreview !== previous) {
-          deferRevokeObjectURL(pendingPreview)
+        if (pendingDataPreview && isRevocableBlobUrl(pendingDataPreview) && pendingDataPreview !== url && pendingDataPreview !== previous) {
+          deferRevokeObjectURL(pendingDataPreview)
         }
         return { ...prev, [photo.id]: url }
       })
@@ -276,10 +287,9 @@ export function LeadPhotoGallery({
 
     thumbRequestRef.current[savedPhoto.id] = (thumbRequestRef.current[savedPhoto.id] || 0) + 1
     delete thumbLoadedRef.current[savedPhoto.id]
-    loadThumb({
-      ...savedPhoto,
-      _annotatedPreviewUrl: pendingAnnotatedPreviewRef.current[savedPhoto.id] || savedPhoto._annotatedPreviewUrl,
-    })
+    delete pendingAnnotatedPreviewRef.current[savedPhoto.id]
+    const { _annotatedPreviewUrl, _annotationSaving, ...serverPhoto } = savedPhoto
+    loadThumb(serverPhoto, { skipLocalPreview: true })
   }
 
   const openAnnotate = (photo) => {

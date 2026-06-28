@@ -5,6 +5,7 @@ import {
   getPhotoThumbnailKey,
   getPhotoThumbnailFetchKeys,
   getPhotoThumbSourceToken,
+  getAnnotatedDataPreviewUrl,
   shouldUseLocalPhotoPreview,
 } from '../photoDisplay'
 
@@ -54,5 +55,21 @@ describe('photoDisplay', () => {
     })
     expect(token).toBe('local-annotated:2026-01-01')
     expect(token.length).toBeLessThan(100)
+  })
+
+  it('does not treat non-data annotated preview as a local cache token', () => {
+    expect(getPhotoThumbSourceToken({
+      _annotatedPreviewUrl: 'blob:http://local/1',
+      key: 'original',
+      thumbnailKey: 'thumb',
+      updatedAt: '2026-01-01',
+    })).toBe('thumb:2026-01-01')
+  })
+
+  it('resolves annotated data preview from photo or pending ref', () => {
+    const dataUrl = 'data:image/jpeg;base64,abc'
+    expect(getAnnotatedDataPreviewUrl({ _annotatedPreviewUrl: dataUrl })).toBe(dataUrl)
+    expect(getAnnotatedDataPreviewUrl({}, dataUrl)).toBe(dataUrl)
+    expect(getAnnotatedDataPreviewUrl({ _annotatedPreviewUrl: dataUrl }, null, { skipLocalPreview: true })).toBeNull()
   })
 })
