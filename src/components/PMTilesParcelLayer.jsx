@@ -108,6 +108,26 @@ function pidMatch(pid) {
   ]
 }
 
+/** promoteId uses lrid — setFeatureState id must match, not PROP_ID. */
+function featureStateIdFromRaw(raw, parcelId) {
+  return raw?.lrid || raw?.parcelid || parcelId
+}
+
+function queryFeatureStateIdForParcelId(map, parcelId) {
+  if (!map || !parcelId) return null
+  try {
+    const features = map.querySourceFeatures(SOURCE_ID, {
+      sourceLayer: SOURCE_LAYER,
+      filter: pidMatch(parcelId),
+    })
+    if (!features.length) return null
+    const raw = features[0].properties || {}
+    return featureStateIdFromRaw(raw, parcelId)
+  } catch {
+    return null
+  }
+}
+
 // Multi-select uses feature-state ('selected') so toggling a selection doesn't
 // trigger bucket re-tessellation in the worker. Clicked highlight also uses
 // feature-state so it survives tile reloads after recenter animations.
@@ -184,9 +204,10 @@ export function PMTilesParcelLayer({
   const selectedRef = useRef(selectedParcels)
   const colorIndexRef = useRef(new Map())
   const layersAddedRef = useRef(false)
-  // Tracks which feature ids currently have selected=true feature-state so we
-  // can diff and reconcile when selectedParcels changes from the parent.
+  // Tracks promoteId (lrid) values with selected=true feature-state.
   const featureStateIdsRef = useRef(new Set())
+  /** PROP_ID → promoteId for reconciling React selection with feature-state. */
+  const parcelIdToFeatureStateIdRef = useRef(new Map())
   /** promoteId target (lrid) for clicked feature-state — survives tile reloads */
   const clickedFeatureIdRef = useRef(null)
 
@@ -294,6 +315,30 @@ export function PMTilesParcelLayer({
     }
   }, [boundaryColor, boundaryOpacity, clickedParcelId, applyClickedHighlight, clearClickedHighlight])
 
+  const setSelectedFeatureState = useCallback((map, featureStateId, selected) => {
+    if (!map || !featureStateId) return
+    try {
+      map.setFeatureState(
+        { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureStateId },
+        { selected: !!selected }
+      )
+    } catch { /* feature not in loaded tiles yet */ }
+  }, [])
+
+  const setSelectedFeatureStateRef = useRef(setSelectedFeatureState)
+  setSelectedFeatureStateRef.current = setSelectedFeatureState
+
+  const reapplySelectedFeatureStates = useCallback(() => {
+    const map = mapRef?.current
+    if (!map || !featureStateIdsRef.current.size) return
+    for (const featureStateId of featureStateIdsRef.current) {
+      setSelectedFeatureState(map, featureStateId, true)
+    }
+  }, [mapRef, setSelectedFeatureState])
+
+  const reapplySelectedFeatureStatesRef = useRef(reapplySelectedFeatureStates)
+  reapplySelectedFeatureStatesRef.current = reapplySelectedFeatureStates
+
   // Reconcile feature-state with selectedParcels prop. This handles external
   // selection changes (list operations, etc.) and keeps the optimistic
   // click-handler updates aligned with the authoritative React state.
@@ -301,29 +346,34 @@ export function PMTilesParcelLayer({
     const map = mapRef?.current
     if (!map || !layersAddedRef.current) return
     const current = featureStateIdsRef.current
-    const next = new Set(selectedParcels || [])
-    for (const id of current) {
-      if (!next.has(id)) {
-        try {
-          map.setFeatureState(
-            { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id },
-            { selected: false }
-          )
-        } catch { /* ignore */ }
+    const parcelToFeatureState = parcelIdToFeatureStateIdRef.current
+    const nextFeatureStateIds = new Set()
+
+    for (const parcelId of selectedParcels || []) {
+      let featureStateId = parcelToFeatureState.get(parcelId)
+      if (!featureStateId) {
+        featureStateId = queryFeatureStateIdForParcelId(map, parcelId)
+        if (featureStateId) parcelToFeatureState.set(parcelId, featureStateId)
+      }
+      if (featureStateId) nextFeatureStateIds.add(featureStateId)
+    }
+
+    for (const parcelId of parcelToFeatureState.keys()) {
+      if (!selectedParcels?.has(parcelId)) parcelToFeatureState.delete(parcelId)
+    }
+
+    for (const featureStateId of current) {
+      if (!nextFeatureStateIds.has(featureStateId)) {
+        setSelectedFeatureState(map, featureStateId, false)
       }
     }
-    for (const id of next) {
-      if (!current.has(id)) {
-        try {
-          map.setFeatureState(
-            { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id },
-            { selected: true }
-          )
-        } catch { /* ignore */ }
+    for (const featureStateId of nextFeatureStateIds) {
+      if (!current.has(featureStateId)) {
+        setSelectedFeatureState(map, featureStateId, true)
       }
     }
-    featureStateIdsRef.current = next
-  }, [selectedParcels])
+    featureStateIdsRef.current = nextFeatureStateIds
+  }, [selectedParcels, mapRef, setSelectedFeatureState])
 
   // Add source + layers fully imperatively
   useEffect(() => {
@@ -373,6 +423,7 @@ export function PMTilesParcelLayer({
     function scheduleLabelRefreshAfterMove() {
       refreshLabels()
       reapplyClickedHighlightRef.current?.()
+      reapplySelectedFeatureStatesRef.current?.()
       if (idleLabelHandler) return
       idleLabelHandler = () => {
         idleLabelHandler = null
@@ -491,6 +542,7 @@ export function PMTilesParcelLayer({
       const properties = mapProperties(raw)
       const parcelId = properties.PROP_ID
       if (!parcelId) return
+      const featureStateId = featureStateIdFromRaw(raw, parcelId)
       if (isMultiSelectRef.current) {
         // Optimistically toggle via setFeatureState. This is bucket-free (no
         // worker re-tessellation) so the canvas updates on the very next frame.
@@ -499,16 +551,11 @@ export function PMTilesParcelLayer({
         const willSelect = !next.has(parcelId)
         if (willSelect) next.add(parcelId); else next.delete(parcelId)
         selectedRef.current = next
-        try {
-          map.setFeatureState(
-            { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: parcelId },
-            { selected: willSelect }
-          )
-          if (willSelect) featureStateIdsRef.current.add(parcelId)
-          else featureStateIdsRef.current.delete(parcelId)
-        } catch { /* ignore */ }
+        parcelIdToFeatureStateIdRef.current.set(parcelId, featureStateId)
+        setSelectedFeatureStateRef.current(map, featureStateId, willSelect)
+        if (willSelect) featureStateIdsRef.current.add(featureStateId)
+        else featureStateIdsRef.current.delete(featureStateId)
       } else {
-        const featureStateId = raw.lrid || raw.parcelid || parcelId
         applyClickedHighlightRef.current?.(featureStateId, parcelId)
       }
       onParcelClickRef.current({
@@ -631,6 +678,7 @@ export function PMTilesParcelLayer({
         tiles: [tileUrl],
         minzoom: PARCEL_MIN_ZOOM,
         maxzoom: PARCEL_TILE_MAXZOOM,
+        promoteId: { [SOURCE_LAYER]: 'lrid' },
       })
       map.addLayer({
         id: FILL_LAYER,
