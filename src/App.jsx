@@ -75,6 +75,7 @@ import { DealTemplateEditorDialog } from './components/DealTemplateEditorDialog'
 import { DealTemplatesManagerDialog } from './components/DealTemplatesManagerDialog'
 import { templateToCreateDealPrefill } from './utils/dealTemplates'
 import { AppLoadingScreen } from './components/AppLoadingScreen'
+import { getAppLoadingMessage } from './config/appLoadingMessages'
 import { PanelListLoadingShell } from './components/ui/PanelListLoadingShell'
 import { BasemapErrorBanner } from './components/BasemapErrorBanner'
 import { useBasemapStyle } from './hooks/useBasemapStyle'
@@ -520,6 +521,13 @@ function App() {
     onTileUrlRefresh: refreshBasemapTiles,
   })
   const showAppLoading = authLoading || basemapStatus === 'loading'
+  const appLoadingMessage = useMemo(
+    () => getAppLoadingMessage({
+      authLoading,
+      basemapLoading: basemapStatus === 'loading',
+    }),
+    [authLoading, basemapStatus]
+  )
   const mapInitialViewState = useMemo(() => ({
     longitude: -96.7970,
     latitude: 32.7767,
@@ -3599,7 +3607,7 @@ function App() {
 
   return (
     <UserDataSyncProvider getToken={getToken}>
-    <AppLoadingScreen active={showAppLoading} />
+    <AppLoadingScreen active={showAppLoading} message={appLoadingMessage} />
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
         <PermissionPrompt onComplete={(orientationGranted) => {

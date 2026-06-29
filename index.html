@@ -213,7 +213,7 @@
           </div>
           <div class="boot-brand">
             <span class="boot-name">KnockScout</span>
-            <span class="boot-tagline">Loading your map…</span>
+            <span class="boot-tagline" id="boot-tagline">Loading your map…</span>
           </div>
           <div class="boot-progress">
             <div class="boot-progress-fill"></div>
@@ -221,6 +221,16 @@
         </div>
       </div>
     </div>
+    <script>
+      (function () {
+        var el = document.getElementById('boot-tagline');
+        if (!el) return;
+        var p = new URLSearchParams(window.location.search);
+        if (p.get('quote')) el.textContent = 'Loading quote…';
+        else if (p.get('report')) el.textContent = 'Loading report…';
+        else if (p.get('form')) el.textContent = 'Loading form…';
+      })();
+    </script>
     <script>
       window.__removeInitialLoader = function() {
         var el = document.getElementById('initial-loader');

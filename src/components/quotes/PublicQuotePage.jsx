@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Loader2, CheckCircle2, AlertCircle, CreditCard } from 'lucide-react'
+import { CheckCircle2, AlertCircle, CreditCard } from 'lucide-react'
 import { fetchPublicQuote, respondToPublicQuote, createQuoteCheckout } from '../../utils/quotes'
 import { computeQuoteTotals, formatQuoteMoney } from '../../utils/quoteMath'
 import { PublicFormBrandBar } from '../forms/PublicFormBrand'
@@ -9,6 +9,8 @@ import { QuoteCheckToggle } from './QuoteCheckToggle'
 import { cn } from '@/lib/utils'
 import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
 import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
+import { AppLoadingScreen } from '../AppLoadingScreen'
+import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 export function PublicQuotePage({ token }) {
   const [loading, setLoading] = useState(true)
@@ -122,14 +124,7 @@ export function PublicQuotePage({ token }) {
   )
 
   if (loading) {
-    return (
-      <div className={pageClass}>
-        <PublicFormBrandBar className="public-form-brand-bar--page" />
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
-        </div>
-      </div>
-    )
+    return <AppLoadingScreen active message={APP_LOADING_MESSAGES.quote} />
   }
 
   if (error && !data) {

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 const MIN_VISIBLE_MS = 400
 const LOGO_SRC = '/icon-512.png'
@@ -8,7 +9,10 @@ const LOGO_SRC = '/icon-512.png'
  * Full-screen KnockScout boot splash (auth + basemap + first map paint).
  * Portaled above the app; hands off from #initial-loader in index.html on mount.
  */
-export function AppLoadingScreen({ active }) {
+export function AppLoadingScreen({
+  active,
+  message = APP_LOADING_MESSAGES.mapAuth,
+}) {
   const [visible, setVisible] = useState(active)
   const shownAtRef = useRef(0)
 
@@ -36,7 +40,7 @@ export function AppLoadingScreen({ active }) {
         className="app-loading-screen app-loading-screen--visible"
         role="status"
         aria-live="polite"
-        aria-label="Loading KnockScout"
+        aria-label={message}
       >
         <div className="app-loading-screen__bg" aria-hidden>
           <div className="app-loading-screen__orb app-loading-screen__orb--a" />
@@ -59,7 +63,7 @@ export function AppLoadingScreen({ active }) {
 
           <div className="app-loading-screen__brand">
             <span className="app-loading-screen__name">KnockScout</span>
-            <span className="app-loading-screen__tagline">Loading your map…</span>
+            <span className="app-loading-screen__tagline">{message}</span>
           </div>
 
           <div className="app-loading-screen__progress">

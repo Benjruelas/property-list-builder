@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, AlertCircle, X } from 'lucide-react'
+import { AlertCircle, X } from 'lucide-react'
 import { fetchPublicReport } from '../../utils/photoReports'
 import { PublicFormBrandBar } from '../forms/PublicFormBrand'
 import { PublicPdfDownload } from '../shared/PublicPdfDownload'
@@ -7,6 +7,8 @@ import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
 import { cn } from '@/lib/utils'
 import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
 import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
+import { AppLoadingScreen } from '../AppLoadingScreen'
+import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 function resolvePhotoUrl(url) {
   if (!url) return ''
@@ -91,14 +93,7 @@ export function PublicReportPage({ token }) {
   )
 
   if (loading) {
-    return (
-      <div className={pageClass}>
-        <PublicFormBrandBar className="public-form-brand-bar--page" />
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
-        </div>
-      </div>
-    )
+    return <AppLoadingScreen active message={APP_LOADING_MESSAGES.report} />
   }
 
   if (error && !data) {

@@ -4,6 +4,8 @@ import { fetchPublicForm } from '../../utils/forms'
 import { cn } from '@/lib/utils'
 import { PublicFormBrandBar } from './PublicFormBrand'
 import { PublicFormSubmittingOverlay } from './PublicFormSubmittingOverlay'
+import { AppLoadingScreen } from '../AppLoadingScreen'
+import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 const FormFillView = lazy(() => import('./FormFillView'))
 
@@ -51,16 +53,7 @@ export function PublicFormPage({ token }) {
   const pageClass = cn('public-form-page flex flex-col min-h-screen bg-gray-100 text-gray-900')
 
   if (loading) {
-    return (
-      <div className={pageClass}>
-        <PublicFormBrandBar className="public-form-brand-bar--page" />
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-          <p className="text-sm text-gray-600 flex items-center justify-center">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading form…
-          </p>
-        </div>
-      </div>
-    )
+    return <AppLoadingScreen active message={APP_LOADING_MESSAGES.form} />
   }
 
   if (error) {
