@@ -76,7 +76,7 @@ async function resolveLeadContext(user, leadId) {
     ownerUid: lead.ownerId || user.uid,
     photos: Array.isArray(lead.photos) ? lead.photos : [],
     canMutate: (photo) => canMutateLeadPhotos(user, lead, access, photo),
-    canAdd: canMutateLeadPhotos(user, lead, access),
+    canAdd: () => canMutateLeadPhotos(user, lead, access),
   }
 }
 
@@ -102,7 +102,7 @@ async function resolveDealContext(user, pipelineId, dealId) {
     ownerUid: pipeline.ownerId || user.uid,
     photos: Array.isArray(deal.photos) ? deal.photos : [],
     canMutate: () => true,
-    canAdd: true,
+    canAdd: () => true,
   }
 }
 
