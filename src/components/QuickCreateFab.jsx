@@ -24,9 +24,9 @@ function CreateMenuButton({ Icon, label, onClick }) {
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="w-full text-left text-gray-900 flex items-center transition-colors hamburger-menu-btn"
+      className="w-full px-4 py-2.5 text-left text-sm text-gray-900 flex items-center gap-3 transition-colors hamburger-menu-btn"
     >
-      <Icon className="flex-shrink-0" aria-hidden />
+      <Icon className="h-4 w-4 flex-shrink-0" aria-hidden />
       <span className="flex-1">{label}</span>
     </button>
   )

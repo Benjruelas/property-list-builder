@@ -117,10 +117,14 @@ export function MobileActionBar({
       setMenuAnchor(null)
       return
     }
-    const r = el.getBoundingClientRect()
+    const btnRect = el.getBoundingClientRect()
+    const barRect = el.closest('.mobile-action-bar-inner')?.getBoundingClientRect()
+    const anchorRight = barRect
+      ? window.innerWidth - barRect.right
+      : window.innerWidth - btnRect.right
     setMenuAnchor({
-      right: Math.max(12, window.innerWidth - r.right),
-      bottom: Math.max(12, window.innerHeight - r.top + 16),
+      right: Math.max(12, anchorRight),
+      bottom: Math.max(12, window.innerHeight - btnRect.top + 16),
     })
   }, [])
 

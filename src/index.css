@@ -29,8 +29,15 @@
     --ui-panel-width-ratio: 1.365;
     --ui-touch-scale: 1;
     --action-bar-width: min(92vw, 400px);
-    --ui-action-bar-btn-height: calc(3.5rem * var(--ui-touch-scale));
     --ui-action-bar-inner-v-pad: calc(12px * var(--ui-touch-scale));
+    --ui-action-bar-btn-height: calc(3.5rem * var(--ui-touch-scale));
+    --ui-mobile-chrome-scale: 1.15;
+    --ui-menu-item-font-size: calc(0.875rem * var(--ui-mobile-chrome-scale));
+    --ui-menu-item-icon-size: calc(1rem * var(--ui-mobile-chrome-scale));
+    --ui-menu-item-gap: calc(0.75rem * var(--ui-mobile-chrome-scale));
+    --ui-menu-item-pad-y: calc(0.625rem * var(--ui-mobile-chrome-scale));
+    --ui-menu-item-pad-x: calc(1rem * var(--ui-mobile-chrome-scale));
+    --ui-menu-item-line-height: 1.5;
     --ui-action-bar-block: calc(
       var(--ui-action-bar-btn-height)
       + var(--ui-action-bar-inner-v-pad)
@@ -40,10 +47,12 @@
     --tasks-dock-width: min(300px, 24vw);
     --tasks-dock-gap: 14px;
     --tasks-panel-right-inset: calc(12px + env(safe-area-inset-right, 0px));
-    --map-chrome-btn-size: 3rem;
-    --map-chrome-btn-gap: 0.5rem;
-    --quick-create-fab-size: calc(var(--map-chrome-btn-size) * 1.25);
-    --quick-create-fab-icon-size: calc(1.5rem * 1.25);
+    --map-chrome-btn-size: calc(3rem * var(--ui-mobile-chrome-scale));
+    --map-chrome-btn-gap: calc(0.5rem * var(--ui-mobile-chrome-scale));
+    --map-chrome-icon-size: calc(1.5rem * var(--ui-mobile-chrome-scale));
+    --map-controls-stack-height: calc(4 * var(--map-chrome-btn-size) + 3 * var(--map-chrome-btn-gap));
+    --quick-create-fab-size: var(--map-chrome-btn-size);
+    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
     --tasks-panel-fade-duration: 380ms;
     --tasks-panel-fade-ease: cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -77,8 +86,9 @@
     --tasks-panel-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
     --map-chrome-btn-size: var(--ui-action-bar-btn-height);
     --map-chrome-btn-gap: 0.5rem;
+    --map-chrome-icon-size: calc(1.5rem * var(--ui-touch-scale));
     --quick-create-fab-size: var(--map-chrome-btn-size);
-    --quick-create-fab-icon-size: calc(1.5rem * var(--ui-touch-scale));
+    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
     --map-controls-stack-height: calc(4 * var(--map-chrome-btn-size) + 3 * var(--map-chrome-btn-gap));
     --map-controls-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
     --tasks-panel-motion-duration: 380ms;
@@ -296,8 +306,8 @@
 .map-controls-stack .map-chrome-btn svg,
 .map-search-stack .map-chrome-btn svg,
 .map-chrome-icon-slot svg {
-  width: calc(1.5rem * var(--ui-touch-scale, 1));
-  height: calc(1.5rem * var(--ui-touch-scale, 1));
+  width: var(--map-chrome-icon-size, calc(1.5rem * var(--ui-touch-scale, 1)));
+  height: var(--map-chrome-icon-size, calc(1.5rem * var(--ui-touch-scale, 1)));
 }
 
 .map-chrome-icon-slot {
@@ -314,12 +324,12 @@
 }
 
 .map-search-results-panel {
-  top: calc(var(--map-chrome-btn-size) + 0.5rem);
+  top: calc(var(--map-chrome-btn-size) + var(--map-chrome-btn-gap));
 }
 
 /* North indicator — below search + zoom column (3 square buttons + gaps) */
 .north-indicator {
-  top: calc(12px + (var(--map-chrome-btn-size) + 0.5rem) * 3 + env(safe-area-inset-top, 0px));
+  top: calc(12px + (var(--map-chrome-btn-size) + var(--map-chrome-btn-gap)) * 3 + env(safe-area-inset-top, 0px));
   left: calc(12px + env(safe-area-inset-left, 0px));
 }
 
@@ -6358,6 +6368,33 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
+@media (max-width: 767px) {
+  .map-controls-stack {
+    gap: var(--map-chrome-btn-gap) !important;
+  }
+
+  .quick-create-fab-menu {
+    min-width: 220px;
+    max-width: min(320px, calc(100vw - 24px));
+  }
+
+  .quick-create-fab-menu .hamburger-menu-btn,
+  .mobile-action-bar-menu .hamburger-menu-btn {
+    font-size: var(--ui-menu-item-font-size);
+    line-height: var(--ui-menu-item-line-height, 1.5);
+    padding: var(--ui-menu-item-pad-y) var(--ui-menu-item-pad-x);
+    gap: var(--ui-menu-item-gap);
+  }
+
+  .quick-create-fab-menu .hamburger-menu-btn svg,
+  .quick-create-fab-menu .hamburger-menu-btn .quote-icon,
+  .mobile-action-bar-menu .hamburger-menu-btn svg,
+  .mobile-action-bar-menu .hamburger-menu-btn .quote-icon {
+    width: var(--ui-menu-item-icon-size);
+    height: var(--ui-menu-item-icon-size);
+  }
+}
+
 @media (min-width: 768px) {
   #modal-root .mobile-action-bar-inner {
     pointer-events: auto !important; /* modal-root sets pointer-events: none on the portal host */
@@ -6380,7 +6417,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
       calc(6px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
     border-radius: calc(8px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
   }
-  .mobile-action-bar-btn svg {
+  .mobile-action-bar-btn svg,
+  .mobile-action-bar-btn .quote-icon {
     width: calc(1.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
     height: calc(1.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
   }
@@ -6408,6 +6446,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     border-radius: calc(14px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
   }
   .mobile-action-bar-label {
+    font-size: calc(11px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
+  }
+  .quick-create-fab-menu .hamburger-menu-btn {
     font-size: calc(11px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
   }
 }
@@ -6453,7 +6494,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   align-items: center;
   justify-content: center;
 }
-.mobile-action-bar-btn svg {
+.mobile-action-bar-btn svg,
+.mobile-action-bar-btn .quote-icon {
   width: calc(1.5rem * var(--ui-touch-scale));
   height: calc(1.5rem * var(--ui-touch-scale));
 }
@@ -6603,10 +6645,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   background: var(--quick-create-fab-accent, #2563eb) !important;
   background-color: var(--quick-create-fab-accent, #2563eb) !important;
   color: #ffffff !important;
-  overflow: visible !important;
+  overflow: hidden !important;
   isolation: isolate;
   box-shadow:
-    var(--lead-detail-list-card-shadow),
     0 10px 24px rgba(0, 0, 0, 0.32),
     0 2px 6px rgba(0, 0, 0, 0.2) !important;
   backdrop-filter: none !important;
@@ -6624,12 +6665,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 #modal-root button.quick-create-fab-btn::before {
   content: '';
   position: absolute;
-  z-index: -1;
-  left: -20px;
-  right: -20px;
-  top: -14px;
-  bottom: -24px;
-  border-radius: 50%;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
   pointer-events: none;
   background:
     linear-gradient(
@@ -6641,13 +6679,13 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
       transparent 100%
     ),
     radial-gradient(
-      ellipse 110% 95% at 50% 42%,
+      circle at 50% 50%,
       var(--lead-detail-list-card-shadow-glow) 0%,
-      color-mix(in srgb, var(--lead-detail-list-card-shadow-glow) 42%, transparent) 48%,
-      transparent 68%
+      color-mix(in srgb, var(--lead-detail-list-card-shadow-glow) 35%, transparent) 55%,
+      transparent 85%
     );
   background-size: 240% 100%, 100% 100%;
-  filter: blur(12px);
+  mix-blend-mode: soft-light;
   animation: quick-create-fab-shadow-shimmer 7s ease-in-out infinite;
 }
 
@@ -6667,14 +6705,12 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 #modal-root button.quick-create-fab-btn:hover {
   filter: brightness(1.05);
   box-shadow:
-    var(--lead-detail-list-card-shadow-hover),
     0 10px 24px rgba(0, 0, 0, 0.32),
     0 2px 6px rgba(0, 0, 0, 0.2) !important;
 }
 
 #modal-root button.quick-create-fab-btn:hover::before {
   animation-name: quick-create-fab-shadow-shimmer-hover;
-  filter: blur(14px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6717,10 +6753,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 .quick-create-fab-menu {
   position: fixed;
-  right: 12px;
+  right: calc((100vw - var(--action-bar-width)) / 2);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 8px + var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) + 8px);
-  min-width: 250px;
-  max-width: min(350px, calc(100vw - 24px));
+  min-width: 200px;
+  max-width: min(280px, calc(100vw - 24px));
   z-index: 10058;
   padding: 8px 0;
   border-radius: 14px;
@@ -6730,21 +6766,24 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   pointer-events: auto;
 }
 
-.quick-create-fab-menu .hamburger-menu-btn {
-  font-size: 1.09375rem;
-  line-height: 1.5;
-  padding: 0.78125rem 1.25rem;
-  gap: 0.9375rem;
-}
-
-.quick-create-fab-menu .hamburger-menu-btn svg {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
 @media (min-width: 768px) {
+  .quick-create-fab-menu .hamburger-menu-btn {
+    font-size: calc(9px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
+    line-height: 1.1;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    gap: calc(6px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
+    padding: calc(8px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale))
+      calc(12px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
+  }
+
+  .quick-create-fab-menu .hamburger-menu-btn svg,
+  .quick-create-fab-menu .hamburger-menu-btn .quote-icon {
+    width: calc(1.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale)) !important;
+    height: calc(1.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale)) !important;
+  }
+
   .quick-create-fab-menu {
-    right: calc((100vw - var(--action-bar-width)) / 2 - var(--map-chrome-btn-gap) - var(--map-chrome-btn-size));
     bottom: calc(
       var(--ui-action-bar-block)
       + var(--ui-action-bar-inner-v-pad)
