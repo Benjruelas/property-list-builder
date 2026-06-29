@@ -79,10 +79,6 @@ export async function uploadLeadPhoto(getToken, {
   const usePresigned = import.meta.env.VITE_PRESIGNED_PHOTOS === '1'
     || import.meta.env.VITE_PRESIGNED_PHOTOS === 'true'
 
-  // #region agent log
-  fetch('http://127.0.0.1:7670/ingest/d6025e07-f4a3-4325-9234-794e9f14731e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a5a5c'},body:JSON.stringify({sessionId:'7a5a5c',location:'leadPhotos.js:uploadLeadPhoto:start',message:'uploadLeadPhoto starting',data:{leadId,usePresigned,apiBase:getApiBase(),fileSize:compressed.file.size,thumbSize:compressed.thumbnail.size},timestamp:Date.now(),hypothesisId:'A,B'})}).catch(()=>{});
-  // #endregion
-
   if (usePresigned) {
     const presignRes = await fetch(`${getApiBase()}/lead-photos?presign=1`, {
       method: 'POST',
@@ -95,12 +91,9 @@ export async function uploadLeadPhoto(getToken, {
         ...metadata,
       }),
     })
-    // #region agent log
-    fetch('http://127.0.0.1:7670/ingest/d6025e07-f4a3-4325-9234-794e9f14731e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a5a5c'},body:JSON.stringify({sessionId:'7a5a5c',location:'leadPhotos.js:uploadLeadPhoto:presign',message:'presign response',data:{leadId,ok:presignRes.ok,status:presignRes.status},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     if (presignRes.ok) {
       const presign = await presignRes.json()
-      const [origPut, thumbPut] = await Promise.all([
+      await Promise.all([
         fetch(presign.uploadUrl, {
           method: 'PUT',
           headers: { 'Content-Type': 'image/jpeg' },
@@ -112,9 +105,6 @@ export async function uploadLeadPhoto(getToken, {
           body: compressed.thumbnail,
         }),
       ])
-      // #region agent log
-      fetch('http://127.0.0.1:7670/ingest/d6025e07-f4a3-4325-9234-794e9f14731e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a5a5c'},body:JSON.stringify({sessionId:'7a5a5c',location:'leadPhotos.js:uploadLeadPhoto:presignPut',message:'presigned PUT results',data:{leadId,origOk:origPut.ok,origStatus:origPut.status,thumbOk:thumbPut.ok,thumbStatus:thumbPut.status},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       const recordRes = await fetch(`${getApiBase()}/lead-photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -145,30 +135,19 @@ export async function uploadLeadPhoto(getToken, {
     blobToBase64(compressed.thumbnail),
   ])
 
-  let res
-  try {
-    res = await fetch(`${getApiBase()}/lead-photos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        leadId,
-        fileBase64,
-        thumbnailBase64,
-        contentType: 'image/jpeg',
-        width: compressed.width,
-        height: compressed.height,
-        ...metadata,
-      }),
-    })
-  } catch (fetchErr) {
-    // #region agent log
-    fetch('http://127.0.0.1:7670/ingest/d6025e07-f4a3-4325-9234-794e9f14731e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a5a5c'},body:JSON.stringify({sessionId:'7a5a5c',location:'leadPhotos.js:uploadLeadPhoto:legacyFetchError',message:'legacy upload fetch threw',data:{leadId,errMessage:fetchErr?.message},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    throw fetchErr
-  }
-  // #region agent log
-  fetch('http://127.0.0.1:7670/ingest/d6025e07-f4a3-4325-9234-794e9f14731e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a5a5c'},body:JSON.stringify({sessionId:'7a5a5c',location:'leadPhotos.js:uploadLeadPhoto:legacyResponse',message:'legacy upload response',data:{leadId,ok:res.ok,status:res.status},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
+  const res = await fetch(`${getApiBase()}/lead-photos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      leadId,
+      fileBase64,
+      thumbnailBase64,
+      contentType: 'image/jpeg',
+      width: compressed.width,
+      height: compressed.height,
+      ...metadata,
+    }),
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || 'Upload failed')

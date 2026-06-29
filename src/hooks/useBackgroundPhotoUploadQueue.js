@@ -9,6 +9,7 @@ import {
   insertPhotoInList,
   revokeLocalPreview,
   updatePhotoInList,
+  mergePhotosFromPoll,
   UPLOAD_STATUS,
 } from '@/utils/optimisticPhotoUpload'
 import { showToast } from '@/components/ui/toast'
@@ -277,9 +278,15 @@ export function useBackgroundPhotoUploadQueue({
       return
     }
     const deleting = pendingDeleteIdsRef.current
-    entityRef.current = deleting.size
-      ? { ...entity, photos: (entity.photos || []).filter((p) => !deleting.has(p.id)) }
-      : entity
+    const current = entityRef.current
+    let photos = entity.photos || []
+    if (current?.id === entity.id) {
+      photos = mergePhotosFromPoll(current.photos, photos)
+    }
+    if (deleting.size) {
+      photos = photos.filter((p) => !deleting.has(p.id))
+    }
+    entityRef.current = { ...entity, photos }
   }, [])
 
   useEffect(() => () => {

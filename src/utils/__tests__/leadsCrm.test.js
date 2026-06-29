@@ -60,6 +60,25 @@ describe('lead CRM helpers', () => {
     expect(merged[0]._listView).toBe(true)
   })
 
+  it('mergeListViewLeads preserves fresh thumbs and pending uploads on full poll payloads', () => {
+    const existing = [{
+      id: 'l1',
+      photos: [
+        { id: 'pending_1', _uploadStatus: 'uploading', _localPreviewUrl: 'data:image/jpeg;base64,abc' },
+        { id: 'p1', key: 'k1', _freshThumbUrl: 'data:image/jpeg;base64,fresh' },
+      ],
+    }]
+    const incoming = [{
+      id: 'l1',
+      photos: [{ id: 'p1', key: 'k1', thumbnailKey: 'k1t' }],
+    }]
+    const merged = mergeListViewLeads(existing, incoming)
+    expect(merged[0].photos).toHaveLength(2)
+    expect(merged[0].photos[0]._freshThumbUrl).toBe('data:image/jpeg;base64,fresh')
+    expect(merged[0].photos[1].id).toBe('pending_1')
+    expect(merged[0].photos[1]._localPreviewUrl).toBe('data:image/jpeg;base64,abc')
+  })
+
   it('buildActivityEntry creates valid entry shape', () => {
     const entry = buildActivityEntry('call', 'Called from app', { phone: '555' })
     expect(entry.type).toBe('call')

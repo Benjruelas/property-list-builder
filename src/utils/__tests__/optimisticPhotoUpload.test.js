@@ -8,6 +8,7 @@ import {
   updatePhotoInList,
   persistedPhotos,
   estimatePhotoBytes,
+  mergePhotosFromPoll,
   UPLOAD_STATUS,
 } from '../optimisticPhotoUpload'
 
@@ -59,5 +60,17 @@ describe('optimisticPhotoUpload', () => {
   it('estimatePhotoBytes handles data URLs', () => {
     const bytes = estimatePhotoBytes('data:image/jpeg;base64,AAAA')
     expect(bytes).toBeGreaterThan(0)
+  })
+
+  it('mergePhotosFromPoll keeps pending uploads and fresh thumbs', () => {
+    const prev = [
+      { id: 'pending_1', _uploadStatus: UPLOAD_STATUS.UPLOADING, _localPreviewUrl: 'data:x' },
+      { id: 'p1', key: 'k', _freshThumbUrl: 'data:fresh' },
+    ]
+    const incoming = [{ id: 'p1', key: 'k', thumbnailKey: 'kt' }]
+    const merged = mergePhotosFromPoll(prev, incoming)
+    expect(merged).toHaveLength(2)
+    expect(merged[0]._freshThumbUrl).toBe('data:fresh')
+    expect(merged[1].id).toBe('pending_1')
   })
 })

@@ -13,6 +13,7 @@ import {
   leadContactMatchesQuery,
   skipTraceContactDetails,
 } from './leadContact'
+import { mergePhotosFromPoll } from './optimisticPhotoUpload'
 
 export {
   getLeadPhones,
@@ -88,19 +89,22 @@ export function saveLocalLeads(leads) {
   }
 }
 
-/** Merge a list-view poll payload into existing client state without dropping heavy fields. */
+/** Merge poll payloads into existing client state without dropping heavy / in-flight fields. */
 export function mergeListViewLeads(existing, incoming) {
   const prevById = new Map((Array.isArray(existing) ? existing : []).map((l) => [l.id, l]))
   return (Array.isArray(incoming) ? incoming : []).map((inc) => {
-    if (!inc?._listView) return inc
     const prev = prevById.get(inc.id)
     if (!prev) return inc
-    return {
-      ...inc,
-      activity: prev.activity ?? inc.activity,
-      photos: prev.photos ?? inc.photos,
-      files: prev.files ?? inc.files,
+    if (inc?._listView) {
+      return {
+        ...inc,
+        activity: prev.activity ?? inc.activity,
+        photos: mergePhotosFromPoll(prev.photos, inc.photos),
+        files: prev.files ?? inc.files,
+      }
     }
+    const photos = mergePhotosFromPoll(prev.photos, inc.photos)
+    return { ...inc, photos }
   })
 }
 
@@ -121,7 +125,7 @@ export async function fetchLeads(getToken, { view = 'list' } = {}) {
   const data = await res.json()
   const leads = data.leads || []
   const existing = loadLocalLeads()
-  const toStore = leads.some((l) => l._listView) ? mergeListViewLeads(existing, leads) : leads
+  const toStore = mergeListViewLeads(existing, leads)
   saveLocalLeads(toStore)
   return leads
 }

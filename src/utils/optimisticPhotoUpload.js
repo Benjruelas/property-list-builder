@@ -98,3 +98,34 @@ export function revokeLocalPreview(photo) {
     } catch { /* ignore */ }
   }
 }
+
+/** Keep in-flight / just-uploaded client previews when background polls refresh entity photos. */
+export function mergePhotosFromPoll(prevPhotos, incomingPhotos) {
+  const prev = Array.isArray(prevPhotos) ? prevPhotos : []
+  if (!Array.isArray(incomingPhotos)) return prev
+
+  const prevById = new Map(prev.map((p) => [p.id, p]))
+  const merged = incomingPhotos.map((inc) => {
+    const old = prevById.get(inc.id)
+    if (!old) return inc
+    const patch = {}
+    if (old._freshThumbUrl) patch._freshThumbUrl = old._freshThumbUrl
+    if (isPendingPhoto(old) && old._localPreviewUrl) patch._localPreviewUrl = old._localPreviewUrl
+    if (old._uploadStatus) {
+      patch._uploadStatus = old._uploadStatus
+      if (old._uploadError) patch._uploadError = old._uploadError
+    }
+    if (old._annotatedPreviewUrl?.startsWith('data:')) {
+      patch._annotatedPreviewUrl = old._annotatedPreviewUrl
+    }
+    return Object.keys(patch).length ? { ...inc, ...patch } : inc
+  })
+
+  for (const p of prev) {
+    if (isPendingPhoto(p) && !incomingPhotos.some((i) => i.id === p.id)) {
+      merged.push(p)
+    }
+  }
+
+  return merged
+}
