@@ -96,7 +96,6 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
     }
     if (!skipLocalPreview && photo._freshThumbUrl) {
       setThumbUrlForPhoto(setThumbUrls, thumbUrlsRef, photo.id, photo._freshThumbUrl)
-      return
     }
 
     const keys = getPhotoThumbnailFetchKeys(photo).filter((key) => key && key !== '__pending__')
@@ -202,7 +201,15 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       thumbUrlsRef.current = next
       return next
     })
-    loadThumb({ ...photo, _annotatedPreviewUrl: undefined })
+    loadThumb(
+      {
+        ...photo,
+        _annotatedPreviewUrl: undefined,
+        _freshThumbUrl: undefined,
+        _localPreviewUrl: undefined,
+      },
+      { skipLocalPreview: true },
+    )
   }, [loadThumb])
 
   const invalidatePhotoThumb = useCallback((photoId) => {

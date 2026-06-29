@@ -131,7 +131,11 @@ export function useBackgroundPhotoUploadQueue({
       if (pendingPreviewUrl?.startsWith('blob:')) deferRevokeObjectURL(pendingPreviewUrl)
 
       if (logActivity) {
-        await logActivity(entityRef.current || result.entity)
+        try {
+          await logActivity(entityRef.current || result.entity)
+        } catch (logErr) {
+          console.warn('Photo uploaded but activity log failed:', logErr?.message)
+        }
       }
       jobsRef.current.delete(pendingId)
     } catch (err) {

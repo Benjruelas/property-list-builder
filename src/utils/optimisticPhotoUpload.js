@@ -99,6 +99,27 @@ export function revokeLocalPreview(photo) {
   }
 }
 
+/**
+ * Client-only fields on photo records — never persist to localStorage or server.
+ */
+export function stripClientPhotoFields(photo) {
+  if (!photo || typeof photo !== 'object') return photo
+  const {
+    _freshThumbUrl,
+    _localPreviewUrl,
+    _uploadStatus,
+    _uploadError,
+    _annotatedPreviewUrl,
+    _annotationSaving,
+    ...rest
+  } = photo
+  return rest
+}
+
+export function stripClientFieldsFromPhotos(photos) {
+  return (Array.isArray(photos) ? photos : []).map(stripClientPhotoFields)
+}
+
 /** Keep in-flight / just-uploaded client previews when background polls refresh entity photos. */
 export function mergePhotosFromPoll(prevPhotos, incomingPhotos) {
   const prev = Array.isArray(prevPhotos) ? prevPhotos : []

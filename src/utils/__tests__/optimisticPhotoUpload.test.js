@@ -9,6 +9,7 @@ import {
   persistedPhotos,
   estimatePhotoBytes,
   mergePhotosFromPoll,
+  stripClientPhotoFields,
   UPLOAD_STATUS,
 } from '../optimisticPhotoUpload'
 
@@ -60,6 +61,15 @@ describe('optimisticPhotoUpload', () => {
   it('estimatePhotoBytes handles data URLs', () => {
     const bytes = estimatePhotoBytes('data:image/jpeg;base64,AAAA')
     expect(bytes).toBeGreaterThan(0)
+  })
+
+  it('stripClientPhotoFields removes client-only keys', () => {
+    expect(stripClientPhotoFields({
+      id: 'p1',
+      key: 'k',
+      _freshThumbUrl: 'data:x',
+      _uploadStatus: 'uploading',
+    })).toEqual({ id: 'p1', key: 'k' })
   })
 
   it('mergePhotosFromPoll keeps pending uploads and fresh thumbs', () => {

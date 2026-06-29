@@ -1,4 +1,7 @@
-/** Prefer small annotated thumb for grids, then fall back to larger keys. */
+import { estimateDataUrlBytes } from './uploadLimits'
+
+/** Safari/iOS chokes on multi-MB data URLs in <img src>. */
+const MAX_LOCAL_PREVIEW_BYTES = 512 * 1024
 export function getPhotoThumbnailKey(photo) {
   if (!photo) return null
   return photo.annotatedThumbnailKey || photo.annotatedKey || photo.thumbnailKey || photo.key || null
@@ -40,15 +43,19 @@ export function getAnnotatedDataPreviewUrl(photo, pendingPreviewUrl, { skipLocal
 }
 
 export function shouldUseLocalPhotoPreview(photo) {
-  // Only trust an in-memory local preview before the photo has a real server key.
-  // A persisted photo (has key/annotatedKey) must always fetch from the server —
-  // a leftover _localPreviewUrl can be stale or revoked and would never load.
-  return Boolean(
-    photo?._localPreviewUrl
-    && !photo?.key
-    && !photo?.annotatedKey
-    && !photo?._annotatedPreviewUrl,
-  )
+  const url = photo?._localPreviewUrl
+  if (
+    !url
+    || photo?.key
+    || photo?.annotatedKey
+    || photo?._annotatedPreviewUrl
+  ) {
+    return false
+  }
+  if (url.startsWith('data:') && estimateDataUrlBytes(url) > MAX_LOCAL_PREVIEW_BYTES) {
+    return false
+  }
+  return true
 }
 
 export function shouldUseAnnotatedPreviewUrl(photo) {

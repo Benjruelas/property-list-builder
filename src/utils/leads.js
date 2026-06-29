@@ -13,7 +13,7 @@ import {
   leadContactMatchesQuery,
   skipTraceContactDetails,
 } from './leadContact'
-import { mergePhotosFromPoll } from './optimisticPhotoUpload'
+import { mergePhotosFromPoll, stripClientFieldsFromPhotos } from './optimisticPhotoUpload'
 
 export {
   getLeadPhones,
@@ -125,7 +125,10 @@ export async function fetchLeads(getToken, { view = 'list' } = {}) {
   const data = await res.json()
   const leads = data.leads || []
   const existing = loadLocalLeads()
-  const toStore = mergeListViewLeads(existing, leads)
+  const toStore = mergeListViewLeads(existing, leads).map((lead) => ({
+    ...lead,
+    photos: stripClientFieldsFromPhotos(lead.photos),
+  }))
   saveLocalLeads(toStore)
   return leads
 }

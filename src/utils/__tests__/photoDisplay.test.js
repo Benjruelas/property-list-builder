@@ -48,6 +48,12 @@ describe('photoDisplay', () => {
     expect(shouldUseLocalPhotoPreview({ _localPreviewUrl: 'blob:1', _annotatedPreviewUrl: 'blob:2' })).toBe(false)
   })
 
+  it('ignores oversized camera data URLs that break img rendering', () => {
+    const huge = `data:image/jpeg;base64,${'A'.repeat(700 * 1024)}`
+    expect(shouldUseLocalPhotoPreview({ _localPreviewUrl: huge })).toBe(false)
+    expect(shouldUseLocalPhotoPreview({ _localPreviewUrl: 'data:image/jpeg;base64,abc' })).toBe(true)
+  })
+
   it('ignores a leftover local preview once the photo has a server key', () => {
     expect(shouldUseLocalPhotoPreview({
       _localPreviewUrl: 'data:image/jpeg;base64,stale',
