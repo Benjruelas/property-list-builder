@@ -64,14 +64,25 @@ export function canCollaborateOnPipeline(user, pipeline, teams = []) {
   return canAddDealsToPipeline(user, pipeline, teams)
 }
 
+let pipelinesListEtag = null
+
+export function resetPipelinesListEtag() {
+  pipelinesListEtag = null
+}
+
 export async function fetchPipelines(getToken) {
   const token = await getToken()
   if (!token) return []
+  const headers = { Authorization: `Bearer ${token}` }
+  if (pipelinesListEtag) headers['If-None-Match'] = pipelinesListEtag
   const res = await fetch(`${getApiBase()}/pipelines`, {
     method: 'GET',
-    headers: { Authorization: `Bearer ${token}` }
+    headers,
   })
+  if (res.status === 304) return { notModified: true }
   if (!res.ok) throw new Error('Failed to fetch pipelines')
+  const etag = res.headers.get('ETag')
+  if (etag) pipelinesListEtag = etag.replace(/^W\//, '').replace(/"/g, '')
   const data = await res.json()
   return dedupePipelinesById(data.pipelines || []).map(normalizePipelineForClient)
 }

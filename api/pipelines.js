@@ -1,4 +1,5 @@
-import {resolveDevBypassUser, isDevBypassToken, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
+import { isDevBypassToken, isDevBypassAllowed } from './lib/devBypassUsers.js'
 import { getAllTeams } from './lib/teams.js'
 import {
   buildAccessContext,
@@ -11,7 +12,14 @@ import {
   isTeamAdmin,
 } from './lib/resourceContext.js'
 import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './lib/tagHelpers.js'
-import { normalizePipelineStore } from './lib/pipelineStore.js'
+import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
+import { getPipelinesForUser } from './lib/pipelineRepo.js'
+import { flags } from './lib/flags.js'
+import {
+  DATAVER_PIPELINES,
+  getUserDataVersion,
+  parseIfNoneMatch,
+} from './lib/dataVersion.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
 
 /**
@@ -24,67 +32,6 @@ import { kv, kvAvailable } from './lib/kvBootstrap.js'
  *
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
-
-const KV_KEY = 'user_pipelines'
-let fallbackStore = []
-
-async function getAllPipelines() {
-  if (!kvAvailable || !kv) return normalizePipelineStore(fallbackStore)
-  try {
-    const data = await kv.get(KV_KEY)
-    const pipelines = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    const raw = Array.isArray(pipelines) ? pipelines : []
-    const result = normalizePipelineStore(raw)
-    if (result.length !== raw.length) {
-      fallbackStore = result
-      try {
-        await kv.set(KV_KEY, result).catch(() => kv.set(KV_KEY, JSON.stringify(result)))
-      } catch (e) {
-        console.warn('Pipeline dedupe save failed', e.message)
-      }
-    } else {
-      fallbackStore = result
-    }
-    return result
-  } catch (e) {
-    return normalizePipelineStore(fallbackStore)
-  }
-}
-
-async function saveAllPipelines(pipelines) {
-  const normalized = normalizePipelineStore(Array.isArray(pipelines) ? pipelines : [])
-  fallbackStore = normalized
-  if (!kvAvailable || !kv) return
-  try {
-    await kv.set(KV_KEY, normalized).catch(() => kv.set(KV_KEY, JSON.stringify(normalized)))
-  } catch (e) {
-    console.warn('KV save failed', e.message)
-  }
-}
-
-/** Verify Firebase ID token; returns { uid, email } or null */
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
 
 const DEFAULT_COLUMNS = ['Open', 'Pending', 'Closed']
 
@@ -246,15 +193,11 @@ async function runPipelineActivityLog({
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user, allowDevBypass, idToken } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
@@ -264,9 +207,18 @@ export default async function handler(req, res) {
 
   try {
     if (method === 'GET') {
-      const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
+      if (flags.VERSIONED_POLL()) {
+        const clientVer = parseIfNoneMatch(req)
+        const serverVer = await getUserDataVersion(DATAVER_PIPELINES, user.uid)
+        if (clientVer && clientVer === serverVer) {
+          res.setHeader('ETag', `"${serverVer}"`)
+          return res.status(304).end()
+        }
+      }
+
+      const [allTeams] = await Promise.all([getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
-      const pipelines = filterVisibleResources(all.map(normalizePipelineDeals), user, ctx)
+      const pipelines = (await getPipelinesForUser(user, ctx)).map(normalizePipelineDeals)
       if (kvAvailable && kv) {
         const dealTagMeta = pipelines.flatMap((p) => collectDealTagMetaFromPipeline(p))
         const byId = new Map()
@@ -274,6 +226,10 @@ export default async function handler(req, res) {
           if (t?.id && !byId.has(t.id)) byId.set(t.id, t)
         }
         await hydrateUserRegistryFromTagMeta(kv, user.uid, 'deals', [...byId.values()])
+      }
+      if (flags.VERSIONED_POLL()) {
+        const serverVer = await getUserDataVersion(DATAVER_PIPELINES, user.uid)
+        res.setHeader('ETag', `"${serverVer}"`)
       }
       return res.status(200).json({ pipelines })
     }
@@ -338,8 +294,9 @@ export default async function handler(req, res) {
         }
       }
 
-      all.push(newPipeline)
-      await saveAllPipelines(all)
+      await mutatePipelines((current) => [...current, newPipeline], {
+        changedResources: [{ resource: newPipeline }],
+      })
 
       try {
         const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
@@ -492,8 +449,14 @@ export default async function handler(req, res) {
       }
 
       pipeline.updatedAt = new Date().toISOString()
-      all[idx] = pipeline
-      await saveAllPipelines(all)
+      const prevPipeline = normalizePipelineDeals(all[idx])
+      await mutatePipelines((current) => {
+        const at = current.findIndex((p) => p.id === pipelineId)
+        if (at === -1) return undefined
+        const next = [...current]
+        next[at] = pipeline
+        return next
+      }, { changedResources: [{ resource: pipeline, prevResource: prevPipeline }] })
 
       const dealTagMeta = collectDealTagMetaFromPipeline(pipeline)
       const sharingChanged =
@@ -567,8 +530,12 @@ export default async function handler(req, res) {
       if (!canDelete(access)) {
         return res.status(403).json({ error: 'Only the pipeline owner can delete this pipeline' })
       }
-      all.splice(idx, 1)
-      await saveAllPipelines(all)
+      const removed = all[idx]
+      await mutatePipelines((current) => current.filter((p) => p.id !== pipelineId), {
+        changedResources: [{ resource: null, prevResource: removed }],
+      })
+      const { removePipelineIndex } = await import('./lib/pipelineRepo.js')
+      await removePipelineIndex(pipelineId)
       return res.status(200).json({ message: 'Pipeline deleted' })
     }
 

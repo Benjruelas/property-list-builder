@@ -1,20 +1,11 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
 import {
   getLeadWithAccess,
-  saveAllLeads,
+  mutateSingleLead,
   canMutateLeadPhotos,
   withRepairedLeadOwnership,
 } from './lib/leadAccess.js'
-
-/**
- * Lead photo upload/download via R2.
- * POST: upload original + thumbnail, append to lead.photos
- * PATCH: update annotations / annotated image
- * GET: ?key=lead-photos/...
- * DELETE: remove photo from R2 + lead.photos
- */
-
 import {
   ENTITY_STORAGE_LIMITS,
   MAX_SINGLE_UPLOAD_BYTES,
@@ -22,6 +13,19 @@ import {
   formatStorageBytes,
   sumLeadPhotoBytes,
 } from './lib/uploadLimits.js'
+import {
+  presignedPhotosEnabled,
+  createPresignedPutUrl,
+  createPresignedGetUrl,
+} from './lib/photoPresign.js'
+
+/**
+ * Lead photo upload/download via R2.
+ * POST: upload original + thumbnail, append to lead.photos
+ * PATCH: update annotations / annotated image
+ * GET: ?key=lead-photos/... (or 302 redirect when presigned enabled)
+ * DELETE: remove photo from R2 + lead.photos
+ */
 
 let _s3
 function s3() {
@@ -35,29 +39,6 @@ function s3() {
     },
   })
   return _s3
-}
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
 }
 
 function sanitizeId(v) {
@@ -76,18 +57,40 @@ function decodeBase64(fileBase64, maxBytes = MAX_SINGLE_UPLOAD_BYTES) {
 }
 
 function photoKey(ownerUid, leadId, photoId, variant) {
-  const ext = variant === 'original' || variant === 'annotated' ? 'jpg' : 'jpg'
-  return `lead-photos/${ownerUid}/${leadId}/${photoId}/${variant}.${ext}`
+  return `lead-photos/${ownerUid}/${leadId}/${photoId}/${variant}.jpg`
 }
 
 async function canAccessPhotoKey(user, key) {
   if (!key.startsWith('lead-photos/')) return false
   const parts = key.split('/')
-  const ownerUid = parts[1]
   const leadId = parts[2]
-  if (ownerUid === user.uid) return true
   const { lead, access } = await getLeadWithAccess(user, leadId)
   return !!lead && !!access
+}
+
+function buildPhotoRecord(body, user, lead, photoId, key, thumbnailKey, sizes) {
+  const now = new Date().toISOString()
+  return {
+    id: photoId,
+    key,
+    thumbnailKey: thumbnailKey || key,
+    annotatedKey: null,
+    contentType: body.contentType || 'image/jpeg',
+    size: sizes.original,
+    thumbnailSize: sizes.thumbnail,
+    width: body.width ?? null,
+    height: body.height ?? null,
+    capturedAt: body.capturedAt || now,
+    capturedByUid: user.uid,
+    capturedByName: String(body.capturedByName || '').slice(0, 120) || null,
+    lat: body.lat ?? null,
+    lng: body.lng ?? null,
+    addressLabel: String(body.addressLabel || '').slice(0, 300) || null,
+    parcelId: body.parcelId ? sanitizeId(body.parcelId) : null,
+    annotations: { version: 1, objects: [] },
+    createdAt: now,
+    updatedAt: now,
+  }
 }
 
 export const config = {
@@ -100,11 +103,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
@@ -113,11 +112,59 @@ export default async function handler(req, res) {
       const leadId = sanitizeId(body.leadId)
       if (!leadId) return res.status(400).json({ error: 'leadId is required' })
 
-      const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
+      const { lead, access } = await getLeadWithAccess(user, leadId)
       if (!lead) return res.status(404).json({ error: 'Lead not found' })
       if (!canMutateLeadPhotos(user, lead, access)) return res.status(403).json({ error: 'No permission to add photos' })
 
       const photos = Array.isArray(lead.photos) ? lead.photos : []
+      const ownerUid = lead.ownerId || user.uid
+      const photoId = body.photoId
+        ? sanitizeId(body.photoId)
+        : `photo_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
+      // Presign: return upload URLs without storing yet
+      if (req.query?.presign === '1' || body.presign) {
+        if (!presignedPhotosEnabled()) {
+          return res.status(400).json({ error: 'Presigned uploads are not enabled' })
+        }
+        const key = photoKey(ownerUid, leadId, photoId, 'original')
+        const thumbnailKey = photoKey(ownerUid, leadId, photoId, 'thumb')
+        const [uploadUrl, thumbnailUploadUrl] = await Promise.all([
+          createPresignedPutUrl(key, body.contentType || 'image/jpeg'),
+          createPresignedPutUrl(thumbnailKey, 'image/jpeg'),
+        ])
+        return res.status(200).json({
+          photoId,
+          key,
+          thumbnailKey,
+          uploadUrl,
+          thumbnailUploadUrl,
+        })
+      }
+
+      // Metadata-only record after client uploaded via presigned URLs
+      if (body.recordOnly && body.key) {
+        const key = String(body.key)
+        const thumbnailKey = String(body.thumbnailKey || key)
+        const newBytes = (Number(body.size) || 0) + (Number(body.thumbnailSize) || 0)
+        if (sumLeadPhotoBytes(photos) + newBytes > ENTITY_STORAGE_LIMITS.lead) {
+          return res.status(413).json({ error: entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead) })
+        }
+        const photoRecord = buildPhotoRecord(body, user, lead, photoId, key, thumbnailKey, {
+          original: Number(body.size) || 0,
+          thumbnail: Number(body.thumbnailSize) || 0,
+        })
+        const updatedLead = await mutateSingleLead(leadId, (existing) =>
+          withRepairedLeadOwnership({
+            ...existing,
+            ownerId: existing.ownerId || user.uid,
+            ownerEmail: existing.ownerEmail || user.email || null,
+            photos: [...(existing.photos || []), photoRecord],
+            updatedAt: new Date().toISOString(),
+          }, user))
+        if (!updatedLead) return res.status(404).json({ error: 'Lead not found' })
+        return res.status(200).json({ photo: photoRecord, lead: updatedLead })
+      }
 
       const originalBuf = decodeBase64(body.fileBase64)
       if (!originalBuf) {
@@ -127,13 +174,10 @@ export default async function handler(req, res) {
       }
 
       const thumbBuf = body.thumbnailBase64 ? decodeBase64(body.thumbnailBase64) : null
-      const existingBytes = sumLeadPhotoBytes(photos)
       const newBytes = originalBuf.length + (thumbBuf?.length || 0)
-      if (existingBytes + newBytes > ENTITY_STORAGE_LIMITS.lead) {
+      if (sumLeadPhotoBytes(photos) + newBytes > ENTITY_STORAGE_LIMITS.lead) {
         return res.status(413).json({ error: entityStorageError('lead', ENTITY_STORAGE_LIMITS.lead) })
       }
-      const photoId = `photo_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-      const ownerUid = lead.ownerId || user.uid
       const key = photoKey(ownerUid, leadId, photoId, 'original')
       const thumbnailKey = photoKey(ownerUid, leadId, photoId, 'thumb')
 
@@ -153,39 +197,20 @@ export default async function handler(req, res) {
         }))
       }
 
-      const now = new Date().toISOString()
-      const photoRecord = {
-        id: photoId,
-        key,
-        thumbnailKey: thumbBuf ? thumbnailKey : key,
-        annotatedKey: null,
-        contentType: body.contentType || 'image/jpeg',
-        size: originalBuf.length,
-        thumbnailSize: thumbBuf?.length || 0,
-        width: body.width ?? null,
-        height: body.height ?? null,
-        capturedAt: body.capturedAt || now,
-        capturedByUid: user.uid,
-        capturedByName: String(body.capturedByName || '').slice(0, 120) || null,
-        lat: body.lat ?? null,
-        lng: body.lng ?? null,
-        addressLabel: String(body.addressLabel || '').slice(0, 300) || null,
-        parcelId: body.parcelId ? sanitizeId(body.parcelId) : null,
-        annotations: { version: 1, objects: [] },
-        createdAt: now,
-        updatedAt: now,
-      }
+      const photoRecord = buildPhotoRecord(body, user, lead, photoId, key, thumbBuf ? thumbnailKey : key, {
+        original: originalBuf.length,
+        thumbnail: thumbBuf?.length || 0,
+      })
 
-      const updatedLead = withRepairedLeadOwnership({
-        ...lead,
-        ownerId: lead.ownerId || user.uid,
-        ownerEmail: lead.ownerEmail || user.email || null,
-        photos: [...photos, photoRecord],
-        updatedAt: now,
-      }, user)
-      const nextAll = [...all]
-      nextAll[index] = updatedLead
-      await saveAllLeads(nextAll)
+      const updatedLead = await mutateSingleLead(leadId, (existing) =>
+        withRepairedLeadOwnership({
+          ...existing,
+          ownerId: existing.ownerId || user.uid,
+          ownerEmail: existing.ownerEmail || user.email || null,
+          photos: [...(existing.photos || []), photoRecord],
+          updatedAt: new Date().toISOString(),
+        }, user))
+      if (!updatedLead) return res.status(404).json({ error: 'Lead not found' })
 
       return res.status(200).json({ photo: photoRecord, lead: updatedLead })
     }
@@ -196,7 +221,7 @@ export default async function handler(req, res) {
       const photoId = sanitizeId(body.photoId)
       if (!leadId || !photoId) return res.status(400).json({ error: 'leadId and photoId are required' })
 
-      const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
+      const { lead, access } = await getLeadWithAccess(user, leadId)
       if (!lead) return res.status(404).json({ error: 'Lead not found' })
 
       const photos = Array.isArray(lead.photos) ? [...lead.photos] : []
@@ -251,11 +276,9 @@ export default async function handler(req, res) {
         annotatedThumbnailKey = null
       }
 
-      photos[pIdx] = {
+      const updatedPhoto = {
         ...existing,
-        annotations: body.annotations !== undefined
-          ? body.annotations
-          : existing.annotations,
+        annotations: body.annotations !== undefined ? body.annotations : existing.annotations,
         annotatedKey: body.annotatedBase64 ? annotatedKey : (body.clearAnnotated ? null : existing.annotatedKey),
         annotatedSize,
         annotatedThumbnailKey: body.annotatedBase64
@@ -267,12 +290,16 @@ export default async function handler(req, res) {
         updatedAt: now,
       }
 
-      const updatedLead = { ...lead, photos, updatedAt: now }
-      const nextAll = [...all]
-      nextAll[index] = updatedLead
-      await saveAllLeads(nextAll)
+      const updatedLead = await mutateSingleLead(leadId, (prev) => {
+        const list = [...(prev.photos || [])]
+        const at = list.findIndex((p) => p.id === photoId)
+        if (at === -1) return null
+        list[at] = updatedPhoto
+        return { ...prev, photos: list, updatedAt: now }
+      })
+      if (!updatedLead) return res.status(404).json({ error: 'Lead not found' })
 
-      return res.status(200).json({ photo: photos[pIdx], lead: updatedLead })
+      return res.status(200).json({ photo: updatedPhoto, lead: updatedLead })
     }
 
     if (req.method === 'GET') {
@@ -282,6 +309,12 @@ export default async function handler(req, res) {
 
       const allowed = await canAccessPhotoKey(user, key)
       if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+
+      if (presignedPhotosEnabled() && req.query.redirect !== '0') {
+        const url = await createPresignedGetUrl(key)
+        res.setHeader('Cache-Control', 'private, max-age=60')
+        return res.redirect(302, url)
+      }
 
       try {
         const r = await s3().send(new GetObjectCommand({
@@ -308,7 +341,7 @@ export default async function handler(req, res) {
       const photoId = sanitizeId(body.photoId)
       if (!leadId || !photoId) return res.status(400).json({ error: 'leadId and photoId are required' })
 
-      const { lead, access, all, index } = await getLeadWithAccess(user, leadId)
+      const { lead, access } = await getLeadWithAccess(user, leadId)
       if (!lead) return res.status(404).json({ error: 'Lead not found' })
 
       const photos = Array.isArray(lead.photos) ? lead.photos : []
@@ -333,14 +366,13 @@ export default async function handler(req, res) {
         }
       }
 
-      const updatedLead = withRepairedLeadOwnership({
-        ...lead,
-        photos: photos.filter((p) => p.id !== photoId),
-        updatedAt: new Date().toISOString(),
-      }, user)
-      const nextAll = [...all]
-      nextAll[index] = updatedLead
-      await saveAllLeads(nextAll)
+      const updatedLead = await mutateSingleLead(leadId, (existing) =>
+        withRepairedLeadOwnership({
+          ...existing,
+          photos: (existing.photos || []).filter((p) => p.id !== photoId),
+          updatedAt: new Date().toISOString(),
+        }, user))
+      if (!updatedLead) return res.status(404).json({ error: 'Lead not found' })
 
       return res.status(200).json({ lead: updatedLead })
     }

@@ -7,9 +7,9 @@ import {
   buildAccessContext,
   getResourceAccess,
   canEdit,
-  filterVisibleResources,
 } from './resourceContext.js'
-import { getAllLeads, saveAllLeads } from './leadStore.js'
+import { getAllLeads, saveAllLeads, mutateLeads, mutateSingleLead } from './leadStore.js'
+import { findLeadById } from './leadRepo.js'
 import {
   isLeadOwner,
   userCapturedPhoto,
@@ -17,7 +17,7 @@ import {
   withRepairedLeadOwnership,
 } from './leadOwnership.js'
 
-export { getAllLeads, saveAllLeads }
+export { getAllLeads, saveAllLeads, mutateLeads, mutateSingleLead }
 
 export async function buildLeadAccessContext(user) {
   const allTeams = await getAllTeams()
@@ -26,20 +26,18 @@ export async function buildLeadAccessContext(user) {
 }
 
 export async function getLeadWithAccess(user, leadId) {
-  const all = await getAllLeads()
   const ctx = await buildLeadAccessContext(user)
-  const lead = all.find((l) => l.id === leadId)
+  const { lead, all, index } = await findLeadById(user, ctx, leadId)
   if (!lead) return { lead: null, access: null, all, ctx, index: -1 }
   const access = getResourceAccess(lead, user, ctx)
   if (!access) return { lead: null, access: null, all, ctx, index: -1 }
-  const index = all.findIndex((l) => l.id === leadId)
   return { lead, access, all, ctx, index }
 }
 
 export async function getVisibleLeads(user) {
-  const all = await getAllLeads()
+  const { getLeadsForUser } = await import('./leadRepo.js')
   const ctx = await buildLeadAccessContext(user)
-  return filterVisibleResources(all, user, ctx)
+  return getLeadsForUser(user, ctx)
 }
 
 export function canEditLead(access) {

@@ -1,9 +1,8 @@
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
 import { getAllTeams } from './lib/teams.js'
 import {
   buildAccessContext,
   getResourceAccess,
-  filterVisibleResources,
   canEdit,
   canDelete,
   canChangeVisibility,
@@ -18,7 +17,15 @@ import {
 import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './lib/tagHelpers.js'
 import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './lib/leadStatuses.js'
 import { normalizeLeadContactsForStorage } from './lib/leadContact.js'
-import { getAllLeads, saveAllLeads } from './lib/leadStore.js'
+import { getAllLeads, mutateLeads, deleteLeadFromStore } from './lib/leadStore.js'
+import { getLeadsForUser } from './lib/leadRepo.js'
+import { flags } from './lib/flags.js'
+import {
+  DATAVER_LEADS,
+  getUserDataVersion,
+  parseIfNoneMatch,
+} from './lib/dataVersion.js'
+import { projectLeadsForList } from './lib/leadListProjection.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
 
 /**
@@ -36,29 +43,6 @@ async function loadUserAppSettings(uid) {
     const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
     return parsed?.appSettings || null
   } catch {
-    return null
-  }
-}
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
     return null
   }
 }
@@ -197,25 +181,21 @@ async function logLeadActivity(type, lead, user, summary, { audience } = {}) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
   }
 
   const { method, body = {} } = req
+  const query = req.query || {}
 
   try {
-    const [all, allTeams, userAppSettings] = await Promise.all([
-      getAllLeads(),
+    const [allTeams, userAppSettings] = await Promise.all([
       getAllTeams(),
       loadUserAppSettings(user.uid),
     ])
@@ -223,12 +203,39 @@ export default async function handler(req, res) {
     const allowedStatusIds = resolveAllowedLeadStatusIds(ctx, userAppSettings)
 
     if (method === 'GET') {
-      const leads = filterVisibleResources(all, user, ctx)
+      if (flags.VERSIONED_POLL()) {
+        const clientVer = parseIfNoneMatch(req)
+        const serverVer = await getUserDataVersion(DATAVER_LEADS, user.uid)
+        if (clientVer && clientVer === serverVer) {
+          res.setHeader('ETag', `"${serverVer}"`)
+          return res.status(304).end()
+        }
+      }
+
+      const leads = await getLeadsForUser(user, ctx)
+      const singleLeadId = String(query.leadId || '').trim()
+      if (singleLeadId) {
+        const lead = leads.find((l) => l.id === singleLeadId)
+        if (!lead) return res.status(404).json({ error: 'Lead not found' })
+        if (flags.VERSIONED_POLL()) {
+          const serverVer = await getUserDataVersion(DATAVER_LEADS, user.uid)
+          res.setHeader('ETag', `"${serverVer}"`)
+        }
+        return res.status(200).json({ lead })
+      }
+
+      const useListView = flags.LEADS_LIST_VIEW() && query.view === 'list'
+      const payload = useListView ? projectLeadsForList(leads) : leads
+
       if (kvAvailable && kv) {
         const tagMeta = collectTagMetaFromEntities(leads)
         await hydrateUserRegistryFromTagMeta(kv, user.uid, 'leads', tagMeta)
       }
-      return res.status(200).json({ leads })
+      if (flags.VERSIONED_POLL()) {
+        const serverVer = await getUserDataVersion(DATAVER_LEADS, user.uid)
+        res.setHeader('ETag', `"${serverVer}"`)
+      }
+      return res.status(200).json({ leads: payload })
     }
 
     if (method === 'POST') {
@@ -242,6 +249,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: e.message })
       }
 
+      const all = await getAllLeads()
       if (lead.parcelId && all.some((l) => l.parcelId === lead.parcelId)) {
         const conflict = all.find((l) => l.parcelId === lead.parcelId)
         const canSee = conflict && getResourceAccess(conflict, user, ctx) !== null
@@ -250,8 +258,9 @@ export default async function handler(req, res) {
         }
       }
 
-      all.push(lead)
-      await saveAllLeads(all)
+      await mutateLeads((current) => [...current, lead], {
+        changedResources: [{ resource: lead }],
+      })
 
       if (lead.tagMeta?.length) {
         await syncTagMetaToCollaborators(kv, {
@@ -275,6 +284,7 @@ export default async function handler(req, res) {
       const { leadId, action } = body
       if (!leadId) return res.status(400).json({ error: 'leadId is required' })
 
+      const all = await getAllLeads()
       const idx = all.findIndex((l) => l.id === leadId)
       if (idx === -1) return res.status(404).json({ error: 'Lead not found' })
 
@@ -303,8 +313,13 @@ export default async function handler(req, res) {
             : activities,
           updatedAt: now,
         }
-        all[idx] = lead
-        await saveAllLeads(all)
+        await mutateLeads((current) => {
+          const at = current.findIndex((l) => l.id === leadId)
+          if (at === -1) return undefined
+          const next = [...current]
+          next[at] = lead
+          return next
+        }, { changedResources: [{ resource: lead, prevResource: existing }] })
         return res.status(200).json({ lead })
       }
 
@@ -341,8 +356,13 @@ export default async function handler(req, res) {
         lead.visibility !== existing.visibility ||
         JSON.stringify(lead.sharedMemberUids || []) !== JSON.stringify(existing.sharedMemberUids || [])
 
-      all[idx] = lead
-      await saveAllLeads(all)
+      await mutateLeads((current) => {
+        const at = current.findIndex((l) => l.id === leadId)
+        if (at === -1) return undefined
+        const next = [...current]
+        next[at] = lead
+        return next
+      }, { changedResources: [{ resource: lead, prevResource: existing }] })
 
       if (body.tagIds !== undefined || body.tagMeta !== undefined) {
         await syncTagMetaToCollaborators(kv, {
@@ -369,6 +389,8 @@ export default async function handler(req, res) {
       const name = leadDisplayName(lead)
       if (visibilityChanged) {
         await logLeadActivity('lead.shared', lead, user, `${label} updated sharing on lead ${name}`)
+        const { rebuildSharedIndexForLead } = await import('./lib/leadRepo.js')
+        await rebuildSharedIndexForLead(lead, allTeams)
       } else {
         await logLeadActivity('lead.updated', lead, user, `${label} updated lead ${name}`)
       }
@@ -380,6 +402,7 @@ export default async function handler(req, res) {
       const { leadId } = body
       if (!leadId) return res.status(400).json({ error: 'leadId is required' })
 
+      const all = await getAllLeads()
       const idx = all.findIndex((l) => l.id === leadId)
       if (idx === -1) return res.status(404).json({ error: 'Lead not found' })
       const access = getResourceAccess(all[idx], user, ctx)
@@ -388,8 +411,7 @@ export default async function handler(req, res) {
       }
 
       const removed = all[idx]
-      all.splice(idx, 1)
-      await saveAllLeads(all)
+      await deleteLeadFromStore(leadId)
 
       const label = actorLabel(user)
       const name = leadDisplayName(removed)

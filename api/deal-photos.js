@@ -1,6 +1,12 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { resolveDevBypassUser, isDevBypassAllowed } from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
+import {
+  presignedPhotosEnabled,
+  createPresignedGetUrl,
+  createPresignedPutUrl,
+} from './lib/photoPresign.js'
 import {
   ENTITY_STORAGE_LIMITS,
   MAX_SINGLE_UPLOAD_BYTES,
@@ -14,53 +20,6 @@ import {
  * POST / PATCH / GET / DELETE — mirrors lead-photos, stored on deal.photos in pipeline KV.
  */
 
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
-
-const PIPELINES_KV_KEY = 'user_pipelines'
-
-async function loadPipelinesSnapshot() {
-  if (!kvAvailable || !kv) return []
-  try {
-    const data = await kv.get(PIPELINES_KV_KEY)
-    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-async function saveAllPipelines(pipelines) {
-  if (!kvAvailable || !kv) return false
-  try {
-    await kv.set(PIPELINES_KV_KEY, pipelines).catch(() =>
-      kv.set(PIPELINES_KV_KEY, JSON.stringify(pipelines))
-    )
-    return true
-  } catch {
-    return false
-  }
-}
-
 let _s3
 function s3() {
   if (_s3) return _s3
@@ -73,29 +32,6 @@ function s3() {
     },
   })
   return _s3
-}
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
 }
 
 function sanitizeId(v) {
@@ -118,7 +54,7 @@ function photoKey(ownerUid, dealId, photoId, variant) {
 }
 
 async function canAccessPipeline(user, pipelineId) {
-  const [pipelines, allTeams] = await Promise.all([loadPipelinesSnapshot(), getAllTeams()])
+  const [pipelines, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
   const pipeline = pipelines.find((p) => p.id === pipelineId)
   if (!pipeline) return { allowed: false, pipeline: null, all: pipelines, pipelineIndex: -1 }
   const teamsIndex = fullTeamsIndex(allTeams)
@@ -138,9 +74,25 @@ function replaceDealInAll(all, pipelineIndex, dealIndex, updatedDeal) {
   const pipeline = all[pipelineIndex]
   const deals = [...(pipeline.deals || [])]
   deals[dealIndex] = updatedDeal
+  const nextPipeline = { ...pipeline, deals, updatedAt: new Date().toISOString() }
   const nextAll = [...all]
-  nextAll[pipelineIndex] = { ...pipeline, deals }
-  return nextAll
+  nextAll[pipelineIndex] = nextPipeline
+  return { nextAll, nextPipeline }
+}
+
+async function saveDealMutation(all, pipelineIndex, dealIndex, updatedDeal) {
+  const prevPipeline = all[pipelineIndex]
+  const deals = [...(prevPipeline.deals || [])]
+  deals[dealIndex] = updatedDeal
+  const nextPipeline = { ...prevPipeline, deals, updatedAt: new Date().toISOString() }
+  await mutatePipelines((current) => {
+    const at = current.findIndex((p) => p.id === prevPipeline.id)
+    if (at === -1) return undefined
+    const next = [...current]
+    next[at] = nextPipeline
+    return next
+  }, { changedResources: [{ resource: nextPipeline, prevResource: prevPipeline }] })
+  return updatedDeal
 }
 
 async function canAccessPhotoKey(user, key) {
@@ -149,7 +101,7 @@ async function canAccessPhotoKey(user, key) {
   const ownerUid = parts[1]
   const dealId = parts[2]
   if (ownerUid === user.uid) return true
-  const pipelines = await loadPipelinesSnapshot()
+  const pipelines = await getAllPipelines()
   const allTeams = await getAllTeams()
   const teamsIndex = fullTeamsIndex(allTeams)
   for (const pipeline of pipelines) {
@@ -170,11 +122,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
@@ -252,8 +200,7 @@ export default async function handler(req, res) {
         photos: [...photos, photoRecord],
         updatedAt: Date.now(),
       }
-      const nextAll = replaceDealInAll(all, pipelineIndex, dealIndex, updatedDeal)
-      await saveAllPipelines(nextAll)
+      await saveDealMutation(all, pipelineIndex, dealIndex, updatedDeal)
 
       return res.status(200).json({ photo: photoRecord, deal: updatedDeal })
     }
@@ -335,8 +282,7 @@ export default async function handler(req, res) {
       }
 
       const updatedDeal = { ...deal, photos, updatedAt: Date.now() }
-      const nextAll = replaceDealInAll(all, pipelineIndex, dealIndex, updatedDeal)
-      await saveAllPipelines(nextAll)
+      await saveDealMutation(all, pipelineIndex, dealIndex, updatedDeal)
 
       return res.status(200).json({ photo: photos[pIdx], deal: updatedDeal })
     }
@@ -348,6 +294,12 @@ export default async function handler(req, res) {
 
       const allowed = await canAccessPhotoKey(user, key)
       if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+
+      if (presignedPhotosEnabled() && req.query.redirect !== '0') {
+        const url = await createPresignedGetUrl(key)
+        res.setHeader('Cache-Control', 'private, max-age=60')
+        return res.redirect(302, url)
+      }
 
       try {
         const r = await s3().send(new GetObjectCommand({
@@ -402,8 +354,7 @@ export default async function handler(req, res) {
         photos: photos.filter((p) => p.id !== photoId),
         updatedAt: Date.now(),
       }
-      const nextAll = replaceDealInAll(all, pipelineIndex, dealIndex, updatedDeal)
-      await saveAllPipelines(nextAll)
+      await saveDealMutation(all, pipelineIndex, dealIndex, updatedDeal)
 
       return res.status(200).json({ deal: updatedDeal })
     }

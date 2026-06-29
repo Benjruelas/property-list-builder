@@ -73,13 +73,67 @@ export async function uploadLeadPhoto(getToken, {
   }
   assertLeadPhotoStorage(existingPhotos, addingBytes)
 
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to upload photos')
+
+  const usePresigned = import.meta.env.VITE_PRESIGNED_PHOTOS === '1'
+    || import.meta.env.VITE_PRESIGNED_PHOTOS === 'true'
+
+  if (usePresigned) {
+    const presignRes = await fetch(`${getApiBase()}/lead-photos?presign=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        leadId,
+        contentType: 'image/jpeg',
+        width: compressed.width,
+        height: compressed.height,
+        ...metadata,
+      }),
+    })
+    if (presignRes.ok) {
+      const presign = await presignRes.json()
+      await Promise.all([
+        fetch(presign.uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: compressed.file,
+        }),
+        fetch(presign.thumbnailUploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: compressed.thumbnail,
+        }),
+      ])
+      const recordRes = await fetch(`${getApiBase()}/lead-photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          leadId,
+          recordOnly: true,
+          photoId: presign.photoId,
+          key: presign.key,
+          thumbnailKey: presign.thumbnailKey,
+          size: compressed.file.size,
+          thumbnailSize: compressed.thumbnail.size,
+          contentType: 'image/jpeg',
+          width: compressed.width,
+          height: compressed.height,
+          ...metadata,
+        }),
+      })
+      if (recordRes.ok) {
+        const json = await recordRes.json()
+        return { ...json, thumbnailBlob: compressed.thumbnail }
+      }
+    }
+    // Fall through to legacy base64 upload if presign unavailable
+  }
+
   const [fileBase64, thumbnailBase64] = await Promise.all([
     blobToBase64(compressed.file),
     blobToBase64(compressed.thumbnail),
   ])
-
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to upload photos')
 
   const res = await fetch(`${getApiBase()}/lead-photos`, {
     method: 'POST',
