@@ -29,6 +29,7 @@ function newJobId() {
 class PhotoUploadManager {
   constructor() {
     this.jobs = new Map()
+    this.blobCache = new Map()
     this.listeners = new Set()
     this.getToken = null
     this.onEntityUpdated = null
@@ -117,6 +118,7 @@ class PhotoUploadManager {
     }
 
     this.jobs.set(jobId, job)
+    this.blobCache.set(jobId, { thumb: compressed.thumbnail, full: compressed.file })
     await saveJob(job)
     await saveBlobs(jobId, { thumb: compressed.thumbnail, full: compressed.file })
     this.emit()
@@ -151,6 +153,7 @@ class PhotoUploadManager {
 
   removeJob(jobId) {
     this.jobs.delete(jobId)
+    this.blobCache.delete(jobId)
     deleteJob(jobId)
     this.emit()
   }
@@ -160,7 +163,8 @@ class PhotoUploadManager {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return
 
     const pending = this.getSnapshot().filter(
-      (j) => j.status === JOB_STATUS.queued || j.status === JOB_STATUS.failed,
+      (j) => (j.status === JOB_STATUS.queued || j.status === JOB_STATUS.failed)
+        && !isDraftRef(j.entityRef),
     )
     if (!pending.length) return
 
@@ -171,17 +175,22 @@ class PhotoUploadManager {
           job.status = JOB_STATUS.queued
           job.error = null
         }
-        if (isDraftRef(job.entityRef)) continue
         await this.processJob(job)
       }
     } finally {
       this.processing = false
     }
-    this.start()
+
+    const stillPending = this.getSnapshot().some(
+      (j) => (j.status === JOB_STATUS.queued || j.status === JOB_STATUS.failed)
+        && !isDraftRef(j.entityRef),
+    )
+    if (stillPending) this.start()
   }
 
   async processJob(job) {
-    const blobs = await getBlobs(job.jobId)
+    const cached = this.blobCache.get(job.jobId)
+    const blobs = cached || await getBlobs(job.jobId)
     if (!blobs?.thumb || !blobs?.full) {
       job.status = JOB_STATUS.failed
       job.error = 'Local photo data missing'
@@ -243,6 +252,7 @@ class PhotoUploadManager {
       job.status = JOB_STATUS.done
       job.photoId = presign.photoId
       job.progress = 1
+      this.blobCache.delete(job.jobId)
       await deleteJob(job.jobId)
       this.jobs.delete(job.jobId)
       this.emit()

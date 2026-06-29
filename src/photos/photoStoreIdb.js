@@ -28,68 +28,68 @@ function openDb() {
   return dbPromise
 }
 
-function tx(store, mode) {
+function runTx(storeNames, mode, fn) {
   return openDb().then((db) => {
     if (!db) return null
-    return db.transaction(store, mode).objectStore(store)
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(storeNames, mode)
+      const stores = storeNames.map((name) => tx.objectStore(name))
+      let result
+      try {
+        result = fn(...stores)
+      } catch (e) {
+        reject(e)
+        return
+      }
+      tx.oncomplete = () => resolve(result)
+      tx.onerror = () => reject(tx.error)
+      tx.onabort = () => reject(tx.error)
+    })
+  })
+}
+
+function requestToPromise(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
   })
 }
 
 export async function saveJob(job) {
-  const store = await tx(JOBS, 'readwrite')
-  if (!store) return
-  store.put(job)
+  await runTx([JOBS], 'readwrite', (store) => {
+    store.put(job)
+  })
 }
 
 export async function saveBlobs(jobId, { thumb, full }) {
-  const store = await tx(BLOBS, 'readwrite')
-  if (!store) return
-  store.put({ jobId, thumb, full })
+  await runTx([BLOBS], 'readwrite', (store) => {
+    store.put({ jobId, thumb, full })
+  })
 }
 
 export async function getBlobs(jobId) {
-  const store = await tx(BLOBS, 'readonly')
-  if (!store) return null
-  return new Promise((resolve, reject) => {
-    const req = store.get(jobId)
-    req.onsuccess = () => resolve(req.result || null)
-    req.onerror = () => reject(req.error)
-  })
+  return runTx([BLOBS], 'readonly', (store) => requestToPromise(store.get(jobId)))
 }
 
 export async function deleteJob(jobId) {
-  const jobs = await tx(JOBS, 'readwrite')
-  const blobs = await tx(BLOBS, 'readwrite')
-  if (!jobs || !blobs) return
-  jobs.delete(jobId)
-  blobs.delete(jobId)
-}
-
-export async function loadAllJobs() {
-  const store = await tx(JOBS, 'readonly')
-  if (!store) return []
-  return new Promise((resolve, reject) => {
-    const req = store.getAll()
-    req.onsuccess = () => resolve(req.result || [])
-    req.onerror = () => reject(req.error)
+  await runTx([JOBS, BLOBS], 'readwrite', (jobs, blobs) => {
+    jobs.delete(jobId)
+    blobs.delete(jobId)
   })
 }
 
+export async function loadAllJobs() {
+  const rows = await runTx([JOBS], 'readonly', (store) => requestToPromise(store.getAll()))
+  return rows || []
+}
+
 export async function updateJob(jobId, patch) {
-  const store = await tx(JOBS, 'readwrite')
-  if (!store) return null
-  return new Promise((resolve, reject) => {
+  return runTx([JOBS], 'readwrite', (store) => {
     const getReq = store.get(jobId)
     getReq.onsuccess = () => {
       const existing = getReq.result
-      if (!existing) {
-        resolve(null)
-        return
-      }
-      const next = { ...existing, ...patch }
-      store.put(next)
-      resolve(next)
+      if (!existing) return
+      store.put({ ...existing, ...patch })
     }
-    getReq.onerror = () => reject(getReq.error)
   })
 }

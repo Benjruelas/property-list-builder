@@ -7806,7 +7806,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   flex-direction: column;
   background: #0a0c12;
   color: var(--map-chrome-text, #fff);
-  pointer-events: auto;
+  pointer-events: auto !important;
 }
 
 .photo-mode-header,
@@ -7818,6 +7818,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   background: var(--map-chrome-bg, rgba(18, 22, 34, 0.92));
   border-bottom: 1px solid var(--map-chrome-border, rgba(255, 255, 255, 0.2));
   box-shadow: var(--map-chrome-shadow);
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
 }
 
 .photo-mode-viewport {
@@ -8081,6 +8084,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none;
 }
 
 .photo-mode-video--hidden {
@@ -8152,6 +8156,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
 }
 
 .photo-mode-thumbs {

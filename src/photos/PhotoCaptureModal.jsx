@@ -139,7 +139,6 @@ export function PhotoCaptureModal({
       draftIdRef.current = null
       return undefined
     }
-    setDraftForm(normalizeDraftForm(entity))
     setPhase('capture')
 
     if (!canUseCamera()) {
@@ -170,7 +169,11 @@ export function PhotoCaptureModal({
       cancelled = true
       stopCamera()
     }
-  }, [open, entity, stopCamera])
+  }, [open, stopCamera])
+
+  useEffect(() => {
+    if (open) setDraftForm(normalizeDraftForm(entity))
+  }, [open, entity?.id])
 
   const triggerFlash = () => {
     setFlash(true)
@@ -230,12 +233,15 @@ export function PhotoCaptureModal({
     }
   }
 
-  const handleDone = () => {
+  const handleDone = (e) => {
+    e?.preventDefault?.()
+    e?.stopPropagation?.()
     if (isDraft && sessionItems.length > 0) {
       stopCamera()
       setPhase('save')
       return
     }
+    stopCamera()
     onClose?.()
   }
 
@@ -388,7 +394,12 @@ export function PhotoCaptureModal({
               <div className="text-xs opacity-50">{activeUploadCount} uploading</div>
             )}
           </div>
-          <Button type="button" className="photo-overlay-header-btn photo-mode-btn photo-mode-btn--primary shrink-0" onClick={handleDone}>
+          <Button
+            type="button"
+            className="photo-overlay-header-btn photo-mode-btn photo-mode-btn--primary shrink-0 relative z-10 touch-manipulation"
+            onClick={handleDone}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <Check className="h-4 w-4 mr-1" />
             {isDraft && sessionItems.length > 0 ? 'Next' : 'Done'}
           </Button>

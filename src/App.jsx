@@ -4348,7 +4348,6 @@ function App() {
           onClose={closePhotoMode}
           onEntityUpdate={(updatedLead) => {
             setLeads((prev) => prev.map((l) => (l.id === updatedLead.id ? updatedLead : l)))
-            setPhotoModeLead(updatedLead)
           }}
           onLeadCreated={(lead) => {
             setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
