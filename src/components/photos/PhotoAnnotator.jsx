@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
-import { fetchLeadPhotoBlob, saveLeadPhotoAnnotations } from '@/utils/leadPhotos'
-import { updatePhotoInList } from '@/utils/optimisticPhotoUpload'
+import { fetchPhotoBlob } from '@/photos/photosClient'
+import { savePhotoAnnotations, updatePhotoInList, entityRefFromLead } from '@/photos/annotationSave'
 import { showToast } from '../ui/toast'
 import { normalizeAnnotationObjects } from '@/utils/photoAnnotations'
 import { PhotoAnnotatorEditor } from './PhotoAnnotatorEditor'
 import { renderFlatImageBlobs } from './photoAnnotatorRender'
-import { blobToDataUrl } from '@/utils/blobUrl'
 import { getPhotoAnnotationBaseKey } from '@/utils/photoDisplay'
 
 export function PhotoAnnotator({ open, lead, photo, getToken, onClose, onSaved }) {
@@ -24,7 +23,7 @@ export function PhotoAnnotator({ open, lead, photo, getToken, onClose, onSaved }
       return undefined
     }
     let objectUrl = null
-    fetchLeadPhotoBlob(getToken, key)
+    fetchPhotoBlob(getToken, key)
       .then((blob) => {
         objectUrl = URL.createObjectURL(blob)
         const img = new window.Image()
@@ -55,36 +54,27 @@ export function PhotoAnnotator({ open, lead, photo, getToken, onClose, onSaved }
     const snapshotLead = lead
     setSaving(true)
 
-    let annotatedPreviewUrl = null
     try {
       const { file, thumbnail } = await renderFlatImageBlobs(image, objects, image.width, image.height)
-      annotatedPreviewUrl = await blobToDataUrl(thumbnail)
-      const optimisticPhoto = {
-        ...photo,
-        annotations,
-        annotatedKey: photo.annotatedKey || '__pending__',
-        _annotatedPreviewUrl: annotatedPreviewUrl,
-        _annotationSaving: true,
-        updatedAt: new Date().toISOString(),
-      }
-      onSaved?.({
-        ...lead,
-        photos: updatePhotoInList(lead.photos || [], photo.id, optimisticPhoto),
-        updatedAt: optimisticPhoto.updatedAt,
-      }, { complete: false })
+      const entityRef = entityRefFromLead(lead)
 
-      const { lead: updated } = await saveLeadPhotoAnnotations(getToken, {
-        leadId: lead.id,
-        photoId: photo.id,
+      const result = await savePhotoAnnotations(getToken, entityRef, {
+        photo,
         annotations,
         annotatedBlob: file,
         annotatedThumbnailBlob: thumbnail,
         existingPhotos: lead.photos || [],
+        onOptimistic: (optimisticPhoto) => {
+          onSaved?.({
+            ...lead,
+            photos: updatePhotoInList(lead.photos || [], photo.id, optimisticPhoto),
+            updatedAt: optimisticPhoto.updatedAt,
+          }, { complete: false })
+        },
       })
-      onSaved?.(updated, { complete: true })
-    } catch (e) {
+      onSaved?.(result.entity, { complete: true })
+    } catch {
       onSaved?.(snapshotLead, { complete: true })
-      showToast(e.message || 'Save failed', 'error')
     } finally {
       setSaving(false)
     }

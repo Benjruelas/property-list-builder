@@ -51,7 +51,7 @@ import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import { TagPicker } from './tags/TagPicker'
 import { collectTagMetaFromEntities } from '@/utils/tags'
-import { LeadPhotoGallery } from './photos/LeadPhotoGallery'
+import { PhotoGallery } from '@/photos/PhotoGallery'
 import { fetchPhotoReports } from '@/utils/photoReports'
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
@@ -664,12 +664,13 @@ export function LeadDetails({
               </section>
 
               {canAccessPhotos && (
-                <LeadPhotoGallery
-                  lead={lead}
+                <PhotoGallery
+                  entityType="lead"
+                  entity={lead}
                   getToken={getToken}
                   currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
                   readOnly={photosReadOnly}
-                  onLeadUpdate={onLeadUpdate}
+                  onEntityUpdate={onLeadUpdate}
                 />
               )}
 

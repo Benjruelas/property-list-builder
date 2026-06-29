@@ -4,7 +4,6 @@
 
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { flags } from './flags.js'
 
 let _s3
 
@@ -26,7 +25,7 @@ function bucket() {
 }
 
 export function presignedPhotosEnabled() {
-  return flags.PRESIGNED_PHOTOS() && !!process.env.R2_BUCKET_NAME && !!process.env.R2_ACCOUNT_ID
+  return !!process.env.R2_BUCKET_NAME && !!process.env.R2_ACCOUNT_ID
 }
 
 export async function createPresignedPutUrl(key, contentType = 'image/jpeg', expiresIn = 900) {

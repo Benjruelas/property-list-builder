@@ -22,7 +22,7 @@ import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatQuoteMoney } from '@/utils/quoteMath'
 import { TagPicker } from './tags/TagPicker'
 import { collectTagMetaFromEntities } from '@/utils/tags'
-import { DealPhotoGallery } from './photos/DealPhotoGallery'
+import { PhotoGallery } from '@/photos/PhotoGallery'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -399,14 +399,15 @@ export function DealDetails({
               </section>
 
               {canAccessPhotos && pipelineMeta?.id && (
-                <DealPhotoGallery
-                  deal={d}
+                <PhotoGallery
+                  entityType="deal"
+                  entity={d}
                   pipelineId={pipelineMeta.id}
                   lead={lead}
                   getToken={getToken}
                   currentUser={currentUser}
                   readOnly={readOnly || isClosed}
-                  onDealUpdate={onDealUpdate}
+                  onEntityUpdate={onDealUpdate}
                   onNestedOverlayChange={setPhotosNestedOverlay}
                 />
               )}

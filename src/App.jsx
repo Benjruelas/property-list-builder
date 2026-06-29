@@ -57,7 +57,8 @@ import { PublicFormPage } from './components/forms/PublicFormPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
 import { PublicReportPage } from './components/reports/PublicReportPage'
 import { LeadPickerDialog } from './components/photos/LeadPickerDialog'
-import { LeadPhotoModeContainer } from './components/photos/LeadPhotoModeContainer'
+import { PhotoCaptureModal } from './photos/PhotoCaptureModal'
+import { PhotoUploadProvider } from './photos/PhotoUploadProvider'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
 import { buildPathColorMap } from './utils/pathColors'
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
@@ -2848,6 +2849,21 @@ function App() {
     setPhotoModeAddress('')
   }, [])
 
+  const handlePhotoEntityUpdated = useCallback((entityRef, entity) => {
+    if (entityRef.entityType === 'deal') {
+      setPipelines((prev) => prev.map((p) => {
+        if (p.id !== entityRef.pipelineId) return p
+        return {
+          ...p,
+          deals: (p.deals || []).map((d) => (d.id === entity.id ? entity : d)),
+        }
+      }))
+      return
+    }
+    setLeads((prev) => prev.map((l) => (l.id === entity.id ? entity : l)))
+    setPhotoModeLead((prev) => (prev?.id === entity.id ? entity : prev))
+  }, [])
+
   const openPhotoModeForDraftParcel = useCallback((parcelData) => {
     if (!parcelData) return
     const pid = resolveParcelId(parcelData) || parcelData.id
@@ -3607,6 +3623,7 @@ function App() {
 
   return (
     <UserDataSyncProvider getToken={getToken}>
+    <PhotoUploadProvider getToken={getToken} onEntityUpdated={handlePhotoEntityUpdated}>
     <AppLoadingScreen active={showAppLoading} message={appLoadingMessage} />
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
@@ -4320,14 +4337,16 @@ function App() {
       />
 
       {photoModeLead && (
-        <LeadPhotoModeContainer
-          lead={photoModeLead}
+        <PhotoCaptureModal
+          open
+          entityType="lead"
+          entity={photoModeLead}
           parcelId={photoModeParcelId}
           addressLabel={photoModeAddress}
           getToken={getToken}
           currentUser={currentUser}
           onClose={closePhotoMode}
-          onLeadChange={(updatedLead) => {
+          onEntityUpdate={(updatedLead) => {
             setLeads((prev) => prev.map((l) => (l.id === updatedLead.id ? updatedLead : l)))
             setPhotoModeLead(updatedLead)
           }}
@@ -4669,6 +4688,7 @@ function App() {
       <ToastContainer />
       <ConfirmDialog />
     </div>
+    </PhotoUploadProvider>
     </UserDataSyncProvider>
   )
 }

@@ -13,8 +13,6 @@ import {
   leadContactMatchesQuery,
   skipTraceContactDetails,
 } from './leadContact'
-import { mergePhotosFromPoll, stripClientFieldsFromPhotos } from './optimisticPhotoUpload'
-
 export {
   getLeadPhones,
   getLeadEmails,
@@ -99,12 +97,11 @@ export function mergeListViewLeads(existing, incoming) {
       return {
         ...inc,
         activity: prev.activity ?? inc.activity,
-        photos: mergePhotosFromPoll(prev.photos, inc.photos),
+        photos: inc.photos ?? prev.photos,
         files: prev.files ?? inc.files,
       }
     }
-    const photos = mergePhotosFromPoll(prev.photos, inc.photos)
-    return { ...inc, photos }
+    return inc
   })
 }
 
@@ -125,10 +122,7 @@ export async function fetchLeads(getToken, { view = 'list' } = {}) {
   const data = await res.json()
   const leads = data.leads || []
   const existing = loadLocalLeads()
-  const toStore = mergeListViewLeads(existing, leads).map((lead) => ({
-    ...lead,
-    photos: stripClientFieldsFromPhotos(lead.photos),
-  }))
+  const toStore = mergeListViewLeads(existing, leads)
   saveLocalLeads(toStore)
   return leads
 }
@@ -204,7 +198,7 @@ export function toLeadPatchBody(updates, { includeSharing = false } = {}) {
   return out
 }
 
-/** Photos are persisted via /lead-photos; no leads PATCH needed for photo-only sync. */
+/** Photos are persisted via /api/photos; no leads PATCH needed for photo-only sync. */
 export function isLeadPhotosOnlyPatch(payload) {
   const keys = Object.keys(payload)
   return keys.length > 0 && keys.every((k) => k === 'photos' || k === 'updatedAt')

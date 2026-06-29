@@ -16,7 +16,7 @@ import {
   sectionsFromTemplate,
 } from '@/utils/photoReports'
 import { logLeadReportEvent } from '@/utils/leadActivity'
-import { leadPhotoUrl } from '@/utils/leadPhotos'
+import { getSignedUrl } from '@/photos/photosClient'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
 import { getPhotoThumbnailKey } from '@/utils/photoDisplay'
 import { cn } from '@/lib/utils'
@@ -124,10 +124,10 @@ export function ReportBuilder({
     photos.forEach(async (p) => {
       if (thumbUrls[p.id]) return
       try {
-        const token = await getToken()
         const key = getPhotoThumbnailKey(p)
         if (!key) return
-        const res = await fetch(leadPhotoUrl(key), { headers: { Authorization: `Bearer ${token}` } })
+        const url = await getSignedUrl(getToken, key)
+        const res = await fetch(url)
         if (!res.ok) return
         const blob = await res.blob()
         setThumbUrls((prev) => ({ ...prev, [p.id]: URL.createObjectURL(blob) }))
