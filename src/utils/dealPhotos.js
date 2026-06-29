@@ -29,7 +29,7 @@ export { getCurrentPosition } from './leadPhotos'
 
 export function dealPhotoUrl(key, cacheVersion = '') {
   if (!key) return ''
-  const base = `${getApiBase()}/deal-photos?key=${encodeURIComponent(key)}`
+  const base = `${getApiBase()}/deal-photos?key=${encodeURIComponent(key)}&redirect=0`
   return cacheVersion ? `${base}&v=${encodeURIComponent(cacheVersion)}` : base
 }
 

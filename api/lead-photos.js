@@ -63,7 +63,9 @@ function photoKey(ownerUid, leadId, photoId, variant) {
 async function canAccessPhotoKey(user, key) {
   if (!key.startsWith('lead-photos/')) return false
   const parts = key.split('/')
+  const ownerUid = parts[1]
   const leadId = parts[2]
+  if (ownerUid === user.uid) return true
   const { lead, access } = await getLeadWithAccess(user, leadId)
   return !!lead && !!access
 }

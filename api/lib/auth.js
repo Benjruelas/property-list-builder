@@ -4,7 +4,6 @@
  */
 
 import { createHash } from 'crypto'
-import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { resolveDevBypassUser, isDevBypassAllowed } from './devBypassUsers.js'
 import { flags } from './flags.js'
 
@@ -21,10 +20,11 @@ function firebaseProjectId() {
     || ''
 }
 
-function getJwks() {
+async function getJwks() {
   if (!jwks) {
     const projectId = firebaseProjectId()
     if (!projectId) return null
+    const { createRemoteJWKSet } = await import('jose')
     jwks = createRemoteJWKSet(
       new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
     )
@@ -83,9 +83,10 @@ export async function verifyFirebaseTokenRest(idToken) {
 
 export async function verifyFirebaseTokenLocal(idToken) {
   const projectId = firebaseProjectId()
-  const keys = getJwks()
+  const keys = await getJwks()
   if (!projectId || !keys || !idToken) return null
   try {
+    const { jwtVerify } = await import('jose')
     const { payload } = await jwtVerify(idToken, keys, {
       issuer: `https://securetoken.google.com/${projectId}`,
       audience: projectId,

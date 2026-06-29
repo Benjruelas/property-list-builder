@@ -7,27 +7,17 @@ import {
   shouldUseLocalPhotoPreview,
 } from '@/utils/photoDisplay'
 
-// A single thumbnail fetch must never hang forever — if it stalls it would hold
-// the in-flight slot and block every retry, leaving the photo spinning.
 const THUMB_FETCH_TIMEOUT_MS = 15000
-// Bounded fast retry so transient network errors / 404s (e.g. a just-uploaded thumb
-// that R2 hasn't propagated yet) recover without waiting for the next poll.
 const THUMB_MAX_FETCH_ATTEMPTS = 6
-// After fast retries are exhausted, keep trying slowly instead of giving up forever.
 const THUMB_SLOW_RETRY_MS = 30000
+
+function setThumbUrlForPhoto(setThumbUrls, thumbUrlsRef, photoId, url) {
+  thumbUrlsRef.current = { ...thumbUrlsRef.current, [photoId]: url }
+  setThumbUrls((prev) => (prev[photoId] === url ? prev : { ...prev, [photoId]: url }))
+}
 
 /**
  * Loads and caches gallery thumbnail blob URLs for a list of photos.
- *
- * Resilient against the failure modes that previously caused random endless
- * spinners: request churn from re-renders, stalled fetches holding an in-flight
- * slot, and transient fetch failures with no retry.
- *
- * @param {object} options
- * @param {object[]} options.photos - photos to display thumbnails for
- * @param {() => Promise<string|null>} options.getToken
- * @param {(key: string, version: string) => string} options.buildUrl - leadPhotoUrl/dealPhotoUrl
- * @param {string|undefined} options.resetKey - entity id; resets cache when it changes
  */
 export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }) {
   const [thumbUrls, setThumbUrls] = useState({})
@@ -82,7 +72,7 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       const keys = getPhotoThumbnailFetchKeys(p).filter((key) => key && key !== '__pending__')
       if (!keys.length) continue
       resetFetchAttemptsForPhoto(p.id)
-      loadThumbRef.current?.(p, { skipLocalPreview: true })
+      loadThumbRef.current?.(p)
     }
   }, [resetFetchAttemptsForPhoto])
 
@@ -97,20 +87,18 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
     }
     const annotatedPreviewUrl = getAnnotatedDataPreviewUrl(photo, pendingPreview, { skipLocalPreview })
     if (annotatedPreviewUrl) {
-      setThumbUrls((prev) => (prev[photo.id] === annotatedPreviewUrl ? prev : { ...prev, [photo.id]: annotatedPreviewUrl }))
+      setThumbUrlForPhoto(setThumbUrls, thumbUrlsRef, photo.id, annotatedPreviewUrl)
       return
     }
     if (!skipLocalPreview && shouldUseLocalPhotoPreview(photo)) {
-      const localUrl = photo._localPreviewUrl
-      setThumbUrls((prev) => (prev[photo.id] === localUrl ? prev : { ...prev, [photo.id]: localUrl }))
+      setThumbUrlForPhoto(setThumbUrls, thumbUrlsRef, photo.id, photo._localPreviewUrl)
       return
     }
-    // Show the just-uploaded thumbnail immediately, then continue to fetch the
-    // canonical server thumb (fresh preview is client-only and vanishes on poll).
     if (!skipLocalPreview && photo._freshThumbUrl) {
-      const freshUrl = photo._freshThumbUrl
-      setThumbUrls((prev) => (prev[photo.id] === freshUrl ? prev : { ...prev, [photo.id]: freshUrl }))
+      setThumbUrlForPhoto(setThumbUrls, thumbUrlsRef, photo.id, photo._freshThumbUrl)
+      return
     }
+
     const keys = getPhotoThumbnailFetchKeys(photo).filter((key) => key && key !== '__pending__')
     if (!keys.length) return
     const sourceToken = getPhotoThumbSourceToken(photo)
@@ -125,8 +113,6 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       && thumbUrlsRef.current[photo.id]
       && !annotatedPreviewUrl
     ) return
-    // A fetch for this exact photo version is already running. Skip starting a
-    // duplicate (re-running on every poll would otherwise pile up requests).
     if (thumbInflightRef.current[photo.id]?.token === sourceToken) return
 
     clearRetryTimer(photo.id)
@@ -161,7 +147,6 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       // network error / timeout / abort — handled by retry below
     } finally {
       clearTimeout(timeoutId)
-      // Only the request that currently owns the in-flight slot clears it.
       if (thumbInflightRef.current[photo.id]?.reqId === requestId) {
         delete thumbInflightRef.current[photo.id]
       }
@@ -173,7 +158,6 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       thumbLoadedRef.current[photo.id] = sourceToken
       thumbErrorRetryRef.current[photo.id] = 0
       thumbFetchAttemptsRef.current[photo.id] = 0
-      // Store as data: URL so revoked blob: handles never break <img src>.
       let url
       try {
         url = await blobToDataUrl(blob)
@@ -188,13 +172,14 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
         if (pendingDataPreview && isRevocableBlobUrl(pendingDataPreview) && pendingDataPreview !== url && pendingDataPreview !== previous) {
           deferRevokeObjectURL(pendingDataPreview)
         }
-        return { ...prev, [photo.id]: url }
+        const next = { ...prev, [photo.id]: url }
+        thumbUrlsRef.current = next
+        return next
       })
       return
     }
 
-    // No blob: network error, timeout, or every key 404'd. Retry with backoff;
-    // after fast attempts, fall back to slow periodic retries instead of giving up.
+    if (thumbUrlsRef.current[photo.id]) return
     scheduleThumbRetry(photo, { skipLocalPreview })
   }, [getToken, buildUrl, clearRetryTimer, resetFetchAttemptsForPhoto, scheduleThumbRetry])
 
@@ -214,9 +199,10 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       if (bad?.startsWith('blob:')) deferRevokeObjectURL(bad)
       const next = { ...prev }
       delete next[photo.id]
+      thumbUrlsRef.current = next
       return next
     })
-    loadThumb({ ...photo, _annotatedPreviewUrl: undefined }, { skipLocalPreview: true })
+    loadThumb({ ...photo, _annotatedPreviewUrl: undefined })
   }, [loadThumb])
 
   const invalidatePhotoThumb = useCallback((photoId) => {
@@ -236,11 +222,11 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       }
       const next = { ...prev }
       delete next[photoId]
+      thumbUrlsRef.current = next
       return next
     })
   }, [clearRetryTimer])
 
-  // Force a fresh server fetch for a photo (e.g. after an annotation save).
   const reloadThumb = useCallback((photo) => {
     if (!photo?.id) return
     thumbRequestRef.current[photo.id] = (thumbRequestRef.current[photo.id] || 0) + 1
@@ -250,16 +236,16 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
     thumbFetchAttemptsRef.current[photo.id] = 0
     clearRetryTimer(photo.id)
     const { _annotatedPreviewUrl, _annotationSaving, ...serverPhoto } = photo
-    loadThumbRef.current?.(serverPhoto, { skipLocalPreview: true })
+    loadThumbRef.current?.(serverPhoto)
   }, [clearRetryTimer])
 
   const setPendingAnnotatedPreview = useCallback((photoId, url) => {
     if (photoId && url) pendingAnnotatedPreviewRef.current[photoId] = url
   }, [])
 
-  // Reset all caches/timers when switching to a different entity.
   useEffect(() => {
     setThumbUrls({})
+    thumbUrlsRef.current = {}
     thumbLoadedRef.current = {}
     thumbRequestRef.current = {}
     thumbInflightRef.current = {}
@@ -290,8 +276,6 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
     }
   }, [retryStuckThumbnails])
 
-  // Mirror latest thumbUrls for the in-flight guard and unmount cleanup without
-  // re-running effects when they change.
   thumbUrlsRef.current = thumbUrls
 
   useEffect(() => () => {
