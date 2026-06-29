@@ -35,7 +35,7 @@ export function LeadPhotoModeContainer({
         parcelId: parcelId || entity.parcelId || null,
       },
     })
-    return { entity: result.lead, photo: result.photo }
+    return { entity: result.lead, photo: result.photo, thumbnailBlob: result.thumbnailBlob }
   }, [getToken, currentUser, parcelId, addressLabel])
 
   const { enqueue, setEntity, uploadingCount } = useBackgroundPhotoUploadQueue({

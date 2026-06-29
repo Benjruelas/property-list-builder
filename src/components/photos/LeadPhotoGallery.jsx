@@ -12,6 +12,7 @@ import { PhotoMode } from './PhotoMode'
 import { PhotoAnnotator } from './PhotoAnnotator'
 import { cn } from '@/lib/utils'
 import { usePhotoThumbnailLoader } from '@/hooks/usePhotoThumbnailLoader'
+import { PhotoGridThumbnail } from './PhotoGridThumbnail'
 import {
   getPhotoPreviewKey,
   getPhotoThumbSourceToken,
@@ -237,18 +238,13 @@ export function LeadPhotoGallery({
                     }}
                     title={isFailed ? 'Tap to retry upload' : 'Preview photo'}
                   >
-                    {thumbUrls[photo.id] ? (
-                      <img
-                        src={thumbUrls[photo.id]}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        onError={() => handleThumbLoadError(photo)}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Loader2 className="h-5 w-5 animate-spin opacity-40" />
-                      </div>
-                    )}
+                    <PhotoGridThumbnail
+                      photoId={photo.id}
+                      thumbUrl={thumbUrls[photo.id]}
+                      isUploading={isUploading}
+                      onLoadError={() => handleThumbLoadError(photo)}
+                      onRetryLoad={isUploading ? undefined : () => reloadThumb(photo)}
+                    />
                     {isUploading && (
                       <div className="lead-photo-upload-overlay">
                         <Loader2 className="h-5 w-5 animate-spin" />

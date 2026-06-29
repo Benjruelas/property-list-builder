@@ -10,9 +10,11 @@ import {
 // A single thumbnail fetch must never hang forever — if it stalls it would hold
 // the in-flight slot and block every retry, leaving the photo spinning.
 const THUMB_FETCH_TIMEOUT_MS = 15000
-// Bounded retry so transient network errors / 404s (e.g. a just-uploaded thumb
+// Bounded fast retry so transient network errors / 404s (e.g. a just-uploaded thumb
 // that R2 hasn't propagated yet) recover without waiting for the next poll.
 const THUMB_MAX_FETCH_ATTEMPTS = 6
+// After fast retries are exhausted, keep trying slowly instead of giving up forever.
+const THUMB_SLOW_RETRY_MS = 30000
 
 /**
  * Loads and caches gallery thumbnail blob URLs for a list of photos.
@@ -36,8 +38,10 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
   const thumbUrlsRef = useRef({})
   const thumbErrorRetryRef = useRef({})
   const thumbFetchAttemptsRef = useRef({})
+  const thumbSourceTokenRef = useRef({})
   const thumbRetryTimerRef = useRef({})
   const loadThumbRef = useRef(null)
+  const photosRef = useRef(photos)
 
   const clearRetryTimer = useCallback((photoId) => {
     const timer = thumbRetryTimerRef.current[photoId]
@@ -46,6 +50,41 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       delete thumbRetryTimerRef.current[photoId]
     }
   }, [])
+
+  const scheduleThumbRetry = useCallback((photo, { skipLocalPreview = false } = {}) => {
+    if (!photo?.id) return
+    if (thumbUrlsRef.current[photo.id]) return
+
+    const attempts = (thumbFetchAttemptsRef.current[photo.id] || 0) + 1
+    thumbFetchAttemptsRef.current[photo.id] = attempts
+
+    const delay = attempts > THUMB_MAX_FETCH_ATTEMPTS
+      ? THUMB_SLOW_RETRY_MS
+      : Math.min(1500 * 2 ** (attempts - 1), 15000)
+
+    clearRetryTimer(photo.id)
+    thumbRetryTimerRef.current[photo.id] = setTimeout(() => {
+      delete thumbRetryTimerRef.current[photo.id]
+      loadThumbRef.current?.(photo, { skipLocalPreview })
+    }, delay)
+  }, [clearRetryTimer])
+
+  const resetFetchAttemptsForPhoto = useCallback((photoId) => {
+    if (!photoId) return
+    thumbFetchAttemptsRef.current[photoId] = 0
+    delete thumbLoadedRef.current[photoId]
+    clearRetryTimer(photoId)
+  }, [clearRetryTimer])
+
+  const retryStuckThumbnails = useCallback(() => {
+    for (const p of photosRef.current || []) {
+      if (!p?.id || thumbUrlsRef.current[p.id]) continue
+      const keys = getPhotoThumbnailFetchKeys(p).filter((key) => key && key !== '__pending__')
+      if (!keys.length) continue
+      resetFetchAttemptsForPhoto(p.id)
+      loadThumbRef.current?.(p, { skipLocalPreview: true })
+    }
+  }, [resetFetchAttemptsForPhoto])
 
   const loadThumb = useCallback(async (photo, { skipLocalPreview = false } = {}) => {
     if (!photo?.id) return
@@ -75,6 +114,12 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
     const keys = getPhotoThumbnailFetchKeys(photo).filter((key) => key && key !== '__pending__')
     if (!keys.length) return
     const sourceToken = getPhotoThumbSourceToken(photo)
+    const prevSourceToken = thumbSourceTokenRef.current[photo.id]
+    if (prevSourceToken !== undefined && prevSourceToken !== sourceToken) {
+      resetFetchAttemptsForPhoto(photo.id)
+    }
+    thumbSourceTokenRef.current[photo.id] = sourceToken
+
     if (
       thumbLoadedRef.current[photo.id] === sourceToken
       && thumbUrlsRef.current[photo.id]
@@ -148,19 +193,10 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
       return
     }
 
-    // No blob: network error, timeout, or every key 404'd. Retry with backoff so
-    // a transient failure or upload-propagation delay recovers on its own.
-    if (thumbUrlsRef.current[photo.id]) return
-    const attempts = (thumbFetchAttemptsRef.current[photo.id] || 0) + 1
-    thumbFetchAttemptsRef.current[photo.id] = attempts
-    if (attempts > THUMB_MAX_FETCH_ATTEMPTS) return
-    const delay = Math.min(1500 * 2 ** (attempts - 1), 15000)
-    clearRetryTimer(photo.id)
-    thumbRetryTimerRef.current[photo.id] = setTimeout(() => {
-      delete thumbRetryTimerRef.current[photo.id]
-      loadThumbRef.current?.(photo, { skipLocalPreview })
-    }, delay)
-  }, [getToken, buildUrl, clearRetryTimer])
+    // No blob: network error, timeout, or every key 404'd. Retry with backoff;
+    // after fast attempts, fall back to slow periodic retries instead of giving up.
+    scheduleThumbRetry(photo, { skipLocalPreview })
+  }, [getToken, buildUrl, clearRetryTimer, resetFetchAttemptsForPhoto, scheduleThumbRetry])
 
   loadThumbRef.current = loadThumb
 
@@ -230,13 +266,29 @@ export function usePhotoThumbnailLoader({ photos, getToken, buildUrl, resetKey }
     pendingAnnotatedPreviewRef.current = {}
     thumbErrorRetryRef.current = {}
     thumbFetchAttemptsRef.current = {}
+    thumbSourceTokenRef.current = {}
     Object.values(thumbRetryTimerRef.current).forEach((timer) => clearTimeout(timer))
     thumbRetryTimerRef.current = {}
   }, [resetKey])
 
+  photosRef.current = photos
+
   useEffect(() => {
     photos.forEach((p) => loadThumb(p))
   }, [photos, loadThumb])
+
+  useEffect(() => {
+    const onOnline = () => retryStuckThumbnails()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') retryStuckThumbnails()
+    }
+    window.addEventListener('online', onOnline)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [retryStuckThumbnails])
 
   // Mirror latest thumbUrls for the in-flight guard and unmount cleanup without
   // re-running effects when they change.
