@@ -9,6 +9,17 @@ export const DEFAULT_TEXT_FONT_SIZE = 72
 export const TEXT_MAX_WIDTH_RATIO = 0.85
 export const TEXT_SINGLE_LINE_MIN_WIDTH_RATIO = 0.5
 
+export const ANNOTATION_DEFAULT_STROKE = 3
+
+/** Image-space stroke width → stage/canvas pixels (matches editor preview at any zoom). */
+export function scaledAnnotationStrokeWidth(strokeWidth, scale) {
+  return (strokeWidth ?? ANNOTATION_DEFAULT_STROKE) * scale
+}
+
+export function annotationArrowHeadSize(strokeWidth, scale) {
+  return Math.max(6, (strokeWidth ?? ANNOTATION_DEFAULT_STROKE) * 3 * scale)
+}
+
 export function getMaxTextWidth(imageWidth) {
   if (!imageWidth || imageWidth <= 0) return undefined
   return imageWidth * TEXT_MAX_WIDTH_RATIO

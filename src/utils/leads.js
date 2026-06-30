@@ -13,17 +13,14 @@ import {
   leadContactMatchesQuery,
   skipTraceContactDetails,
 } from './leadContact'
+import { mergePhotoRecord } from './photoDisplay'
 export {
   getLeadPhones,
   getLeadEmails,
   leadContactMatchesQuery,
 } from './leadContact'
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 const LOCAL_LEADS_KEY = 'user_leads_local'
 const MAX_LEAD_ACTIVITY = 200
@@ -88,6 +85,55 @@ export function saveLocalLeads(leads) {
 }
 
 /** Merge poll payloads into existing client state without dropping heavy / in-flight fields. */
+export function mergeLeadPhotos(prevPhotos, nextPhotos) {
+  const prev = Array.isArray(prevPhotos) ? prevPhotos : []
+  if (!Array.isArray(nextPhotos)) return prev
+  const next = nextPhotos
+  if (!prev.length) return next
+  if (!next.length) return []
+
+  const prevIds = new Set(prev.map((p) => p.id))
+  const nextIds = new Set(next.map((p) => p.id))
+  const isDeletion = next.length < prev.length
+    && [...nextIds].every((id) => prevIds.has(id))
+
+  if (isDeletion) {
+    const byId = new Map(prev.map((p) => [p.id, p]))
+    return next.map((p) => mergePhotoRecord(byId.get(p.id), p))
+  }
+
+  const byId = new Map(prev.map((p) => [p.id, p]))
+  for (const p of next) {
+    byId.set(p.id, mergePhotoRecord(byId.get(p.id), p))
+  }
+  return Array.from(byId.values())
+}
+
+/** True when only the photos array (and updatedAt) changed — already persisted via /api/photos. */
+export function isPhotosOnlyEntityChange(prev, next) {
+  if (!prev || !next || prev.id !== next.id) return false
+  const prevPhotos = JSON.stringify(prev.photos || [])
+  const nextPhotos = JSON.stringify(next.photos || [])
+  if (prevPhotos === nextPhotos) return false
+  for (const key of Object.keys(next)) {
+    if (key === 'photos' || key === 'updatedAt') continue
+    if (JSON.stringify(prev[key]) !== JSON.stringify(next[key])) return false
+  }
+  return true
+}
+
+/** Merge a full lead fetch/detail payload onto existing client state. */
+export function mergeLeadDetail(prev, incoming) {
+  if (!incoming) return prev
+  if (!prev) return incoming
+  return {
+    ...incoming,
+    photos: mergeLeadPhotos(prev.photos, incoming.photos),
+    files: incoming.files ?? prev.files,
+    activity: incoming.activity ?? prev.activity,
+  }
+}
+
 export function mergeListViewLeads(existing, incoming) {
   const prevById = new Map((Array.isArray(existing) ? existing : []).map((l) => [l.id, l]))
   return (Array.isArray(incoming) ? incoming : []).map((inc) => {

@@ -5,6 +5,12 @@ const BLOBS = 'blobs'
 
 let dbPromise = null
 
+function logIdb(step, message, data = {}) {
+  if (typeof console !== 'undefined') {
+    console.log(`[PhotoPipeline] idb.${step} — ${message}`, { step: `idb.${step}`, message, ...data })
+  }
+}
+
 function openDb() {
   if (dbPromise) return dbPromise
   dbPromise = new Promise((resolve, reject) => {
@@ -56,19 +62,27 @@ function requestToPromise(req) {
 }
 
 export async function saveJob(job) {
+  logIdb('save-job', 'Saving job', { jobId: job.jobId, status: job.status })
   await runTx([JOBS], 'readwrite', (store) => {
     store.put(job)
   })
 }
 
 export async function saveBlobs(jobId, { thumb, full }) {
+  logIdb('save-blobs', 'Saving blobs', { jobId, thumbBytes: thumb?.size, fullBytes: full?.size })
   await runTx([BLOBS], 'readwrite', (store) => {
     store.put({ jobId, thumb, full })
   })
 }
 
 export async function getBlobs(jobId) {
-  return runTx([BLOBS], 'readonly', (store) => requestToPromise(store.get(jobId)))
+  const row = await runTx([BLOBS], 'readonly', (store) => requestToPromise(store.get(jobId)))
+  logIdb('get-blobs', row ? 'Blobs found' : 'Blobs missing', {
+    jobId,
+    hasThumb: !!row?.thumb,
+    hasFull: !!row?.full,
+  })
+  return row
 }
 
 export async function deleteJob(jobId) {

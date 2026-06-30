@@ -14,10 +14,21 @@ export const PIPELINES_KV_KEY = 'user_pipelines'
 const LOCK_KEY = 'lock:user_pipelines'
 
 let fallbackStore = []
+let pipelinesReadCache = null
+let pipelinesReadCacheAt = 0
+const PIPELINES_READ_CACHE_MS = 3000
+
+function invalidatePipelinesReadCache() {
+  pipelinesReadCache = null
+  pipelinesReadCacheAt = 0
+}
 
 export { dedupePipelinesById, normalizePipelineStore } from './pipelineStore.js'
 
 export async function getAllPipelines() {
+  if (pipelinesReadCache && Date.now() - pipelinesReadCacheAt < PIPELINES_READ_CACHE_MS) {
+    return pipelinesReadCache
+  }
   return withTiming('pipelineStore.getAllPipelines', async () => {
     if (!kvAvailable || !kv) return normalizePipelineStore(fallbackStore)
     try {
@@ -35,15 +46,21 @@ export async function getAllPipelines() {
       } else {
         fallbackStore = result
       }
+      pipelinesReadCache = result
+      pipelinesReadCacheAt = Date.now()
       return result
     } catch {
-      return normalizePipelineStore(fallbackStore)
+      const result = normalizePipelineStore(fallbackStore)
+      pipelinesReadCache = result
+      pipelinesReadCacheAt = Date.now()
+      return result
     }
   })
 }
 
 export async function saveAllPipelines(pipelines, { changedResources = [] } = {}) {
   return withTiming('pipelineStore.saveAllPipelines', async () => {
+    invalidatePipelinesReadCache()
     const normalized = normalizePipelineStore(Array.isArray(pipelines) ? pipelines : [])
     fallbackStore = normalized
     if (kvAvailable && kv) {

@@ -37,12 +37,13 @@ import {
 } from './annotationGeometry'
 import { AnnotationHandleLayer } from './AnnotationHandleLayer'
 import { AnnotationTextEditor } from './AnnotationTextEditor'
+import { arrowHeadSize, scaledStrokeWidth } from './annotationKonvaRender'
 
 const COLORS = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#ffffff']
 const DEFAULT_COLOR = '#ef4444'
 const DEFAULT_STROKE = 3
 const MIN_STROKE = 1
-const MAX_STROKE = 8
+const MAX_STROKE = 15
 const STROKE_OPTIONS = Array.from({ length: MAX_STROKE - MIN_STROKE + 1 }, (_, i) => MIN_STROKE + i)
 const COPY_OFFSET = 16
 const DEFAULT_SHAPE = 'circle'
@@ -595,7 +596,7 @@ export function PhotoAnnotatorEditor({
               y={Math.min(startY, endY) * scale + radius * scale}
               radius={radius * scale}
               stroke={c}
-              strokeWidth={sw}
+              strokeWidth={scaledStrokeWidth(sw, scale)}
             />
           )
         }
@@ -608,18 +609,21 @@ export function PhotoAnnotatorEditor({
               width={Math.abs(endX - startX) * scale}
               height={Math.abs(endY - startY) * scale}
               stroke={c}
-              strokeWidth={sw}
+              strokeWidth={scaledStrokeWidth(sw, scale)}
             />
           )
         }
         if (type === 'arrow') {
+          const head = arrowHeadSize(sw, scale)
           return (
             <Arrow
               key="preview"
               points={[startX, startY, endX, endY].map((v) => v * scale)}
               stroke={c}
-              strokeWidth={sw}
+              strokeWidth={scaledStrokeWidth(sw, scale)}
               fill={c}
+              pointerLength={head}
+              pointerWidth={head}
             />
           )
         }
@@ -629,7 +633,7 @@ export function PhotoAnnotatorEditor({
               key="preview"
               points={[startX, startY, endX, endY].map((v) => v * scale)}
               stroke={c}
-              strokeWidth={sw}
+              strokeWidth={scaledStrokeWidth(sw, scale)}
             />
           )
         }
@@ -693,7 +697,7 @@ export function PhotoAnnotatorEditor({
                         y={(obj.y + obj.radius) * scale}
                         radius={obj.radius * scale}
                         stroke={obj.stroke}
-                        strokeWidth={obj.strokeWidth}
+                        strokeWidth={scaledStrokeWidth(obj.strokeWidth, scale)}
                         onClick={(e) => handleSelectObject(e, obj.id)}
                         onTap={(e) => handleSelectObject(e, obj.id)}
                       />
@@ -709,21 +713,24 @@ export function PhotoAnnotatorEditor({
                         width={obj.width * scale}
                         height={obj.height * scale}
                         stroke={obj.stroke}
-                        strokeWidth={obj.strokeWidth}
+                        strokeWidth={scaledStrokeWidth(obj.strokeWidth, scale)}
                         onClick={(e) => handleSelectObject(e, obj.id)}
                         onTap={(e) => handleSelectObject(e, obj.id)}
                       />
                     )
                   }
                   if (obj.type === 'arrow') {
+                    const head = arrowHeadSize(obj.strokeWidth, scale)
                     return (
                       <Arrow
                         key={obj.id}
                         id={obj.id}
                         points={(obj.points || []).map((v) => v * scale)}
                         stroke={obj.stroke}
-                        strokeWidth={obj.strokeWidth}
+                        strokeWidth={scaledStrokeWidth(obj.strokeWidth, scale)}
                         fill={obj.stroke}
+                        pointerLength={head}
+                        pointerWidth={head}
                         onClick={(e) => handleSelectObject(e, obj.id)}
                         onTap={(e) => handleSelectObject(e, obj.id)}
                       />
@@ -736,7 +743,7 @@ export function PhotoAnnotatorEditor({
                         id={obj.id}
                         points={(obj.points || []).map((v) => v * scale)}
                         stroke={obj.stroke}
-                        strokeWidth={obj.strokeWidth}
+                        strokeWidth={scaledStrokeWidth(obj.strokeWidth, scale)}
                         onClick={(e) => handleSelectObject(e, obj.id)}
                         onTap={(e) => handleSelectObject(e, obj.id)}
                       />
@@ -976,28 +983,32 @@ export function PhotoAnnotatorEditor({
             </button>
             {strokeMenuOpen && (
               <div className="photo-annotator-popover photo-annotator-popover--stroke">
-                {STROKE_OPTIONS.map((w) => (
-                  <button
-                    key={w}
-                    type="button"
-                    className={cn(
-                      'photo-annotator-stroke-option',
-                      strokeWidth === w && 'is-active'
-                    )}
-                    onClick={() => {
-                      setStrokeWidth(w)
-                      setStrokeMenuOpen(false)
-                    }}
-                    title={`${w}px`}
-                    aria-label={`${w}px line thickness`}
-                  >
-                    <span
-                      className="photo-annotator-stroke-preview"
-                      style={{ height: Math.max(2, w), backgroundColor: color }}
-                    />
-                    <span className="photo-annotator-stroke-option-label">{w}px</span>
-                  </button>
-                ))}
+                <div className="photo-annotator-stroke-list" role="listbox" aria-label="Line thickness">
+                  {STROKE_OPTIONS.map((w) => (
+                    <button
+                      key={w}
+                      type="button"
+                      role="option"
+                      aria-selected={strokeWidth === w}
+                      className={cn(
+                        'photo-annotator-stroke-option',
+                        strokeWidth === w && 'is-active',
+                      )}
+                      onClick={() => {
+                        setStrokeWidth(w)
+                        setStrokeMenuOpen(false)
+                      }}
+                      title={`${w}px`}
+                      aria-label={`${w}px line thickness`}
+                    >
+                      <span
+                        className="photo-annotator-stroke-preview"
+                        style={{ height: Math.max(2, w), backgroundColor: color }}
+                      />
+                      <span className="photo-annotator-stroke-option-label">{w}px</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

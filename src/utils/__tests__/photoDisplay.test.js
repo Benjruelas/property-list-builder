@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest'
 import {
   getPhotoAnnotationBaseKey,
   getPhotoPreviewKey,
+  getPhotoPreviewFetchKeys,
   getPhotoThumbnailKey,
   getPhotoThumbnailFetchKeys,
   getPhotoThumbSourceToken,
   getAnnotatedDataPreviewUrl,
   shouldUseLocalPhotoPreview,
+  mergePhotoRecord,
 } from '../photoDisplay'
 
 describe('photoDisplay', () => {
@@ -84,5 +86,44 @@ describe('photoDisplay', () => {
     expect(getAnnotatedDataPreviewUrl({ _annotatedPreviewUrl: dataUrl })).toBe(dataUrl)
     expect(getAnnotatedDataPreviewUrl({}, dataUrl)).toBe(dataUrl)
     expect(getAnnotatedDataPreviewUrl({ _annotatedPreviewUrl: dataUrl }, null, { skipLocalPreview: true })).toBeNull()
+  })
+
+  it('strips ephemeral client fields after server photo merge', () => {
+    const prev = {
+      id: 'p1',
+      key: 'original',
+      _annotatedPreviewUrl: 'blob:http://local/revoked',
+      _annotationSaving: true,
+    }
+    const server = {
+      id: 'p1',
+      key: 'original',
+      annotatedKey: 'annotated',
+      updatedAt: '2026-01-02',
+    }
+    expect(mergePhotoRecord(prev, server)).toEqual({
+      id: 'p1',
+      key: 'original',
+      annotatedKey: 'annotated',
+      updatedAt: '2026-01-02',
+    })
+  })
+
+  it('keeps in-flight annotation preview while saving', () => {
+    const prev = { id: 'p1', key: 'original' }
+    const optimistic = {
+      id: 'p1',
+      key: 'original',
+      _annotationSaving: true,
+      _annotatedPreviewUrl: 'blob:http://local/1',
+    }
+    expect(mergePhotoRecord(prev, optimistic)._annotatedPreviewUrl).toBe('blob:http://local/1')
+  })
+
+  it('lists preview fetch keys with annotated fallback', () => {
+    expect(getPhotoPreviewFetchKeys({ key: 'original', annotatedKey: 'annotated' })).toEqual([
+      'annotated',
+      'original',
+    ])
   })
 })

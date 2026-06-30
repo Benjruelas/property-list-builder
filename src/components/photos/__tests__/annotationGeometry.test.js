@@ -14,6 +14,8 @@ import {
   TEXT_SINGLE_LINE_MIN_WIDTH_RATIO,
   wrapTextLines,
   getTextLayoutLines,
+  scaledAnnotationStrokeWidth,
+  annotationArrowHeadSize,
 } from '../annotationGeometry'
 
 describe('annotationGeometry', () => {
@@ -145,5 +147,15 @@ describe('annotationGeometry', () => {
     const second = applyResize(snapshot, 'nw', 20, 15)
     expect(first).toEqual(second)
     expect(first).toMatchObject({ x: 20, y: 15, width: 90, height: 45 })
+  })
+
+  it('scales stroke width with stage zoom for WYSIWYG export', () => {
+    expect(scaledAnnotationStrokeWidth(3, 0.25)).toBe(0.75)
+    expect(scaledAnnotationStrokeWidth(3, 1)).toBe(3)
+  })
+
+  it('scales arrow head with stroke and zoom', () => {
+    expect(annotationArrowHeadSize(3, 1)).toBe(9)
+    expect(annotationArrowHeadSize(3, 0.5)).toBe(6)
   })
 })

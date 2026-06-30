@@ -14,10 +14,42 @@ export function getPhotoThumbnailFetchKeys(photo) {
   )]
 }
 
+const CLIENT_PHOTO_FIELDS = [
+  '_annotatedPreviewUrl',
+  '_annotationSaving',
+  '_annotationSaveFailed',
+  '_annotationSaveError',
+  '_annotationRetryPayload',
+  '_localThumbUrl',
+  '_localPreviewUrl',
+]
+
+export function stripClientPhotoFields(photo) {
+  if (!photo || typeof photo !== 'object') return photo
+  const next = { ...photo }
+  for (const key of CLIENT_PHOTO_FIELDS) delete next[key]
+  return next
+}
+
+/** Merge one photo record from server/poll onto client state. */
+export function mergePhotoRecord(prevPhoto, incomingPhoto) {
+  if (!incomingPhoto) return prevPhoto
+  if (!prevPhoto) return incomingPhoto
+  const merged = { ...prevPhoto, ...incomingPhoto }
+  if (incomingPhoto._annotationSaving) return merged
+  return stripClientPhotoFields(merged)
+}
+
+/** Full-size preview keys — annotated render first, then original. */
+export function getPhotoPreviewFetchKeys(photo) {
+  if (!photo) return []
+  return [...new Set([photo.annotatedKey, photo.key].filter(Boolean))]
+}
+
 /** Full-size preview: annotated render when available. */
 export function getPhotoPreviewKey(photo) {
-  if (!photo) return null
-  return photo.annotatedKey || photo.key || null
+  const keys = getPhotoPreviewFetchKeys(photo)
+  return keys[0] || null
 }
 
 /** Original photo used as the annotation editor canvas base. */

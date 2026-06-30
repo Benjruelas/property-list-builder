@@ -1,4 +1,5 @@
 import { collectParcelIdCandidates, resolveParcelId } from './parcelPropertyMap'
+import { getApiBaseUrl } from './apiBase'
 
 /**
  * Skip tracing via Trestle IQ (Reverse Address API).
@@ -10,16 +11,6 @@ import { collectParcelIdCandidates, resolveParcelId } from './parcelPropertyMap'
  * The API key lives server-side as TRESTLE_API_KEY and is never exposed to the
  * browser — all calls go through /api/skip-trace.
  */
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.DEV) {
-    return '/api'
-  }
-  if (typeof window !== 'undefined') {
-    return `${window.location.origin}/api`
-  }
-  return import.meta.env.VITE_API_URL || 'https://property-list-builder.vercel.app/api'
-}
 
 const API_BASE_URL = getApiBaseUrl()
 

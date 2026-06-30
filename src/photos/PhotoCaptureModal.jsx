@@ -19,15 +19,40 @@ import { FilePreviewOverlay } from '../components/ui/FilePreviewOverlay'
 import { cn } from '@/lib/utils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
+import { photoLog, photoLogError, photoLogCameraEnvironment, photoLogWarn } from './photoDebug'
 
 function canUseCamera() {
   return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+}
+
+function isCameraNotFoundError(err) {
+  const name = err?.name || ''
+  const msg = String(err?.message || '')
+  return name === 'NotFoundError'
+    || name === 'DevicesNotFoundError'
+    || /device not found/i.test(msg)
+}
+
+function isCameraPermissionError(err) {
+  const name = err?.name || ''
+  return name === 'NotAllowedError' || name === 'PermissionDeniedError'
+}
+
+async function hasVideoInputDevice() {
+  if (!navigator.mediaDevices?.enumerateDevices) return true
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    return devices.some((d) => d.kind === 'videoinput')
+  } catch {
+    return true
+  }
 }
 
 async function requestCameraStream() {
   const attempts = [
     { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
     { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
     { video: true, audio: false },
   ]
   let lastErr
@@ -36,6 +61,7 @@ async function requestCameraStream() {
       return await navigator.mediaDevices.getUserMedia(constraints)
     } catch (e) {
       lastErr = e
+      if (isCameraNotFoundError(e)) break
     }
   }
   throw lastErr || new Error('Camera unavailable')
@@ -84,6 +110,7 @@ export function PhotoCaptureModal({
   const fileInputRef = useRef(null)
   const libraryInputRef = useRef(null)
   const draftIdRef = useRef(null)
+  const cameraFallbackNotifiedRef = useRef(false)
 
   const [sessionItems, setSessionItems] = useState([])
   const [flash, setFlash] = useState(false)
@@ -131,26 +158,57 @@ export function PhotoCaptureModal({
     setCameraStarting(false)
   }, [])
 
+  const showLibraryFallback = useCallback((message) => {
+    setUseCamera(false)
+    setCameraStarting(false)
+    if (!cameraFallbackNotifiedRef.current) {
+      cameraFallbackNotifiedRef.current = true
+      showToast(message, 'info')
+    }
+  }, [])
+
   useEffect(() => {
     if (!open) {
       stopCamera()
       setSessionItems([])
       setPhase('capture')
       draftIdRef.current = null
+      cameraFallbackNotifiedRef.current = false
       return undefined
     }
+    photoLog('capture.open', 'Photo capture modal opened', {
+      entityType,
+      entityId: entity?.id || 'draft',
+      isDraft,
+    })
+    photoLogCameraEnvironment()
     setPhase('capture')
 
     if (!canUseCamera()) {
-      setUseCamera(false)
+      photoLogWarn('capture.camera', 'mediaDevices unavailable')
+      showLibraryFallback('Camera not supported here — use Choose from library')
       return undefined
+    }
+
+    if (!window.isSecureContext) {
+      photoLogWarn('capture.camera', 'Insecure context — camera blocked on mobile LAN. Use: npm run dev:mobile')
     }
 
     setUseCamera(true)
     setCameraStarting(true)
+    photoLog('capture.camera', 'Requesting camera stream')
     let cancelled = false
-    requestCameraStream()
-      .then(async (stream) => {
+    ;(async () => {
+      const hasCamera = await hasVideoInputDevice()
+      if (cancelled) return
+      if (!hasCamera) {
+        photoLogWarn('capture.camera', 'No video input devices detected')
+        showLibraryFallback('No camera on this device — use Choose from library')
+        return
+      }
+
+      try {
+        const stream = await requestCameraStream()
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop())
           return
@@ -159,17 +217,27 @@ export function PhotoCaptureModal({
         if (videoRef.current) await bindStreamToVideo(videoRef.current, stream)
         setCameraReady(true)
         setCameraStarting(false)
-      })
-      .catch(() => {
-        setUseCamera(false)
-        setCameraStarting(false)
-      })
+        photoLog('capture.camera', 'Camera ready')
+      } catch (err) {
+        if (cancelled) return
+        if (isCameraNotFoundError(err)) {
+          photoLogWarn('capture.camera', 'No camera device — library fallback', { error: err.message })
+          showLibraryFallback('No camera on this device — use Choose from library')
+        } else if (isCameraPermissionError(err)) {
+          photoLogWarn('capture.camera', 'Camera permission denied', { error: err.message })
+          showLibraryFallback('Camera permission denied — use Choose from library')
+        } else {
+          photoLogError('capture.camera', 'Camera failed', err)
+          showLibraryFallback('Camera unavailable — use Choose from library')
+        }
+      }
+    })()
 
     return () => {
       cancelled = true
       stopCamera()
     }
-  }, [open, stopCamera])
+  }, [open, stopCamera, showLibraryFallback, entityType, entity?.id, isDraft])
 
   useEffect(() => {
     if (open) setDraftForm(normalizeDraftForm(entity))
@@ -194,19 +262,25 @@ export function PhotoCaptureModal({
   }, [currentUser, entity, parcelId, addressLabel])
 
   const addCapture = useCallback(async (source) => {
-    if (storageFull) return
+    if (storageFull) {
+      photoLogWarn('capture.add', 'Storage full — capture blocked')
+      return
+    }
     try {
       const metadata = await buildMetadata()
+      photoLog('capture.add', 'Enqueueing capture', { entityKey: entityKey(entityRef), isDraft })
       const job = await enqueueCapture(source, entityRef, metadata, entity?.photos || [])
       const blobs = await getBlobs(job.jobId)
       const previewUrl = blobs?.thumb ? URL.createObjectURL(blobs.thumb) : null
       setSessionItems((prev) => [{ jobId: job.jobId, previewUrl, createdAt: Date.now() }, ...prev])
       triggerFlash()
+      photoLog('capture.add', 'Capture enqueued', { jobId: job.jobId, sessionCount: sessionItems.length + 1 })
       if (!isDraft && entity?.id) onPhotosAdded?.()
     } catch (e) {
+      photoLogError('capture.add', 'Capture failed', e)
       showToast(e.message || 'Could not add photo', 'error')
     }
-  }, [storageFull, buildMetadata, enqueueCapture, entityRef, entity, isDraft, onPhotosAdded])
+  }, [storageFull, buildMetadata, enqueueCapture, entityRef, entity, isDraft, onPhotosAdded, sessionItems.length])
 
   const captureFromVideo = useCallback(() => {
     const video = videoRef.current
@@ -237,10 +311,12 @@ export function PhotoCaptureModal({
     e?.preventDefault?.()
     e?.stopPropagation?.()
     if (isDraft && sessionItems.length > 0) {
+      photoLog('capture.done', 'Draft — opening save form', { photoCount: sessionItems.length })
       stopCamera()
       setPhase('save')
       return
     }
+    photoLog('capture.done', 'Closing capture modal', { sessionCount: sessionItems.length })
     stopCamera()
     onClose?.()
   }
@@ -264,6 +340,7 @@ export function PhotoCaptureModal({
 
     setSavingLead(true)
     try {
+      photoLog('capture.save-lead', 'Creating lead with queued photos', { photoCount: sessionItems.length })
       const created = await createLead(getToken, {
         firstName,
         lastName,
@@ -284,6 +361,7 @@ export function PhotoCaptureModal({
       if (draftIdRef.current) {
         await reassignDraftJobs(draftIdRef.current, newRef)
       }
+      photoLog('capture.save-lead', 'Lead created — draft jobs reassigned', { leadId: created.id })
       if (sessionItems.length) {
         await logLeadPhotosAdded(getToken, created.id, sessionItems.length)
       }
@@ -418,7 +496,10 @@ export function PhotoCaptureModal({
           {!useCamera && !cameraStarting && (
             <div className="photo-mode-upload-zone">
               <Upload className="h-10 w-10 opacity-40 mb-3" />
-              <p className="text-sm opacity-70 mb-4">Camera unavailable — choose from library</p>
+              <p className="text-sm opacity-70 mb-4">No camera — tap Choose from library below</p>
+              <Button type="button" variant="outline" className="photo-mode-btn" onClick={() => libraryInputRef.current?.click()} disabled={storageFull}>
+                Choose from library
+              </Button>
             </div>
           )}
         </div>

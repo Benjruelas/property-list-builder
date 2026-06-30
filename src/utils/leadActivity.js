@@ -5,11 +5,7 @@
 import { updateLead, loadLocalLeads, saveLocalLeads, getLeadStatusMeta } from './leads'
 import { getPostContactStatusId } from './leadStatuses'
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 const MAX_LEAD_ACTIVITY = 200
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { viteApiDevPlugin } from './scripts/viteApiDevPlugin.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const devHttps = process.env.VITE_DEV_HTTPS === '1' || process.env.VITE_DEV_HTTPS === 'true'
 
 export default defineConfig({
   test: {
@@ -20,10 +21,11 @@ export default defineConfig({
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
           if (req.url?.startsWith('/__/firebase/init.json')) {
+            const host = req.headers.host || `localhost:${server.config.server.port || 3000}`
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify({
               apiKey: process.env.VITE_FIREBASE_API_KEY || '',
-              authDomain: `localhost:${server.config.server.port || 3000}`
+              authDomain: host,
             }))
             return
           }
@@ -69,6 +71,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    https: devHttps,
     proxy: {
       // Vite on :3000 — run `npm run dev:api` (vercel dev on :3001) for serverless routes.
       '/api': {

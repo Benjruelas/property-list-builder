@@ -1,7 +1,10 @@
 import {
   presignAnnotationUpload,
   saveAnnotations,
+  uploadBytesViaApi,
+  PHOTO_DIRECT_R2_UPLOAD,
   assertPhotoStorage,
+  invalidatePhotoBlobCache,
 } from './photosClient'
 import { apiBodyFromRef } from './entityRef'
 
@@ -47,24 +50,36 @@ export async function savePhotoAnnotations(getToken, entityRef, {
     )
 
     const presign = await presignAnnotationUpload(getToken, entityRef, photo.id)
-    const [origRes, thumbRes] = await Promise.all([
-      fetch(presign.annotatedUploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'image/jpeg' },
-        body: annotatedBlob,
-      }),
-      annotatedThumbnailBlob
-        ? fetch(presign.annotatedThumbnailUploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'image/jpeg' },
-          body: annotatedThumbnailBlob,
-        })
-        : Promise.resolve({ ok: true }),
-    ])
 
-    if (!origRes.ok || !thumbRes.ok) {
-      throw new Error('Annotation upload failed')
+    const uploadAnnotated = async () => {
+      if (
+        PHOTO_DIRECT_R2_UPLOAD
+        && presign.annotatedUploadUrl
+        && (!annotatedThumbnailBlob || presign.annotatedThumbnailUploadUrl)
+      ) {
+        const [origRes, thumbRes] = await Promise.all([
+          fetch(presign.annotatedUploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: annotatedBlob,
+          }),
+          annotatedThumbnailBlob
+            ? fetch(presign.annotatedThumbnailUploadUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'image/jpeg' },
+              body: annotatedThumbnailBlob,
+            })
+            : Promise.resolve({ ok: true }),
+        ])
+        if (origRes.ok && thumbRes.ok) return
+      }
+      await uploadBytesViaApi(getToken, entityRef, presign.annotatedKey, annotatedBlob)
+      if (annotatedThumbnailBlob && presign.annotatedThumbnailKey) {
+        await uploadBytesViaApi(getToken, entityRef, presign.annotatedThumbnailKey, annotatedThumbnailBlob)
+      }
     }
+
+    await uploadAnnotated()
 
     const result = await saveAnnotations(getToken, entityRef, {
       photoId: photo.id,
@@ -76,6 +91,8 @@ export async function savePhotoAnnotations(getToken, entityRef, {
     })
 
     if (previewUrl) URL.revokeObjectURL(previewUrl)
+    invalidatePhotoBlobCache(photo)
+    invalidatePhotoBlobCache(result.photo)
     const entity = result.lead || result.deal
     return { entity, photo: result.photo }
   } catch (e) {

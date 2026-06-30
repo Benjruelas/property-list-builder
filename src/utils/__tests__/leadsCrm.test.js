@@ -11,6 +11,8 @@ import {
   formatAddressProperCase,
   toLeadPatchBody,
   isLeadPhotosOnlyPatch,
+  mergeLeadPhotos,
+  isPhotosOnlyEntityChange,
 } from '../leads'
 import { buildActivityEntry } from '../leadActivity'
 
@@ -105,6 +107,34 @@ describe('lead CRM helpers', () => {
   it('isLeadPhotosOnlyPatch detects photo gallery sync payloads', () => {
     expect(isLeadPhotosOnlyPatch({ photos: [], updatedAt: '2026-01-01' })).toBe(true)
     expect(isLeadPhotosOnlyPatch({ photos: [], firstName: 'Jane' })).toBe(false)
+  })
+
+  it('mergeLeadPhotos removes deleted photos from server payloads', () => {
+    const prev = [
+      { id: 'p1', size: 100 },
+      { id: 'p2', size: 200 },
+      { id: 'p3', size: 300 },
+    ]
+    expect(mergeLeadPhotos(prev, [{ id: 'p1', size: 100 }, { id: 'p3', size: 300 }])).toEqual([
+      { id: 'p1', size: 100 },
+      { id: 'p3', size: 300 },
+    ])
+    expect(mergeLeadPhotos(prev, [])).toEqual([])
+  })
+
+  it('mergeLeadPhotos merges poll additions without dropping existing photos', () => {
+    const prev = [{ id: 'p1', size: 100 }]
+    expect(mergeLeadPhotos(prev, [{ id: 'p2', size: 50 }])).toEqual([
+      { id: 'p1', size: 100 },
+      { id: 'p2', size: 50 },
+    ])
+  })
+
+  it('isPhotosOnlyEntityChange detects photo-only deal/lead updates', () => {
+    const prev = { id: 'd1', title: 'Deal', photos: [{ id: 'p1' }] }
+    const next = { id: 'd1', title: 'Deal', photos: [], updatedAt: '2026-01-02' }
+    expect(isPhotosOnlyEntityChange(prev, next)).toBe(true)
+    expect(isPhotosOnlyEntityChange(prev, { ...next, title: 'Changed' })).toBe(false)
   })
 })
 

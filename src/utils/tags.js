@@ -11,11 +11,7 @@ export const DEFAULT_TAG_COLORS = [
 
 const LOCAL_TAGS_KEY = 'user_tags_local'
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 export function emptyTagRegistry() {
   return { leads: [], deals: [], paths: [], lists: [] }

@@ -2,11 +2,7 @@
  * Web Push subscription + local notification helpers.
  */
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)

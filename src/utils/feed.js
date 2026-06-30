@@ -2,11 +2,7 @@
  * Unified notifications + activity feed API client.
  */
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 const LOCAL_SEEN_PREFIX = 'feed_seen_activity_v1_'
 

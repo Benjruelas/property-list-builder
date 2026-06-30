@@ -8453,6 +8453,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   .photo-annotator-popover--stroke {
     min-width: unset;
     width: min(160px, calc(100vw - 24px));
+    flex-wrap: nowrap;
+    flex-direction: column;
   }
 }
 
@@ -8533,19 +8535,15 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   flex-shrink: 0;
 }
 
-.photo-annotator-popover--stroke {
-  flex-direction: column;
-  align-items: stretch;
-  min-width: 120px;
-  padding: 4px;
-}
-
 .photo-annotator-stroke-option {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  height: 40px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  padding: 0 10px;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -8607,6 +8605,44 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .photo-annotator-popover--colors {
   flex-wrap: wrap;
   max-width: 160px;
+}
+
+/* Stroke menu — after base popover so padding/gap overrides win; inner list scrolls */
+.photo-annotator-popover.photo-annotator-popover--stroke {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  min-width: 120px;
+  padding: 4px;
+  gap: 0;
+}
+
+.photo-annotator-stroke-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 128px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) rgba(255, 255, 255, 0.08);
+}
+
+.photo-annotator-stroke-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.photo-annotator-stroke-list::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.photo-annotator-stroke-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .photo-annotator-popover-btn {

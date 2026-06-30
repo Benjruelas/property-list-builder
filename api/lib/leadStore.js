@@ -15,6 +15,14 @@ export const LEADS_KV_KEY = 'user_leads'
 const LOCK_KEY = 'lock:user_leads'
 
 let fallbackLeads = []
+let leadsReadCache = null
+let leadsReadCacheAt = 0
+const LEADS_READ_CACHE_MS = 3000
+
+function invalidateLeadsReadCache() {
+  leadsReadCache = null
+  leadsReadCacheAt = 0
+}
 
 async function loadLeadsArray() {
   if (!kvAvailable || !kv) {
@@ -35,15 +43,21 @@ async function loadLeadsArray() {
 }
 
 export async function getAllLeads() {
+  if (leadsReadCache && Date.now() - leadsReadCacheAt < LEADS_READ_CACHE_MS) {
+    return leadsReadCache
+  }
   return withTiming('leadStore.getAllLeads', async () => {
     const result = await loadLeadsArray()
     fallbackLeads = result
+    leadsReadCache = result
+    leadsReadCacheAt = Date.now()
     return result
   })
 }
 
 export async function saveAllLeads(leads, { changedResources = [] } = {}) {
   return withTiming('leadStore.saveAllLeads', async () => {
+    invalidateLeadsReadCache()
     fallbackLeads = leads
     await writeLocalDevArray(LEADS_KV_KEY, leads)
     if (kvAvailable && kv) {

@@ -33,11 +33,7 @@ export function dedupePipelinesById(pipelines) {
   return [...byId.values()]
 }
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 /**
  * Owner or collaborator may add/move deals on a pipeline (matches server canEdit).

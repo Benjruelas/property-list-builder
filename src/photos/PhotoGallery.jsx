@@ -9,13 +9,15 @@ import { usePhotoUpload } from './PhotoUploadProvider'
 import {
   deletePhoto,
   fetchPhotoBlob,
+  fetchPhotoPreviewBlob,
   sumPhotoBytes,
   LEAD_STORAGE_LIMIT_BYTES,
   DEAL_STORAGE_LIMIT_BYTES,
 } from './photosClient'
 import { entityRefFromLead, entityRefFromDeal, updatePhotoInList, savePhotoAnnotations } from './annotationSave'
-import { getPhotoPreviewKey } from '@/utils/photoDisplay'
+import { entityKey } from './entityRef'
 import { formatLeadAddress } from '@/utils/leads'
+import { stripClientPhotoFields } from '@/utils/photoDisplay'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
 import { PhotoAnnotator } from '../components/photos/PhotoAnnotator'
 import { DealPhotoAnnotator } from '../components/photos/DealPhotoAnnotator'
@@ -52,7 +54,7 @@ export function PhotoGallery({
   onEntityUpdate,
   onNestedOverlayChange,
 }) {
-  const { getJobsForEntity, retry } = usePhotoUpload()
+  const { getJobsForEntity, retry, kickQueue } = usePhotoUpload()
   const [captureOpen, setCaptureOpen] = useState(false)
   const [annotating, setAnnotating] = useState(null)
   const [previewIndex, setPreviewIndex] = useState(null)
@@ -62,7 +64,12 @@ export function PhotoGallery({
   const entityRef = useMemo(() => {
     if (entityType === 'deal') return entityRefFromDeal(entity, pipelineId)
     return entityRefFromLead(entity)
-  }, [entityType, entity, pipelineId])
+  }, [entityType, entity?.id, pipelineId])
+
+  const queueEntityKey = useMemo(
+    () => entityKey(entityRef),
+    [entityRef],
+  )
 
   const activeJobs = useMemo(
     () => getJobsForEntity(entityRef).filter((j) => j.status !== JOB_STATUS.done),
@@ -94,12 +101,20 @@ export function PhotoGallery({
   }, [activeJobs, serverPhotos, hiddenIds])
 
   const limitBytes = entityType === 'deal' ? DEAL_STORAGE_LIMIT_BYTES : LEAD_STORAGE_LIMIT_BYTES
-  const photosUsed = sumPhotoBytes(entity?.photos || [])
+  const photosUsed = useMemo(() => {
+    const visible = (entity?.photos || []).filter((p) => !hiddenIds.has(p.id))
+    return sumPhotoBytes(visible)
+  }, [entity?.photos, hiddenIds])
   const storageFull = photosUsed >= limitBytes
 
   const uploadingCount = activeJobs.filter(
     (j) => j.status === JOB_STATUS.uploading || j.status === JOB_STATUS.queued,
   ).length
+  const failedCount = activeJobs.filter((j) => j.status === JOB_STATUS.failed).length
+
+  useEffect(() => {
+    kickQueue()
+  }, [queueEntityKey, kickQueue])
 
   useEffect(() => {
     onNestedOverlayChange?.(captureOpen || annotating != null || previewIndex != null)
@@ -114,21 +129,37 @@ export function PhotoGallery({
     const photo = item.photo
     setPreviewIndex(null)
     setHiddenIds((prev) => new Set(prev).add(photo.id))
+
+    const prevEntity = entity
+    const optimistic = {
+      ...entity,
+      photos: (entity.photos || []).filter((p) => p.id !== photo.id),
+      updatedAt: new Date().toISOString(),
+    }
+    onEntityUpdate?.(optimistic)
+
     try {
       const result = await deletePhoto(getToken, entityRef, photo.id)
       const updated = entityType === 'deal' ? result.deal : result.lead
       if (updated) onEntityUpdate?.(updated)
     } catch {
+      onEntityUpdate?.(prevEntity)
       setHiddenIds((prev) => {
         const next = new Set(prev)
         next.delete(photo.id)
         return next
       })
     }
-  }, [getToken, entityRef, entityType, onEntityUpdate])
+  }, [getToken, entityRef, entityType, entity, onEntityUpdate])
 
   const handleAnnotatorSave = useCallback((updatedEntity, { complete = true } = {}) => {
-    onEntityUpdate?.(updatedEntity)
+    const payload = complete
+      ? {
+          ...updatedEntity,
+          photos: (updatedEntity.photos || []).map((p) => stripClientPhotoFields(p)),
+        }
+      : updatedEntity
+    onEntityUpdate?.(payload)
     if (!complete) return
     setAnnotating(null)
     annotatingPhotoIdRef.current = null
@@ -167,13 +198,15 @@ export function PhotoGallery({
           const blobs = await getBlobs(item.job.jobId)
           if (blobs?.full) return blobs.full
         }
-        if (item.photo._annotatedPreviewUrl?.startsWith('blob:')) {
+        if (item.photo._annotationSaving && item.photo._annotatedPreviewUrl?.startsWith('blob:')) {
           const res = await fetch(item.photo._annotatedPreviewUrl)
-          return res.blob()
+          if (res.ok) return res.blob()
         }
-        const key = getPhotoPreviewKey(item.photo)
-        if (!key) throw new Error('Photo not available')
-        return fetchPhotoBlob(getToken, key, item.photo.updatedAt || item.photo.createdAt || '')
+        return fetchPhotoPreviewBlob(
+          getToken,
+          item.photo,
+          item.photo.updatedAt || item.photo.createdAt || '',
+        )
       },
     })),
     [displayItems, getToken],
@@ -210,6 +243,11 @@ export function PhotoGallery({
           {uploadingCount > 0 && (
             <span className="text-[10px] font-normal text-white/45 ml-2">
               {uploadingCount} uploading
+            </span>
+          )}
+          {failedCount > 0 && (
+            <span className="text-[10px] font-normal text-red-300/80 ml-2">
+              {failedCount} failed
             </span>
           )}
         </SectionTitle>

@@ -6,9 +6,12 @@ import {
   resolvePreviewKind,
   createPreviewSource,
   readTextFromBlob,
-  triggerBlobDownload,
+  saveBlobToDevice,
+  isMobileDevice,
+  isNativeApp,
   getFilePreviewPortalContainer,
 } from '@/utils/filePreview'
+import { showToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 
 const SWIPE_THRESHOLD_PX = 48
@@ -28,6 +31,7 @@ export function FilePreviewOverlay({
   const [textContent, setTextContent] = useState('')
   const revokeRef = useRef(null)
   const swipeRef = useRef({ x: 0, y: 0, active: false })
+  const [downloading, setDownloading] = useState(false)
 
   const item = items[index]
   const kind = item
@@ -132,18 +136,38 @@ export function FilePreviewOverlay({
     else goNext()
   }
 
-  const handleDownload = () => {
-    if (blob) {
-      triggerBlobDownload(blob, item?.name)
-      return
-    }
-    if (previewUrl && previewUrl.startsWith('data:')) {
-      const a = document.createElement('a')
-      a.href = previewUrl
-      a.download = item?.name || 'download'
-      a.click()
+  const handleDownload = async () => {
+    if (downloading) return
+    setDownloading(true)
+    try {
+      if (blob) {
+        await saveBlobToDevice(blob, item?.name, {
+          contentType: item?.contentType || blob.type,
+          onToast: showToast,
+        })
+        return
+      }
+      if (previewUrl?.startsWith('data:')) {
+        const res = await fetch(previewUrl)
+        const dataBlob = await res.blob()
+        await saveBlobToDevice(dataBlob, item?.name, {
+          contentType: item?.contentType || dataBlob.type,
+          onToast: showToast,
+        })
+      }
+    } catch (e) {
+      if (e?.name !== 'AbortError') {
+        setError(e.message || 'Could not save file')
+      }
+    } finally {
+      setDownloading(false)
     }
   }
+
+  const downloadDisabled = loading || downloading || (!blob && !previewUrl)
+  const downloadLabel = kind === 'image' && (isNativeApp() || isMobileDevice())
+    ? 'Save to Photos'
+    : 'Download'
 
   const portalTarget = getFilePreviewPortalContainer()
   if (!open || !item || !portalTarget) return null
@@ -172,11 +196,11 @@ export function FilePreviewOverlay({
             type="button"
             className="file-preview-icon-btn"
             onClick={handleDownload}
-            disabled={loading || (!blob && !previewUrl)}
-            aria-label="Download"
-            title="Download"
+            disabled={downloadDisabled}
+            aria-label={downloadLabel}
+            title={downloadLabel}
           >
-            <Download className="h-5 w-5" />
+            {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
           </button>
           <button
             type="button"
@@ -218,9 +242,9 @@ export function FilePreviewOverlay({
                   Retry
                 </Button>
                 {blob && (
-                  <Button type="button" size="sm" onClick={handleDownload}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
+                  <Button type="button" size="sm" onClick={handleDownload} disabled={downloading}>
+                    {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                    {downloadLabel}
                   </Button>
                 )}
               </div>
@@ -251,9 +275,9 @@ export function FilePreviewOverlay({
           {showUnsupported && (
             <div className="file-preview-state">
               <p className="text-sm opacity-70 mb-4">Preview not available for this file type.</p>
-              <Button type="button" size="sm" onClick={handleDownload} disabled={!blob && !previewUrl}>
-                <Download className="h-4 w-4 mr-2" />
-                Download file
+              <Button type="button" size="sm" onClick={handleDownload} disabled={downloadDisabled}>
+                {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                {downloadLabel}
               </Button>
             </div>
           )}

@@ -100,7 +100,10 @@ import {
   fetchLeads,
   fetchLeadById,
   mergeListViewLeads,
+  mergeLeadDetail,
+  isPhotosOnlyEntityChange,
   loadLocalLeads,
+  saveLocalLeads,
   createLead,
   buildLeadPrefillFromParcel,
   isParcelALead as isParcelInLeadsList,
@@ -1798,10 +1801,12 @@ function App() {
     if (pipelines.length > 0 && pid) {
       const pipe = pipelines.find((p) => p.id === pid)
       if (!pipe) return
+      const prevDeal = (pipe.deals || []).find((d) => d.id === updatedDeal.id)
       const deals = (pipe.deals || []).map((d) => (d.id === updatedDeal.id ? updatedDeal : d))
+      setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals } : p)))
+      if (prevDeal && isPhotosOnlyEntityChange(prevDeal, updatedDeal)) return
       try {
         await updatePipeline(getToken, pid, { deals })
-        setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals } : p)))
       } catch (e) {
         showToast(e.message || 'Failed to update deal', 'error')
       }
@@ -2855,13 +2860,23 @@ function App() {
         if (p.id !== entityRef.pipelineId) return p
         return {
           ...p,
-          deals: (p.deals || []).map((d) => (d.id === entity.id ? entity : d)),
+          deals: (p.deals || []).map((d) => {
+            if (d.id !== entity.id) return d
+            return mergeLeadDetail(d, entity)
+          }),
         }
       }))
       return
     }
-    setLeads((prev) => prev.map((l) => (l.id === entity.id ? entity : l)))
-    setPhotoModeLead((prev) => (prev?.id === entity.id ? entity : prev))
+    setLeads((prev) => {
+      const next = prev.map((l) => {
+        if (l.id !== entity.id) return l
+        return mergeLeadDetail(l, entity)
+      })
+      saveLocalLeads(next)
+      return next
+    })
+    setPhotoModeLead((prev) => (prev?.id === entity.id ? mergeLeadDetail(prev, entity) : prev))
   }, [])
 
   const openPhotoModeForDraftParcel = useCallback((parcelData) => {
@@ -3131,7 +3146,11 @@ function App() {
       fetchLeadById(getToken, lead.id)
         .then((full) => {
           if (full?.id) {
-            setLeads((prev) => prev.map((l) => (l.id === full.id ? full : l)))
+            setLeads((prev) => {
+              const next = prev.map((l) => (l.id === full.id ? mergeLeadDetail(l, full) : l))
+              saveLocalLeads(next)
+              return next
+            })
           }
         })
         .catch((err) => console.warn('Lead detail hydrate failed:', err?.message))

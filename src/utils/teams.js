@@ -3,11 +3,7 @@
  * a Firebase ID token (or the dev-bypass token in dev mode).
  */
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 async function apiCall(getToken, method, body = null) {
   const token = await getToken()

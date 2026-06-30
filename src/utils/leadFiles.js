@@ -11,11 +11,7 @@ import {
 } from './uploadLimits'
 import { fetchAuthenticatedBlob, triggerBlobDownload } from './filePreview'
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 export const LEAD_FILE_STORAGE_LIMIT_BYTES = ENTITY_STORAGE_LIMITS.leadFiles
 

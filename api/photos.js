@@ -2,7 +2,7 @@
  * Unified photo API for leads and deals — presigned upload only (no base64 POST).
  */
 
-import { S3Client, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { authenticate } from './lib/auth.js'
 import {
   presignedPhotosEnabled,
@@ -27,6 +27,14 @@ import {
   canAccessPhotoKey,
   photoKeyPrefix,
 } from './lib/photoEntity.js'
+import { photoLog, photoLogError } from './lib/photoDebug.js'
+import {
+  writeLocalPhotoBlob,
+  readLocalPhotoBlob,
+  localPhotoBlobExists,
+  deleteLocalPhotoBlob,
+  localPhotoStorageEnabled,
+} from './lib/photoBlobStore.js'
 
 let _s3
 function s3() {
@@ -43,6 +51,8 @@ function s3() {
 }
 
 async function objectExists(key) {
+  if (await localPhotoBlobExists(key)) return true
+  if (!presignedPhotosEnabled()) return false
   try {
     await s3().send(new HeadObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
@@ -55,13 +65,47 @@ async function objectExists(key) {
   }
 }
 
+async function readPhotoBytes(key) {
+  const local = await readLocalPhotoBlob(key)
+  if (local) return { body: local, contentType: 'image/jpeg' }
+  if (!presignedPhotosEnabled()) return null
+  const r = await s3().send(new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+  }))
+  const chunks = []
+  for await (const c of r.Body) chunks.push(c)
+  return { body: Buffer.concat(chunks), contentType: r.ContentType || 'image/jpeg' }
+}
+
+async function writePhotoBytes(key, buf, contentType = 'image/jpeg') {
+  if (presignedPhotosEnabled()) {
+    await s3().send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      Body: buf,
+      ContentType: contentType,
+    }))
+  } else if (!localPhotoStorageEnabled()) {
+    throw new Error('Photo storage is not configured')
+  }
+  await writeLocalPhotoBlob(key, buf)
+}
+
 function entityResponse(ctx, entity) {
   if (ctx.entityType === 'deal') return { deal: entity }
   return { lead: entity }
 }
 
 export const config = {
-  api: { bodyParser: { sizeLimit: '1mb' } },
+  api: { bodyParser: { sizeLimit: '6mb' } },
+}
+
+function keyMatchesEntity(key, ctx) {
+  const prefix = photoKeyPrefix(ctx.entityType)
+  if (!key.startsWith(`${prefix}/`)) return false
+  const parts = key.split('/')
+  return parts[1] === ctx.ownerUid && parts[2] === ctx.entity.id
 }
 
 export default async function handler(req, res) {
@@ -74,18 +118,33 @@ export default async function handler(req, res) {
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
+    photoLog('request', `${req.method} /api/photos`, {
+      action: req.body?.action || req.query?.action,
+      entityType: req.body?.entityType,
+      leadId: req.body?.leadId,
+      dealId: req.body?.dealId,
+      key: req.query?.key ? `…${String(req.query.key).slice(-48)}` : undefined,
+    })
+
     if (req.method === 'POST') {
       const body = req.body || {}
       const action = String(body.action || req.query?.action || '').toLowerCase()
 
       if (action === 'presign' || action === 'presign-annotation') {
-        if (!presignedPhotosEnabled()) {
+        if (!presignedPhotosEnabled() && !localPhotoStorageEnabled()) {
+          photoLog('presign', 'Photo storage not configured')
           return res.status(503).json({ error: 'Photo storage is not configured' })
         }
 
         const ctx = await resolvePhotoContext(user, body)
-        if (ctx.error) return res.status(ctx.error.status).json({ error: ctx.error.message })
-        if (!ctx.canAdd()) return res.status(403).json({ error: 'No permission to add photos' })
+        if (ctx.error) {
+          photoLog('presign', 'Context error', { status: ctx.error.status, error: ctx.error.message })
+          return res.status(ctx.error.status).json({ error: ctx.error.message })
+        }
+        if (!ctx.canAdd()) {
+          photoLog('presign', 'Permission denied')
+          return res.status(403).json({ error: 'No permission to add photos' })
+        }
 
         const entityType = ctx.entityType
         const entityId = entityType === 'deal' ? ctx.entity.id : ctx.entity.id
@@ -99,10 +158,14 @@ export default async function handler(req, res) {
           if (!existingPhotoId) return res.status(400).json({ error: 'photoId is required' })
           const annotatedKey = buildPhotoKey(entityType, ownerUid, entityId, existingPhotoId, 'annotated')
           const annotatedThumbnailKey = buildPhotoKey(entityType, ownerUid, entityId, existingPhotoId, 'annotated-thumb')
-          const [annotatedUploadUrl, annotatedThumbnailUploadUrl] = await Promise.all([
-            createPresignedPutUrl(annotatedKey, 'image/jpeg'),
-            createPresignedPutUrl(annotatedThumbnailKey, 'image/jpeg'),
-          ])
+          let annotatedUploadUrl = ''
+          let annotatedThumbnailUploadUrl = ''
+          if (presignedPhotosEnabled()) {
+            ;[annotatedUploadUrl, annotatedThumbnailUploadUrl] = await Promise.all([
+              createPresignedPutUrl(annotatedKey, 'image/jpeg'),
+              createPresignedPutUrl(annotatedThumbnailKey, 'image/jpeg'),
+            ])
+          }
           return res.status(200).json({
             photoId: existingPhotoId,
             annotatedKey,
@@ -114,10 +177,15 @@ export default async function handler(req, res) {
 
         const key = buildPhotoKey(entityType, ownerUid, entityId, photoId, 'original')
         const thumbnailKey = buildPhotoKey(entityType, ownerUid, entityId, photoId, 'thumb')
-        const [uploadUrl, thumbnailUploadUrl] = await Promise.all([
-          createPresignedPutUrl(key, body.contentType || 'image/jpeg'),
-          createPresignedPutUrl(thumbnailKey, 'image/jpeg'),
-        ])
+        let uploadUrl = ''
+        let thumbnailUploadUrl = ''
+        if (presignedPhotosEnabled()) {
+          ;[uploadUrl, thumbnailUploadUrl] = await Promise.all([
+            createPresignedPutUrl(key, body.contentType || 'image/jpeg'),
+            createPresignedPutUrl(thumbnailKey, 'image/jpeg'),
+          ])
+        }
+        photoLog('presign', 'Presigned URLs created', { photoId, key, entityType })
         return res.status(200).json({
           photoId,
           key,
@@ -127,7 +195,39 @@ export default async function handler(req, res) {
         })
       }
 
+      if (action === 'upload-bytes') {
+        if (!presignedPhotosEnabled() && !localPhotoStorageEnabled()) {
+          return res.status(503).json({ error: 'Photo storage is not configured' })
+        }
+        const ctx = await resolvePhotoContext(user, body)
+        if (ctx.error) return res.status(ctx.error.status).json({ error: ctx.error.message })
+        if (!ctx.canAdd()) return res.status(403).json({ error: 'No permission to add photos' })
+
+        const key = String(body.key || '')
+        if (!key) return res.status(400).json({ error: 'key is required' })
+        if (!keyMatchesEntity(key, ctx)) return res.status(403).json({ error: 'Forbidden key' })
+
+        const raw = String(body.dataBase64 || '').replace(/^data:[^;]+;base64,/, '')
+        if (!raw) return res.status(400).json({ error: 'dataBase64 is required' })
+
+        let buf
+        try {
+          buf = Buffer.from(raw, 'base64')
+        } catch {
+          return res.status(400).json({ error: 'Invalid base64' })
+        }
+        if (!buf.length) return res.status(400).json({ error: 'Empty upload' })
+
+        await writePhotoBytes(key, buf, body.contentType || 'image/jpeg')
+        photoLog('upload-bytes', 'Stored via API proxy', { key: key.slice(0, 80), bytes: buf.length })
+        return res.status(200).json({ ok: true, key, size: buf.length })
+      }
+
       if (action === 'complete' || body.recordOnly) {
+        photoLog('complete', 'Verifying uploads and saving record', {
+          photoId: body.photoId,
+          key: body.key,
+        })
         const ctx = await resolvePhotoContext(user, body)
         if (ctx.error) return res.status(ctx.error.status).json({ error: ctx.error.message })
         if (!ctx.canAdd()) return res.status(403).json({ error: 'No permission to add photos' })
@@ -160,11 +260,12 @@ export default async function handler(req, res) {
 
         const result = await appendPhotoRecord(user, ctx, photoRecord)
         if (result.error) return res.status(result.error.status).json({ error: result.error.message })
+        photoLog('complete', 'Photo record saved', { photoId: photoRecord.id, entityType: ctx.entityType })
         return res.status(200).json({ photo: result.photo, ...entityResponse(ctx, result.entity) })
       }
 
       return res.status(400).json({
-        error: 'Invalid action. Use action=presign or action=complete',
+        error: 'Invalid action. Use action=presign, upload-bytes, or action=complete',
       })
     }
 
@@ -231,6 +332,11 @@ export default async function handler(req, res) {
 
       const result = await updatePhotoRecord(user, ctx, photoId, () => updatedPhoto)
       if (result.error) return res.status(result.error.status).json({ error: result.error.message })
+      photoLog('patch', 'Photo metadata saved', {
+        photoId,
+        annotatedKey: updatedPhoto.annotatedKey?.slice?.(-48),
+        entityType: ctx.entityType,
+      })
       return res.status(200).json({ photo: result.photo, ...entityResponse(ctx, result.entity) })
     }
 
@@ -243,27 +349,25 @@ export default async function handler(req, res) {
       const allowed = await canAccessPhotoKey(user, key)
       if (!allowed) return res.status(403).json({ error: 'Forbidden' })
 
-      if (presignedPhotosEnabled()) {
+      // format=url → JSON signed URL (e.g. reports). redirect=0 → proxy bytes (gallery thumbnails, no R2 CORS).
+      if (presignedPhotosEnabled() && req.query.format === 'url') {
         const url = await createPresignedGetUrl(key)
-        if (req.query.redirect === '0' || req.query.format === 'url') {
-          res.setHeader('Cache-Control', 'private, max-age=60')
-          return res.status(200).json({ url })
-        }
+        res.setHeader('Cache-Control', 'private, max-age=60')
+        return res.status(200).json({ url })
+      }
+
+      if (presignedPhotosEnabled() && req.query.redirect !== '0') {
+        const url = await createPresignedGetUrl(key)
         res.setHeader('Cache-Control', 'private, max-age=60')
         return res.redirect(302, url)
       }
 
       try {
-        const r = await s3().send(new GetObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME,
-          Key: key,
-        }))
-        const chunks = []
-        for await (const c of r.Body) chunks.push(c)
-        const bodyBuf = Buffer.concat(chunks)
-        res.setHeader('Content-Type', r.ContentType || 'image/jpeg')
+        const stored = await readPhotoBytes(key)
+        if (!stored) return res.status(404).json({ error: 'File not found' })
+        res.setHeader('Content-Type', stored.contentType)
         res.setHeader('Cache-Control', 'private, max-age=300')
-        return res.status(200).send(bodyBuf)
+        return res.status(200).send(stored.body)
       } catch (e) {
         if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) {
           return res.status(404).json({ error: 'File not found' })
@@ -287,6 +391,8 @@ export default async function handler(req, res) {
       }
 
       for (const k of [photo.key, photo.thumbnailKey, photo.annotatedKey, photo.annotatedThumbnailKey].filter(Boolean)) {
+        await deleteLocalPhotoBlob(k)
+        if (!presignedPhotosEnabled()) continue
         try {
           await s3().send(new DeleteObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME,
@@ -304,7 +410,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
-    console.error('photos error', err)
+    photoLogError('error', 'Unhandled photos handler error', err)
     return res.status(500).json({ error: 'Internal server error', message: err.message })
   }
 }

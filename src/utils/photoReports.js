@@ -2,11 +2,7 @@
  * Photo report CRUD client.
  */
 
-const getApiBase = () => {
-  if (import.meta.env.DEV) return '/api'
-  if (typeof window !== 'undefined') return `${window.location.origin}/api`
-  return import.meta.env.VITE_API_URL || ''
-}
+import { getApiBase } from './apiBase'
 
 export async function fetchPhotoReports(getToken, { leadId, reportId } = {}) {
   const token = await getToken?.()

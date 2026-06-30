@@ -1,4 +1,7 @@
-import { encode } from 'blurhash'
+import { encode, decode } from 'blurhash'
+
+const BLUR_SIZE = 32
+const blurStyleCache = new Map()
 
 export async function blurHashFromBlob(blob) {
   try {
@@ -20,9 +23,27 @@ export async function blurHashFromBlob(blob) {
 
 export function blurHashStyle(hash) {
   if (!hash) return {}
-  return {
-    backgroundImage: `url("https://blurhash.vercel.app/${encodeURIComponent(hash)}/32/32")`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
+  const cached = blurStyleCache.get(hash)
+  if (cached) return cached
+
+  try {
+    const pixels = decode(hash, BLUR_SIZE, BLUR_SIZE)
+    const canvas = document.createElement('canvas')
+    canvas.width = BLUR_SIZE
+    canvas.height = BLUR_SIZE
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return {}
+    const imageData = ctx.createImageData(BLUR_SIZE, BLUR_SIZE)
+    imageData.data.set(pixels)
+    ctx.putImageData(imageData, 0, 0)
+    const style = {
+      backgroundImage: `url("${canvas.toDataURL('image/jpeg', 0.82)}")`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    }
+    blurStyleCache.set(hash, style)
+    return style
+  } catch {
+    return {}
   }
 }

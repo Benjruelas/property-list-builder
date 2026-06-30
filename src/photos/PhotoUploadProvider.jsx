@@ -30,14 +30,17 @@ export function PhotoUploadProvider({ getToken, children, onEntityUpdated }) {
     [jobs],
   )
 
+  const kickQueue = useCallback(() => photoUploadManager.start(), [])
+
   const value = useMemo(() => ({
     jobs,
     enqueueCapture,
     retry,
     reassignDraftJobs,
     getJobsForEntity,
+    kickQueue,
     entityKey,
-  }), [jobs, enqueueCapture, retry, reassignDraftJobs, getJobsForEntity])
+  }), [jobs, enqueueCapture, retry, reassignDraftJobs, getJobsForEntity, kickQueue])
 
   return (
     <PhotoUploadContext.Provider value={value}>
