@@ -62,6 +62,20 @@ describe('lead CRM helpers', () => {
     expect(merged[0]._listView).toBe(true)
   })
 
+  it('mergeListViewLeads drops stale cached photos when server photoCount differs', () => {
+    const existing = [{
+      id: 'l1',
+      photos: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }],
+    }]
+    const incoming = [{
+      id: 'l1',
+      _listView: true,
+      photoCount: 1,
+    }]
+    const merged = mergeListViewLeads(existing, incoming)
+    expect(merged[0].photos).toBeUndefined()
+  })
+
   it('mergeListViewLeads uses server photos on full poll payloads', () => {
     const existing = [{
       id: 'l1',

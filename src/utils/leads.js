@@ -140,16 +140,34 @@ export function mergeLeadDetail(prev, incoming) {
   }
 }
 
+/** Merge one lead into the cached list and persist — used after /api/photos mutations. */
+export function upsertLeadInLocalStore(leads, updated, merge = mergeLeadDetail) {
+  const list = Array.isArray(leads) ? leads : []
+  const next = list.map((lead) => (lead.id === updated.id ? merge(lead, updated) : lead))
+  saveLocalLeads(next)
+  return next
+}
+
 export function mergeListViewLeads(existing, incoming) {
   const prevById = new Map((Array.isArray(existing) ? existing : []).map((l) => [l.id, l]))
   return (Array.isArray(incoming) ? incoming : []).map((inc) => {
     const prev = prevById.get(inc.id)
     if (!prev) return inc
     if (inc?._listView) {
+      const prevPhotos = prev.photos
+      const serverPhotoCount = typeof inc.photoCount === 'number' ? inc.photoCount : null
+      let photos = inc.photos
+      if (photos == null && Array.isArray(prevPhotos)) {
+        if (serverPhotoCount != null && prevPhotos.length !== serverPhotoCount) {
+          photos = undefined
+        } else {
+          photos = prevPhotos
+        }
+      }
       return {
         ...inc,
         activity: prev.activity ?? inc.activity,
-        photos: inc.photos ?? prev.photos,
+        photos,
         files: prev.files ?? inc.files,
       }
     }
@@ -157,7 +175,7 @@ export function mergeListViewLeads(existing, incoming) {
   })
 }
 
-export async function fetchLeads(getToken, { view = 'list' } = {}) {
+export async function fetchLeads(getToken, { view = 'list', existingLeads } = {}) {
   const token = await getToken()
   if (!token) return loadLocalLeads()
   const headers = { Authorization: `Bearer ${token}` }
@@ -173,7 +191,7 @@ export async function fetchLeads(getToken, { view = 'list' } = {}) {
   if (etag) leadsListEtag = etag.replace(/^W\//, '').replace(/"/g, '')
   const data = await res.json()
   const leads = data.leads || []
-  const existing = loadLocalLeads()
+  const existing = Array.isArray(existingLeads) ? existingLeads : loadLocalLeads()
   const toStore = mergeListViewLeads(existing, leads)
   saveLocalLeads(toStore)
   return leads

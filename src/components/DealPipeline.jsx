@@ -23,7 +23,7 @@ import { DealDetails } from './DealDetails'
 import { LeadDetails } from './LeadDetails'
 import { canCollaborateOnPipeline, pipelinesUserCanWorkIn } from '@/utils/pipelines'
 import { CreatePipelineDialog } from './CreatePipelineDialog'
-import { displayLeadName, updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch } from '@/utils/leads'
+import { displayLeadName, updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch, mergeLeadDetail, upsertLeadInLocalStore } from '@/utils/leads'
 import { LeadSharingIcon, TeamSharedIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
 import { PipelineDealCard } from './DealRow'
@@ -338,7 +338,7 @@ export function DealPipeline({
   }, [onGoToParcelOnMap, onCloseLeadOverlay, onCloseDeal])
 
   const handleLeadUpdate = useCallback(async (updated) => {
-    onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
+    onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated))
     const payload = toLeadPatchBody(updated)
     if (isLeadPhotosOnlyPatch(payload)) return
     try {

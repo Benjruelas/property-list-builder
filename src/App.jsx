@@ -104,6 +104,7 @@ import {
   isPhotosOnlyEntityChange,
   loadLocalLeads,
   saveLocalLeads,
+  upsertLeadInLocalStore,
   createLead,
   buildLeadPrefillFromParcel,
   isParcelALead as isParcelInLeadsList,
@@ -1190,7 +1191,7 @@ function App() {
     const showSpinner = leadsRef.current.length === 0
     if (showSpinner) setLeadsLoading(true)
     try {
-      const next = await fetchLeads(getToken)
+      const next = await fetchLeads(getToken, { existingLeads: leadsRef.current })
       if (next?.notModified) return
       setLeads((prev) => mergeListViewLeads(prev, next))
       await refreshTags()
@@ -3142,7 +3143,12 @@ function App() {
   const openLeadDetails = useCallback((lead) => {
     if (!lead?.id) return
     guardFeature('leads', () => nav.openLeadDetails(lead.id))
-    if (lead._listView) {
+    const photoCount = typeof lead.photoCount === 'number' ? lead.photoCount : null
+    const cachedPhotoCount = Array.isArray(lead.photos) ? lead.photos.length : 0
+    const needsPhotoHydrate = lead._listView
+      || (photoCount != null && photoCount > 0 && cachedPhotoCount === 0)
+      || (photoCount != null && cachedPhotoCount !== photoCount)
+    if (needsPhotoHydrate) {
       fetchLeadById(getToken, lead.id)
         .then((full) => {
           if (full?.id) {
@@ -4366,7 +4372,10 @@ function App() {
           currentUser={currentUser}
           onClose={closePhotoMode}
           onEntityUpdate={(updatedLead) => {
-            setLeads((prev) => prev.map((l) => (l.id === updatedLead.id ? updatedLead : l)))
+            setLeads((prev) => upsertLeadInLocalStore(prev, updatedLead))
+            setPhotoModeLead((prev) => (
+              prev?.id === updatedLead.id ? mergeLeadDetail(prev, updatedLead) : prev
+            ))
           }}
           onLeadCreated={(lead) => {
             setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
