@@ -8304,6 +8304,224 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   background: rgba(255, 255, 255, 0.28) !important;
 }
 
+/* Immersive camera-style photo mode */
+.photo-mode-overlay--camera {
+  background: #000;
+}
+
+.photo-mode-viewport--immersive {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+.photo-mode-video--immersive {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.photo-mode-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
+  pointer-events: none;
+}
+
+.photo-mode-top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-mode-icon-btn {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  touch-action: manipulation;
+}
+
+.photo-mode-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.photo-mode-icon-btn:disabled {
+  opacity: 0.4;
+}
+
+.photo-mode-zoom-bar {
+  position: absolute;
+  bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.photo-mode-zoom-btn {
+  min-width: 36px;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  font-weight: 600;
+  touch-action: manipulation;
+}
+
+.photo-mode-zoom-btn--active {
+  background: rgba(59, 130, 246, 0.85);
+  color: #fff;
+}
+
+.photo-mode-bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px calc(24px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent);
+}
+
+.photo-mode-gallery-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.photo-mode-gallery-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.photo-mode-gallery-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-mode-gallery-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-mode-shutter--camera {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.9);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+.photo-mode-shutter-inner {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.1s ease;
+}
+
+.photo-mode-shutter--camera:active:not(:disabled) .photo-mode-shutter-inner {
+  transform: scale(0.92);
+}
+
+.photo-mode-shutter--camera.photo-mode-shutter--disabled {
+  opacity: 0.6;
+}
+
+.photo-mode-done-btn {
+  min-width: 72px;
+  height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(30, 30, 30, 0.75);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  touch-action: manipulation;
+  backdrop-filter: blur(8px);
+}
+
+.photo-mode-done-btn:hover:not(:disabled) {
+  background: rgba(50, 50, 50, 0.85);
+}
+
+.photo-mode-done-btn:disabled {
+  opacity: 0.6;
+}
+
+.photo-mode-upload-badge {
+  position: absolute;
+  top: calc(56px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 16;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
 .photo-annotator-canvas-wrap {
   flex: 1;
   min-height: 0;

@@ -1,11 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Camera, Upload, Loader2, Check } from 'lucide-react'
-import { PanelBackButton } from '../components/ui/panel-header'
-import { Button } from '../components/ui/button'
-import { AddressAutocompleteField } from '../components/AddressAutocompleteField'
-import { ResourceSharePicker } from '../components/ResourceSharePicker'
-import { displayLeadName, formatLeadAddress, createLead } from '@/utils/leads'
+import { Loader2, X, RotateCw, Zap, ZapOff, Image as ImageIcon } from 'lucide-react'
 import { sumPhotoBytes, LEAD_STORAGE_LIMIT_BYTES, DEAL_STORAGE_LIMIT_BYTES, getCurrentPosition } from '@/photos/photosClient'
 import { usePhotoUpload } from './PhotoUploadProvider'
 import { draftSessionId, entityKey } from './entityRef'
@@ -13,8 +8,7 @@ import { getBlobs } from './photoStoreIdb'
 import { VISIBILITY } from '@/utils/access'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from '../components/ui/toast'
-import { formatPhoneAsYouType, formatPhoneDisplay } from '@/utils/phoneFormat'
-import { StorageUsageBar } from '../components/ui/StorageUsageBar'
+import { createLead, displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { FilePreviewOverlay } from '../components/ui/FilePreviewOverlay'
 import { cn } from '@/lib/utils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
@@ -48,10 +42,10 @@ async function hasVideoInputDevice() {
   }
 }
 
-async function requestCameraStream() {
+async function requestCameraStream(facingMode = 'environment') {
   const attempts = [
-    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
-    { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+    { video: { facingMode: facingMode === 'environment' ? 'user' : 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
     { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
     { video: true, audio: false },
   ]
@@ -70,21 +64,6 @@ async function requestCameraStream() {
 async function bindStreamToVideo(video, stream) {
   video.srcObject = stream
   await video.play()
-}
-
-function normalizeDraftForm(data = {}) {
-  return {
-    firstName: data.firstName ?? '',
-    lastName: data.lastName ?? '',
-    address: data.address ?? '',
-    phone: formatPhoneDisplay(data.phone ?? '') || '',
-    email: data.email ?? '',
-    notes: data.notes ?? '',
-    parcelId: data.parcelId ?? null,
-    lat: data.lat ?? null,
-    lng: data.lng ?? null,
-    properties: data.properties ?? null,
-  }
 }
 
 export function PhotoCaptureModal({
@@ -107,40 +86,43 @@ export function PhotoCaptureModal({
   const { enqueueCapture, reassignDraftJobs, jobs } = usePhotoUpload()
   const videoRef = useRef(null)
   const streamRef = useRef(null)
-  const fileInputRef = useRef(null)
   const libraryInputRef = useRef(null)
   const draftIdRef = useRef(null)
   const cameraFallbackNotifiedRef = useRef(false)
+  const promotingLeadRef = useRef(false)
+  const savedLeadRef = useRef(null)
+  const galleryLongPressRef = useRef(null)
 
   const [sessionItems, setSessionItems] = useState([])
   const [flash, setFlash] = useState(false)
-  const [savingLead, setSavingLead] = useState(false)
+  const [promotingLead, setPromotingLead] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
   const [useCamera, setUseCamera] = useState(false)
   const [cameraStarting, setCameraStarting] = useState(false)
   const [viewerIndex, setViewerIndex] = useState(null)
-  const [phase, setPhase] = useState('capture')
-  const [draftForm, setDraftForm] = useState(() => normalizeDraftForm(entity))
-  const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
+  const [facingMode, setFacingMode] = useState('environment')
+  const [flashEnabled, setFlashEnabled] = useState(false)
+  const [zoomLevel, setZoomLevel] = useState('1')
 
-  const isLead = entityType === 'lead'
-  const isDraft = isLead && !entity?.id
   const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
-  const allowExternalSharing = teamMembership?.allowExternalSharing === true
+
+  const resolvedEntity = savedLeadRef.current?.id ? savedLeadRef.current : entity
+  const isLead = entityType === 'lead'
+  const isDraft = isLead && !resolvedEntity?.id
 
   const entityRef = useMemo(() => {
     if (entityType === 'deal') {
-      return { entityType: 'deal', pipelineId, dealId: entity.id, entityId: entity.id }
+      return { entityType: 'deal', pipelineId, dealId: resolvedEntity.id, entityId: resolvedEntity.id }
     }
     if (isDraft) {
       if (!draftIdRef.current) draftIdRef.current = draftSessionId()
       return { entityType: 'lead', leadId: draftIdRef.current, entityId: draftIdRef.current }
     }
-    return { entityType: 'lead', leadId: entity.id, entityId: entity.id }
-  }, [entityType, entity?.id, pipelineId, isDraft])
+    return { entityType: 'lead', leadId: resolvedEntity.id, entityId: resolvedEntity.id }
+  }, [entityType, resolvedEntity?.id, pipelineId, isDraft])
 
   const limitBytes = entityType === 'deal' ? DEAL_STORAGE_LIMIT_BYTES : LEAD_STORAGE_LIMIT_BYTES
-  const photosUsed = sumPhotoBytes(entity?.photos || [])
+  const photosUsed = sumPhotoBytes(resolvedEntity?.photos || [])
   const storageFull = photosUsed >= limitBytes
 
   const activeUploadCount = useMemo(
@@ -167,81 +149,74 @@ export function PhotoCaptureModal({
     }
   }, [])
 
+  const startCamera = useCallback(async (facing = facingMode) => {
+    if (!canUseCamera()) {
+      showLibraryFallback('Camera not supported here — use the gallery button')
+      return
+    }
+    stopCamera()
+    setUseCamera(true)
+    setCameraStarting(true)
+    photoLog('capture.camera', 'Requesting camera stream', { facing })
+
+    const hasCamera = await hasVideoInputDevice()
+    if (!hasCamera) {
+      photoLogWarn('capture.camera', 'No video input devices detected')
+      showLibraryFallback('No camera on this device — use the gallery button')
+      return
+    }
+
+    try {
+      const stream = await requestCameraStream(facing)
+      streamRef.current = stream
+      if (videoRef.current) await bindStreamToVideo(videoRef.current, stream)
+      setCameraReady(true)
+      setCameraStarting(false)
+      photoLog('capture.camera', 'Camera ready')
+    } catch (err) {
+      if (isCameraNotFoundError(err)) {
+        showLibraryFallback('No camera on this device — use the gallery button')
+      } else if (isCameraPermissionError(err)) {
+        showLibraryFallback('Camera permission denied — use the gallery button')
+      } else {
+        photoLogError('capture.camera', 'Camera failed', err)
+        showLibraryFallback('Camera unavailable — use the gallery button')
+      }
+    }
+  }, [facingMode, showLibraryFallback, stopCamera])
+
   useEffect(() => {
     if (!open) {
       stopCamera()
       setSessionItems([])
-      setPhase('capture')
       draftIdRef.current = null
+      savedLeadRef.current = null
       cameraFallbackNotifiedRef.current = false
+      promotingLeadRef.current = false
+      setFacingMode('environment')
+      setFlashEnabled(false)
+      setZoomLevel('1')
       return undefined
     }
     photoLog('capture.open', 'Photo capture modal opened', {
       entityType,
       entityId: entity?.id || 'draft',
-      isDraft,
+      isDraft: isLead && !entity?.id,
     })
     photoLogCameraEnvironment()
-    setPhase('capture')
-
-    if (!canUseCamera()) {
-      photoLogWarn('capture.camera', 'mediaDevices unavailable')
-      showLibraryFallback('Camera not supported here — use Choose from library')
-      return undefined
-    }
 
     if (!window.isSecureContext) {
       photoLogWarn('capture.camera', 'Insecure context — camera blocked on mobile LAN. Use: npm run dev:mobile')
     }
 
-    setUseCamera(true)
-    setCameraStarting(true)
-    photoLog('capture.camera', 'Requesting camera stream')
-    let cancelled = false
-    ;(async () => {
-      const hasCamera = await hasVideoInputDevice()
-      if (cancelled) return
-      if (!hasCamera) {
-        photoLogWarn('capture.camera', 'No video input devices detected')
-        showLibraryFallback('No camera on this device — use Choose from library')
-        return
-      }
-
-      try {
-        const stream = await requestCameraStream()
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
-        }
-        streamRef.current = stream
-        if (videoRef.current) await bindStreamToVideo(videoRef.current, stream)
-        setCameraReady(true)
-        setCameraStarting(false)
-        photoLog('capture.camera', 'Camera ready')
-      } catch (err) {
-        if (cancelled) return
-        if (isCameraNotFoundError(err)) {
-          photoLogWarn('capture.camera', 'No camera device — library fallback', { error: err.message })
-          showLibraryFallback('No camera on this device — use Choose from library')
-        } else if (isCameraPermissionError(err)) {
-          photoLogWarn('capture.camera', 'Camera permission denied', { error: err.message })
-          showLibraryFallback('Camera permission denied — use Choose from library')
-        } else {
-          photoLogError('capture.camera', 'Camera failed', err)
-          showLibraryFallback('Camera unavailable — use Choose from library')
-        }
-      }
-    })()
+    startCamera('environment')
 
     return () => {
-      cancelled = true
       stopCamera()
     }
-  }, [open, stopCamera, showLibraryFallback, entityType, entity?.id, isDraft])
-
-  useEffect(() => {
-    if (open) setDraftForm(normalizeDraftForm(entity))
-  }, [open, entity?.id])
+    // Only re-init camera when modal opens/closes — not when flip/zoom changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const triggerFlash = () => {
     setFlash(true)
@@ -254,33 +229,115 @@ export function PhotoCaptureModal({
     return {
       capturedByUid: currentUser?.uid ?? null,
       capturedByName: name,
-      lat: pos?.lat ?? entity?.lat ?? null,
-      lng: pos?.lng ?? entity?.lng ?? null,
-      addressLabel: addressLabel || formatLeadAddress(entity) || entity?.address || '',
-      parcelId: parcelId || entity?.parcelId || null,
+      lat: pos?.lat ?? resolvedEntity?.lat ?? null,
+      lng: pos?.lng ?? resolvedEntity?.lng ?? null,
+      addressLabel: addressLabel || formatLeadAddress(resolvedEntity) || resolvedEntity?.address || '',
+      parcelId: parcelId || resolvedEntity?.parcelId || null,
     }
-  }, [currentUser, entity, parcelId, addressLabel])
+  }, [currentUser, resolvedEntity, parcelId, addressLabel])
+
+  /** Create a real lead from draft prefill so uploads can start immediately. */
+  const ensureLeadSaved = useCallback(async () => {
+    if (!isDraft || savedLeadRef.current?.id) return savedLeadRef.current
+    if (promotingLeadRef.current) {
+      while (promotingLeadRef.current) {
+        await new Promise((r) => setTimeout(r, 50))
+      }
+      return savedLeadRef.current
+    }
+
+    const source = entity || {}
+    const parcel = source.parcelId
+    if (parcel && existingLeads.some((l) => l.parcelId === parcel)) {
+      throw new Error('A lead already exists for this parcel')
+    }
+
+    let firstName = (source.firstName ?? '').trim()
+    let lastName = (source.lastName ?? '').trim()
+    if (!firstName && !lastName) lastName = 'Property'
+
+    promotingLeadRef.current = true
+    setPromotingLead(true)
+    try {
+      photoLog('capture.promote', 'Auto-creating lead for immediate upload')
+      const created = await createLead(getToken, {
+        firstName,
+        lastName,
+        address: (source.address ?? '').trim(),
+        phone: (source.phone ?? '').trim() || null,
+        email: (source.email ?? '').trim() || null,
+        notes: (source.notes ?? '').trim(),
+        parcelId: source.parcelId,
+        lat: source.lat,
+        lng: source.lng,
+        properties: source.properties,
+        visibility: VISIBILITY.PRIVATE,
+        sharedMemberUids: [],
+        teamId: activeTeam?.id || null,
+        teamShares: [],
+      })
+      savedLeadRef.current = created
+      if (draftIdRef.current) {
+        const newRef = { entityType: 'lead', leadId: created.id, entityId: created.id }
+        await reassignDraftJobs(draftIdRef.current, newRef)
+      }
+      onLeadCreated?.(created, { keepOpen: true })
+      onEntityUpdate?.(created)
+      photoLog('capture.promote', 'Lead auto-created', { leadId: created.id })
+      return created
+    } finally {
+      promotingLeadRef.current = false
+      setPromotingLead(false)
+    }
+  }, [isDraft, entity, existingLeads, getToken, activeTeam, reassignDraftJobs, onLeadCreated, onEntityUpdate])
+
+  const resolveCaptureRef = useCallback(async () => {
+    if (entityType === 'deal') {
+      return {
+        ref: { entityType: 'deal', pipelineId, dealId: resolvedEntity.id, entityId: resolvedEntity.id },
+        photos: resolvedEntity?.photos || [],
+        leadId: null,
+      }
+    }
+    if (isDraft) {
+      const saved = await ensureLeadSaved()
+      return {
+        ref: { entityType: 'lead', leadId: saved.id, entityId: saved.id },
+        photos: saved?.photos || [],
+        leadId: saved.id,
+      }
+    }
+    return {
+      ref: { entityType: 'lead', leadId: resolvedEntity.id, entityId: resolvedEntity.id },
+      photos: resolvedEntity?.photos || [],
+      leadId: resolvedEntity.id,
+    }
+  }, [entityType, pipelineId, resolvedEntity, isDraft, ensureLeadSaved])
 
   const addCapture = useCallback(async (source) => {
     if (storageFull) {
       photoLogWarn('capture.add', 'Storage full — capture blocked')
+      showToast('Photo storage is full', 'error')
       return
     }
     try {
+      const { ref, photos, leadId } = await resolveCaptureRef()
       const metadata = await buildMetadata()
-      photoLog('capture.add', 'Enqueueing capture', { entityKey: entityKey(entityRef), isDraft })
-      const job = await enqueueCapture(source, entityRef, metadata, entity?.photos || [])
+      photoLog('capture.add', 'Enqueueing capture', { entityKey: entityKey(ref) })
+      const job = await enqueueCapture(source, ref, metadata, photos)
       const blobs = await getBlobs(job.jobId)
       const previewUrl = blobs?.thumb ? URL.createObjectURL(blobs.thumb) : null
       setSessionItems((prev) => [{ jobId: job.jobId, previewUrl, createdAt: Date.now() }, ...prev])
       triggerFlash()
-      photoLog('capture.add', 'Capture enqueued', { jobId: job.jobId, sessionCount: sessionItems.length + 1 })
-      if (!isDraft && entity?.id) onPhotosAdded?.()
+      if (leadId) {
+        onPhotosAdded?.()
+        void logLeadPhotosAdded(getToken, leadId, 1).catch(() => {})
+      }
     } catch (e) {
       photoLogError('capture.add', 'Capture failed', e)
       showToast(e.message || 'Could not add photo', 'error')
     }
-  }, [storageFull, buildMetadata, enqueueCapture, entityRef, entity, isDraft, onPhotosAdded, sessionItems.length])
+  }, [storageFull, resolveCaptureRef, buildMetadata, enqueueCapture, onPhotosAdded, getToken])
 
   const captureFromVideo = useCallback(() => {
     const video = videoRef.current
@@ -294,6 +351,7 @@ export function PhotoCaptureModal({
   }, [])
 
   const handleCapture = async () => {
+    if (promotingLead) return
     const dataUrl = captureFromVideo()
     if (!dataUrl) return
     await addCapture(dataUrl)
@@ -307,71 +365,16 @@ export function PhotoCaptureModal({
     }
   }
 
-  const handleDone = (e) => {
-    e?.preventDefault?.()
-    e?.stopPropagation?.()
-    if (isDraft && sessionItems.length > 0) {
-      photoLog('capture.done', 'Draft — opening save form', { photoCount: sessionItems.length })
-      stopCamera()
-      setPhase('save')
-      return
-    }
+  const handleDone = () => {
     photoLog('capture.done', 'Closing capture modal', { sessionCount: sessionItems.length })
     stopCamera()
     onClose?.()
   }
 
-  const handleBack = () => {
-    if (phase === 'save') {
-      setPhase('capture')
-      return
-    }
-    onClose?.()
-  }
-
-  const handleSaveDraftLead = async () => {
-    let firstName = (draftForm.firstName ?? '').trim()
-    let lastName = (draftForm.lastName ?? '').trim()
-    if (!firstName && !lastName) lastName = 'Property'
-    if (draftForm.parcelId && existingLeads.some((l) => l.parcelId === draftForm.parcelId)) {
-      showToast('A lead already exists for this parcel', 'warning')
-      return
-    }
-
-    setSavingLead(true)
-    try {
-      photoLog('capture.save-lead', 'Creating lead with queued photos', { photoCount: sessionItems.length })
-      const created = await createLead(getToken, {
-        firstName,
-        lastName,
-        address: (draftForm.address ?? '').trim(),
-        phone: (draftForm.phone ?? '').trim() || null,
-        email: (draftForm.email ?? '').trim() || null,
-        notes: (draftForm.notes ?? '').trim(),
-        parcelId: draftForm.parcelId,
-        lat: draftForm.lat,
-        lng: draftForm.lng,
-        properties: draftForm.properties,
-        visibility: shareState.visibility,
-        sharedMemberUids: shareState.sharedMemberUids,
-        teamId: activeTeam?.id || null,
-        teamShares: shareState.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
-      })
-      const newRef = { entityType: 'lead', leadId: created.id, entityId: created.id }
-      if (draftIdRef.current) {
-        await reassignDraftJobs(draftIdRef.current, newRef)
-      }
-      photoLog('capture.save-lead', 'Lead created — draft jobs reassigned', { leadId: created.id })
-      if (sessionItems.length) {
-        await logLeadPhotosAdded(getToken, created.id, sessionItems.length)
-      }
-      onLeadCreated?.(created)
-      onClose?.()
-    } catch (err) {
-      showToast(err.message || 'Could not save lead', 'error')
-    } finally {
-      setSavingLead(false)
-    }
+  const handleFlipCamera = () => {
+    const next = facingMode === 'environment' ? 'user' : 'environment'
+    setFacingMode(next)
+    startCamera(next)
   }
 
   const sessionPreviewItems = useMemo(
@@ -387,105 +390,44 @@ export function PhotoCaptureModal({
     [sessionItems],
   )
 
-  if (!open || !entity) return null
+  const openLibrary = () => libraryInputRef.current?.click()
 
-  const headerTitle = isDraft
-    ? (phase === 'save' ? 'Save lead' : (formatLeadAddress(entity) || entity.address || 'New lead'))
-    : (isLead ? displayLeadName(entity) : (entity.name || entity.address || 'Deal'))
-
-  if (phase === 'save' && isDraft) {
-    return createPortal(
-      <>
-        <div className="photo-mode-overlay map-panel list-panel photos-panel fullscreen-panel flex flex-col min-h-0" role="dialog">
-          <div className="photo-mode-header flex-shrink-0">
-            <PanelBackButton onClick={handleBack} title="Back to photos" />
-            <div className="min-w-0 flex-1 px-2">
-              <div className="text-sm font-semibold truncate">{headerTitle}</div>
-              <div className="text-xs opacity-50 truncate">{sessionItems.length} photos</div>
-            </div>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-5 py-4 space-y-4">
-            <div className="photo-mode-save-grid">
-              {sessionItems.map((item, i) => (
-                <button key={item.jobId} type="button" className="photo-mode-save-thumb-btn" onClick={() => setViewerIndex(i)}>
-                  {item.previewUrl && <img src={item.previewUrl} alt="" className="photo-mode-save-thumb" />}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs opacity-60 mb-1 block">First Name</label>
-                <input type="text" value={draftForm.firstName ?? ''} onChange={(e) => setDraftForm((f) => ({ ...f, firstName: e.target.value }))} className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15" />
-              </div>
-              <div>
-                <label className="text-xs opacity-60 mb-1 block">Last Name</label>
-                <input type="text" value={draftForm.lastName ?? ''} onChange={(e) => setDraftForm((f) => ({ ...f, lastName: e.target.value }))} className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs opacity-60 mb-1 block">Property Address</label>
-              <AddressAutocompleteField
-                value={draftForm.address ?? ''}
-                onChange={(v) => setDraftForm((f) => ({ ...f, address: v }))}
-                onSelectResult={({ address, latParsed, lngParsed }) => {
-                  setDraftForm((f) => ({
-                    ...f,
-                    address: address ?? f.address,
-                    lat: latParsed ?? f.lat,
-                    lng: lngParsed ?? f.lng,
-                  }))
-                }}
-              />
-            </div>
-            <ResourceSharePicker
-              team={activeTeam}
-              visibility={shareState.visibility}
-              sharedMemberUids={shareState.sharedMemberUids}
-              onChange={setShareState}
-              disabled={savingLead}
-              allowExternalSharing={allowExternalSharing}
-              defaultExpanded
-            />
-          </div>
-          <div className="photo-mode-save-footer flex justify-end gap-2 px-5 py-4 border-t border-white/20">
-            <Button type="button" variant="ghost" onClick={handleBack} disabled={savingLead}>Back</Button>
-            <Button type="button" onClick={handleSaveDraftLead} disabled={savingLead}>
-              {savingLead ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save lead'}
-            </Button>
-          </div>
-        </div>
-        <FilePreviewOverlay open={viewerIndex != null} onClose={() => setViewerIndex(null)} items={sessionPreviewItems} initialIndex={viewerIndex ?? 0} />
-      </>,
-      getModalPortalContainer(),
-    )
+  const handleGalleryPointerDown = () => {
+    galleryLongPressRef.current = window.setTimeout(() => {
+      galleryLongPressRef.current = null
+      openLibrary()
+    }, 500)
   }
+
+  const handleGalleryPointerUp = () => {
+    if (galleryLongPressRef.current) {
+      window.clearTimeout(galleryLongPressRef.current)
+      galleryLongPressRef.current = null
+    }
+  }
+
+  const handleGalleryClick = () => {
+    if (sessionItems.length > 0) setViewerIndex(0)
+    else openLibrary()
+  }
+  const zoomScale = zoomLevel === '0.5' ? 0.85 : zoomLevel === '3' ? 1.35 : 1
+
+  if (!open || !entity) return null
 
   return createPortal(
     <>
-      <div className="photo-mode-overlay map-panel list-panel photos-panel fullscreen-panel flex flex-col min-h-0" role="dialog">
-        <div className="photo-mode-header">
-          <PanelBackButton onClick={handleBack} title="Exit photo mode" />
-          <div className="min-w-0 flex-1 px-2">
-            <div className="text-sm font-semibold truncate">{headerTitle}</div>
-            {activeUploadCount > 0 && (
-              <div className="text-xs opacity-50">{activeUploadCount} uploading</div>
-            )}
-          </div>
-          <Button
-            type="button"
-            className="photo-overlay-header-btn photo-mode-btn photo-mode-btn--primary shrink-0 relative z-10 touch-manipulation"
-            onClick={handleDone}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <Check className="h-4 w-4 mr-1" />
-            {isDraft && sessionItems.length > 0 ? 'Next' : 'Done'}
-          </Button>
-        </div>
-
-        <div className="photo-mode-viewport relative">
-          {flash && <div className="photo-mode-flash absolute inset-0 z-10 bg-white/80 pointer-events-none animate-pulse" />}
+      <div className="photo-mode-overlay photo-mode-overlay--camera" role="dialog" aria-label="Photo mode">
+        <div className="photo-mode-viewport photo-mode-viewport--immersive">
+          {flash && <div className="photo-mode-flash absolute inset-0 z-20 bg-white/80 pointer-events-none animate-pulse" />}
           {useCamera && (
-            <video ref={videoRef} className={cn('photo-mode-video', !cameraReady && 'photo-mode-video--hidden')} playsInline muted autoPlay />
+            <video
+              ref={videoRef}
+              className={cn('photo-mode-video photo-mode-video--immersive', !cameraReady && 'photo-mode-video--hidden')}
+              style={{ transform: `scale(${zoomScale})` }}
+              playsInline
+              muted
+              autoPlay
+            />
           )}
           {cameraStarting && (
             <div className="photo-mode-camera-loading">
@@ -494,39 +436,114 @@ export function PhotoCaptureModal({
           )}
           {!useCamera && !cameraStarting && (
             <div className="photo-mode-upload-zone">
-              <Upload className="h-10 w-10 opacity-40 mb-3" />
-              <p className="text-sm opacity-70 mb-4">No camera — tap Choose from library below</p>
-              <Button type="button" variant="outline" className="photo-mode-btn" onClick={() => libraryInputRef.current?.click()} disabled={storageFull}>
-                Choose from library
-              </Button>
+              <ImageIcon className="h-10 w-10 opacity-40 mb-3" />
+              <p className="text-sm opacity-70 mb-4">No camera — tap the gallery button below</p>
             </div>
           )}
-        </div>
 
-        <div className="photo-mode-footer">
-          <StorageUsageBar usedBytes={photosUsed} limitBytes={limitBytes} className="w-full" label="Photo storage" />
-          {sessionItems.length > 0 && (
-            <div className="photo-mode-thumbs">
-              {sessionItems.map((item, i) => (
-                <button key={item.jobId} type="button" className="photo-mode-thumb-btn" onClick={() => setViewerIndex(i)}>
-                  {item.previewUrl && <img src={item.previewUrl} alt="" className="photo-mode-thumb" />}
-                  <span className="photo-mode-thumb-number">{sessionItems.length - i}</span>
+          {/* Top overlay controls */}
+          <div className="photo-mode-top-bar">
+            <button type="button" className="photo-mode-icon-btn" onClick={handleDone} aria-label="Close photo mode">
+              <X className="h-5 w-5" />
+            </button>
+            <div className="photo-mode-top-bar-right">
+              <button
+                type="button"
+                className="photo-mode-icon-btn"
+                onClick={handleFlipCamera}
+                disabled={!useCamera || cameraStarting}
+                aria-label="Flip camera"
+              >
+                <RotateCw className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                className="photo-mode-icon-btn"
+                onClick={() => setFlashEnabled((v) => !v)}
+                aria-label={flashEnabled ? 'Flash on' : 'Flash off'}
+              >
+                {flashEnabled ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Zoom selector */}
+          {useCamera && cameraReady && (
+            <div className="photo-mode-zoom-bar">
+              {['0.5', '1', '3'].map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className={cn('photo-mode-zoom-btn', zoomLevel === level && 'photo-mode-zoom-btn--active')}
+                  onClick={() => setZoomLevel(level)}
+                >
+                  {level === '0.5' ? '.5x' : `${level}x`}
                 </button>
               ))}
             </div>
           )}
-          <div className="flex items-center justify-center gap-4 py-2">
+
+          {/* Bottom controls */}
+          <div className="photo-mode-bottom-bar">
             <input ref={libraryInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFilePick} />
-            <Button type="button" variant="outline" className="photo-mode-btn" onClick={() => libraryInputRef.current?.click()} disabled={storageFull}>
-              Choose from library
-            </Button>
-            {useCamera && cameraReady && (
-              <button type="button" className="photo-mode-shutter" onClick={handleCapture} disabled={storageFull} aria-label="Take photo">
-                <Camera className="h-7 w-7" />
+
+            <button
+              type="button"
+              className="photo-mode-gallery-btn"
+              onClick={handleGalleryClick}
+              onPointerDown={handleGalleryPointerDown}
+              onPointerUp={handleGalleryPointerUp}
+              onPointerLeave={handleGalleryPointerUp}
+              disabled={storageFull || promotingLead}
+              aria-label={sessionItems.length ? 'View captured photos (hold for library)' : 'Choose from library'}
+            >
+              {lastThumb ? (
+                <img src={lastThumb} alt="" className="photo-mode-gallery-thumb" />
+              ) : (
+                <ImageIcon className="h-6 w-6" />
+              )}
+              {sessionItems.length > 1 && (
+                <span className="photo-mode-gallery-count">{sessionItems.length}</span>
+              )}
+            </button>
+
+            {useCamera && cameraReady ? (
+              <button
+                type="button"
+                className="photo-mode-shutter photo-mode-shutter--camera"
+                onClick={handleCapture}
+                disabled={storageFull || promotingLead}
+                aria-label="Take photo"
+              >
+                <span className="photo-mode-shutter-inner" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="photo-mode-shutter photo-mode-shutter--camera photo-mode-shutter--disabled"
+                onClick={() => libraryInputRef.current?.click()}
+                disabled={storageFull}
+                aria-label="Choose from library"
+              >
+                <ImageIcon className="h-7 w-7" />
               </button>
             )}
+
+            <button
+              type="button"
+              className="photo-mode-done-btn"
+              onClick={handleDone}
+              disabled={promotingLead}
+            >
+              {promotingLead ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Done'}
+            </button>
           </div>
-          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleFilePick} />
+
+          {activeUploadCount > 0 && (
+            <div className="photo-mode-upload-badge" role="status">
+              {activeUploadCount} uploading
+            </div>
+          )}
         </div>
       </div>
       <FilePreviewOverlay open={viewerIndex != null} onClose={() => setViewerIndex(null)} items={sessionPreviewItems} initialIndex={viewerIndex ?? 0} />
