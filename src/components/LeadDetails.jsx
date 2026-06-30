@@ -888,6 +888,7 @@ export function LeadDetails({
                 {activities.length === 0 ? (
                   <p className="text-xs text-white/40">No activity yet. Calls, texts, emails, and notes will appear here.</p>
                 ) : (
+                  <div className="max-h-[26rem] overflow-y-auto pr-1">
                   <ul className="space-y-2">
                     {activities.map((entry) => {
                       const Icon = ACTIVITY_ICONS[entry.type] || StickyNote
@@ -905,6 +906,7 @@ export function LeadDetails({
                       )
                     })}
                   </ul>
+                  </div>
                 )}
               </section>
             </div>

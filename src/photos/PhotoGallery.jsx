@@ -59,7 +59,20 @@ export function PhotoGallery({
   const [annotating, setAnnotating] = useState(null)
   const [previewIndex, setPreviewIndex] = useState(null)
   const [hiddenIds, setHiddenIds] = useState(() => new Set())
+  const [expanded, setExpanded] = useState(false)
+  const [wideViewport, setWideViewport] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 480px)').matches,
+  )
   const annotatingPhotoIdRef = useRef(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined
+    const mql = window.matchMedia('(min-width: 480px)')
+    const onChange = (e) => setWideViewport(e.matches)
+    setWideViewport(mql.matches)
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
 
   const entityRef = useMemo(() => {
     if (entityType === 'deal') return entityRefFromDeal(entity, pipelineId)
@@ -99,6 +112,13 @@ export function PhotoGallery({
       }))
     return [...jobItems, ...photoItems]
   }, [activeJobs, serverPhotos, hiddenIds])
+
+  const columns = wideViewport ? 4 : 3
+  const collapsedLimit = columns * 3
+  const canCollapse = displayItems.length > collapsedLimit
+  const visibleItems = expanded || !canCollapse
+    ? displayItems
+    : displayItems.slice(0, collapsedLimit)
 
   const limitBytes = entityType === 'deal' ? DEAL_STORAGE_LIMIT_BYTES : LEAD_STORAGE_LIMIT_BYTES
   const photosUsed = useMemo(() => {
@@ -261,7 +281,7 @@ export function PhotoGallery({
           <p className="text-xs text-white/40 py-1">No photos yet</p>
         ) : (
           <div className="lead-photo-grid">
-            {displayItems.map((item) => (
+            {visibleItems.map((item) => (
               <div key={item.id} className="lead-photo-grid-item group relative">
                 <PhotoTile
                   item={item}
@@ -307,6 +327,19 @@ export function PhotoGallery({
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {canCollapse && (
+          <div className="flex justify-center mt-2.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 text-xs"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? 'Show fewer' : `Show all (${displayItems.length})`}
+            </Button>
           </div>
         )}
       </section>
