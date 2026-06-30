@@ -95,22 +95,25 @@ export function PhotoGallery({
   }, [entity?.photos])
 
   const displayItems = useMemo(() => {
-    const jobItems = activeJobs.map((job, i) => ({
-      kind: 'job',
-      id: job.jobId,
-      job,
-      photo: { id: job.jobId, blurHash: job.blurHash },
-      number: activeJobs.length - i,
-    }))
-    const photoItems = serverPhotos
-      .filter((p) => !hiddenIds.has(p.id))
-      .map((photo, i) => ({
+    const visiblePhotos = serverPhotos.filter((p) => !hiddenIds.has(p.id))
+    const items = [
+      ...activeJobs.map((job) => ({
+        kind: 'job',
+        id: job.jobId,
+        job,
+        photo: { id: job.jobId, blurHash: job.blurHash },
+      })),
+      ...visiblePhotos.map((photo) => ({
         kind: 'photo',
         id: photo.id,
         photo,
-        number: serverPhotos.length - i,
-      }))
-    return [...jobItems, ...photoItems]
+      })),
+    ]
+    const total = items.length
+    return items.map((item, index) => ({
+      ...item,
+      number: total - index,
+    }))
   }, [activeJobs, serverPhotos, hiddenIds])
 
   const columns = wideViewport ? 4 : 3
@@ -143,6 +146,15 @@ export function PhotoGallery({
   useEffect(() => {
     if (annotating?.id) annotatingPhotoIdRef.current = annotating.id
   }, [annotating])
+
+  useEffect(() => {
+    const currentIds = new Set((entity?.photos || []).map((p) => p.id))
+    setHiddenIds((prev) => {
+      if (prev.size === 0) return prev
+      const next = new Set([...prev].filter((id) => currentIds.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [entity?.photos])
 
   const handleDelete = useCallback(async (item) => {
     if (item.kind === 'job') return

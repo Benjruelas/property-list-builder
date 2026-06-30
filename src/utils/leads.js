@@ -106,7 +106,13 @@ export function mergeLeadPhotos(prevPhotos, nextPhotos) {
   for (const p of next) {
     byId.set(p.id, mergePhotoRecord(byId.get(p.id), p))
   }
-  return Array.from(byId.values())
+
+  const isPartialAddition = next.every((p) => !prevIds.has(p.id))
+  if (isPartialAddition) {
+    return Array.from(byId.values())
+  }
+
+  return next.map((p) => mergePhotoRecord(byId.get(p.id), p))
 }
 
 /** True when only the photos array (and updatedAt) changed — already persisted via /api/photos. */
