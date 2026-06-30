@@ -4380,9 +4380,12 @@ function App() {
               prev?.id === updatedLead.id ? mergeLeadDetail(prev, updatedLead) : prev
             ))
           }}
-          onLeadCreated={(lead) => {
+          onLeadCreated={(lead, options = {}) => {
             setLeads((prev) => upsertLeadInLocalStore(prev, lead))
-            closePhotoMode()
+            setPhotoModeLead((prev) => (
+              prev && !prev?.id ? { ...lead, photos: lead.photos || prev.photos || [] } : lead
+            ))
+            if (!options?.keepOpen) closePhotoMode()
           }}
           teams={teams}
           teamMembership={teamMembership}
