@@ -1,6 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// The `node` test environment does not expose Web Storage; provide a minimal
+// in-memory sessionStorage so storage-backed helpers can be exercised.
+if (typeof globalThis.sessionStorage === 'undefined') {
+  const store = new Map()
+  globalThis.sessionStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)) },
+    removeItem: (key) => { store.delete(key) },
+    clear: () => { store.clear() },
+  }
+}
+
 import {
   CLIENT_PREVIEW_RETURN_KEY,
+  CLIENT_PREVIEW_NAV_KEY,
+  CLIENT_PREVIEW_RESTORE_FLAG,
   fetchClientPreviewUrl,
   markClientPreviewOpened,
   openClientPreviewUrl,
@@ -8,6 +23,10 @@ import {
   closeClientPreviewTab,
   returnToAppFromClientPreview,
   shouldShowOwnerPreviewBack,
+  isPublicPreviewRoute,
+  persistNavStack,
+  readPersistedNavStack,
+  consumeNavRestoreFlag,
 } from '../clientPreview'
 
 describe('fetchClientPreviewUrl', () => {
@@ -133,5 +152,55 @@ describe('owner preview back helpers', () => {
     expect(location.href).toBe('/app?panel=reports')
     expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBeNull()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('nav stack persistence helpers', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('markClientPreviewOpened sets the durable restore flag', () => {
+    vi.stubGlobal('window', { location: { pathname: '/', search: '', hash: '' } })
+    markClientPreviewOpened()
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG)).toBe('1')
+  })
+
+  it('isPublicPreviewRoute detects report/quote/form params', () => {
+    vi.stubGlobal('window', { location: { search: '?report=abc' } })
+    expect(isPublicPreviewRoute()).toBe(true)
+    vi.stubGlobal('window', { location: { search: '?quote=abc' } })
+    expect(isPublicPreviewRoute()).toBe(true)
+    vi.stubGlobal('window', { location: { search: '?form=abc' } })
+    expect(isPublicPreviewRoute()).toBe(true)
+    vi.stubGlobal('window', { location: { search: '?panel=reports' } })
+    expect(isPublicPreviewRoute()).toBe(false)
+  })
+
+  it('persistNavStack / readPersistedNavStack round trip on app routes', () => {
+    vi.stubGlobal('window', { location: { search: '?panel=reports' } })
+    const stack = [{ type: 'reports' }, { type: 'reports.editor', report: { id: 'r1' } }]
+    persistNavStack(stack)
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_NAV_KEY)).toBe(JSON.stringify(stack))
+    expect(readPersistedNavStack()).toEqual(stack)
+  })
+
+  it('persistNavStack is a no-op on public preview routes', () => {
+    vi.stubGlobal('window', { location: { search: '?report=token' } })
+    persistNavStack([{ type: 'reports' }])
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_NAV_KEY)).toBeNull()
+    expect(readPersistedNavStack()).toBeNull()
+  })
+
+  it('consumeNavRestoreFlag reads then clears the flag', () => {
+    expect(consumeNavRestoreFlag()).toBe(false)
+    sessionStorage.setItem(CLIENT_PREVIEW_RESTORE_FLAG, '1')
+    expect(consumeNavRestoreFlag()).toBe(true)
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG)).toBeNull()
+    expect(consumeNavRestoreFlag()).toBe(false)
   })
 })

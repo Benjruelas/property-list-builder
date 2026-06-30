@@ -1,9 +1,15 @@
-import { createContext, useCallback, useContext, useMemo, useReducer } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
 import {
   createInitialState,
   navigationReducer,
   resetToMapFull,
 } from './navigationReducer.js'
+import {
+  consumeNavRestoreFlag,
+  isPublicPreviewRoute,
+  persistNavStack,
+  readPersistedNavStack,
+} from '../utils/clientPreview.js'
 import { NAV_ACTIONS } from './types.js'
 import { selectActionBarActiveId, selectPanelProps, selectTopFrame } from './selectors.js'
 import { feedDataToFrames } from './feedNavigation.js'
@@ -62,8 +68,26 @@ import {
 
 const NavigationContext = createContext(null)
 
+/**
+ * Restore the navStack only after returning from a client preview (durable flag set
+ * at preview open). Never restore on the public preview page, which shares this provider.
+ */
+function initNavState() {
+  const base = createInitialState()
+  if (isPublicPreviewRoute()) return base
+  if (!consumeNavRestoreFlag()) return base
+  const navStack = readPersistedNavStack()
+  return navStack ? { ...base, navStack } : base
+}
+
 export function NavigationProvider({ children }) {
-  const [state, dispatch] = useReducer(navigationReducer, undefined, createInitialState)
+  const [state, dispatch] = useReducer(navigationReducer, undefined, initNavState)
+
+  // Keep a sessionStorage snapshot of the nav stack so it survives the reload that
+  // returnToAppFromClientPreview triggers. No-ops on public preview routes.
+  useEffect(() => {
+    persistNavStack(state.navStack)
+  }, [state.navStack])
 
   const panelProps = useMemo(() => selectPanelProps(state), [state])
   const topFrame = useMemo(() => selectTopFrame(state), [state])

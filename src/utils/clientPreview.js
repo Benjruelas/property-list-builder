@@ -3,6 +3,8 @@
  */
 
 export const CLIENT_PREVIEW_RETURN_KEY = 'clientPreviewReturnUrl'
+export const CLIENT_PREVIEW_NAV_KEY = 'clientPreviewNavStack'
+export const CLIENT_PREVIEW_RESTORE_FLAG = 'clientPreviewRestorePending'
 
 import { getApiBase } from './apiBase'
 
@@ -14,6 +16,52 @@ async function parseJsonSafe(res) {
   }
 }
 
+/**
+ * True when the current URL renders a public preview/share page (report, quote, form)
+ * rather than the CRM app — mirrors the routing in AppWithPublicFormRoute.
+ */
+export function isPublicPreviewRoute() {
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return params.has('report') || params.has('quote') || params.has('form')
+  } catch {
+    return false
+  }
+}
+
+/** Persist the navigation stack so it can be restored after a preview round trip. */
+export function persistNavStack(navStack) {
+  if (typeof sessionStorage === 'undefined') return
+  if (isPublicPreviewRoute()) return
+  try {
+    sessionStorage.setItem(CLIENT_PREVIEW_NAV_KEY, JSON.stringify(navStack ?? []))
+  } catch {
+    /* ignore quota / serialization errors */
+  }
+}
+
+/** Read the persisted navigation stack, or null when unavailable. */
+export function readPersistedNavStack() {
+  if (typeof sessionStorage === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(CLIENT_PREVIEW_NAV_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** Read-and-clear the restore flag; true only after a preview was opened. */
+export function consumeNavRestoreFlag() {
+  if (typeof sessionStorage === 'undefined') return false
+  const pending = sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG) === '1'
+  if (pending) sessionStorage.removeItem(CLIENT_PREVIEW_RESTORE_FLAG)
+  return pending
+}
+
 /** Remember where the user was before opening a client preview. */
 export function markClientPreviewOpened() {
   if (typeof sessionStorage === 'undefined') return
@@ -21,6 +69,9 @@ export function markClientPreviewOpened() {
     ? `${window.location.pathname}${window.location.search}${window.location.hash}`
     : '/'
   sessionStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, path)
+  // Durable signal that survives the reload triggered by returnToAppFromClientPreview;
+  // intentionally not cleared there so the app can restore nav state on next load.
+  sessionStorage.setItem(CLIENT_PREVIEW_RESTORE_FLAG, '1')
 }
 
 /** True only for owner "View as client" previews — not real client share links. */
