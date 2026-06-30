@@ -15,6 +15,7 @@ import {
   toLeadPatchBody,
   isLeadPhotosOnlyPatch,
   mergeLeadDetail,
+  upsertLeadInLocalStore,
   getLeadStatus,
   lastContactedAt,
   leadToParcelData,
@@ -174,7 +175,7 @@ export function LeadsPanel({
 
 
   const handleLeadUpdate = useCallback(async (updated) => {
-    onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? mergeLeadDetail(l, updated) : l)))
+    onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated))
     const payload = toLeadPatchBody(updated)
     if (isLeadPhotosOnlyPatch(payload)) return
     try {

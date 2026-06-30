@@ -14,7 +14,7 @@ import { DealDetails } from './DealDetails'
 import { LeadDetails } from './LeadDetails'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
-import { updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch } from '@/utils/leads'
+import { updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch, mergeLeadDetail, upsertLeadInLocalStore } from '@/utils/leads'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { loadClosedDeals } from '@/utils/closedDeals'
 import { filterByTags, buildFilterableTags } from '@/utils/tags'
@@ -214,7 +214,7 @@ export function DealsPanel({
   }, [onGoToParcelOnMap, onCloseLeadOverlay, onCloseDealDetail])
 
   const handleLeadUpdate = useCallback(async (updated) => {
-    onLeadsChange?.((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
+    onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated))
     const payload = toLeadPatchBody(updated)
     if (isLeadPhotosOnlyPatch(payload)) return
     try {
