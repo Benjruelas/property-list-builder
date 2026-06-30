@@ -39,6 +39,15 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    // Capacitor packages are web-safe stubs but confuse Vite's dep optimizer after lockfile changes.
+    exclude: [
+      '@capacitor/core',
+      '@capacitor/app',
+      '@capacitor/filesystem',
+      '@capacitor-community/media',
+    ],
+  },
   worker: {
     format: 'es'
   },

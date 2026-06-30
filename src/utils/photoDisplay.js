@@ -31,6 +31,16 @@ export function stripClientPhotoFields(photo) {
   return next
 }
 
+/** Keep one record per photo id (last occurrence wins). */
+export function dedupePhotosById(photos) {
+  if (!Array.isArray(photos)) return []
+  const byId = new Map()
+  for (const p of photos) {
+    if (p?.id) byId.set(p.id, p)
+  }
+  return Array.from(byId.values())
+}
+
 /** Merge one photo record from server/poll onto client state. */
 export function mergePhotoRecord(prevPhoto, incomingPhoto) {
   if (!incomingPhoto) return prevPhoto

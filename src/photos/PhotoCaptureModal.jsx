@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, X, RotateCw, Zap, ZapOff, Image as ImageIcon } from 'lucide-react'
+import { Loader2, ChevronLeft, RotateCw, Zap, ZapOff, Image as ImageIcon, Camera } from 'lucide-react'
 import { sumPhotoBytes, LEAD_STORAGE_LIMIT_BYTES, DEAL_STORAGE_LIMIT_BYTES, getCurrentPosition } from '@/photos/photosClient'
 import { usePhotoUpload } from './PhotoUploadProvider'
 import { draftSessionId, entityKey } from './entityRef'
@@ -8,7 +8,7 @@ import { getBlobs } from './photoStoreIdb'
 import { VISIBILITY } from '@/utils/access'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from '../components/ui/toast'
-import { createLead, displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { createLead, formatLeadAddress } from '@/utils/leads'
 import { FilePreviewOverlay } from '../components/ui/FilePreviewOverlay'
 import { cn } from '@/lib/utils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
@@ -93,6 +93,7 @@ export function PhotoCaptureModal({
   const savedLeadRef = useRef(null)
   const galleryLongPressRef = useRef(null)
 
+  const [mode, setMode] = useState('chooser')
   const [sessionItems, setSessionItems] = useState([])
   const [flash, setFlash] = useState(false)
   const [promotingLead, setPromotingLead] = useState(false)
@@ -138,6 +139,7 @@ export function PhotoCaptureModal({
     if (videoRef.current) videoRef.current.srcObject = null
     setCameraReady(false)
     setCameraStarting(false)
+    setUseCamera(false)
   }, [])
 
   const showLibraryFallback = useCallback((message) => {
@@ -151,7 +153,7 @@ export function PhotoCaptureModal({
 
   const startCamera = useCallback(async (facing = facingMode) => {
     if (!canUseCamera()) {
-      showLibraryFallback('Camera not supported here — use the gallery button')
+      showLibraryFallback('Camera not supported here — use Upload photos instead')
       return
     }
     stopCamera()
@@ -162,7 +164,7 @@ export function PhotoCaptureModal({
     const hasCamera = await hasVideoInputDevice()
     if (!hasCamera) {
       photoLogWarn('capture.camera', 'No video input devices detected')
-      showLibraryFallback('No camera on this device — use the gallery button')
+      showLibraryFallback('No camera on this device — use Upload photos instead')
       return
     }
 
@@ -175,12 +177,12 @@ export function PhotoCaptureModal({
       photoLog('capture.camera', 'Camera ready')
     } catch (err) {
       if (isCameraNotFoundError(err)) {
-        showLibraryFallback('No camera on this device — use the gallery button')
+        showLibraryFallback('No camera on this device — use Upload photos instead')
       } else if (isCameraPermissionError(err)) {
-        showLibraryFallback('Camera permission denied — use the gallery button')
+        showLibraryFallback('Camera permission denied — use Upload photos instead')
       } else {
         photoLogError('capture.camera', 'Camera failed', err)
-        showLibraryFallback('Camera unavailable — use the gallery button')
+        showLibraryFallback('Camera unavailable — use Upload photos instead')
       }
     }
   }, [facingMode, showLibraryFallback, stopCamera])
@@ -188,6 +190,7 @@ export function PhotoCaptureModal({
   useEffect(() => {
     if (!open) {
       stopCamera()
+      setMode('chooser')
       setSessionItems([])
       draftIdRef.current = null
       savedLeadRef.current = null
@@ -209,14 +212,10 @@ export function PhotoCaptureModal({
       photoLogWarn('capture.camera', 'Insecure context — camera blocked on mobile LAN. Use: npm run dev:mobile')
     }
 
-    startCamera('environment')
-
     return () => {
       stopCamera()
     }
-    // Only re-init camera when modal opens/closes — not when flip/zoom changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, entityType, entity?.id, isLead, stopCamera])
 
   const triggerFlash = () => {
     setFlash(true)
@@ -314,7 +313,7 @@ export function PhotoCaptureModal({
     }
   }, [entityType, pipelineId, resolvedEntity, isDraft, ensureLeadSaved])
 
-  const addCapture = useCallback(async (source) => {
+  const addCapture = useCallback(async (source, { withFlash = false } = {}) => {
     if (storageFull) {
       photoLogWarn('capture.add', 'Storage full — capture blocked')
       showToast('Photo storage is full', 'error')
@@ -328,7 +327,7 @@ export function PhotoCaptureModal({
       const blobs = await getBlobs(job.jobId)
       const previewUrl = blobs?.thumb ? URL.createObjectURL(blobs.thumb) : null
       setSessionItems((prev) => [{ jobId: job.jobId, previewUrl, createdAt: Date.now() }, ...prev])
-      triggerFlash()
+      if (withFlash) triggerFlash()
       if (leadId) {
         onPhotosAdded?.()
         void logLeadPhotosAdded(getToken, leadId, 1).catch(() => {})
@@ -354,21 +353,43 @@ export function PhotoCaptureModal({
     if (promotingLead) return
     const dataUrl = captureFromVideo()
     if (!dataUrl) return
-    await addCapture(dataUrl)
+    await addCapture(dataUrl, { withFlash: true })
   }
 
   const handleFilePick = async (e) => {
     const files = Array.from(e.target.files || [])
     e.target.value = ''
+    if (files.length === 0) return
+
     for (const file of files) {
       await addCapture(file)
     }
+    showToast(
+      files.length === 1 ? '1 photo uploading' : `${files.length} photos uploading`,
+      'success',
+    )
+    handleDone()
   }
 
   const handleDone = () => {
     photoLog('capture.done', 'Closing capture modal', { sessionCount: sessionItems.length })
     stopCamera()
     onClose?.()
+  }
+
+  const handleBackToChooser = () => {
+    stopCamera()
+    cameraFallbackNotifiedRef.current = false
+    setMode('chooser')
+  }
+
+  const handleChooseUpload = () => {
+    libraryInputRef.current?.click()
+  }
+
+  const handleChooseCamera = () => {
+    setMode('camera')
+    startCamera('environment')
   }
 
   const handleFlipCamera = () => {
@@ -410,142 +431,185 @@ export function PhotoCaptureModal({
     if (sessionItems.length > 0) setViewerIndex(0)
     else openLibrary()
   }
+
   const zoomScale = zoomLevel === '0.5' ? 0.85 : zoomLevel === '3' ? 1.35 : 1
+  const lastThumb = sessionItems[0]?.previewUrl || null
 
   if (!open || !entity) return null
 
   return createPortal(
     <>
-      <div className="photo-mode-overlay photo-mode-overlay--camera" role="dialog" aria-label="Photo mode">
-        <div className="photo-mode-viewport photo-mode-viewport--immersive">
-          {flash && <div className="photo-mode-flash absolute inset-0 z-20 bg-white/80 pointer-events-none animate-pulse" />}
-          {useCamera && (
-            <video
-              ref={videoRef}
-              className={cn('photo-mode-video photo-mode-video--immersive', !cameraReady && 'photo-mode-video--hidden')}
-              style={{ transform: `scale(${zoomScale})` }}
-              playsInline
-              muted
-              autoPlay
-            />
-          )}
-          {cameraStarting && (
-            <div className="photo-mode-camera-loading">
-              <Loader2 className="h-8 w-8 animate-spin opacity-60" />
-            </div>
-          )}
-          {!useCamera && !cameraStarting && (
-            <div className="photo-mode-upload-zone">
-              <ImageIcon className="h-10 w-10 opacity-40 mb-3" />
-              <p className="text-sm opacity-70 mb-4">No camera — tap the gallery button below</p>
-            </div>
-          )}
+      <input
+        ref={libraryInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFilePick}
+      />
 
-          {/* Top overlay controls */}
-          <div className="photo-mode-top-bar">
-            <button type="button" className="photo-mode-icon-btn" onClick={handleDone} aria-label="Close photo mode">
-              <X className="h-5 w-5" />
-            </button>
-            <div className="photo-mode-top-bar-right">
-              <button
-                type="button"
-                className="photo-mode-icon-btn"
-                onClick={handleFlipCamera}
-                disabled={!useCamera || cameraStarting}
-                aria-label="Flip camera"
-              >
-                <RotateCw className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                className="photo-mode-icon-btn"
-                onClick={() => setFlashEnabled((v) => !v)}
-                aria-label={flashEnabled ? 'Flash on' : 'Flash off'}
-              >
-                {flashEnabled ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Zoom selector */}
-          {useCamera && cameraReady && (
-            <div className="photo-mode-zoom-bar">
-              {['0.5', '1', '3'].map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  className={cn('photo-mode-zoom-btn', zoomLevel === level && 'photo-mode-zoom-btn--active')}
-                  onClick={() => setZoomLevel(level)}
-                >
-                  {level === '0.5' ? '.5x' : `${level}x`}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Bottom controls */}
-          <div className="photo-mode-bottom-bar">
-            <input ref={libraryInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFilePick} />
-
+      {mode === 'chooser' && (
+        <div className="photo-add-popover-layer">
+          <button
+            type="button"
+            className="photo-add-popover-backdrop"
+            onClick={handleDone}
+            aria-label="Close add photos menu"
+          />
+          <div className="photo-add-popover" role="dialog" aria-label="Add photos">
             <button
               type="button"
-              className="photo-mode-gallery-btn"
-              onClick={handleGalleryClick}
-              onPointerDown={handleGalleryPointerDown}
-              onPointerUp={handleGalleryPointerUp}
-              onPointerLeave={handleGalleryPointerUp}
+              className="photo-add-popover-option"
+              onClick={handleChooseUpload}
               disabled={storageFull || promotingLead}
-              aria-label={sessionItems.length ? 'View captured photos (hold for library)' : 'Choose from library'}
             >
-              {lastThumb ? (
-                <img src={lastThumb} alt="" className="photo-mode-gallery-thumb" />
-              ) : (
-                <ImageIcon className="h-6 w-6" />
-              )}
-              {sessionItems.length > 1 && (
-                <span className="photo-mode-gallery-count">{sessionItems.length}</span>
-              )}
+              <ImageIcon className="photo-add-popover-icon" strokeWidth={1.75} />
+              <span className="photo-add-popover-label">Upload</span>
             </button>
+            <button
+              type="button"
+              className="photo-add-popover-option"
+              onClick={handleChooseCamera}
+              disabled={storageFull || promotingLead}
+            >
+              <Camera className="photo-add-popover-icon" strokeWidth={1.75} />
+              <span className="photo-add-popover-label">Camera</span>
+            </button>
+          </div>
+        </div>
+      )}
 
-            {useCamera && cameraReady ? (
-              <button
-                type="button"
-                className="photo-mode-shutter photo-mode-shutter--camera"
-                onClick={handleCapture}
-                disabled={storageFull || promotingLead}
-                aria-label="Take photo"
-              >
-                <span className="photo-mode-shutter-inner" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="photo-mode-shutter photo-mode-shutter--camera photo-mode-shutter--disabled"
-                onClick={() => libraryInputRef.current?.click()}
-                disabled={storageFull}
-                aria-label="Choose from library"
-              >
-                <ImageIcon className="h-7 w-7" />
-              </button>
+      {mode === 'camera' && (
+        <div className="photo-mode-overlay photo-mode-overlay--camera" role="dialog" aria-label="Photo mode">
+          <div className="photo-mode-viewport photo-mode-viewport--immersive">
+            {flash && <div className="photo-mode-flash absolute inset-0 z-20 bg-white/80 pointer-events-none animate-pulse" />}
+            {useCamera && (
+              <video
+                ref={videoRef}
+                className={cn('photo-mode-video photo-mode-video--immersive', !cameraReady && 'photo-mode-video--hidden')}
+                style={{ transform: `scale(${zoomScale})` }}
+                playsInline
+                muted
+                autoPlay
+              />
+            )}
+            {cameraStarting && (
+              <div className="photo-mode-camera-loading">
+                <Loader2 className="h-8 w-8 animate-spin opacity-60" />
+              </div>
+            )}
+            {!useCamera && !cameraStarting && (
+              <div className="photo-mode-upload-zone">
+                <ImageIcon className="h-10 w-10 opacity-40 mb-3" />
+                <p className="text-sm opacity-70 mb-4">No camera — use Upload photos instead</p>
+                <button type="button" className="photo-mode-btn" onClick={handleBackToChooser}>
+                  Back to options
+                </button>
+              </div>
             )}
 
-            <button
-              type="button"
-              className="photo-mode-done-btn"
-              onClick={handleDone}
-              disabled={promotingLead}
-            >
-              {promotingLead ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Done'}
-            </button>
-          </div>
-
-          {activeUploadCount > 0 && (
-            <div className="photo-mode-upload-badge" role="status">
-              {activeUploadCount} uploading
+            <div className="photo-mode-top-bar">
+              <button type="button" className="photo-mode-icon-btn" onClick={handleBackToChooser} aria-label="Back">
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <div className="photo-mode-top-bar-right">
+                <button
+                  type="button"
+                  className="photo-mode-icon-btn"
+                  onClick={handleFlipCamera}
+                  disabled={!useCamera || cameraStarting}
+                  aria-label="Flip camera"
+                >
+                  <RotateCw className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  className="photo-mode-icon-btn"
+                  onClick={() => setFlashEnabled((v) => !v)}
+                  aria-label={flashEnabled ? 'Flash on' : 'Flash off'}
+                >
+                  {flashEnabled ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
+                </button>
+              </div>
             </div>
-          )}
+
+            {useCamera && cameraReady && (
+              <div className="photo-mode-zoom-bar">
+                {['0.5', '1', '3'].map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={cn('photo-mode-zoom-btn', zoomLevel === level && 'photo-mode-zoom-btn--active')}
+                    onClick={() => setZoomLevel(level)}
+                  >
+                    {level === '0.5' ? '.5x' : `${level}x`}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="photo-mode-bottom-bar">
+              <button
+                type="button"
+                className="photo-mode-gallery-btn"
+                onClick={handleGalleryClick}
+                onPointerDown={handleGalleryPointerDown}
+                onPointerUp={handleGalleryPointerUp}
+                onPointerLeave={handleGalleryPointerUp}
+                disabled={storageFull || promotingLead}
+                aria-label={sessionItems.length ? 'View captured photos (hold for library)' : 'Choose from library'}
+              >
+                {lastThumb ? (
+                  <img src={lastThumb} alt="" className="photo-mode-gallery-thumb" />
+                ) : (
+                  <ImageIcon className="h-6 w-6" />
+                )}
+                {sessionItems.length > 1 && (
+                  <span className="photo-mode-gallery-count">{sessionItems.length}</span>
+                )}
+              </button>
+
+              {useCamera && cameraReady ? (
+                <button
+                  type="button"
+                  className="photo-mode-shutter photo-mode-shutter--camera"
+                  onClick={handleCapture}
+                  disabled={storageFull || promotingLead}
+                  aria-label="Take photo"
+                >
+                  <span className="photo-mode-shutter-inner" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="photo-mode-shutter photo-mode-shutter--camera photo-mode-shutter--disabled"
+                  onClick={openLibrary}
+                  disabled={storageFull}
+                  aria-label="Choose from library"
+                >
+                  <ImageIcon className="h-7 w-7" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="photo-mode-done-btn"
+                onClick={handleDone}
+                disabled={promotingLead}
+              >
+                {promotingLead ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Done'}
+              </button>
+            </div>
+
+            {activeUploadCount > 0 && (
+              <div className="photo-mode-upload-badge" role="status">
+                {activeUploadCount} uploading
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
       <FilePreviewOverlay open={viewerIndex != null} onClose={() => setViewerIndex(null)} items={sessionPreviewItems} initialIndex={viewerIndex ?? 0} />
     </>,
     getModalPortalContainer(),

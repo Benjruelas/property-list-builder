@@ -8522,6 +8522,92 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   pointer-events: none;
 }
 
+/* Add-photos popover — centered over CRM panel */
+.photo-add-popover-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10040;
+  pointer-events: none;
+}
+
+.photo-add-popover-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.28);
+  cursor: default;
+}
+
+.photo-add-popover {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 40px));
+  padding: 10px;
+  border-radius: 18px;
+  background: var(--map-chrome-bg, rgba(18, 22, 34, 0.97));
+  border: 1px solid var(--map-chrome-border, rgba(255, 255, 255, 0.2));
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.photo-add-popover-option {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 128px;
+  padding: 22px 20px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--map-chrome-text, #fff);
+  touch-action: manipulation;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+
+.photo-add-popover-option:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.photo-add-popover-option:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  transform: scale(0.98);
+}
+
+.photo-add-popover-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.photo-add-popover-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: #93c5fd;
+}
+
+.photo-add-popover-label {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
 .photo-annotator-canvas-wrap {
   flex: 1;
   min-height: 0;

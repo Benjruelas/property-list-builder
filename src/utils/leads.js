@@ -13,7 +13,7 @@ import {
   leadContactMatchesQuery,
   skipTraceContactDetails,
 } from './leadContact'
-import { mergePhotoRecord } from './photoDisplay'
+import { mergePhotoRecord, dedupePhotosById } from './photoDisplay'
 export {
   getLeadPhones,
   getLeadEmails,
@@ -99,7 +99,7 @@ export function mergeLeadPhotos(prevPhotos, nextPhotos) {
 
   if (isDeletion) {
     const byId = new Map(prev.map((p) => [p.id, p]))
-    return next.map((p) => mergePhotoRecord(byId.get(p.id), p))
+    return dedupePhotosById(next.map((p) => mergePhotoRecord(byId.get(p.id), p)))
   }
 
   const byId = new Map(prev.map((p) => [p.id, p]))
@@ -112,7 +112,7 @@ export function mergeLeadPhotos(prevPhotos, nextPhotos) {
     return Array.from(byId.values())
   }
 
-  return next.map((p) => mergePhotoRecord(byId.get(p.id), p))
+  return dedupePhotosById(next.map((p) => mergePhotoRecord(byId.get(p.id), p)))
 }
 
 /** Merge lead after /api/photos returns a full entity snapshot (upload, annotate, delete). */

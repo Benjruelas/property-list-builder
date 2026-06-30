@@ -17,7 +17,7 @@ import {
 import { entityRefFromLead, entityRefFromDeal, updatePhotoInList, savePhotoAnnotations } from './annotationSave'
 import { entityKey } from './entityRef'
 import { formatLeadAddress } from '@/utils/leads'
-import { stripClientPhotoFields } from '@/utils/photoDisplay'
+import { stripClientPhotoFields, dedupePhotosById } from '@/utils/photoDisplay'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
 import { PhotoAnnotator } from '../components/photos/PhotoAnnotator'
 import { DealPhotoAnnotator } from '../components/photos/DealPhotoAnnotator'
@@ -90,14 +90,16 @@ export function PhotoGallery({
   )
 
   const serverPhotos = useMemo(() => {
-    const all = Array.isArray(entity?.photos) ? [...entity.photos] : []
-    return all.reverse()
+    const all = dedupePhotosById(Array.isArray(entity?.photos) ? entity.photos : [])
+    return [...all].reverse()
   }, [entity?.photos])
 
   const displayItems = useMemo(() => {
     const visiblePhotos = serverPhotos.filter((p) => !hiddenIds.has(p.id))
+    const serverPhotoIds = new Set(visiblePhotos.map((p) => p.id))
+    const pendingJobs = activeJobs.filter((j) => !j.photoId || !serverPhotoIds.has(j.photoId))
     const items = [
-      ...activeJobs.map((job) => ({
+      ...pendingJobs.map((job) => ({
         kind: 'job',
         id: job.jobId,
         job,
