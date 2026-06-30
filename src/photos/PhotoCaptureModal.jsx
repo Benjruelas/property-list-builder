@@ -8,7 +8,7 @@ import { getBlobs } from './photoStoreIdb'
 import { VISIBILITY } from '@/utils/access'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from '../components/ui/toast'
-import { createLead, displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { createLead, formatLeadAddress } from '@/utils/leads'
 import { FilePreviewOverlay } from '../components/ui/FilePreviewOverlay'
 import { cn } from '@/lib/utils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
@@ -66,6 +66,62 @@ async function bindStreamToVideo(video, stream) {
   await video.play()
 }
 
+const ZOOM_PRESETS = [0.5, 1, 3]
+const MAX_ZOOM = 5
+
+function touchDistance(t1, t2) {
+  const dx = t1.clientX - t2.clientX
+  const dy = t1.clientY - t2.clientY
+  return Math.hypot(dx, dy)
+}
+
+function clampZoom(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function getTrackZoomRange(stream) {
+  const track = stream?.getVideoTracks?.()?.[0]
+  const caps = track?.getCapabilities?.()
+  if (!caps?.zoom) return null
+  return {
+    min: caps.zoom.min ?? 1,
+    max: caps.zoom.max ?? 1,
+    step: caps.zoom.step ?? 0.1,
+  }
+}
+
+async function applyTrackZoom(stream, zoom) {
+  const track = stream?.getVideoTracks?.()?.[0]
+  if (!track?.applyConstraints) return false
+  const range = getTrackZoomRange(stream)
+  if (!range) return false
+  const z = clampZoom(zoom, range.min, range.max)
+  try {
+    await track.applyConstraints({ advanced: [{ zoom: z }] })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** CSS scale is always >= 1 so object-fit: cover keeps the preview full screen. */
+function displayScaleForZoom(zoomFactor) {
+  return Math.max(1, zoomFactor)
+}
+
+function nearestPresetLabel(zoomFactor) {
+  let best = ZOOM_PRESETS[1]
+  let bestDist = Infinity
+  for (const p of ZOOM_PRESETS) {
+    const dist = Math.abs(zoomFactor - p)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = p
+    }
+  }
+  return String(best)
+}
+
 export function PhotoCaptureModal({
   open,
   entityType = 'lead',
@@ -92,6 +148,8 @@ export function PhotoCaptureModal({
   const promotingLeadRef = useRef(false)
   const savedLeadRef = useRef(null)
   const galleryLongPressRef = useRef(null)
+  const pinchRef = useRef({ active: false, startDist: 0, startZoom: 1 })
+  const zoomFactorRef = useRef(1)
 
   const [sessionItems, setSessionItems] = useState([])
   const [flash, setFlash] = useState(false)
@@ -102,7 +160,37 @@ export function PhotoCaptureModal({
   const [viewerIndex, setViewerIndex] = useState(null)
   const [facingMode, setFacingMode] = useState('environment')
   const [flashEnabled, setFlashEnabled] = useState(false)
-  const [zoomLevel, setZoomLevel] = useState('1')
+  const [zoomFactor, setZoomFactor] = useState(1)
+  const [pinching, setPinching] = useState(false)
+  const [trackZoomRange, setTrackZoomRange] = useState(null)
+
+  const minZoom = trackZoomRange?.min ?? 1
+  const maxZoom = Math.max(MAX_ZOOM, trackZoomRange?.max ?? MAX_ZOOM)
+  const displayScale = displayScaleForZoom(zoomFactor)
+  const activePreset = nearestPresetLabel(zoomFactor)
+  const wideZoomAvailable = trackZoomRange != null && trackZoomRange.min < 1
+
+  const syncTrackZoom = useCallback((stream, factor, range) => {
+    if (!stream || !range) return
+    if (factor < 1) {
+      void applyTrackZoom(stream, range.min)
+    } else {
+      void applyTrackZoom(stream, 1)
+    }
+  }, [])
+
+  const setZoom = useCallback((next, range = trackZoomRange) => {
+    const lo = range?.min ?? 1
+    const hi = Math.max(MAX_ZOOM, range?.max ?? MAX_ZOOM)
+    const clamped = clampZoom(next, lo, hi)
+    zoomFactorRef.current = clamped
+    setZoomFactor(clamped)
+    syncTrackZoom(streamRef.current, clamped, range)
+  }, [trackZoomRange, syncTrackZoom])
+
+  useEffect(() => {
+    zoomFactorRef.current = zoomFactor
+  }, [zoomFactor])
 
   const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
 
@@ -169,10 +257,15 @@ export function PhotoCaptureModal({
     try {
       const stream = await requestCameraStream(facing)
       streamRef.current = stream
+      const range = getTrackZoomRange(stream)
+      setTrackZoomRange(range)
+      zoomFactorRef.current = 1
+      setZoomFactor(1)
       if (videoRef.current) await bindStreamToVideo(videoRef.current, stream)
+      if (range) void applyTrackZoom(stream, 1)
       setCameraReady(true)
       setCameraStarting(false)
-      photoLog('capture.camera', 'Camera ready')
+      photoLog('capture.camera', 'Camera ready', { trackZoom: range })
     } catch (err) {
       if (isCameraNotFoundError(err)) {
         showLibraryFallback('No camera on this device — use the gallery button')
@@ -195,7 +288,9 @@ export function PhotoCaptureModal({
       promotingLeadRef.current = false
       setFacingMode('environment')
       setFlashEnabled(false)
-      setZoomLevel('1')
+      setZoomFactor(1)
+      setTrackZoomRange(null)
+      zoomFactorRef.current = 1
       return undefined
     }
     photoLog('capture.open', 'Photo capture modal opened', {
@@ -342,13 +437,61 @@ export function PhotoCaptureModal({
   const captureFromVideo = useCallback(() => {
     const video = videoRef.current
     if (!video?.videoWidth) return null
+    const scale = displayScaleForZoom(zoomFactorRef.current)
+    const vw = video.videoWidth
+    const vh = video.videoHeight
+    let sx = 0
+    let sy = 0
+    let sw = vw
+    let sh = vh
+    if (scale > 1) {
+      sw = vw / scale
+      sh = vh / scale
+      sx = (vw - sw) / 2
+      sy = (vh - sh) / 2
+    }
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    canvas.width = sw
+    canvas.height = sh
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, 0, 0)
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh)
     return canvas.toDataURL('image/jpeg', 0.92)
   }, [])
+
+  const handleViewportTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      pinchRef.current = {
+        active: true,
+        startDist: touchDistance(e.touches[0], e.touches[1]),
+        startZoom: zoomFactorRef.current,
+      }
+      setPinching(true)
+    }
+  }
+
+  const handleViewportTouchMove = (e) => {
+    if (!pinchRef.current.active || e.touches.length !== 2) return
+    e.preventDefault()
+    const dist = touchDistance(e.touches[0], e.touches[1])
+    if (!pinchRef.current.startDist) return
+    const ratio = dist / pinchRef.current.startDist
+    setZoom(pinchRef.current.startZoom * ratio)
+  }
+
+  const handleViewportTouchEnd = (e) => {
+    if (e.touches.length < 2) {
+      pinchRef.current.active = false
+      setPinching(false)
+    }
+  }
+
+  const handlePresetZoom = (preset) => {
+    if (preset === 0.5 && !wideZoomAvailable) {
+      setZoom(1)
+      return
+    }
+    setZoom(preset)
+  }
 
   const handleCapture = async () => {
     if (promotingLead) return
@@ -374,6 +517,8 @@ export function PhotoCaptureModal({
   const handleFlipCamera = () => {
     const next = facingMode === 'environment' ? 'user' : 'environment'
     setFacingMode(next)
+    setZoomFactor(1)
+    zoomFactorRef.current = 1
     startCamera(next)
   }
 
@@ -410,24 +555,39 @@ export function PhotoCaptureModal({
     if (sessionItems.length > 0) setViewerIndex(0)
     else openLibrary()
   }
-  const zoomScale = zoomLevel === '0.5' ? 0.85 : zoomLevel === '3' ? 1.35 : 1
+  const lastThumb = sessionItems[0]?.previewUrl ?? null
 
   if (!open || !entity) return null
 
   return createPortal(
     <>
       <div className="photo-mode-overlay photo-mode-overlay--camera" role="dialog" aria-label="Photo mode">
-        <div className="photo-mode-viewport photo-mode-viewport--immersive">
+        <div
+          className={cn(
+            'photo-mode-viewport photo-mode-viewport--immersive',
+            useCamera && cameraReady && 'photo-mode-viewport--pinchable',
+          )}
+          onTouchStart={handleViewportTouchStart}
+          onTouchMove={handleViewportTouchMove}
+          onTouchEnd={handleViewportTouchEnd}
+          onTouchCancel={handleViewportTouchEnd}
+        >
           {flash && <div className="photo-mode-flash absolute inset-0 z-20 bg-white/80 pointer-events-none animate-pulse" />}
           {useCamera && (
-            <video
-              ref={videoRef}
-              className={cn('photo-mode-video photo-mode-video--immersive', !cameraReady && 'photo-mode-video--hidden')}
-              style={{ transform: `scale(${zoomScale})` }}
-              playsInline
-              muted
-              autoPlay
-            />
+            <div className="photo-mode-video-stage">
+              <video
+                ref={videoRef}
+                className={cn(
+                  'photo-mode-video photo-mode-video--immersive',
+                  !cameraReady && 'photo-mode-video--hidden',
+                  pinching && 'photo-mode-video--pinching',
+                )}
+                style={{ transform: `scale(${displayScale})` }}
+                playsInline
+                muted
+                autoPlay
+              />
+            </div>
           )}
           {cameraStarting && (
             <div className="photo-mode-camera-loading">
@@ -470,14 +630,14 @@ export function PhotoCaptureModal({
           {/* Zoom selector */}
           {useCamera && cameraReady && (
             <div className="photo-mode-zoom-bar">
-              {['0.5', '1', '3'].map((level) => (
+              {ZOOM_PRESETS.filter((level) => level !== 0.5 || wideZoomAvailable).map((level) => (
                 <button
                   key={level}
                   type="button"
-                  className={cn('photo-mode-zoom-btn', zoomLevel === level && 'photo-mode-zoom-btn--active')}
-                  onClick={() => setZoomLevel(level)}
+                  className={cn('photo-mode-zoom-btn', activePreset === String(level) && 'photo-mode-zoom-btn--active')}
+                  onClick={() => handlePresetZoom(level)}
                 >
-                  {level === '0.5' ? '.5x' : `${level}x`}
+                  {level === 0.5 ? '.5x' : `${level}x`}
                 </button>
               ))}
             </div>
