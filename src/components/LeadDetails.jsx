@@ -219,6 +219,7 @@ export function LeadDetails({
     setContactPickerOpen(contactPickerDepthRef.current > 0)
   }, [])
   const [tasksNestedOverlay, setTasksNestedOverlay] = useState(false)
+  const [photosNestedOverlay, setPhotosNestedOverlay] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
   const fileInputRef = useRef(null)
@@ -456,7 +457,7 @@ export function LeadDetails({
   const effectiveHideOverlay = hideOverlay || standaloneDocked
   const effectiveSuppressBackdrop = suppressBackdrop || standaloneDocked
   const suppressClickOutDismiss = primaryDetail || panelDockSlot === 'primary'
-  const hasNestedOverlay = menuOpen || tasksNestedOverlay || externalNestedOverlay || previewFileIndex != null || contactPickerOpen
+  const hasNestedOverlay = menuOpen || tasksNestedOverlay || photosNestedOverlay || externalNestedOverlay || previewFileIndex != null || contactPickerOpen
 
   return (
     <Dialog
@@ -702,6 +703,7 @@ export function LeadDetails({
                   currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
                   readOnly={photosReadOnly}
                   onEntityUpdate={onLeadUpdate}
+                  onNestedOverlayChange={setPhotosNestedOverlay}
                 />
               )}
 

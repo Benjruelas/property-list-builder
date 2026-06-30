@@ -366,7 +366,6 @@ export function PhotoCaptureModal({
         await logLeadPhotosAdded(getToken, created.id, sessionItems.length)
       }
       onLeadCreated?.(created)
-      onEntityUpdate?.(created)
       onClose?.()
     } catch (err) {
       showToast(err.message || 'Could not save lead', 'error')

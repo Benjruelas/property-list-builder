@@ -12,6 +12,7 @@ import {
   toLeadPatchBody,
   isLeadPhotosOnlyPatch,
   mergeLeadPhotos,
+  mergeLeadDetailFromPhotoApi,
   isPhotosOnlyEntityChange,
 } from '../leads'
 import { buildActivityEntry } from '../leadActivity'
@@ -74,6 +75,20 @@ describe('lead CRM helpers', () => {
     }]
     const merged = mergeListViewLeads(existing, incoming)
     expect(merged[0].photos).toBeUndefined()
+  })
+
+  it('mergeListViewLeads keeps cached photos when server photoCount is higher during upload race', () => {
+    const existing = [{
+      id: 'l1',
+      photos: [{ id: 'p1' }, { id: 'p2' }],
+    }]
+    const incoming = [{
+      id: 'l1',
+      _listView: true,
+      photoCount: 3,
+    }]
+    const merged = mergeListViewLeads(existing, incoming)
+    expect(merged[0].photos).toEqual([{ id: 'p1' }, { id: 'p2' }])
   })
 
   it('mergeListViewLeads uses server photos on full poll payloads', () => {
@@ -154,6 +169,23 @@ describe('lead CRM helpers', () => {
       { id: 'p3', size: 300 },
       { id: 'p4', size: 400 },
     ])
+  })
+
+  it('mergeLeadDetailFromPhotoApi replaces photos from server snapshot', () => {
+    const prev = {
+      id: 'l1',
+      photos: [{ id: 'p1', key: 'old' }],
+    }
+    const incoming = {
+      id: 'l1',
+      photos: [
+        { id: 'p1', key: 'old', annotatedKey: 'ann1' },
+        { id: 'p2', key: 'new' },
+      ],
+    }
+    const merged = mergeLeadDetailFromPhotoApi(prev, incoming)
+    expect(merged.photos.map((p) => p.id)).toEqual(['p1', 'p2'])
+    expect(merged.photos[0].annotatedKey).toBe('ann1')
   })
 
   it('isPhotosOnlyEntityChange detects photo-only deal/lead updates', () => {

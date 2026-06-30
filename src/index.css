@@ -7715,13 +7715,24 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.15s ease;
 }
 
-.lead-photo-grid-item:hover .lead-photo-grid-item-actions,
-.lead-photo-grid-item:focus-within .lead-photo-grid-item-actions {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .lead-photo-grid-item-actions {
+    opacity: 0;
+  }
+
+  .lead-photo-grid-item:hover .lead-photo-grid-item-actions,
+  .lead-photo-grid-item:focus-within .lead-photo-grid-item-actions {
+    opacity: 1;
+  }
+}
+
+.lead-photo-grid-item .lead-photo-grid-action-btn,
+.lead-photo-grid-item button.absolute.inset-0 {
+  touch-action: manipulation;
 }
 
 .lead-photo-grid-action-btn {
