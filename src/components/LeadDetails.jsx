@@ -87,6 +87,8 @@ const ACTIVITY_ICONS = {
   report: FileText,
 }
 
+const ACTIVITY_FEED_LIMIT = 10
+
 function LeadDetailSectionTitle({ children, action }) {
   return (
     <div className="flex items-center justify-between gap-2 mb-2.5">
@@ -269,6 +271,10 @@ export function LeadDetails({
   const activities = useMemo(
     () => sortActivitiesNewestFirst(lead),
     [lead?.activity, lead?.id]
+  )
+  const visibleActivities = useMemo(
+    () => activities.slice(0, ACTIVITY_FEED_LIMIT),
+    [activities],
   )
 
   const photosReadOnly = useMemo(() => {
@@ -890,7 +896,7 @@ export function LeadDetails({
                 ) : (
                   <div className="max-h-[26rem] overflow-y-auto pr-1">
                   <ul className="space-y-2">
-                    {activities.map((entry) => {
+                    {visibleActivities.map((entry) => {
                       const Icon = ACTIVITY_ICONS[entry.type] || StickyNote
                       return (
                         <li
