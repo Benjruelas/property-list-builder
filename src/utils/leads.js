@@ -115,6 +115,23 @@ export function mergeLeadPhotos(prevPhotos, nextPhotos) {
   return next.map((p) => mergePhotoRecord(byId.get(p.id), p))
 }
 
+/** Merge lead after /api/photos returns a full entity snapshot (upload, annotate, delete). */
+export function mergeLeadDetailFromPhotoApi(prev, incoming) {
+  if (!incoming) return prev
+  if (!prev) return incoming
+  const incomingPhotos = Array.isArray(incoming.photos) ? incoming.photos : null
+  const prevById = new Map((prev.photos || []).map((p) => [p.id, p]))
+  const photos = incomingPhotos
+    ? incomingPhotos.map((p) => mergePhotoRecord(prevById.get(p.id), p))
+    : mergeLeadPhotos(prev.photos, incoming.photos)
+  return {
+    ...incoming,
+    photos,
+    files: incoming.files ?? prev.files,
+    activity: incoming.activity ?? prev.activity,
+  }
+}
+
 /** True when only the photos array (and updatedAt) changed — already persisted via /api/photos. */
 export function isPhotosOnlyEntityChange(prev, next) {
   if (!prev || !next || prev.id !== next.id) return false
@@ -158,7 +175,7 @@ export function mergeListViewLeads(existing, incoming) {
       const serverPhotoCount = typeof inc.photoCount === 'number' ? inc.photoCount : null
       let photos = inc.photos
       if (photos == null && Array.isArray(prevPhotos)) {
-        if (serverPhotoCount != null && prevPhotos.length !== serverPhotoCount) {
+        if (serverPhotoCount != null && serverPhotoCount < prevPhotos.length) {
           photos = undefined
         } else {
           photos = prevPhotos
@@ -175,7 +192,7 @@ export function mergeListViewLeads(existing, incoming) {
   })
 }
 
-export async function fetchLeads(getToken, { view = 'list', existingLeads } = {}) {
+export async function fetchLeads(getToken, { view = 'list' } = {}) {
   const token = await getToken()
   if (!token) return loadLocalLeads()
   const headers = { Authorization: `Bearer ${token}` }
@@ -191,9 +208,6 @@ export async function fetchLeads(getToken, { view = 'list', existingLeads } = {}
   if (etag) leadsListEtag = etag.replace(/^W\//, '').replace(/"/g, '')
   const data = await res.json()
   const leads = data.leads || []
-  const existing = Array.isArray(existingLeads) ? existingLeads : loadLocalLeads()
-  const toStore = mergeListViewLeads(existing, leads)
-  saveLocalLeads(toStore)
   return leads
 }
 

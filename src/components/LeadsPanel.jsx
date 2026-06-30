@@ -180,7 +180,7 @@ export function LeadsPanel({
     if (isLeadPhotosOnlyPatch(payload)) return
     try {
       const saved = await updateLead(getToken, updated.id, payload)
-      onLeadsChange?.((prev) => prev.map((l) => (l.id === saved.id ? mergeLeadDetail(l, saved) : l)))
+      onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, saved))
     } catch (e) {
       showToast(e.message || 'Could not update lead', 'error')
     }

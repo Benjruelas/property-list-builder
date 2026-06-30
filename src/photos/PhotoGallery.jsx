@@ -308,7 +308,11 @@ export function PhotoGallery({
                     const idx = displayItems.findIndex((d) => d.id === item.id)
                     setPreviewIndex(idx)
                   }}
-                  onDelete={readOnly ? undefined : () => handleDelete(item)}
+                  onDelete={
+                    readOnly || (item.kind === 'photo' && item.photo.key)
+                      ? undefined
+                      : () => handleDelete(item)
+                  }
                 />
                 {item.kind === 'photo' && item.photo.annotatedKey && (
                   <span className="lead-photo-annotated-badge absolute top-1 left-1 text-[9px] px-1.5 py-0.5 rounded bg-black/50 text-white/90">

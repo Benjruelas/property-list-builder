@@ -101,6 +101,7 @@ import {
   fetchLeadById,
   mergeListViewLeads,
   mergeLeadDetail,
+  mergeLeadDetailFromPhotoApi,
   isPhotosOnlyEntityChange,
   loadLocalLeads,
   saveLocalLeads,
@@ -1186,14 +1187,21 @@ function App() {
     }
   }, [currentUser, getToken])
 
-  const refreshLeads = useCallback(async () => {
+  const refreshLeads = useCallback(async ({ existingLeads } = {}) => {
     if (!currentUser) return
-    const showSpinner = leadsRef.current.length === 0
+    const baseline = Array.isArray(existingLeads) && existingLeads.length > 0
+      ? existingLeads
+      : (leadsRef.current.length > 0 ? leadsRef.current : loadLocalLeads())
+    const showSpinner = baseline.length === 0
     if (showSpinner) setLeadsLoading(true)
     try {
-      const next = await fetchLeads(getToken, { existingLeads: leadsRef.current })
+      const next = await fetchLeads(getToken)
       if (next?.notModified) return
-      setLeads((prev) => mergeListViewLeads(prev, next))
+      setLeads((prev) => {
+        const merged = mergeListViewLeads(prev.length > 0 ? prev : baseline, next)
+        saveLocalLeads(merged)
+        return merged
+      })
       await refreshTags()
     } catch (error) {
       console.error('Error loading leads:', error)
@@ -1329,7 +1337,7 @@ function App() {
       prefetchPanel('dealPipeline')
       runLeadsDealsFreshStartMigration()
       refreshPipelines()
-      refreshLeads()
+      refreshLeads({ existingLeads: cached })
       refreshTags()
     } else {
       setPipelines([])
@@ -2869,15 +2877,10 @@ function App() {
       }))
       return
     }
-    setLeads((prev) => {
-      const next = prev.map((l) => {
-        if (l.id !== entity.id) return l
-        return mergeLeadDetail(l, entity)
-      })
-      saveLocalLeads(next)
-      return next
-    })
-    setPhotoModeLead((prev) => (prev?.id === entity.id ? mergeLeadDetail(prev, entity) : prev))
+    setLeads((prev) => upsertLeadInLocalStore(prev, entity, mergeLeadDetailFromPhotoApi))
+    setPhotoModeLead((prev) => (
+      prev?.id === entity.id ? mergeLeadDetailFromPhotoApi(prev, entity) : prev
+    ))
   }, [])
 
   const openPhotoModeForDraftParcel = useCallback((parcelData) => {
@@ -4378,8 +4381,7 @@ function App() {
             ))
           }}
           onLeadCreated={(lead) => {
-            setLeads((prev) => [...prev.filter((l) => l.id !== lead.id), lead])
-            refreshLeads()
+            setLeads((prev) => upsertLeadInLocalStore(prev, lead))
             closePhotoMode()
           }}
           teams={teams}
