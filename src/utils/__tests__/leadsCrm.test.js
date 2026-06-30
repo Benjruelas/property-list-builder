@@ -130,6 +130,18 @@ describe('lead CRM helpers', () => {
     ])
   })
 
+  it('mergeLeadPhotos drops deleted photos when server snapshot adds new uploads', () => {
+    const prev = [
+      { id: 'p1', size: 100 },
+      { id: 'p2', size: 200 },
+      { id: 'p3', size: 300 },
+    ]
+    expect(mergeLeadPhotos(prev, [{ id: 'p3', size: 300 }, { id: 'p4', size: 400 }])).toEqual([
+      { id: 'p3', size: 300 },
+      { id: 'p4', size: 400 },
+    ])
+  })
+
   it('isPhotosOnlyEntityChange detects photo-only deal/lead updates', () => {
     const prev = { id: 'd1', title: 'Deal', photos: [{ id: 'p1' }] }
     const next = { id: 'd1', title: 'Deal', photos: [], updatedAt: '2026-01-02' }

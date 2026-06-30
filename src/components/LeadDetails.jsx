@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import {
   Phone,
   Mail,
@@ -86,6 +86,8 @@ const ACTIVITY_ICONS = {
   photo: Camera,
   report: FileText,
 }
+
+const ACTIVITY_FEED_LIMIT = 10
 
 function LeadDetailSectionTitle({ children, action }) {
   return (
@@ -270,6 +272,35 @@ export function LeadDetails({
     () => sortActivitiesNewestFirst(lead),
     [lead?.activity, lead?.id]
   )
+
+  const activityFeedRef = useRef(null)
+  const [activityFeedMaxHeight, setActivityFeedMaxHeight] = useState(undefined)
+
+  const measureActivityFeedHeight = useCallback(() => {
+    const feed = activityFeedRef.current
+    if (!feed) return
+    const items = feed.querySelectorAll('[data-activity-item]')
+    if (items.length === 0) {
+      setActivityFeedMaxHeight(undefined)
+      return
+    }
+    const visibleCount = Math.min(items.length, ACTIVITY_FEED_LIMIT)
+    const first = items[0]
+    const last = items[visibleCount - 1]
+    setActivityFeedMaxHeight(last.offsetTop + last.offsetHeight - first.offsetTop)
+  }, [])
+
+  useLayoutEffect(() => {
+    measureActivityFeedHeight()
+  }, [activities, measureActivityFeedHeight])
+
+  useEffect(() => {
+    const feed = activityFeedRef.current
+    if (!feed || typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(() => measureActivityFeedHeight())
+    observer.observe(feed)
+    return () => observer.disconnect()
+  }, [measureActivityFeedHeight])
 
   const photosReadOnly = useMemo(() => {
     const uid = currentUser?.uid || currentUserId
@@ -888,12 +919,18 @@ export function LeadDetails({
                 {activities.length === 0 ? (
                   <p className="text-xs text-white/40">No activity yet. Calls, texts, emails, and notes will appear here.</p>
                 ) : (
+                  <div
+                    ref={activityFeedRef}
+                    className="overflow-y-auto pr-1"
+                    style={activityFeedMaxHeight != null ? { maxHeight: activityFeedMaxHeight } : undefined}
+                  >
                   <ul className="space-y-2">
                     {activities.map((entry) => {
                       const Icon = ACTIVITY_ICONS[entry.type] || StickyNote
                       return (
                         <li
                           key={entry.id}
+                          data-activity-item
                           className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg border border-white/10 bg-white/[0.04]"
                         >
                           <Icon className="h-3.5 w-3.5 mt-0.5 opacity-50 shrink-0" />
@@ -905,6 +942,7 @@ export function LeadDetails({
                       )
                     })}
                   </ul>
+                  </div>
                 )}
               </section>
             </div>
