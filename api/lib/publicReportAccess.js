@@ -38,7 +38,7 @@ export async function loadReportContext(token) {
   }
 
   const all = await getAllPhotoReports()
-  const index = all.findIndex((r) => r.previewToken === normalized)
+  const index = all.findIndex((r) => r.previewToken === normalized || r.publicToken === normalized)
   if (index === -1) return { error: 'Report link not found', status: 404 }
 
   const report = all[index]
