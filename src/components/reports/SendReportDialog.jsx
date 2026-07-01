@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Loader2, Copy, MessageSquare, Mail, CheckCircle2 } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Loader2, Copy, MessageSquare, Mail, CheckCircle2, Link2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -16,15 +16,17 @@ import { sendPhotoReportEmail, buildReportPublicUrl } from '../../utils/photoRep
 import {
   REPORT_SEND_TAGS,
   replaceReportTags,
+  applyReportLinkToText,
   getReportSendTemplatesFromSettings,
   buildReportSendTemplatesPatch,
 } from '../../utils/reportSendTemplates'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { getSenderDisplayName, getCompanyNameForSends } from '../../utils/profile'
-import { getSettings, updateSettings } from '../../utils/settings'
+import { updateSettings } from '../../utils/settings'
 import { cn } from '@/lib/utils'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const REPORT_LINK_TAG = '{ReportLink}'
 
 export function SendReportDialog({ open, report, onClose, onSent, leads = [], teams = [], teamMembership = null }) {
   const { getToken, currentUser } = useAuth()
@@ -36,6 +38,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   const [textBody, setTextBody] = useState('')
   const [savingDefault, setSavingDefault] = useState(false)
   const [sending, setSending] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
   const [sentTo, setSentTo] = useState(null)
   const [lastLink, setLastLink] = useState('')
 
@@ -44,14 +47,37 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     [report?.leadId, leads]
   )
 
-  const tagData = useMemo(() => ({
+  const baseTagData = useMemo(() => ({
     ClientName: linkedLead ? displayLeadName(linkedLead) : 'there',
     ReportTitle: report?.title || 'Photo Report',
-    ReportLink: lastLink || '[link will appear after send]',
     SenderName: getSenderDisplayName(currentUser),
     CompanyName: getCompanyNameForSends(teams, teamMembership),
     LeadAddress: linkedLead ? formatLeadAddress(linkedLead) : '',
-  }), [report, linkedLead, lastLink, currentUser, teams, teamMembership])
+  }), [report, linkedLead, currentUser, teams, teamMembership])
+
+  const tagData = useMemo(() => ({
+    ...baseTagData,
+    ReportLink: lastLink || REPORT_LINK_TAG,
+  }), [baseTagData, lastLink])
+
+  const getLinkEmail = useCallback(() => {
+    const trimmed = recipient.trim()
+    if (EMAIL_RE.test(trimmed)) return trimmed
+    const leadEmail = (linkedLead?.email || '').trim()
+    if (EMAIL_RE.test(leadEmail)) return leadEmail
+    return null
+  }, [recipient, linkedLead?.email])
+
+  const loadTemplates = useCallback((link = '') => {
+    const t = getReportSendTemplatesFromSettings()
+    const data = {
+      ...baseTagData,
+      ReportLink: link || REPORT_LINK_TAG,
+    }
+    setSubject(replaceReportTags(t.emailSubject, data))
+    setBody(replaceReportTags(t.emailBody, data))
+    setTextBody(replaceReportTags(t.textBody, data))
+  }, [baseTagData])
 
   useEffect(() => {
     if (!open || !report) return
@@ -59,25 +85,43 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     setRecipient(linkedLead?.email || '')
     setPhone(linkedLead?.phone || '')
     setSentTo(null)
-    setLastLink('')
-    const t = getReportSendTemplatesFromSettings()
-    setSubject(replaceReportTags(t.emailSubject, tagData))
-    setBody(replaceReportTags(t.emailBody, tagData))
-    setTextBody(replaceReportTags(t.textBody, tagData))
-  }, [open, report?.id, linkedLead?.id])
+    const existingLink = report.publicToken ? buildReportPublicUrl(report.publicToken) : ''
+    setLastLink(existingLink)
+    loadTemplates(existingLink)
+  }, [open, report?.id, report?.publicToken, linkedLead?.id, loadTemplates])
 
   useEffect(() => {
-    if (!open) return
-    const t = getReportSendTemplatesFromSettings()
-    setSubject(replaceReportTags(t.emailSubject, tagData))
-    setBody(replaceReportTags(t.emailBody, tagData))
-    setTextBody(replaceReportTags(t.textBody, tagData))
-  }, [lastLink, tagData, open])
+    if (!open || !lastLink) return
+    setBody((prev) => applyReportLinkToText(prev, lastLink))
+    setTextBody((prev) => applyReportLinkToText(prev, lastLink))
+  }, [lastLink, open])
 
   const resetAndClose = () => {
-    if (sending) return
+    if (sending || generatingLink) return
     setSentTo(null)
     onClose?.()
+  }
+
+  const ensureReportLink = async () => {
+    if (lastLink) return lastLink
+    const email = getLinkEmail()
+    if (!email) {
+      throw new Error('Enter a valid client email to generate a report link')
+    }
+    setGeneratingLink(true)
+    try {
+      const res = await sendPhotoReportEmail(getToken, {
+        reportId: report.id,
+        recipientEmail: email,
+        generateOnly: true,
+      })
+      const link = res.publicUrl || buildReportPublicUrl(res.token)
+      setLastLink(link)
+      onSent?.(res.report)
+      return link
+    } finally {
+      setGeneratingLink(false)
+    }
   }
 
   const handleSaveDefault = async () => {
@@ -104,9 +148,11 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         reportId: report.id,
         recipientEmail: trimmed,
         subject: replaceReportTags(subject, tagData),
-        message: replaceReportTags(body, { ...tagData, ReportLink: '{{ReportLink}}' }),
+        message: replaceReportTags(body, tagData),
       })
-      setLastLink(res.publicUrl || buildReportPublicUrl(res.token))
+      const link = res.publicUrl || buildReportPublicUrl(res.token)
+      setLastLink(link)
+      setBody((prev) => applyReportLinkToText(prev, link))
       setSentTo(trimmed)
       showToast(`Report sent to ${trimmed}`, 'success')
       onSent?.(res.report)
@@ -123,46 +169,42 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
       showToast('Enter a client phone number', 'error')
       return
     }
-    let link = lastLink
-    const email = (recipient.trim() || linkedLead?.email || '').trim()
-    if (!link) {
-      if (!EMAIL_RE.test(email)) {
-        showToast('Enter a valid client email to generate a report link', 'error')
-        return
-      }
-      setSending(true)
-      try {
-        const res = await sendPhotoReportEmail(getToken, {
-          reportId: report.id,
-          recipientEmail: email,
-          generateOnly: true,
-        })
-        link = res.publicUrl || buildReportPublicUrl(res.token)
-        setLastLink(link)
-      } catch (e) {
-        showToast(e.message || 'Failed to generate link', 'error')
-        setSending(false)
-        return
-      }
+    setSending(true)
+    try {
+      const link = await ensureReportLink()
+      const msg = replaceReportTags(textBody, { ...tagData, ReportLink: link })
+      window.location.href = `sms:${tel}?body=${encodeURIComponent(msg)}`
+      showToast('Opening SMS…', 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to generate link', 'error')
+    } finally {
       setSending(false)
     }
-    const msg = replaceReportTags(textBody, { ...tagData, ReportLink: link })
-    window.location.href = `sms:${tel}?body=${encodeURIComponent(msg)}`
-    showToast('Opening SMS…', 'success')
   }
 
   const handleCopyLink = async () => {
-    if (!lastLink) {
-      showToast('Send via email first to generate a link', 'error')
-      return
-    }
     try {
-      await navigator.clipboard.writeText(lastLink)
+      const link = await ensureReportLink()
+      await navigator.clipboard.writeText(link)
       showToast('Link copied', 'success')
-    } catch {
-      showToast('Could not copy link', 'error')
+    } catch (e) {
+      showToast(e.message || 'Could not copy link', 'error')
     }
   }
+
+  const insertTag = (tag, field) => {
+    if (field === 'subject') setSubject((s) => s + tag)
+    else if (field === 'body') setBody((s) => s + tag)
+    else setTextBody((s) => s + tag)
+  }
+
+  const insertLink = () => {
+    const field = tab === 'email' ? 'body' : 'text'
+    insertTag(lastLink || REPORT_LINK_TAG, field)
+  }
+
+  const activeMessageField = tab === 'email' ? 'body' : 'text'
+  const busy = sending || generatingLink
 
   if (!report) return null
 
@@ -178,13 +220,14 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 <DialogDescription className="text-sm opacity-90">to: {sentTo}</DialogDescription>
               </div>
             </DialogHeader>
-            <div className="px-5 pb-4">
+            <div className="px-5 pb-4 space-y-3">
               {lastLink && (
-                <Button variant="outline" className="w-full min-h-[44px]" onClick={handleCopyLink}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy link
-                </Button>
+                <p className="text-xs opacity-60 break-all">{lastLink}</p>
               )}
+              <Button variant="outline" className="w-full min-h-[44px]" onClick={handleCopyLink} disabled={busy}>
+                {generatingLink ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                Copy link
+              </Button>
             </div>
             <DialogFooter className="px-5 pb-5">
               <Button className="w-full create-list-btn min-h-[44px]" onClick={resetAndClose}>Done</Button>
@@ -217,12 +260,36 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 ))}
               </div>
 
+              {lastLink ? (
+                <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 space-y-2">
+                  <p className="text-[10px] uppercase tracking-wide opacity-50">Report link</p>
+                  <p className="text-xs break-all opacity-80">{lastLink}</p>
+                </div>
+              ) : null}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full min-h-[44px]"
+                onClick={handleCopyLink}
+                disabled={busy}
+              >
+                {generatingLink ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                Copy report link
+              </Button>
+
               {tab === 'email' ? (
                 <>
                   <Input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="Recipient email" className="min-h-[44px] bg-white/5 border-white/15" />
                   <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="min-h-[44px] bg-white/5 border-white/15" />
-                  <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[120px] lead-detail-field" placeholder="Email body (link is added automatically)" />
-                  <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendEmail} disabled={sending}>
+                  <textarea
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    rows={6}
+                    className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[120px] lead-detail-field"
+                    placeholder={'Email body — use {ReportLink} for the share link'}
+                  />
+                  <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendEmail} disabled={busy}>
                     {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send email with link'}
                   </Button>
                 </>
@@ -230,18 +297,38 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 <>
                   <Input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="Client email (for link)" className="min-h-[44px] bg-white/5 border-white/15" />
                   <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Client phone" className="min-h-[44px] bg-white/5 border-white/15" />
-                  <textarea value={textBody} onChange={(e) => setTextBody(e.target.value)} rows={5} className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm lead-detail-field" />
-                  <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendText} disabled={sending}>
+                  <textarea
+                    value={textBody}
+                    onChange={(e) => setTextBody(e.target.value)}
+                    rows={5}
+                    className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm lead-detail-field"
+                    placeholder={'Text message — use {ReportLink} for the share link'}
+                  />
+                  <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendText} disabled={busy}>
                     {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Open SMS with link'}
                   </Button>
                 </>
               )}
 
-              <div className="text-[10px] opacity-50 flex flex-wrap gap-1">
-                {REPORT_SEND_TAGS.map((t) => (
-                  <span key={t} className="px-1.5 py-0.5 rounded bg-white/5">{t}</span>
-                ))}
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1">
+                  {REPORT_SEND_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/15"
+                      onClick={() => insertTag(tag, tag === '{ReportTitle}' && tab === 'email' ? 'subject' : activeMessageField)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+                <Button type="button" variant="outline" size="sm" className="min-h-[36px]" onClick={insertLink}>
+                  <Link2 className="h-3.5 w-3.5 mr-1.5" />
+                  {lastLink ? 'Insert link' : 'Insert {ReportLink}'}
+                </Button>
               </div>
+
               <Button type="button" variant="ghost" size="sm" onClick={handleSaveDefault} disabled={savingDefault}>
                 Save as default template
               </Button>

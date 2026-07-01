@@ -95,6 +95,8 @@ export default async function handler(req, res) {
     const appOrigin = resolveOrigin(req)
     const publicUrl = `${appOrigin}/?report=${encodeURIComponent(token)}`
     const safeMessage = String(message || '').slice(0, 4000)
+      .replace(/\{ReportLink\}/g, publicUrl)
+      .replace(/\{\{ReportLink\}\}/g, publicUrl)
     const reportTitle = String(report.title || 'Photo Report').trim()
 
     const allInvites = await getAllReportInvites()
