@@ -22,6 +22,7 @@ import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatQuoteMoney } from '@/utils/quoteMath'
 import { TagPicker } from './tags/TagPicker'
 import { collectTagMetaFromEntities } from '@/utils/tags'
+import { resolveResourceAccess, canMutateDealPhotos, userActiveTeam } from '@/utils/access'
 import { PhotoGallery } from '@/photos/PhotoGallery'
 
 function getColumnName(colId, columns) {
@@ -116,6 +117,15 @@ export function DealDetails({
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
   const [tasksNestedOverlay, setTasksNestedOverlay] = useState(false)
   const [photosNestedOverlay, setPhotosNestedOverlay] = useState(false)
+
+  const canWorkOnDeal = useMemo(() => {
+    const uid = currentUser?.uid
+    if (!pipelineMeta || !uid || readOnly || closedRecord) return false
+    const user = { uid, email: currentUser?.email || '' }
+    const team = userActiveTeam(teams, uid)
+    const access = resolveResourceAccess(pipelineMeta, user, team, teams)
+    return canMutateDealPhotos(user, pipelineMeta, access)
+  }, [pipelineMeta, currentUser, teams, readOnly, closedRecord])
 
   useEffect(() => {
     if (!d?.id || !getToken) {
@@ -406,7 +416,7 @@ export function DealDetails({
                   lead={lead}
                   getToken={getToken}
                   currentUser={currentUser}
-                  readOnly={readOnly || isClosed}
+                  readOnly={readOnly || isClosed || !canWorkOnDeal}
                   onEntityUpdate={onDealUpdate}
                   onNestedOverlayChange={setPhotosNestedOverlay}
                 />
@@ -415,7 +425,7 @@ export function DealDetails({
               <section className="lead-detail-section">
                 <DealDetailSectionTitle
                   action={
-                    !readOnly && !isClosed ? (
+                    !readOnly && !isClosed && canWorkOnDeal ? (
                       <>
                         <input ref={fileInputRef} type="file" className="hidden" onChange={handleFilePick} />
                         <Button
@@ -473,7 +483,7 @@ export function DealDetails({
                         >
                           <Download className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
                         </button>
-                        {!readOnly && !isClosed && (
+                        {!readOnly && !isClosed && canWorkOnDeal && (
                           <button
                             type="button"
                             className="lead-detail-file-action-btn shrink-0"

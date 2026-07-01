@@ -159,6 +159,15 @@ export function canMutateLeadPhotos(user, lead, access, photo = null) {
   return false
 }
 
+/** Mirror of api/lib/pipelineAccess.js canMutateDealPhotos for UI gating. */
+export function canMutateDealPhotos(user, pipeline, access, photo = null) {
+  if (!user?.uid || !pipeline) return false
+  if (pipeline.ownerId && pipeline.ownerId === user.uid) return true
+  if (canEdit(access)) return true
+  if (photo && userCapturedPhoto(user, photo)) return true
+  return false
+}
+
 export function canDelete(access) {
   return access === 'owner'
 }

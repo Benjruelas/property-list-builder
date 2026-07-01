@@ -1,6 +1,9 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { resolveDevBypassUser, isDevBypassAllowed } from './lib/devBypassUsers.js'
+import {
+  userCanAccessDealInPipeline,
+  userCanAccessDealFileKey,
+} from './lib/pipelineAccess.js'
 
 import {
   ENTITY_STORAGE_LIMITS,
@@ -16,41 +19,6 @@ import {
  * - GET: ?key=deal-files/... — download
  * - DELETE: { key, pipelineId, dealId } — remove file
  */
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
-
-const PIPELINES_KV_KEY = 'user_pipelines'
-
-async function loadPipelinesSnapshot() {
-  if (!kvAvailable || !kv) return []
-  try {
-    const data = await kv.get(PIPELINES_KV_KEY)
-    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 let _s3
 function s3() {
@@ -97,15 +65,6 @@ function sanitizeFileName(v) {
   return String(v || 'file').replace(/[^a-zA-Z0-9._\- ]/g, '_').slice(0, 120)
 }
 
-async function canAccessPipeline(user, pipelineId) {
-  const [pipelines, allTeams] = await Promise.all([loadPipelinesSnapshot(), getAllTeams()])
-  const pipeline = pipelines.find((p) => p.id === pipelineId)
-  if (!pipeline) return { allowed: false, pipeline: null }
-  const teamsIndex = fullTeamsIndex(allTeams)
-  const access = resolveAccess(pipeline, user, teamsIndex)
-  return { allowed: !!access, pipeline }
-}
-
 export const config = {
   api: { bodyParser: { sizeLimit: '14mb' } }
 }
@@ -133,9 +92,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'fileBase64 is required' })
       }
 
-      const { allowed, pipeline } = await canAccessPipeline(user, pid)
-      if (!allowed) return res.status(403).json({ error: 'Forbidden' })
-      const deal = (pipeline.deals || []).find((d) => d.id === did)
+      const { allowed, canEdit, pipeline, deal } = await userCanAccessDealInPipeline(user, pid, did)
+      if (!allowed || !canEdit) return res.status(403).json({ error: 'Forbidden' })
       if (!deal) return res.status(404).json({ error: 'Deal not found in pipeline' })
 
       const cleaned = fileBase64.replace(/^data:[^;]+;base64,/, '')
@@ -206,21 +164,7 @@ export default async function handler(req, res) {
       if (!key) return res.status(400).json({ error: 'key is required' })
       if (!key.startsWith('deal-files/')) return res.status(400).json({ error: 'Malformed key' })
 
-      const parts = key.split('/')
-      const ownerUid = parts[1]
-      const dealId = parts[2]
-
-      let allowed = ownerUid === user.uid
-      if (!allowed) {
-        const pipelines = await loadPipelinesSnapshot()
-        const teamsIndex = fullTeamsIndex(await getAllTeams())
-        for (const p of pipelines) {
-          if ((p.deals || []).some((d) => d.id === dealId) && resolveAccess(p, user, teamsIndex)) {
-            allowed = true
-            break
-          }
-        }
-      }
+      const allowed = await userCanAccessDealFileKey(user, key)
       if (!allowed) return res.status(403).json({ error: 'Forbidden' })
 
       try {
@@ -247,8 +191,8 @@ export default async function handler(req, res) {
       if (!key) return res.status(400).json({ error: 'key is required' })
       const pid = sanitizeId(pipelineId)
       if (pid) {
-        const { allowed } = await canAccessPipeline(user, pid)
-        if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+        const { allowed, canEdit } = await userCanAccessDealInPipeline(user, pid, sanitizeId(key.split('/')[2]))
+        if (!allowed || !canEdit) return res.status(403).json({ error: 'Forbidden' })
       } else if (!key.includes(`/${user.uid}/`)) {
         return res.status(403).json({ error: 'Forbidden' })
       }
@@ -266,13 +210,12 @@ export default async function handler(req, res) {
         try {
           const keyParts = key.split('/')
           const dealIdFromKey = sanitizeId(keyParts[2])
-          const { allowed, pipeline } = await canAccessPipeline(user, pid)
-          if (allowed && pipeline && dealIdFromKey) {
-            const deal = (pipeline.deals || []).find((d) => d.id === dealIdFromKey)
+          const { allowed, canEdit, pipeline, deal } = await userCanAccessDealInPipeline(user, pid, dealIdFromKey)
+          if (allowed && canEdit && pipeline && deal) {
             const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./lib/activityLog.js')
             const teamIds = teamIdsFromResource(pipeline)
             const fileName = key.split('/').pop()?.replace(/^\d+_[a-z0-9]+_/, '') || 'file'
-            if (teamIds.length > 0 && deal) {
+            if (teamIds.length > 0) {
               await logTeamActivity({
                 teamIds,
                 actor: user,

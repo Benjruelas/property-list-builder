@@ -8,7 +8,12 @@ import {
   canMutateLeadPhotos,
   withRepairedLeadOwnership,
 } from './leadAccess.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './teams.js'
+import {
+  getPipelineWithAccess,
+  canMutateDealPhotos,
+  buildPipelineAccessContext,
+  getResourceAccess,
+} from './pipelineAccess.js'
 import { getAllPipelines, mutatePipelines } from './pipelineStoreFull.js'
 import {
   ENTITY_STORAGE_LIMITS,
@@ -81,12 +86,8 @@ async function resolveLeadContext(user, leadId) {
 }
 
 async function resolveDealContext(user, pipelineId, dealId) {
-  const [pipelines, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
-  const pipelineIndex = pipelines.findIndex((p) => p.id === pipelineId)
-  const pipeline = pipelineIndex >= 0 ? pipelines[pipelineIndex] : null
+  const { pipeline, access, all, index } = await getPipelineWithAccess(user, pipelineId)
   if (!pipeline) return { error: { status: 404, message: 'Pipeline not found' } }
-  const teamsIndex = fullTeamsIndex(allTeams)
-  const access = resolveAccess(pipeline, user, teamsIndex)
   if (!access) return { error: { status: 403, message: 'Forbidden' } }
   const deals = Array.isArray(pipeline.deals) ? pipeline.deals : []
   const dealIndex = deals.findIndex((d) => d.id === dealId)
@@ -96,13 +97,13 @@ async function resolveDealContext(user, pipelineId, dealId) {
     entityType: 'deal',
     entity: deal,
     pipeline,
-    pipelineIndex,
-    allPipelines: pipelines,
+    pipelineIndex: index,
+    allPipelines: all,
     dealIndex,
     ownerUid: pipeline.ownerId || user.uid,
     photos: Array.isArray(deal.photos) ? deal.photos : [],
-    canMutate: () => true,
-    canAdd: () => true,
+    canMutate: (photo) => canMutateDealPhotos(user, pipeline, access, photo),
+    canAdd: () => canMutateDealPhotos(user, pipeline, access),
   }
 }
 
@@ -237,13 +238,10 @@ export async function canAccessPhotoKey(user, key) {
     const ownerUid = parts[1]
     const dealId = parts[2]
     if (ownerUid === user.uid) return true
-    const pipelines = await getAllPipelines()
-    const allTeams = await getAllTeams()
-    const teamsIndex = fullTeamsIndex(allTeams)
+    const [pipelines, ctx] = await Promise.all([getAllPipelines(), buildPipelineAccessContext(user)])
     for (const pipeline of pipelines) {
-      if ((pipeline.deals || []).some((d) => d.id === dealId) && resolveAccess(pipeline, user, teamsIndex)) {
-        return true
-      }
+      if (!(pipeline.deals || []).some((d) => d.id === dealId)) continue
+      if (getResourceAccess(pipeline, user, ctx)) return true
     }
   }
   return false

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   resolveResourceAccess,
   canMutateLeadPhotos,
+  canMutateDealPhotos,
   isLeadOwner,
   userCapturedPhoto,
   userCapturedAllPhotos,
@@ -120,5 +121,22 @@ describe('canMutateLeadPhotos', () => {
     }
     expect(canMutateLeadPhotos(admin, memberLead, 'admin_view')).toBe(false)
     expect(canMutateLeadPhotos(admin, memberLead, 'admin_view', memberLead.photos[0])).toBe(false)
+  })
+})
+
+describe('canMutateDealPhotos', () => {
+  const sharedPipeline = {
+    ownerId: 'other',
+    teamId: 'team_a',
+    visibility: 'members',
+    sharedMemberUids: ['user-1'],
+  }
+
+  it('allows shared collaborators to upload deal photos', () => {
+    expect(canMutateDealPhotos(user, sharedPipeline, 'collaborator')).toBe(true)
+  })
+
+  it('blocks admin_view from uploading deal photos', () => {
+    expect(canMutateDealPhotos(admin, sharedPipeline, 'admin_view')).toBe(false)
   })
 })
