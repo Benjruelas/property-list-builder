@@ -583,7 +583,10 @@ export function ReportBuilder({
                   <>
                     <Button type="button" variant="outline" size="sm" onClick={() => setPickerSectionId(section.id)}>
                       <ImageIcon className="h-3.5 w-3.5 mr-1" />
-                      {section.photoIds.length ? `${section.photoIds.length} photos` : 'Add photos'}
+                      Add photos
+                      {section.photoIds.length > 0 ? (
+                        <span className="ml-1.5 text-xs opacity-70">({section.photoIds.length})</span>
+                      ) : null}
                     </Button>
                     {section.photoIds.length > 0 && (
                       <div className="report-section-photo-grid">

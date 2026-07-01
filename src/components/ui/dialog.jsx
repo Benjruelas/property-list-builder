@@ -63,6 +63,8 @@ const NESTED_DISMISS_GUARD_SELECTORS = [
   '[data-deals-panel-menu]',
   '[data-quotes-panel-menu]',
   '[data-reports-panel-menu]',
+  '.report-details-panel',
+  '.report-editor-panel',
   '[data-deal-template-menu]',
   '[data-tag-picker-menu]',
   '[data-tag-picker-trigger]',
