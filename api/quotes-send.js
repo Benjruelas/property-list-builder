@@ -10,6 +10,7 @@ import {
   supersedePendingQuoteInvites,
   hasPriorQuoteInvite,
 } from './lib/quoteInvites.js'
+import { buildQuotePublicUrl } from './lib/publicLinks.js'
 import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 import {
@@ -119,7 +120,7 @@ export default async function handler(req, res) {
     await saveAllQuoteInvites(nextInvites)
 
     const appOrigin = resolveOrigin(req)
-    const quoteLink = `${appOrigin}/?quote=${encodeURIComponent(token)}`
+    const quoteLink = buildQuotePublicUrl(appOrigin, token)
 
     if (generateOnly) {
       const updatedQuote = {

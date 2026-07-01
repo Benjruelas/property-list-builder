@@ -3,6 +3,7 @@
  */
 
 import { getApiBase } from './apiBase'
+import { buildReportPublicUrl as buildReportPublicUrlFromToken } from './publicLinks'
 
 export async function fetchPhotoReports(getToken, { leadId, reportId } = {}) {
   const token = await getToken?.()
@@ -100,8 +101,7 @@ export async function sendPhotoReportEmail(getToken, payload) {
 }
 
 export function buildReportPublicUrl(token) {
-  if (typeof window === 'undefined') return `/?report=${token}`
-  return `${window.location.origin}/?report=${encodeURIComponent(token)}`
+  return buildReportPublicUrlFromToken(token)
 }
 
 export async function fetchPublicReport(token) {

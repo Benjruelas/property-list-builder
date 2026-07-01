@@ -77,6 +77,7 @@ import { DealTemplatesManagerDialog } from './components/DealTemplatesManagerDia
 import { templateToCreateDealPrefill } from './utils/dealTemplates'
 import { AppLoadingScreen } from './components/AppLoadingScreen'
 import { getAppLoadingMessage } from './config/appLoadingMessages'
+import { getPublicRouteFromWindow } from './utils/publicLinks'
 import { PanelListLoadingShell } from './components/ui/PanelListLoadingShell'
 import { BasemapErrorBanner } from './components/BasemapErrorBanner'
 import { useBasemapStyle } from './hooks/useBasemapStyle'
@@ -4731,10 +4732,10 @@ function App() {
 export default App
 
 export function AppWithPublicFormRoute() {
-  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-  const formToken = params?.get('form')
-  const quoteToken = params?.get('quote')
-  const reportToken = params?.get('report')
+  const publicRoute = typeof window !== 'undefined' ? getPublicRouteFromWindow() : null
+  const formToken = publicRoute?.type === 'form' ? publicRoute.token : null
+  const quoteToken = publicRoute?.type === 'quote' ? publicRoute.token : null
+  const reportToken = publicRoute?.type === 'report' ? publicRoute.token : null
   if (formToken) {
     return (
       <div className="h-[100dvh] overflow-hidden">

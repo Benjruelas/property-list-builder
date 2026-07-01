@@ -16,6 +16,7 @@ import {
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 import { resolveSenderBranding } from './lib/senderBranding.js'
 import { buildQuotePdfBuffer, safeQuotePdfFilename } from './lib/buildQuotePdf.js'
+import { buildQuotePublicPath } from './lib/publicLinks.js'
 
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const stripe = stripeKey ? new Stripe(stripeKey) : null
@@ -286,8 +287,8 @@ export default async function handler(req, res) {
             pipelineId: quote.pipelineId || '',
             paymentLineItemId: quote.paymentLineItemId || '',
           },
-          success_url: `${origin}/?quote=${encodeURIComponent(quoteToken)}&payment=success`,
-          cancel_url: `${origin}/?quote=${encodeURIComponent(quoteToken)}&payment=cancel`,
+          success_url: `${origin}${buildQuotePublicPath(quoteToken, { payment: 'success' })}`,
+          cancel_url: `${origin}${buildQuotePublicPath(quoteToken, { payment: 'cancel' })}`,
         })
 
         quote = { ...quote, stripeSessionId: session.id, updatedAt: now }

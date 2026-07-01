@@ -7,6 +7,7 @@ export const CLIENT_PREVIEW_NAV_KEY = 'clientPreviewNavStack'
 export const CLIENT_PREVIEW_RESTORE_FLAG = 'clientPreviewRestorePending'
 
 import { getApiBase } from './apiBase'
+import { getPublicRouteFromWindow, parsePublicRoute } from './publicLinks'
 
 async function parseJsonSafe(res) {
   try {
@@ -23,8 +24,7 @@ async function parseJsonSafe(res) {
 export function isPublicPreviewRoute() {
   if (typeof window === 'undefined') return false
   try {
-    const params = new URLSearchParams(window.location.search)
-    return params.has('report') || params.has('quote') || params.has('form')
+    return !!getPublicRouteFromWindow()
   } catch {
     return false
   }
@@ -100,6 +100,14 @@ export function returnToAppFromClientPreview() {
   }
 
   const url = new URL(window.location.href)
+  const parsed = parsePublicRoute(url.pathname, url.search)
+  if (parsed?.type === 'quote' || parsed?.type === 'report') {
+    url.pathname = '/'
+    url.search = ''
+    url.hash = ''
+    window.location.href = url.toString()
+    return
+  }
   url.searchParams.delete('quote')
   url.searchParams.delete('report')
   url.searchParams.delete('payment')
