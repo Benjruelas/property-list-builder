@@ -44,6 +44,7 @@ import {
 } from '../../utils/reportSendTemplates'
 import { getSettings, updateSettings } from '../../utils/settings'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { clearReportEditorDraft, clearReportEditorDraftForReport } from '../../utils/reportEditorDraft'
 import { ReportBuilder } from './ReportBuilder'
 import { ReportDetail } from './ReportDetail'
 import { ReportTemplatePickerDialog } from './ReportTemplatePickerDialog'
@@ -222,6 +223,8 @@ export function ReportsPanel({
     resetReportCreateFlow()
     if (!leadId) return
 
+    clearReportEditorDraft(leadId)
+
     if (wasAwaitingTemplate) {
       onPatchEditor?.({
         layoutTemplate: template ?? null,
@@ -259,6 +262,8 @@ export function ReportsPanel({
   const performDeleteReport = async (report) => {
     try {
       await deletePhotoReport(getToken, report.id)
+      clearReportEditorDraftForReport(report.leadId, report.id)
+      if (editorReport?.id === report.id) onCloseEditor?.()
       if (detailReportId === report.id) onCloseDetail?.()
       await refresh()
       showToast('Report deleted', 'success')
