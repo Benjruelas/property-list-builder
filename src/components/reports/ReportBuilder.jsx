@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Loader2, Plus, Trash2, ChevronUp, ChevronDown, Image as ImageIcon, X, Eye, Check, Send, Save } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
@@ -6,7 +6,7 @@ import { PanelHeader } from '../ui/panel-header'
 import { PanelActionButton } from '../ui/panel-action-button'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
-import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { displayLeadName, formatLeadAddress, fetchLeadById } from '@/utils/leads'
 import {
   createPhotoReport,
   updatePhotoReport,
@@ -19,9 +19,27 @@ import { logLeadReportEvent } from '@/utils/leadActivity'
 import { fetchPhotoThumbnailBlob } from '@/photos/photosClient'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
 import { cn } from '@/lib/utils'
+import { dedupePhotosById } from '@/utils/photoDisplay'
 import { SendReportDialog } from './SendReportDialog'
 
 const FIELD = 'w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[44px]'
+
+function photoSortTime(photo) {
+  if (!photo) return ''
+  return photo.capturedAt || photo.createdAt || photo.updatedAt || ''
+}
+
+function sortPhotosNewestFirst(photos) {
+  return [...dedupePhotosById(photos)].sort((a, b) => photoSortTime(b).localeCompare(photoSortTime(a)))
+}
+
+function sortPhotoIdsNewestFirst(photoIds, photosById) {
+  return [...photoIds].sort((a, b) => {
+    const ta = photoSortTime(photosById.get(a))
+    const tb = photoSortTime(photosById.get(b))
+    return tb.localeCompare(ta)
+  })
+}
 
 export function ReportBuilder({
   open,
@@ -37,6 +55,7 @@ export function ReportBuilder({
   teamMembership = null,
   getToken,
   onSaved,
+  onLeadUpdate,
 }) {
   const isTemplate = mode === 'template'
   const [name, setName] = useState('')
@@ -49,6 +68,8 @@ export function ReportBuilder({
   const [sendReport, setSendReport] = useState(null)
   const [pickerSectionId, setPickerSectionId] = useState(null)
   const [thumbUrls, setThumbUrls] = useState({})
+  const [savedReportId, setSavedReportId] = useState(initialReport?.id ?? null)
+  const initKeyRef = useRef(null)
 
   const lead = useMemo(() => {
     if (isTemplate) return null
@@ -56,7 +77,10 @@ export function ReportBuilder({
     return leads.find((l) => l.id === id) || null
   }, [leads, initialReport, initialLeadId, isTemplate])
 
-  const photos = useMemo(() => (Array.isArray(lead?.photos) ? lead.photos : []), [lead])
+  const photos = useMemo(
+    () => sortPhotosNewestFirst(Array.isArray(lead?.photos) ? lead.photos : []),
+    [lead],
+  )
 
   const photosById = useMemo(() => {
     const map = new Map()
@@ -65,8 +89,18 @@ export function ReportBuilder({
   }, [photos])
 
   useEffect(() => {
-    if (!open) return
+    if (initialReport?.id) setSavedReportId(initialReport.id)
+  }, [initialReport?.id])
+
+  useEffect(() => {
+    if (!open) {
+      initKeyRef.current = null
+      return
+    }
     if (isTemplate) {
+      const key = initialTemplate?.id ?? 'new-template'
+      if (initKeyRef.current === key) return
+      initKeyRef.current = key
       if (initialTemplate) {
         setName(initialTemplate.name || '')
         setTitle(initialTemplate.title || 'Photo Report')
@@ -82,6 +116,13 @@ export function ReportBuilder({
       }
       return
     }
+
+    const leadId = initialReport?.leadId || initialLeadId
+    const key = initialReport?.id
+      ?? (layoutTemplate?.id ? `draft:${leadId}:${layoutTemplate.id}` : `draft:${leadId}`)
+    if (initKeyRef.current === key) return
+    initKeyRef.current = key
+
     if (initialReport) {
       setTitle(initialReport.title || 'Photo Report')
       setSections(
@@ -96,7 +137,28 @@ export function ReportBuilder({
       setTitle('Photo Report')
       setSections([newReportSection(0)])
     }
-  }, [open, initialReport, initialTemplate, layoutTemplate, isTemplate])
+  }, [open, initialReport, initialTemplate, layoutTemplate, isTemplate, initialLeadId])
+
+  useEffect(() => {
+    if (!open || isTemplate || !lead?.id || !getToken || !onLeadUpdate) return undefined
+
+    const photoCount = typeof lead.photoCount === 'number' ? lead.photoCount : null
+    const cachedPhotoCount = Array.isArray(lead.photos) ? lead.photos.length : 0
+    const needsPhotoHydrate = lead._listView
+      || (photoCount != null && photoCount > 0 && cachedPhotoCount === 0)
+      || (photoCount != null && cachedPhotoCount !== photoCount)
+    if (!needsPhotoHydrate) return undefined
+
+    let cancelled = false
+    fetchLeadById(getToken, lead.id)
+      .then((full) => {
+        if (!cancelled && full?.id) onLeadUpdate(full)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [open, isTemplate, lead, getToken, onLeadUpdate])
 
   useEffect(() => {
     if (!open) setPickerSectionId(null)
@@ -268,13 +330,17 @@ export function ReportBuilder({
   const persistReport = useCallback(async () => {
     if (!lead) throw new Error('Lead is required')
     const payload = buildReportPayload()
-    if (initialReport?.id) {
-      return updatePhotoReport(getToken, initialReport.id, payload)
+    const reportId = savedReportId || initialReport?.id
+    if (reportId) {
+      const report = await updatePhotoReport(getToken, reportId, payload)
+      setSavedReportId(report.id)
+      return report
     }
     const report = await createPhotoReport(getToken, payload)
+    setSavedReportId(report.id)
     await logLeadReportEvent(getToken, lead.id, `Photo report created: ${report.title}`, { reportId: report.id })
     return report
-  }, [lead, buildReportPayload, initialReport, getToken])
+  }, [lead, buildReportPayload, savedReportId, initialReport, getToken])
 
   const handlePreview = async () => {
     if (!lead) {
@@ -426,7 +492,7 @@ export function ReportBuilder({
                     </Button>
                     {section.photoIds.length > 0 && (
                       <div className="report-section-photo-grid">
-                        {section.photoIds.map((photoId) => {
+                        {sortPhotoIdsNewestFirst(section.photoIds, photosById).map((photoId) => {
                           const photo = photosById.get(photoId)
                           if (!photo) return null
                           return (

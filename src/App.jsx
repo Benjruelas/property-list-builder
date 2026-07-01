@@ -4325,6 +4325,9 @@ function App() {
             teams={teams}
             teamMembership={teamMembership}
             quickCreateRequestKey={quickCreateReportKey}
+            onLeadUpdate={(full) => {
+              setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetail))
+            }}
           />
         </Suspense>
       )}
