@@ -597,6 +597,23 @@ export function ReportsPanel({
         onSelect={finalizeNewReport}
       />
 
+      <ReportDetail
+        open={!!detailReportId && !!detailReport && !editorOpen}
+        report={detailReport}
+        lead={detailLead}
+        getToken={getToken}
+        leads={leads}
+        teams={teams}
+        teamMembership={teamMembership}
+        onClose={onCloseDetail}
+        onBack={onCloseDetail}
+        onEdit={(r) => onOpenEditor?.({ mode: 'report', report: r })}
+        onDelete={performDeleteReport}
+        onReportUpdated={(r) => {
+          setReports((prev) => prev.map((x) => (x.id === r.id ? r : x)))
+        }}
+      />
+
       <ReportBuilder
         open={reportBuilderOpen}
         mode={editorMode}
@@ -631,23 +648,6 @@ export function ReportsPanel({
           } else {
             onCloseEditor?.()
           }
-        }}
-      />
-
-      <ReportDetail
-        open={!!detailReportId && !!detailReport}
-        report={detailReport}
-        lead={detailLead}
-        getToken={getToken}
-        leads={leads}
-        teams={teams}
-        teamMembership={teamMembership}
-        onClose={onCloseDetail}
-        onBack={onCloseDetail}
-        onEdit={(r) => onOpenEditor?.({ mode: 'report', report: r })}
-        onDelete={performDeleteReport}
-        onReportUpdated={(r) => {
-          setReports((prev) => prev.map((x) => (x.id === r.id ? r : x)))
         }}
       />
     </>
