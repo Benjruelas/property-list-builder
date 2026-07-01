@@ -9,6 +9,7 @@ import {
   supersedePendingReportInvites,
   hasPriorReportInvite,
 } from './lib/reportInvites.js'
+import { buildReportPublicUrl } from './lib/publicLinks.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.js'
 import { getLeadWithAccess } from './lib/leadAccess.js'
 import {
@@ -93,7 +94,7 @@ export default async function handler(req, res) {
     const now = new Date()
     const expiresAt = new Date(now.getTime() + REPORT_INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
     const appOrigin = resolveOrigin(req)
-    const publicUrl = `${appOrigin}/?report=${encodeURIComponent(token)}`
+    const publicUrl = buildReportPublicUrl(appOrigin, token)
     const safeMessage = String(message || '').slice(0, 4000)
       .replace(/\{ReportLink\}/g, publicUrl)
       .replace(/\{\{ReportLink\}\}/g, publicUrl)

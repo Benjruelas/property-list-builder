@@ -41,6 +41,14 @@
       "destination": "/api/firebase-auth-proxy?path=:path"
     },
     {
+      "source": "/q/:token",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/r/:token",
+      "destination": "/index.html"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     }

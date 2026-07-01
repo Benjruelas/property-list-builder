@@ -2,6 +2,8 @@
  * KV storage for public photo report links.
  */
 
+import { generatePublicInviteToken } from './publicLinks.js'
+
 export const REPORT_INVITES_KV_KEY = 'photo_report_invites'
 export const REPORT_INVITE_EXPIRY_DAYS = 30
 
@@ -53,13 +55,7 @@ export async function saveAllReportInvites(invites) {
 }
 
 export function generateReportToken() {
-  const bytes = new Uint8Array(32)
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes)
-  } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
-  }
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return generatePublicInviteToken()
 }
 
 export function isReportInviteExpired(invite) {

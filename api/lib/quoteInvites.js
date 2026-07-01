@@ -2,6 +2,8 @@
  * KV storage helpers for public quote invite links.
  */
 
+import { generatePublicInviteToken } from './publicLinks.js'
+
 export const INVITES_KV_KEY = 'quote_invites'
 export const INVITE_EXPIRY_DAYS = 30
 
@@ -53,13 +55,7 @@ export async function saveAllQuoteInvites(invites) {
 }
 
 export function generateToken() {
-  const bytes = new Uint8Array(32)
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes)
-  } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
-  }
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return generatePublicInviteToken()
 }
 
 export function isInviteExpired(invite) {
