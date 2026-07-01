@@ -16,9 +16,8 @@ import {
   sectionsFromTemplate,
 } from '@/utils/photoReports'
 import { logLeadReportEvent } from '@/utils/leadActivity'
-import { getSignedUrl } from '@/photos/photosClient'
+import { fetchPhotoThumbnailBlob } from '@/photos/photosClient'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
-import { getPhotoThumbnailKey } from '@/utils/photoDisplay'
 import { cn } from '@/lib/utils'
 import { SendReportDialog } from './SendReportDialog'
 
@@ -120,20 +119,51 @@ export function ReportBuilder({
   }, [pickerSectionId])
 
   useEffect(() => {
-    if (!open || !getToken || isTemplate) return
-    photos.forEach(async (p) => {
-      if (thumbUrls[p.id]) return
-      try {
-        const key = getPhotoThumbnailKey(p)
-        if (!key) return
-        const url = await getSignedUrl(getToken, key)
-        const res = await fetch(url)
-        if (!res.ok) return
-        const blob = await res.blob()
-        setThumbUrls((prev) => ({ ...prev, [p.id]: URL.createObjectURL(blob) }))
-      } catch { /* ignore */ }
+    if (!open || !getToken || isTemplate) return undefined
+
+    let cancelled = false
+    const objectUrls = []
+
+    const loadThumbnails = async () => {
+      await Promise.all(
+        photos.map(async (p) => {
+          if (p._localThumbUrl) {
+            if (!cancelled) {
+              setThumbUrls((prev) => (prev[p.id] ? prev : { ...prev, [p.id]: p._localThumbUrl }))
+            }
+            return
+          }
+          try {
+            const cacheVersion = p.updatedAt || p.createdAt || ''
+            const blob = await fetchPhotoThumbnailBlob(getToken, p, cacheVersion)
+            if (cancelled) return
+            const objectUrl = URL.createObjectURL(blob)
+            objectUrls.push(objectUrl)
+            setThumbUrls((prev) => (prev[p.id] ? prev : { ...prev, [p.id]: objectUrl }))
+          } catch {
+            /* ignore — tile stays as placeholder */
+          }
+        }),
+      )
+    }
+
+    loadThumbnails()
+
+    return () => {
+      cancelled = true
+      objectUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [open, photos, getToken, isTemplate])
+
+  useEffect(() => {
+    if (open) return
+    setThumbUrls((prev) => {
+      Object.values(prev).forEach((url) => {
+        if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url)
+      })
+      return {}
     })
-  }, [open, photos, getToken, thumbUrls, isTemplate])
+  }, [open])
 
   const addSection = () => {
     setSections((prev) => [...prev, newReportSection(prev.length)])
