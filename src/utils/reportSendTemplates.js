@@ -35,6 +35,14 @@ export function replaceReportTags(template, data) {
   return out
 }
 
+/** Replace report link placeholders in editable message text. */
+export function applyReportLinkToText(text, link) {
+  if (!link) return String(text || '')
+  return String(text || '')
+    .split('{ReportLink}').join(link)
+    .split('[link will appear after send]').join(link)
+}
+
 export function getReportSendTemplatesFromSettings(settings = null) {
   const s = settings || getSettings()
   const t = s.reportSendTemplates || {}
