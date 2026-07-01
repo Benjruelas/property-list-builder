@@ -14,12 +14,20 @@ import {
   createReportTemplate,
   updateReportTemplate,
   sectionsFromTemplate,
+  fetchPhotoReports,
 } from '@/utils/photoReports'
 import { logLeadReportEvent } from '@/utils/leadActivity'
 import { fetchPhotoThumbnailBlob } from '@/photos/photosClient'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
 import { cn } from '@/lib/utils'
 import { dedupePhotosById } from '@/utils/photoDisplay'
+import {
+  saveReportEditorDraft,
+  loadReportEditorDraft,
+  clearReportEditorDraft,
+  sectionsHavePhotoIds,
+  sortReportSections,
+} from '@/utils/reportEditorDraft'
 import { SendReportDialog } from './SendReportDialog'
 
 const FIELD = 'w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[44px]'
@@ -39,6 +47,55 @@ function sortPhotoIdsNewestFirst(photoIds, photosById) {
     const tb = photoSortTime(photosById.get(b))
     return tb.localeCompare(ta)
   })
+}
+
+function resolveEditorSeed({ initialReport, layoutTemplate, initialLeadId, draft }) {
+  const leadId = initialReport?.leadId || initialLeadId
+
+  if (initialReport && sectionsHavePhotoIds(initialReport.sections)) {
+    return {
+      title: initialReport.title || 'Photo Report',
+      sections: sortReportSections(initialReport.sections),
+      reportId: initialReport.id ?? null,
+    }
+  }
+
+  if (
+    draft
+    && draft.leadId === leadId
+    && sectionsHavePhotoIds(draft.sections)
+    && (!initialReport?.id || draft.reportId === initialReport.id)
+  ) {
+    return {
+      title: draft.title || initialReport?.title || layoutTemplate?.title || layoutTemplate?.name || 'Photo Report',
+      sections: sortReportSections(draft.sections),
+      reportId: draft.reportId || initialReport?.id || null,
+    }
+  }
+
+  if (initialReport) {
+    return {
+      title: initialReport.title || 'Photo Report',
+      sections: (initialReport.sections || []).length
+        ? sortReportSections(initialReport.sections)
+        : [newReportSection(0)],
+      reportId: initialReport.id ?? null,
+    }
+  }
+
+  if (layoutTemplate) {
+    return {
+      title: layoutTemplate.title || layoutTemplate.name || 'Photo Report',
+      sections: sectionsFromTemplate(layoutTemplate),
+      reportId: null,
+    }
+  }
+
+  return {
+    title: 'Photo Report',
+    sections: [newReportSection(0)],
+    reportId: draft?.reportId ?? null,
+  }
 }
 
 export function ReportBuilder({
@@ -118,26 +175,56 @@ export function ReportBuilder({
     }
 
     const leadId = initialReport?.leadId || initialLeadId
+    const draft = leadId ? loadReportEditorDraft(leadId) : null
     const key = initialReport?.id
+      ?? draft?.reportId
       ?? (layoutTemplate?.id ? `draft:${leadId}:${layoutTemplate.id}` : `draft:${leadId}`)
     if (initKeyRef.current === key) return
     initKeyRef.current = key
 
-    if (initialReport) {
-      setTitle(initialReport.title || 'Photo Report')
-      setSections(
-        (initialReport.sections || []).length
-          ? [...initialReport.sections].sort((a, b) => a.order - b.order)
-          : [newReportSection(0)]
-      )
-    } else if (layoutTemplate) {
-      setTitle(layoutTemplate.title || layoutTemplate.name || 'Photo Report')
-      setSections(sectionsFromTemplate(layoutTemplate))
-    } else {
-      setTitle('Photo Report')
-      setSections([newReportSection(0)])
-    }
+    const seed = resolveEditorSeed({ initialReport, layoutTemplate, initialLeadId, draft })
+    setTitle(seed.title)
+    setSections(seed.sections)
+    if (seed.reportId) setSavedReportId(seed.reportId)
   }, [open, initialReport, initialTemplate, layoutTemplate, isTemplate, initialLeadId])
+
+  useEffect(() => {
+    if (!open || isTemplate) return undefined
+    const leadId = initialReport?.leadId || initialLeadId
+    if (!leadId) return undefined
+
+    const draft = {
+      leadId,
+      reportId: savedReportId || initialReport?.id || null,
+      title,
+      sections,
+      templateId: layoutTemplate?.id || initialReport?.templateId || null,
+    }
+    saveReportEditorDraft(draft)
+    return undefined
+  }, [open, isTemplate, initialReport, initialLeadId, savedReportId, title, sections, layoutTemplate])
+
+  useEffect(() => {
+    if (!open || isTemplate || !getToken) return undefined
+    if (sectionsHavePhotoIds(sections)) return undefined
+
+    const reportId = savedReportId || initialReport?.id
+    if (!reportId) return undefined
+
+    let cancelled = false
+    fetchPhotoReports(getToken, { reportId })
+      .then((report) => {
+        if (cancelled || !report?.sections?.length) return
+        if (!sectionsHavePhotoIds(report.sections)) return
+        setTitle(report.title || 'Photo Report')
+        setSections(sortReportSections(report.sections))
+        setSavedReportId(report.id)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [open, isTemplate, getToken, savedReportId, initialReport?.id, sections])
 
   useEffect(() => {
     if (!open || isTemplate || !lead?.id || !getToken || !onLeadUpdate) return undefined
@@ -355,6 +442,13 @@ export function ReportBuilder({
     setPreviewing(true)
     try {
       const report = await persistReport()
+      saveReportEditorDraft({
+        leadId: lead.id,
+        reportId: report.id,
+        title: title.trim() || 'Photo Report',
+        sections,
+        templateId: layoutTemplate?.id || initialReport?.templateId || null,
+      })
       onSaved?.(report, { keepOpen: true })
       const url = await fetchClientPreviewUrl(getToken, { type: 'report', id: report.id })
       if (!openClientPreviewUrl(url, previewWindow)) {
@@ -377,6 +471,7 @@ export function ReportBuilder({
     setSaving(true)
     try {
       const report = await persistReport()
+      clearReportEditorDraft(lead.id)
       showToast('Report saved', 'success')
       onSaved?.(report)
       onClose?.()

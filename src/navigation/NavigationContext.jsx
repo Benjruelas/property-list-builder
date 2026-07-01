@@ -423,11 +423,15 @@ export function NavigationProvider({ children }) {
   }, [push])
 
   const patchReportsEditor = useCallback((patch) => {
+    const nextStack = state.navStack.map((f) =>
+      f.type === 'reports.editor' ? { ...f, ...patch } : f,
+    )
+    persistNavStack(nextStack)
     dispatch({
       type: NAV_ACTIONS.PATCH_NAV_FRAME,
       payload: { frameType: 'reports.editor', patch },
     })
-  }, [])
+  }, [state.navStack])
 
   const pushReportsDetail = useCallback((reportId) => {
     push({ type: 'reports.detail', reportId })
