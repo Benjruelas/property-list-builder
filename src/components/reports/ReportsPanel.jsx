@@ -67,6 +67,7 @@ export function ReportsPanel({
   teams = [],
   teamMembership = null,
   quickCreateRequestKey = 0,
+  onLeadUpdate,
 }) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('reports')
@@ -609,6 +610,7 @@ export function ReportsPanel({
         getToken={getToken}
         onClose={onCloseEditor}
         onBack={onCloseEditor}
+        onLeadUpdate={onLeadUpdate}
         onSaved={(saved, options = {}) => {
           if (editorMode === 'template') {
             refresh()
