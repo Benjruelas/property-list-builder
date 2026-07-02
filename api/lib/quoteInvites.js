@@ -77,7 +77,7 @@ export function escapeHtml(s) {
 
 export async function findQuoteInviteByToken(token) {
   const normalized = String(token || '').trim()
-  if (!normalized || normalized.length < 16) {
+  if (!normalized || normalized.length < 8) {
     return { invite: null, index: -1, error: 'not_found' }
   }
   const all = await getAllQuoteInvites()
