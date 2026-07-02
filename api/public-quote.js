@@ -5,8 +5,9 @@ import {
   saveAllQuoteInvites,
   escapeHtml,
 } from './lib/quoteInvites.js'
-import { getQuoteById, getAllQuotes, updateQuoteAtIndex } from './lib/quoteStore.js'
+import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
 import { parseQuotePreviewToken } from './lib/previewToken.js'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 import { syncQuotePaymentOnPaid, syncQuoteToDealOnAccept } from './lib/syncQuoteToDeal.js'
 import {
   computeQuoteTotals,
@@ -162,20 +163,10 @@ async function loadQuoteContext(token) {
     return { invite: previewInvite, invIdx: -1, quote, index, all, error: null }
   }
 
-  const all = await getAllQuotes()
-  const index = all.findIndex((q) => q.previewToken === normalized)
-  if (index === -1) return { error: 'Quote link not found', status: 404 }
-
-  const quote = all[index]
-  const previewInvite = {
-    token: normalized,
-    quoteId: quote.id,
-    preview: true,
-    recipientEmail: '',
-    message: '',
-    status: 'pending',
-  }
-  return { invite: previewInvite, invIdx: -1, quote, index, all, error: null }
+  // Legacy raw `quote.previewToken` KV fallback removed: it bypassed invite
+  // expiry/revocation. Access now requires a live invite or a signed preview
+  // token (handled above).
+  return { error: 'Quote link not found', status: 404 }
 }
 
 export const config = {
@@ -189,6 +180,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
+
+  if (await enforceIpRateLimit(req, res, { name: 'public-quote', limit: 120, windowSec: 60 })) return
 
   const token = req.query?.token || (typeof req.body === 'object' ? req.body?.token : null)
   if (!token) return res.status(400).json({ error: 'token is required' })

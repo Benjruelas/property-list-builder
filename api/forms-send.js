@@ -6,6 +6,10 @@ import {
   buildFromAddress,
   escapeHtml,
 } from './lib/senderBranding.js'
+import { getAllTemplates } from './lib/formInvites.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { rateLimit } from './lib/rateLimit.js'
+import { sanitizeHeader } from './lib/emailSafety.js'
 
 /**
  * Vercel Serverless Function - emails a flattened form PDF and records the submission.
@@ -115,6 +119,12 @@ export default async function handler(req, res) {
   if (!user) user = await verifyFirebaseToken(idToken)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
+  const rl = await rateLimit({ key: `forms-send:${user.uid}`, limit: 100, windowSec: 3600 })
+  if (!rl.allowed) {
+    res.setHeader('Retry-After', String(rl.retryAfter))
+    return res.status(429).json({ error: 'Too many sends. Please try again later.', retryAfter: rl.retryAfter })
+  }
+
   try {
     if (!process.env.RESEND_API_KEY) {
       return res.status(500).json({ error: 'Email service not configured. Please set RESEND_API_KEY.' })
@@ -139,6 +149,16 @@ export default async function handler(req, res) {
     }
     if (!templateId) return res.status(400).json({ error: 'templateId is required' })
 
+    // Verify the caller actually has access to this template so submissions
+    // can't be attributed to someone else's template.
+    const [templates, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
+    const template = templates.find((t) => t.id === String(templateId))
+    if (!template) return res.status(404).json({ error: 'Template not found' })
+    const templateAccess = resolveAccess(template, user, fullTeamsIndex(allTeams))
+    if (!templateAccess) {
+      return res.status(403).json({ error: 'You do not have access to this template' })
+    }
+
     const cleaned = pdfBase64.replace(/^data:application\/pdf;base64,/, '')
     let buf
     try {
@@ -150,7 +170,7 @@ export default async function handler(req, res) {
       return res.status(413).json({ error: `PDF must be between 1 byte and ${MAX_PDF_BYTES} bytes` })
     }
 
-    const safeSubject = String(subject || `Completed form: ${templateName || 'Form'}`).slice(0, 200)
+    const safeSubject = sanitizeHeader(subject || `Completed form: ${templateName || 'Form'}`, 200)
     const safeMessage = String(message || '').slice(0, 4000)
     const filename = `${sanitizeFilename(templateName || templateId)}_${Date.now()}.pdf`
 

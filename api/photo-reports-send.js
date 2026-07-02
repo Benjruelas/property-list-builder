@@ -19,6 +19,8 @@ import {
   escapeHtml,
 } from './lib/senderBranding.js'
 import { leadDisplayName } from './lib/publicReportPayload.js'
+import { rateLimit } from './lib/rateLimit.js'
+import { sanitizeHeader } from './lib/emailSafety.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
@@ -71,6 +73,12 @@ export default async function handler(req, res) {
   let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
   if (!user) user = await verifyFirebaseToken(idToken)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
+
+  const rl = await rateLimit({ key: `reports-send:${user.uid}`, limit: 100, windowSec: 3600 })
+  if (!rl.allowed) {
+    res.setHeader('Retry-After', String(rl.retryAfter))
+    return res.status(429).json({ error: 'Too many sends. Please try again later.', retryAfter: rl.retryAfter })
+  }
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
@@ -153,7 +161,7 @@ export default async function handler(req, res) {
     const senderLabel = branding.senderName
     const { lead } = await getLeadWithAccess(user, report.leadId)
     const propertyLabel = lead ? leadDisplayName(lead) : 'your property'
-    const safeSubject = String(subject || `Photo report: ${reportTitle}`).slice(0, 200)
+    const safeSubject = sanitizeHeader(subject || `Photo report: ${reportTitle}`, 200)
 
     const innerHtml = `
       <p>${escapeHtml(senderLabel)} has sent you a photo report${reportTitle ? `: <strong>${escapeHtml(reportTitle)}</strong>` : ''} for ${escapeHtml(propertyLabel)}.</p>

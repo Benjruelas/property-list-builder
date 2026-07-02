@@ -10,6 +10,7 @@ import { Resend } from 'resend'
 import { requireAuth } from './lib/apiAuth.js'
 import { rateLimit } from './lib/rateLimit.js'
 import { escapeHtml, sanitizeHeader, isValidEmail } from './lib/emailSafety.js'
+import { applyCors } from './lib/cors.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -20,9 +21,7 @@ const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
 const FROM_ADDRESS = process.env.EXPORT_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || DEFAULT_FROM
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  applyCors(req, res, { methods: 'POST, OPTIONS' })
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()

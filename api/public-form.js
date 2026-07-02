@@ -10,6 +10,7 @@ import {
   sanitizeFilename,
   mergeInviteValues,
 } from './lib/formInvites.js'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 /**
  * Vercel Serverless Function - token-gated public form access (no auth).
@@ -95,6 +96,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
+
+  if (await enforceIpRateLimit(req, res, { name: 'public-form', limit: 120, windowSec: 60 })) return
 
   try {
     if (req.method === 'GET') {
