@@ -35,7 +35,8 @@ import { resolveLeadParcelAtLocation, parcelDataFromLandRecords } from './utils/
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import PathTracker from './components/PathTracker'
-import { panelLazy, prefetchAllPanels, prefetchPanel } from './utils/panelChunks'
+import { getUserLocation, setCurrentUserLocation, subscribeUserLocation, useUserLocation } from './utils/locationStore'
+import { panelLazy, prefetchPanel } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
 const FormsPanel = lazy(panelLazy.forms)
 const DealPipeline = lazy(panelLazy.dealPipeline)
@@ -159,7 +160,9 @@ function notifySkipTraceEvent(label, detail, { failed = false } = {}) {
   }
 }
 
-function LocationMarker({ position }) {
+function LocationMarker() {
+  // Subscribes to the location store so GPS ticks re-render only this marker.
+  const position = useUserLocation()
   const [interpPos, setInterpPos] = useState(null)
   const animRef = useRef({ from: null, to: null, startTime: 0, duration: 900, rafId: null })
 
@@ -349,18 +352,6 @@ function App() {
     }
   }, [logout, nav])
   const [permissionsReady, setPermissionsReady] = useState(() => hasGrantedPermissions())
-  const [userLocation, setUserLocation] = useState(null)
-
-  useEffect(() => {
-    if (!permissionsReady || authLoading) return undefined
-    const run = () => prefetchAllPanels()
-    if (typeof requestIdleCallback === 'function') {
-      const id = requestIdleCallback(run, { timeout: 3000 })
-      return () => cancelIdleCallback(id)
-    }
-    const t = window.setTimeout(run, 600)
-    return () => window.clearTimeout(t)
-  }, [permissionsReady, authLoading])
 
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
   const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
@@ -384,7 +375,7 @@ function App() {
     return true
   })
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
-  const { heading, requestOrientation, needsGesture } = useDeviceHeading(permissionsReady)
+  const { getHeading, subscribeHeading, requestOrientation, needsGesture } = useDeviceHeading(permissionsReady)
 
   // When orientation becomes available (needsGesture flips to false),
   // auto-enable compass if user's setting wants it.
@@ -688,43 +679,49 @@ function App() {
     }
   }, [])
 
-  // Initial center on first GPS fix
+  // Initial center on first GPS fix (imperative — GPS ticks don't re-render App)
   useEffect(() => {
-    if (userLocation && !initialSetDoneRef.current && mapInstanceRef.current) {
-      initialSetDoneRef.current = true
-      const initZoom = 17
-      const map = mapInstanceRef.current
-      map.jumpTo({ center: [userLocation.lng, userLocation.lat], zoom: initZoom, pitch: 0 })
-      map.fire('moveend')
+    const applyInitialCenter = () => {
+      const loc = getUserLocation()
+      if (loc && !initialSetDoneRef.current && mapInstanceRef.current) {
+        initialSetDoneRef.current = true
+        const map = mapInstanceRef.current
+        map.jumpTo({ center: [loc.lng, loc.lat], zoom: 17, pitch: 0 })
+        map.fire('moveend')
+      }
     }
-  }, [userLocation])
+    applyInitialCenter()
+    return subscribeUserLocation(applyInitialCenter)
+  }, [])
 
-  // Follow-mode panning
+  // Follow-mode panning (imperative subscription to the location store)
   useEffect(() => {
-    if (!userLocation || !initialSetDoneRef.current || !isFollowing) {
-      prevFollowingRef.current = isFollowing
-      return
-    }
-    const map = mapInstanceRef.current
-    if (!map) { prevFollowingRef.current = isFollowing; return }
     const justResumed = !prevFollowingRef.current && isFollowing
     prevFollowingRef.current = isFollowing
-    if (justResumed) {
-      const raf = requestAnimationFrame(() => {
-        programmaticMoveRef.current = true
-        map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 500 })
-        setTimeout(() => { programmaticMoveRef.current = false }, 600)
-      })
-      return () => cancelAnimationFrame(raf)
+    if (!isFollowing) return undefined
+
+    const panTo = (loc, duration) => {
+      const map = mapInstanceRef.current
+      if (!map || !loc || !initialSetDoneRef.current) return
+      const c = map.getCenter()
+      const dx = Math.abs(c.lng - loc.lng)
+      const dy = Math.abs(c.lat - loc.lat)
+      if (dx < 0.00002 && dy < 0.00002) return
+      programmaticMoveRef.current = true
+      map.easeTo({ center: [loc.lng, loc.lat], duration, easing: (t) => 1 - Math.pow(1 - t, 3) })
+      setTimeout(() => { programmaticMoveRef.current = false }, duration + 100)
     }
-    const c = map.getCenter()
-    const dx = Math.abs(c.lng - userLocation.lng)
-    const dy = Math.abs(c.lat - userLocation.lat)
-    if (dx < 0.00002 && dy < 0.00002) return
-    programmaticMoveRef.current = true
-    map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 900, easing: (t) => 1 - Math.pow(1 - t, 3) })
-    setTimeout(() => { programmaticMoveRef.current = false }, 1000)
-  }, [userLocation, isFollowing])
+
+    let raf = null
+    if (justResumed) {
+      raf = requestAnimationFrame(() => panTo(getUserLocation(), 500))
+    }
+    const unsubscribe = subscribeUserLocation((loc) => panTo(loc, 900))
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      unsubscribe()
+    }
+  }, [isFollowing])
 
   // Recenter map function
   const recenterMapRef = useRef(null)
@@ -732,13 +729,14 @@ function App() {
   useEffect(() => {
     recenterMapRef.current = () => {
       const map = mapInstanceRef.current
-      if (map && userLocation) {
+      const loc = getUserLocation()
+      if (map && loc) {
         programmaticMoveRef.current = true
-        map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 500 })
+        map.easeTo({ center: [loc.lng, loc.lat], duration: 500 })
         setTimeout(() => { programmaticMoveRef.current = false }, 600)
       }
     }
-  }, [userLocation])
+  }, [])
 
   const handleSettingsChange = useCallback((partial) => {
     const next = updateSettings(partial, getToken)
@@ -792,7 +790,9 @@ function App() {
     return () => clearInterval(id)
   }, [permissionsReady])
 
-  // Track user's current location in real-time (only after permissions granted)
+  // Track user's current location in real-time (only after permissions granted).
+  // Fixes go to the external location store, not React state, so 1 Hz GPS
+  // updates never re-render the App tree.
   useEffect(() => {
     if (!permissionsReady) return
     let watchId = null
@@ -802,17 +802,16 @@ function App() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const location = {
+          setCurrentUserLocation({
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy
-          }
-          setUserLocation(location)
+          })
           lastUpdateTime = Date.now()
         },
         (error) => {
           console.error('Error getting initial location:', error)
-          setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
+          setCurrentUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
         },
         {
           enableHighAccuracy: true,
@@ -832,22 +831,24 @@ function App() {
             accuracy: position.coords.accuracy
           }
 
-          setUserLocation((prevLocation) => {
-            if (!prevLocation) return location
+          const prevLocation = getUserLocation()
+          if (!prevLocation) {
+            lastUpdateTime = now
+            setCurrentUserLocation(location)
+            return
+          }
 
-            const latDiff = Math.abs(location.lat - prevLocation.lat)
-            const lngDiff = Math.abs(location.lng - prevLocation.lng)
-            const distanceMeters = Math.sqrt(
-              Math.pow(latDiff * 111000, 2) +
-              Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
-            )
+          const latDiff = Math.abs(location.lat - prevLocation.lat)
+          const lngDiff = Math.abs(location.lng - prevLocation.lng)
+          const distanceMeters = Math.sqrt(
+            Math.pow(latDiff * 111000, 2) +
+            Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
+          )
 
-            if (distanceMeters >= 2) {
-              lastUpdateTime = now
-              return location
-            }
-            return prevLocation
-          })
+          if (distanceMeters >= 2) {
+            lastUpdateTime = now
+            setCurrentUserLocation(location)
+          }
         },
         (error) => {
           console.error('Error watching location:', error)
@@ -860,7 +861,7 @@ function App() {
       )
 
     } else {
-      setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
+      setCurrentUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
     }
 
     return () => {
@@ -3767,11 +3768,12 @@ function App() {
             mapInstanceRef.current = map
             mapRef.current = map
             setMapReady(true)
-            if (userLocation && !initialSetDoneRef.current) {
+            const loc = getUserLocation()
+            if (loc && !initialSetDoneRef.current) {
               initialSetDoneRef.current = true
               const initZoom = 17
               map.jumpTo({
-                center: [userLocation.lng, userLocation.lat],
+                center: [loc.lng, loc.lat],
                 zoom: initZoom,
                 pitch: 0,
               })
@@ -3789,7 +3791,12 @@ function App() {
           pitchWithRotate={false}
           touchPitch={false}
         >
-          <CompassOrientation isActive={isCompassActive} heading={heading} mapRef={mapInstanceRef} />
+          <CompassOrientation
+            isActive={isCompassActive}
+            mapRef={mapInstanceRef}
+            getHeading={getHeading}
+            subscribeHeading={subscribeHeading}
+          />
           {/* <NorthIndicator mapRef={mapInstanceRef} /> */}
           <PMTilesParcelLayer 
             mapRef={mapInstanceRef}
@@ -3814,14 +3821,11 @@ function App() {
             ref={pathTrackerRef}
             mapRef={mapInstanceRef}
             isTracking={isPathTrackingActive}
-            userLocation={userLocation}
             savedPathsToShow={paths.filter(p => visiblePathIds.includes(p.id))}
             pathColorMap={pathColorMap}
             smoothingLevel={settings.pathSmoothing}
           />
-          {userLocation && (
-            <LocationMarker position={userLocation} />
-          )}
+          <LocationMarker />
           <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
           {selectedHailEvent && hailParcelCoords ? (
             <HailStormMapMarkers
