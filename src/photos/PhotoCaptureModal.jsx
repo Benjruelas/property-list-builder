@@ -138,6 +138,8 @@ export function PhotoCaptureModal({
   teams = [],
   teamMembership = null,
   existingLeads = [],
+  /** Skip the Upload/Camera chooser and jump straight into the camera (Quick Photo Mode). */
+  autoOpenCamera = false,
 }) {
   const { enqueueCapture, reassignDraftJobs, jobs } = usePhotoUpload()
   const videoRef = useRef(null)
@@ -300,6 +302,7 @@ export function PhotoCaptureModal({
       entityType,
       entityId: entity?.id || 'draft',
       isDraft: isLead && !entity?.id,
+      autoOpenCamera,
     })
     photoLogCameraEnvironment()
 
@@ -307,10 +310,15 @@ export function PhotoCaptureModal({
       photoLogWarn('capture.camera', 'Insecure context — camera blocked on mobile LAN. Use: npm run dev:mobile')
     }
 
+    if (autoOpenCamera) {
+      setMode('camera')
+      startCamera('environment')
+    }
+
     return () => {
       stopCamera()
     }
-  }, [open, entityType, entity?.id, isLead, stopCamera])
+  }, [open, entityType, entity?.id, isLead, stopCamera, autoOpenCamera, startCamera])
 
   const triggerFlash = () => {
     setFlash(true)
