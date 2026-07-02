@@ -53,12 +53,14 @@ const OutreachPanel = lazy(panelLazy.outreach)
 const EmailComposer = lazy(panelLazy.emailComposer)
 const BulkEmailPreview = lazy(panelLazy.bulkEmailPreview)
 const HailDataPanel = lazy(panelLazy.hailData)
+const PhotoImportDialog = lazy(panelLazy.photoImport)
 import { setCachedDealQuotes, getCachedDealQuotes } from './utils/quotes'
 import { PublicFormPage } from './components/forms/PublicFormPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
 import { PublicReportPage } from './components/reports/PublicReportPage'
 import { LeadPickerDialog } from './components/photos/LeadPickerDialog'
 import { PhotoCaptureModal } from './photos/PhotoCaptureModal'
+import { QuickPhotoModeDialog } from './components/photos/QuickPhotoModeDialog'
 import { PhotoUploadProvider } from './photos/PhotoUploadProvider'
 import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as deletePathApi, sharePath as sharePathApi, sharePathWithTeams as sharePathWithTeamsApi } from './utils/paths'
 import { buildPathColorMap } from './utils/pathColors'
@@ -416,6 +418,10 @@ function App() {
   const hydratingLeadIdsRef = useRef(new Set())
   const [photoModeParcelId, setPhotoModeParcelId] = useState(null)
   const [photoModeAddress, setPhotoModeAddress] = useState('')
+  const [photoModeAutoCamera, setPhotoModeAutoCamera] = useState(false)
+  const [quickPhotoModeOpen, setQuickPhotoModeOpen] = useState(false)
+  const [photoImportOpen, setPhotoImportOpen] = useState(false)
+  const photoImportMounted = useStickyPanelMount(photoImportOpen)
   /** When set, user is choosing a target pipeline to move a deal into. */
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
@@ -2909,17 +2915,19 @@ function App() {
     guardFeature('quotes', () => nav.openQuotes())
   }, [requireAuth, guardFeature, nav])
 
-  const openPhotoModeForLead = useCallback((lead, { parcelId = null, addressLabel = '' } = {}) => {
+  const openPhotoModeForLead = useCallback((lead, { parcelId = null, addressLabel = '', autoCamera = false } = {}) => {
     if (!lead?.id) return
     setPhotoModeLead(lead)
     setPhotoModeParcelId(parcelId || lead.parcelId || null)
     setPhotoModeAddress(addressLabel || '')
+    setPhotoModeAutoCamera(autoCamera)
   }, [])
 
   const closePhotoMode = useCallback(() => {
     setPhotoModeLead(null)
     setPhotoModeParcelId(null)
     setPhotoModeAddress('')
+    setPhotoModeAutoCamera(false)
   }, [])
 
   const handlePhotoEntityUpdated = useCallback((entityRef, entity) => {
@@ -2942,25 +2950,30 @@ function App() {
     ))
   }, [])
 
-  const openPhotoModeForDraftParcel = useCallback((parcelData) => {
+  const openPhotoModeForDraftParcel = useCallback((parcelData, { autoCamera = false } = {}) => {
     if (!parcelData) return
-    const pid = resolveParcelId(parcelData) || parcelData.id
-    if (!pid) return
-    const skip = getSkipTracedParcel(pid)
+    const pid = resolveParcelId(parcelData) || parcelData.id || null
+    // Quick Photo Mode can land on a point with no assessor parcel record — still
+    // allow starting a lead as long as we have a usable address (manual entry or
+    // reverse-geocoded fallback set on parcelData.address).
+    const skip = pid ? getSkipTracedParcel(pid) : null
     const prefill = buildLeadPrefillFromParcel(parcelData, skip)
+    if (!pid && !prefill.address) return
     setPhotoModeLead({ ...prefill, photos: [] })
     setPhotoModeParcelId(pid)
     setPhotoModeAddress(parcelData.address || popupData?.address || prefill.address || '')
+    setPhotoModeAutoCamera(autoCamera)
   }, [popupData])
 
   const beginPhotoCapture = useCallback((opts = {}) => {
     if (!requireAuth()) return
     guardFeature('photos', () => {
-      const { parcelData, lead } = opts
+      const { parcelData, lead, autoCamera = false } = opts
       if (lead?.id) {
         openPhotoModeForLead(lead, {
           parcelId: parcelData ? (resolveParcelId(parcelData) || parcelData.id) : lead.parcelId,
           addressLabel: parcelData?.address || popupData?.address || '',
+          autoCamera,
         })
         return
       }
@@ -2970,10 +2983,11 @@ function App() {
           openPhotoModeForLead(existing, {
             parcelId: resolveParcelId(parcelData) || parcelData.id,
             addressLabel: parcelData.address || popupData?.address || '',
+            autoCamera,
           })
           return
         }
-        guardFeature('leads', () => openPhotoModeForDraftParcel(parcelData))
+        guardFeature('leads', () => openPhotoModeForDraftParcel(parcelData, { autoCamera }))
         return
       }
       const parcelId = opts.parcelId || null
@@ -2983,6 +2997,7 @@ function App() {
           openPhotoModeForLead(existing, {
             parcelId,
             addressLabel: popupData?.address || '',
+            autoCamera,
           })
           return
         }
@@ -2997,6 +3012,27 @@ function App() {
     if (!clickedParcelData) return
     beginPhotoCapture({ parcelData: clickedParcelData })
   }, [clickedParcelData, beginPhotoCapture])
+
+  const beginQuickPhotoCapture = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('photos', () => setQuickPhotoModeOpen(true))
+  }, [requireAuth, guardFeature])
+
+  const handleQuickPhotoModeConfirm = useCallback(({ parcelData, lead } = {}) => {
+    setQuickPhotoModeOpen(false)
+    if (lead?.id) {
+      beginPhotoCapture({ lead, autoCamera: true })
+      return
+    }
+    if (parcelData) {
+      beginPhotoCapture({ parcelData, autoCamera: true })
+    }
+  }, [beginPhotoCapture])
+
+  const openPhotoImport = useCallback(() => {
+    if (!requireAuth()) return
+    guardFeature('photos', () => setPhotoImportOpen(true))
+  }, [requireAuth, guardFeature])
 
   const openReportsPanel = useCallback(() => {
     if (!requireAuth()) return
@@ -3912,6 +3948,7 @@ function App() {
         isPathTrackingActive={isPathTrackingActive}
         currentUser={currentUser}
         onCloseParcelPopup={() => nav.clearMapOverlays()}
+        onQuickPhotoMode={beginQuickPhotoCapture}
       />
 
       <MobileActionBar
@@ -3949,6 +3986,8 @@ function App() {
         onOpenOutreach={handleOpenOutreach}
         onOpenForms={openFormsPanel}
         onOpenSettings={openSettingsPanel}
+        onOpenPhotoMode={beginQuickPhotoCapture}
+        onOpenPhotoImport={openPhotoImport}
         currentUser={currentUser}
         onLogin={openLogin}
       />
@@ -4443,6 +4482,7 @@ function App() {
           entity={photoModeLead}
           parcelId={photoModeParcelId}
           addressLabel={photoModeAddress}
+          autoOpenCamera={photoModeAutoCamera}
           getToken={getToken}
           currentUser={currentUser}
           onClose={closePhotoMode}
@@ -4463,6 +4503,36 @@ function App() {
           teamMembership={teamMembership}
           existingLeads={leads}
         />
+      )}
+
+      <QuickPhotoModeDialog
+        open={quickPhotoModeOpen}
+        onClose={() => setQuickPhotoModeOpen(false)}
+        leads={leads}
+        onConfirm={handleQuickPhotoModeConfirm}
+      />
+
+      {photoImportMounted && (
+        <Suspense fallback={null}>
+          <PhotoImportDialog
+            open={photoImportOpen}
+            onClose={() => setPhotoImportOpen(false)}
+            leads={leads}
+            getToken={getToken}
+            currentUser={currentUser}
+            teams={teams}
+            teamMembership={teamMembership}
+            onLeadsUpdated={(updatedLeads) => {
+              setLeads((prev) => {
+                let next = prev
+                for (const lead of updatedLeads) {
+                  next = upsertLeadInLocalStore(next, lead)
+                }
+                return next
+              })
+            }}
+          />
+        </Suspense>
       )}
 
       {pathsPanelMounted && (
