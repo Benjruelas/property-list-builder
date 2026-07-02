@@ -4,7 +4,7 @@
 
 import { flags } from './flags.js'
 import { kv, kvAvailable } from './kvBootstrap.js'
-import { kvSAdd, kvSMembers } from './kvOps.js'
+import { kvSAdd, kvSMembers, kvMSet } from './kvOps.js'
 import { withTiming } from './timing.js'
 import { filterVisibleResources } from './resourceContext.js'
 import { collectAffectedUidsForResource } from './shareIndex.js'
@@ -92,14 +92,19 @@ export async function writePipelinesToShards(allPipelines) {
   const mode = flags.PIPELINES_SHARDED()
   if (mode === 'off' || !kvAvailable) return
   const byOwner = new Map()
+  const indexEntries = {}
   for (const pipeline of allPipelines || []) {
     const ownerId = pipeline?.ownerId
     if (!ownerId) continue
     if (!byOwner.has(ownerId)) byOwner.set(ownerId, [])
     byOwner.get(ownerId).push(pipeline)
-    await indexPipeline(pipeline)
+    if (pipeline.id) indexEntries[pipelineIndexKey(pipeline.id)] = ownerId
   }
-  await Promise.all([...byOwner.entries()].map(([ownerId, pipes]) => saveOwnerPipelines(ownerId, pipes)))
+  // Batch the pipeline->owner index writes into one round trip instead of N.
+  await Promise.all([
+    kvMSet(indexEntries),
+    ...[...byOwner.entries()].map(([ownerId, pipes]) => saveOwnerPipelines(ownerId, pipes)),
+  ])
 }
 
 export async function getVisiblePipelinesFromShards(user, ctx) {
@@ -144,22 +149,27 @@ export async function backfillPipelineShards() {
   const allTeams = await getAllTeams()
   const byOwner = new Map()
   const sharedPairs = []
+  const indexEntries = {}
 
   for (const pipeline of all) {
     const ownerId = pipeline?.ownerId
     if (!ownerId) continue
     if (!byOwner.has(ownerId)) byOwner.set(ownerId, [])
     byOwner.get(ownerId).push(pipeline)
-    await indexPipeline(pipeline)
+    if (pipeline.id) indexEntries[pipelineIndexKey(pipeline.id)] = ownerId
     for (const uid of collectAffectedUidsForResource(pipeline, allTeams)) {
       if (uid !== ownerId) sharedPairs.push([uid, ownerId])
     }
   }
 
+  await kvMSet(indexEntries)
   await Promise.all([...byOwner.entries()].map(([ownerId, pipes]) => saveOwnerPipelines(ownerId, pipes)))
+  const byUid = new Map()
   for (const [uid, ownerId] of sharedPairs) {
-    await kvSAdd(sharedIndexKey(uid), ownerId)
+    if (!byUid.has(uid)) byUid.set(uid, new Set())
+    byUid.get(uid).add(ownerId)
   }
+  await Promise.all([...byUid.entries()].map(([uid, owners]) => kvSAdd(sharedIndexKey(uid), ...owners)))
 
   return { owners: byOwner.size, pipelines: all.length, sharedLinks: sharedPairs.length }
 }

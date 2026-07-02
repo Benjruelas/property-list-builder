@@ -4,7 +4,7 @@
 
 import { flags } from './flags.js'
 import { kv, kvAvailable } from './kvBootstrap.js'
-import { kvSAdd, kvSMembers } from './kvOps.js'
+import { kvSAdd, kvSMembers, kvMSet } from './kvOps.js'
 import { withTiming } from './timing.js'
 import { getAllTeams } from './teams.js'
 import { buildAccessContext, filterVisibleResources } from './resourceContext.js'
@@ -101,14 +101,19 @@ export async function writeLeadToShards(allLeads) {
   const mode = flags.LEADS_SHARDED()
   if (mode === 'off' || !kvAvailable) return
   const byOwner = new Map()
+  const indexEntries = {}
   for (const lead of allLeads || []) {
     const ownerId = lead?.ownerId
     if (!ownerId) continue
     if (!byOwner.has(ownerId)) byOwner.set(ownerId, [])
     byOwner.get(ownerId).push(lead)
-    await indexLead(lead)
+    if (lead.id) indexEntries[leadIndexKey(lead.id)] = ownerId
   }
-  await Promise.all([...byOwner.entries()].map(([ownerId, leads]) => saveOwnerLeads(ownerId, leads)))
+  // Batch the lead->owner index writes into one round trip instead of N.
+  await Promise.all([
+    kvMSet(indexEntries),
+    ...[...byOwner.entries()].map(([ownerId, leads]) => saveOwnerLeads(ownerId, leads)),
+  ])
 }
 
 export async function getVisibleLeadsFromShards(user, ctx) {
@@ -179,22 +184,28 @@ export async function backfillLeadShards() {
   const allTeams = await getAllTeams()
   const byOwner = new Map()
   const sharedPairs = []
+  const indexEntries = {}
 
   for (const lead of all) {
     const ownerId = lead?.ownerId
     if (!ownerId) continue
     if (!byOwner.has(ownerId)) byOwner.set(ownerId, [])
     byOwner.get(ownerId).push(lead)
-    await indexLead(lead)
+    if (lead.id) indexEntries[leadIndexKey(lead.id)] = ownerId
     for (const uid of collectAffectedUidsForResource(lead, allTeams)) {
       if (uid !== ownerId) sharedPairs.push([uid, ownerId])
     }
   }
 
+  await kvMSet(indexEntries)
   await Promise.all([...byOwner.entries()].map(([ownerId, leads]) => saveOwnerLeads(ownerId, leads)))
+  // Group shared links per uid so each uid is one SADD with all owners.
+  const byUid = new Map()
   for (const [uid, ownerId] of sharedPairs) {
-    await kvSAdd(sharedIndexKey(uid), ownerId)
+    if (!byUid.has(uid)) byUid.set(uid, new Set())
+    byUid.get(uid).add(ownerId)
   }
+  await Promise.all([...byUid.entries()].map(([uid, owners]) => kvSAdd(sharedIndexKey(uid), ...owners)))
 
   return {
     owners: byOwner.size,

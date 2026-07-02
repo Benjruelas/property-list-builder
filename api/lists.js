@@ -11,6 +11,7 @@ import {
   activityAudienceForResource,
 } from './lib/resourceContext.js'
 import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
+import { paginateArray } from './lib/pagination.js'
 
 /**
  * Vercel Serverless Function - property lists. Firebase Bearer auth.
@@ -132,6 +133,11 @@ export default async function handler(req, res) {
       const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
       const lists = filterVisibleResources(all, user, ctx)
+      // Opt-in cursor pagination (?limit=&cursor=) — full array without limit.
+      const page = paginateArray(lists, req.query || {})
+      if (page.paginated) {
+        return res.status(200).json({ lists: page.items, nextCursor: page.nextCursor })
+      }
       return res.status(200).json({ lists })
     }
 

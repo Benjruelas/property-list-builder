@@ -7,9 +7,9 @@ import {
 } from '../publicLinks.js'
 
 describe('publicLinks', () => {
-  it('generates compact invite tokens', () => {
+  it('generates high-entropy invite tokens (>=128 bits)', () => {
     const token = generatePublicInviteToken()
-    expect(token).toHaveLength(10)
+    expect(token).toHaveLength(22)
     expect(token).toMatch(/^[0-9A-Za-z]+$/)
   })
 

@@ -149,6 +149,9 @@ export default async function handler(req, res) {
       await saveSubscriptions(user.uid, entries)
       await kv.set(`push_by_email:${email}`, user.uid)
       await kv.set(`push_uid:${user.uid}`, email)
+      // Maintain an index set so the reminders cron can iterate push-enabled
+      // users without a blocking KEYS scan.
+      try { if (typeof kv.sAdd === 'function') await kv.sAdd('push_subscribers', user.uid); else if (typeof kv.sadd === 'function') await kv.sadd('push_subscribers', user.uid) } catch { /* ignore */ }
 
       return res.status(200).json({ ok: true, deviceCount: entries.length })
     }
@@ -161,6 +164,7 @@ export default async function handler(req, res) {
       if (email) {
         await kv.del(`push_by_email:${email}`)
       }
+      try { if (typeof kv.sRem === 'function') await kv.sRem('push_subscribers', user.uid); else if (typeof kv.srem === 'function') await kv.srem('push_subscribers', user.uid) } catch { /* ignore */ }
       return res.status(200).json({ ok: true })
     }
 

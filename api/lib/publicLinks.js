@@ -4,10 +4,12 @@
  */
 
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-const DEFAULT_INVITE_TOKEN_LENGTH = 10
+// 22 base62 chars ≈ 131 bits of entropy — brute-force infeasible even without
+// per-token throttling (10 chars was only ~59 bits).
+const DEFAULT_INVITE_TOKEN_LENGTH = 22
 
 export function generatePublicInviteToken(length = DEFAULT_INVITE_TOKEN_LENGTH) {
-  const size = Math.max(8, Math.min(length, 24))
+  const size = Math.max(8, Math.min(length, 32))
   const bytes = new Uint8Array(size)
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(bytes)

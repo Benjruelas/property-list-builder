@@ -7,6 +7,7 @@ import {
   getAllReportTemplates,
 } from './lib/reportStore.js'
 import { getLeadWithAccess, getVisibleLeads } from './lib/leadAccess.js'
+import { paginateArray } from './lib/pagination.js'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 
 async function verifyFirebaseToken(idToken) {
@@ -139,6 +140,11 @@ export default async function handler(req, res) {
       }
 
       reports.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+      // Opt-in cursor pagination (?limit=&cursor=) — full array without limit.
+      const page = paginateArray(reports, req.query || {})
+      if (page.paginated) {
+        return res.status(200).json({ reports: page.items, nextCursor: page.nextCursor })
+      }
       return res.status(200).json({ reports })
     }
 

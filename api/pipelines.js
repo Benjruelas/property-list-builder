@@ -21,6 +21,7 @@ import {
   parseIfNoneMatch,
 } from './lib/dataVersion.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
+import { paginateArray } from './lib/pagination.js'
 
 /**
  * Vercel Serverless Function
@@ -230,6 +231,11 @@ export default async function handler(req, res) {
       if (flags.VERSIONED_POLL()) {
         const serverVer = await getUserDataVersion(DATAVER_PIPELINES, user.uid)
         res.setHeader('ETag', `"${serverVer}"`)
+      }
+      // Opt-in cursor pagination (?limit=&cursor=) — full array without limit.
+      const page = paginateArray(pipelines, req.query || {})
+      if (page.paginated) {
+        return res.status(200).json({ pipelines: page.items, nextCursor: page.nextCursor })
       }
       return res.status(200).json({ pipelines })
     }

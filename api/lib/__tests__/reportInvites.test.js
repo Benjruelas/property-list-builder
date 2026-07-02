@@ -10,9 +10,9 @@ describe('findReportInviteByToken', () => {
     await saveAllReportInvites([])
   })
 
-  it('resolves compact 10-char invite tokens stored in KV', async () => {
+  it('resolves generated invite tokens stored in KV', async () => {
     const token = generateReportToken()
-    expect(token).toHaveLength(10)
+    expect(token).toHaveLength(22)
 
     const invite = {
       token,

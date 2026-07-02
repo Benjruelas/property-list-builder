@@ -45,10 +45,12 @@ export async function getAllReportInvites() {
 }
 
 export async function saveAllReportInvites(invites) {
-  fallbackInvites = invites
+  const { pruneDeadInvites } = await import('./invitePrune.js')
+  const pruned = pruneDeadInvites(invites)
+  fallbackInvites = pruned
   if (!kvAvailable || !kv) return
   try {
-    await kv.set(REPORT_INVITES_KV_KEY, invites).catch(() => kv.set(REPORT_INVITES_KV_KEY, JSON.stringify(invites)))
+    await kv.set(REPORT_INVITES_KV_KEY, pruned).catch(() => kv.set(REPORT_INVITES_KV_KEY, JSON.stringify(pruned)))
   } catch (e) {
     console.warn('report invites KV save failed', e.message)
   }

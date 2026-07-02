@@ -26,8 +26,6 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
   }
 }
 
-const sentCache = new Map()
-
 function isAuthorized(req) {
   const secret = process.env.CRON_SECRET
   if (secret) {
@@ -58,8 +56,23 @@ function parseTasks(userData) {
   return []
 }
 
+/**
+ * Prefer the maintained `push_subscribers` index set (only push-enabled users
+ * matter for reminders) to avoid a blocking KEYS scan of every user. Falls back
+ * to KEYS for deployments where the set hasn't been populated yet.
+ */
 async function listUserDataKeys() {
   if (!kvAvailable || !kv) return []
+  try {
+    const members = typeof kv.sMembers === 'function'
+      ? await kv.sMembers('push_subscribers')
+      : (typeof kv.smembers === 'function' ? await kv.smembers('push_subscribers') : null)
+    if (Array.isArray(members) && members.length) {
+      return members.map((uid) => `user_data_${uid}`)
+    }
+  } catch {
+    /* fall through to legacy scan */
+  }
   try {
     if (typeof kv.keys === 'function') {
       const keys = await kv.keys('user_data_*')
@@ -81,6 +94,36 @@ async function listUserDataKeys() {
     /* ignore */
   }
   return [...uids].map((uid) => `user_data_${uid}`)
+}
+
+/**
+ * Persisted, TTL'd dedup so a reminder is sent at most once per task/day even
+ * across cold starts and multiple function instances (the old in-memory cache
+ * was lost on cold start, causing duplicate pushes).
+ */
+async function markSentOnce(cacheKey) {
+  const key = `reminder_sent:${cacheKey}`
+  try {
+    if (typeof kv.set === 'function') {
+      const opts = { NX: true, EX: 86400 }
+      const r = await kv.set(key, '1', opts)
+      // node-redis returns 'OK' when set, null when NX fails; @vercel/kv returns 'OK'/null too.
+      if (r === null) return false
+      if (r === 'OK' || r === true) return true
+      // Unknown client behavior: fall back to get/settx.
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    const existing = await kv.get(key)
+    if (existing) return false
+    await kv.set(key, '1')
+    if (typeof kv.expire === 'function') await kv.expire(key, 86400)
+    return true
+  } catch {
+    return true
+  }
 }
 
 export default async function handler(req, res) {
@@ -125,15 +168,14 @@ export default async function handler(req, res) {
 
         const dayKey = new Date(at).toISOString().slice(0, 10)
         const cacheKey = `${uid}:${t.id}:${dayKey}`
-        if (sentCache.has(cacheKey)) continue
-        if (Date.now() - (sentCache.get(cacheKey) || 0) < 60000) continue
+        const firstSend = await markSentOnce(cacheKey)
+        if (!firstSend) continue
 
         await notifyTaskDeadline(uid, email, {
           taskTitle: t.title,
           scheduledAt: at,
           taskId: t.id,
         })
-        sentCache.set(cacheKey, Date.now())
         sent++
       }
     }

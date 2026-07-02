@@ -1,6 +1,10 @@
 /**
  * Team activity feed stored in KV per team.
- * Key: team_activity:{teamId} — array of activity objects (newest first).
+ * Key: team_activity:{teamId} — capped Redis LIST of activity JSON (newest first).
+ *
+ * Appends use LPUSH + LTRIM (O(1)) instead of read-modify-write on a JSON
+ * array, which eliminates append races and full-array rewrites per event.
+ * Legacy string keys holding a JSON array are migrated on first append/read.
  */
 
 let kv = null
@@ -56,27 +60,76 @@ function activityKey(teamId) {
   return `team_activity:${teamId}`
 }
 
-export async function getTeamActivity(teamId) {
-  await initKv()
-  if (!teamId || !kvAvailable || !kv) return []
+function isNativeRedis(client) {
+  return client && typeof client.connect === 'function' && typeof client.lPush === 'function'
+}
+
+function parseItem(item) {
+  if (item && typeof item === 'object') return item
+  if (typeof item === 'string') {
+    try { return JSON.parse(item) } catch { return null }
+  }
+  return null
+}
+
+async function listRange(key) {
+  if (isNativeRedis(kv)) return kv.lRange(key, 0, MAX_ACTIVITY - 1)
+  return kv.lrange(key, 0, MAX_ACTIVITY - 1)
+}
+
+async function listPush(key, value) {
+  if (isNativeRedis(kv)) {
+    await kv.lPush(key, value)
+    await kv.lTrim(key, 0, MAX_ACTIVITY - 1)
+    return
+  }
+  await kv.lpush(key, value)
+  await kv.ltrim(key, 0, MAX_ACTIVITY - 1)
+}
+
+/** Read a legacy string-key JSON-array feed, if present. Returns null when key is a list. */
+async function readLegacyArray(key) {
   try {
-    const raw = await kv.get(activityKey(teamId))
-    const parsed = typeof raw === 'string' ? (raw ? JSON.parse(raw) : []) : raw
-    return Array.isArray(parsed) ? parsed : []
+    const raw = await kv.get(key)
+    const parsed = typeof raw === 'string' ? (raw ? JSON.parse(raw) : null) : raw
+    return Array.isArray(parsed) ? parsed : null
   } catch {
-    return []
+    return null
   }
 }
 
-export async function saveTeamActivity(teamId, items) {
-  await initKv()
-  if (!teamId || !kvAvailable || !kv) return
+/** One-time migration: convert a legacy JSON-array string key to a Redis list. */
+async function migrateLegacyToList(key) {
+  const legacy = await readLegacyArray(key)
+  if (!legacy) {
+    // Key might not exist or is already a list; nothing to migrate.
+    return false
+  }
   try {
-    await kv.set(activityKey(teamId), items).catch(() =>
-      kv.set(activityKey(teamId), JSON.stringify(items))
-    )
+    await kv.del(key)
+    // LPUSH oldest first so newest ends at the head.
+    for (let i = Math.min(legacy.length, MAX_ACTIVITY) - 1; i >= 0; i--) {
+      await listPush(key, JSON.stringify(legacy[i]))
+    }
+    return true
   } catch (e) {
-    console.warn('activity store save failed', e.message)
+    console.warn('activity store legacy migration failed', e.message)
+    return false
+  }
+}
+
+export async function getTeamActivity(teamId) {
+  await initKv()
+  if (!teamId || !kvAvailable || !kv) return []
+  const key = activityKey(teamId)
+  try {
+    const items = await listRange(key)
+    if (Array.isArray(items)) return items.map(parseItem).filter(Boolean)
+    return []
+  } catch {
+    // WRONGTYPE: legacy string key still holding a JSON array.
+    const legacy = await readLegacyArray(key)
+    return Array.isArray(legacy) ? legacy : []
   }
 }
 
@@ -86,10 +139,21 @@ export async function saveTeamActivity(teamId, items) {
  */
 export async function appendTeamActivity(teamId, record) {
   if (!teamId || !record?.id) return null
-  const feed = await getTeamActivity(teamId)
-  feed.unshift(record)
-  if (feed.length > MAX_ACTIVITY) feed.length = MAX_ACTIVITY
-  await saveTeamActivity(teamId, feed)
+  await initKv()
+  if (!kvAvailable || !kv) return null
+  const key = activityKey(teamId)
+  try {
+    await listPush(key, JSON.stringify(record))
+  } catch {
+    // WRONGTYPE: migrate the legacy array key to a list, then retry once.
+    await migrateLegacyToList(key)
+    try {
+      await listPush(key, JSON.stringify(record))
+    } catch (e) {
+      console.warn('activity store append failed', e.message)
+      return null
+    }
+  }
   return record
 }
 
