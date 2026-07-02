@@ -1,8 +1,7 @@
 import { Navigation, CheckSquare, Square, Compass, Route, Plus, X, Camera } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
-
-const MAP_CHROME_BTN = 'map-chrome-btn shadow-lg touch-manipulation'
+import { MAP_CHROME_BTN, MAP_CHROME_BTN_OFFSET } from '@/lib/mapChrome'
 
 export function MapControls({ 
   onRecenter, 
@@ -30,7 +29,7 @@ export function MapControls({
   }
 
   return (
-    <div className="map-controls-stack absolute z-[1000] flex flex-col items-end gap-2 sm:gap-2 md:gap-2" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))', right: 'calc(12px + env(safe-area-inset-right, 0px))' }}>
+    <div className="map-controls-stack absolute z-[1000] flex flex-col items-end" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))', right: 'calc(12px + env(safe-area-inset-right, 0px))' }}>
       <Button
         data-tour="recenter"
         onClick={runAction(onRecenter)}
@@ -75,7 +74,8 @@ export function MapControls({
             onClick={runAction(() => onCancelMultiSelect?.())}
             className={cn(
               MAP_CHROME_BTN,
-              'absolute right-full top-1/2 z-10 mr-2 -translate-y-1/2 bg-red-600/90 hover:bg-red-700/95 border-red-400/60 text-white'
+              'absolute right-full top-1/2 z-10 -translate-y-1/2 bg-red-600/90 hover:bg-red-700/95 border-red-400/60 text-white',
+              MAP_CHROME_BTN_OFFSET
             )}
             title="Cancel multi-select and clear selection"
           >
