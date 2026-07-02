@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './lib/photoPresign.js'
 
 import {
   ENTITY_STORAGE_LIMITS,
@@ -125,10 +126,57 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      const { pipelineId, dealId, fileName, fileBase64, contentType } = req.body || {}
+      const { pipelineId, dealId, fileName, fileBase64, contentType, action, size } = req.body || {}
       const pid = sanitizeId(pipelineId)
       const did = sanitizeId(dealId)
       if (!pid || !did) return res.status(400).json({ error: 'pipelineId and dealId are required' })
+
+      // Presigned direct-to-R2 upload: avoids proxying base64 bytes through the
+      // function (double memory + slow). Client PUTs to uploadUrl then stores
+      // the returned file record on the deal.
+      if (action === 'presign') {
+        if (!presignedPhotosEnabled()) {
+          return res.status(503).json({ error: 'Direct upload not configured' })
+        }
+        const declaredSize = Number(size) || 0
+        if (declaredSize <= 0) return res.status(400).json({ error: 'size is required' })
+        if (declaredSize > MAX_SINGLE_UPLOAD_BYTES) {
+          return res.status(413).json({
+            error: `Single upload must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`,
+          })
+        }
+
+        const { allowed, pipeline } = await canAccessPipeline(user, pid)
+        if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+        const deal = (pipeline.deals || []).find((d) => d.id === did)
+        if (!deal) return res.status(404).json({ error: 'Deal not found in pipeline' })
+
+        const existingBytes = sumDealFileBytes(deal.files)
+        if (existingBytes + declaredSize > ENTITY_STORAGE_LIMITS.deal) {
+          return res.status(413).json({ error: entityStorageError('deal', ENTITY_STORAGE_LIMITS.deal) })
+        }
+
+        const safeName = sanitizeFileName(fileName)
+        const fileId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+        const key = `deal-files/${pipeline.ownerId}/${did}/${fileId}_${safeName}`
+        const uploadUrl = await createPresignedPutUrl(key, contentType || 'application/octet-stream', 900)
+
+        const fileRecord = {
+          id: fileId,
+          name: safeName,
+          size: declaredSize,
+          key,
+          contentType: contentType || 'application/octet-stream',
+          uploadedAt: new Date().toISOString(),
+        }
+        return res.status(200).json({
+          uploadUrl,
+          file: fileRecord,
+          key,
+          url: `/api/deal-files?key=${encodeURIComponent(key)}`,
+        })
+      }
+
       if (!fileBase64 || typeof fileBase64 !== 'string') {
         return res.status(400).json({ error: 'fileBase64 is required' })
       }
@@ -222,6 +270,14 @@ export default async function handler(req, res) {
         }
       }
       if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+
+      // Presigned GET: hand back a short-lived direct R2 URL instead of
+      // proxying the bytes through the function.
+      if (req.query.format === 'url' && presignedPhotosEnabled()) {
+        const url = await createPresignedGetUrl(key, 3600)
+        res.setHeader('Cache-Control', 'private, max-age=300')
+        return res.status(200).json({ url })
+      }
 
       try {
         const r = await s3().send(new GetObjectCommand({

@@ -8,6 +8,7 @@ import {
 } from './lib/reportStore.js'
 import { getLeadWithAccess, getVisibleLeads } from './lib/leadAccess.js'
 import { paginateArray } from './lib/pagination.js'
+import { presignedPhotosEnabled, createPresignedGetUrl } from './lib/photoPresign.js'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 
 async function verifyFirebaseToken(idToken) {
@@ -109,6 +110,12 @@ export default async function handler(req, res) {
         const report = all.find((r) => r.pdfKey === key)
         if (!report || !(await canAccessReport(user, report))) {
           return res.status(403).json({ error: 'Forbidden' })
+        }
+        // ?format=url → presigned R2 URL so the client downloads directly
+        // instead of proxying PDF bytes through the function.
+        if (req.query.format === 'url' && presignedPhotosEnabled()) {
+          const url = await createPresignedGetUrl(key, 3600)
+          return res.status(200).json({ url })
         }
         const r = await s3().send(new GetObjectCommand({
           Bucket: process.env.R2_BUCKET_NAME,

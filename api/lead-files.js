@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { resolveDevBypassUser, isDevBypassAllowed } from './lib/devBypassUsers.js'
 import { getLeadWithAccess, canEditLead } from './lib/leadAccess.js'
+import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './lib/photoPresign.js'
 
 import {
   ENTITY_STORAGE_LIMITS,
@@ -87,9 +88,54 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      const { leadId, fileName, fileBase64, contentType } = req.body || {}
+      const { leadId, fileName, fileBase64, contentType, action, size } = req.body || {}
       const lid = sanitizeId(leadId)
       if (!lid) return res.status(400).json({ error: 'leadId is required' })
+
+      // Presigned direct-to-R2 upload (no base64 proxying through the function).
+      if (action === 'presign') {
+        if (!presignedPhotosEnabled()) {
+          return res.status(503).json({ error: 'Direct upload not configured' })
+        }
+        const declaredSize = Number(size) || 0
+        if (declaredSize <= 0) return res.status(400).json({ error: 'size is required' })
+        if (declaredSize > MAX_SINGLE_UPLOAD_BYTES) {
+          return res.status(413).json({
+            error: `Single upload must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`,
+          })
+        }
+
+        const { lead, access } = await getLeadWithAccess(user, lid)
+        if (!lead) return res.status(404).json({ error: 'Lead not found' })
+        if (!canEditLead(access)) return res.status(403).json({ error: 'Forbidden' })
+
+        const existingBytes = sumDealFileBytes(lead.files)
+        if (existingBytes + declaredSize > ENTITY_STORAGE_LIMITS.leadFiles) {
+          return res.status(413).json({ error: entityStorageError('leadFiles', ENTITY_STORAGE_LIMITS.leadFiles) })
+        }
+
+        const safeName = sanitizeFileName(fileName)
+        const fileId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+        const ownerUid = lead.ownerId || user.uid
+        const key = `lead-files/${ownerUid}/${lid}/${fileId}_${safeName}`
+        const uploadUrl = await createPresignedPutUrl(key, contentType || 'application/octet-stream', 900)
+
+        const fileRecord = {
+          id: fileId,
+          name: safeName,
+          size: declaredSize,
+          key,
+          contentType: contentType || 'application/octet-stream',
+          uploadedAt: new Date().toISOString(),
+        }
+        return res.status(200).json({
+          uploadUrl,
+          file: fileRecord,
+          key,
+          url: `/api/lead-files?key=${encodeURIComponent(key)}`,
+        })
+      }
+
       if (!fileBase64 || typeof fileBase64 !== 'string') {
         return res.status(400).json({ error: 'fileBase64 is required' })
       }
@@ -177,6 +223,13 @@ export default async function handler(req, res) {
         allowed = !!lead && !!access
       }
       if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+
+      // Presigned GET: short-lived direct R2 URL instead of proxying bytes.
+      if (req.query.format === 'url' && presignedPhotosEnabled()) {
+        const url = await createPresignedGetUrl(key, 3600)
+        res.setHeader('Cache-Control', 'private, max-age=300')
+        return res.status(200).json({ url })
+      }
 
       try {
         const r = await s3().send(new GetObjectCommand({

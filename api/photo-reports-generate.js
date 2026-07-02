@@ -4,6 +4,7 @@ import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.
 import { getLeadWithAccess } from './lib/leadAccess.js'
 import { resolveSenderBranding } from './lib/senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './lib/buildReportPdf.js'
+import { presignedPhotosEnabled, createPresignedGetUrl } from './lib/photoPresign.js'
 
 let _s3
 function s3() {
@@ -107,10 +108,20 @@ export default async function handler(req, res) {
     }
     await updatePhotoReportAtIndex(all, index, updated)
 
+    // Prefer a presigned direct-download URL; keep the proxy URL for clients
+    // that expect it.
+    let pdfDownloadUrl = null
+    if (presignedPhotosEnabled()) {
+      try {
+        pdfDownloadUrl = await createPresignedGetUrl(pdfKey, 3600)
+      } catch { /* fall back to proxy URL */ }
+    }
+
     return res.status(200).json({
       report: updated,
       pdfKey,
       pdfUrl: `/api/photo-reports?pdfKey=${encodeURIComponent(pdfKey)}`,
+      pdfDownloadUrl,
     })
   } catch (err) {
     console.error('photo-reports-generate error', err)
