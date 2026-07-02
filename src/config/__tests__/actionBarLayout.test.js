@@ -13,7 +13,7 @@ describe('actionBarLayout', () => {
     const { barIds, overflowPrimaryIds, isDesktop } = resolveActionBarLayout(1600)
     expect(barIds).toEqual([
       'pipes', 'tasks', 'schedule', 'leads', 'deals', 'quotes', 'forms', 'reports', 'lists', 'activity',
-      'photoMode', 'photoImport', 'paths', 'outreach', 'settings',
+      'photoMode', 'paths', 'outreach', 'settings',
     ])
     expect(overflowPrimaryIds).toEqual([])
     expect(isDesktop).toBe(true)
@@ -32,6 +32,5 @@ describe('actionBarLayout', () => {
     expect(layout.barIds).toContain('paths')
     expect(layout.barIds).toContain('settings')
     expect(layout.barIds).toContain('photoMode')
-    expect(layout.barIds).toContain('photoImport')
   })
 })
