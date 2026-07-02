@@ -522,9 +522,10 @@ export function LeadDetails({
   const effectiveHideOverlay = hideOverlay || standaloneDocked
   const effectiveSuppressBackdrop = suppressBackdrop || standaloneDocked
   const suppressClickOutDismiss = primaryDetail || panelDockSlot === 'primary'
-  const hasNestedOverlay = menuOpen || tasksNestedOverlay || photosNestedOverlay || externalNestedOverlay || previewFileIndex != null || contactPickerOpen
+  const hasNestedOverlay = menuOpen || shareOpen || tasksNestedOverlay || photosNestedOverlay || externalNestedOverlay || previewFileIndex != null || contactPickerOpen
 
   return (
+    <>
     <Dialog
       open={isOpen}
       modal={false}
@@ -1053,6 +1054,8 @@ export function LeadDetails({
         )}
       </OptionsMenuDropdown>
 
+    </Dialog>
+
       <ShareResourceDialog
         open={shareOpen}
         onOpenChange={(open) => { if (!open) setShareOpen(false) }}
@@ -1062,8 +1065,10 @@ export function LeadDetails({
         shareState={localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }}
         onShareStateChange={handleShareChange}
         allowExternalSharing={teamMembership?.allowExternalSharing === true}
+        topLayer
+        nestedOverlay
       />
-    </Dialog>
+    </>
   )
 }
 

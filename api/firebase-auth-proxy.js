@@ -33,10 +33,15 @@ export default async function handler(req, res) {
     // so forwarding Content-Encoding causes ERR_CONTENT_DECODING_FAILED
     fetchRes.headers.forEach((v, k) => {
       const lower = k.toLowerCase()
-      if (!['transfer-encoding', 'content-encoding', 'content-length'].includes(lower)) {
-        res.setHeader(k, v)
+      if (
+        ['transfer-encoding', 'content-encoding', 'content-length', 'x-frame-options'].includes(lower)
+      ) {
+        return
       }
+      res.setHeader(k, v)
     })
+    // Firebase Auth embeds /__/auth/iframe on the app origin — must not inherit DENY.
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN')
     res.send(body)
   } catch (err) {
     console.error('Firebase auth proxy error:', err)

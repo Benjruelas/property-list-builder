@@ -74,6 +74,8 @@ const NESTED_DISMISS_GUARD_SELECTORS = [
   '[data-toast-container]',
   '[data-toast-item]',
   '[data-team-member-features-dialog]',
+  '[data-share-resource-dialog]',
+  '.share-list-dialog',
   '.mobile-action-bar',
   '.mobile-action-bar-menu',
   '.mobile-action-bar-menu-backdrop',

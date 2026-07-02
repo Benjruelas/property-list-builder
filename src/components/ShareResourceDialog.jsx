@@ -28,15 +28,21 @@ export function ShareResourceDialog({
   isValidatingShare = false,
   onShareEmailSave,
   secondaryLabel = 'Cancel',
+  topLayer = false,
+  nestedOverlay = false,
 }) {
   const handleClose = () => onOpenChange?.(false)
+  const stackedLayer = topLayer || nestedOverlay
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="map-panel share-list-dialog w-[min(92vw,22rem)] max-w-sm rounded-xl p-0 gap-0 overflow-hidden"
-        focusOverlay
+        focusOverlay={!stackedLayer}
+        nestedOverlay={stackedLayer}
+        topLayer={topLayer}
         showCloseButton={false}
+        data-share-resource-dialog
         {...(pipelineDialog ? { 'data-share-pipeline-dialog': true } : {})}
       >
         <div className="share-dialog-inner">

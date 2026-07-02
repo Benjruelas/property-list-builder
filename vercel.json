@@ -128,6 +128,15 @@
           "value": "camera=(self), geolocation=(self), microphone=(), payment=()"
         }
       ]
+    },
+    {
+      "source": "/__/auth/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        }
+      ]
     }
   ]
 }
