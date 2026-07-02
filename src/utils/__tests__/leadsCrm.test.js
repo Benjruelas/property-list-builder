@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   getLeadStatus,
   lastContactedAt,
@@ -11,13 +11,29 @@ import {
   formatAddressProperCase,
   toLeadPatchBody,
   isLeadPhotosOnlyPatch,
+  isLeadStatusOnlyPatch,
   mergeLeadPhotos,
   mergeLeadDetailFromPhotoApi,
   isPhotosOnlyEntityChange,
+  updateLead,
+  saveLocalLeads,
 } from '../leads'
 import { buildActivityEntry } from '../leadActivity'
 
+function mockLocalStorage() {
+  const store = new Map()
+  globalThis.localStorage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => { store.set(key, String(value)) },
+    removeItem: (key) => { store.delete(key) },
+    clear: () => { store.clear() },
+  }
+}
+
 describe('lead CRM helpers', () => {
+  beforeEach(() => {
+    mockLocalStorage()
+  })
   it('getLeadStatus derives converted when lead has deals', () => {
     const lead = { id: 'l1', status: 'qualified' }
     expect(getLeadStatus(lead, 1)).toBe('converted')
@@ -136,6 +152,40 @@ describe('lead CRM helpers', () => {
   it('isLeadPhotosOnlyPatch detects photo gallery sync payloads', () => {
     expect(isLeadPhotosOnlyPatch({ photos: [], updatedAt: '2026-01-01' })).toBe(true)
     expect(isLeadPhotosOnlyPatch({ photos: [], firstName: 'Jane' })).toBe(false)
+  })
+
+  it('isLeadStatusOnlyPatch detects status-only sync payloads', () => {
+    expect(isLeadStatusOnlyPatch({ status: 'qualified', statusUpdatedAt: '2026-01-01' })).toBe(true)
+    expect(isLeadStatusOnlyPatch({ status: 'qualified', firstName: 'Jane' })).toBe(false)
+  })
+
+  it('updateLead preserves contact info on status-only changes', async () => {
+    saveLocalLeads([{
+      id: 'lead_1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      address: '123 Main St, Dallas, TX',
+      phone: '(555) 111-2222',
+      email: 'jane@example.com',
+      phones: ['(555) 111-2222'],
+      emails: ['jane@example.com'],
+      phoneDetails: [{ value: '(555) 111-2222', source: 'user', callerId: '', primary: true }],
+      emailDetails: [{ value: 'jane@example.com', source: 'user', callerId: '', primary: true }],
+      status: 'new',
+    }])
+
+    const saved = await updateLead(async () => null, 'lead_1', {
+      status: 'qualified',
+      statusUpdatedAt: '2026-01-02T00:00:00.000Z',
+    })
+
+    expect(saved.status).toBe('qualified')
+    expect(saved.phone).toBe('(555) 111-2222')
+    expect(saved.email).toBe('jane@example.com')
+    expect(saved.phones).toEqual(['(555) 111-2222'])
+    expect(saved.emails).toEqual(['jane@example.com'])
+    expect(saved.firstName).toBe('Jane')
+    expect(saved.address).toBe('123 Main St, Dallas, TX')
   })
 
   it('mergeLeadPhotos removes deleted photos from server payloads', () => {
