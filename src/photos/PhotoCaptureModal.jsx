@@ -193,6 +193,26 @@ export function PhotoCaptureModal({
     zoomFactorRef.current = zoomFactor
   }, [zoomFactor])
 
+  // Revoke session preview blob URLs when the modal closes or unmounts so each
+  // capture session doesn't leak thumbnail bitmaps.
+  const sessionItemsRef = useRef(sessionItems)
+  sessionItemsRef.current = sessionItems
+  const revokeSessionPreviews = useCallback(() => {
+    for (const item of sessionItemsRef.current) {
+      if (item?.previewUrl?.startsWith?.('blob:')) URL.revokeObjectURL(item.previewUrl)
+    }
+    sessionItemsRef.current = []
+    setSessionItems([])
+  }, [])
+  useEffect(() => {
+    if (!open && sessionItemsRef.current.length > 0) revokeSessionPreviews()
+  }, [open, revokeSessionPreviews])
+  useEffect(() => () => {
+    for (const item of sessionItemsRef.current) {
+      if (item?.previewUrl?.startsWith?.('blob:')) URL.revokeObjectURL(item.previewUrl)
+    }
+  }, [])
+
   const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
 
   const resolvedEntity = savedLeadRef.current?.id ? savedLeadRef.current : entity

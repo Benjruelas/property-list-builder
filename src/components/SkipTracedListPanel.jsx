@@ -4,7 +4,7 @@ import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
-import { getSkipTracedList } from '../utils/skipTracedList'
+import { getSkipTracedList, subscribeSkipTracedList } from '../utils/skipTracedList'
 
 export function SkipTracedListPanel({ 
   isOpen, 
@@ -14,30 +14,14 @@ export function SkipTracedListPanel({
   const [skipTracedList, setSkipTracedList] = useState(null)
   const [expandedSkipTracedLists, setExpandedSkipTracedLists] = useState(new Set())
 
-  // Load skip traced list when panel opens
+  // Load on open and subscribe to change events (replaces 1s polling).
   useEffect(() => {
-    if (isOpen) {
-      const skipTraced = getSkipTracedList()
-      setSkipTracedList(skipTraced)
-      console.log('📋 Loaded skip traced list:', skipTraced)
-    } else {
+    if (!isOpen) {
       setSkipTracedList(null)
+      return undefined
     }
-  }, [isOpen])
-
-  // Poll for localStorage changes when panel is open (since storage event only fires across tabs)
-  // This ensures the list updates when parcels/lists are skip traced
-  useEffect(() => {
-    if (!isOpen) return
-
-    const intervalId = setInterval(() => {
-      const skipTraced = getSkipTracedList()
-      setSkipTracedList(skipTraced)
-    }, 1000) // Check every 1 second when panel is open
-
-    return () => {
-      clearInterval(intervalId)
-    }
+    setSkipTracedList(getSkipTracedList())
+    return subscribeSkipTracedList(setSkipTracedList)
   }, [isOpen])
 
   return (

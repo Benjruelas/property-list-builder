@@ -3751,7 +3751,6 @@ function App() {
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         {basemapStatus === 'ready' && basemapStyle ? (
         <MapGL
-          key={settings.mapStyle}
           initialViewState={mapInitialViewState}
           maxTileCacheSize={80}
           onMove={(evt) => {

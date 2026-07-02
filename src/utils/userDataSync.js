@@ -73,6 +73,12 @@ export function readLocalBlob() {
   return blob
 }
 
+let quotaWarned = false
+
+function isQuotaError(e) {
+  return e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014)
+}
+
 /** Write blob to localStorage (merge: only overwrite keys present in blob) */
 function mergeBlobToLocal(blob) {
   if (!blob || typeof blob !== 'object') return
@@ -88,6 +94,18 @@ function mergeBlobToLocal(blob) {
       }
     } catch (e) {
       console.warn('userDataSync: failed to merge key', blobKey, e)
+      if (isQuotaError(e) && !quotaWarned) {
+        quotaWarned = true
+        // Surface once so the user knows local caching is degraded. Server
+        // data remains the source of truth; loading the toast module lazily
+        // keeps this util UI-free otherwise.
+        import('../components/ui/toast')
+          .then(({ showToast }) => showToast(
+            'Device storage is full — some offline data may not be saved locally. Your data is still synced to your account.',
+            'warning'
+          ))
+          .catch(() => {})
+      }
     }
   }
 }

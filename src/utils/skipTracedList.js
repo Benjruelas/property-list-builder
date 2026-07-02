@@ -5,6 +5,24 @@
 
 const STORAGE_KEY = 'skip_traced_list'
 
+/** Fired on window whenever the skip-traced list changes (replaces polling). */
+export const SKIP_TRACED_CHANGED_EVENT = 'skiptraced:changed'
+
+/** Subscribe to skip-traced list changes. Returns an unsubscribe function. */
+export const subscribeSkipTracedList = (fn) => {
+  const handler = () => fn(getSkipTracedList())
+  window.addEventListener(SKIP_TRACED_CHANGED_EVENT, handler)
+  // Cross-tab updates still arrive via the native storage event.
+  const storageHandler = (e) => {
+    if (e.key === STORAGE_KEY) fn(getSkipTracedList())
+  }
+  window.addEventListener('storage', storageHandler)
+  return () => {
+    window.removeEventListener(SKIP_TRACED_CHANGED_EVENT, handler)
+    window.removeEventListener('storage', storageHandler)
+  }
+}
+
 export const getSkipTracedList = () => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -31,6 +49,7 @@ export const getSkipTracedList = () => {
 const saveSkipTracedList = (list) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+    window.dispatchEvent(new Event(SKIP_TRACED_CHANGED_EVENT))
   } catch (error) {
     console.error('Error saving skip traced list:', error)
   }
