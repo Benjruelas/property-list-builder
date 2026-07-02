@@ -47,6 +47,10 @@
     --tasks-dock-width: min(300px, 24vw);
     --tasks-dock-gap: 14px;
     --tasks-panel-right-inset: calc(12px + env(safe-area-inset-right, 0px));
+    --map-chrome-inset: 12px;
+    --map-chrome-top: calc(var(--map-chrome-inset) + env(safe-area-inset-top, 0px));
+    --map-chrome-left: calc(var(--map-chrome-inset) + env(safe-area-inset-left, 0px));
+    --map-chrome-right: calc(var(--map-chrome-inset) + env(safe-area-inset-right, 0px));
     --map-chrome-btn-size: calc(3rem * var(--ui-mobile-chrome-scale));
     --map-chrome-btn-gap: calc(0.5rem * var(--ui-mobile-chrome-scale));
     --map-chrome-icon-size: calc(1.5rem * var(--ui-mobile-chrome-scale));
@@ -84,6 +88,10 @@
     --tasks-dock-width: min(calc(var(--ui-action-bar-height-basis) * 0.366), 28vw);
     --tasks-dock-gap: calc(14px * var(--ui-touch-scale));
     --tasks-panel-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
+    --map-chrome-inset: var(--ui-chrome-inset);
+    --map-chrome-top: calc(var(--map-chrome-inset) + env(safe-area-inset-top, 0px));
+    --map-chrome-left: calc(var(--map-chrome-inset) + env(safe-area-inset-left, 0px));
+    --map-chrome-right: calc(var(--map-chrome-inset) + env(safe-area-inset-right, 0px));
     --map-chrome-btn-size: var(--ui-action-bar-btn-height);
     --map-chrome-btn-gap: 0.5rem;
     --map-chrome-icon-size: calc(1.5rem * var(--ui-touch-scale));
@@ -295,6 +303,7 @@
   flex-shrink: 0;
   aspect-ratio: 1 / 1;
   padding: 0 !important;
+  box-sizing: border-box;
 }
 
 .map-chrome-slot {
@@ -319,9 +328,24 @@
   justify-content: center;
 }
 
-.map-controls-stack,
-.map-search-stack {
-  gap: var(--map-chrome-btn-gap) !important;
+.map-chrome-stack {
+  position: absolute;
+  z-index: 1000;
+  top: var(--map-chrome-top);
+  display: grid;
+  grid-auto-rows: var(--map-chrome-btn-size);
+  gap: var(--map-chrome-btn-gap);
+  align-content: start;
+}
+
+.map-chrome-stack--left {
+  left: var(--map-chrome-left);
+  justify-items: start;
+}
+
+.map-chrome-stack--right {
+  right: var(--map-chrome-right);
+  justify-items: end;
 }
 
 .map-chrome-btn-group {
@@ -336,6 +360,7 @@
 
 .map-search-open-pill {
   height: var(--map-chrome-btn-size);
+  box-sizing: border-box;
 }
 
 .map-chrome-pill-close {
@@ -365,8 +390,8 @@
 
 /* North indicator — below search + zoom column (3 square buttons + gaps) */
 .north-indicator {
-  top: calc(12px + (var(--map-chrome-btn-size) + var(--map-chrome-btn-gap)) * 3 + env(safe-area-inset-top, 0px));
-  left: calc(12px + env(safe-area-inset-left, 0px));
+  top: calc(var(--map-chrome-top) + (var(--map-chrome-btn-size) + var(--map-chrome-btn-gap)) * 3);
+  left: var(--map-chrome-left);
 }
 
 /* User location marker */
