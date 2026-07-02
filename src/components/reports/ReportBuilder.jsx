@@ -6,7 +6,7 @@ import { PanelHeader } from '../ui/panel-header'
 import { PanelActionButton } from '../ui/panel-action-button'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
-import { displayLeadName, formatLeadAddress, fetchLeadById } from '@/utils/leads'
+import { displayLeadName, formatLeadAddress, fetchLeadById, leadNeedsPhotoHydrate } from '@/utils/leads'
 import {
   createPhotoReport,
   updatePhotoReport,
@@ -186,11 +186,7 @@ export function ReportBuilder({
   useEffect(() => {
     if (!open || isTemplate || !lead?.id || !getToken || !onLeadUpdate) return undefined
 
-    const photoCount = typeof lead.photoCount === 'number' ? lead.photoCount : null
-    const cachedPhotoCount = Array.isArray(lead.photos) ? lead.photos.length : 0
-    const needsPhotoHydrate = lead._listView
-      || (photoCount != null && photoCount > 0 && cachedPhotoCount === 0)
-      || (photoCount != null && cachedPhotoCount !== photoCount)
+    const needsPhotoHydrate = leadNeedsPhotoHydrate(lead)
     if (!needsPhotoHydrate) return undefined
 
     let cancelled = false

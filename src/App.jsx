@@ -90,6 +90,8 @@ import { PermissionPrompt, hasGrantedPermissions } from './components/Permission
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
 import { useTeamDataSync } from './hooks/useTeamDataSync'
+import { countPendingUploadsByLeadId, shouldEnableSharedAssetSync } from './utils/sharedAssetSync'
+import { photoUploadManager } from './photos/PhotoUploadManager'
 import { getSettings, updateSettings } from './utils/settings'
 import { resolveLeadStatuses } from './utils/leadStatuses'
 import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
@@ -113,6 +115,8 @@ import {
   findLeadByParcelId,
   displayLeadName,
   getLeadStatus,
+  leadNeedsPhotoHydrate,
+  collectLeadsNeedingPhotoHydrate,
 } from './utils/leads'
 import {
   logLeadOutreach,
@@ -416,6 +420,9 @@ function App() {
   const [photoPickerParcelId, setPhotoPickerParcelId] = useState(null)
   const [photoPickerAddress, setPhotoPickerAddress] = useState('')
   const [photoModeLead, setPhotoModeLead] = useState(null)
+  const photoModeLeadRef = useRef(photoModeLead)
+  const leadsDetailLeadIdRef = useRef(leadsDetailLeadId)
+  const hydratingLeadIdsRef = useRef(new Set())
   const [photoModeParcelId, setPhotoModeParcelId] = useState(null)
   const [photoModeAddress, setPhotoModeAddress] = useState('')
   /** When set, user is choosing a target pipeline to move a deal into. */
@@ -1166,6 +1173,14 @@ function App() {
   }, [leads])
 
   useEffect(() => {
+    photoModeLeadRef.current = photoModeLead
+  }, [photoModeLead])
+
+  useEffect(() => {
+    leadsDetailLeadIdRef.current = leadsDetailLeadId
+  }, [leadsDetailLeadId])
+
+  useEffect(() => {
     pipelinesRef.current = pipelines
   }, [pipelines])
 
@@ -1188,6 +1203,8 @@ function App() {
     }
   }, [currentUser, getToken])
 
+  const hydrateSharedLeadPhotosRef = useRef(null)
+
   const refreshLeads = useCallback(async ({ existingLeads } = {}) => {
     if (!currentUser) return
     const baseline = Array.isArray(existingLeads) && existingLeads.length > 0
@@ -1195,21 +1212,61 @@ function App() {
       : (leadsRef.current.length > 0 ? leadsRef.current : loadLocalLeads())
     const showSpinner = baseline.length === 0
     if (showSpinner) setLeadsLoading(true)
+    let mergedLeads = null
     try {
       const next = await fetchLeads(getToken)
-      if (next?.notModified) return
+      if (next?.notModified) {
+        await hydrateSharedLeadPhotosRef.current?.()
+        return
+      }
       setLeads((prev) => {
-        const merged = mergeListViewLeads(prev.length > 0 ? prev : baseline, next)
-        saveLocalLeads(merged)
-        return merged
+        mergedLeads = mergeListViewLeads(prev.length > 0 ? prev : baseline, next)
+        saveLocalLeads(mergedLeads)
+        return mergedLeads
       })
       await refreshTags()
+      await hydrateSharedLeadPhotosRef.current?.({ leadsSnapshot: mergedLeads })
     } catch (error) {
       console.error('Error loading leads:', error)
     } finally {
       if (showSpinner) setLeadsLoading(false)
     }
   }, [currentUser, getToken, refreshTags])
+
+  const hydrateSharedLeadPhotos = useCallback(async ({ leadsSnapshot, priorityLeadIds } = {}) => {
+    if (!currentUser) return
+
+    const snapshot = leadsSnapshot || leadsRef.current
+    const priority = (priorityLeadIds || [
+      leadsDetailLeadIdRef.current,
+      photoModeLeadRef.current?.id,
+    ]).filter(Boolean)
+    const pendingUploadsByLeadId = countPendingUploadsByLeadId(photoUploadManager.getSnapshot())
+    const leadIds = collectLeadsNeedingPhotoHydrate(snapshot, {
+      priorityLeadIds: priority,
+      pendingUploadsByLeadId,
+    })
+    if (!leadIds.length) return
+
+    await Promise.all(leadIds.map(async (leadId) => {
+      if (hydratingLeadIdsRef.current.has(leadId)) return
+      hydratingLeadIdsRef.current.add(leadId)
+      try {
+        const full = await fetchLeadById(getToken, leadId)
+        if (!full?.id) return
+        setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetail))
+        setPhotoModeLead((prev) => (
+          prev?.id === full.id ? mergeLeadDetail(prev, full) : prev
+        ))
+      } catch (error) {
+        console.warn('Lead photo hydrate failed:', leadId, error?.message)
+      } finally {
+        hydratingLeadIdsRef.current.delete(leadId)
+      }
+    }))
+  }, [currentUser, getToken])
+
+  hydrateSharedLeadPhotosRef.current = hydrateSharedLeadPhotos
 
   const upsertRegistryTag = useCallback((type, tag) => {
     if (!tag?.id) {
@@ -3096,10 +3153,22 @@ function App() {
     }
   }, [parcelPendingForList, isParcelDetailsOpen, parcelDetailsSource, clearListAddMode, handlePanelBack, nav])
 
+  const sharedAssetSyncEnabled = useMemo(() => {
+    if (!currentUser?.uid) return false
+    if (leadsDetailLeadId || photoModeLead?.id) return true
+    return shouldEnableSharedAssetSync({
+      teams,
+      leads,
+      pipelines,
+      currentUserId: currentUser.uid,
+    })
+  }, [currentUser?.uid, teams, leads, pipelines, leadsDetailLeadId, photoModeLead?.id])
+
   useTeamDataSync({
-    enabled: !!currentUser?.uid && teams.length > 0,
+    enabled: sharedAssetSyncEnabled,
     refreshPipelines,
     refreshLeads,
+    hydrateSharedAssets: hydrateSharedLeadPhotos,
   })
 
   const notificationInbox = useNotificationInbox({
@@ -3147,12 +3216,7 @@ function App() {
   const openLeadDetails = useCallback((lead) => {
     if (!lead?.id) return
     guardFeature('leads', () => nav.openLeadDetails(lead.id))
-    const photoCount = typeof lead.photoCount === 'number' ? lead.photoCount : null
-    const cachedPhotoCount = Array.isArray(lead.photos) ? lead.photos.length : 0
-    const needsPhotoHydrate = lead._listView
-      || (photoCount != null && photoCount > 0 && cachedPhotoCount === 0)
-      || (photoCount != null && cachedPhotoCount !== photoCount)
-    if (needsPhotoHydrate) {
+    if (leadNeedsPhotoHydrate(lead)) {
       fetchLeadById(getToken, lead.id)
         .then((full) => {
           if (full?.id) {
