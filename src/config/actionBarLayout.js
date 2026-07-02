@@ -25,8 +25,7 @@ export const PRIMARY_BAR_ORDER = [
 /**
  * Extra items surfaced on the bar at desktop widths (formerly menu-only).
  * 'photoMode' and 'photoImport' are desktop-bar-only here — on mobile,
- * Photo Mode lives as a floating button on the map (see MapControls) and
- * Import Photos lives in the action-bar Menu overflow (see ActionBarMenu).
+ * Photo Mode lives as a floating button on the map (see MapControls).
  */
 export const DESKTOP_EXTRA_BAR_ORDER = ['photoMode', 'photoImport', 'paths', 'outreach', 'settings']
 
