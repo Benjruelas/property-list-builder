@@ -8,6 +8,7 @@ import {
   Briefcase,
   ChevronRight,
   MoreVertical,
+  Share2,
   Plus,
   MessageSquare,
   StickyNote,
@@ -27,11 +28,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { handleChildPanelDismiss } from './ui/panelDialogUtils'
 import { DirectionsPicker } from './DirectionsPicker'
 import { cn } from '@/lib/utils'
-import { resolveResourceAccess, canMutateLeadPhotos, canEdit, userActiveTeam } from '@/utils/access'
+import {
+  resolveResourceAccess,
+  canMutateLeadPhotos,
+  canEdit,
+  canChangeVisibility,
+  canDelete,
+  userActiveTeam,
+  VISIBILITY,
+  normalizeResourceVisibility,
+} from '@/utils/access'
 import {
   displayLeadName,
   formatLeadAddress,
   deleteLead,
+  updateLead,
   getLeadStatus,
   getLeadStatusMeta,
 } from '@/utils/leads'
@@ -41,6 +52,7 @@ import {
   sortActivitiesNewestFirst,
 } from '@/utils/leadActivity'
 import { VisibilityBadge } from './ResourceSharePicker'
+import { ShareResourceDialog } from './ShareResourceDialog'
 import { LeadOwnerChip } from './leads/LeadOwnerChip'
 import { isLeadOwnedByCurrentUser } from '@/utils/leadOwner'
 import { findDealsForLead } from '@/utils/deals'
@@ -207,6 +219,8 @@ export function LeadDetails({
   const [notes, setNotes] = useState('')
   const [notesDirty, setNotesDirty] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [localShareState, setLocalShareState] = useState(null)
   const [activityNote, setActivityNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
@@ -239,6 +253,8 @@ export function LeadDetails({
 
   useEffect(() => {
     setMenuOpen(false)
+    setShareOpen(false)
+    setLocalShareState(null)
   }, [lead?.id, isOpen])
 
   useEffect(() => {
@@ -320,6 +336,55 @@ export function LeadDetails({
     const access = resolveResourceAccess(lead, user, team, teams)
     return !canEdit(access) || access === 'admin_view'
   }, [lead, currentUser, currentUserId, teams, onLeadUpdate])
+
+  const uid = currentUser?.uid || currentUserId
+  const activeTeam = useMemo(() => userActiveTeam(teams, uid), [teams, uid])
+  const leadAccess = useMemo(() => {
+    if (!lead || !uid) return null
+    const user = { uid, email: currentUser?.email || '' }
+    return resolveResourceAccess(lead, user, activeTeam, teams)
+  }, [lead, uid, currentUser?.email, activeTeam, teams])
+  const canShareLead = canChangeVisibility(leadAccess)
+  const canDeleteLead = canDelete(leadAccess)
+
+  useEffect(() => {
+    if (!shareOpen) {
+      setLocalShareState(null)
+      return
+    }
+    const norm = normalizeResourceVisibility(lead || {})
+    setLocalShareState({
+      visibility: norm.visibility || VISIBILITY.PRIVATE,
+      sharedMemberUids: norm.sharedMemberUids || [],
+    })
+  }, [shareOpen, lead])
+
+  const handleShareChange = useCallback(
+    (next) => {
+      if (!lead?.id || !getToken) return
+      setLocalShareState(next)
+      void (async () => {
+        try {
+          const teamId = activeTeam?.id
+          const saved = await updateLead(getToken, lead.id, {
+            visibility: next.visibility,
+            sharedMemberUids: next.sharedMemberUids || [],
+            teamId: next.visibility === VISIBILITY.TEAM ? teamId : null,
+            teamShares: next.visibility === VISIBILITY.TEAM && teamId ? [teamId] : [],
+          })
+          onLeadUpdate?.(saved, { localOnly: true })
+        } catch (e) {
+          const norm = normalizeResourceVisibility(lead || {})
+          setLocalShareState({
+            visibility: norm.visibility || VISIBILITY.PRIVATE,
+            sharedMemberUids: norm.sharedMemberUids || [],
+          })
+          showToast(e.message || 'Failed to update sharing', 'error')
+        }
+      })()
+    },
+    [lead, getToken, activeTeam, onLeadUpdate],
+  )
 
   const persistLead = useCallback((patch) => {
     onLeadUpdate?.({ ...lead, ...patch, updatedAt: new Date().toISOString() })
@@ -970,15 +1035,34 @@ export function LeadDetails({
           <Plus className="h-4 w-4 shrink-0" />
           Create deal
         </OptionsMenuItem>
-        <OptionsMenuItem
-          destructive
-          className="list-panel-delete-btn rounded-b-xl pb-2 hover:bg-red-600/80"
-          onClick={() => { closeMenu(); handleDelete() }}
-        >
-          <Trash2 className="h-4 w-4 shrink-0" />
-          Delete lead
-        </OptionsMenuItem>
+        {canShareLead && (
+          <OptionsMenuItem onClick={() => { closeMenu(); setShareOpen(true) }}>
+            <Share2 className="h-4 w-4 shrink-0" />
+            Share lead
+          </OptionsMenuItem>
+        )}
+        {canDeleteLead && (
+          <OptionsMenuItem
+            destructive
+            className="list-panel-delete-btn rounded-b-xl pb-2 hover:bg-red-600/80"
+            onClick={() => { closeMenu(); handleDelete() }}
+          >
+            <Trash2 className="h-4 w-4 shrink-0" />
+            Delete lead
+          </OptionsMenuItem>
+        )}
       </OptionsMenuDropdown>
+
+      <ShareResourceDialog
+        open={shareOpen}
+        onOpenChange={(open) => { if (!open) setShareOpen(false) }}
+        title="Share lead"
+        team={activeTeam}
+        showTeamPicker={Boolean(activeTeam)}
+        shareState={localShareState ?? { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }}
+        onShareStateChange={handleShareChange}
+        allowExternalSharing={teamMembership?.allowExternalSharing === true}
+      />
     </Dialog>
   )
 }

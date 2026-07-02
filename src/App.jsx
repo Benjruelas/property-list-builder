@@ -4682,6 +4682,7 @@ function App() {
         existingLeads={leads}
         teams={teams}
         teamMembership={teamMembership}
+        currentUser={currentUser}
         nestedOverlay={!!editLead || createLeadOpen}
         topLayer={createLeadOpen || !!editLead}
         confirmLayer={!!editLead}
