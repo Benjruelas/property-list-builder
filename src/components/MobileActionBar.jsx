@@ -200,7 +200,6 @@ export function MobileActionBar({
         onOpenOutreach={onOpenOutreach}
         onOpenForms={onOpenForms}
         onOpenSettings={onOpenSettings}
-        onOpenPhotoImport={onOpenPhotoImport}
         currentUser={currentUser}
         onLogin={onLogin}
         activityUnreadCount={activityUnreadCount}
