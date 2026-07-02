@@ -265,8 +265,21 @@ export async function fetchLeadById(getToken, leadId) {
   return data.lead || null
 }
 
+function hasLeadContactInput(data) {
+  if (!data || typeof data !== 'object') return false
+  return (
+    'phoneDetails' in data
+    || 'emailDetails' in data
+    || 'phones' in data
+    || 'phone' in data
+    || 'emails' in data
+    || 'email' in data
+  )
+}
+
 function withNormalizedLeadContact(data) {
   if (!data || typeof data !== 'object') return data
+  if (!hasLeadContactInput(data)) return data
   const contact = normalizeLeadContactsForStorage(data)
   return { ...data, ...contact }
 }
@@ -328,6 +341,12 @@ export function toLeadPatchBody(updates, { includeSharing = false } = {}) {
 export function isLeadPhotosOnlyPatch(payload) {
   const keys = Object.keys(payload)
   return keys.length > 0 && keys.every((k) => k === 'photos' || k === 'updatedAt')
+}
+
+/** Status is persisted via setLeadStatus; skip redundant full-lead PATCH. */
+export function isLeadStatusOnlyPatch(payload) {
+  const keys = Object.keys(payload)
+  return keys.length > 0 && keys.every((k) => k === 'status' || k === 'statusUpdatedAt')
 }
 
 export async function updateLead(getToken, leadId, updates) {
