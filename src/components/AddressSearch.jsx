@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Search, X, Loader2, Plus, Minus } from 'lucide-react'
 import { Button } from './ui/button'
 import { useMapboxGeocode } from '@/hooks/useMapboxGeocode'
-import { MAP_CHROME_BTN, MAP_CHROME_BTN_GROUP } from '@/lib/mapChrome'
+import { MAP_CHROME_BTN, MAP_CHROME_STACK_LEFT } from '@/lib/mapChrome'
 
 /**
  * Address search using Mapbox Geocoding API.
@@ -70,11 +70,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
   return (
     <div
       ref={containerRef}
-      className="map-search-stack absolute z-[1000] flex flex-col items-start"
-      style={{
-        top: 'calc(12px + env(safe-area-inset-top, 0px))',
-        left: 'calc(12px + env(safe-area-inset-left, 0px))'
-      }}
+      className={MAP_CHROME_STACK_LEFT}
     >
       {!isOpen ? (
         <Button
@@ -121,7 +117,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
         </div>
       )}
 
-      <div className={MAP_CHROME_BTN_GROUP} data-tour="zoom-controls">
+      <div className="contents" data-tour="zoom-controls">
         <Button
           onClick={() => {
             onCloseParcelPopup?.()

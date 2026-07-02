@@ -1,7 +1,7 @@
 import { Navigation, CheckSquare, Square, Compass, Route, Plus, X, Camera } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
-import { MAP_CHROME_BTN, MAP_CHROME_BTN_OFFSET } from '@/lib/mapChrome'
+import { MAP_CHROME_BTN, MAP_CHROME_BTN_OFFSET, MAP_CHROME_STACK_RIGHT } from '@/lib/mapChrome'
 
 export function MapControls({ 
   onRecenter, 
@@ -29,7 +29,7 @@ export function MapControls({
   }
 
   return (
-    <div className="map-controls-stack absolute z-[1000] flex flex-col items-end" style={{ top: 'calc(12px + env(safe-area-inset-top, 0px))', right: 'calc(12px + env(safe-area-inset-right, 0px))' }}>
+    <div className={MAP_CHROME_STACK_RIGHT}>
       <Button
         data-tour="recenter"
         onClick={runAction(onRecenter)}
