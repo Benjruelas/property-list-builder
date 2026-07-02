@@ -338,8 +338,9 @@ export function DealPipeline({
     onGoToParcelOnMap?.(data)
   }, [onGoToParcelOnMap, onCloseLeadOverlay, onCloseDeal])
 
-  const handleLeadUpdate = useCallback(async (updated) => {
+  const handleLeadUpdate = useCallback(async (updated, opts = {}) => {
     onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated))
+    if (opts.localOnly) return
     const payload = toLeadPatchBody(updated)
     if (isLeadPhotosOnlyPatch(payload)) return
     try {

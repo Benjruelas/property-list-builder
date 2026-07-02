@@ -5,7 +5,7 @@ import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { AddressAutocompleteField } from './AddressAutocompleteField'
 import { ResourceSharePicker } from './ResourceSharePicker'
-import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
+import { VISIBILITY, normalizeResourceVisibility, resolveResourceAccess, canChangeVisibility } from '@/utils/access'
 import { createLead, updateLead } from '@/utils/leads'
 import { mergeLeadFormWithParcel, ensureLeadParcelLink } from '@/utils/resolveLeadParcel'
 import { getTeamForMembership } from '@/utils/profile'
@@ -60,12 +60,19 @@ export function CreateLeadDialog({
   existingLeads = [],
   teams = [],
   teamMembership = null,
+  currentUser = null,
   nestedOverlay = false,
   topLayer = false,
   confirmLayer = false,
 }) {
   const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
+  const canEditSharing = !isEdit || canChangeVisibility(resolveResourceAccess(
+    editLead,
+    currentUser,
+    activeTeam,
+    teams,
+  ))
   const [form, setForm] = useState(emptyForm)
   const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
   const [saving, setSaving] = useState(false)
@@ -286,7 +293,7 @@ export function CreateLeadDialog({
             visibility={shareState.visibility}
             sharedMemberUids={shareState.sharedMemberUids}
             onChange={setShareState}
-            disabled={saving}
+            disabled={saving || !canEditSharing}
             allowExternalSharing={allowExternalSharing}
             collapsible={!fromParcel}
             defaultExpanded={fromParcel}

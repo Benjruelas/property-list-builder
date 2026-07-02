@@ -237,8 +237,9 @@ export function DealsPanel({
     onGoToParcelOnMap?.(data)
   }, [onGoToParcelOnMap, onCloseLeadOverlay, onCloseDealDetail])
 
-  const handleLeadUpdate = useCallback(async (updated) => {
+  const handleLeadUpdate = useCallback(async (updated, opts = {}) => {
     onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated))
+    if (opts.localOnly) return
     const payload = toLeadPatchBody(updated)
     if (isLeadPhotosOnlyPatch(payload)) return
     try {
