@@ -37,6 +37,7 @@ import { NewTaskDialog } from './NewTaskDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
+import { WindowedItems } from '@/hooks/useWindowedList'
 
 import { cn } from '@/lib/utils'
 
@@ -640,21 +641,23 @@ export function TasksPanel({
           {unlabeled.length > 0 && (
             <section className="mb-4" aria-label="Tasks not in a pipe">
               <ul className="space-y-2">
-                {unlabeled.map((task) => (
-                  <li key={`${task.id}-${task.__source || 'p'}`}>
-                    <TaskRow
-                      task={task}
-                      displayLeads={displayLeads}
-                      allDeals={allDeals}
-                      onToggle={handleToggle}
-                      onActivate={() => handleRowActivate(task)}
-                      onEdit={() => setEditingTask(task)}
-                      onDelete={() => handleDeleteTask(task)}
-                      onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
-                      onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
-                    />
-                  </li>
-                ))}
+                <WindowedItems items={unlabeled} sentinelTag="li">
+                  {(task) => (
+                    <li key={`${task.id}-${task.__source || 'p'}`}>
+                      <TaskRow
+                        task={task}
+                        displayLeads={displayLeads}
+                        allDeals={allDeals}
+                        onToggle={handleToggle}
+                        onActivate={() => handleRowActivate(task)}
+                        onEdit={() => setEditingTask(task)}
+                        onDelete={() => handleDeleteTask(task)}
+                        onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
+                        onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
+                      />
+                    </li>
+                  )}
+                </WindowedItems>
               </ul>
             </section>
           )}
@@ -680,21 +683,23 @@ export function TasksPanel({
                 </button>
                 {!collapsed && (
                   <ul className="space-y-2">
-                    {tasks.map((task) => (
-                      <li key={`${task.id}-${task.__source || 'p'}`}>
-                        <TaskRow
-                          task={task}
-                          displayLeads={displayLeads}
-                          allDeals={allDeals}
-                          onToggle={handleToggle}
-                          onActivate={() => handleRowActivate(task)}
-                          onEdit={() => setEditingTask(task)}
-                          onDelete={() => handleDeleteTask(task)}
-                          onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
-                          onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
-                        />
-                      </li>
-                    ))}
+                    <WindowedItems items={tasks} sentinelTag="li">
+                      {(task) => (
+                        <li key={`${task.id}-${task.__source || 'p'}`}>
+                          <TaskRow
+                            task={task}
+                            displayLeads={displayLeads}
+                            allDeals={allDeals}
+                            onToggle={handleToggle}
+                            onActivate={() => handleRowActivate(task)}
+                            onEdit={() => setEditingTask(task)}
+                            onDelete={() => handleDeleteTask(task)}
+                            onViewOnSchedule={(task.scheduledAt || task.dueAt) && onOpenScheduleAtDate ? () => handleViewOnSchedule(task) : null}
+                            onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
+                          />
+                        </li>
+                      )}
+                    </WindowedItems>
                   </ul>
                 )}
               </section>
@@ -706,21 +711,23 @@ export function TasksPanel({
               {closedUnlabeled.length > 0 && (
                 <section className="mb-4" aria-label="Closed tasks not in a pipe">
                   <ul className="space-y-2">
-                    {closedUnlabeled.map((task) => (
-                      <li key={`${task.id}-${task.__source || 'p'}`}>
-                        <TaskRow
-                          task={task}
-                          displayLeads={displayLeads}
-                          allDeals={allDeals}
-                          onToggle={handleToggle}
-                          onActivate={() => handleRowActivate(task)}
-                          onEdit={() => setEditingTask(task)}
-                          onDelete={() => handleDeleteTask(task)}
-                          onViewOnSchedule={null}
-                          onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
-                        />
-                      </li>
-                    ))}
+                    <WindowedItems items={closedUnlabeled} sentinelTag="li">
+                      {(task) => (
+                        <li key={`${task.id}-${task.__source || 'p'}`}>
+                          <TaskRow
+                            task={task}
+                            displayLeads={displayLeads}
+                            allDeals={allDeals}
+                            onToggle={handleToggle}
+                            onActivate={() => handleRowActivate(task)}
+                            onEdit={() => setEditingTask(task)}
+                            onDelete={() => handleDeleteTask(task)}
+                            onViewOnSchedule={null}
+                            onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
+                          />
+                        </li>
+                      )}
+                    </WindowedItems>
                   </ul>
                 </section>
               )}
@@ -746,21 +753,23 @@ export function TasksPanel({
                     </button>
                     {!collapsed && (
                       <ul className="space-y-2">
-                        {tasks.map((task) => (
-                          <li key={`${task.id}-${task.__source || 'p'}`}>
-                            <TaskRow
-                              task={task}
-                              displayLeads={displayLeads}
-                              allDeals={allDeals}
-                              onToggle={handleToggle}
-                              onActivate={() => handleRowActivate(task)}
-                              onEdit={() => setEditingTask(task)}
-                              onDelete={() => handleDeleteTask(task)}
-                              onViewOnSchedule={null}
-                              onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
-                            />
-                          </li>
-                        ))}
+                        <WindowedItems items={tasks} sentinelTag="li">
+                          {(task) => (
+                            <li key={`${task.id}-${task.__source || 'p'}`}>
+                              <TaskRow
+                                task={task}
+                                displayLeads={displayLeads}
+                                allDeals={allDeals}
+                                onToggle={handleToggle}
+                                onActivate={() => handleRowActivate(task)}
+                                onEdit={() => setEditingTask(task)}
+                                onDelete={() => handleDeleteTask(task)}
+                                onViewOnSchedule={null}
+                                onOpenLead={(task.parcelId || task.leadId) ? () => handleOpenLeadFromTask(task) : null}
+                              />
+                            </li>
+                          )}
+                        </WindowedItems>
                       </ul>
                     )}
                   </section>

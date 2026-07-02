@@ -21,6 +21,7 @@ import { filterByTags, buildFilterableTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { showToast } from './ui/toast'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
+import { useWindowedList } from '@/hooks/useWindowedList'
 
 import { leadToParcelData } from '@/utils/leads'
 const DEALS_PANEL_MENU_W = 220
@@ -190,6 +191,29 @@ export function DealsPanel({
   }, [closedDeals, search, selectedTagIds])
 
   const toggleCollapse = (pid) => setCollapsedPipelines((prev) => ({ ...prev, [pid]: !prev[pid] }))
+
+  const leadsById = useMemo(() => new Map(leads.map((l) => [l.id, l])), [leads])
+
+  // Flatten pipeline groups into one row stream (header rows + deal rows) so
+  // long boards window across group boundaries instead of mounting every row.
+  const activeRowStream = useMemo(() => {
+    const rows = []
+    const showHeader = allPipelineData.length > 1
+    for (const pipeline of filteredPipelines) {
+      if (pipeline.deals.length === 0) continue
+      const collapsed = collapsedPipelines[pipeline.id]
+      if (showHeader) rows.push({ type: 'header', pipeline, collapsed, key: `hdr-${pipeline.id}` })
+      if (!collapsed) {
+        for (const deal of pipeline.deals) {
+          rows.push({ type: 'deal', deal, pipeline, showHeader, key: deal.id })
+        }
+      }
+    }
+    return rows
+  }, [filteredPipelines, collapsedPipelines, allPipelineData.length])
+
+  const { visibleItems: visibleActiveRows, sentinel: activeSentinel } = useWindowedList(activeRowStream)
+  const { visibleItems: visibleClosed, sentinel: closedSentinel } = useWindowedList(filteredClosed)
 
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId)
   const selectedLead = selectedDeal?.leadId ? leads.find((l) => l.id === selectedDeal.leadId) : null
@@ -502,38 +526,32 @@ export function DealsPanel({
                     <span>In stage</span>
                     <span>Amount</span>
                   </div>
-                  {filteredPipelines.map((pipeline) => {
-                    if (pipeline.deals.length === 0) return null
-                    const collapsed = collapsedPipelines[pipeline.id]
-                    const showHeader = allPipelineData.length > 1
-                    return (
-                      <div key={pipeline.id} className="crm-list-rows-group">
-                        {showHeader && (
-                          <button
-                            type="button"
-                            onClick={() => toggleCollapse(pipeline.id)}
-                            className="w-full flex items-center gap-2 py-2 text-sm font-semibold opacity-70 hover:opacity-100 transition-opacity"
-                          >
-                            {collapsed ? <ChevronRight className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
-                            <span className="truncate">{pipeline.title}</span>
-                            <span className="text-xs opacity-50 ml-auto shrink-0">{pipeline.deals.length}</span>
-                          </button>
-                        )}
-                        {!collapsed && pipeline.deals.map((deal) => (
-                          <DealRow
-                            key={deal.id}
-                            deal={deal}
-                            columns={pipeline.columns}
-                            pipelineTitle={showHeader ? pipeline.title : null}
-                            lead={deal.leadId ? leads.find((l) => l.id === deal.leadId) : null}
-                            onClick={(d) => onOpenDealDetail?.(d.id, pipeline.id)}
-                            canSeeDealAmounts={canSeeDealAmounts}
-                            tagRegistry={tagRegistry}
-                          />
-                        ))}
-                      </div>
+                  {visibleActiveRows.map((row) => (
+                    row.type === 'header' ? (
+                      <button
+                        key={row.key}
+                        type="button"
+                        onClick={() => toggleCollapse(row.pipeline.id)}
+                        className="w-full flex items-center gap-2 py-2 text-sm font-semibold opacity-70 hover:opacity-100 transition-opacity"
+                      >
+                        {row.collapsed ? <ChevronRight className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                        <span className="truncate">{row.pipeline.title}</span>
+                        <span className="text-xs opacity-50 ml-auto shrink-0">{row.pipeline.deals.length}</span>
+                      </button>
+                    ) : (
+                      <DealRow
+                        key={row.key}
+                        deal={row.deal}
+                        columns={row.pipeline.columns}
+                        pipelineTitle={row.showHeader ? row.pipeline.title : null}
+                        lead={row.deal.leadId ? leadsById.get(row.deal.leadId) || null : null}
+                        onClick={(d) => onOpenDealDetail?.(d.id, row.pipeline.id)}
+                        canSeeDealAmounts={canSeeDealAmounts}
+                        tagRegistry={tagRegistry}
+                      />
                     )
-                  })}
+                  ))}
+                  {activeSentinel}
                 </div>
               )
             ) : filteredClosed.length === 0 ? (
@@ -566,9 +584,10 @@ export function DealsPanel({
                   <span>Closed</span>
                   <span>Amount</span>
                 </div>
-                {filteredClosed.map((r) => (
+                {visibleClosed.map((r) => (
                   <ClosedDealRow key={r.id} record={r} onClick={(r) => onOpenClosedDeal?.(r.id)} canSeeDealAmounts={canSeeDealAmounts} tagRegistry={tagRegistry} />
                 ))}
+                {closedSentinel}
               </div>
             )}
           </div>
