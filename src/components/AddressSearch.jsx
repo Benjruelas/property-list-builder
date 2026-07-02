@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Search, X, Loader2, Plus, Minus } from 'lucide-react'
 import { Button } from './ui/button'
 import { useMapboxGeocode } from '@/hooks/useMapboxGeocode'
+import { MAP_CHROME_BTN, MAP_CHROME_BTN_GROUP } from '@/lib/mapChrome'
 
 /**
  * Address search using Mapbox Geocoding API.
@@ -61,7 +62,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
 
   const openPillStyle = {
     width:
-      'calc(100vw - 12px - 0.5rem - var(--map-chrome-btn-size) - 12px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))'
+      'calc(100vw - 12px - var(--map-chrome-btn-gap) - var(--map-chrome-btn-size) - 12px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))'
   }
   const showResultsPanel =
     isOpen && (query.length > 0 || isSearching || error || results.length > 0)
@@ -69,7 +70,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
   return (
     <div
       ref={containerRef}
-      className="map-search-stack absolute z-[1000] flex flex-col items-start gap-2 sm:gap-2 md:gap-2"
+      className="map-search-stack absolute z-[1000] flex flex-col items-start"
       style={{
         top: 'calc(12px + env(safe-area-inset-top, 0px))',
         left: 'calc(12px + env(safe-area-inset-left, 0px))'
@@ -83,7 +84,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           }}
           size="icon"
           variant="glass-outline"
-          className="map-chrome-btn shadow-lg touch-manipulation"
+          className={MAP_CHROME_BTN}
           title="Search address"
         >
           <Search />
@@ -112,15 +113,15 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           <button
             type="button"
             onClick={handleToggle}
-            className="mr-1 flex-shrink-0 rounded-full p-1.5 text-gray-700 hover:bg-white/40 transition-colors"
+            className="map-chrome-pill-close"
             title="Close search"
           >
-            <X className="h-4 w-4" />
+            <X />
           </button>
         </div>
       )}
 
-      <div className="flex flex-col gap-2" data-tour="zoom-controls">
+      <div className={MAP_CHROME_BTN_GROUP} data-tour="zoom-controls">
         <Button
           onClick={() => {
             onCloseParcelPopup?.()
@@ -128,7 +129,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           }}
           size="icon"
           variant="glass-outline"
-          className="map-chrome-btn shadow-lg touch-manipulation"
+          className={MAP_CHROME_BTN}
           title="Zoom in"
         >
           <Plus />
@@ -140,7 +141,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           }}
           size="icon"
           variant="glass-outline"
-          className="map-chrome-btn shadow-lg touch-manipulation"
+          className={MAP_CHROME_BTN}
           title="Zoom out"
         >
           <Minus />

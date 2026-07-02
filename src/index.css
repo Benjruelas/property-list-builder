@@ -50,7 +50,7 @@
     --map-chrome-btn-size: calc(3rem * var(--ui-mobile-chrome-scale));
     --map-chrome-btn-gap: calc(0.5rem * var(--ui-mobile-chrome-scale));
     --map-chrome-icon-size: calc(1.5rem * var(--ui-mobile-chrome-scale));
-    --map-controls-stack-height: calc(4 * var(--map-chrome-btn-size) + 3 * var(--map-chrome-btn-gap));
+    --map-controls-stack-height: calc(5 * var(--map-chrome-btn-size) + 4 * var(--map-chrome-btn-gap));
     --quick-create-fab-size: var(--map-chrome-btn-size);
     --quick-create-fab-icon-size: var(--map-chrome-icon-size);
     --tasks-panel-fade-duration: 380ms;
@@ -319,8 +319,44 @@
   justify-content: center;
 }
 
+.map-controls-stack,
+.map-search-stack {
+  gap: var(--map-chrome-btn-gap) !important;
+}
+
+.map-chrome-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--map-chrome-btn-gap);
+}
+
+.map-chrome-btn-offset {
+  margin-right: var(--map-chrome-btn-gap);
+}
+
 .map-search-open-pill {
   height: var(--map-chrome-btn-size);
+}
+
+.map-chrome-pill-close {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--map-chrome-btn-size);
+  height: var(--map-chrome-btn-size);
+  border-radius: 9999px;
+  color: rgb(55 65 81);
+  transition: background-color 150ms ease;
+}
+
+.map-chrome-pill-close:hover {
+  background-color: rgb(255 255 255 / 0.4);
+}
+
+.map-chrome-pill-close svg {
+  width: var(--map-chrome-icon-size, calc(1.5rem * var(--ui-touch-scale, 1)));
+  height: var(--map-chrome-icon-size, calc(1.5rem * var(--ui-touch-scale, 1)));
 }
 
 .map-search-results-panel {
@@ -6369,10 +6405,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 @media (max-width: 767px) {
-  .map-controls-stack {
-    gap: var(--map-chrome-btn-gap) !important;
-  }
-
   .quick-create-fab-menu {
     min-width: 220px;
     max-width: min(320px, calc(100vw - 24px));
