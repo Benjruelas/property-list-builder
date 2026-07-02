@@ -149,7 +149,11 @@ export function PublicQuotePage({ token }) {
           <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
           <h1 className="text-xl font-semibold mb-2">Payment received</h1>
           <p className="text-sm text-gray-600 mb-6">Thank you! Your payment for {data?.title || 'this quote'} has been recorded.</p>
-          <PublicPdfDownload url={data?.pdfDownloadUrl} className="pb-0" />
+          <PublicPdfDownload
+            url={data?.pdfDownloadUrl}
+            fileName={`${data?.title || 'Quote'}.pdf`}
+            className="pb-0"
+          />
         </div>
       </div>
     )
@@ -262,7 +266,10 @@ export function PublicQuotePage({ token }) {
           </div>
         )}
 
-        <PublicPdfDownload url={data.pdfDownloadUrl} />
+        <PublicPdfDownload
+          url={data.pdfDownloadUrl}
+          fileName={`${data.title || 'Quote'}.pdf`}
+        />
 
         {data.clientResponse && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm">

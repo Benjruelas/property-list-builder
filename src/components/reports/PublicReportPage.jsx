@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, X } from 'lucide-react'
 import { fetchPublicReport } from '../../utils/photoReports'
+import { resolveApiUrl } from '@/utils/apiBase'
 import { PublicFormBrandBar } from '../forms/PublicFormBrand'
 import { PublicPdfDownload } from '../shared/PublicPdfDownload'
 import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
@@ -11,10 +12,7 @@ import { AppLoadingScreen } from '../AppLoadingScreen'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 function resolvePhotoUrl(url) {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) return url
-  const base = import.meta.env.DEV ? '' : (typeof window !== 'undefined' ? window.location.origin : '')
-  return `${base}${url}`
+  return resolveApiUrl(url)
 }
 
 function PhotoLightbox({ photo, onClose }) {
@@ -174,7 +172,10 @@ export function PublicReportPage({ token }) {
           </section>
         ))}
 
-        <PublicPdfDownload url={data?.pdfDownloadUrl} />
+        <PublicPdfDownload
+          url={data?.pdfDownloadUrl}
+          fileName={`${report?.title || 'Photo Report'}.pdf`}
+        />
       </div>
 
       <PhotoLightbox photo={lightboxPhoto} onClose={() => setLightboxPhoto(null)} />

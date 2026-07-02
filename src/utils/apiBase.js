@@ -30,3 +30,17 @@ export function getApiBaseUrl() {
 export function isNativeApp() {
   return Capacitor.isNativePlatform()
 }
+
+/**
+ * Resolve a server-relative `/api/...` path to a fetchable URL.
+ * Uses getApiBase() so Capacitor native builds hit the configured API host.
+ */
+export function resolveApiUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  const base = getApiBase().replace(/\/$/, '')
+  if (url.startsWith('/api')) {
+    return `${base}${url.slice(4)}`
+  }
+  return url.startsWith('/') ? `${base}${url}` : `${base}/${url}`
+}
