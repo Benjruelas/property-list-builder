@@ -988,7 +988,7 @@ export function LeadDetails({
                 ) : (
                   <div
                     ref={activityFeedRef}
-                    className="overflow-y-auto pr-1"
+                    className="overflow-y-auto scrollbar-hide pr-1"
                     style={activityFeedMaxHeight != null ? { maxHeight: activityFeedMaxHeight } : undefined}
                   >
                   <ul className="space-y-2">

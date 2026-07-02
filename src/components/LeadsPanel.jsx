@@ -15,6 +15,7 @@ import {
   toLeadPatchBody,
   isLeadPhotosOnlyPatch,
   mergeLeadDetail,
+  mergeLeadDetailFromPhotoApi,
   upsertLeadInLocalStore,
   getLeadStatus,
   lastContactedAt,
@@ -178,9 +179,10 @@ export function LeadsPanel({
   const { visibleItems: visibleLeads, sentinel: leadsSentinel } = useWindowedList(filteredLeads)
 
   const handleLeadUpdate = useCallback(async (updated, opts = {}) => {
-    onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated))
-    if (opts.localOnly) return
     const payload = toLeadPatchBody(updated)
+    const merge = isLeadPhotosOnlyPatch(payload) ? mergeLeadDetailFromPhotoApi : mergeLeadDetail
+    onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated, merge))
+    if (opts.localOnly) return
     if (isLeadPhotosOnlyPatch(payload)) return
     try {
       const saved = await updateLead(getToken, updated.id, payload)

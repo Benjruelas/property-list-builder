@@ -65,6 +65,8 @@ export function CreateLeadDialog({
   topLayer = false,
   confirmLayer = false,
 }) {
+  const isEdit = !!editLead?.id
+  const fromParcel = Boolean(prefill?.parcelId) && !isEdit
   const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
   const canEditSharing = !isEdit || canChangeVisibility(resolveResourceAccess(
@@ -77,8 +79,6 @@ export function CreateLeadDialog({
   const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
   const [saving, setSaving] = useState(false)
   const [resolvingParcel, setResolvingParcel] = useState(false)
-  const isEdit = !!editLead?.id
-  const fromParcel = Boolean(prefill?.parcelId) && !isEdit
 
   useEffect(() => {
     if (!open) {

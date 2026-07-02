@@ -8618,7 +8618,12 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   width: 32px;
   height: 32px;
   flex-shrink: 0;
-  color: #93c5fd;
+  color: var(--map-chrome-text);
+}
+
+[data-ui-theme='dark'] .photo-add-popover-icon,
+[data-ui-theme='glass'] .photo-add-popover-icon {
+  color: #fff;
 }
 
 .photo-add-popover-label {

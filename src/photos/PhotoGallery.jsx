@@ -10,6 +10,7 @@ import {
   deletePhoto,
   fetchPhotoBlob,
   fetchPhotoPreviewBlob,
+  invalidatePhotoBlobCache,
   sumPhotoBytes,
   LEAD_STORAGE_LIMIT_BYTES,
   DEAL_STORAGE_LIMIT_BYTES,
@@ -163,6 +164,7 @@ export function PhotoGallery({
     const photo = item.photo
     setPreviewIndex(null)
     setHiddenIds((prev) => new Set(prev).add(photo.id))
+    invalidatePhotoBlobCache(photo)
 
     const prevEntity = entity
     const optimistic = {
@@ -174,9 +176,11 @@ export function PhotoGallery({
 
     try {
       const result = await deletePhoto(getToken, entityRef, photo.id)
+      if (result.notFound) return
       const updated = entityType === 'deal' ? result.deal : result.lead
       if (updated) onEntityUpdate?.(updated)
     } catch {
+      invalidatePhotoBlobCache(photo)
       onEntityUpdate?.(prevEntity)
       setHiddenIds((prev) => {
         const next = new Set(prev)
@@ -310,11 +314,7 @@ export function PhotoGallery({
                     const idx = displayItems.findIndex((d) => d.id === item.id)
                     setPreviewIndex(idx)
                   }}
-                  onDelete={
-                    readOnly || (item.kind === 'photo' && item.photo.key)
-                      ? undefined
-                      : () => handleDelete(item)
-                  }
+                  onDelete={readOnly ? undefined : () => handleDelete(item)}
                 />
                 {item.kind === 'photo' && item.photo.annotatedKey && (
                   <span className="lead-photo-annotated-badge absolute top-1 left-1 text-[9px] px-1.5 py-0.5 rounded bg-black/50 text-white/90">
@@ -331,15 +331,6 @@ export function PhotoGallery({
                       aria-label="Annotate photo"
                     >
                       <PenLine className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="lead-photo-grid-action-btn lead-photo-grid-action-btn--delete"
-                      onClick={() => handleDelete(item)}
-                      title="Delete"
-                      aria-label="Delete photo"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 )}
