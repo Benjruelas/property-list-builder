@@ -11,17 +11,21 @@ function nextSyncDelayMs() {
  * Poll shared team data while the tab is visible.
  * Uses jittered intervals so clients don't sync in lockstep.
  */
-export function useTeamDataSync({ enabled, refreshPipelines, refreshLeads }) {
-  const refreshRef = useRef({ refreshPipelines, refreshLeads })
-  refreshRef.current = { refreshPipelines, refreshLeads }
+export function useTeamDataSync({ enabled, refreshPipelines, refreshLeads, hydrateSharedAssets }) {
+  const refreshRef = useRef({ refreshPipelines, refreshLeads, hydrateSharedAssets })
+  refreshRef.current = { refreshPipelines, refreshLeads, hydrateSharedAssets }
 
   useEffect(() => {
     if (!enabled) return
 
-    const runRefresh = () => {
+    let cancelled = false
+
+    const runRefresh = async () => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-      refreshRef.current.refreshPipelines?.()
-      refreshRef.current.refreshLeads?.()
+      const { refreshPipelines, refreshLeads, hydrateSharedAssets } = refreshRef.current
+      await refreshPipelines?.()
+      await refreshLeads?.()
+      if (!cancelled) await hydrateSharedAssets?.()
     }
 
     runRefresh()
@@ -42,6 +46,7 @@ export function useTeamDataSync({ enabled, refreshPipelines, refreshLeads }) {
     schedule()
 
     return () => {
+      cancelled = true
       document.removeEventListener('visibilitychange', onVisibility)
       clearTimeout(timeoutId)
     }
