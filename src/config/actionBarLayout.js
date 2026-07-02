@@ -4,7 +4,7 @@
  * Desktop (768+): every action on the bar — no Menu.
  */
 
-/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'paths' | 'outreach' | 'settings' | 'menu'} ActionBarItemId */
+/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'paths' | 'outreach' | 'settings' | 'photoMode' | 'photoImport' | 'menu'} ActionBarItemId */
 
 export const DESKTOP_MIN_WIDTH = 768
 
@@ -22,8 +22,13 @@ export const PRIMARY_BAR_ORDER = [
   'activity',
 ]
 
-/** Extra items surfaced on the bar at desktop widths (formerly menu-only). */
-export const DESKTOP_EXTRA_BAR_ORDER = ['paths', 'outreach', 'settings']
+/**
+ * Extra items surfaced on the bar at desktop widths (formerly menu-only).
+ * 'photoMode' and 'photoImport' are desktop-bar-only here — on mobile,
+ * Photo Mode lives as a floating button on the map (see MapControls) and
+ * Import Photos lives in the action-bar Menu overflow (see ActionBarMenu).
+ */
+export const DESKTOP_EXTRA_BAR_ORDER = ['photoMode', 'photoImport', 'paths', 'outreach', 'settings']
 
 export const DESKTOP_BAR_ORDER = [...PRIMARY_BAR_ORDER, ...DESKTOP_EXTRA_BAR_ORDER]
 

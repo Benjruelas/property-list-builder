@@ -12,6 +12,7 @@ import {
   Calendar,
   ListTodo,
   Bell,
+  ImagePlus,
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { PipeIcon } from './PipeIcon'
@@ -28,6 +29,7 @@ const MENU_PREFETCH_KEY = {
   reports: 'reports',
   paths: 'paths',
   outreach: 'outreach',
+  photoImport: 'photoImport',
 }
 
 /** Bar-primary items that only appear in the menu when they overflow off the action bar. */
@@ -46,6 +48,7 @@ const TOOLS_MENU = [
   { id: 'lists', label: 'Lists', Icon: List, tour: 'menu-lists' },
   { id: 'paths', label: 'Paths', Icon: Route, tour: 'menu-paths' },
   { id: 'outreach', label: 'Outreach', Icon: Send, tour: 'menu-outreach' },
+  { id: 'photoImport', label: 'Import Photos', Icon: ImagePlus, tour: 'menu-photo-import' },
 ]
 
 function MenuDivider() {
@@ -91,6 +94,7 @@ export function ActionBarMenu({
   onOpenOutreach,
   onOpenForms,
   onOpenSettings,
+  onOpenPhotoImport,
   currentUser,
   onLogin,
   activityUnreadCount = 0,
@@ -114,6 +118,7 @@ export function ActionBarMenu({
     activity: onOpenActivity,
     paths: onOpenPathsPanel,
     outreach: onOpenOutreach,
+    photoImport: onOpenPhotoImport,
   }
 
   const onBarSet = new Set(barIds.filter((id) => id !== 'menu'))

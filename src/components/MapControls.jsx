@@ -1,4 +1,4 @@
-import { Navigation, CheckSquare, Square, Compass, Route, Plus, X } from 'lucide-react'
+import { Navigation, CheckSquare, Square, Compass, Route, Plus, X, Camera } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +19,8 @@ export function MapControls({
   currentUser,
   /** Called before every map-control action to dismiss any open parcel popup */
   onCloseParcelPopup,
+  /** Quick Photo Mode — geolocate, resolve parcel, jump straight to camera. Desktop users get this on the action bar instead. */
+  onQuickPhotoMode,
 }) {
   const multiSelectAddToListMode = isMultiSelectActive && multiSelectParcelCount > 0
   // Run any map-control action through this so the parcel popup auto-closes.
@@ -52,6 +54,18 @@ export function MapControls({
       >
         <Compass />
       </Button>
+      {onQuickPhotoMode && (
+        <Button
+          data-tour="photo-mode"
+          onClick={runAction(onQuickPhotoMode)}
+          size="icon"
+          variant="glass"
+          className={cn(MAP_CHROME_BTN, 'md:hidden')}
+          title="Photo Mode — find this property and start shooting"
+        >
+          <Camera />
+        </Button>
+      )}
       <div className="map-chrome-slot relative flex shrink-0 items-center justify-center">
         {multiSelectAddToListMode && (
           <Button

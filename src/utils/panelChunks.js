@@ -17,6 +17,7 @@ export const panelLazy = {
   emailComposer: () => import('../components/EmailComposer').then((m) => ({ default: m.EmailComposer })),
   bulkEmailPreview: () => import('../components/BulkEmailPreview').then((m) => ({ default: m.BulkEmailPreview })),
   hailData: () => import('../components/HailDataPanel').then((m) => ({ default: m.HailDataPanel })),
+  photoImport: () => import('../components/photos/PhotoImportDialog').then((m) => ({ default: m.PhotoImportDialog })),
 }
 
 const PREFETCH_ORDER = [
@@ -34,6 +35,7 @@ const PREFETCH_ORDER = [
   'emailComposer',
   'bulkEmailPreview',
   'hailData',
+  'photoImport',
 ]
 
 let prefetchStarted = false
