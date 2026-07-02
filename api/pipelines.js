@@ -78,7 +78,7 @@ async function runPipelinePushNotifications({
   user
 }) {
   try {
-    const { notifyPipelineDealStatusChanges, diffDealStatusChanges } = await import('./push-utils.js')
+    const { notifyPipelineDealStatusChanges, diffDealStatusChanges } = await import('./lib/pushUtils.js')
     if (isOwner) {
       const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
       await runResourceShareNotifications({

@@ -228,7 +228,7 @@ export default async function handler(req, res) {
     }
     if (deferred.notify.length) {
       try {
-        const { notifyTaskAssigned } = await import('./push-utils.js')
+        const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
         for (const [uids, payload] of deferred.notify) {
           await notifyTaskAssigned(uids, payload, teamsIndex)
         }

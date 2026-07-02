@@ -319,7 +319,7 @@ export default async function handler(req, res) {
         t.teamShares = unique
         if (isOwner && newlyAddedTeamShares.length > 0) {
           try {
-            const { notifyTeamResourceShare } = await import('./push-utils.js')
+            const { notifyTeamResourceShare } = await import('./lib/pushUtils.js')
             await notifyTeamResourceShare(newlyAddedTeamShares, teamsIndex, {
               resourceType: 'form',
               resourceName: t.name,

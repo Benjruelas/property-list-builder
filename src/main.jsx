@@ -7,14 +7,28 @@ import './index.css'
 import './styles/quote-panel-actions.css'
 import { applyUiThemeFromStorage } from './utils/uiTheme'
 import { AuthProvider } from './contexts/AuthContext'
+import { initErrorTracking } from './utils/errorTracking'
 
+initErrorTracking()
 applyUiThemeFromStorage()
 import { NavigationProvider } from './navigation/NavigationContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => {
+        // Pick up new SW versions when the user returns to the tab.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            registration.update().catch(() => {})
+          }
+        })
+      })
+      .catch((err) => {
+        console.warn('Service worker registration failed:', err?.message || err)
+      })
   })
 }
 

@@ -107,7 +107,7 @@ async function recordQuoteView(quote, index, all, invite) {
 
   if (isFirst) {
     try {
-      const { notifyQuoteViewed } = await import('./push-utils.js')
+      const { notifyQuoteViewed } = await import('./lib/pushUtils.js')
       await notifyQuoteViewed(quote.ownerEmail, {
         quoteTitle: quote.title,
         clientName: quote.clientName || invite.recipientEmail,
@@ -359,7 +359,7 @@ export default async function handler(req, res) {
       }
 
       try {
-        const { notifyQuoteResponded } = await import('./push-utils.js')
+        const { notifyQuoteResponded } = await import('./lib/pushUtils.js')
         await notifyQuoteResponded(quote.ownerEmail, {
           quoteTitle: quote.title,
           action,
@@ -430,7 +430,7 @@ export async function markQuotePaidFromStripe(metadata, paymentIntentId) {
   }
 
   try {
-    const { notifyQuotePaid } = await import('./push-utils.js')
+    const { notifyQuotePaid } = await import('./lib/pushUtils.js')
     await notifyQuotePaid(updated.ownerEmail, {
       quoteTitle: updated.title,
       clientName: updated.clientName,

@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import { reportError } from '../utils/errorTracking'
 
 export class ErrorBoundary extends Component {
   state = { hasError: false, error: null }
@@ -8,7 +9,7 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error('App error:', error, info)
+    reportError(error, { componentStack: info?.componentStack })
   }
 
   render() {

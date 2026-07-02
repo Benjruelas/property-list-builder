@@ -3,8 +3,8 @@
  * send via web-push, and record in-app inbox entries.
  */
 import webpush from 'web-push'
-import { appendInAppNotification } from './lib/notificationStore.js'
-import { fullTeamsIndex } from './lib/teams.js'
+import { appendInAppNotification } from './notificationStore.js'
+import { fullTeamsIndex } from './teams.js'
 
 let kv = null
 let kvAvailable = false

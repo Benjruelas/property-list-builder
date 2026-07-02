@@ -163,7 +163,7 @@ export default async function handler(req, res) {
 
       try {
         const allTeams = await getAllTeams()
-        const { notifyTaskAssigned } = await import('./push-utils.js')
+        const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
         await notifyTaskAssigned(assignedUids.filter((uid) => uid !== user.uid), {
           taskTitle: title,
           taskId: task.id,
@@ -207,7 +207,7 @@ export default async function handler(req, res) {
           if (newlyAssigned.length) {
             try {
               const allTeams = await getAllTeams()
-              const { notifyTaskAssigned } = await import('./push-utils.js')
+              const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
               await notifyTaskAssigned(newlyAssigned, {
                 taskTitle: task.title,
                 taskId: task.id,

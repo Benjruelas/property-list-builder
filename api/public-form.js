@@ -217,7 +217,7 @@ export default async function handler(req, res) {
       appendSubmission(submission).catch(() => {})
 
       try {
-        const { notifyFormSubmitted } = await import('./push-utils.js')
+        const { notifyFormSubmitted } = await import('./lib/pushUtils.js')
         await notifyFormSubmitted(ownerEmail, {
           formName: templateName,
           submitterEmail: recipientEmail,

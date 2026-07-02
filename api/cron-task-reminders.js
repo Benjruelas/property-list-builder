@@ -2,7 +2,7 @@
  * Cron: scan synced user data for upcoming task deadlines and send Web Push.
  * Secured via CRON_SECRET header (Vercel cron) or Authorization Bearer.
  */
-import { notifyTaskDeadline } from './push-utils.js'
+import { notifyTaskDeadline } from './lib/pushUtils.js'
 
 let kv = null
 let kvAvailable = false

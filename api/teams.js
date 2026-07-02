@@ -352,7 +352,7 @@ export default async function handler(req, res) {
           invitedByEmail: user.email,
         })
         try {
-          const { notifyTeamMemberAdded } = await import('./push-utils.js')
+          const { notifyTeamMemberAdded } = await import('./lib/pushUtils.js')
           await notifyTeamMemberAdded(email, {
             teamName: team.name,
             teamId: team.id,
