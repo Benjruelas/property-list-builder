@@ -41,7 +41,7 @@ describe('fetchClientPreviewUrl', () => {
   it('posts type and id and returns publicUrl', async () => {
     fetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ publicUrl: 'https://app.test/?quote=token123' }),
+      json: async () => ({ publicUrl: 'https://app.test/q/token123' }),
     })
 
     const url = await fetchClientPreviewUrl(
@@ -49,7 +49,7 @@ describe('fetchClientPreviewUrl', () => {
       { type: 'quote', id: 'q_1' },
     )
 
-    expect(url).toBe('https://app.test/?quote=token123')
+    expect(url).toBe('https://app.test/q/token123')
     expect(fetch).toHaveBeenCalledWith(
       '/api/client-preview-link',
       expect.objectContaining({
@@ -90,16 +90,16 @@ describe('openClientPreviewUrl', () => {
       location: { pathname: '/app', search: '?panel=quotes', hash: '', href: 'https://app.test/app?panel=quotes' },
     })
     markClientPreviewOpened()
-    openClientPreviewUrl('https://app.test/?report=abc')
+    openClientPreviewUrl('https://app.test/r/abc')
     expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBe('/app?panel=quotes')
-    expect(open).toHaveBeenCalledWith('https://app.test/?report=abc', '_blank', 'noopener,noreferrer')
+    expect(open).toHaveBeenCalledWith('https://app.test/r/abc', '_blank', 'noopener,noreferrer')
     vi.unstubAllGlobals()
   })
 
   it('returns false when popup is blocked', () => {
     const open = vi.fn(() => null)
     vi.stubGlobal('window', { open, location: { href: 'https://app.test/app' } })
-    expect(openClientPreviewUrl('https://app.test/?quote=abc')).toBe(false)
+    expect(openClientPreviewUrl('https://app.test/q/abc')).toBe(false)
     vi.unstubAllGlobals()
   })
 })
@@ -125,8 +125,8 @@ describe('prepareClientPreviewTab', () => {
   it('navigates a prepared tab when url is ready', () => {
     const previewWindow = { closed: false, location: { href: 'about:blank' } }
     vi.stubGlobal('window', { open: vi.fn(), location: { pathname: '/', search: '', hash: '' } })
-    expect(openClientPreviewUrl('https://app.test/?report=abc', previewWindow)).toBe(true)
-    expect(previewWindow.location.href).toBe('https://app.test/?report=abc')
+    expect(openClientPreviewUrl('https://app.test/r/abc', previewWindow)).toBe(true)
+    expect(previewWindow.location.href).toBe('https://app.test/r/abc')
     vi.unstubAllGlobals()
   })
 })
@@ -170,14 +170,18 @@ describe('nav stack persistence helpers', () => {
     expect(sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG)).toBe('1')
   })
 
-  it('isPublicPreviewRoute detects report/quote/form params', () => {
-    vi.stubGlobal('window', { location: { search: '?report=abc' } })
+  it('isPublicPreviewRoute detects report/quote/form params and short paths', () => {
+    vi.stubGlobal('window', { location: { pathname: '/', search: '?report=abc' } })
     expect(isPublicPreviewRoute()).toBe(true)
-    vi.stubGlobal('window', { location: { search: '?quote=abc' } })
+    vi.stubGlobal('window', { location: { pathname: '/r/abc', search: '' } })
     expect(isPublicPreviewRoute()).toBe(true)
-    vi.stubGlobal('window', { location: { search: '?form=abc' } })
+    vi.stubGlobal('window', { location: { pathname: '/', search: '?quote=abc' } })
     expect(isPublicPreviewRoute()).toBe(true)
-    vi.stubGlobal('window', { location: { search: '?panel=reports' } })
+    vi.stubGlobal('window', { location: { pathname: '/q/abc', search: '' } })
+    expect(isPublicPreviewRoute()).toBe(true)
+    vi.stubGlobal('window', { location: { pathname: '/', search: '?form=abc' } })
+    expect(isPublicPreviewRoute()).toBe(true)
+    vi.stubGlobal('window', { location: { pathname: '/', search: '?panel=reports' } })
     expect(isPublicPreviewRoute()).toBe(false)
   })
 
@@ -190,7 +194,7 @@ describe('nav stack persistence helpers', () => {
   })
 
   it('persistNavStack is a no-op on public preview routes', () => {
-    vi.stubGlobal('window', { location: { search: '?report=token' } })
+    vi.stubGlobal('window', { location: { pathname: '/r/token', search: '' } })
     persistNavStack([{ type: 'reports' }])
     expect(sessionStorage.getItem(CLIENT_PREVIEW_NAV_KEY)).toBeNull()
     expect(readPersistedNavStack()).toBeNull()

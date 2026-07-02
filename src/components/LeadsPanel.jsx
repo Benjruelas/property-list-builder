@@ -29,6 +29,7 @@ import { buildDealCountByLeadId } from '@/utils/deals'
 import { showToast } from './ui/toast'
 import { LeadRow } from './LeadRow'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
+import { useWindowedList } from '@/hooks/useWindowedList'
 
 export function LeadsPanel({
   isOpen,
@@ -173,6 +174,8 @@ export function LeadsPanel({
     return list
   }, [leads, search, selectedTagIds, statusFilter, sortMode, dealCountByLead, leadStatuses])
 
+  // Windowed rendering — mounts ~80 rows at a time instead of the whole list.
+  const { visibleItems: visibleLeads, sentinel: leadsSentinel } = useWindowedList(filteredLeads)
 
   const handleLeadUpdate = useCallback(async (updated) => {
     onLeadsChange?.((prev) => upsertLeadInLocalStore(prev, updated))
@@ -348,7 +351,7 @@ export function LeadsPanel({
                   <span>Email</span>
                   <span>Activity</span>
                 </div>
-                {filteredLeads.map((lead) => (
+                {visibleLeads.map((lead) => (
                   <LeadRow
                     key={lead.id}
                     lead={lead}
@@ -363,6 +366,7 @@ export function LeadsPanel({
                   }}
                   />
                 ))}
+                {leadsSentinel}
               </div>
             )}
           </div>

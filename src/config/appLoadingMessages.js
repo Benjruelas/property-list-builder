@@ -1,4 +1,6 @@
 /** Boot splash taglines — map app, public quote/report/form links. */
+import { parsePublicRoute } from '../utils/publicLinks'
+
 export const APP_LOADING_MESSAGES = {
   mapAuth: 'Loading KnockScout…',
   mapBasemap: 'Loading your map…',
@@ -7,12 +9,15 @@ export const APP_LOADING_MESSAGES = {
   form: 'Loading form…',
 }
 
-/** Route kind inferred from ?quote= / ?report= / ?form= query params. */
-export function getAppLoadingRoute(search = typeof window !== 'undefined' ? window.location.search : '') {
-  const params = new URLSearchParams(search)
-  if (params.get('quote')) return 'quote'
-  if (params.get('report')) return 'report'
-  if (params.get('form')) return 'form'
+/** Route kind inferred from /q/, /r/, or legacy ?quote= / ?report= / ?form= params. */
+export function getAppLoadingRoute(
+  search = typeof window !== 'undefined' ? window.location.search : '',
+  pathname = typeof window !== 'undefined' ? window.location.pathname : '',
+) {
+  const parsed = parsePublicRoute(pathname, search)
+  if (parsed?.type === 'quote') return 'quote'
+  if (parsed?.type === 'report') return 'report'
+  if (parsed?.type === 'form') return 'form'
   return 'map'
 }
 

@@ -2,6 +2,8 @@
  * KV storage for public photo report links.
  */
 
+import { generatePublicInviteToken } from './publicLinks.js'
+
 export const REPORT_INVITES_KV_KEY = 'photo_report_invites'
 export const REPORT_INVITE_EXPIRY_DAYS = 30
 
@@ -43,23 +45,19 @@ export async function getAllReportInvites() {
 }
 
 export async function saveAllReportInvites(invites) {
-  fallbackInvites = invites
+  const { pruneDeadInvites } = await import('./invitePrune.js')
+  const pruned = pruneDeadInvites(invites)
+  fallbackInvites = pruned
   if (!kvAvailable || !kv) return
   try {
-    await kv.set(REPORT_INVITES_KV_KEY, invites).catch(() => kv.set(REPORT_INVITES_KV_KEY, JSON.stringify(invites)))
+    await kv.set(REPORT_INVITES_KV_KEY, pruned).catch(() => kv.set(REPORT_INVITES_KV_KEY, JSON.stringify(pruned)))
   } catch (e) {
     console.warn('report invites KV save failed', e.message)
   }
 }
 
 export function generateReportToken() {
-  const bytes = new Uint8Array(32)
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes)
-  } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
-  }
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return generatePublicInviteToken()
 }
 
 export function isReportInviteExpired(invite) {
@@ -69,7 +67,7 @@ export function isReportInviteExpired(invite) {
 
 export async function findReportInviteByToken(token) {
   const normalized = String(token || '').trim()
-  if (!normalized || normalized.length < 16) {
+  if (!normalized || normalized.length < 8) {
     return { invite: null, index: -1, error: 'not_found' }
   }
   const all = await getAllReportInvites()

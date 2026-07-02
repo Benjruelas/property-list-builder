@@ -7,19 +7,41 @@ const needsIOSPermission =
 /**
  * Smoothed compass heading (0-360, 0 = North).
  *
- * Returns { heading, requestOrientation, needsGesture }.
+ * Returns { getHeading, subscribeHeading, requestOrientation, needsGesture }.
+ * Heading updates are delivered through the subscription (and readable via
+ * `getHeading()`) instead of React state so multi-Hz orientation events never
+ * re-render the component tree — consumers apply them imperatively.
  * On iOS, `needsGesture` is true until the user has tapped and orientation
  * permission has been granted for this page load.  Call `requestOrientation()`
  * from a user-gesture handler (onClick) when `needsGesture` is true.
  */
 export function useDeviceHeading(enabled = false) {
-  const [heading, setHeading] = useState(null)
   const [needsGesture, setNeedsGesture] = useState(needsIOSPermission)
+  const headingRef = useRef(null)
+  const subscribersRef = useRef(new Set())
   const smoothedRef = useRef(null)
   const lastEmittedRef = useRef(null)
   const rafPendingRef = useRef(false)
   const listeningRef = useRef(false)
   const grantedRef = useRef(false)
+
+  const getHeading = useCallback(() => headingRef.current, [])
+
+  const subscribeHeading = useCallback((fn) => {
+    subscribersRef.current.add(fn)
+    return () => subscribersRef.current.delete(fn)
+  }, [])
+
+  const emitHeading = useCallback((value) => {
+    headingRef.current = value
+    for (const fn of subscribersRef.current) {
+      try {
+        fn(value)
+      } catch {
+        /* subscriber errors must not break the sensor pipeline */
+      }
+    }
+  }, [])
 
   const ALPHA = 0.15
   const MIN_DELTA = 1
@@ -45,7 +67,7 @@ export function useDeviceHeading(enabled = false) {
     if (smoothedRef.current === null) {
       smoothedRef.current = raw
       lastEmittedRef.current = raw
-      setHeading(raw)
+      emitHeading(raw)
       return
     }
 
@@ -63,7 +85,7 @@ export function useDeviceHeading(enabled = false) {
       const current = smoothedRef.current
       if (lastEmittedRef.current === null) {
         lastEmittedRef.current = current
-        setHeading(current)
+        emitHeading(current)
         return
       }
       let emitDelta = current - lastEmittedRef.current
@@ -71,10 +93,10 @@ export function useDeviceHeading(enabled = false) {
       if (emitDelta < -180) emitDelta += 360
       if (Math.abs(emitDelta) >= MIN_DELTA) {
         lastEmittedRef.current = current
-        setHeading(current)
+        emitHeading(current)
       }
     })
-  }, [])
+  }, [emitHeading])
 
   const startListening = useCallback(() => {
     if (listeningRef.current) return
@@ -134,5 +156,5 @@ export function useDeviceHeading(enabled = false) {
     }
   }, [eventName, handleOrientation])
 
-  return { heading, requestOrientation, needsGesture }
+  return { getHeading, subscribeHeading, requestOrientation, needsGesture }
 }

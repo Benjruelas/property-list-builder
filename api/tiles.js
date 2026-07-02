@@ -1,4 +1,5 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 const EMPTY_MARKER = Buffer.alloc(0)
@@ -44,6 +45,9 @@ function putToR2(key, body) {
 }
 
 export default async function handler(req, res) {
+  // Map tiles can't carry a bearer token, so throttle abuse per-IP instead.
+  if (await enforceIpRateLimit(req, res, { name: 'tiles', limit: 4000, windowSec: 60 })) return
+
   const { z, x, y } = req.query
   if (!z || !x || !y) {
     return res.status(400).json({ error: 'z, x, y required' })

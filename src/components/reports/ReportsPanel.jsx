@@ -44,6 +44,7 @@ import {
 } from '../../utils/reportSendTemplates'
 import { getSettings, updateSettings } from '../../utils/settings'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { clearReportEditorDraft, clearReportEditorDraftForReport } from '../../utils/reportEditorDraft'
 import { ReportBuilder } from './ReportBuilder'
 import { ReportDetail } from './ReportDetail'
 import { ReportTemplatePickerDialog } from './ReportTemplatePickerDialog'
@@ -222,6 +223,8 @@ export function ReportsPanel({
     resetReportCreateFlow()
     if (!leadId) return
 
+    clearReportEditorDraft(leadId)
+
     if (wasAwaitingTemplate) {
       onPatchEditor?.({
         layoutTemplate: template ?? null,
@@ -259,6 +262,8 @@ export function ReportsPanel({
   const performDeleteReport = async (report) => {
     try {
       await deletePhotoReport(getToken, report.id)
+      clearReportEditorDraftForReport(report.leadId, report.id)
+      if (editorReport?.id === report.id) onCloseEditor?.()
       if (detailReportId === report.id) onCloseDetail?.()
       await refresh()
       showToast('Report deleted', 'success')
@@ -509,7 +514,7 @@ export function ReportsPanel({
               )
             ) : (
               <div className="space-y-4 pb-4">
-                <p className="text-sm opacity-70">Default templates used when sending photo reports via email or text. Your name comes from Settings; company name from team branding (Teams → your team).</p>
+                <p className="text-sm opacity-70">Default templates used when sending photo reports via email or text. Use {'{ReportLink}'} for the share link — it is filled in automatically when you copy or send. Your name comes from Settings; company name from team branding (Teams → your team).</p>
                 <div className="flex flex-wrap gap-1">
                   {REPORT_SEND_TAGS.map((tag) => (
                     <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10" title={tag}>{tag}</span>
@@ -597,6 +602,23 @@ export function ReportsPanel({
         onSelect={finalizeNewReport}
       />
 
+      <ReportDetail
+        open={!!detailReportId && !!detailReport && !editorOpen}
+        report={detailReport}
+        lead={detailLead}
+        getToken={getToken}
+        leads={leads}
+        teams={teams}
+        teamMembership={teamMembership}
+        onClose={onCloseDetail}
+        onBack={onCloseDetail}
+        onEdit={(r) => onOpenEditor?.({ mode: 'report', report: r })}
+        onDelete={performDeleteReport}
+        onReportUpdated={(r) => {
+          setReports((prev) => prev.map((x) => (x.id === r.id ? r : x)))
+        }}
+      />
+
       <ReportBuilder
         open={reportBuilderOpen}
         mode={editorMode}
@@ -631,23 +653,6 @@ export function ReportsPanel({
           } else {
             onCloseEditor?.()
           }
-        }}
-      />
-
-      <ReportDetail
-        open={!!detailReportId && !!detailReport}
-        report={detailReport}
-        lead={detailLead}
-        getToken={getToken}
-        leads={leads}
-        teams={teams}
-        teamMembership={teamMembership}
-        onClose={onCloseDetail}
-        onBack={onCloseDetail}
-        onEdit={(r) => onOpenEditor?.({ mode: 'report', report: r })}
-        onDelete={performDeleteReport}
-        onReportUpdated={(r) => {
-          setReports((prev) => prev.map((x) => (x.id === r.id ? r : x)))
         }}
       />
     </>

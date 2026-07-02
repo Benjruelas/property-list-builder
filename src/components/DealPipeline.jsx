@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { WindowedItems } from '@/hooks/useWindowedList'
 import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Check, Users } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelBackButton, PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
@@ -993,25 +994,27 @@ export function DealPipeline({
                   onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
                   onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
                 >
-                  {getDealsForColumn(col.id).map((deal) => (
-                    <PipelineDealCard
-                      key={deal.id}
-                      deal={deal}
-                      leads={leads}
-                      tagRegistry={tagRegistry}
-                      canSeeDealAmounts={canSeeDealAmounts}
-                      isDragging={draggedDealId === deal.id}
-                      isEditMode={isEditMode}
-                      canCollaborate={canCollaboratePipeline}
-                      canMoveNext={columns.findIndex((c) => c.id === deal.status) < columns.length - 1}
-                      draggable={canCollaboratePipeline}
-                      onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, deal.id) : undefined}
-                      onDragEnd={canCollaboratePipeline ? handleDragEnd : undefined}
-                      onClick={() => handleDealClick(deal)}
-                      onMoveNext={() => handleMoveToNext(deal.id)}
-                      onDelete={() => handleDeleteDeal(deal.id)}
-                    />
-                  ))}
+                  <WindowedItems items={getDealsForColumn(col.id)} batch={40}>
+                    {(deal) => (
+                      <PipelineDealCard
+                        key={deal.id}
+                        deal={deal}
+                        leads={leads}
+                        tagRegistry={tagRegistry}
+                        canSeeDealAmounts={canSeeDealAmounts}
+                        isDragging={draggedDealId === deal.id}
+                        isEditMode={isEditMode}
+                        canCollaborate={canCollaboratePipeline}
+                        canMoveNext={columns.findIndex((c) => c.id === deal.status) < columns.length - 1}
+                        draggable={canCollaboratePipeline}
+                        onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, deal.id) : undefined}
+                        onDragEnd={canCollaboratePipeline ? handleDragEnd : undefined}
+                        onClick={() => handleDealClick(deal)}
+                        onMoveNext={() => handleMoveToNext(deal.id)}
+                        onDelete={() => handleDeleteDeal(deal.id)}
+                      />
+                    )}
+                  </WindowedItems>
                 </div>
               </div>
             ))}

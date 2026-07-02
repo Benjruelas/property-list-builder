@@ -10,6 +10,7 @@ import {
   supersedePendingQuoteInvites,
   hasPriorQuoteInvite,
 } from './lib/quoteInvites.js'
+import { buildQuotePublicUrl } from './lib/publicLinks.js'
 import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 import {
@@ -17,6 +18,8 @@ import {
   buildBrandedEmailHtml,
   buildFromAddress,
 } from './lib/senderBranding.js'
+import { rateLimit } from './lib/rateLimit.js'
+import { sanitizeHeader } from './lib/emailSafety.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
@@ -66,6 +69,12 @@ export default async function handler(req, res) {
   if (!user) user = await verifyFirebaseToken(idToken)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
+  const rl = await rateLimit({ key: `quotes-send:${user.uid}`, limit: 100, windowSec: 3600 })
+  if (!rl.allowed) {
+    res.setHeader('Retry-After', String(rl.retryAfter))
+    return res.status(429).json({ error: 'Too many sends. Please try again later.', retryAfter: rl.retryAfter })
+  }
+
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const { quoteId, recipientEmail, subject, message, recipientPhone, generateOnly } = body
@@ -92,9 +101,10 @@ export default async function handler(req, res) {
 
     const allInvites = await getAllQuoteInvites()
     const isResend = hasPriorQuoteInvite(allInvites, { quoteId, recipientEmail: trimmedRecipient })
-    const safeSubject = String(
-      subject || `Quote: ${quoteTitle}${isResend ? ' (new link)' : ''}`
-    ).slice(0, 200)
+    const safeSubject = sanitizeHeader(
+      subject || `Quote: ${quoteTitle}${isResend ? ' (new link)' : ''}`,
+      200,
+    )
 
     const invite = {
       id: `qinv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
@@ -119,7 +129,7 @@ export default async function handler(req, res) {
     await saveAllQuoteInvites(nextInvites)
 
     const appOrigin = resolveOrigin(req)
-    const quoteLink = `${appOrigin}/?quote=${encodeURIComponent(token)}`
+    const quoteLink = buildQuotePublicUrl(appOrigin, token)
 
     if (generateOnly) {
       const updatedQuote = {

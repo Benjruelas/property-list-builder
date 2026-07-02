@@ -8,6 +8,7 @@ import { getAllTeams, fullTeamsIndex } from './lib/teams.js'
 import { userHasTeamMembership } from './lib/access.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 import { taskVisibleToUser, canManageTask, sharedViewerMayPatch } from './lib/taskAccess.js'
+import { paginateArray } from './lib/pagination.js'
 
 let kv = null
 let kvAvailable = false
@@ -103,6 +104,11 @@ export default async function handler(req, res) {
 
     if (method === 'GET') {
       const tasks = all.filter((t) => taskVisibleToUser(t, user, membership))
+      // Opt-in cursor pagination (?limit=&cursor=) — full array without limit.
+      const page = paginateArray(tasks, req.query || {})
+      if (page.paginated) {
+        return res.status(200).json({ tasks: page.items, nextCursor: page.nextCursor, teamId: membership?.id || null })
+      }
       return res.status(200).json({ tasks, teamId: membership?.id || null })
     }
 
@@ -157,7 +163,7 @@ export default async function handler(req, res) {
 
       try {
         const allTeams = await getAllTeams()
-        const { notifyTaskAssigned } = await import('./push-utils.js')
+        const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
         await notifyTaskAssigned(assignedUids.filter((uid) => uid !== user.uid), {
           taskTitle: title,
           taskId: task.id,
@@ -201,7 +207,7 @@ export default async function handler(req, res) {
           if (newlyAssigned.length) {
             try {
               const allTeams = await getAllTeams()
-              const { notifyTaskAssigned } = await import('./push-utils.js')
+              const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
               await notifyTaskAssigned(newlyAssigned, {
                 taskTitle: task.title,
                 taskId: task.id,

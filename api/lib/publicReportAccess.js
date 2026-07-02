@@ -1,9 +1,16 @@
 import { findReportInviteByToken } from './reportInvites.js'
-import { getPhotoReportById, getAllPhotoReports } from './reportStore.js'
+import { getPhotoReportById } from './reportStore.js'
 import { parseReportPreviewToken } from './previewToken.js'
 
 /**
- * Resolve a public report from an invite token, signed preview token, or legacy previewToken.
+ * Resolve a public report from an invite token or a signed preview token.
+ *
+ * The legacy raw `report.publicToken` / `report.previewToken` KV fallback was
+ * removed: it granted access with no expiry/revocation, so "expiring" share
+ * links never actually expired. Access now requires either a live invite
+ * (which enforces expiry/revocation) or a cryptographically signed preview
+ * token.
+ *
  * @returns {{ invite, report, index, all, error: string|null, status?: number }}
  */
 export async function loadReportContext(token) {
@@ -37,18 +44,5 @@ export async function loadReportContext(token) {
     return { invite: previewInvite, report, index, all, error: null }
   }
 
-  const all = await getAllPhotoReports()
-  const index = all.findIndex((r) => r.previewToken === normalized)
-  if (index === -1) return { error: 'Report link not found', status: 404 }
-
-  const report = all[index]
-  const previewInvite = {
-    token: normalized,
-    reportId: report.id,
-    preview: true,
-    recipientEmail: '',
-    message: '',
-    status: 'pending',
-  }
-  return { invite: previewInvite, report, index, all, error: null }
+  return { error: 'Report link not found', status: 404 }
 }

@@ -192,6 +192,48 @@ export function mergeListViewLeads(existing, incoming) {
   })
 }
 
+/** Whether a list-view lead needs a full fetch to load photo metadata. */
+export function leadNeedsPhotoHydrate(lead, { pendingUploadCount = 0 } = {}) {
+  if (!lead?.id) return false
+
+  const photoCount = typeof lead.photoCount === 'number' ? lead.photoCount : null
+  const cachedPhotos = Array.isArray(lead.photos) ? lead.photos : undefined
+  const cachedPhotoCount = cachedPhotos?.length ?? 0
+
+  if (cachedPhotos === undefined) return true
+  if (photoCount == null) return lead._listView === true && cachedPhotoCount > 0
+  if (photoCount > cachedPhotoCount) return true
+  if (photoCount < cachedPhotoCount) return pendingUploadCount === 0
+  if (lead._listView && photoCount > 0 && cachedPhotoCount === 0) return true
+  return false
+}
+
+/**
+ * Collect lead ids that need photo hydration, prioritizing open/shared views first.
+ * @param {Array} leads
+ * @param {{ priorityLeadIds?: string[], pendingUploadsByLeadId?: Map<string, number>, limit?: number }} options
+ */
+export function collectLeadsNeedingPhotoHydrate(
+  leads,
+  { priorityLeadIds = [], pendingUploadsByLeadId = new Map(), limit = 5 } = {},
+) {
+  const list = Array.isArray(leads) ? leads : []
+  const priority = [...new Set((priorityLeadIds || []).filter(Boolean))]
+  const ordered = [
+    ...priority.map((id) => list.find((lead) => lead.id === id)).filter(Boolean),
+    ...list.filter((lead) => !priority.includes(lead.id)),
+  ]
+
+  const ids = []
+  for (const lead of ordered) {
+    const pendingUploadCount = pendingUploadsByLeadId.get(lead.id) || 0
+    if (!leadNeedsPhotoHydrate(lead, { pendingUploadCount })) continue
+    ids.push(lead.id)
+    if (ids.length >= limit) break
+  }
+  return ids
+}
+
 export async function fetchLeads(getToken, { view = 'list' } = {}) {
   const token = await getToken()
   if (!token) return loadLocalLeads()
@@ -223,8 +265,21 @@ export async function fetchLeadById(getToken, leadId) {
   return data.lead || null
 }
 
+function hasLeadContactInput(data) {
+  if (!data || typeof data !== 'object') return false
+  return (
+    'phoneDetails' in data
+    || 'emailDetails' in data
+    || 'phones' in data
+    || 'phone' in data
+    || 'emails' in data
+    || 'email' in data
+  )
+}
+
 function withNormalizedLeadContact(data) {
   if (!data || typeof data !== 'object') return data
+  if (!hasLeadContactInput(data)) return data
   const contact = normalizeLeadContactsForStorage(data)
   return { ...data, ...contact }
 }
@@ -286,6 +341,12 @@ export function toLeadPatchBody(updates, { includeSharing = false } = {}) {
 export function isLeadPhotosOnlyPatch(payload) {
   const keys = Object.keys(payload)
   return keys.length > 0 && keys.every((k) => k === 'photos' || k === 'updatedAt')
+}
+
+/** Status is persisted via setLeadStatus; skip redundant full-lead PATCH. */
+export function isLeadStatusOnlyPatch(payload) {
+  const keys = Object.keys(payload)
+  return keys.length > 0 && keys.every((k) => k === 'status' || k === 'statusUpdatedAt')
 }
 
 export async function updateLead(getToken, leadId, updates) {

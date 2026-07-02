@@ -6,14 +6,13 @@ import { PanelHeader } from '../ui/panel-header'
 import { PanelActionButton } from '../ui/panel-action-button'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
-import { displayLeadName, formatLeadAddress, fetchLeadById } from '@/utils/leads'
+import { displayLeadName, formatLeadAddress, fetchLeadById, leadNeedsPhotoHydrate } from '@/utils/leads'
 import {
   createPhotoReport,
   updatePhotoReport,
   newReportSection,
   createReportTemplate,
   updateReportTemplate,
-  sectionsFromTemplate,
   fetchPhotoReports,
 } from '@/utils/photoReports'
 import { logLeadReportEvent } from '@/utils/leadActivity'
@@ -27,6 +26,7 @@ import {
   clearReportEditorDraft,
   sectionsHavePhotoIds,
   sortReportSections,
+  resolveEditorSeed,
 } from '@/utils/reportEditorDraft'
 import { SendReportDialog } from './SendReportDialog'
 
@@ -47,55 +47,6 @@ function sortPhotoIdsNewestFirst(photoIds, photosById) {
     const tb = photoSortTime(photosById.get(b))
     return tb.localeCompare(ta)
   })
-}
-
-function resolveEditorSeed({ initialReport, layoutTemplate, initialLeadId, draft }) {
-  const leadId = initialReport?.leadId || initialLeadId
-
-  if (initialReport && sectionsHavePhotoIds(initialReport.sections)) {
-    return {
-      title: initialReport.title || 'Photo Report',
-      sections: sortReportSections(initialReport.sections),
-      reportId: initialReport.id ?? null,
-    }
-  }
-
-  if (
-    draft
-    && draft.leadId === leadId
-    && sectionsHavePhotoIds(draft.sections)
-    && (!initialReport?.id || draft.reportId === initialReport.id)
-  ) {
-    return {
-      title: draft.title || initialReport?.title || layoutTemplate?.title || layoutTemplate?.name || 'Photo Report',
-      sections: sortReportSections(draft.sections),
-      reportId: draft.reportId || initialReport?.id || null,
-    }
-  }
-
-  if (initialReport) {
-    return {
-      title: initialReport.title || 'Photo Report',
-      sections: (initialReport.sections || []).length
-        ? sortReportSections(initialReport.sections)
-        : [newReportSection(0)],
-      reportId: initialReport.id ?? null,
-    }
-  }
-
-  if (layoutTemplate) {
-    return {
-      title: layoutTemplate.title || layoutTemplate.name || 'Photo Report',
-      sections: sectionsFromTemplate(layoutTemplate),
-      reportId: null,
-    }
-  }
-
-  return {
-    title: 'Photo Report',
-    sections: [newReportSection(0)],
-    reportId: draft?.reportId ?? null,
-  }
 }
 
 export function ReportBuilder({
@@ -177,15 +128,14 @@ export function ReportBuilder({
     const leadId = initialReport?.leadId || initialLeadId
     const draft = leadId ? loadReportEditorDraft(leadId) : null
     const key = initialReport?.id
-      ?? draft?.reportId
-      ?? (layoutTemplate?.id ? `draft:${leadId}:${layoutTemplate.id}` : `draft:${leadId}`)
+      ?? (layoutTemplate?.id ? `new:${leadId}:${layoutTemplate.id}` : `new:${leadId}`)
     if (initKeyRef.current === key) return
     initKeyRef.current = key
 
     const seed = resolveEditorSeed({ initialReport, layoutTemplate, initialLeadId, draft })
     setTitle(seed.title)
     setSections(seed.sections)
-    if (seed.reportId) setSavedReportId(seed.reportId)
+    setSavedReportId(seed.reportId ?? null)
   }, [open, initialReport, initialTemplate, layoutTemplate, isTemplate, initialLeadId])
 
   useEffect(() => {
@@ -211,6 +161,7 @@ export function ReportBuilder({
     const reportId = savedReportId || initialReport?.id
     if (!reportId) return undefined
 
+    const leadId = initialReport?.leadId || initialLeadId
     let cancelled = false
     fetchPhotoReports(getToken, { reportId })
       .then((report) => {
@@ -220,20 +171,22 @@ export function ReportBuilder({
         setSections(sortReportSections(report.sections))
         setSavedReportId(report.id)
       })
-      .catch(() => {})
+      .catch(() => {
+        if (cancelled) return
+        if (!initialReport?.id) {
+          setSavedReportId(null)
+          if (leadId) clearReportEditorDraft(leadId)
+        }
+      })
     return () => {
       cancelled = true
     }
-  }, [open, isTemplate, getToken, savedReportId, initialReport?.id, sections])
+  }, [open, isTemplate, getToken, savedReportId, initialReport?.id, initialLeadId, sections])
 
   useEffect(() => {
     if (!open || isTemplate || !lead?.id || !getToken || !onLeadUpdate) return undefined
 
-    const photoCount = typeof lead.photoCount === 'number' ? lead.photoCount : null
-    const cachedPhotoCount = Array.isArray(lead.photos) ? lead.photos.length : 0
-    const needsPhotoHydrate = lead._listView
-      || (photoCount != null && photoCount > 0 && cachedPhotoCount === 0)
-      || (photoCount != null && cachedPhotoCount !== photoCount)
+    const needsPhotoHydrate = leadNeedsPhotoHydrate(lead)
     if (!needsPhotoHydrate) return undefined
 
     let cancelled = false
@@ -419,9 +372,16 @@ export function ReportBuilder({
     const payload = buildReportPayload()
     const reportId = savedReportId || initialReport?.id
     if (reportId) {
-      const report = await updatePhotoReport(getToken, reportId, payload)
-      setSavedReportId(report.id)
-      return report
+      try {
+        const report = await updatePhotoReport(getToken, reportId, payload)
+        setSavedReportId(report.id)
+        return report
+      } catch (e) {
+        const missing = /not found/i.test(e.message || '')
+        if (!missing) throw e
+        setSavedReportId(null)
+        clearReportEditorDraft(lead.id)
+      }
     }
     const report = await createPhotoReport(getToken, payload)
     setSavedReportId(report.id)
@@ -583,7 +543,10 @@ export function ReportBuilder({
                   <>
                     <Button type="button" variant="outline" size="sm" onClick={() => setPickerSectionId(section.id)}>
                       <ImageIcon className="h-3.5 w-3.5 mr-1" />
-                      {section.photoIds.length ? `${section.photoIds.length} photos` : 'Add photos'}
+                      Add photos
+                      {section.photoIds.length > 0 ? (
+                        <span className="ml-1.5 text-xs opacity-70">({section.photoIds.length})</span>
+                      ) : null}
                     </Button>
                     {section.photoIds.length > 0 && (
                       <div className="report-section-photo-grid">

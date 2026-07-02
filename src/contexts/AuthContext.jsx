@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -209,7 +209,9 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser({ ...auth.currentUser, displayName: trimmed })
   }
 
-  const value = {
+  // Memoized so consumers of the context don't re-render on every provider
+  // render — only when auth state actually changes.
+  const value = useMemo(() => ({
     currentUser,
     getToken,
     signup,
@@ -219,7 +221,8 @@ export const AuthProvider = ({ children }) => {
     resetPassword,
     updateDisplayName,
     loading
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [currentUser, loading, getToken])
 
   return (
     <AuthContext.Provider value={value}>

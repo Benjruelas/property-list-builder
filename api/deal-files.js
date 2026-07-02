@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './lib/photoPresign.js'
 
 import {
   ENTITY_STORAGE_LIMITS,
@@ -125,10 +126,57 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      const { pipelineId, dealId, fileName, fileBase64, contentType } = req.body || {}
+      const { pipelineId, dealId, fileName, fileBase64, contentType, action, size } = req.body || {}
       const pid = sanitizeId(pipelineId)
       const did = sanitizeId(dealId)
       if (!pid || !did) return res.status(400).json({ error: 'pipelineId and dealId are required' })
+
+      // Presigned direct-to-R2 upload: avoids proxying base64 bytes through the
+      // function (double memory + slow). Client PUTs to uploadUrl then stores
+      // the returned file record on the deal.
+      if (action === 'presign') {
+        if (!presignedPhotosEnabled()) {
+          return res.status(503).json({ error: 'Direct upload not configured' })
+        }
+        const declaredSize = Number(size) || 0
+        if (declaredSize <= 0) return res.status(400).json({ error: 'size is required' })
+        if (declaredSize > MAX_SINGLE_UPLOAD_BYTES) {
+          return res.status(413).json({
+            error: `Single upload must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`,
+          })
+        }
+
+        const { allowed, pipeline } = await canAccessPipeline(user, pid)
+        if (!allowed) return res.status(403).json({ error: 'Forbidden' })
+        const deal = (pipeline.deals || []).find((d) => d.id === did)
+        if (!deal) return res.status(404).json({ error: 'Deal not found in pipeline' })
+
+        const existingBytes = sumDealFileBytes(deal.files)
+        if (existingBytes + declaredSize > ENTITY_STORAGE_LIMITS.deal) {
+          return res.status(413).json({ error: entityStorageError('deal', ENTITY_STORAGE_LIMITS.deal) })
+        }
+
+        const safeName = sanitizeFileName(fileName)
+        const fileId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+        const key = `deal-files/${pipeline.ownerId}/${did}/${fileId}_${safeName}`
+        const uploadUrl = await createPresignedPutUrl(key, contentType || 'application/octet-stream', 900)
+
+        const fileRecord = {
+          id: fileId,
+          name: safeName,
+          size: declaredSize,
+          key,
+          contentType: contentType || 'application/octet-stream',
+          uploadedAt: new Date().toISOString(),
+        }
+        return res.status(200).json({
+          uploadUrl,
+          file: fileRecord,
+          key,
+          url: `/api/deal-files?key=${encodeURIComponent(key)}`,
+        })
+      }
+
       if (!fileBase64 || typeof fileBase64 !== 'string') {
         return res.status(400).json({ error: 'fileBase64 is required' })
       }
@@ -223,6 +271,14 @@ export default async function handler(req, res) {
       }
       if (!allowed) return res.status(403).json({ error: 'Forbidden' })
 
+      // Presigned GET: hand back a short-lived direct R2 URL instead of
+      // proxying the bytes through the function.
+      if (req.query.format === 'url' && presignedPhotosEnabled()) {
+        const url = await createPresignedGetUrl(key, 3600)
+        res.setHeader('Cache-Control', 'private, max-age=300')
+        return res.status(200).json({ url })
+      }
+
       try {
         const r = await s3().send(new GetObjectCommand({
           Bucket: process.env.R2_BUCKET_NAME,
@@ -244,12 +300,35 @@ export default async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       const { key, pipelineId } = req.body || {}
-      if (!key) return res.status(400).json({ error: 'key is required' })
+      if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key is required' })
       const pid = sanitizeId(pipelineId)
+
+      // Validate the key actually belongs to a deal in a pipeline the caller can
+      // access. Without this, a collaborator on one pipeline could delete
+      // arbitrary R2 objects under deal-files/ (IDOR).
+      const keyParts = key.split('/')
+      if (keyParts[0] !== 'deal-files') {
+        return res.status(400).json({ error: 'Invalid key' })
+      }
+      const ownerFromKey = keyParts[1] || ''
+      const dealIdFromKey = sanitizeId(keyParts[2])
+
+      let pipeline = null
       if (pid) {
-        const { allowed } = await canAccessPipeline(user, pid)
-        if (!allowed) return res.status(403).json({ error: 'Forbidden' })
-      } else if (!key.includes(`/${user.uid}/`)) {
+        const access = await canAccessPipeline(user, pid)
+        if (!access.allowed) return res.status(403).json({ error: 'Forbidden' })
+        pipeline = access.pipeline
+        // Key owner segment must match the pipeline owner, and the deal id in
+        // the key must be a real deal in this pipeline.
+        if (ownerFromKey !== String(pipeline.ownerId)) {
+          return res.status(403).json({ error: 'Forbidden' })
+        }
+        const dealExists = (pipeline.deals || []).some((d) => d.id === dealIdFromKey)
+        if (!dealExists) {
+          return res.status(403).json({ error: 'Forbidden' })
+        }
+      } else if (ownerFromKey !== String(user.uid)) {
+        // No pipeline context: only allow deleting the caller's own objects.
         return res.status(403).json({ error: 'Forbidden' })
       }
 
@@ -264,10 +343,7 @@ export default async function handler(req, res) {
 
       if (pid) {
         try {
-          const keyParts = key.split('/')
-          const dealIdFromKey = sanitizeId(keyParts[2])
-          const { allowed, pipeline } = await canAccessPipeline(user, pid)
-          if (allowed && pipeline && dealIdFromKey) {
+          if (pipeline && dealIdFromKey) {
             const deal = (pipeline.deals || []).find((d) => d.id === dealIdFromKey)
             const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./lib/activityLog.js')
             const teamIds = teamIdsFromResource(pipeline)

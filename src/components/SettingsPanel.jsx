@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from '../utils/settings'
 import { saveUserData, readLocalBlob } from '../utils/userDataSync'
 import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotifications'
 import { cn } from '@/lib/utils'
-import { getSkipTracedList } from '../utils/skipTracedList'
+import { getSkipTracedList, subscribeSkipTracedList } from '../utils/skipTracedList'
 import { useAuth } from '@/contexts/AuthContext'
 import { TeamSettingsSection } from './TeamSettingsSection'
 import { resolveLeadStatuses, canEditLeadStatuses } from '../utils/leadStatuses'
@@ -265,9 +265,9 @@ export function SettingsPanel({
   }, [isOpen, settings, currentUser?.displayName])
 
   useEffect(() => {
-    if (!isOpen) return
-    const id = setInterval(() => setSkipTracedList(getSkipTracedList()), 2000)
-    return () => clearInterval(id)
+    if (!isOpen) return undefined
+    // Event-driven updates (replaces 2s polling while the panel is open).
+    return subscribeSkipTracedList(setSkipTracedList)
   }, [isOpen])
 
   const update = useCallback((partial) => {

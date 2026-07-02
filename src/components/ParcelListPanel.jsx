@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dia
 import { cn } from '@/lib/utils'
 import { ListParcelExpanded } from '@/components/parcel-list-expanded/ListParcelExpanded'
 import { resolveParcelId } from '@/utils/parcelPropertyMap'
+import { useWindowedList } from '@/hooks/useWindowedList'
 
 import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 
@@ -82,6 +83,9 @@ export function ParcelListPanel({
     })
   }, [parcels])
 
+  // Windowed rendering — large lists mount rows incrementally on scroll.
+  const { visibleItems: visibleParcels, sentinel: parcelsSentinel } = useWindowedList(sortedParcels)
+
   const toggleParcel = (parcelId) => {
     setExpandedParcels(prev => {
       const newSet = new Set(prev)
@@ -142,7 +146,7 @@ export function ParcelListPanel({
             <p className="text-center text-gray-500 py-8 text-sm">No parcels in this list yet.</p>
           ) : (
             <div className="space-y-2">
-              {sortedParcels.map((parcel) => {
+              {visibleParcels.map((parcel) => {
                 const parcelId = resolveParcelId(parcel) || `parcel-${parcel.addedAt}`
                 const isExpanded = expandedParcels.has(parcelId)
                 const props = parcel.properties || {}
@@ -201,6 +205,7 @@ export function ParcelListPanel({
                   </div>
                 )
               })}
+              {parcelsSentinel}
             </div>
           )}
         </div>

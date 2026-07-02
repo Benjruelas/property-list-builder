@@ -1,3 +1,5 @@
+import { enforceIpRateLimit } from './lib/rateLimit.js'
+
 /** @type {Record<string, { session: string, expiry: number }>} */
 const sessionCache = {}
 
@@ -48,6 +50,8 @@ async function createGoogleSession(key, mapType) {
 }
 
 export default async function handler(req, res) {
+  if (await enforceIpRateLimit(req, res, { name: 'google-tiles-session', limit: 600, windowSec: 3600 })) return
+
   const key = process.env.GOOGLE_MAPS_TILES_KEY || process.env.GOOGLE_SOLAR_API_KEY
   if (!key) {
     return clientFallbackResponse(res, req.query.mapType || 'satellite')

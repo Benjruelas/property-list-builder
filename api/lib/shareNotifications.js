@@ -14,7 +14,7 @@ export async function runResourceShareNotifications({
   actor,
 }) {
   try {
-    const push = await import('../push-utils.js')
+    const push = await import('./pushUtils.js')
     const name = resource?.[nameField] || resourceType
     const id = resource?.id
     if (!id) return

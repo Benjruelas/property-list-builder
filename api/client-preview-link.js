@@ -2,6 +2,7 @@ import { resolveDevBypassUser, isDevBypassAllowed } from './lib/devBypassUsers.j
 import { getQuoteById } from './lib/quoteStore.js'
 import { getPhotoReportById } from './lib/reportStore.js'
 import { mintQuotePreviewToken, mintReportPreviewToken } from './lib/previewToken.js'
+import { buildQuotePublicUrl, buildReportPublicUrl } from './lib/publicLinks.js'
 
 async function verifyFirebaseToken(idToken) {
   const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
@@ -41,7 +42,7 @@ async function getOrCreateQuotePreviewUrl(user, quoteId, origin) {
 
   const token = mintQuotePreviewToken(quote.id)
   return {
-    publicUrl: `${origin}/?quote=${encodeURIComponent(token)}`,
+    publicUrl: buildQuotePublicUrl(origin, token),
   }
 }
 
@@ -53,7 +54,7 @@ async function getOrCreateReportPreviewUrl(user, reportId, origin) {
 
   const token = mintReportPreviewToken(report.id)
   return {
-    publicUrl: `${origin}/?report=${encodeURIComponent(token)}`,
+    publicUrl: buildReportPublicUrl(origin, token),
   }
 }
 

@@ -121,6 +121,16 @@ export function PhotoAnnotatorEditor({
 }) {
   const containerRef = useRef(null)
   const stageRef = useRef(null)
+
+  // Konva keeps canvases/caches alive unless the stage is destroyed; release
+  // them when the editor unmounts.
+  useEffect(() => () => {
+    try {
+      stageRef.current?.destroy?.()
+    } catch {
+      /* already destroyed */
+    }
+  }, [])
   const shapesBtnRef = useRef(null)
   const colorBtnRef = useRef(null)
   const strokeBtnRef = useRef(null)

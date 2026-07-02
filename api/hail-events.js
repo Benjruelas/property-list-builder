@@ -1,4 +1,5 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 const CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000
 const RESPONSE_CACHE_TTL_MS = 6 * 60 * 60 * 1000
@@ -452,6 +453,8 @@ function buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents) {
 }
 
 export default async function handler(req, res) {
+  if (await enforceIpRateLimit(req, res, { name: 'hail-events', limit: 300, windowSec: 3600 })) return
+
   const { lat, lng, radius_miles, from_year } = req.query
   if (!lat || !lng) {
     return res.status(400).json({ error: 'lat and lng required' })

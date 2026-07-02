@@ -3,6 +3,7 @@
  */
 
 import { getApiBase } from './apiBase'
+import { buildQuotePublicUrl as buildQuotePublicUrlFromToken } from './publicLinks'
 
 async function parseJsonSafe(res) {
   try {
@@ -200,8 +201,5 @@ export async function createQuoteCheckout(token) {
 }
 
 export function buildQuotePublicUrl(token) {
-  if (typeof window !== 'undefined') {
-    return `${window.location.origin}/?quote=${encodeURIComponent(token)}`
-  }
-  return `/?quote=${encodeURIComponent(token)}`
+  return buildQuotePublicUrlFromToken(token)
 }

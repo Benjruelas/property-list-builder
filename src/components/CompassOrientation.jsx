@@ -5,23 +5,17 @@ import { useEffect, useRef } from 'react'
  * Rotation is independent of follow-mode: the map stays oriented to
  * the user's heading even while they pan around freely.
  * Skips tiny changes (< 2 degrees) to keep the map calm during idle.
+ *
+ * Heading updates arrive via subscription (not props/state) so multi-Hz
+ * sensor events rotate the map imperatively without any React re-render.
  */
-export function CompassOrientation({ isActive, heading, mapRef }) {
+export function CompassOrientation({ isActive, mapRef, getHeading, subscribeHeading }) {
   const lastBearingRef = useRef(null)
 
   useEffect(() => {
-    const map = mapRef?.current
-    if (!map || typeof map.setBearing !== 'function') return
-
-    if (!isActive) {
-      if (lastBearingRef.current !== 0) {
-        map.setBearing(0)
-        lastBearingRef.current = 0
-      }
-      return
-    }
-
-    if (heading != null) {
+    const apply = (heading) => {
+      const map = mapRef?.current
+      if (!map || typeof map.setBearing !== 'function' || heading == null) return
       const target = -heading
       if (lastBearingRef.current != null) {
         let delta = target - lastBearingRef.current
@@ -32,7 +26,19 @@ export function CompassOrientation({ isActive, heading, mapRef }) {
       map.setBearing(target)
       lastBearingRef.current = target
     }
-  }, [mapRef, isActive, heading])
+
+    if (!isActive) {
+      const map = mapRef?.current
+      if (map && typeof map.setBearing === 'function' && lastBearingRef.current !== 0) {
+        map.setBearing(0)
+        lastBearingRef.current = 0
+      }
+      return undefined
+    }
+
+    apply(getHeading?.())
+    return subscribeHeading ? subscribeHeading(apply) : undefined
+  }, [mapRef, isActive, getHeading, subscribeHeading])
 
   return null
 }

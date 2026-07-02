@@ -20,35 +20,6 @@ export const panelLazy = {
   photoImport: () => import('../components/photos/PhotoImportDialog').then((m) => ({ default: m.PhotoImportDialog })),
 }
 
-const PREFETCH_ORDER = [
-  'tasks',
-  'dealPipeline',
-  'leads',
-  'deals',
-  'schedule',
-  'outreach',
-  'quotes',
-  'forms',
-  'reports',
-  'paths',
-  'settings',
-  'emailComposer',
-  'bulkEmailPreview',
-  'hailData',
-  'photoImport',
-]
-
-let prefetchStarted = false
-
-/** Warm panel JS chunks after boot so opening a panel does not wait on the network. */
-export function prefetchAllPanels() {
-  if (prefetchStarted) return
-  prefetchStarted = true
-  for (const key of PREFETCH_ORDER) {
-    panelLazy[key]?.().catch(() => {})
-  }
-}
-
 /** Prefetch a single panel (e.g. on action-bar hover). */
 export function prefetchPanel(key) {
   panelLazy[key]?.().catch(() => {})

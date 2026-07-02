@@ -45,8 +45,14 @@ function isPrivateLanHostname(hostname = '') {
 /**
  * Whether synthetic dev-bypass tokens may be used for this request.
  * Matches localhost, loopback, private LAN IPs (phone → Mac dev), or ENABLE_DEV_BYPASS.
+ *
+ * Hard-disabled in Vercel production so a mis-set env var can never open a
+ * total auth bypass across the API.
  */
 export function isDevBypassAllowed(req) {
+  if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') {
+    return false
+  }
   if (process.env.ENABLE_DEV_BYPASS === 'true') return true
   const hostRaw = req?.headers?.host || req?.headers?.['x-forwarded-host'] || ''
   const originRaw = req?.headers?.origin || ''

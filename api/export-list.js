@@ -7,6 +7,10 @@
  */
 
 import { Resend } from 'resend'
+import { requireAuth } from './lib/apiAuth.js'
+import { rateLimit } from './lib/rateLimit.js'
+import { escapeHtml, sanitizeHeader, isValidEmail } from './lib/emailSafety.js'
+import { applyCors } from './lib/cors.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -17,9 +21,7 @@ const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
 const FROM_ADDRESS = process.env.EXPORT_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || DEFAULT_FROM
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  applyCors(req, res, { methods: 'POST, OPTIONS' })
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
@@ -29,13 +31,33 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  try {
-    const { listName, csvContent, userEmail } = req.body
+  const user = await requireAuth(req, res)
+  if (!user) return
 
-    if (!listName || !csvContent || !userEmail) {
+  // Deliver only to the verified account email — never a client-supplied
+  // address — so this endpoint cannot be used as an open email relay.
+  const recipient = user.email
+  if (!recipient || !isValidEmail(recipient)) {
+    return res.status(400).json({ error: 'Your account has no valid email address to send to.' })
+  }
+
+  const rl = await rateLimit({ key: `export-list:${user.uid}`, limit: 30, windowSec: 3600 })
+  if (!rl.allowed) {
+    res.setHeader('Retry-After', String(rl.retryAfter))
+    return res.status(429).json({ error: 'Too many exports. Please try again later.', retryAfter: rl.retryAfter })
+  }
+
+  try {
+    const { listName, csvContent } = req.body || {}
+
+    if (!listName || !csvContent) {
       return res.status(400).json({
-        error: 'Missing required fields: listName, csvContent, and userEmail are required'
+        error: 'Missing required fields: listName and csvContent are required'
       })
+    }
+
+    if (typeof csvContent !== 'string' || csvContent.length > 5_000_000) {
+      return res.status(413).json({ error: 'Export is too large.' })
     }
 
     if (!process.env.RESEND_API_KEY) {
@@ -44,14 +66,15 @@ export default async function handler(req, res) {
       })
     }
 
-    const sanitizedName = listName.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 50)
-    const filename = `${sanitizedName}_export_${Date.now()}.csv`
+    const safeName = sanitizeHeader(listName, 120)
+    const sanitizedFilename = safeName.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 50) || 'list'
+    const filename = `${sanitizedFilename}_export_${Date.now()}.csv`
 
     const { data, error } = await resend.emails.send({
       from: FROM_ADDRESS,
-      to: [userEmail],
-      subject: `Your exported list: ${listName}`,
-      html: `<p>Please find your exported property list attached.</p><p>List: ${listName}</p><p>Exported on ${new Date().toLocaleDateString()}.</p>`,
+      to: [recipient],
+      subject: sanitizeHeader(`Your exported list: ${safeName}`, 180),
+      html: `<p>Please find your exported property list attached.</p><p>List: ${escapeHtml(safeName)}</p><p>Exported on ${new Date().toLocaleDateString()}.</p>`,
       attachments: [
         {
           filename,
@@ -70,7 +93,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: `Export sent to ${userEmail}`,
+      message: `Export sent to ${recipient}`,
       id: data?.id
     })
   } catch (err) {

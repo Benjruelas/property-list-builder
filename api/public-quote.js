@@ -5,8 +5,9 @@ import {
   saveAllQuoteInvites,
   escapeHtml,
 } from './lib/quoteInvites.js'
-import { getQuoteById, getAllQuotes, updateQuoteAtIndex } from './lib/quoteStore.js'
+import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
 import { parseQuotePreviewToken } from './lib/previewToken.js'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 import { syncQuotePaymentOnPaid, syncQuoteToDealOnAccept } from './lib/syncQuoteToDeal.js'
 import {
   computeQuoteTotals,
@@ -16,6 +17,7 @@ import {
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 import { resolveSenderBranding } from './lib/senderBranding.js'
 import { buildQuotePdfBuffer, safeQuotePdfFilename } from './lib/buildQuotePdf.js'
+import { buildQuotePublicPath } from './lib/publicLinks.js'
 
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const stripe = stripeKey ? new Stripe(stripeKey) : null
@@ -105,7 +107,7 @@ async function recordQuoteView(quote, index, all, invite) {
 
   if (isFirst) {
     try {
-      const { notifyQuoteViewed } = await import('./push-utils.js')
+      const { notifyQuoteViewed } = await import('./lib/pushUtils.js')
       await notifyQuoteViewed(quote.ownerEmail, {
         quoteTitle: quote.title,
         clientName: quote.clientName || invite.recipientEmail,
@@ -161,20 +163,10 @@ async function loadQuoteContext(token) {
     return { invite: previewInvite, invIdx: -1, quote, index, all, error: null }
   }
 
-  const all = await getAllQuotes()
-  const index = all.findIndex((q) => q.previewToken === normalized)
-  if (index === -1) return { error: 'Quote link not found', status: 404 }
-
-  const quote = all[index]
-  const previewInvite = {
-    token: normalized,
-    quoteId: quote.id,
-    preview: true,
-    recipientEmail: '',
-    message: '',
-    status: 'pending',
-  }
-  return { invite: previewInvite, invIdx: -1, quote, index, all, error: null }
+  // Legacy raw `quote.previewToken` KV fallback removed: it bypassed invite
+  // expiry/revocation. Access now requires a live invite or a signed preview
+  // token (handled above).
+  return { error: 'Quote link not found', status: 404 }
 }
 
 export const config = {
@@ -188,6 +180,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
+
+  if (await enforceIpRateLimit(req, res, { name: 'public-quote', limit: 120, windowSec: 60 })) return
 
   const token = req.query?.token || (typeof req.body === 'object' ? req.body?.token : null)
   if (!token) return res.status(400).json({ error: 'token is required' })
@@ -286,8 +280,8 @@ export default async function handler(req, res) {
             pipelineId: quote.pipelineId || '',
             paymentLineItemId: quote.paymentLineItemId || '',
           },
-          success_url: `${origin}/?quote=${encodeURIComponent(quoteToken)}&payment=success`,
-          cancel_url: `${origin}/?quote=${encodeURIComponent(quoteToken)}&payment=cancel`,
+          success_url: `${origin}${buildQuotePublicPath(quoteToken, { payment: 'success' })}`,
+          cancel_url: `${origin}${buildQuotePublicPath(quoteToken, { payment: 'cancel' })}`,
         })
 
         quote = { ...quote, stripeSessionId: session.id, updatedAt: now }
@@ -365,7 +359,7 @@ export default async function handler(req, res) {
       }
 
       try {
-        const { notifyQuoteResponded } = await import('./push-utils.js')
+        const { notifyQuoteResponded } = await import('./lib/pushUtils.js')
         await notifyQuoteResponded(quote.ownerEmail, {
           quoteTitle: quote.title,
           action,
@@ -436,7 +430,7 @@ export async function markQuotePaidFromStripe(metadata, paymentIntentId) {
   }
 
   try {
-    const { notifyQuotePaid } = await import('./push-utils.js')
+    const { notifyQuotePaid } = await import('./lib/pushUtils.js')
     await notifyQuotePaid(updated.ownerEmail, {
       quoteTitle: updated.title,
       clientName: updated.clientName,

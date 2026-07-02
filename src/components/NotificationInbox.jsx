@@ -368,8 +368,21 @@ export function useNotificationInbox({
 
   useEffect(() => {
     loadFeed({ replaceSessionKeys: false })
-    const id = setInterval(() => loadFeed({ replaceSessionKeys: false }), 60000)
-    return () => clearInterval(id)
+    // Poll only while the tab is visible; refresh immediately on return so a
+    // backgrounded phone doesn't burn LTE/battery on a 60s feed loop.
+    const id = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        loadFeed({ replaceSessionKeys: false })
+      }
+    }, 60000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadFeed({ replaceSessionKeys: false })
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [loadFeed])
 
   useEffect(() => {

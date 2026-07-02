@@ -44,4 +44,16 @@ describe('loadReportContext', () => {
     expect(ctx.error).toBe('Report link not found')
     expect(ctx.status).toBe(404)
   })
+
+  it('does NOT fall back to a raw report.publicToken (expiry bypass removed)', async () => {
+    const report = { id: 'preport_legacy', title: 'Legacy report', publicToken: 'H3nQw8zK2p' }
+
+    findReportInviteByToken.mockResolvedValue({ invite: null, index: -1, error: 'not_found' })
+    getAllPhotoReports.mockResolvedValue([report])
+
+    const ctx = await loadReportContext('H3nQw8zK2p')
+
+    expect(ctx.error).toBe('Report link not found')
+    expect(ctx.status).toBe(404)
+  })
 })

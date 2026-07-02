@@ -22,10 +22,48 @@ function pdfToBuffer(doc) {
 }
 
 /**
+ * Fetch all image buffers needed by the report up front, with a bounded
+ * concurrency so large reports neither serialize downloads nor open an
+ * unbounded number of parallel R2 connections.
+ */
+async function prefetchImageBuffers({ report, photosById, getImageBuffer, concurrency = 4 }) {
+  const keys = []
+  const seen = new Set()
+  for (const section of report?.sections || []) {
+    for (const photoId of section.photoIds || []) {
+      const photo = photosById[photoId]
+      const imgKey = photo && (photo.annotatedKey || photo.key)
+      if (imgKey && !seen.has(imgKey)) {
+        seen.add(imgKey)
+        keys.push(imgKey)
+      }
+    }
+  }
+
+  const buffers = new Map()
+  let next = 0
+  async function worker() {
+    while (next < keys.length) {
+      const key = keys[next++]
+      try {
+        buffers.set(key, await getImageBuffer(key))
+      } catch (e) {
+        console.warn('skip photo in pdf', key, e.message)
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, keys.length) }, worker))
+  return buffers
+}
+
+/**
  * @param {{ report: object, lead: object, branding: object, getImageBuffer: (key: string) => Promise<Buffer> }} opts
  */
 export async function buildReportPdfBuffer({ report, lead, branding, getImageBuffer }) {
   const photosById = Object.fromEntries((lead?.photos || []).map((p) => [p.id, p]))
+  const imageBuffers = getImageBuffer
+    ? await prefetchImageBuffers({ report, photosById, getImageBuffer })
+    : new Map()
 
   const doc = new PDFDocument({ size: 'LETTER', margin: MG })
   let y = MG
@@ -84,10 +122,11 @@ export async function buildReportPdfBuffer({ report, lead, branding, getImageBuf
       const photo = photosById[photoId]
       if (!photo) continue
       const imgKey = photo.annotatedKey || photo.key
-      if (!imgKey || !getImageBuffer) continue
+      if (!imgKey) continue
+      const imgBuf = imageBuffers.get(imgKey)
+      if (!imgBuf) continue
 
       try {
-        const imgBuf = await getImageBuffer(imgKey)
         const maxH = PH - MG * 2 - 40
         const maxW = CW
         if (y > PH - maxH - 40) {

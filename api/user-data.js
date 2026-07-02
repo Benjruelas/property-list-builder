@@ -11,9 +11,14 @@
 
 import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
+import { withKvLock } from './lib/kvLock.js'
 
 function kvKey(uid) {
   return `user_data_${uid}`
+}
+
+function lockKey(uid) {
+  return `lock:user_data_${uid}`
 }
 
 /** Verify Firebase ID token; returns { uid, email } or null */
@@ -82,25 +87,53 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const data = await getUserData(user.uid)
-      return res.status(200).json({ data: data || {} })
+      const version = Number(data?.__version) || 0
+      return res.status(200).json({ data: data || {}, version })
     }
 
     if (req.method === 'PATCH') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-      const existing = await getUserData(user.uid) || {}
-      const merged = { ...existing }
       const allowedKeys = [
         'dealPipelineColumns', 'dealPipelineLeads', 'dealPipelineTitle',
         'leadTasks', 'parcelNotes', 'skipTracedParcels', 'emailTemplates', 'textTemplates',
-        'skipTraceJobs', 'skipTracedList', 'appSettings', 'closedLeads'
+        'dealTemplates', 'skipTraceJobs', 'skipTracedList', 'appSettings', 'closedLeads'
       ]
-      for (const key of allowedKeys) {
-        if (key in body && body[key] !== undefined) {
-          merged[key] = body[key]
+
+      // Optimistic concurrency: if the client sends baseVersion and it no longer
+      // matches, reject so it can re-read and re-merge instead of clobbering a
+      // newer write from another tab/device.
+      const baseVersion = body.__baseVersion
+
+      // Serialize the read-modify-write under a short lock so concurrent PATCHes
+      // (multiple tabs/devices) can't lose each other's field updates.
+      const applyMerge = async () => {
+        const existing = await getUserData(user.uid) || {}
+        const currentVersion = Number(existing.__version) || 0
+        if (baseVersion !== undefined && Number(baseVersion) !== currentVersion) {
+          return { conflict: true, currentVersion, data: existing }
         }
+        const merged = { ...existing }
+        for (const key of allowedKeys) {
+          if (key in body && body[key] !== undefined) {
+            merged[key] = body[key]
+          }
+        }
+        merged.__version = currentVersion + 1
+        await saveUserData(user.uid, merged)
+        return { conflict: false, currentVersion: merged.__version, data: merged }
       }
-      await saveUserData(user.uid, merged)
-      return res.status(200).json({ data: merged })
+
+      const locked = await withKvLock(lockKey(user.uid), applyMerge, { ttlMs: 5000, maxWaitMs: 3000 })
+      const result = locked !== null ? locked : await applyMerge()
+
+      if (result.conflict) {
+        return res.status(409).json({
+          error: 'Version conflict — reload and retry.',
+          version: result.currentVersion,
+          data: result.data,
+        })
+      }
+      return res.status(200).json({ data: result.data, version: result.currentVersion })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

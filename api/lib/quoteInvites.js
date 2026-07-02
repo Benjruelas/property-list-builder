@@ -2,6 +2,8 @@
  * KV storage helpers for public quote invite links.
  */
 
+import { generatePublicInviteToken } from './publicLinks.js'
+
 export const INVITES_KV_KEY = 'quote_invites'
 export const INVITE_EXPIRY_DAYS = 30
 
@@ -43,23 +45,19 @@ export async function getAllQuoteInvites() {
 }
 
 export async function saveAllQuoteInvites(invites) {
-  fallbackInvites = invites
+  const { pruneDeadInvites } = await import('./invitePrune.js')
+  const pruned = pruneDeadInvites(invites)
+  fallbackInvites = pruned
   if (!kvAvailable || !kv) return
   try {
-    await kv.set(INVITES_KV_KEY, invites).catch(() => kv.set(INVITES_KV_KEY, JSON.stringify(invites)))
+    await kv.set(INVITES_KV_KEY, pruned).catch(() => kv.set(INVITES_KV_KEY, JSON.stringify(pruned)))
   } catch (e) {
     console.warn('quote invites KV save failed', e.message)
   }
 }
 
 export function generateToken() {
-  const bytes = new Uint8Array(32)
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes)
-  } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
-  }
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return generatePublicInviteToken()
 }
 
 export function isInviteExpired(invite) {
@@ -81,7 +79,7 @@ export function escapeHtml(s) {
 
 export async function findQuoteInviteByToken(token) {
   const normalized = String(token || '').trim()
-  if (!normalized || normalized.length < 16) {
+  if (!normalized || normalized.length < 8) {
     return { invite: null, index: -1, error: 'not_found' }
   }
   const all = await getAllQuoteInvites()

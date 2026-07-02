@@ -66,6 +66,27 @@ export async function kvSMembers(key) {
   return Array.isArray(result) ? result : []
 }
 
+/**
+ * Batch-set many string keys in one round trip.
+ * @param {Record<string, string>} entries
+ */
+export async function kvMSet(entries) {
+  const keys = Object.keys(entries || {})
+  if (!kvAvailable || !kv || keys.length === 0) return
+  try {
+    if (isNativeRedis(kv)) {
+      const flat = []
+      for (const k of keys) flat.push(k, String(entries[k]))
+      return await kv.mSet(flat)
+    }
+    // @vercel/kv accepts an object.
+    return await kv.mset(entries)
+  } catch {
+    // Fall back to parallel individual sets.
+    await Promise.all(keys.map((k) => kv.set(k, entries[k]).catch(() => {})))
+  }
+}
+
 export async function kvEval(script, keys, args) {
   if (!kvAvailable || !kv) return null
   if (isNativeRedis(kv)) return kv.eval(script, { keys, arguments: args })

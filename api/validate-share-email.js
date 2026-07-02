@@ -1,4 +1,5 @@
 import {resolveDevBypassUser, DEV_BYPASS_KNOWN_EMAILS, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { rateLimit } from './lib/rateLimit.js'
 
 /**
  * Validates that an email belongs to a known user (owner or shared-with in our lists).
@@ -116,6 +117,13 @@ export default async function handler(req, res) {
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  // Throttle to blunt email-enumeration via repeated probes.
+  const rl = await rateLimit({ key: `validate-email:${user.uid}`, limit: 120, windowSec: 3600 })
+  if (!rl.allowed) {
+    res.setHeader('Retry-After', String(rl.retryAfter))
+    return res.status(429).json({ valid: false, error: 'Too many lookups. Please slow down.' })
   }
 
   const email = (req.query?.email || '').toLowerCase().trim()

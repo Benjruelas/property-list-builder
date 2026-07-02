@@ -3,10 +3,15 @@ import { getAppLoadingMessage, getAppLoadingRoute, APP_LOADING_MESSAGES } from '
 
 describe('appLoadingMessages', () => {
   it('detects public routes from query params', () => {
-    expect(getAppLoadingRoute('?quote=abc')).toBe('quote')
-    expect(getAppLoadingRoute('?report=xyz')).toBe('report')
-    expect(getAppLoadingRoute('?form=tok')).toBe('form')
-    expect(getAppLoadingRoute('')).toBe('map')
+    expect(getAppLoadingRoute('?quote=abc', '/')).toBe('quote')
+    expect(getAppLoadingRoute('?report=xyz', '/')).toBe('report')
+    expect(getAppLoadingRoute('?form=tok', '/')).toBe('form')
+    expect(getAppLoadingRoute('', '/')).toBe('map')
+  })
+
+  it('detects public routes from short paths', () => {
+    expect(getAppLoadingRoute('', '/q/Ab3xK9mP2r')).toBe('quote')
+    expect(getAppLoadingRoute('', '/r/H3nQw8zK2p')).toBe('report')
   })
 
   it('returns route-specific messages', () => {

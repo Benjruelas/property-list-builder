@@ -5,12 +5,15 @@
 import crypto from 'node:crypto'
 
 function previewSecret() {
-  return (
-    process.env.PREVIEW_LINK_SECRET
-    || process.env.FIREBASE_API_KEY
-    || process.env.VITE_FIREBASE_API_KEY
-    || 'dev-preview-link-secret'
-  )
+  const configured = process.env.PREVIEW_LINK_SECRET
+  if (configured && configured.length >= 16) return configured
+
+  // Fail closed in production: never fall back to the (public) Firebase web API
+  // key or a hardcoded dev string, which would let anyone forge preview tokens.
+  if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') {
+    throw new Error('PREVIEW_LINK_SECRET must be set (>=16 chars) in production')
+  }
+  return configured || 'dev-preview-link-secret'
 }
 
 function signPreview(entityType, entityId) {

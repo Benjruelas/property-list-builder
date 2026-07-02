@@ -73,6 +73,12 @@ export function readLocalBlob() {
   return blob
 }
 
+let quotaWarned = false
+
+function isQuotaError(e) {
+  return e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014)
+}
+
 /** Write blob to localStorage (merge: only overwrite keys present in blob) */
 function mergeBlobToLocal(blob) {
   if (!blob || typeof blob !== 'object') return
@@ -88,8 +94,33 @@ function mergeBlobToLocal(blob) {
       }
     } catch (e) {
       console.warn('userDataSync: failed to merge key', blobKey, e)
+      if (isQuotaError(e) && !quotaWarned) {
+        quotaWarned = true
+        // Surface once so the user knows local caching is degraded. Server
+        // data remains the source of truth; loading the toast module lazily
+        // keeps this util UI-free otherwise.
+        import('../components/ui/toast')
+          .then(({ showToast }) => showToast(
+            'Device storage is full — some offline data may not be saved locally. Your data is still synced to your account.',
+            'warning'
+          ))
+          .catch(() => {})
+      }
     }
   }
+}
+
+/** Server data version (for optimistic concurrency) and last-synced snapshot for delta computation. */
+let serverVersion = 0
+/** blobKey -> JSON string of the last value we know the server has. */
+let lastSyncedSnapshot = {}
+
+function snapshotFromBlob(blob) {
+  const snap = {}
+  for (const [k, v] of Object.entries(blob || {})) {
+    try { snap[k] = JSON.stringify(v) } catch { /* ignore */ }
+  }
+  return snap
 }
 
 /**
@@ -106,11 +137,14 @@ export async function loadUserData(getToken) {
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const { data } = await res.json()
+    const { data, version } = await res.json()
+    serverVersion = Number(version) || 0
     if (data && typeof data === 'object') {
       mergeBlobToLocal(data)
+      lastSyncedSnapshot = snapshotFromBlob(data)
       return data
     }
+    lastSyncedSnapshot = {}
     return {}
   } catch (e) {
     console.warn('loadUserData failed:', e.message)
@@ -120,6 +154,7 @@ export async function loadUserData(getToken) {
 
 /**
  * Save user data blob to API (PATCH - merge). Used internally by scheduleUserDataSync.
+ * Only the provided keys are sent; the server merges them field-by-field.
  * @param {() => Promise<string|null>} getToken - Returns Firebase ID token
  * @param {Object} data - Partial blob to merge
  */
@@ -134,9 +169,26 @@ export async function saveUserData(getToken, data) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify({ ...data, __baseVersion: serverVersion })
     })
+    if (res.status === 409) {
+      // Another writer advanced the version; re-load and re-merge so we don't
+      // clobber their changes, then let the next edit re-sync.
+      const conflict = await res.json().catch(() => ({}))
+      if (conflict?.data && typeof conflict.data === 'object') {
+        mergeBlobToLocal(conflict.data)
+        lastSyncedSnapshot = snapshotFromBlob(conflict.data)
+      }
+      serverVersion = Number(conflict?.version) || serverVersion
+      return
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const body = await res.json().catch(() => ({}))
+    serverVersion = Number(body?.version) || serverVersion
+    // Fold the just-sent keys into the snapshot so we don't resend them.
+    for (const [k, v] of Object.entries(data)) {
+      try { lastSyncedSnapshot[k] = JSON.stringify(v) } catch { /* ignore */ }
+    }
   } catch (e) {
     console.warn('saveUserData failed:', e.message)
   }
@@ -145,8 +197,20 @@ export async function saveUserData(getToken, data) {
 let debounceTimer = null
 const DEBOUNCE_MS = 1500
 
+/** Compute only the blob keys whose value changed since the last successful sync. */
+function computeDelta() {
+  const blob = readLocalBlob()
+  const delta = {}
+  for (const [k, v] of Object.entries(blob)) {
+    let serialized
+    try { serialized = JSON.stringify(v) } catch { continue }
+    if (lastSyncedSnapshot[k] !== serialized) delta[k] = v
+  }
+  return delta
+}
+
 /**
- * Schedule a debounced sync of current localStorage to API.
+ * Schedule a debounced, delta-only sync of localStorage to the API.
  * Call this after any local save (saveLeads, saveColumns, saveParcelNote, etc.).
  * @param {() => Promise<string|null>} getToken - Returns Firebase ID token
  */
@@ -155,7 +219,8 @@ export function scheduleUserDataSync(getToken) {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
     debounceTimer = null
-    const blob = readLocalBlob()
-    saveUserData(getToken, blob)
+    const delta = computeDelta()
+    if (Object.keys(delta).length === 0) return
+    saveUserData(getToken, delta)
   }, DEBOUNCE_MS)
 }

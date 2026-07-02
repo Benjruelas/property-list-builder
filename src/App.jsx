@@ -35,7 +35,8 @@ import { resolveLeadParcelAtLocation, parcelDataFromLandRecords } from './utils/
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import PathTracker from './components/PathTracker'
-import { panelLazy, prefetchAllPanels, prefetchPanel } from './utils/panelChunks'
+import { getUserLocation, setCurrentUserLocation, subscribeUserLocation, useUserLocation } from './utils/locationStore'
+import { panelLazy, prefetchPanel } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
 const FormsPanel = lazy(panelLazy.forms)
 const DealPipeline = lazy(panelLazy.dealPipeline)
@@ -79,6 +80,7 @@ import { DealTemplatesManagerDialog } from './components/DealTemplatesManagerDia
 import { templateToCreateDealPrefill } from './utils/dealTemplates'
 import { AppLoadingScreen } from './components/AppLoadingScreen'
 import { getAppLoadingMessage } from './config/appLoadingMessages'
+import { getPublicRouteFromWindow } from './utils/publicLinks'
 import { PanelListLoadingShell } from './components/ui/PanelListLoadingShell'
 import { BasemapErrorBanner } from './components/BasemapErrorBanner'
 import { useBasemapStyle } from './hooks/useBasemapStyle'
@@ -91,6 +93,8 @@ import { PermissionPrompt, hasGrantedPermissions } from './components/Permission
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
 import { useTeamDataSync } from './hooks/useTeamDataSync'
+import { countPendingUploadsByLeadId, shouldEnableSharedAssetSync } from './utils/sharedAssetSync'
+import { photoUploadManager } from './photos/PhotoUploadManager'
 import { getSettings, updateSettings } from './utils/settings'
 import { resolveLeadStatuses } from './utils/leadStatuses'
 import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
@@ -114,6 +118,8 @@ import {
   findLeadByParcelId,
   displayLeadName,
   getLeadStatus,
+  leadNeedsPhotoHydrate,
+  collectLeadsNeedingPhotoHydrate,
 } from './utils/leads'
 import {
   logLeadOutreach,
@@ -156,7 +162,9 @@ function notifySkipTraceEvent(label, detail, { failed = false } = {}) {
   }
 }
 
-function LocationMarker({ position }) {
+function LocationMarker() {
+  // Subscribes to the location store so GPS ticks re-render only this marker.
+  const position = useUserLocation()
   const [interpPos, setInterpPos] = useState(null)
   const animRef = useRef({ from: null, to: null, startTime: 0, duration: 900, rafId: null })
 
@@ -346,18 +354,6 @@ function App() {
     }
   }, [logout, nav])
   const [permissionsReady, setPermissionsReady] = useState(() => hasGrantedPermissions())
-  const [userLocation, setUserLocation] = useState(null)
-
-  useEffect(() => {
-    if (!permissionsReady || authLoading) return undefined
-    const run = () => prefetchAllPanels()
-    if (typeof requestIdleCallback === 'function') {
-      const id = requestIdleCallback(run, { timeout: 3000 })
-      return () => cancelIdleCallback(id)
-    }
-    const t = window.setTimeout(run, 600)
-    return () => window.clearTimeout(t)
-  }, [permissionsReady, authLoading])
 
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
   const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
@@ -381,7 +377,7 @@ function App() {
     return true
   })
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
-  const { heading, requestOrientation, needsGesture } = useDeviceHeading(permissionsReady)
+  const { getHeading, subscribeHeading, requestOrientation, needsGesture } = useDeviceHeading(permissionsReady)
 
   // When orientation becomes available (needsGesture flips to false),
   // auto-enable compass if user's setting wants it.
@@ -417,6 +413,9 @@ function App() {
   const [photoPickerParcelId, setPhotoPickerParcelId] = useState(null)
   const [photoPickerAddress, setPhotoPickerAddress] = useState('')
   const [photoModeLead, setPhotoModeLead] = useState(null)
+  const photoModeLeadRef = useRef(photoModeLead)
+  const leadsDetailLeadIdRef = useRef(leadsDetailLeadId)
+  const hydratingLeadIdsRef = useRef(new Set())
   const [photoModeParcelId, setPhotoModeParcelId] = useState(null)
   const [photoModeAddress, setPhotoModeAddress] = useState('')
   const [photoModeAutoCamera, setPhotoModeAutoCamera] = useState(false)
@@ -686,43 +685,49 @@ function App() {
     }
   }, [])
 
-  // Initial center on first GPS fix
+  // Initial center on first GPS fix (imperative — GPS ticks don't re-render App)
   useEffect(() => {
-    if (userLocation && !initialSetDoneRef.current && mapInstanceRef.current) {
-      initialSetDoneRef.current = true
-      const initZoom = 17
-      const map = mapInstanceRef.current
-      map.jumpTo({ center: [userLocation.lng, userLocation.lat], zoom: initZoom, pitch: 0 })
-      map.fire('moveend')
+    const applyInitialCenter = () => {
+      const loc = getUserLocation()
+      if (loc && !initialSetDoneRef.current && mapInstanceRef.current) {
+        initialSetDoneRef.current = true
+        const map = mapInstanceRef.current
+        map.jumpTo({ center: [loc.lng, loc.lat], zoom: 17, pitch: 0 })
+        map.fire('moveend')
+      }
     }
-  }, [userLocation])
+    applyInitialCenter()
+    return subscribeUserLocation(applyInitialCenter)
+  }, [])
 
-  // Follow-mode panning
+  // Follow-mode panning (imperative subscription to the location store)
   useEffect(() => {
-    if (!userLocation || !initialSetDoneRef.current || !isFollowing) {
-      prevFollowingRef.current = isFollowing
-      return
-    }
-    const map = mapInstanceRef.current
-    if (!map) { prevFollowingRef.current = isFollowing; return }
     const justResumed = !prevFollowingRef.current && isFollowing
     prevFollowingRef.current = isFollowing
-    if (justResumed) {
-      const raf = requestAnimationFrame(() => {
-        programmaticMoveRef.current = true
-        map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 500 })
-        setTimeout(() => { programmaticMoveRef.current = false }, 600)
-      })
-      return () => cancelAnimationFrame(raf)
+    if (!isFollowing) return undefined
+
+    const panTo = (loc, duration) => {
+      const map = mapInstanceRef.current
+      if (!map || !loc || !initialSetDoneRef.current) return
+      const c = map.getCenter()
+      const dx = Math.abs(c.lng - loc.lng)
+      const dy = Math.abs(c.lat - loc.lat)
+      if (dx < 0.00002 && dy < 0.00002) return
+      programmaticMoveRef.current = true
+      map.easeTo({ center: [loc.lng, loc.lat], duration, easing: (t) => 1 - Math.pow(1 - t, 3) })
+      setTimeout(() => { programmaticMoveRef.current = false }, duration + 100)
     }
-    const c = map.getCenter()
-    const dx = Math.abs(c.lng - userLocation.lng)
-    const dy = Math.abs(c.lat - userLocation.lat)
-    if (dx < 0.00002 && dy < 0.00002) return
-    programmaticMoveRef.current = true
-    map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 900, easing: (t) => 1 - Math.pow(1 - t, 3) })
-    setTimeout(() => { programmaticMoveRef.current = false }, 1000)
-  }, [userLocation, isFollowing])
+
+    let raf = null
+    if (justResumed) {
+      raf = requestAnimationFrame(() => panTo(getUserLocation(), 500))
+    }
+    const unsubscribe = subscribeUserLocation((loc) => panTo(loc, 900))
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      unsubscribe()
+    }
+  }, [isFollowing])
 
   // Recenter map function
   const recenterMapRef = useRef(null)
@@ -730,13 +735,14 @@ function App() {
   useEffect(() => {
     recenterMapRef.current = () => {
       const map = mapInstanceRef.current
-      if (map && userLocation) {
+      const loc = getUserLocation()
+      if (map && loc) {
         programmaticMoveRef.current = true
-        map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 500 })
+        map.easeTo({ center: [loc.lng, loc.lat], duration: 500 })
         setTimeout(() => { programmaticMoveRef.current = false }, 600)
       }
     }
-  }, [userLocation])
+  }, [])
 
   const handleSettingsChange = useCallback((partial) => {
     const next = updateSettings(partial, getToken)
@@ -790,7 +796,9 @@ function App() {
     return () => clearInterval(id)
   }, [permissionsReady])
 
-  // Track user's current location in real-time (only after permissions granted)
+  // Track user's current location in real-time (only after permissions granted).
+  // Fixes go to the external location store, not React state, so 1 Hz GPS
+  // updates never re-render the App tree.
   useEffect(() => {
     if (!permissionsReady) return
     let watchId = null
@@ -800,17 +808,16 @@ function App() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const location = {
+          setCurrentUserLocation({
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy
-          }
-          setUserLocation(location)
+          })
           lastUpdateTime = Date.now()
         },
         (error) => {
           console.error('Error getting initial location:', error)
-          setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
+          setCurrentUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
         },
         {
           enableHighAccuracy: true,
@@ -830,22 +837,24 @@ function App() {
             accuracy: position.coords.accuracy
           }
 
-          setUserLocation((prevLocation) => {
-            if (!prevLocation) return location
+          const prevLocation = getUserLocation()
+          if (!prevLocation) {
+            lastUpdateTime = now
+            setCurrentUserLocation(location)
+            return
+          }
 
-            const latDiff = Math.abs(location.lat - prevLocation.lat)
-            const lngDiff = Math.abs(location.lng - prevLocation.lng)
-            const distanceMeters = Math.sqrt(
-              Math.pow(latDiff * 111000, 2) +
-              Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
-            )
+          const latDiff = Math.abs(location.lat - prevLocation.lat)
+          const lngDiff = Math.abs(location.lng - prevLocation.lng)
+          const distanceMeters = Math.sqrt(
+            Math.pow(latDiff * 111000, 2) +
+            Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
+          )
 
-            if (distanceMeters >= 2) {
-              lastUpdateTime = now
-              return location
-            }
-            return prevLocation
-          })
+          if (distanceMeters >= 2) {
+            lastUpdateTime = now
+            setCurrentUserLocation(location)
+          }
         },
         (error) => {
           console.error('Error watching location:', error)
@@ -858,7 +867,7 @@ function App() {
       )
 
     } else {
-      setUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
+      setCurrentUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
     }
 
     return () => {
@@ -1171,6 +1180,14 @@ function App() {
   }, [leads])
 
   useEffect(() => {
+    photoModeLeadRef.current = photoModeLead
+  }, [photoModeLead])
+
+  useEffect(() => {
+    leadsDetailLeadIdRef.current = leadsDetailLeadId
+  }, [leadsDetailLeadId])
+
+  useEffect(() => {
     pipelinesRef.current = pipelines
   }, [pipelines])
 
@@ -1193,6 +1210,8 @@ function App() {
     }
   }, [currentUser, getToken])
 
+  const hydrateSharedLeadPhotosRef = useRef(null)
+
   const refreshLeads = useCallback(async ({ existingLeads } = {}) => {
     if (!currentUser) return
     const baseline = Array.isArray(existingLeads) && existingLeads.length > 0
@@ -1200,21 +1219,61 @@ function App() {
       : (leadsRef.current.length > 0 ? leadsRef.current : loadLocalLeads())
     const showSpinner = baseline.length === 0
     if (showSpinner) setLeadsLoading(true)
+    let mergedLeads = null
     try {
       const next = await fetchLeads(getToken)
-      if (next?.notModified) return
+      if (next?.notModified) {
+        await hydrateSharedLeadPhotosRef.current?.()
+        return
+      }
       setLeads((prev) => {
-        const merged = mergeListViewLeads(prev.length > 0 ? prev : baseline, next)
-        saveLocalLeads(merged)
-        return merged
+        mergedLeads = mergeListViewLeads(prev.length > 0 ? prev : baseline, next)
+        saveLocalLeads(mergedLeads)
+        return mergedLeads
       })
       await refreshTags()
+      await hydrateSharedLeadPhotosRef.current?.({ leadsSnapshot: mergedLeads })
     } catch (error) {
       console.error('Error loading leads:', error)
     } finally {
       if (showSpinner) setLeadsLoading(false)
     }
   }, [currentUser, getToken, refreshTags])
+
+  const hydrateSharedLeadPhotos = useCallback(async ({ leadsSnapshot, priorityLeadIds } = {}) => {
+    if (!currentUser) return
+
+    const snapshot = leadsSnapshot || leadsRef.current
+    const priority = (priorityLeadIds || [
+      leadsDetailLeadIdRef.current,
+      photoModeLeadRef.current?.id,
+    ]).filter(Boolean)
+    const pendingUploadsByLeadId = countPendingUploadsByLeadId(photoUploadManager.getSnapshot())
+    const leadIds = collectLeadsNeedingPhotoHydrate(snapshot, {
+      priorityLeadIds: priority,
+      pendingUploadsByLeadId,
+    })
+    if (!leadIds.length) return
+
+    await Promise.all(leadIds.map(async (leadId) => {
+      if (hydratingLeadIdsRef.current.has(leadId)) return
+      hydratingLeadIdsRef.current.add(leadId)
+      try {
+        const full = await fetchLeadById(getToken, leadId)
+        if (!full?.id) return
+        setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetail))
+        setPhotoModeLead((prev) => (
+          prev?.id === full.id ? mergeLeadDetail(prev, full) : prev
+        ))
+      } catch (error) {
+        console.warn('Lead photo hydrate failed:', leadId, error?.message)
+      } finally {
+        hydratingLeadIdsRef.current.delete(leadId)
+      }
+    }))
+  }, [currentUser, getToken])
+
+  hydrateSharedLeadPhotosRef.current = hydrateSharedLeadPhotos
 
   const upsertRegistryTag = useCallback((type, tag) => {
     if (!tag?.id) {
@@ -1863,7 +1922,7 @@ function App() {
         }
         if (!parcels.length) throw new Error('No valid skip trace requests in job')
 
-        const result = await skipTraceParcels(parcels)
+        const result = await skipTraceParcels(parcels, getToken)
         const results = result.results || []
         
         // Process results
@@ -3131,10 +3190,22 @@ function App() {
     }
   }, [parcelPendingForList, isParcelDetailsOpen, parcelDetailsSource, clearListAddMode, handlePanelBack, nav])
 
+  const sharedAssetSyncEnabled = useMemo(() => {
+    if (!currentUser?.uid) return false
+    if (leadsDetailLeadId || photoModeLead?.id) return true
+    return shouldEnableSharedAssetSync({
+      teams,
+      leads,
+      pipelines,
+      currentUserId: currentUser.uid,
+    })
+  }, [currentUser?.uid, teams, leads, pipelines, leadsDetailLeadId, photoModeLead?.id])
+
   useTeamDataSync({
-    enabled: !!currentUser?.uid && teams.length > 0,
+    enabled: sharedAssetSyncEnabled,
     refreshPipelines,
     refreshLeads,
+    hydrateSharedAssets: hydrateSharedLeadPhotos,
   })
 
   const notificationInbox = useNotificationInbox({
@@ -3182,12 +3253,7 @@ function App() {
   const openLeadDetails = useCallback((lead) => {
     if (!lead?.id) return
     guardFeature('leads', () => nav.openLeadDetails(lead.id))
-    const photoCount = typeof lead.photoCount === 'number' ? lead.photoCount : null
-    const cachedPhotoCount = Array.isArray(lead.photos) ? lead.photos.length : 0
-    const needsPhotoHydrate = lead._listView
-      || (photoCount != null && photoCount > 0 && cachedPhotoCount === 0)
-      || (photoCount != null && cachedPhotoCount !== photoCount)
-    if (needsPhotoHydrate) {
+    if (leadNeedsPhotoHydrate(lead)) {
       fetchLeadById(getToken, lead.id)
         .then((full) => {
           if (full?.id) {
@@ -3393,17 +3459,18 @@ function App() {
       return
     }
 
-    const exportEmail = (settings.defaultEmail && settings.emailTestMode) ? settings.defaultEmail : currentUser.email
-
     try {
       const csvContent = listToCsv(list)
+      const token = getToken ? await getToken() : null
       const res = await fetch('/api/export-list', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           listName: list.name,
           csvContent,
-          userEmail: exportEmail
         })
       })
 
@@ -3412,12 +3479,12 @@ function App() {
         throw new Error(data.message || data.error || `Export failed (${res.status})`)
       }
 
-      showToast(`Export sent to ${exportEmail}`, 'success')
+      showToast(data.message || 'Export sent to your account email', 'success')
     } catch (err) {
       console.error('Export list error:', err)
       showToast(err.message || 'Failed to export list', 'error')
     }
-  }, [lists, currentUser, settings.emailTestMode, settings.defaultEmail])
+  }, [lists, currentUser, getToken])
 
   const handleBulkEmailList = useCallback(async (listId) => {
     await handleBulkEmailListSelected(listId)
@@ -3537,7 +3604,7 @@ function App() {
 
       showToast(isRefresh ? 'Refreshing contact info...' : 'Starting skip trace...', 'info', 2000)
 
-      const result = await skipTraceParcels([requestParcel])
+      const result = await skipTraceParcels([requestParcel], getToken)
       
       if (!result.jobId) {
         throw new Error('No job ID returned')
@@ -3720,7 +3787,6 @@ function App() {
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         {basemapStatus === 'ready' && basemapStyle ? (
         <MapGL
-          key={settings.mapStyle}
           initialViewState={mapInitialViewState}
           maxTileCacheSize={80}
           onMove={(evt) => {
@@ -3737,11 +3803,12 @@ function App() {
             mapInstanceRef.current = map
             mapRef.current = map
             setMapReady(true)
-            if (userLocation && !initialSetDoneRef.current) {
+            const loc = getUserLocation()
+            if (loc && !initialSetDoneRef.current) {
               initialSetDoneRef.current = true
               const initZoom = 17
               map.jumpTo({
-                center: [userLocation.lng, userLocation.lat],
+                center: [loc.lng, loc.lat],
                 zoom: initZoom,
                 pitch: 0,
               })
@@ -3759,7 +3826,12 @@ function App() {
           pitchWithRotate={false}
           touchPitch={false}
         >
-          <CompassOrientation isActive={isCompassActive} heading={heading} mapRef={mapInstanceRef} />
+          <CompassOrientation
+            isActive={isCompassActive}
+            mapRef={mapInstanceRef}
+            getHeading={getHeading}
+            subscribeHeading={subscribeHeading}
+          />
           {/* <NorthIndicator mapRef={mapInstanceRef} /> */}
           <PMTilesParcelLayer 
             mapRef={mapInstanceRef}
@@ -3784,14 +3856,11 @@ function App() {
             ref={pathTrackerRef}
             mapRef={mapInstanceRef}
             isTracking={isPathTrackingActive}
-            userLocation={userLocation}
             savedPathsToShow={paths.filter(p => visiblePathIds.includes(p.id))}
             pathColorMap={pathColorMap}
             smoothingLevel={settings.pathSmoothing}
           />
-          {userLocation && (
-            <LocationMarker position={userLocation} />
-          )}
+          <LocationMarker />
           <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
           {selectedHailEvent && hailParcelCoords ? (
             <HailStormMapMarkers
@@ -4801,10 +4870,10 @@ function App() {
 export default App
 
 export function AppWithPublicFormRoute() {
-  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-  const formToken = params?.get('form')
-  const quoteToken = params?.get('quote')
-  const reportToken = params?.get('report')
+  const publicRoute = typeof window !== 'undefined' ? getPublicRouteFromWindow() : null
+  const formToken = publicRoute?.type === 'form' ? publicRoute.token : null
+  const quoteToken = publicRoute?.type === 'quote' ? publicRoute.token : null
+  const reportToken = publicRoute?.type === 'report' ? publicRoute.token : null
   if (formToken) {
     return (
       <div className="h-[100dvh] overflow-hidden">

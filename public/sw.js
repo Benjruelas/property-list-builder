@@ -1,4 +1,15 @@
 /* global self */
+
+// Update strategy: this SW is push-only (no fetch caching), so activating a
+// new version immediately is always safe and keeps clients on the latest code.
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
+
 self.addEventListener('push', (event) => {
   let data = { title: 'Notification', body: '' }
   try {

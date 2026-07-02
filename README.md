@@ -1,6 +1,6 @@
 # KnockScout
 
-A mobile-first field canvassing and property intelligence platform built with React, Leaflet, and Vercel serverless functions. Designed for door-to-door sales teams, roofing contractors, and real estate professionals who need to identify properties, gather owner contact info, manage leads, and generate roof measurement reports -- all from the field.
+A mobile-first field canvassing and property intelligence platform built with React, MapLibre GL, and Vercel serverless functions. Designed for door-to-door sales teams, roofing contractors, and real estate professionals who need to identify properties, gather owner contact info, manage leads, and generate roof measurement reports -- all from the field.
 
 ---
 
@@ -223,14 +223,10 @@ property_list_builder/
 │   ├── solar-imagery.js          # Google Solar API roof imagery
 │   ├── sentinel-imagery.js       # Historical satellite imagery (Esri Wayback)
 │   ├── roof-report.js            # Full PDF roof measurement report
-│   ├── roof-analysis.js          # AI roof condition assessment (Claude)
-│   ├── skip-trace.js             # Tracerfy skip trace
-│   ├── skip-trace-batchdata.js   # BatchData skip trace
-│   ├── skip-trace-sherpa.js      # SkipSherpa skip trace
-│   ├── skip-trace-status*.js     # Job polling for each provider
+│   ├── skip-trace.js             # Skip tracing (Trestle/BatchData/SkipSherpa/Tracerfy)
 │   ├── export-list.js            # CSV email export via Resend
 │   ├── push-subscribe.js         # Web Push subscription management
-│   ├── push-utils.js             # Shared push notification helpers
+│   ├── lib/pushUtils.js          # Shared push notification helpers
 │   ├── validate-share-email.js   # Email validation for list/pipeline sharing
 │   ├── public-lists.js           # Global public property lists
 │   ├── firebase-init.js          # Firebase web config endpoint
@@ -366,7 +362,7 @@ The API (`api/lists.js`) supports GET/POST/PATCH/DELETE with Firebase token auth
 
 ### Skip Tracing
 
-**Files:** `src/utils/skipTrace.js`, `src/utils/skipTraceJobs.js`, `src/utils/skipTracedList.js`, `api/skip-trace-batchdata.js`, `api/skip-trace-sherpa.js`, `api/skip-trace.js`, `api/skip-trace-status*.js`
+**Files:** `src/utils/skipTrace.js`, `src/utils/skipTraceJobs.js`, `src/utils/skipTracedList.js`, `api/skip-trace.js`
 
 Skip tracing looks up property owner contact information (phone numbers, emails, mailing addresses). Three providers are supported:
 
@@ -436,7 +432,7 @@ Record walking/driving routes while canvassing:
 
 ### Roof Inspector
 
-**Files:** `src/components/RoofInspectorPanel.jsx`, `api/solar-imagery.js`, `api/sentinel-imagery.js`, `api/hail-events.js`, `api/roof-report.js`, `api/roof-analysis.js`
+**Files:** `src/components/RoofInspectorPanel.jsx`, `api/solar-imagery.js`, `api/sentinel-imagery.js`, `api/hail-events.js`, `api/roof-report.js`
 
 Property roof analysis toolkit for roofing contractors:
 
@@ -452,15 +448,15 @@ Property roof analysis toolkit for roofing contractors:
 
 Device compass integration for map orientation:
 
-- `useDeviceHeading` hook reads device orientation events and provides a smoothed heading
-- `CompassOrientation` rotates the Leaflet map to match the user's heading using `leaflet-rotate`
+- `useDeviceHeading` hook reads device orientation events and provides a smoothed heading via a subscription API (no per-tick React re-renders)
+- `CompassOrientation` rotates the MapLibre map to match the user's heading imperatively via `map.setBearing()`
 - Compass stays active during map panning (rotation persists even when auto-centering pauses)
 - Tapping the compass button toggles orientation; user map interaction pauses auto-centering but keeps orientation
 - `NorthIndicator` shows a north arrow when the map is rotated
 
 ### Notifications
 
-**Files:** `src/components/NotificationPrompt.jsx`, `src/utils/pushNotifications.js`, `api/push-subscribe.js`, `api/push-utils.js`
+**Files:** `src/components/NotificationPrompt.jsx`, `src/utils/pushNotifications.js`, `api/push-subscribe.js`, `api/lib/pushUtils.js`
 
 Web Push notifications for collaborative features:
 
@@ -513,43 +509,45 @@ The icon on `FieldOverlay` is looked up from `FIELD_ICON` in [`src/components/fo
 
 All endpoints require `Authorization: Bearer <Firebase ID token>` unless noted. On localhost, dev bypass tokens are accepted: `dev-bypass` (User A, `dev@localhost`) and `dev-bypass-2` (User B, `dev2@localhost`). In the Settings panel (dev builds), **Local dev user** switches persona and reloads the app.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/lists` | Fetch user's lists (owned + shared) |
-| POST | `/api/lists` | Create a new list |
-| PATCH | `/api/lists` | Update list (add/remove parcels, rename, share) |
-| DELETE | `/api/lists` | Delete a list |
-| GET | `/api/paths` | Fetch user's paths (owned + shared) |
-| POST | `/api/paths` | Save a new GPS path |
-| PATCH | `/api/paths` | Rename or share a path |
-| DELETE | `/api/paths` | Delete a path |
-| GET | `/api/pipelines` | Fetch user's pipelines (owned + shared) |
-| POST | `/api/pipelines` | Create a pipeline |
-| PATCH | `/api/pipelines` | Update pipeline (leads, columns, title, share) |
-| DELETE | `/api/pipelines` | Delete a pipeline |
-| GET | `/api/user-data` | Fetch user's synced data blob |
-| PATCH | `/api/user-data` | Merge updates into user's data blob |
-| GET | `/api/tiles?z=&x=&y=` | Parcel vector tile (PBF), R2-cached |
+| Method(s) | Endpoint | Description |
+|-----------|----------|-------------|
+| GET/POST/PATCH/DELETE | `/api/lists` | Property lists CRUD + sharing (supports `?limit=&cursor=` pagination) |
+| GET/POST/PATCH/DELETE | `/api/leads` | Leads CRUD + sharing (paginated) |
+| GET/POST/PATCH/DELETE | `/api/paths` | GPS paths CRUD + sharing |
+| GET/POST/PATCH/DELETE | `/api/pipelines` | Deal pipelines CRUD + collaboration (paginated) |
+| GET/POST/PATCH/DELETE | `/api/pipelines-tasks`, `/api/pipelines-team-tasks` | Deal/team task operations |
+| GET/POST/PATCH/DELETE | `/api/tasks` | Standalone tasks (paginated) |
+| GET/PATCH | `/api/user-data` | Per-user synced blob — versioned (`__version`/`__baseVersion`), delta PATCH |
+| GET/POST/PATCH/DELETE | `/api/quotes`, `/api/quote-templates` | Quotes + templates |
+| POST | `/api/quotes-send` | Email a quote (rate-limited per user) |
+| GET/POST/PATCH/DELETE | `/api/photo-reports`, `/api/report-templates` | Photo reports + templates |
+| POST | `/api/photo-reports-generate` | Build report PDF → R2 (returns presigned URL) |
+| POST | `/api/photo-reports-send` | Email a photo report (rate-limited) |
+| GET/POST/DELETE | `/api/photos` | Photo metadata + presigned upload/download |
+| GET/POST/DELETE | `/api/deal-files`, `/api/lead-files` | File attachments — presigned PUT (`action: 'presign'`) / GET (`?format=url`), base64 fallback |
+| GET/POST/PATCH/DELETE | `/api/forms` | Form templates |
+| POST/GET | `/api/forms-upload` | Form PDF upload/download (R2) |
+| POST | `/api/forms-send` | Email flattened PDF (rate-limited, template-ownership checked) |
+| POST/GET/DELETE | `/api/forms-invite` | Form share invites |
+| GET/POST | `/api/public-form`, `/api/public-quote`, `/api/public-report`, `/api/public-report-photo` | Public token access (no auth, IP rate-limited) |
+| POST | `/api/client-preview-link` | Signed preview links for quotes/reports |
+| GET/POST/PATCH/DELETE | `/api/teams` | Team management |
+| GET/POST | `/api/tags` | Tag registry |
+| GET | `/api/activity`, `/api/feed`, `/api/notifications` | Activity + notification feeds |
+| GET | `/api/tiles?z=&x=&y=` | Parcel vector tile (PBF), R2-cached, IP rate-limited |
+| GET | `/api/parcel` | Parcel lookup (IP rate-limited) |
+| GET | `/api/google-tiles-session` | Basemap session token (IP rate-limited) |
 | GET | `/api/hail-events?lat=&lng=` | Hail history near coordinates |
-| GET | `/api/solar-imagery?lat=&lng=` | Google Solar roof imagery |
-| GET | `/api/sentinel-imagery?lat=&lng=` | Historical satellite imagery |
-| POST | `/api/roof-report` | Generate PDF roof measurement report |
-| POST | `/api/roof-analysis` | AI roof condition analysis |
-| POST | `/api/skip-trace-batchdata` | Submit BatchData skip trace |
-| GET | `/api/skip-trace-status-batchdata?jobId=` | Poll BatchData job |
-| POST | `/api/skip-trace-sherpa` | Submit SkipSherpa skip trace |
-| GET | `/api/skip-trace-status-sherpa?jobId=` | Poll SkipSherpa job |
-| POST | `/api/export-list` | Email CSV export |
-| GET | `/api/forms` | List the user's form templates |
-| POST | `/api/forms` | Create a form template |
-| PATCH | `/api/forms` | Update template name / fields / PDF key |
-| DELETE | `/api/forms` | Delete a template (owner only, also removes the R2 PDF) |
-| POST | `/api/forms-upload` | Upload a PDF (base64, ≤4 MB) to R2 for a template |
-| GET | `/api/forms-upload?key=` | Owner-scoped PDF download from R2 |
-| POST | `/api/forms-send` | Email the flattened PDF via Resend + record submission |
-| POST | `/api/push-subscribe` | Save push subscription |
-| DELETE | `/api/push-subscribe` | Remove push subscription |
-| GET | `/api/validate-share-email?email=` | Check if email belongs to a user |
+| GET | `/api/solar-imagery`, `/api/sentinel-imagery`, `/api/eagleview-imagery` | Roof imagery providers (IP rate-limited) |
+| POST | `/api/roof-report` | PDF roof measurement report (auth + rate-limited; returns presigned R2 URL) |
+| POST | `/api/skip-trace` | Skip trace (auth, per-user daily quota, batch cap) |
+| POST | `/api/export-list` | Email CSV export to the signed-in user (auth + rate-limited) |
+| POST/DELETE | `/api/push-subscribe` | Web Push subscription management |
+| POST | `/api/validate-share-email` | Check share recipient (auth + rate-limited) |
+| POST | `/api/stripe-webhook` | Stripe webhook (signature-verified) |
+| POST | `/api/migrate-infra` | Infra migrations (secret + admin allowlist) |
+| GET | `/api/firebase-init`, `/api/firebase-auth-proxy` | Firebase config/auth-domain proxy |
+| GET | `/api/cron-task-reminders` | Vercel Cron — task reminders (requires `CRON_SECRET`) |
 
 ---
 
@@ -666,13 +664,19 @@ Map-specific styles handle selection states and Leaflet control overrides.
 
 The app deploys to **Vercel** with automatic builds on push to `main`.
 
+> **Plan requirement:** this project ships ~50 serverless functions (one per
+> `api/*.js` file), which exceeds the Hobby plan's 12-function limit. Deploying
+> requires a **Vercel Pro** plan (or consolidating functions into routers).
+
 ### Vercel Configuration
 
 `vercel.json` configures:
 
 - **Function timeouts:** Heavy endpoints (tiles, imagery, reports) get extended `maxDuration` and memory
-- **Rewrites:** Firebase auth proxy routes (`/__/firebase/init.json`, `/__/auth/*`)
-- **CORS headers:** Permissive headers on `/api/*` for cross-origin requests
+- **Rewrites:** Firebase auth proxy routes (`/__/firebase/init.json`, `/__/auth/*`) and an SPA catch-all (everything except `/api/*` serves `index.html`)
+- **CORS headers** on `/api/*` (optionally restricted via the `ALLOWED_ORIGINS` env var handled in `api/lib/cors.js`)
+- **Security headers:** HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`
+- **Caching:** immutable long-cache for `/assets/*`; `no-cache` for `index.html` and `sw.js` so deploys roll out immediately
 
 ### Required Vercel Integrations
 

@@ -52,6 +52,8 @@ export default defineConfig({
     format: 'es'
   },
   build: {
+    sourcemap: false,
+    target: 'es2020',
     rollupOptions: {
       output: {
         manualChunks(id) {

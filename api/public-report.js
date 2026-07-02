@@ -5,6 +5,7 @@ import { publicReportPayload, recordReportView } from './lib/publicReportPayload
 import { loadReportContext } from './lib/publicReportAccess.js'
 import { resolveSenderBranding } from './lib/senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey, safePdfFilename } from './lib/buildReportPdf.js'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 let _s3
 function s3() {
@@ -75,6 +76,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+
+  if (await enforceIpRateLimit(req, res, { name: 'public-report', limit: 120, windowSec: 60 })) return
 
   try {
     const token = String(req.query.token || '').trim()

@@ -23,6 +23,23 @@ export default async function handler(req, res) {
   const { user } = await authenticate(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
+  // Restrict to an explicit admin allowlist so a leaked MIGRATE_SECRET plus any
+  // valid user session cannot rewrite production KV layout.
+  const adminList = String(process.env.MIGRATE_ADMIN_UIDS || process.env.ADMIN_UIDS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+  if (adminList.length > 0) {
+    const uid = String(user.uid || '').toLowerCase()
+    const email = String(user.email || '').toLowerCase()
+    if (!adminList.includes(uid) && !adminList.includes(email)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+  } else if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') {
+    // In production, refuse to run without an explicit admin allowlist configured.
+    return res.status(403).json({ error: 'Admin allowlist not configured' })
+  }
+
   const target = String(req.body?.target || 'all')
   try {
     const result = {}

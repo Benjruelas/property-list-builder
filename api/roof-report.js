@@ -1,8 +1,11 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
+import { createPresignedGetUrl } from './lib/photoPresign.js'
 import sharp from 'sharp'
 import { fromArrayBuffer } from 'geotiff'
 import PDFDocument from 'pdfkit'
 import crypto from 'crypto'
+import { requireAuth } from './lib/apiAuth.js'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 const CACHE_TTL = 30 * 24 * 3600 * 1000
 const M_FT = 3.28084
@@ -21,15 +24,18 @@ function s3() {
   })
   return _s3
 }
-async function r2Get(key) {
-  try {
-    const r = await s3().send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
-    if (Date.now() - (r.LastModified?.getTime() ?? 0) > CACHE_TTL) return null
-    const ch = []; for await (const c of r.Body) ch.push(c); return Buffer.concat(ch)
-  } catch (e) { if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return null; throw e }
-}
 function r2Put(key, body, ct = 'application/pdf') {
   return s3().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: body, ContentType: ct }))
+}
+// Freshness check without downloading the object body.
+async function r2FreshExists(key) {
+  try {
+    const r = await s3().send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
+    return Date.now() - (r.LastModified?.getTime() ?? 0) <= CACHE_TTL
+  } catch (e) {
+    if (e.name === 'NotFound' || e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return false
+    throw e
+  }
 }
 
 /* ── Helpers ──────────────────────────────────────────────────── */
@@ -1455,6 +1461,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' })
 
+  const user = await requireAuth(req, res)
+  if (!user) return
+  if (await enforceIpRateLimit(req, res, { name: 'roof-report', limit: 60, windowSec: 3600 })) return
+
   const { lat, lng, address, branding } = req.body || {}
   if (!lat || !lng) return res.status(400).json({ error: 'lat and lng required' })
 
@@ -1463,8 +1473,10 @@ export default async function handler(req, res) {
   const cacheKey = `report/v19/${latF.toFixed(6)}/${lngF.toFixed(6)}/${bHash}.pdf`
 
   try {
-    const cached = await r2Get(cacheKey)
-    if (cached) return res.status(200).json({ pdf_base64: `data:application/pdf;base64,${cached.toString('base64')}` })
+    if (await r2FreshExists(cacheKey)) {
+      const pdfUrl = await createPresignedGetUrl(cacheKey, 3600)
+      return res.status(200).json({ pdf_url: pdfUrl })
+    }
   } catch (e) { console.error('Cache read:', e.message) }
 
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY
@@ -1539,13 +1551,21 @@ export default async function handler(req, res) {
     sideViews,
   })
 
-  r2Put(cacheKey, pdfBuf).catch(e => console.error('Cache write:', e.message))
+  // Persist first, then hand the client a presigned URL instead of shipping
+  // the multi-MB PDF as base64 through the function response.
+  let pdfUrl = null
+  try {
+    await r2Put(cacheKey, pdfBuf)
+    pdfUrl = await createPresignedGetUrl(cacheKey, 3600)
+  } catch (e) { console.error('Cache write:', e.message) }
 
   const tot = roofData?.totals || {}
   const drv = roofData?.derived || {}
   res.setHeader('Cache-Control', 'public, max-age=3600')
   return res.status(200).json({
-    pdf_base64: `data:application/pdf;base64,${pdfBuf.toString('base64')}`,
+    pdf_url: pdfUrl,
+    // Fallback only when R2 persistence failed so callers still get the PDF.
+    ...(pdfUrl ? {} : { pdf_base64: `data:application/pdf;base64,${pdfBuf.toString('base64')}` }),
     measurements: {
       total_area_sqft: Math.round(totalSqFt),
       total_squares: Math.round(totalSqFt / 100),

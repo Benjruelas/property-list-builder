@@ -8,6 +8,7 @@ import {
   defaultValidUntil,
   normalizeQuoteStatus,
 } from './lib/quoteMath.js'
+import { paginateArray } from './lib/pagination.js'
 
 /**
  * Quote instances CRUD — owner-only v1.
@@ -122,6 +123,11 @@ export default async function handler(req, res) {
       }
 
       quotes.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+      // Opt-in cursor pagination (?limit=&cursor=) — full array without limit.
+      const page = paginateArray(quotes, req.query || {})
+      if (page.paginated) {
+        return res.status(200).json({ quotes: page.items, nextCursor: page.nextCursor })
+      }
       return res.status(200).json({ quotes })
     }
 
