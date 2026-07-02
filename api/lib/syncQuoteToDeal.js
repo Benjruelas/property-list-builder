@@ -1,54 +1,11 @@
 /**
  * Sync accepted quote lines to linked deal payments + costs in user_pipelines KV.
+ *
+ * All writes go through the shared, lockable pipeline store (mutatePipelines) so
+ * they don't race with pipeline CRUD, team-task updates, or the Stripe webhook.
  */
 
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
-
-const PIPELINES_KV_KEY = 'user_pipelines'
-
-async function getAllPipelines() {
-  if (!kvAvailable || !kv) return []
-  try {
-    const data = await kv.get(PIPELINES_KV_KEY)
-    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-async function saveAllPipelines(pipelines) {
-  if (!kvAvailable || !kv) return false
-  try {
-    await kv.set(PIPELINES_KV_KEY, pipelines).catch(() =>
-      kv.set(PIPELINES_KV_KEY, JSON.stringify(pipelines))
-    )
-    return true
-  } catch (e) {
-    console.warn('syncQuoteToDeal pipeline save failed', e.message)
-    return false
-  }
-}
+import { mutatePipelines } from './pipelineStoreFull.js'
 
 function upsertLineItem(rows, { id, name, amount, settled, sourceQuoteId, lineItemId }) {
   const list = Array.isArray(rows) ? rows.map((r) => ({ ...r })) : []
@@ -82,51 +39,54 @@ export async function syncQuoteToDealOnAccept(quote) {
   const acceptedLines = (lineItems || []).filter((l) => acceptedSet.has(l.id))
   if (!acceptedLines.length) return { ok: false, reason: 'no_accepted_lines' }
 
-  const all = await getAllPipelines()
-  const pIdx = all.findIndex((p) => p.id === pipelineId)
-  if (pIdx === -1) return { ok: false, reason: 'pipeline_not_found' }
+  let outcome = { ok: false, reason: 'pipeline_not_found' }
+  await mutatePipelines((all) => {
+    const pIdx = all.findIndex((p) => p.id === pipelineId)
+    if (pIdx === -1) { outcome = { ok: false, reason: 'pipeline_not_found' }; return undefined }
 
-  const pipeline = { ...all[pIdx] }
-  const deals = Array.isArray(pipeline.deals) ? pipeline.deals.map((d) => ({ ...d })) : []
-  const dIdx = deals.findIndex((d) => d.id === dealId)
-  if (dIdx === -1) return { ok: false, reason: 'deal_not_found' }
+    const pipeline = { ...all[pIdx] }
+    const deals = Array.isArray(pipeline.deals) ? pipeline.deals.map((d) => ({ ...d })) : []
+    const dIdx = deals.findIndex((d) => d.id === dealId)
+    if (dIdx === -1) { outcome = { ok: false, reason: 'deal_not_found' }; return undefined }
 
-  const deal = { ...deals[dIdx] }
-  let payments = (deal.payments || []).filter((p) => p?.sourceQuoteId !== quoteId)
-  let costs = (deal.costs || []).filter((c) => c?.sourceQuoteId !== quoteId)
+    const deal = { ...deals[dIdx] }
+    let payments = (deal.payments || []).filter((p) => p?.sourceQuoteId !== quoteId)
+    let costs = (deal.costs || []).filter((c) => c?.sourceQuoteId !== quoteId)
 
-  for (const line of acceptedLines) {
-    const qty = Math.max(0, Number(line.quantity) || 1)
-    const sell = Number(line.amount) || 0
-    const cost = Math.round(qty * (Number(line.unitCost) || 0) * 100) / 100
-    const label = line.name || 'Service'
+    for (const line of acceptedLines) {
+      const qty = Math.max(0, Number(line.quantity) || 1)
+      const sell = Number(line.amount) || 0
+      const cost = Math.round(qty * (Number(line.unitCost) || 0) * 100) / 100
+      const label = line.name || 'Service'
 
-    payments = upsertLineItem(payments, {
-      lineItemId: line.dealPaymentLineItemId,
-      name: label,
-      amount: sell,
-      settled: false,
-      sourceQuoteId: quoteId,
-    })
-    costs = upsertLineItem(costs, {
-      lineItemId: line.dealCostLineItemId,
-      name: `${label} (cost)`,
-      amount: cost,
-      settled: false,
-      sourceQuoteId: quoteId,
-    })
-  }
+      payments = upsertLineItem(payments, {
+        lineItemId: line.dealPaymentLineItemId,
+        name: label,
+        amount: sell,
+        settled: false,
+        sourceQuoteId: quoteId,
+      })
+      costs = upsertLineItem(costs, {
+        lineItemId: line.dealCostLineItemId,
+        name: `${label} (cost)`,
+        amount: cost,
+        settled: false,
+        sourceQuoteId: quoteId,
+      })
+    }
 
-  deal.payments = payments
-  deal.costs = costs
-  deal.updatedAt = Date.now()
-  deals[dIdx] = deal
-  pipeline.deals = deals
-  pipeline.updatedAt = new Date().toISOString()
-  all[pIdx] = pipeline
-
-  const saved = await saveAllPipelines(all)
-  return { ok: saved, deal }
+    deal.payments = payments
+    deal.costs = costs
+    deal.updatedAt = Date.now()
+    deals[dIdx] = deal
+    pipeline.deals = deals
+    pipeline.updatedAt = new Date().toISOString()
+    const next = [...all]
+    next[pIdx] = pipeline
+    outcome = { ok: true, deal }
+    return next
+  })
+  return outcome
 }
 
 /**
@@ -136,31 +96,34 @@ export async function syncQuotePaymentOnPaid(quote) {
   const { pipelineId, dealId, id: quoteId, acceptedLineIds = [] } = quote || {}
   if (!pipelineId || !dealId || !quoteId) return { ok: false, reason: 'missing_ids' }
 
-  const all = await getAllPipelines()
-  const pIdx = all.findIndex((p) => p.id === pipelineId)
-  if (pIdx === -1) return { ok: false, reason: 'pipeline_not_found' }
+  let outcome = { ok: false, reason: 'pipeline_not_found' }
+  await mutatePipelines((all) => {
+    const pIdx = all.findIndex((p) => p.id === pipelineId)
+    if (pIdx === -1) { outcome = { ok: false, reason: 'pipeline_not_found' }; return undefined }
 
-  const pipeline = { ...all[pIdx] }
-  const deals = Array.isArray(pipeline.deals) ? pipeline.deals.map((d) => ({ ...d })) : []
-  const dIdx = deals.findIndex((d) => d.id === dealId)
-  if (dIdx === -1) return { ok: false, reason: 'deal_not_found' }
+    const pipeline = { ...all[pIdx] }
+    const deals = Array.isArray(pipeline.deals) ? pipeline.deals.map((d) => ({ ...d })) : []
+    const dIdx = deals.findIndex((d) => d.id === dealId)
+    if (dIdx === -1) { outcome = { ok: false, reason: 'deal_not_found' }; return undefined }
 
-  const deal = { ...deals[dIdx] }
-  const now = quote.paidAt || new Date().toISOString()
-  deal.payments = (deal.payments || []).map((p) => {
-    if (p?.sourceQuoteId === quoteId) {
-      return { ...p, settled: true, settledAt: now, sourceQuoteId: quoteId }
-    }
-    return p
+    const deal = { ...deals[dIdx] }
+    const now = quote.paidAt || new Date().toISOString()
+    deal.payments = (deal.payments || []).map((p) => {
+      if (p?.sourceQuoteId === quoteId) {
+        return { ...p, settled: true, settledAt: now, sourceQuoteId: quoteId }
+      }
+      return p
+    })
+    deal.updatedAt = Date.now()
+    deals[dIdx] = deal
+    pipeline.deals = deals
+    pipeline.updatedAt = new Date().toISOString()
+    const next = [...all]
+    next[pIdx] = pipeline
+    outcome = { ok: true, deal }
+    return next
   })
-  deal.updatedAt = Date.now()
-  deals[dIdx] = deal
-  pipeline.deals = deals
-  pipeline.updatedAt = new Date().toISOString()
-  all[pIdx] = pipeline
-
-  const saved = await saveAllPipelines(all)
-  return { ok: saved, deal }
+  return outcome
 }
 
 /** @deprecated use syncQuotePaymentOnPaid */

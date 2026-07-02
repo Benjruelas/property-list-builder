@@ -15,56 +15,7 @@
 
 import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess, verifyFirebaseToken } from './lib/teams.js'
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
-
-const PIPELINES_KV_KEY = 'user_pipelines'
-let fallbackStore = []
-
-async function getAllPipelines() {
-  if (!kvAvailable || !kv) return fallbackStore
-  try {
-    const data = await kv.get(PIPELINES_KV_KEY)
-    const rows = typeof data === 'string' ? (data ? JSON.parse(data) : []) : data
-    const result = Array.isArray(rows) ? rows : []
-    fallbackStore = result
-    return result
-  } catch {
-    return fallbackStore
-  }
-}
-
-async function savePipelines(rows) {
-  fallbackStore = rows
-  if (!kvAvailable || !kv) return
-  try {
-    await kv
-      .set(PIPELINES_KV_KEY, rows)
-      .catch(() => kv.set(PIPELINES_KV_KEY, JSON.stringify(rows)))
-  } catch (e) {
-    console.warn('team-tasks save failed', e.message)
-  }
-}
+import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
 
 function num(v) {
   if (v == null) return null
@@ -161,124 +112,132 @@ export default async function handler(req, res) {
   if (!action) return res.status(400).json({ error: 'action is required' })
 
   try {
-    const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
-    const idx = all.findIndex((p) => p.id === pipelineId)
-    if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
-    const pipeline = all[idx]
+    const [initial, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
+    const pipelineForAccess = initial.find((p) => p.id === pipelineId)
+    if (!pipelineForAccess) return res.status(404).json({ error: 'Pipeline not found' })
     const teamsIndex = fullTeamsIndex(allTeams)
-    const access = resolveAccess(pipeline, user, teamsIndex)
+    const access = resolveAccess(pipelineForAccess, user, teamsIndex)
     if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
 
-    const allowedMemberUids = collectAllowedMemberUids(pipeline, allTeams, user)
-
-    let leadIdx = (pipeline.leads || []).findIndex(
-      (l) => l.id === leadId || l.parcelId === leadId
-    )
-    if (leadIdx === -1) {
-      const deal = (pipeline.deals || []).find((d) => d.leadId === leadId)
-      if (!deal) return res.status(404).json({ error: 'Lead not found' })
-      pipeline.leads = Array.isArray(pipeline.leads) ? pipeline.leads : []
-      leadIdx = pipeline.leads.findIndex((l) => l.id === leadId)
-      if (leadIdx === -1) {
-        pipeline.leads.push({
-          id: leadId,
-          parcelId: deal.parcelId || null,
-          teamTasks: [],
-        })
-        leadIdx = pipeline.leads.length - 1
-      }
-    }
-    const lead = pipeline.leads[leadIdx]
-    lead.teamTasks = Array.isArray(lead.teamTasks) ? lead.teamTasks : []
+    const allowedMemberUids = collectAllowedMemberUids(pipelineForAccess, allTeams, user)
     const { actorLabel } = await import('./lib/activityLog.js')
     const actor = actorLabel(user)
 
-    if (action === 'add') {
-      if (!String(task.title || '').trim()) {
-        return res.status(400).json({ error: 'Task title is required' })
-      }
-      const normalized = normalizeTask(task, user, allowedMemberUids)
-      lead.teamTasks.push(normalized)
-      await logTeamTaskActivity(pipeline, user, 'task.created', { ...normalized, leadId }, `${actor} created task "${normalized.title}"`)
-      const newAssignees = normalized.assignedUids.filter((uid) => uid !== user.uid)
-      if (newAssignees.length) {
-        try {
-          const { notifyTaskAssigned } = await import('./push-utils.js')
-          await notifyTaskAssigned(newAssignees, {
-            taskTitle: normalized.title,
-            taskId: normalized.id,
-            actorEmail: user.email,
-          }, teamsIndex)
-        } catch {
-          /* ignore */
+    // Applies the requested action to a pipeline in place. Returns a status
+    // object; side effects (activity/push) are deferred until after the write
+    // commits so they run exactly once. Runs under the shared pipeline lock via
+    // mutatePipelines to avoid clobbering concurrent edits.
+    let httpError = null
+    let resultLead = null
+    const deferred = { activity: [], notify: [] }
+
+    const applyAction = (pipeline) => {
+      let leadIdx = (pipeline.leads || []).findIndex(
+        (l) => l.id === leadId || l.parcelId === leadId
+      )
+      if (leadIdx === -1) {
+        const deal = (pipeline.deals || []).find((d) => d.leadId === leadId)
+        if (!deal) { httpError = { status: 404, error: 'Lead not found' }; return false }
+        pipeline.leads = Array.isArray(pipeline.leads) ? pipeline.leads : []
+        leadIdx = pipeline.leads.findIndex((l) => l.id === leadId)
+        if (leadIdx === -1) {
+          pipeline.leads.push({ id: leadId, parcelId: deal.parcelId || null, teamTasks: [] })
+          leadIdx = pipeline.leads.length - 1
         }
       }
-    } else if (action === 'update') {
-      const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
-      if (tIdx === -1) return res.status(404).json({ error: 'Task not found' })
-      const prevAssigned = new Set(lead.teamTasks[tIdx].assignedUids || [])
-      lead.teamTasks[tIdx] = {
-        ...lead.teamTasks[tIdx],
-        ...(task.title !== undefined ? { title: String(task.title).trim() } : {}),
-        ...(task.notes !== undefined ? { notes: String(task.notes) } : {}),
-        ...(task.dueAt !== undefined ? { dueAt: num(task.dueAt) } : {}),
-        ...(task.assignedUids !== undefined
-          ? { assignedUids: filterAssignedUids(task.assignedUids, allowedMemberUids) }
-          : {}),
-        ...(task.dealId !== undefined
-          ? { dealId: task.dealId && String(task.dealId).trim() ? String(task.dealId).trim() : null }
-          : {})
-      }
-      if (task.assignedUids !== undefined) {
-        const updated = lead.teamTasks[tIdx]
-        const newlyAssigned = (updated.assignedUids || []).filter(
-          (uid) => uid !== user.uid && !prevAssigned.has(uid)
-        )
-        if (newlyAssigned.length) {
-          try {
-            const { notifyTaskAssigned } = await import('./push-utils.js')
-            await notifyTaskAssigned(newlyAssigned, {
-              taskTitle: updated.title,
-              taskId: updated.id,
-              actorEmail: user.email,
-            }, teamsIndex)
-          } catch {
-            /* ignore */
-          }
+      const lead = pipeline.leads[leadIdx]
+      lead.teamTasks = Array.isArray(lead.teamTasks) ? lead.teamTasks : []
+
+      if (action === 'add') {
+        if (!String(task.title || '').trim()) {
+          httpError = { status: 400, error: 'Task title is required' }; return false
         }
+        const normalized = normalizeTask(task, user, allowedMemberUids)
+        lead.teamTasks.push(normalized)
+        deferred.activity.push(['task.created', { ...normalized, leadId }, `${actor} created task "${normalized.title}"`])
+        const newAssignees = normalized.assignedUids.filter((uid) => uid !== user.uid)
+        if (newAssignees.length) deferred.notify.push([newAssignees, { taskTitle: normalized.title, taskId: normalized.id, actorEmail: user.email }])
+      } else if (action === 'update') {
+        const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
+        if (tIdx === -1) { httpError = { status: 404, error: 'Task not found' }; return false }
+        const prevAssigned = new Set(lead.teamTasks[tIdx].assignedUids || [])
+        lead.teamTasks[tIdx] = {
+          ...lead.teamTasks[tIdx],
+          ...(task.title !== undefined ? { title: String(task.title).trim() } : {}),
+          ...(task.notes !== undefined ? { notes: String(task.notes) } : {}),
+          ...(task.dueAt !== undefined ? { dueAt: num(task.dueAt) } : {}),
+          ...(task.assignedUids !== undefined
+            ? { assignedUids: filterAssignedUids(task.assignedUids, allowedMemberUids) }
+            : {}),
+          ...(task.dealId !== undefined
+            ? { dealId: task.dealId && String(task.dealId).trim() ? String(task.dealId).trim() : null }
+            : {})
+        }
+        if (task.assignedUids !== undefined) {
+          const updated = lead.teamTasks[tIdx]
+          const newlyAssigned = (updated.assignedUids || []).filter(
+            (uid) => uid !== user.uid && !prevAssigned.has(uid)
+          )
+          if (newlyAssigned.length) deferred.notify.push([newlyAssigned, { taskTitle: updated.title, taskId: updated.id, actorEmail: user.email }])
+        }
+      } else if (action === 'remove') {
+        const removed = lead.teamTasks.find((t) => t.id === task.id)
+        const before = lead.teamTasks.length
+        lead.teamTasks = lead.teamTasks.filter((t) => t.id !== task.id)
+        if (lead.teamTasks.length === before) { httpError = { status: 404, error: 'Task not found' }; return false }
+        if (removed) deferred.activity.push(['task.deleted', { ...removed, leadId }, `${actor} deleted task "${removed.title}"`])
+      } else if (action === 'toggle-complete') {
+        const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
+        if (tIdx === -1) { httpError = { status: 404, error: 'Task not found' }; return false }
+        const cur = lead.teamTasks[tIdx]
+        const completing = !cur.completedAt
+        lead.teamTasks[tIdx] = {
+          ...cur,
+          completedAt: completing ? new Date().toISOString() : null,
+          completedBy: completing ? user.uid : null
+        }
+        if (completing) deferred.activity.push(['task.completed', { ...cur, leadId }, `${actor} completed task "${cur.title}"`])
+      } else {
+        httpError = { status: 400, error: `Unknown action: ${action}` }; return false
       }
-    } else if (action === 'remove') {
-      const removed = lead.teamTasks.find((t) => t.id === task.id)
-      const before = lead.teamTasks.length
-      lead.teamTasks = lead.teamTasks.filter((t) => t.id !== task.id)
-      if (lead.teamTasks.length === before) {
-        return res.status(404).json({ error: 'Task not found' })
-      }
-      if (removed) {
-        await logTeamTaskActivity(pipeline, user, 'task.deleted', { ...removed, leadId }, `${actor} deleted task "${removed.title}"`)
-      }
-    } else if (action === 'toggle-complete') {
-      const tIdx = lead.teamTasks.findIndex((t) => t.id === task.id)
-      if (tIdx === -1) return res.status(404).json({ error: 'Task not found' })
-      const cur = lead.teamTasks[tIdx]
-      const completing = !cur.completedAt
-      lead.teamTasks[tIdx] = {
-        ...cur,
-        completedAt: completing ? new Date().toISOString() : null,
-        completedBy: completing ? user.uid : null
-      }
-      if (completing) {
-        await logTeamTaskActivity(pipeline, user, 'task.completed', { ...cur, leadId }, `${actor} completed task "${cur.title}"`)
-      }
-    } else {
-      return res.status(400).json({ error: `Unknown action: ${action}` })
+
+      pipeline.leads[leadIdx] = lead
+      pipeline.updatedAt = new Date().toISOString()
+      resultLead = lead
+      return true
     }
 
-    pipeline.leads[leadIdx] = lead
-    pipeline.updatedAt = new Date().toISOString()
-    all[idx] = pipeline
-    await savePipelines(all)
-    return res.status(200).json({ lead })
+    let savedPipeline = null
+    await mutatePipelines((all) => {
+      const idx = all.findIndex((p) => p.id === pipelineId)
+      if (idx === -1) { httpError = { status: 404, error: 'Pipeline not found' }; return undefined }
+      const next = [...all]
+      const pipeline = { ...next[idx] }
+      const ok = applyAction(pipeline)
+      if (!ok) return undefined
+      next[idx] = pipeline
+      savedPipeline = pipeline
+      return next
+    })
+
+    if (httpError) return res.status(httpError.status).json({ error: httpError.error })
+
+    // Fire deferred side effects once, after the write committed.
+    for (const [type, taskObj, summary] of deferred.activity) {
+      await logTeamTaskActivity(savedPipeline || pipelineForAccess, user, type, taskObj, summary)
+    }
+    if (deferred.notify.length) {
+      try {
+        const { notifyTaskAssigned } = await import('./push-utils.js')
+        for (const [uids, payload] of deferred.notify) {
+          await notifyTaskAssigned(uids, payload, teamsIndex)
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return res.status(200).json({ lead: resultLead })
   } catch (err) {
     console.error('team-tasks error', err)
     return res.status(500).json({ error: 'Internal server error', message: err.message })
