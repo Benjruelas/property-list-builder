@@ -248,11 +248,15 @@ export const buildSkipTraceRequest = (parcelData, opts = {}) => {
  * @param {Array<{parcelId: string, address: string, ownerName?: string}>} parcels
  * @returns {Promise<{ success: boolean, jobId: 'sync', async: false, status: 'completed', results: Array }>}
  */
-export const skipTraceParcels = async (parcels) => {
+export const skipTraceParcels = async (parcels, getToken) => {
   try {
+    const token = typeof getToken === 'function' ? await getToken() : null
     const response = await fetch(`${API_BASE_URL}/skip-trace`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ parcels })
     })
 

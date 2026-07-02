@@ -1,3 +1,5 @@
+import { enforceIpRateLimit } from './lib/rateLimit.js'
+
 const SANDBOX_BASE = 'https://sandbox.apis.eagleview.com'
 const PROD_BASE = 'https://apis.eagleview.com'
 
@@ -13,6 +15,8 @@ function latLngToTile(lat, lng, zoom) {
 }
 
 export default async function handler(req, res) {
+  if (await enforceIpRateLimit(req, res, { name: 'eagleview', limit: 300, windowSec: 3600 })) return
+
   const { lat, lng, zoom: zoomParam } = req.query
   if (!lat || !lng) {
     return res.status(400).json({ error: 'lat and lng required' })

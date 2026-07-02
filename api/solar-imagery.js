@@ -1,5 +1,6 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 const CACHE_TTL_MS = 180 * 24 * 60 * 60 * 1000
 
@@ -44,6 +45,8 @@ function putToR2(key, body, contentType = 'application/json') {
 }
 
 export default async function handler(req, res) {
+  if (await enforceIpRateLimit(req, res, { name: 'solar-imagery', limit: 300, windowSec: 3600 })) return
+
   const { lat, lng, radius, force } = req.query
   if (!lat || !lng) {
     return res.status(400).json({ error: 'lat and lng required' })

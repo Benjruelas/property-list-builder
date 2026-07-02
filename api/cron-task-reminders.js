@@ -34,6 +34,12 @@ function isAuthorized(req) {
     const auth = req.headers.authorization || ''
     if (auth === `Bearer ${secret}`) return true
     if (req.headers['x-cron-secret'] === secret) return true
+    return false
+  }
+  // No secret configured: only allow when running locally (dev). In production
+  // the Host header is attacker-controllable, so never trust it there.
+  if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') {
+    return false
   }
   const host = req.headers.host || ''
   return /localhost|127\.0\.0\.1/.test(host)

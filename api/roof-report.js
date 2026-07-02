@@ -3,6 +3,8 @@ import sharp from 'sharp'
 import { fromArrayBuffer } from 'geotiff'
 import PDFDocument from 'pdfkit'
 import crypto from 'crypto'
+import { requireAuth } from './lib/apiAuth.js'
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 const CACHE_TTL = 30 * 24 * 3600 * 1000
 const M_FT = 3.28084
@@ -1454,6 +1456,10 @@ async function buildPDF({ branding, address, reportDate, totalSqFt, roofData, di
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' })
+
+  const user = await requireAuth(req, res)
+  if (!user) return
+  if (await enforceIpRateLimit(req, res, { name: 'roof-report', limit: 60, windowSec: 3600 })) return
 
   const { lat, lng, address, branding } = req.body || {}
   if (!lat || !lng) return res.status(400).json({ error: 'lat and lng required' })

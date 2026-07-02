@@ -4,6 +4,8 @@
  * pro:parcel_us record for a map click point.
  */
 
+import { enforceIpRateLimit } from './lib/rateLimit.js'
+
 const WMS_BASE = 'https://api.landrecords.us/pro/wms'
 const WFS_BASE = 'https://api.landrecords.us/pro/wfs'
 const BBOX_DELTA = 0.00015
@@ -70,6 +72,8 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
+
+  if (await enforceIpRateLimit(req, res, { name: 'parcel', limit: 2000, windowSec: 60 })) return
 
   const lat = parseFloat(req.query.lat)
   const lng = parseFloat(req.query.lng)

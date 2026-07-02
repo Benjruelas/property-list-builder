@@ -1915,7 +1915,7 @@ function App() {
         }
         if (!parcels.length) throw new Error('No valid skip trace requests in job')
 
-        const result = await skipTraceParcels(parcels)
+        const result = await skipTraceParcels(parcels, getToken)
         const results = result.results || []
         
         // Process results
@@ -3422,17 +3422,18 @@ function App() {
       return
     }
 
-    const exportEmail = (settings.defaultEmail && settings.emailTestMode) ? settings.defaultEmail : currentUser.email
-
     try {
       const csvContent = listToCsv(list)
+      const token = getToken ? await getToken() : null
       const res = await fetch('/api/export-list', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           listName: list.name,
           csvContent,
-          userEmail: exportEmail
         })
       })
 
@@ -3441,12 +3442,12 @@ function App() {
         throw new Error(data.message || data.error || `Export failed (${res.status})`)
       }
 
-      showToast(`Export sent to ${exportEmail}`, 'success')
+      showToast(data.message || 'Export sent to your account email', 'success')
     } catch (err) {
       console.error('Export list error:', err)
       showToast(err.message || 'Failed to export list', 'error')
     }
-  }, [lists, currentUser, settings.emailTestMode, settings.defaultEmail])
+  }, [lists, currentUser, getToken])
 
   const handleBulkEmailList = useCallback(async (listId) => {
     await handleBulkEmailListSelected(listId)
@@ -3566,7 +3567,7 @@ function App() {
 
       showToast(isRefresh ? 'Refreshing contact info...' : 'Starting skip trace...', 'info', 2000)
 
-      const result = await skipTraceParcels([requestParcel])
+      const result = await skipTraceParcels([requestParcel], getToken)
       
       if (!result.jobId) {
         throw new Error('No job ID returned')

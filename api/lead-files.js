@@ -199,12 +199,23 @@ export default async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       const { key, leadId } = req.body || {}
-      if (!key) return res.status(400).json({ error: 'key is required' })
+      if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key is required' })
+      if (!key.startsWith('lead-files/')) return res.status(400).json({ error: 'Malformed key' })
       const lid = sanitizeId(leadId)
+
+      // Validate the key belongs to the referenced lead so a collaborator can't
+      // delete arbitrary objects under lead-files/ (IDOR).
+      const parts = key.split('/')
+      const ownerFromKey = parts[1] || ''
+      const leadIdFromKey = sanitizeId(parts[2])
+
       if (lid) {
         const { lead, access } = await getLeadWithAccess(user, lid)
         if (!lead || !canEditLead(access)) return res.status(403).json({ error: 'Forbidden' })
-      } else if (!key.includes(`/${user.uid}/`)) {
+        if (leadIdFromKey !== lid || ownerFromKey !== String(lead.ownerId)) {
+          return res.status(403).json({ error: 'Forbidden' })
+        }
+      } else if (ownerFromKey !== String(user.uid)) {
         return res.status(403).json({ error: 'Forbidden' })
       }
 

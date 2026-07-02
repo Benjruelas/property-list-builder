@@ -244,12 +244,35 @@ export default async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       const { key, pipelineId } = req.body || {}
-      if (!key) return res.status(400).json({ error: 'key is required' })
+      if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key is required' })
       const pid = sanitizeId(pipelineId)
+
+      // Validate the key actually belongs to a deal in a pipeline the caller can
+      // access. Without this, a collaborator on one pipeline could delete
+      // arbitrary R2 objects under deal-files/ (IDOR).
+      const keyParts = key.split('/')
+      if (keyParts[0] !== 'deal-files') {
+        return res.status(400).json({ error: 'Invalid key' })
+      }
+      const ownerFromKey = keyParts[1] || ''
+      const dealIdFromKey = sanitizeId(keyParts[2])
+
+      let pipeline = null
       if (pid) {
-        const { allowed } = await canAccessPipeline(user, pid)
-        if (!allowed) return res.status(403).json({ error: 'Forbidden' })
-      } else if (!key.includes(`/${user.uid}/`)) {
+        const access = await canAccessPipeline(user, pid)
+        if (!access.allowed) return res.status(403).json({ error: 'Forbidden' })
+        pipeline = access.pipeline
+        // Key owner segment must match the pipeline owner, and the deal id in
+        // the key must be a real deal in this pipeline.
+        if (ownerFromKey !== String(pipeline.ownerId)) {
+          return res.status(403).json({ error: 'Forbidden' })
+        }
+        const dealExists = (pipeline.deals || []).some((d) => d.id === dealIdFromKey)
+        if (!dealExists) {
+          return res.status(403).json({ error: 'Forbidden' })
+        }
+      } else if (ownerFromKey !== String(user.uid)) {
+        // No pipeline context: only allow deleting the caller's own objects.
         return res.status(403).json({ error: 'Forbidden' })
       }
 
@@ -264,10 +287,7 @@ export default async function handler(req, res) {
 
       if (pid) {
         try {
-          const keyParts = key.split('/')
-          const dealIdFromKey = sanitizeId(keyParts[2])
-          const { allowed, pipeline } = await canAccessPipeline(user, pid)
-          if (allowed && pipeline && dealIdFromKey) {
+          if (pipeline && dealIdFromKey) {
             const deal = (pipeline.deals || []).find((d) => d.id === dealIdFromKey)
             const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./lib/activityLog.js')
             const teamIds = teamIdsFromResource(pipeline)

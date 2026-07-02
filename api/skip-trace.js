@@ -19,9 +19,16 @@
  */
 
 import { parseOwnerName, matchResident } from './lib/ownerNameMatch.js'
+import { requireAuth } from './lib/apiAuth.js'
+import { rateLimit } from './lib/rateLimit.js'
 
 const TRESTLE_BASE = process.env.TRESTLE_API_BASE || 'https://api.trestleiq.com/3.1'
 const TRESTLE_REAL_CONTACT_URL = process.env.TRESTLE_REAL_CONTACT_URL || 'https://api.trestleiq.com/1.1/real_contact'
+
+// Abuse guards: cap per-request batch size and per-user daily volume so an
+// attacker (or bug) cannot drain paid Trestle credits or harvest PII at scale.
+const MAX_SKIP_TRACE_BATCH = Number(process.env.SKIP_TRACE_MAX_BATCH) || 25
+const SKIP_TRACE_DAILY_LIMIT = Number(process.env.SKIP_TRACE_DAILY_LIMIT) || 500
 
 // Grade ranks for ordering/comparison. Higher wins. Unknown/null is worst so
 // an ungraded contact never beats a graded one with the same match tier.
@@ -620,10 +627,34 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  const user = await requireAuth(req, res)
+  if (!user) return
+
   try {
     const { parcels } = req.body || {}
     if (!Array.isArray(parcels) || parcels.length === 0) {
       return res.status(400).json({ error: 'Parcels array is required' })
+    }
+
+    // Each parcel triggers paid Trestle calls, so cap the batch and enforce a
+    // per-user daily quota to prevent credit drain / PII harvesting.
+    if (parcels.length > MAX_SKIP_TRACE_BATCH) {
+      return res.status(413).json({
+        error: `Too many parcels in one request (max ${MAX_SKIP_TRACE_BATCH}).`,
+      })
+    }
+
+    const rl = await rateLimit({
+      key: `skiptrace:${user.uid}`,
+      limit: SKIP_TRACE_DAILY_LIMIT,
+      windowSec: 86400,
+    })
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfter))
+      return res.status(429).json({
+        error: 'Daily skip-trace limit reached. Try again later.',
+        retryAfter: rl.retryAfter,
+      })
     }
 
     const apiKey = process.env.TRESTLE_API_KEY
