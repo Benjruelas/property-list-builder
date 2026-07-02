@@ -446,7 +446,7 @@ export function findLeadById(leads, leadId) {
   return leads.find((lead) => lead?.id != null && String(lead.id) === key) || null
 }
 
-export function findLeadByParcelId(leads, parcelOrId) {
+export function findLeadByParcelId(leads, parcelOrId, { matchCoords = true } = {}) {
   if (!leads?.length || parcelOrId == null || parcelOrId === '') return null
 
   if (typeof parcelOrId === 'object' && parcelOrId.leadId) {
@@ -467,7 +467,7 @@ export function findLeadByParcelId(leads, parcelOrId) {
           if (leadIds.has(id)) return true
         }
       }
-      if (parcelLat != null && parcelLng != null) {
+      if (matchCoords && parcelLat != null && parcelLng != null) {
         const leadLat = Number(lead.lat)
         const leadLng = Number(lead.lng)
         if (Number.isFinite(leadLat) && Number.isFinite(leadLng)) {

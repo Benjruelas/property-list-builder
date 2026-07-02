@@ -29,23 +29,29 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
   const [candidate, setCandidate] = useState(null)
   const [manualAddress, setManualAddress] = useState('')
   const [manualBusy, setManualBusy] = useState(false)
+  const [forceNewLead, setForceNewLead] = useState(false)
   const requestIdRef = useRef(0)
 
-  const resolveAt = useCallback(async (lat, lng) => {
+  const resolveAt = useCallback(async (lat, lng, { ignoreExistingLeads = false } = {}) => {
     const requestId = ++requestIdRef.current
     setStep(STEP.LOCATING)
     setStatusMessage('Looking up this property…')
     setErrorMessage('')
+    const leadLookupOptions = { matchCoords: false }
     try {
       const parcelData = await resolveLeadParcelAtLocation(lat, lng)
       if (requestId !== requestIdRef.current) return
       if (parcelData) {
-        const existingLead = findLeadByParcelId(leads, parcelData)
+        const existingLead = ignoreExistingLeads
+          ? null
+          : findLeadByParcelId(leads, parcelData, leadLookupOptions)
         setCandidate({ parcelData, lead: existingLead || null, lat, lng })
         setStep(STEP.CONFIRM)
         return
       }
-      const existingLead = findLeadByParcelId(leads, { lat, lng })
+      const existingLead = ignoreExistingLeads
+        ? null
+        : findLeadByParcelId(leads, { lat, lng }, leadLookupOptions)
       if (existingLead) {
         setCandidate({ parcelData: null, lead: existingLead, lat, lng })
         setStep(STEP.CONFIRM)
@@ -86,6 +92,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
       setCandidate(null)
       setManualAddress('')
       setManualBusy(false)
+      setForceNewLead(false)
       return
     }
     void locate()
@@ -96,7 +103,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
   const handleManualSelect = useCallback(({ address, latParsed, lngParsed }) => {
     setManualAddress(address || '')
     if (Number.isFinite(latParsed) && Number.isFinite(lngParsed)) {
-      void resolveAt(latParsed, lngParsed)
+      void resolveAt(latParsed, lngParsed, { ignoreExistingLeads: true })
     }
   }, [resolveAt])
 
@@ -110,7 +117,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
         showToast('Could not find that address', 'error')
         return
       }
-      await resolveAt(geo.lat, geo.lng)
+      await resolveAt(geo.lat, geo.lng, { ignoreExistingLeads: true })
     } finally {
       setManualBusy(false)
     }
@@ -118,12 +125,12 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
 
   const handleConfirm = () => {
     if (!candidate) return
-    if (candidate.lead) {
+    if (candidate.lead && !forceNewLead) {
       onConfirm?.({ lead: candidate.lead })
       return
     }
     if (candidate.parcelData) {
-      onConfirm?.({ parcelData: candidate.parcelData })
+      onConfirm?.({ parcelData: candidate.parcelData, forceNewLead: true })
       return
     }
     const fallbackAddress =
@@ -138,7 +145,13 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
         lng: candidate.lng,
         address: fallbackAddress,
       },
+      forceNewLead: true,
     })
+  }
+
+  const openManualStep = () => {
+    setForceNewLead(true)
+    setStep(STEP.MANUAL)
   }
 
   const ownerName = candidate?.parcelData?.properties?.OWNER_NAME || ''
@@ -194,7 +207,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
                 <button
                   type="button"
                   className="w-full text-center text-xs opacity-60 hover:opacity-90 underline underline-offset-2"
-                  onClick={() => setStep(STEP.MANUAL)}
+                  onClick={openManualStep}
                 >
                   Not the right address?
                 </button>
@@ -221,7 +234,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
                 <button
                   type="button"
                   className="w-full text-center text-xs opacity-60 hover:opacity-90 underline underline-offset-2"
-                  onClick={() => setStep(STEP.MANUAL)}
+                  onClick={openManualStep}
                 >
                   Enter the address instead
                 </button>
@@ -233,7 +246,10 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
                 <button
                   type="button"
                   className="flex items-center gap-1 text-xs opacity-60 hover:opacity-90"
-                  onClick={() => void locate()}
+                  onClick={() => {
+                    setForceNewLead(false)
+                    void locate()
+                  }}
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   Try my location again
