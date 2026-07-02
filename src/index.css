@@ -7229,9 +7229,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
-.public-report-lightbox img {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
 
 .public-form-status-card {
   width: min(100%, 22rem);
@@ -8081,6 +8078,21 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   -webkit-user-drag: none;
 }
 
+.file-preview-zoom-stage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.file-preview-zoom-stage .file-preview-image {
+  transform-origin: center center;
+  will-change: transform;
+}
+
 .file-preview-pdf {
   width: 100%;
   height: 100%;
@@ -8138,14 +8150,31 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   right: 12px;
 }
 
-.file-preview-counter {
+.file-preview-footer {
   padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   text-align: center;
+  background: var(--map-chrome-bg, rgba(18, 22, 34, 0.92));
+  border-top: 1px solid var(--map-chrome-border, rgba(255, 255, 255, 0.15));
+}
+
+.file-preview-caption {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: pre-wrap;
+}
+
+.file-preview-counter {
   font-size: 13px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.75);
-  background: var(--map-chrome-bg, rgba(18, 22, 34, 0.92));
-  border-top: 1px solid var(--map-chrome-border, rgba(255, 255, 255, 0.15));
+}
+
+.file-preview-footer .file-preview-counter {
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .photo-mode-video {

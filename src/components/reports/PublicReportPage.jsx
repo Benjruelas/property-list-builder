@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AlertCircle, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertCircle } from 'lucide-react'
 import { fetchPublicReport } from '../../utils/photoReports'
 import { resolveApiUrl } from '@/utils/apiBase'
 import { PublicFormBrandBar } from '../forms/PublicFormBrand'
@@ -10,50 +10,55 @@ import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
 import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
 import { AppLoadingScreen } from '../AppLoadingScreen'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
+import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 
 function resolvePhotoUrl(url) {
   return resolveApiUrl(url)
 }
 
-function PhotoLightbox({ photo, onClose }) {
-  if (!photo) return null
-  return (
-    <div
-      className="public-report-lightbox fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Photo preview"
-      onClick={onClose}
-    >
-      <button
-        type="button"
-        className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"
-        onClick={onClose}
-        aria-label="Close preview"
-      >
-        <X className="h-5 w-5" />
-      </button>
-      <img
-        src={resolvePhotoUrl(photo.imageUrl)}
-        alt={photo.caption || 'Report photo'}
-        className="max-h-[90vh] max-w-full rounded-lg object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
-      {photo.caption ? (
-        <p className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-lg text-center text-sm text-white/90 px-4">
-          {photo.caption}
-        </p>
-      ) : null}
-    </div>
-  )
+function buildGalleryItems(sections = []) {
+  const items = []
+  sections.forEach((sec) => {
+    (sec.photos || []).forEach((photo) => {
+      const index = items.length
+      items.push({
+        id: photo.id,
+        name: photo.caption?.trim() || sec.subtitle?.trim() || `Photo ${index + 1}`,
+        caption: photo.caption || '',
+        contentType: 'image/jpeg',
+        loadBlob: async () => {
+          const res = await fetch(resolvePhotoUrl(photo.imageUrl))
+          if (!res.ok) throw new Error('Could not load photo')
+          return res.blob()
+        },
+      })
+    })
+  })
+  return items
+}
+
+function buildPhotoIndexMap(sections = []) {
+  const map = new Map()
+  let index = 0
+  sections.forEach((sec) => {
+    (sec.photos || []).forEach((photo) => {
+      map.set(photo.id, index)
+      index += 1
+    })
+  })
+  return map
 }
 
 export function PublicReportPage({ token }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
-  const [lightboxPhoto, setLightboxPhoto] = useState(null)
+  const [previewIndex, setPreviewIndex] = useState(null)
   const showOwnerBack = shouldShowOwnerPreviewBack({ preview: data?.preview })
+
+  const sections = data?.report?.sections || []
+  const galleryItems = useMemo(() => buildGalleryItems(sections), [sections])
+  const photoIndexMap = useMemo(() => buildPhotoIndexMap(sections), [sections])
 
   useEffect(() => {
     let cancelled = false
@@ -135,7 +140,7 @@ export function PublicReportPage({ token }) {
           ) : null}
         </header>
 
-        {(report?.sections || []).map((sec, i) => (
+        {sections.map((sec, i) => (
           <section
             key={sec.id || i}
             className="public-report-section mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm"
@@ -155,7 +160,7 @@ export function PublicReportPage({ token }) {
                     key={photo.id}
                     type="button"
                     className="public-report-photo-tile relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    onClick={() => setLightboxPhoto(photo)}
+                    onClick={() => setPreviewIndex(photoIndexMap.get(photo.id) ?? 0)}
                   >
                     <img
                       src={resolvePhotoUrl(photo.thumbUrl || photo.imageUrl)}
@@ -178,7 +183,12 @@ export function PublicReportPage({ token }) {
         />
       </div>
 
-      <PhotoLightbox photo={lightboxPhoto} onClose={() => setLightboxPhoto(null)} />
+      <FilePreviewOverlay
+        open={previewIndex != null}
+        initialIndex={previewIndex ?? 0}
+        items={galleryItems}
+        onClose={() => setPreviewIndex(null)}
+      />
     </div>
   )
 }

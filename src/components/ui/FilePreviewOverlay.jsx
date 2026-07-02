@@ -12,7 +12,8 @@ import {
   getFilePreviewPortalContainer,
 } from '@/utils/filePreview'
 import { showToast } from '@/components/ui/toast'
-import { cn } from '@/lib/utils'
+import { ZoomableImage } from '@/components/ui/ZoomableImage'
+import { shouldAllowGallerySwipe } from '@/utils/zoomableImage'
 
 const SWIPE_THRESHOLD_PX = 48
 
@@ -31,6 +32,7 @@ export function FilePreviewOverlay({
   const [textContent, setTextContent] = useState('')
   const revokeRef = useRef(null)
   const swipeRef = useRef({ x: 0, y: 0, active: false })
+  const zoomRef = useRef(null)
   const [downloading, setDownloading] = useState(false)
 
   const item = items[index]
@@ -119,6 +121,18 @@ export function FilePreviewOverlay({
   }, [open, onClose, goPrev, goNext, hasGallery])
 
   const handleTouchStart = (e) => {
+    if (e.touches.length > 1) {
+      swipeRef.current.active = false
+      return
+    }
+    if (zoomRef.current?.isZoomed?.()) {
+      swipeRef.current.active = false
+      return
+    }
+    if (!shouldAllowGallerySwipe({ scale: 1, touchCount: e.touches.length })) {
+      swipeRef.current.active = false
+      return
+    }
     const t = e.touches[0]
     if (!t) return
     swipeRef.current = { x: t.clientX, y: t.clientY, active: true }
@@ -126,6 +140,10 @@ export function FilePreviewOverlay({
 
   const handleTouchEnd = (e) => {
     if (!hasGallery || !swipeRef.current.active) return
+    if (zoomRef.current?.isZoomed?.()) {
+      swipeRef.current.active = false
+      return
+    }
     const t = e.changedTouches[0]
     swipeRef.current.active = false
     if (!t) return
@@ -176,6 +194,7 @@ export function FilePreviewOverlay({
   const showImage = !loading && !error && kind === 'image' && previewUrl
   const showPdf = !loading && !error && kind === 'pdf' && previewUrl
   const showText = !loading && !error && kind === 'text' && textContent
+  const footerCaption = item.caption?.trim() || ''
 
   return createPortal(
     <div
@@ -252,11 +271,12 @@ export function FilePreviewOverlay({
           )}
 
           {showImage && (
-            <img
+            <ZoomableImage
+              ref={zoomRef}
               src={previewUrl}
               alt={item.name}
               className="file-preview-image"
-              draggable={false}
+              resetKey={`${index}-${previewUrl}`}
             />
           )}
 
@@ -296,9 +316,16 @@ export function FilePreviewOverlay({
         )}
       </div>
 
-      {hasGallery && (
-        <div className="file-preview-counter" aria-live="polite">
-          {index + 1} / {items.length}
+      {(hasGallery || footerCaption) && (
+        <div className="file-preview-footer" aria-live="polite">
+          {footerCaption ? (
+            <p className="file-preview-caption">{footerCaption}</p>
+          ) : null}
+          {hasGallery ? (
+            <div className="file-preview-counter">
+              {index + 1} / {items.length}
+            </div>
+          ) : null}
         </div>
       )}
     </div>,
