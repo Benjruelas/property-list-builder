@@ -701,7 +701,8 @@ export function DealsPanel({
             onCloseLeadOverlay?.()
             onOpenDealFromLead?.(deal.id, pipelineId || deal.__pipelineId || selectedPipelineId)
           }}
-          onLeadDeleted={() => {
+          onLeadDeleted={(deletedLeadId) => {
+            onLeadsChange?.((prev) => prev.filter((l) => l.id !== deletedLeadId))
             onCloseLeadOverlay?.()
             onRefreshLeads?.()
           }}

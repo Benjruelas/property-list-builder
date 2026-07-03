@@ -389,6 +389,8 @@ export async function deleteLead(getToken, leadId) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || 'Failed to delete lead')
   }
+  resetLeadsListEtag()
+  saveLocalLeads(loadLocalLeads().filter((l) => l.id !== leadId))
 }
 
 function parcelIdCandidateSet(parcelOrId) {

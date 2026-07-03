@@ -64,6 +64,8 @@ import { showConfirm } from './ui/confirm-dialog'
 import { TagPicker } from './tags/TagPicker'
 import { collectTagMetaFromEntities } from '@/utils/tags'
 import { PhotoGallery } from '@/photos/PhotoGallery'
+import { invalidatePhotoBlobCache } from '@/photos/photosClient'
+import { deleteAllLeadTasks } from '@/utils/leadTasks'
 import { fetchPhotoReports } from '@/utils/photoReports'
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
@@ -463,8 +465,10 @@ export function LeadDetails({
     if (!ok) return
     try {
       await deleteLead(getToken, lead.id)
+      if (lead.parcelId) deleteAllLeadTasks(lead.parcelId)
+      for (const photo of lead.photos || []) invalidatePhotoBlobCache(photo)
       showToast('Lead deleted', 'success')
-      onLeadDeleted?.()
+      onLeadDeleted?.(lead.id)
       onClose?.()
     } catch (e) {
       showToast(e.message || 'Could not delete lead', 'error')

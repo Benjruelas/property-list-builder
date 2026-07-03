@@ -19,6 +19,8 @@ import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './lib/lea
 import { normalizeLeadContactsForStorage } from './lib/leadContact.js'
 import { getAllLeads, mutateLeads, deleteLeadFromStore } from './lib/leadStore.js'
 import { getLeadsForUser } from './lib/leadRepo.js'
+import { deleteLeadContentFromStorage } from './lib/leadCleanup.js'
+import { withRepairedLeadOwnership } from './lib/leadOwnership.js'
 import { flags } from './lib/flags.js'
 import {
   DATAVER_LEADS,
@@ -411,12 +413,14 @@ export default async function handler(req, res) {
       const all = await getAllLeads()
       const idx = all.findIndex((l) => l.id === leadId)
       if (idx === -1) return res.status(404).json({ error: 'Lead not found' })
-      const access = getResourceAccess(all[idx], user, ctx)
+      const candidate = withRepairedLeadOwnership(all[idx], user)
+      const access = getResourceAccess(candidate, user, ctx)
       if (!canDelete(access)) {
         return res.status(403).json({ error: 'Only the lead owner can delete this lead' })
       }
 
-      const removed = all[idx]
+      const removed = candidate
+      await deleteLeadContentFromStorage(removed)
       await deleteLeadFromStore(leadId)
 
       const label = actorLabel(user)

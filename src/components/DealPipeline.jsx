@@ -1320,7 +1320,8 @@ export function DealPipeline({
             onCloseLeadOverlay?.()
             onOpenDeal?.(deal.id)
           }}
-          onLeadDeleted={() => {
+          onLeadDeleted={(deletedLeadId) => {
+            onLeadsChange?.((prev) => prev.filter((l) => l.id !== deletedLeadId))
             onCloseLeadOverlay?.()
             onRefreshLeads?.()
           }}

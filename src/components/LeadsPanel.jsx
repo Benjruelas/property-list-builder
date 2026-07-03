@@ -441,7 +441,11 @@ export function LeadsPanel({
             onEditLead={onEditLead}
             onCreateDeal={onCreateDeal ?? startCreateDeal}
             onOpenDeal={onOpenDeal}
-            onLeadDeleted={() => { onCloseLeadDetail?.(); onRefreshLeads?.() }}
+            onLeadDeleted={(deletedLeadId) => {
+              onLeadsChange?.((prev) => prev.filter((l) => l.id !== deletedLeadId))
+              onCloseLeadDetail?.()
+              onRefreshLeads?.()
+            }}
             onOpenScheduleAtDate={onOpenScheduleAtDate}
             onPipelinesChange={onPipelinesChange}
             teams={teams}
