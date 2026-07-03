@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo } 
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
@@ -110,29 +109,14 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Popup avoids redirect flow embedding / in a hidden iframe (breaks with XFO/CSP).
-  // Fall back to redirect only when the browser blocks popups.
+  // Full-page redirect to Google (better on mobile than popup).
   const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider()
-    provider.setCustomParameters({ prompt: 'select_account' })
     try {
-      await signInWithPopup(auth, provider)
-      showToast('Signed in with Google successfully!', 'success')
+      const provider = new GoogleAuthProvider()
+      provider.setCustomParameters({ prompt: 'select_account' })
+      await signInWithRedirect(auth, provider)
+      showToast('Redirecting to Google…', 'info')
     } catch (error) {
-      const code = error?.code || ''
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-        return
-      }
-      if (code === 'auth/popup-blocked') {
-        try {
-          await signInWithRedirect(auth, provider)
-          showToast('Redirecting to Google…', 'info')
-          return
-        } catch (redirectError) {
-          showToast(redirectError.message || 'Failed to sign in with Google', 'error')
-          throw redirectError
-        }
-      }
       showToast(error.message || 'Failed to sign in with Google', 'error')
       throw error
     }
