@@ -25,7 +25,7 @@ export default defineConfig({
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify({
               apiKey: process.env.VITE_FIREBASE_API_KEY || '',
-              authDomain: host,
+              authDomain: (process.env.VITE_FIREBASE_AUTH_DOMAIN || host).replace(/^https?:\/\//, '').replace(/\/$/, ''),
             }))
             return
           }
