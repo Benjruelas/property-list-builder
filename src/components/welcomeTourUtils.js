@@ -13,6 +13,10 @@ export function resolveTourSelector(step, isMobile, findTarget) {
     if (findTarget(sel)) return sel
   }
 
+  if (isMobile && step.menuRequired && step.mobileTarget) {
+    return step.mobileTarget
+  }
+
   return step.target || step.mobileTarget || null
 }
 

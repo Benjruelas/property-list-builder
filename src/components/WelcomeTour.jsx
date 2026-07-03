@@ -5,45 +5,114 @@ import { resolveTourSelector, stepUsesActionBar as usesActionBar } from './welco
 
 const MOBILE_MAX = 767
 
-const ALL_STEPS = [
-  {
+/** Map chrome → parcel demo → quick create → action bar / menu, top-to-bottom and left-to-right. */
+const DESKTOP_TOUR_ORDER = [
+  'address-search',
+  'zoom',
+  'recenter',
+  'compass',
+  'multi-select',
+  'path-recording',
+  'parcel-intro',
+  'parcel-action-details',
+  'parcel-action-list',
+  'parcel-action-lead',
+  'parcel-action-photos',
+  'quick-create',
+  'pipes',
+  'tasks',
+  'schedule',
+  'leads',
+  'deals',
+  'quotes',
+  'forms',
+  'reports',
+  'lists',
+  'activity',
+  'photo-mode-bar',
+  'paths',
+  'outreach',
+  'settings-menu',
+  'teams',
+]
+
+const MOBILE_TOUR_ORDER = [
+  'address-search',
+  'zoom',
+  'recenter',
+  'compass',
+  'photo-mode',
+  'multi-select',
+  'path-recording',
+  'parcel-intro',
+  'parcel-action-details',
+  'parcel-action-list',
+  'parcel-action-lead',
+  'parcel-action-photos',
+  'quick-create',
+  'pipes',
+  'tasks',
+  'schedule',
+  'navigation',
+  'activity',
+  'leads',
+  'deals',
+  'quotes',
+  'forms',
+  'reports',
+  'lists',
+  'paths',
+  'outreach',
+  'settings-menu',
+  'teams',
+]
+
+const TOUR_STEPS_BY_ID = {
+  'address-search': {
     id: 'address-search',
     title: 'Address Search',
     desc: 'Jump to any property — search an address or paste coordinates.',
     target: '.map-search-stack button',
   },
-  {
+  zoom: {
     id: 'zoom',
     title: 'Zoom Controls',
     desc: 'Zoom in on parcel lines or out to scan a whole neighborhood.',
     target: '[data-tour="zoom-controls"]',
   },
-  {
+  recenter: {
     id: 'recenter',
     title: 'Recenter Map',
     desc: 'One tap puts the map back on your current location.',
     target: '[data-tour="recenter"]',
   },
-  {
+  compass: {
     id: 'compass',
     title: 'Compass Mode',
     desc: 'Keep the map facing the same direction you are while you walk.',
     target: '[data-tour="compass"]',
   },
-  {
+  'photo-mode': {
+    id: 'photo-mode',
+    title: 'Photo Mode',
+    desc: 'Find this property and start shooting — geolocate, jump to the parcel, and open the camera.',
+    target: '[data-tour="photo-mode"]',
+    featureId: 'photos',
+  },
+  'multi-select': {
     id: 'multi-select',
     title: 'Multi-Select',
     desc: 'Tag a whole street at once — select multiple parcels and add them to a list.',
     target: '[data-tour="multi-select"]',
   },
-  {
+  'path-recording': {
     id: 'path-recording',
     title: 'Path',
     desc: 'Record your drive or walk and revisit that route anytime.',
     target: '[data-tour="path-recording"]',
     featureId: 'paths',
   },
-  {
+  'parcel-intro': {
     id: 'parcel-intro',
     title: 'Parcel Quick Actions',
     desc: 'Tap any parcel for owner info and shortcuts — no full panel needed.',
@@ -51,7 +120,7 @@ const ALL_STEPS = [
     parcelDemo: 'show',
     parcelLayout: 'stack',
   },
-  {
+  'parcel-action-details': {
     id: 'parcel-action-details',
     title: 'Details',
     desc: 'Everything on one property — owner, skip trace, hail history, and more.',
@@ -59,31 +128,40 @@ const ALL_STEPS = [
     parcelDemo: 'show',
     tooltipPrefer: 'above',
   },
-  {
+  'parcel-action-list': {
     id: 'parcel-action-list',
     title: 'Add to List',
     desc: 'Save standouts to a list and highlight them on the map.',
     target: '[data-tour="parcel-demo-add-list"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
+    featureId: 'lists',
   },
-  {
+  'parcel-action-lead': {
     id: 'parcel-action-lead',
     title: 'Convert to Lead',
     desc: 'Add the property to Leads and start tracking outreach from one place.',
     target: '[data-tour="parcel-demo-convert-lead"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
+    featureId: 'leads',
   },
-  {
+  'parcel-action-photos': {
     id: 'parcel-action-photos',
     title: 'Photos',
     desc: 'Capture field photos for a lead, annotate them, and use them in photo reports.',
     target: '[data-tour="parcel-demo-photos"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
+    featureId: 'photos',
   },
-  {
+  'quick-create': {
+    id: 'quick-create',
+    title: 'Quick Create',
+    desc: 'Spin up a task, lead, deal, quote, or report without leaving the map.',
+    target: '[data-tour="quick-create-fab"]',
+  },
+  pipes: {
     id: 'pipes',
     title: 'Pipes',
     desc: 'See every deal by stage — drag jobs through your pipeline.',
@@ -91,7 +169,7 @@ const ALL_STEPS = [
     mobileTarget: '[data-tour="action-bar-pipes"]',
     featureId: 'pipes',
   },
-  {
+  tasks: {
     id: 'tasks',
     title: 'Tasks',
     desc: 'Never miss a follow-up — all tasks for your leads and deals.',
@@ -99,7 +177,7 @@ const ALL_STEPS = [
     mobileTarget: '[data-tour="action-bar-tasks"]',
     featureId: 'tasks',
   },
-  {
+  schedule: {
     id: 'schedule',
     title: 'Schedule',
     desc: 'Plan your week — appointments and due tasks in one calendar.',
@@ -107,25 +185,25 @@ const ALL_STEPS = [
     mobileTarget: '[data-tour="action-bar-schedule"]',
     featureId: 'schedule',
   },
-  {
+  navigation: {
     id: 'navigation',
     title: 'Menu',
     desc: 'Lists, paths, outreach, and settings — anything not on the action bar lives here.',
     target: '[data-tour="action-bar-menu"]',
     mobileTarget: '[data-tour="action-bar-menu"]',
-    mobileOnly: true,
     mobileTitle: 'Menu',
     mobileDesc: 'Lists, paths, outreach, and settings — right from the bottom bar.',
   },
-  {
+  activity: {
     id: 'activity',
     title: 'Activity',
     desc: 'Notifications and team updates — shared lists, pipes, and mentions show up here first.',
     target: '[data-tour="action-bar-activity"]',
-    mobileTarget: '[data-tour="action-bar-activity"]',
+    mobileTarget: '[data-tour="menu-notifications"]',
+    menuRequired: true,
     featureId: 'activity',
   },
-  {
+  leads: {
     id: 'leads',
     title: 'Leads',
     desc: 'Every property you\'re actively working, in one place.',
@@ -134,7 +212,7 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'leads',
   },
-  {
+  deals: {
     id: 'deals',
     title: 'Deals',
     desc: 'Follow jobs from first contact through close.',
@@ -143,7 +221,7 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'deals',
   },
-  {
+  quotes: {
     id: 'quotes',
     title: 'Quotes',
     desc: 'Build and send quotes from your deals — clients get a share link to review, accept, pay, and download a PDF.',
@@ -152,7 +230,7 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'quotes',
   },
-  {
+  forms: {
     id: 'forms',
     title: 'Forms',
     desc: 'Fill PDFs in the field and email them when you\'re done.',
@@ -161,7 +239,7 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'forms',
   },
-  {
+  reports: {
     id: 'reports',
     title: 'Photo Reports',
     desc: 'Turn lead photos into branded reports — email or text a link so clients can view and download a PDF.',
@@ -170,7 +248,7 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'reports',
   },
-  {
+  lists: {
     id: 'lists',
     title: 'Lists',
     desc: 'Build named lists and light up those properties on the map.',
@@ -179,7 +257,14 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'lists',
   },
-  {
+  'photo-mode-bar': {
+    id: 'photo-mode-bar',
+    title: 'Photo Mode',
+    desc: 'Open Photo Mode from the bar — same quick capture flow, one tap away.',
+    target: '[data-tour="action-bar-photoMode"]',
+    featureId: 'photos',
+  },
+  paths: {
     id: 'paths',
     title: 'Paths',
     desc: 'Review, share, or show and hide routes you\'ve recorded.',
@@ -188,7 +273,7 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'paths',
   },
-  {
+  outreach: {
     id: 'outreach',
     title: 'Outreach',
     desc: 'Saved email and text templates — reach owners without rewriting.',
@@ -197,15 +282,7 @@ const ALL_STEPS = [
     menuRequired: true,
     featureId: 'outreach',
   },
-  {
-    id: 'teams',
-    title: 'Team & Lead Statuses',
-    desc: 'Collaborate with your crew in Settings — create a team, invite members, and customize lead statuses for your pipeline.',
-    target: '[data-tour="settings-team-section"]',
-    settingsRequired: true,
-    expandSettingsSection: 'team',
-  },
-  {
+  'settings-menu': {
     id: 'settings-menu',
     title: 'Settings',
     desc: 'Map, appearance, notifications, and data — open Settings anytime; each section expands when you tap it.',
@@ -213,7 +290,15 @@ const ALL_STEPS = [
     mobileTarget: '[data-tour="menu-settings"]',
     menuRequired: true,
   },
-]
+  teams: {
+    id: 'teams',
+    title: 'Team & Lead Statuses',
+    desc: 'Collaborate with your crew in Settings — create a team, invite members, and customize lead statuses for your pipeline.',
+    target: '[data-tour="settings-team-section"]',
+    settingsRequired: true,
+    expandSettingsSection: 'team',
+  },
+}
 
 const PADDING = 8
 const TOOLTIP_GAP = 12
@@ -261,14 +346,25 @@ function useIsMobile() {
   return isMobile
 }
 
-function filterSteps(steps, canAccessFeature, isMobile) {
+function filterSteps(steps, canAccessFeature) {
   return steps.filter((step) => {
-    if (step.desktopOnly && isMobile) return false
-    if (step.mobileOnly && !isMobile) return false
     if (!step.featureId) return true
     if (!canAccessFeature) return true
     return canAccessFeature(step.featureId) !== false
   })
+}
+
+function buildVisibleSteps(isMobile, canAccessFeature) {
+  const order = isMobile ? MOBILE_TOUR_ORDER : DESKTOP_TOUR_ORDER
+  const steps = order.map((id) => TOUR_STEPS_BY_ID[id]).filter(Boolean)
+  return filterSteps(steps, canAccessFeature)
+}
+
+export {
+  DESKTOP_TOUR_ORDER,
+  MOBILE_TOUR_ORDER,
+  TOUR_STEPS_BY_ID,
+  buildVisibleSteps,
 }
 
 function resolveSelector(step, isMobile) {
@@ -331,7 +427,7 @@ export default function WelcomeTour({
   setSettingsOpenRef.current = setSettingsOpen
 
   const visibleSteps = useMemo(
-    () => filterSteps(ALL_STEPS, canAccessFeature, isMobile),
+    () => buildVisibleSteps(isMobile, canAccessFeature),
     [canAccessFeature, isMobile]
   )
 
@@ -417,14 +513,14 @@ export default function WelcomeTour({
     onStepChange?.(stepDef.id, stepDef.expandSettingsSection ?? null)
 
     const selector = resolveSelector(stepDef, isMobile)
-    const isActionBarTarget = Boolean(selector?.includes('action-bar'))
+    const barTargetVisible = stepDef.target ? findTourTarget(stepDef.target) : null
 
     let wantMenu = false
     let wantSettings = false
 
     if (stepDef.settingsRequired) {
       wantSettings = true
-    } else if (stepDef.menuRequired && !isActionBarTarget) {
+    } else if (stepDef.menuRequired && !barTargetVisible) {
       wantMenu = true
     }
 

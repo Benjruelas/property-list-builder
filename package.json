@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "regression:build": "node docs/build-regression-cases.mjs && node docs/generate-regression-html.mjs",
+    "regression": "npm run regression:build && open docs/regression-test-procedure.html",
     "cap:sync": "npm run build && npx cap sync",
     "cap:ios": "npx cap open ios",
     "cap:android": "npx cap open android"

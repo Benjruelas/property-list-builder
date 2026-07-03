@@ -51,8 +51,37 @@ const HTML = `<!DOCTYPE html>
       padding: 12px 16px;
     }
     .header h1 { margin: 0 0 8px; font-size: 1.15rem; }
+    .run-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .run-meta input, .run-meta select {
+      font: inherit;
+      font-size: 0.8rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      width: 150px;
+    }
+    .run-meta label { font-size: 0.7rem; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+    .kpi .kpi-value { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+    .kpi .kpi-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 2px; }
+    .kpi.k-pass .kpi-value { color: var(--pass); }
+    .kpi.k-fail .kpi-value { color: var(--fail); }
+    .kpi.k-blocked .kpi-value { color: var(--blocked); }
     .summary { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; color: var(--muted); margin-bottom: 10px; }
     .summary strong { color: var(--text); }
+    .section-bar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: #333; flex: 1; max-width: 180px; }
+    .section-bar span { display: block; height: 100%; }
+    .section-bar .sb-pass { background: var(--pass); }
+    .section-bar .sb-fail { background: var(--fail); }
+    .section-bar .sb-blocked { background: var(--blocked); }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .controls input, .controls select, .controls button {
       font: inherit;
@@ -143,6 +172,7 @@ const HTML = `<!DOCTYPE html>
       background: var(--step-bg);
     }
     .step.step-failed { border-color: var(--fail); background: var(--step-fail); }
+    .step.step-passed { border-color: rgba(34,197,94,0.45); background: rgba(34,197,94,0.05); }
     .step-num {
       flex-shrink: 0;
       width: 1.6rem;
@@ -157,6 +187,7 @@ const HTML = `<!DOCTYPE html>
       color: var(--muted);
     }
     .step.step-failed .step-num { background: rgba(239,68,68,0.25); color: var(--fail); }
+    .step.step-passed .step-num { background: rgba(34,197,94,0.25); color: var(--pass); }
     .step-body { flex: 1; min-width: 0; }
     .step-row { margin: 0 0 4px; font-size: 0.85rem; }
     .step-row:last-child { margin-bottom: 0; }
@@ -173,14 +204,40 @@ const HTML = `<!DOCTYPE html>
     .step-label.do { color: #93c5fd; }
     .step-label.check { color: #86efac; }
     .step-label.ui { color: #fcd34d; }
-    .step-fail-marker {
-      margin-top: 6px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    .step-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .step-btn {
+      padding: 3px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
       font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
     }
-    .step-fail-marker input { accent-color: var(--fail); }
+    .step-btn:hover { color: var(--text); }
+    .step-btn.pass.on { background: rgba(34,197,94,0.18); color: var(--pass); border-color: var(--pass); }
+    .step-btn.fail.on { background: rgba(239,68,68,0.18); color: var(--fail); border-color: var(--fail); }
+    .step-actual { margin-top: 8px; }
+    .step-actual-label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--fail);
+      margin-bottom: 4px;
+    }
+    .step-actual-input {
+      width: 100%;
+      min-height: 56px;
+      resize: vertical;
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(239,68,68,0.4);
+      background: var(--bg);
+      color: var(--text);
+    }
     .case-notes-wrap { margin-top: 10px; }
     .case-notes-label {
       display: flex;
@@ -202,7 +259,7 @@ const HTML = `<!DOCTYPE html>
       color: var(--text);
     }
     @media print {
-      .header .controls, .status-btn, .copy-btn, .case-notes, .step-fail-marker { display: none !important; }
+      .header .controls, .status-btn, .copy-btn, .case-notes, .step-actions { display: none !important; }
       .section-body { display: block !important; }
       .case::after {
         content: " [" attr(data-status-print) "]";
@@ -214,6 +271,17 @@ const HTML = `<!DOCTYPE html>
 <body>
   <header class="header">
     <h1>KnockScout Manual Regression Test Procedure</h1>
+    <div class="run-meta">
+      <label>Tester<input type="text" id="runTester" placeholder="Your name" /></label>
+      <label>Build / commit<input type="text" id="runBuild" placeholder="e.g. 7759524" /></label>
+      <label>Environment<select id="runEnv">
+        <option value="production">Production</option>
+        <option value="preview">Preview</option>
+        <option value="localhost">Localhost</option>
+      </select></label>
+      <label>Run started<input type="text" id="runStarted" readonly /></label>
+    </div>
+    <div class="kpis" id="kpis"></div>
     <div class="summary" id="summary"></div>
     <div class="progress-wrap">
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -234,9 +302,13 @@ const HTML = `<!DOCTYPE html>
         <option value="team-member">Team member</option>
         <option value="logged-out">Logged out</option>
       </select>
+      <select id="sectionFilter" aria-label="Section filter">
+        <option value="all">All sections</option>
+      </select>
       <button type="button" id="expandAll">Expand all</button>
       <button type="button" id="collapseAll">Collapse all</button>
       <button type="button" id="exportBtn">Export JSON</button>
+      <button type="button" id="exportCsvBtn">Export CSV</button>
       <button type="button" id="exportAgentBtn" class="primary">Export agent bundle</button>
       <button type="button" id="importBtn">Import JSON</button>
       <input type="file" id="importFile" accept="application/json" hidden />
@@ -247,11 +319,13 @@ const HTML = `<!DOCTYPE html>
     <details class="readme">
       <summary>How to use this checklist</summary>
       <ol>
+        <li>Fill in <strong>Tester</strong>, <strong>Build/commit</strong> (e.g. from <code>git log -1 --oneline</code>), and <strong>Environment</strong> at the top — these are stamped into every export and agent report.</li>
         <li>Open the app at <code>http://localhost:3000</code> (or your deploy URL) in a separate window.</li>
         <li>Pick a <strong>role filter</strong> matching the account you are testing.</li>
-        <li>Follow each test’s numbered steps in order. Each step has a <strong>Do</strong> action and a <strong>Verify</strong> checkpoint before continuing.</li>
-        <li>Click the status button to cycle: <em>Not run → Pass → Fail → Blocked</em>.</li>
-        <li>On failure, mark the failing step number, fill in notes using the template, and use <strong>Copy agent report</strong> to paste into a debugging agent.</li>
+        <li>Follow each test’s numbered steps in order. Each step has a <strong>Do</strong> action and a <strong>Verify</strong> checkpoint — mark it <strong>Pass</strong> or <strong>Fail</strong> as you go.</li>
+        <li>When you mark a step <strong>Fail</strong>, a box appears asking what you actually saw — describe it there. Failure notes auto-fill from your step results (Verify statement = expected, your description = actual).</li>
+        <li>The case status is set automatically: any failed step marks the case Fail; all steps passed marks it Pass. The status button still works as a manual override (e.g. for Blocked).</li>
+        <li>Use <strong>Copy agent report</strong> on a failed case to paste a full debugging report into an agent.</li>
         <li>Progress saves automatically in this browser via localStorage.</li>
         <li>Use <strong>Export agent bundle</strong> to download all failures with full step context for batch debugging.</li>
       </ol>
@@ -288,7 +362,15 @@ const HTML = `<!DOCTYPE html>
           return { cases: parsed.cases || {}, exportedAt: parsed.exportedAt || null };
         }
       } catch (_) {}
-      return { cases: {}, exportedAt: null };
+      return { cases: {}, exportedAt: null, run: null };
+    }
+
+    function ensureRun() {
+      if (!state.run) {
+        state.run = { tester: '', build: '', env: 'production', startedAt: new Date().toISOString() };
+        saveState();
+      }
+      return state.run;
     }
 
     function saveState() {
@@ -298,7 +380,11 @@ const HTML = `<!DOCTYPE html>
     }
 
     function defaultCaseState() {
-      return { status: 'pending', notes: '', failedAtStep: null };
+      return { status: 'pending', notes: '', notesEdited: false, failedAtStep: null, updatedAt: null, steps: {} };
+    }
+
+    function getStepState(cs, n) {
+      return (cs.steps && cs.steps[n]) || { status: null, actual: '' };
     }
 
     function getCaseState(id) {
@@ -314,23 +400,83 @@ const HTML = `<!DOCTYPE html>
       const cur = getCaseState(id);
       const idx = STATUSES.indexOf(cur.status);
       const next = STATUSES[(idx + 1) % STATUSES.length];
-      const patch = { status: next };
+      const patch = { status: next, updatedAt: new Date().toISOString() };
       if (next !== 'fail') patch.failedAtStep = null;
       setCaseState(id, patch);
       render();
     }
 
     function setNotes(id, notes) {
-      setCaseState(id, { notes });
+      // Manual edits stick; clearing the field re-enables auto-fill from step states.
+      setCaseState(id, { notes, notesEdited: notes.trim() !== '' });
     }
 
-    function setFailedStep(id, stepNum) {
-      const cur = getCaseState(id);
-      const failedAtStep = cur.failedAtStep === stepNum ? null : stepNum;
-      const patch = { failedAtStep };
-      if (failedAtStep && cur.status !== 'fail') patch.status = 'fail';
+    let focusStep = null;
+
+    function generateAutoNotes(tcDef, stepStates) {
+      const norm = normalizeCaseSteps(tcDef.steps);
+      const failed = norm.filter(s => stepStates[s.n] && stepStates[s.n].status === 'fail');
+      if (!failed.length) return '';
+      const blocks = failed.map(s => {
+        const actual = (stepStates[s.n].actual || '').trim();
+        const lines = [
+          'Failed at step ' + s.n + ':',
+          'Step action attempted: ' + s.action,
+          'Expected behavior (verify): ' + s.verify,
+          'Actual behavior: ' + (actual || '(describe what you saw in the box under step ' + s.n + ')'),
+        ];
+        if (s.ui) lines.push('UI surface: ' + s.ui);
+        return lines.join('\\n');
+      });
+      return blocks.join('\\n\\n') +
+        '\\n\\nConsole/network errors:\\nScreenshot or recording:\\nRegression test ID: ' + tcDef.id;
+    }
+
+    function deriveCaseFromSteps(tcDef, stepStates) {
+      const total = normalizeCaseSteps(tcDef.steps).length;
+      const failedNums = Object.keys(stepStates)
+        .filter(n => stepStates[n] && stepStates[n].status === 'fail')
+        .map(Number)
+        .sort((a, b) => a - b);
+      const passCount = Object.keys(stepStates)
+        .filter(n => stepStates[n] && stepStates[n].status === 'pass').length;
+      let status = 'pending';
+      if (failedNums.length) status = 'fail';
+      else if (passCount === total) status = 'pass';
+      return { status, failedAtStep: failedNums[0] || null };
+    }
+
+    function markStep(id, n, targetStatus) {
+      const tcDef = TEST_CASES.find(t => t.id === id);
+      const cs = getCaseState(id);
+      const steps = { ...(cs.steps || {}) };
+      const cur = steps[n] || { status: null, actual: '' };
+      const next = cur.status === targetStatus ? null : targetStatus;
+      steps[n] = { ...cur, status: next };
+      const derived = deriveCaseFromSteps(tcDef, steps);
+      const patch = { steps, status: derived.status, failedAtStep: derived.failedAtStep, updatedAt: new Date().toISOString() };
+      if (!cs.notesEdited) patch.notes = generateAutoNotes(tcDef, steps);
       setCaseState(id, patch);
+      if (next === 'fail') focusStep = { caseId: id, n };
       render();
+    }
+
+    function setStepActual(id, n, text) {
+      const tcDef = TEST_CASES.find(t => t.id === id);
+      const cs = getCaseState(id);
+      const steps = { ...(cs.steps || {}) };
+      steps[n] = { ...(steps[n] || { status: 'fail', actual: '' }), actual: text };
+      const patch = { steps };
+      if (!cs.notesEdited) {
+        patch.notes = generateAutoNotes(tcDef, steps);
+      }
+      setCaseState(id, patch);
+      // Update the visible notes textarea in place (no re-render, keeps typing focus)
+      if (patch.notes != null) {
+        document.querySelectorAll('.case-notes').forEach(ta => {
+          if (ta.dataset.id === id) ta.value = patch.notes;
+        });
+      }
     }
 
     function stepSearchHay(tc) {
@@ -346,39 +492,83 @@ const HTML = `<!DOCTYPE html>
       const q = document.getElementById('searchInput').value.trim().toLowerCase();
       const statusF = document.getElementById('statusFilter').value;
       const roleF = document.getElementById('roleFilter').value;
+      const sectionF = document.getElementById('sectionFilter').value;
       const cs = getCaseState(tc.id);
       if (statusF !== 'all' && cs.status !== statusF) return false;
       if (roleF !== 'all' && !tc.roles.includes(roleF)) return false;
+      if (sectionF !== 'all' && tc.section !== sectionF) return false;
       if (q && !stepSearchHay(tc).includes(q)) return false;
       return true;
     }
 
-    function updateSummary() {
+    function computeTotals() {
       const total = TEST_CASES.length;
       let pass = 0, fail = 0, blocked = 0, pending = 0;
+      const timestamps = [];
       TEST_CASES.forEach(tc => {
-        const s = getCaseState(tc.id).status;
-        if (s === 'pass') pass++;
-        else if (s === 'fail') fail++;
-        else if (s === 'blocked') blocked++;
+        const cs = getCaseState(tc.id);
+        if (cs.status === 'pass') pass++;
+        else if (cs.status === 'fail') fail++;
+        else if (cs.status === 'blocked') blocked++;
         else pending++;
+        if (cs.updatedAt) timestamps.push(cs.updatedAt);
       });
       const done = pass + fail + blocked;
-      const pct = total ? Math.round((pass / total) * 100) : 0;
+      return { total, pass, fail, blocked, pending, done, timestamps };
+    }
+
+    function updateSummary() {
+      const t = computeTotals();
+      const completionPct = t.total ? Math.round((t.done / t.total) * 100) : 0;
+      const passRate = t.done ? Math.round((t.pass / t.done) * 100) : 0;
+
+      // Pace: cases touched in the last hour of activity
+      let pace = '—';
+      if (t.timestamps.length >= 2) {
+        const times = t.timestamps.map(ts => new Date(ts).getTime()).sort((a, b) => a - b);
+        const elapsedH = (times[times.length - 1] - times[0]) / 3600000;
+        if (elapsedH > 0.01) {
+          const perHour = t.done / elapsedH;
+          pace = perHour.toFixed(0) + '/hr';
+        }
+      }
+      let eta = '—';
+      if (pace !== '—' && t.pending > 0) {
+        const perHour = parseFloat(pace);
+        if (perHour > 0) {
+          const hrsLeft = t.pending / perHour;
+          eta = hrsLeft >= 1 ? hrsLeft.toFixed(1) + ' hr left' : Math.ceil(hrsLeft * 60) + ' min left';
+        }
+      }
+
+      document.getElementById('kpis').innerHTML =
+        kpi(t.total, 'Total cases') +
+        kpi(t.pass, 'Pass', 'k-pass') +
+        kpi(t.fail, 'Fail', 'k-fail') +
+        kpi(t.blocked, 'Blocked', 'k-blocked') +
+        kpi(t.pending, 'Not run') +
+        kpi(completionPct + '%', 'Completion') +
+        kpi(passRate + '%', 'Pass rate (of run)') +
+        kpi(pace, 'Pace') +
+        kpi(eta, 'Est. remaining');
+
       document.getElementById('summary').innerHTML =
-        '<span><strong>' + pass + '</strong> pass</span>' +
-        '<span><strong>' + fail + '</strong> fail</span>' +
-        '<span><strong>' + blocked + '</strong> blocked</span>' +
-        '<span><strong>' + pending + '</strong> not run</span>' +
-        '<span><strong>' + done + '</strong> / ' + total + ' touched</span>';
-      document.getElementById('progressFill').style.width = pct + '%';
+        '<span><strong>' + t.done + '</strong> / ' + t.total + ' touched</span>' +
+        (t.fail ? '<span style="color:var(--fail)"><strong>' + t.fail + '</strong> need debugging — use Export agent bundle</span>' : '');
+      document.getElementById('progressFill').style.width = completionPct + '%';
+    }
+
+    function kpi(value, label, cls) {
+      return '<div class="kpi ' + (cls || '') + '"><div class="kpi-value">' + value + '</div><div class="kpi-label">' + label + '</div></div>';
     }
 
     function buildAgentReport(tc) {
       const cs = getCaseState(tc.id);
       const steps = normalizeCaseSteps(tc.steps);
       const sec = SECTIONS.find(s => s.id === tc.section);
-      const failedStep = cs.failedAtStep ? steps.find(s => s.n === cs.failedAtStep) : null;
+      const stepStates = cs.steps || {};
+      const failedSteps = steps.filter(s => stepStates[s.n] && stepStates[s.n].status === 'fail');
+      const run = state.run || {};
       const lines = [
         '# Regression failure report',
         '',
@@ -389,6 +579,9 @@ const HTML = `<!DOCTYPE html>
         '- Roles: ' + tc.roles.join(', '),
         '- Viewport: ' + tc.viewport,
         '- Status: ' + cs.status,
+        '- Build/commit: ' + (run.build || 'unknown'),
+        '- Environment: ' + (run.env || 'unknown'),
+        '- Tester: ' + (run.tester || 'unknown'),
         '',
         '## Preconditions',
         tc.preconditions,
@@ -396,7 +589,10 @@ const HTML = `<!DOCTYPE html>
         '## Steps performed',
       ];
       steps.forEach(s => {
-        const marker = cs.failedAtStep === s.n ? ' **[FAILED HERE]**' : '';
+        const st = stepStates[s.n];
+        const marker = st && st.status === 'fail' ? ' **[FAILED]**'
+          : st && st.status === 'pass' ? ' [passed]'
+          : (cs.failedAtStep === s.n ? ' **[FAILED HERE]**' : '');
         lines.push(s.n + '. **Do:** ' + s.action + marker);
         lines.push('   **Verify:** ' + s.verify);
         if (s.ui) lines.push('   **UI:** ' + s.ui);
@@ -405,13 +601,15 @@ const HTML = `<!DOCTYPE html>
       lines.push('## Overall expected outcome');
       lines.push(tc.expected);
       lines.push('');
-      if (failedStep) {
-        lines.push('## Failure at step ' + failedStep.n);
-        lines.push('- Action attempted: ' + failedStep.action);
-        lines.push('- Expected verify: ' + failedStep.verify);
-        if (failedStep.ui) lines.push('- UI surface: ' + failedStep.ui);
+      failedSteps.forEach(fs => {
+        const actual = (stepStates[fs.n].actual || '').trim();
+        lines.push('## Failure at step ' + fs.n);
+        lines.push('- Action attempted: ' + fs.action);
+        lines.push('- Expected behavior (verify): ' + fs.verify);
+        lines.push('- Actual behavior: ' + (actual || '(not described)'));
+        if (fs.ui) lines.push('- UI surface: ' + fs.ui);
         lines.push('');
-      }
+      });
       lines.push('## Tester notes');
       lines.push(cs.notes || '(none)');
       lines.push('');
@@ -423,20 +621,30 @@ const HTML = `<!DOCTYPE html>
     function renderSteps(tc, cs) {
       const steps = normalizeCaseSteps(tc.steps);
       return steps.map(s => {
-        const failed = cs.failedAtStep === s.n;
+        const st = getStepState(cs, s.n);
+        const failed = st.status === 'fail';
+        const passed = st.status === 'pass';
         const uiRow = s.ui
           ? '<div class="step-row"><span class="step-label ui">UI</span>' + escapeHtml(s.ui) + '</div>'
           : '';
-        return '<li class="step' + (failed ? ' step-failed' : '') + '" data-step="' + s.n + '">' +
+        const actualBox = failed
+          ? '<div class="step-actual">' +
+              '<label class="step-actual-label">Verify failed — what did you actually see? (auto-fills failure notes)</label>' +
+              '<textarea class="step-actual-input" data-case="' + tc.id + '" data-step="' + s.n + '" ' +
+                'placeholder="Describe the actual behavior…">' + escapeHtml(st.actual || '') + '</textarea>' +
+            '</div>'
+          : '';
+        return '<li class="step' + (failed ? ' step-failed' : '') + (passed ? ' step-passed' : '') + '" data-step="' + s.n + '">' +
           '<div class="step-num">' + s.n + '</div>' +
           '<div class="step-body">' +
             '<div class="step-row"><span class="step-label do">Do</span>' + escapeHtml(s.action) + '</div>' +
             '<div class="step-row"><span class="step-label check">Verify</span>' + escapeHtml(s.verify) + '</div>' +
             uiRow +
-            '<label class="step-fail-marker">' +
-              '<input type="radio" name="fail-' + tc.id + '" value="' + s.n + '"' + (failed ? ' checked' : '') + ' />' +
-              'Mark step ' + s.n + ' as failure point' +
-            '</label>' +
+            '<div class="step-actions">' +
+              '<button type="button" class="step-btn pass' + (passed ? ' on' : '') + '" data-case="' + tc.id + '" data-step="' + s.n + '" data-set="pass">Pass</button>' +
+              '<button type="button" class="step-btn fail' + (failed ? ' on' : '') + '" data-case="' + tc.id + '" data-step="' + s.n + '" data-set="fail">Fail</button>' +
+            '</div>' +
+            actualBox +
           '</div>' +
         '</li>';
       }).join('');
@@ -452,16 +660,27 @@ const HTML = `<!DOCTYPE html>
       SECTIONS.forEach(sec => {
         const cases = TEST_CASES.filter(tc => tc.section === sec.id);
         const visible = cases.filter(matchesFilters);
-        let secPass = 0;
-        cases.forEach(tc => { if (getCaseState(tc.id).status === 'pass') secPass++; });
+        let secPass = 0, secFail = 0, secBlocked = 0;
+        cases.forEach(tc => {
+          const s = getCaseState(tc.id).status;
+          if (s === 'pass') secPass++;
+          else if (s === 'fail') secFail++;
+          else if (s === 'blocked') secBlocked++;
+        });
 
         const sectionEl = document.createElement('div');
         sectionEl.className = 'section open';
         sectionEl.dataset.section = sec.id;
 
+        const pctOf = n => cases.length ? (n / cases.length) * 100 : 0;
         const header = document.createElement('div');
         header.className = 'section-header';
         header.innerHTML = '<h2>' + sec.id + ' — ' + sec.title + '</h2>' +
+          '<div class="section-bar" title="' + secPass + ' pass / ' + secFail + ' fail / ' + secBlocked + ' blocked">' +
+            '<span class="sb-pass" style="width:' + pctOf(secPass) + '%"></span>' +
+            '<span class="sb-fail" style="width:' + pctOf(secFail) + '%"></span>' +
+            '<span class="sb-blocked" style="width:' + pctOf(secBlocked) + '%"></span>' +
+          '</div>' +
           '<span class="section-meta">' + secPass + '/' + cases.length + ' pass · ' + visible.length + ' shown</span>';
         header.addEventListener('click', () => sectionEl.classList.toggle('open'));
 
@@ -476,7 +695,8 @@ const HTML = `<!DOCTYPE html>
           caseEl.dataset.statusPrint = STATUS_LABELS[cs.status];
 
           const tags = tc.roles.map(r => '<span class="tag">' + r + '</span>').join('') +
-            '<span class="tag">' + tc.viewport + '</span>';
+            '<span class="tag">' + tc.viewport + '</span>' +
+            (cs.updatedAt ? '<span class="tag" title="Last status change">' + new Date(cs.updatedAt).toLocaleString() + '</span>' : '');
 
           caseEl.innerHTML =
             '<div class="case-top">' +
@@ -513,10 +733,15 @@ const HTML = `<!DOCTYPE html>
               setTimeout(() => { e.target.textContent = 'Copy agent report'; }, 1500);
             }).catch(() => alert(text));
           });
-          caseEl.querySelectorAll('.step-fail-marker input').forEach(input => {
-            input.addEventListener('change', e => {
+          caseEl.querySelectorAll('.step-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
               e.stopPropagation();
-              if (e.target.checked) setFailedStep(tc.id, Number(e.target.value));
+              markStep(btn.dataset.case, Number(btn.dataset.step), btn.dataset.set);
+            });
+          });
+          caseEl.querySelectorAll('.step-actual-input').forEach(input => {
+            input.addEventListener('input', () => {
+              setStepActual(input.dataset.case, Number(input.dataset.step), input.value);
             });
           });
 
@@ -528,6 +753,12 @@ const HTML = `<!DOCTYPE html>
         root.appendChild(sectionEl);
       });
       updateSummary();
+      if (focusStep) {
+        const sel = '.step-actual-input[data-case="' + focusStep.caseId + '"][data-step="' + focusStep.n + '"]';
+        const ta = document.querySelector(sel);
+        if (ta) ta.focus();
+        focusStep = null;
+      }
     }
 
     function escapeHtml(s) {
@@ -547,6 +778,10 @@ const HTML = `<!DOCTYPE html>
         .map(tc => {
           const cs = getCaseState(tc.id);
           const steps = normalizeCaseSteps(tc.steps);
+          const stepStates = cs.steps || {};
+          const failedSteps = steps
+            .filter(s => stepStates[s.n] && stepStates[s.n].status === 'fail')
+            .map(s => ({ ...s, actual: (stepStates[s.n].actual || '').trim() }));
           const failedStep = cs.failedAtStep ? steps.find(s => s.n === cs.failedAtStep) : null;
           return {
             id: tc.id,
@@ -559,6 +794,8 @@ const HTML = `<!DOCTYPE html>
             status: cs.status,
             failedAtStep: cs.failedAtStep,
             failedStep,
+            failedSteps,
+            stepStates,
             notes: cs.notes,
             steps,
             agentReport: buildAgentReport(tc),
@@ -568,6 +805,7 @@ const HTML = `<!DOCTYPE html>
       return {
         version,
         exportedAt: new Date().toISOString(),
+        run: state.run || null,
         summary: {
           total: TEST_CASES.length,
           pass: TEST_CASES.filter(tc => getCaseState(tc.id).status === 'pass').length,
@@ -579,6 +817,26 @@ const HTML = `<!DOCTYPE html>
       };
     }
 
+    function buildCsv() {
+      const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      const run = state.run || {};
+      const rows = [
+        ['id', 'section', 'title', 'roles', 'viewport', 'status', 'failedSteps', 'stepsPassed', 'updatedAt', 'notes', 'tester', 'build', 'env'].map(esc).join(','),
+      ];
+      TEST_CASES.forEach(tc => {
+        const cs = getCaseState(tc.id);
+        const stepStates = cs.steps || {};
+        const failedNums = Object.keys(stepStates).filter(n => stepStates[n] && stepStates[n].status === 'fail');
+        const passedNums = Object.keys(stepStates).filter(n => stepStates[n] && stepStates[n].status === 'pass');
+        rows.push([
+          tc.id, tc.section, tc.title, tc.roles.join('|'), tc.viewport,
+          cs.status, failedNums.join(';'), passedNums.length, cs.updatedAt || '', cs.notes || '',
+          run.tester || '', run.build || '', run.env || '',
+        ].map(esc).join(','));
+      });
+      return rows.join('\\n');
+    }
+
     function downloadJson(filename, payload) {
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -588,9 +846,37 @@ const HTML = `<!DOCTYPE html>
       URL.revokeObjectURL(a.href);
     }
 
+    // Populate section filter
+    (function () {
+      const sel = document.getElementById('sectionFilter');
+      SECTIONS.forEach(sec => {
+        const opt = document.createElement('option');
+        opt.value = sec.id;
+        opt.textContent = sec.id + ' — ' + sec.title;
+        sel.appendChild(opt);
+      });
+    })();
+
+    // Run metadata wiring
+    (function () {
+      const run = ensureRun();
+      const tester = document.getElementById('runTester');
+      const build = document.getElementById('runBuild');
+      const env = document.getElementById('runEnv');
+      const started = document.getElementById('runStarted');
+      tester.value = run.tester || '';
+      build.value = run.build || '';
+      env.value = run.env || 'production';
+      started.value = new Date(run.startedAt).toLocaleString();
+      tester.addEventListener('input', () => { state.run.tester = tester.value; saveState(); });
+      build.addEventListener('input', () => { state.run.build = build.value; saveState(); });
+      env.addEventListener('change', () => { state.run.env = env.value; saveState(); });
+    })();
+
     document.getElementById('searchInput').addEventListener('input', render);
     document.getElementById('statusFilter').addEventListener('change', render);
     document.getElementById('roleFilter').addEventListener('change', render);
+    document.getElementById('sectionFilter').addEventListener('change', render);
 
     document.getElementById('expandAll').addEventListener('click', () => {
       document.querySelectorAll('.section').forEach(el => el.classList.add('open'));
@@ -601,6 +887,15 @@ const HTML = `<!DOCTYPE html>
 
     document.getElementById('exportBtn').addEventListener('click', () => {
       downloadJson('knockscout-regression-' + new Date().toISOString().slice(0, 10) + '.json', buildExportPayload(2));
+    });
+
+    document.getElementById('exportCsvBtn').addEventListener('click', () => {
+      const blob = new Blob([buildCsv()], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'knockscout-regression-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
     });
 
     document.getElementById('exportAgentBtn').addEventListener('click', () => {
@@ -635,8 +930,15 @@ const HTML = `<!DOCTYPE html>
     });
 
     document.getElementById('resetAll').addEventListener('click', () => {
-      if (!confirm('Reset all pass/fail/notes for every test case?')) return;
+      if (!confirm('Reset all pass/fail/notes for every test case and start a new run?')) return;
       state.cases = {};
+      state.run = null;
+      ensureRun();
+      const run = state.run;
+      document.getElementById('runTester').value = run.tester || '';
+      document.getElementById('runBuild').value = run.build || '';
+      document.getElementById('runEnv').value = run.env || 'production';
+      document.getElementById('runStarted').value = new Date(run.startedAt).toLocaleString();
       saveState();
       render();
     });

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { resolveTourSelector, stepUsesActionBar } from '../welcomeTourUtils'
+import {
+  DESKTOP_TOUR_ORDER,
+  MOBILE_TOUR_ORDER,
+  TOUR_STEPS_BY_ID,
+  buildVisibleSteps,
+} from '../WelcomeTour'
 
 describe('resolveTourSelector', () => {
   it('uses bar target when it is visible', () => {
@@ -35,5 +41,73 @@ describe('stepUsesActionBar', () => {
     const step = { target: '[data-tour="menu-leads"]', mobileTarget: '[data-tour="action-bar-leads"]' }
     expect(stepUsesActionBar(step, false, (sel) => sel === '[data-tour="action-bar-leads"]')).toBe(true)
     expect(stepUsesActionBar(step, true, () => false)).toBe(false)
+  })
+})
+
+describe('welcome tour order', () => {
+  it('maps every ordered step id to a definition', () => {
+    for (const id of [...DESKTOP_TOUR_ORDER, ...MOBILE_TOUR_ORDER]) {
+      expect(TOUR_STEPS_BY_ID[id], `missing step: ${id}`).toBeTruthy()
+    }
+  })
+
+  it('walks map chrome top-left then top-right on desktop', () => {
+    const mapChrome = DESKTOP_TOUR_ORDER.slice(0, 6)
+    expect(mapChrome).toEqual([
+      'address-search',
+      'zoom',
+      'recenter',
+      'compass',
+      'multi-select',
+      'path-recording',
+    ])
+  })
+
+  it('walks the action bar left-to-right on desktop', () => {
+    const bar = DESKTOP_TOUR_ORDER.slice(
+      DESKTOP_TOUR_ORDER.indexOf('pipes'),
+      DESKTOP_TOUR_ORDER.indexOf('settings-menu') + 1
+    )
+    expect(bar).toEqual([
+      'pipes',
+      'tasks',
+      'schedule',
+      'leads',
+      'deals',
+      'quotes',
+      'forms',
+      'reports',
+      'lists',
+      'activity',
+      'photo-mode-bar',
+      'paths',
+      'outreach',
+      'settings-menu',
+    ])
+  })
+
+  it('walks the overflow menu top-to-bottom on mobile', () => {
+    const menu = MOBILE_TOUR_ORDER.slice(
+      MOBILE_TOUR_ORDER.indexOf('navigation') + 1,
+      MOBILE_TOUR_ORDER.indexOf('settings-menu')
+    )
+    expect(menu).toEqual([
+      'activity',
+      'leads',
+      'deals',
+      'quotes',
+      'forms',
+      'reports',
+      'lists',
+      'paths',
+      'outreach',
+    ])
+  })
+
+  it('skips feature-gated steps', () => {
+    const steps = buildVisibleSteps(true, (id) => id !== 'deals' && id !== 'quotes')
+    expect(steps.some((s) => s.id === 'deals')).toBe(false)
+    expect(steps.some((s) => s.id === 'quotes')).toBe(false)
+    expect(steps.some((s) => s.id === 'leads')).toBe(true)
   })
 })

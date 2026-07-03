@@ -18,6 +18,7 @@ export const LEGACY_TEST_CASES = [
   tc('AUTH-010', '01', 'Complete welcome tour', IN, 'both', 'New user or restart tour from Settings', ['Step through all tour slides', 'Finish tour'], 'Tour dismisses; map usable'),
   tc('AUTH-011', '01', 'Restart tour from Settings', IN, 'both', 'Logged in', ['Settings → Help → Restart tour'], 'Welcome tour relaunches'),
   tc('AUTH-012', '01', 'Feature gate denies panel for restricted member', ['team-member'], 'both', 'Member without leads feature', ['Menu → Leads'], 'Toast: access denied; panel does not open'),
+  tc('AUTH-013', '01', 'Session persists across page reload', IN, 'both', 'Logged in', ['Refresh page', 'Wait for app to finish loading'], 'Still logged in; map and action bar usable without re-auth'),
 
   // ── 02 Map and parcels ──
   tc('MAP-001', '02', 'Map loads with parcels visible', IN, 'both', 'Logged in', ['Open app at localhost'], 'Satellite/street basemap renders; parcel outlines visible'),
@@ -47,6 +48,8 @@ export const LEGACY_TEST_CASES = [
   tc('MAP-025', '02', 'Multi-select parcels and add to list', IN, 'both', 'Logged in', ['Enable multi-select on map', 'Tap several parcels', 'Tap + Add to list', 'Pick list'], 'Parcels added; banner shows count in Lists panel'),
   tc('MAP-026', '02', 'Cancel multi-select mode', IN, 'both', 'Multi-select active', ['Tap cancel/X on multi-select UI'], 'Selection cleared; mode exits'),
   tc('MAP-027', '02', 'Start and stop path recording', IN, 'both', 'Logged in', ['Start path recording from map control', 'Move/walk briefly', 'Stop recording'], 'Path saved; visible in Paths panel'),
+  tc('MAP-028', '02', 'Photo Mode chooser — upload vs camera', IN, 'both', 'Photos feature enabled', ['Open Photo Mode for a parcel or lead', 'Verify chooser shows Upload photos and Take photos buttons', 'Tap Take photos then use back to return to chooser'], 'Chooser renders both options; camera does not auto-start; back returns to chooser'),
+  tc('MAP-029', '02', 'Photo Mode — upload photos review flow', IN, 'both', 'Photos feature enabled', ['Open Photo Mode', 'Tap Upload photos', 'Pick one or more image files', 'Review thumbnails in the session review screen', 'Confirm/attach photos'], 'Selected photos appear in review; upload completes; photos attach to the lead'),
 
   // ── 03 Navigation and action bar ──
   tc('NAV-001', '03', 'Open Pipes from action bar', IN, 'both', 'Logged in', ['Tap Pipes on action bar'], 'Deal pipeline panel opens'),
@@ -69,6 +72,10 @@ export const LEGACY_TEST_CASES = [
   tc('NAV-018', '03', 'Solo Tasks rail when no primary panel', IN, 'desktop', 'Only Tasks open', ['Open Tasks alone'], 'Tasks on right rail'),
   tc('NAV-019', '03', 'Activity → lead keeps Activity+Tasks docked', IN, 'desktop', 'Activity and Tasks open', ['Open Activity item for a lead'], 'Lead detail overlay; Activity+Tasks stay docked'),
   tc('NAV-020', '03', 'Back from Activity-origin detail returns to Activity', IN, 'both', 'Opened lead from Activity', ['Close/back from lead detail'], 'Activity feed focused again'),
+  tc('NAV-021', '03', 'Import Photos removed from bar and menu', IN, 'both', 'Logged in', ['Inspect desktop action bar at ≥768px width', 'Switch to mobile width and open the overflow Menu'], 'No Import Photos item anywhere; Photo Mode still present on desktop bar and as map button on mobile'),
+  tc('NAV-022', '03', 'Action bar adapts across 768px breakpoint', IN, 'both', 'Logged in', ['Resize viewport from 700px to 800px and back', 'Verify bar items at each width'], 'Mobile shows Pipes/Tasks/Schedule + Menu; desktop shows full bar with no Menu; no duplicate or missing items after resize'),
+  tc('NAV-023', '03', 'Quick Create FAB opens create options', IN, 'both', 'Logged in', ['Tap the Quick Create (+) floating button', 'Review the create options shown'], 'FAB expands with Task, Lead, Deal, Quote, and Report options; closes on outside tap'),
+  tc('NAV-024', '03', 'Quick Create — create task and lead', ADM, 'both', 'Logged in', ['Open Quick Create (+)', 'Create a task and save', 'Open Quick Create again', 'Create a lead and save'], 'Task appears in Tasks; lead appears in Leads; FAB closes cleanly after each create'),
 
   // ── 04 Lists ──
   tc('LST-001', '04', 'Lists tabs All/Mine/Shared/On map', IN, 'both', 'Lists panel open', ['Click each tab'], 'List filters correctly; counts update'),
@@ -115,6 +122,10 @@ export const LEGACY_TEST_CASES = [
   tc('LED-020', '05', 'Photo reports section', IN, 'both', 'Photos feature enabled', ['Create or open photo report'], 'Report builder or detail opens'),
   tc('LED-021', '05', 'Lead photos gallery', IN, 'both', 'Photos on lead', ['Open photos section'], 'Gallery displays'),
   tc('LED-022', '05', 'Convert parcel to lead creates lead', IN, 'both', 'Parcel not lead', ['Convert from map flow'], 'Lead created with parcel link'),
+  tc('LED-023', '05', 'Share lead dialog opens above Lead Details', ADM, 'both', 'Lead detail open', ['⋮ → Share lead', 'Verify dialog is on top and interactive on first click', 'Add an email or team and save', 'Close share dialog'], 'Share dialog renders above Lead Details; inputs respond to first click; Lead Details usable after close without extra clicks'),
+  tc('LED-024', '05', 'Delete lead cascades all lead content', ADM, 'both', 'Lead with photos, tasks, and notes', ['⋮ → Delete', 'Confirm', 'Search for the deleted lead', 'Check Tasks panel and photo gallery for orphaned items'], 'Lead gone; its photos, tasks, and notes no longer appear anywhere'),
+  tc('LED-025', '05', 'Edit lead created from parcel', ADM, 'both', 'Lead converted from a parcel', ['Open lead detail', '⋮ → Edit', 'Change a field', 'Save'], 'Edit dialog opens without crash; parcel-linked fields intact; changes persist'),
+  tc('LED-026', '05', 'Delete photo from lead gallery', ADM, 'both', 'Photos on lead', ['Open photos section', 'Open a photo or its actions', 'Delete photo', 'Confirm'], 'Photo removed from gallery immediately; count updates; no broken thumbnails'),
 
   // ── 06 Deals and pipes ──
   tc('DPL-001', '06', 'Deals Active tab', IN, 'both', 'Deals exist', ['Open Deals panel'], 'Active deals grouped by pipeline'),
@@ -270,4 +281,8 @@ export const LEGACY_TEST_CASES = [
   tc('PUB-006', '12', 'Basemap error banner if tiles fail', IN, 'both', 'Simulate offline or block tiles', ['Load map'], 'Error banner or graceful degradation'),
   tc('PUB-007', '12', 'Menu Sign In when logged out', ['logged-out'], 'both', 'Logged out', ['Menu shows Sign In'], 'Tapping opens login'),
   tc('PUB-008', '12', 'Restricted member deal amounts hidden', ['team-member'], 'both', 'Member without dealAmounts', ['Open deal detail'], 'Amount/profit fields hidden or masked'),
+  tc('PUB-009', '12', 'Public short quote link /q/ loads', IN, 'both', 'Valid /q/<token> link', ['Open public URL in a fresh/incognito tab'], 'Quote renders read-only without requiring login'),
+  tc('PUB-010', '12', 'Public short report link /r/ loads', IN, 'both', 'Valid /r/<token> link', ['Open public URL in a fresh/incognito tab'], 'Report renders without requiring login'),
+  tc('PUB-011', '12', 'Sync failure while offline shows feedback', IN, 'both', 'Logged in with unsaved change', ['Simulate offline (devtools Network → Offline)', 'Perform save or Sync now', 'Restore network and retry'], 'Clear error feedback while offline; no data loss; retry succeeds once online'),
+  tc('PUB-012', '12', 'Invalid public token shows friendly error', IN, 'both', 'Malformed or expired ?quote=/?report=/?form= link', ['Open the invalid public URL'], 'Friendly not-found/expired message; no blank screen or console crash'),
 ]

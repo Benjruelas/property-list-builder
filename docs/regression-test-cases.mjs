@@ -117,6 +117,15 @@ export const TEST_CASES = [
     ],
     "Toast: access denied; panel does not open"),
 
+  tc("AUTH-013", "01", "Session persists across page reload", ["solo","team-admin","team-member"], "both",
+    "Logged in. Test on both mobile and desktop if time allows.",
+    [
+      step("Refresh page", "Target screen, panel, or dialog opens and is interactive.", "Auth / bootstrap"),
+      step("Wait for app to finish loading", "Still logged in; map and action bar usable without re-auth", "Auth / bootstrap"),
+      step("Confirm final expected outcome for this test case.", "Still logged in; map and action bar usable without re-auth", "Auth / bootstrap"),
+    ],
+    "Still logged in; map and action bar usable without re-auth"),
+
   tc("MAP-001", "02", "Map loads with parcels visible", ["solo","team-admin","team-member"], "both",
     "Logged in. Test on both mobile and desktop if time allows.",
     [
@@ -362,6 +371,28 @@ export const TEST_CASES = [
     ],
     "Path saved; visible in Paths panel"),
 
+  tc("MAP-028", "02", "Photo Mode chooser — upload vs camera", ["solo","team-admin","team-member"], "both",
+    "Photos feature enabled. Test on both mobile and desktop if time allows.",
+    [
+      step("Open Photo Mode for a parcel or lead", "Target screen, panel, or dialog opens and is interactive.", "Map chrome"),
+      step("Verify chooser shows Upload photos and Take photos buttons", "Action completes without crash; UI updates or feedback appears before continuing.", "Map view"),
+      step("Tap Take photos then use back to return to chooser", "Target screen, panel, or dialog opens and is interactive.", "Map view"),
+      step("Confirm final expected outcome for this test case.", "Chooser renders both options; camera does not auto-start; back returns to chooser", "Map view"),
+    ],
+    "Chooser renders both options; camera does not auto-start; back returns to chooser"),
+
+  tc("MAP-029", "02", "Photo Mode — upload photos review flow", ["solo","team-admin","team-member"], "both",
+    "Photos feature enabled. Test on both mobile and desktop if time allows.",
+    [
+      step("Open Photo Mode", "Target screen, panel, or dialog opens and is interactive.", "Map view"),
+      step("Tap Upload photos", "Action completes without crash; UI updates or feedback appears before continuing.", "Map view"),
+      step("Pick one or more image files", "Input/selection is reflected in the UI; no validation error blocks progress.", "Map view"),
+      step("Review thumbnails in the session review screen", "Target screen, panel, or dialog opens and is interactive.", "Map view"),
+      step("Confirm/attach photos", "Selected photos appear in review; upload completes; photos attach to the lead", "Dialog / feedback"),
+      step("Confirm final expected outcome for this test case.", "Selected photos appear in review; upload completes; photos attach to the lead", "Dialog / feedback"),
+    ],
+    "Selected photos appear in review; upload completes; photos attach to the lead"),
+
   tc("NAV-001", "03", "Open Pipes from action bar", ["solo","team-admin","team-member"], "both",
     "Logged in. Test on both mobile and desktop if time allows.",
     [
@@ -527,6 +558,44 @@ export const TEST_CASES = [
       step("Confirm final expected outcome for this test case.", "Activity feed focused again", "Action bar / menu"),
     ],
     "Activity feed focused again"),
+
+  tc("NAV-021", "03", "Import Photos removed from bar and menu", ["solo","team-admin","team-member"], "both",
+    "Logged in. Test on both mobile and desktop if time allows.",
+    [
+      step("Inspect desktop action bar at ≥768px width", "Target screen, panel, or dialog opens and is interactive.", "Auth / menu"),
+      step("Switch to mobile width and open the overflow Menu", "Input/selection is reflected in the UI; no validation error blocks progress.", "Auth / menu"),
+      step("Confirm final expected outcome for this test case.", "No Import Photos item anywhere; Photo Mode still present on desktop bar and as map button on mobile", "Auth / menu"),
+    ],
+    "No Import Photos item anywhere; Photo Mode still present on desktop bar and as map button on mobile"),
+
+  tc("NAV-022", "03", "Action bar adapts across 768px breakpoint", ["solo","team-admin","team-member"], "both",
+    "Logged in. Test on both mobile and desktop if time allows.",
+    [
+      step("Resize viewport from 700px to 800px and back", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
+      step("Verify bar items at each width", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
+      step("Confirm final expected outcome for this test case.", "Mobile shows Pipes/Tasks/Schedule + Menu; desktop shows full bar with no Menu; no duplicate or missing items after resize", "Action bar / menu"),
+    ],
+    "Mobile shows Pipes/Tasks/Schedule + Menu; desktop shows full bar with no Menu; no duplicate or missing items after resize"),
+
+  tc("NAV-023", "03", "Quick Create FAB opens create options", ["solo","team-admin","team-member"], "both",
+    "Logged in. Test on both mobile and desktop if time allows.",
+    [
+      step("Tap the Quick Create (+) floating button", "Action completes without crash; UI updates or feedback appears before continuing.", "Navigation"),
+      step("Review the create options shown", "FAB expands with Task, Lead, Deal, Quote, and Report options; closes on outside tap", "Navigation"),
+      step("Confirm final expected outcome for this test case.", "FAB expands with Task, Lead, Deal, Quote, and Report options; closes on outside tap", "Navigation"),
+    ],
+    "FAB expands with Task, Lead, Deal, Quote, and Report options; closes on outside tap"),
+
+  tc("NAV-024", "03", "Quick Create — create task and lead", ["solo","team-admin"], "both",
+    "Logged in. Test on both mobile and desktop if time allows.",
+    [
+      step("Open Quick Create (+)", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Create a task and save", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Open Quick Create again", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Create a lead and save", "Task appears in Tasks; lead appears in Leads; FAB closes cleanly after each create", "Leads CRM"),
+      step("Confirm final expected outcome for this test case.", "Task appears in Tasks; lead appears in Leads; FAB closes cleanly after each create", "Leads CRM"),
+    ],
+    "Task appears in Tasks; lead appears in Leads; FAB closes cleanly after each create"),
 
   tc("LST-001", "04", "Lists tabs All/Mine/Shared/On map", ["solo","team-admin","team-member"], "both",
     "Lists panel open. Test on both mobile and desktop if time allows.",
@@ -922,6 +991,53 @@ export const TEST_CASES = [
       step("Confirm final expected outcome for this test case.", "Lead created with parcel link", "Map chrome"),
     ],
     "Lead created with parcel link"),
+
+  tc("LED-023", "05", "Share lead dialog opens above Lead Details", ["solo","team-admin"], "both",
+    "Lead detail open. Test on both mobile and desktop if time allows.",
+    [
+      step("Open a lead and leave Lead Details visible.", "Starting state matches preconditions (Lead detail open); no error dialog blocks the test.", "Leads CRM"),
+      step("⋮ → Share lead", "Step completes; ready for next action.", "Leads CRM"),
+      step("Verify dialog is on top and interactive on first click", "Target screen, panel, or dialog opens and is interactive.", "Leads CRM"),
+      step("Add an email or team and save", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Close share dialog", "Previous context closes; underlying panel or map is usable again.", "Leads CRM"),
+      step("Confirm final expected outcome for this test case.", "Share dialog renders above Lead Details; inputs respond to first click; Lead Details usable after close without extra clicks", "Leads CRM"),
+    ],
+    "Share dialog renders above Lead Details; inputs respond to first click; Lead Details usable after close without extra clicks"),
+
+  tc("LED-024", "05", "Delete lead cascades all lead content", ["solo","team-admin"], "both",
+    "Lead with photos, tasks, and notes. Test on both mobile and desktop if time allows.",
+    [
+      step("Set up preconditions: Lead with photos, tasks, and notes. Navigate to the starting screen for this test.", "Starting state matches preconditions (Lead with photos, tasks, and notes); no error dialog blocks the test.", "Leads CRM"),
+      step("⋮ → Delete", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Confirm", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Search for the deleted lead", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Check Tasks panel and photo gallery for orphaned items", "Lead gone; its photos, tasks, and notes no longer appear anywhere", "Action bar / menu"),
+      step("Confirm final expected outcome for this test case.", "Lead gone; its photos, tasks, and notes no longer appear anywhere", "Action bar / menu"),
+    ],
+    "Lead gone; its photos, tasks, and notes no longer appear anywhere"),
+
+  tc("LED-025", "05", "Edit lead created from parcel", ["solo","team-admin"], "both",
+    "Lead converted from a parcel. Test on both mobile and desktop if time allows.",
+    [
+      step("Open lead detail", "Target screen, panel, or dialog opens and is interactive.", "Map chrome"),
+      step("⋮ → Edit", "Input/selection is reflected in the UI; no validation error blocks progress.", "Map chrome"),
+      step("Change a field", "Input/selection is reflected in the UI; no validation error blocks progress.", "Map chrome"),
+      step("Save", "Edit dialog opens without crash; parcel-linked fields intact; changes persist", "Map chrome"),
+      step("Confirm final expected outcome for this test case.", "Edit dialog opens without crash; parcel-linked fields intact; changes persist", "Map chrome"),
+    ],
+    "Edit dialog opens without crash; parcel-linked fields intact; changes persist"),
+
+  tc("LED-026", "05", "Delete photo from lead gallery", ["solo","team-admin"], "both",
+    "Photos on lead. Test on both mobile and desktop if time allows.",
+    [
+      step("Set up preconditions: Photos on lead. Navigate to the starting screen for this test.", "Starting state matches preconditions (Photos on lead); no error dialog blocks the test.", "Leads CRM"),
+      step("Open photos section", "Target screen, panel, or dialog opens and is interactive.", "Leads CRM"),
+      step("Open a photo or its actions", "Target screen, panel, or dialog opens and is interactive.", "Leads CRM"),
+      step("Delete photo", "Action completes without crash; UI updates or feedback appears before continuing.", "Leads CRM"),
+      step("Confirm", "Photo removed from gallery immediately; count updates; no broken thumbnails", "Leads CRM"),
+      step("Confirm final expected outcome for this test case.", "Photo removed from gallery immediately; count updates; no broken thumbnails", "Leads CRM"),
+    ],
+    "Photo removed from gallery immediately; count updates; no broken thumbnails"),
 
   tc("DPL-001", "06", "Deals Active tab", ["solo","team-admin","team-member"], "both",
     "Deals exist. Test on both mobile and desktop if time allows.",
@@ -2169,4 +2285,38 @@ export const TEST_CASES = [
       step("Confirm final expected outcome for this test case.", "Amount/profit fields hidden or masked", "Deals / Pipes"),
     ],
     "Amount/profit fields hidden or masked"),
+
+  tc("PUB-009", "12", "Public short quote link /q/ loads", ["solo","team-admin","team-member"], "both",
+    "Valid /q/<token> link. Test on both mobile and desktop if time allows.",
+    [
+      step("Open public URL in a fresh/incognito tab", "Target screen, panel, or dialog opens and is interactive.", "Forms / Quotes / Reports"),
+      step("Confirm final expected outcome for this test case.", "Quote renders read-only without requiring login", "Forms / Quotes / Reports"),
+    ],
+    "Quote renders read-only without requiring login"),
+
+  tc("PUB-010", "12", "Public short report link /r/ loads", ["solo","team-admin","team-member"], "both",
+    "Valid /r/<token> link. Test on both mobile and desktop if time allows.",
+    [
+      step("Open public URL in a fresh/incognito tab", "Target screen, panel, or dialog opens and is interactive.", "Forms / Quotes / Reports"),
+      step("Confirm final expected outcome for this test case.", "Report renders without requiring login", "Forms / Quotes / Reports"),
+    ],
+    "Report renders without requiring login"),
+
+  tc("PUB-011", "12", "Sync failure while offline shows feedback", ["solo","team-admin","team-member"], "both",
+    "Logged in with unsaved change. Test on both mobile and desktop if time allows.",
+    [
+      step("Simulate offline (devtools Network → Offline)", "Target screen, panel, or dialog opens and is interactive.", "Settings / Activity / Paths"),
+      step("Perform save or Sync now", "Action completes without crash; UI updates or feedback appears before continuing.", "Settings / Activity / Paths"),
+      step("Restore network and retry", "Target screen, panel, or dialog opens and is interactive.", "Settings / Activity / Paths"),
+      step("Confirm final expected outcome for this test case.", "Clear error feedback while offline; no data loss; retry succeeds once online", "Settings / Activity / Paths"),
+    ],
+    "Clear error feedback while offline; no data loss; retry succeeds once online"),
+
+  tc("PUB-012", "12", "Invalid public token shows friendly error", ["solo","team-admin","team-member"], "both",
+    "Malformed or expired ?quote=/?report=/?form= link. Test on both mobile and desktop if time allows.",
+    [
+      step("Open the invalid public URL", "Target screen, panel, or dialog opens and is interactive.", "Forms / Quotes / Reports"),
+      step("Confirm final expected outcome for this test case.", "Friendly not-found/expired message; no blank screen or console crash", "Forms / Quotes / Reports"),
+    ],
+    "Friendly not-found/expired message; no blank screen or console crash"),
 ]
