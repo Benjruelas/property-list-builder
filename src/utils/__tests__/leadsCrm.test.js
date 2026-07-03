@@ -313,6 +313,11 @@ describe('findLeadByParcelId', () => {
     expect(findLeadByParcelId(leads, { lat: 32.78, lng: -96.8 })?.id).toBe('lead_2')
   })
 
+  it('skips coordinate matching when matchCoords is false', () => {
+    expect(findLeadByParcelId(leads, { lat: 32.78, lng: -96.8 }, { matchCoords: false })).toBeNull()
+    expect(findLeadByParcelId(leads, 'LR-100', { matchCoords: false })?.id).toBe('lead_1')
+  })
+
   it('matches by leadId when navigating from lead detail', () => {
     expect(findLeadByParcelId(leads, { leadId: 'lead_2', id: null })?.id).toBe('lead_2')
   })

@@ -2968,8 +2968,9 @@ function App() {
   const beginPhotoCapture = useCallback((opts = {}) => {
     if (!requireAuth()) return
     guardFeature('photos', () => {
-      const { parcelData, lead, autoCamera = false } = opts
-      if (lead?.id) {
+      const { parcelData, lead, autoCamera = false, forceNewLead = false } = opts
+      const leadLookupOptions = forceNewLead ? { matchCoords: false } : undefined
+      if (lead?.id && !forceNewLead) {
         openPhotoModeForLead(lead, {
           parcelId: parcelData ? (resolveParcelId(parcelData) || parcelData.id) : lead.parcelId,
           addressLabel: parcelData?.address || popupData?.address || '',
@@ -2978,7 +2979,9 @@ function App() {
         return
       }
       if (parcelData) {
-        const existing = findLeadByParcelId(leads, parcelData)
+        const existing = forceNewLead
+          ? null
+          : findLeadByParcelId(leads, parcelData, leadLookupOptions)
         if (existing) {
           openPhotoModeForLead(existing, {
             parcelId: resolveParcelId(parcelData) || parcelData.id,
@@ -2992,7 +2995,9 @@ function App() {
       }
       const parcelId = opts.parcelId || null
       if (parcelId) {
-        const existing = findLeadByParcelId(leads, parcelId)
+        const existing = forceNewLead
+          ? null
+          : findLeadByParcelId(leads, parcelId, leadLookupOptions)
         if (existing) {
           openPhotoModeForLead(existing, {
             parcelId,
@@ -3018,14 +3023,14 @@ function App() {
     guardFeature('photos', () => setQuickPhotoModeOpen(true))
   }, [requireAuth, guardFeature])
 
-  const handleQuickPhotoModeConfirm = useCallback(({ parcelData, lead } = {}) => {
+  const handleQuickPhotoModeConfirm = useCallback(({ parcelData, lead, forceNewLead = false } = {}) => {
     setQuickPhotoModeOpen(false)
-    if (lead?.id) {
+    if (lead?.id && !forceNewLead) {
       beginPhotoCapture({ lead, autoCamera: true })
       return
     }
     if (parcelData) {
-      beginPhotoCapture({ parcelData, autoCamera: true })
+      beginPhotoCapture({ parcelData, autoCamera: true, forceNewLead: forceNewLead || !lead?.id })
     }
   }, [beginPhotoCapture])
 
