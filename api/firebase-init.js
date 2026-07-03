@@ -11,7 +11,6 @@ export default function handler(req, res) {
 
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
   res.status(200).json({
     apiKey,
     authDomain

@@ -13,6 +13,20 @@ import {
 import { auth } from '../config/firebase'
 import { showToast } from '../components/ui/toast'
 
+function AuthLoadingShell() {
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-3 bg-[#0a0a0a] text-white/80"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading authentication"
+    >
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
+      <p className="text-sm text-white/60">Signing in…</p>
+    </div>
+  )
+}
+
 const AuthContext = createContext({})
 
 export const useAuth = () => {
@@ -130,9 +144,24 @@ export const AuthProvider = ({ children }) => {
       .catch((error) => {
         const code = error?.code || ''
         if (code && code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+          console.error('Google redirect sign-in failed:', error)
           showToast(error.message || 'Sign-in failed', 'error')
         }
       })
+  }, [])
+
+  // Never leave a blank screen if auth init stalls (e.g. blocked auth iframe).
+  useEffect(() => {
+    if (isDev) return
+    const timeout = window.setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          console.warn('Auth initialization timed out; rendering app anyway.')
+        }
+        return false
+      })
+    }, 12000)
+    return () => window.clearTimeout(timeout)
   }, [])
 
   // Sign out
@@ -226,7 +255,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? <AuthLoadingShell /> : children}
     </AuthContext.Provider>
   )
 }
