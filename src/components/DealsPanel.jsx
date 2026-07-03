@@ -99,6 +99,7 @@ export function DealsPanel({
   canSeeDealAmounts = true,
   canAccessPhotos = true,
   onEditLead,
+  onLeadDeleted,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   leadOverlayPanelDockSlot,
@@ -701,11 +702,7 @@ export function DealsPanel({
             onCloseLeadOverlay?.()
             onOpenDealFromLead?.(deal.id, pipelineId || deal.__pipelineId || selectedPipelineId)
           }}
-          onLeadDeleted={(deletedLeadId) => {
-            onLeadsChange?.((prev) => prev.filter((l) => l.id !== deletedLeadId))
-            onCloseLeadOverlay?.()
-            onRefreshLeads?.()
-          }}
+          onLeadDeleted={onLeadDeleted}
           onOpenScheduleAtDate={onOpenScheduleAtDate}
           onPipelinesChange={onPipelinesChange}
           teams={teams}

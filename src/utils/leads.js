@@ -165,9 +165,11 @@ export function upsertLeadInLocalStore(leads, updated, merge = mergeLeadDetail) 
   return next
 }
 
-export function mergeListViewLeads(existing, incoming) {
+export function mergeListViewLeads(existing, incoming, { excludeIds } = {}) {
+  const exclude = excludeIds instanceof Set && excludeIds.size > 0 ? excludeIds : null
   const prevById = new Map((Array.isArray(existing) ? existing : []).map((l) => [l.id, l]))
-  return (Array.isArray(incoming) ? incoming : []).map((inc) => {
+  const merged = (Array.isArray(incoming) ? incoming : []).map((inc) => {
+    if (exclude?.has(inc.id)) return null
     const prev = prevById.get(inc.id)
     if (!prev) return inc
     if (inc?._listView) {
@@ -190,6 +192,7 @@ export function mergeListViewLeads(existing, incoming) {
     }
     return inc
   })
+  return exclude ? merged.filter(Boolean) : merged
 }
 
 /** Whether a list-view lead needs a full fetch to load photo metadata. */

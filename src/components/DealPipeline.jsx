@@ -123,6 +123,7 @@ export function DealPipeline({
   canSeeDealAmounts = true,
   canAccessPhotos = true,
   onEditLead,
+  onLeadDeleted,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   leadStatuses = [],
@@ -1320,11 +1321,7 @@ export function DealPipeline({
             onCloseLeadOverlay?.()
             onOpenDeal?.(deal.id)
           }}
-          onLeadDeleted={(deletedLeadId) => {
-            onLeadsChange?.((prev) => prev.filter((l) => l.id !== deletedLeadId))
-            onCloseLeadOverlay?.()
-            onRefreshLeads?.()
-          }}
+          onLeadDeleted={onLeadDeleted}
           onOpenScheduleAtDate={onOpenScheduleAtDate}
           onPipelinesChange={onPipelinesChange}
           teams={teams}
