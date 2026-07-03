@@ -34,7 +34,6 @@ import {
   User,
   Circle,
   Camera,
-  ImagePlus,
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { cn } from '@/lib/utils'
@@ -55,7 +54,6 @@ const BAR_PREFETCH_KEY = {
   paths: 'paths',
   outreach: 'outreach',
   settings: 'settings',
-  photoImport: 'photoImport',
 }
 
 /**
@@ -79,7 +77,6 @@ const ITEM_DEFS = {
   outreach: { label: 'Outreach', Icon: Send },
   settings: { label: 'Settings', Icon: Settings },
   photoMode: { label: 'Photo Mode', Icon: Camera },
-  photoImport: { label: 'Import Photos', Icon: ImagePlus },
   login: { label: 'Sign In', Icon: User },
   menu: { label: 'Menu', Icon: Menu },
 }
@@ -104,7 +101,6 @@ export function MobileActionBar({
   onOpenForms,
   onOpenSettings,
   onOpenPhotoMode,
-  onOpenPhotoImport,
   currentUser,
   onLogin,
   activityUnreadCount = 0,
@@ -171,7 +167,6 @@ export function MobileActionBar({
     outreach: onOpenOutreach,
     settings: onOpenSettings,
     photoMode: onOpenPhotoMode,
-    photoImport: onOpenPhotoImport,
     login: onLogin,
     menu: () => setShowMenu?.(!showMenu),
   }

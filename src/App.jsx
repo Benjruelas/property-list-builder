@@ -53,7 +53,6 @@ const OutreachPanel = lazy(panelLazy.outreach)
 const EmailComposer = lazy(panelLazy.emailComposer)
 const BulkEmailPreview = lazy(panelLazy.bulkEmailPreview)
 const HailDataPanel = lazy(panelLazy.hailData)
-const PhotoImportDialog = lazy(panelLazy.photoImport)
 import { setCachedDealQuotes, getCachedDealQuotes } from './utils/quotes'
 import { PublicFormPage } from './components/forms/PublicFormPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
@@ -420,8 +419,6 @@ function App() {
   const [photoModeAddress, setPhotoModeAddress] = useState('')
   const [photoModeAutoCamera, setPhotoModeAutoCamera] = useState(false)
   const [quickPhotoModeOpen, setQuickPhotoModeOpen] = useState(false)
-  const [photoImportOpen, setPhotoImportOpen] = useState(false)
-  const photoImportMounted = useStickyPanelMount(photoImportOpen)
   /** When set, user is choosing a target pipeline to move a deal into. */
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
@@ -3034,11 +3031,6 @@ function App() {
     }
   }, [beginPhotoCapture])
 
-  const openPhotoImport = useCallback(() => {
-    if (!requireAuth()) return
-    guardFeature('photos', () => setPhotoImportOpen(true))
-  }, [requireAuth, guardFeature])
-
   const openReportsPanel = useCallback(() => {
     if (!requireAuth()) return
     guardFeature('reports', () => nav.openReports())
@@ -3992,7 +3984,6 @@ function App() {
         onOpenForms={openFormsPanel}
         onOpenSettings={openSettingsPanel}
         onOpenPhotoMode={beginQuickPhotoCapture}
-        onOpenPhotoImport={openPhotoImport}
         currentUser={currentUser}
         onLogin={openLogin}
       />
@@ -4516,29 +4507,6 @@ function App() {
         leads={leads}
         onConfirm={handleQuickPhotoModeConfirm}
       />
-
-      {photoImportMounted && (
-        <Suspense fallback={null}>
-          <PhotoImportDialog
-            open={photoImportOpen}
-            onClose={() => setPhotoImportOpen(false)}
-            leads={leads}
-            getToken={getToken}
-            currentUser={currentUser}
-            teams={teams}
-            teamMembership={teamMembership}
-            onLeadsUpdated={(updatedLeads) => {
-              setLeads((prev) => {
-                let next = prev
-                for (const lead of updatedLeads) {
-                  next = upsertLeadInLocalStore(next, lead)
-                }
-                return next
-              })
-            }}
-          />
-        </Suspense>
-      )}
 
       {pathsPanelMounted && (
       <Suspense fallback={
