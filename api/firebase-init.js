@@ -3,11 +3,16 @@
  * Use with custom authDomain (your app's domain instead of firebaseapp.com).
  */
 
+function resolveAuthDomain(req) {
+  const fromEnv = (process.env.VITE_FIREBASE_AUTH_DOMAIN || '').trim()
+  if (fromEnv) return fromEnv.replace(/^https?:\/\//, '').replace(/\/$/, '')
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000'
+  return String(host).split(':')[0]
+}
+
 export default function handler(req, res) {
   const apiKey = process.env.VITE_FIREBASE_API_KEY || ''
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000'
-  const proto = req.headers['x-forwarded-proto'] || 'http'
-  const authDomain = host
+  const authDomain = resolveAuthDomain(req)
 
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')

@@ -31,6 +31,14 @@
       "maxDuration": 30
     }
   },
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.knockscout.app" }],
+      "destination": "https://knockscout.app/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/__/firebase/init.json",
@@ -120,8 +128,8 @@
           "value": "strict-origin-when-cross-origin"
         },
         {
-          "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self'"
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin-allow-popups"
         },
         {
           "key": "Permissions-Policy",
