@@ -415,6 +415,8 @@ function App() {
   const photoModeLeadRef = useRef(photoModeLead)
   const leadsDetailLeadIdRef = useRef(leadsDetailLeadId)
   const hydratingLeadIdsRef = useRef(new Set())
+  const deletedLeadIdsRef = useRef(new Set())
+  const refreshLeadsGenerationRef = useRef(0)
   const [photoModeParcelId, setPhotoModeParcelId] = useState(null)
   const [photoModeAddress, setPhotoModeAddress] = useState('')
   const [photoModeAutoCamera, setPhotoModeAutoCamera] = useState(false)
@@ -1211,6 +1213,7 @@ function App() {
 
   const refreshLeads = useCallback(async ({ existingLeads } = {}) => {
     if (!currentUser) return
+    const requestId = ++refreshLeadsGenerationRef.current
     const baseline = Array.isArray(existingLeads) && existingLeads.length > 0
       ? existingLeads
       : (leadsRef.current.length > 0 ? leadsRef.current : loadLocalLeads())
@@ -1219,16 +1222,23 @@ function App() {
     let mergedLeads = null
     try {
       const next = await fetchLeads(getToken)
+      if (requestId !== refreshLeadsGenerationRef.current) return
       if (next?.notModified) {
         await hydrateSharedLeadPhotosRef.current?.()
         return
       }
+      const excludeIds = deletedLeadIdsRef.current
       setLeads((prev) => {
-        mergedLeads = mergeListViewLeads(prev.length > 0 ? prev : baseline, next)
+        mergedLeads = mergeListViewLeads(
+          prev.length > 0 ? prev : baseline,
+          next,
+          { excludeIds },
+        )
         saveLocalLeads(mergedLeads)
         return mergedLeads
       })
       await refreshTags()
+      if (requestId !== refreshLeadsGenerationRef.current) return
       await hydrateSharedLeadPhotosRef.current?.({ leadsSnapshot: mergedLeads })
     } catch (error) {
       console.error('Error loading leads:', error)
@@ -1249,15 +1259,16 @@ function App() {
     const leadIds = collectLeadsNeedingPhotoHydrate(snapshot, {
       priorityLeadIds: priority,
       pendingUploadsByLeadId,
-    })
+    }).filter((leadId) => !deletedLeadIdsRef.current.has(leadId))
     if (!leadIds.length) return
 
     await Promise.all(leadIds.map(async (leadId) => {
       if (hydratingLeadIdsRef.current.has(leadId)) return
+      if (deletedLeadIdsRef.current.has(leadId)) return
       hydratingLeadIdsRef.current.add(leadId)
       try {
         const full = await fetchLeadById(getToken, leadId)
-        if (!full?.id) return
+        if (!full?.id || deletedLeadIdsRef.current.has(leadId)) return
         setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetail))
         setPhotoModeLead((prev) => (
           prev?.id === full.id ? mergeLeadDetail(prev, full) : prev
@@ -1387,6 +1398,14 @@ function App() {
   }, [currentUser, teams.length, pipelines.length, pipelines, pickActivePipelineId])
 
   useEffect(() => {
+    if (!leadsDetailLeadId) return
+    const stillExists = leads.some(
+      (l) => l.id === leadsDetailLeadId || l.parcelId === leadsDetailLeadId,
+    )
+    if (!stillExists) nav.popLeadsDetail()
+  }, [leads, leadsDetailLeadId, nav])
+
+  useEffect(() => {
     if (currentUser) {
       const cached = loadLocalLeads()
       if (cached.length > 0) {
@@ -1402,6 +1421,7 @@ function App() {
       refreshLeads({ existingLeads: cached })
       refreshTags()
     } else {
+      deletedLeadIdsRef.current.clear()
       setPipelines([])
       setActivePipelineId(null)
       setLeads([])
@@ -1535,6 +1555,29 @@ function App() {
   const handleEditLead = useCallback((lead) => {
     if (lead?.id) setEditLead(lead)
   }, [])
+
+  const handleLeadDeleted = useCallback((deletedLeadId) => {
+    if (!deletedLeadId) return
+    deletedLeadIdsRef.current.add(deletedLeadId)
+    refreshLeadsGenerationRef.current += 1
+    setLeads((prev) => {
+      const next = prev.filter((l) => l.id !== deletedLeadId)
+      saveLocalLeads(next)
+      return next
+    })
+    setEditLead((prev) => (prev?.id === deletedLeadId ? null : prev))
+    setPhotoModeLead((prev) => (prev?.id === deletedLeadId ? null : prev))
+    if (leadsDetailLeadIdRef.current === deletedLeadId) {
+      nav.popLeadsDetail()
+    }
+    if (dealsLeadOverlayId === deletedLeadId) {
+      nav.popIfTop('deals.lead')
+    }
+    if (pipesLeadOverlayId === deletedLeadId) {
+      nav.popIfTop('pipes.lead')
+    }
+    void refreshLeads()
+  }, [nav, dealsLeadOverlayId, pipesLeadOverlayId, refreshLeads])
 
   const markLeadConvertedAfterDeal = useCallback(async (lead, deal) => {
     if (!lead?.id || !deal) return
@@ -3253,13 +3296,12 @@ function App() {
     if (leadNeedsPhotoHydrate(lead)) {
       fetchLeadById(getToken, lead.id)
         .then((full) => {
-          if (full?.id) {
-            setLeads((prev) => {
-              const next = prev.map((l) => (l.id === full.id ? mergeLeadDetail(l, full) : l))
-              saveLocalLeads(next)
-              return next
-            })
-          }
+          if (!full?.id || deletedLeadIdsRef.current.has(full.id)) return
+          setLeads((prev) => {
+            const next = prev.map((l) => (l.id === full.id ? mergeLeadDetail(l, full) : l))
+            saveLocalLeads(next)
+            return next
+          })
         })
         .catch((err) => console.warn('Lead detail hydrate failed:', err?.message))
     }
@@ -4189,6 +4231,7 @@ function App() {
         canSeeDealAmounts={showDealAmounts}
         canAccessPhotos={canAccessFeature('photos')}
         onEditLead={handleEditLead}
+        onLeadDeleted={handleLeadDeleted}
         editLeadId={editLead?.id ?? null}
         onCreateLead={openCreateLeadForPicker}
         tagRegistry={tagRegistry}
@@ -4628,6 +4671,7 @@ function App() {
         canAccessPhotos={canAccessFeature('photos')}
         canAccessReports={canAccessFeature('reports')}
         onEditLead={handleEditLead}
+        onLeadDeleted={handleLeadDeleted}
         onCreatePhotoReport={handleCreatePhotoReport}
         onOpenPhotoReport={handleOpenPhotoReport}
         tagRegistry={tagRegistry}
@@ -4697,6 +4741,7 @@ function App() {
         canAccessPhotos={canAccessFeature('photos')}
         currentUser={currentUser}
         onEditLead={handleEditLead}
+        onLeadDeleted={handleLeadDeleted}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
         leadOverlayPanelDockSlot={leadOverlayPanelDockSlot}

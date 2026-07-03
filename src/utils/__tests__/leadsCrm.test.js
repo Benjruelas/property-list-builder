@@ -107,6 +107,21 @@ describe('lead CRM helpers', () => {
     expect(merged[0].photos).toEqual([{ id: 'p1' }, { id: 'p2' }])
   })
 
+  it('mergeListViewLeads skips excluded lead ids (e.g. after delete)', () => {
+    const existing = [{
+      id: 'l1',
+      photos: [{ id: 'p1' }],
+      activity: [{ type: 'call', at: '2026-01-01T00:00:00.000Z' }],
+    }]
+    const incoming = [
+      { id: 'l1', firstName: 'A', _listView: true, photoCount: 1 },
+      { id: 'l2', firstName: 'B', _listView: true },
+    ]
+    const merged = mergeListViewLeads(existing, incoming, { excludeIds: new Set(['l1']) })
+    expect(merged).toHaveLength(1)
+    expect(merged[0].id).toBe('l2')
+  })
+
   it('mergeListViewLeads uses server photos on full poll payloads', () => {
     const existing = [{
       id: 'l1',

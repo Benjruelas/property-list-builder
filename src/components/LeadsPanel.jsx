@@ -73,6 +73,7 @@ export function LeadsPanel({
   pipelinesCount = 0,
   canSeeDealAmounts = true,
   onEditLead,
+  onLeadDeleted,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   leadStatuses = [],
@@ -441,11 +442,7 @@ export function LeadsPanel({
             onEditLead={onEditLead}
             onCreateDeal={onCreateDeal ?? startCreateDeal}
             onOpenDeal={onOpenDeal}
-            onLeadDeleted={(deletedLeadId) => {
-              onLeadsChange?.((prev) => prev.filter((l) => l.id !== deletedLeadId))
-              onCloseLeadDetail?.()
-              onRefreshLeads?.()
-            }}
+            onLeadDeleted={onLeadDeleted}
             onOpenScheduleAtDate={onOpenScheduleAtDate}
             onPipelinesChange={onPipelinesChange}
             teams={teams}
