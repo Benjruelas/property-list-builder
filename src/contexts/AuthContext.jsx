@@ -7,7 +7,6 @@ import {
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
-  sendPasswordResetEmail,
   updateProfile
 } from 'firebase/auth'
 import { auth } from '../config/firebase'
@@ -160,10 +159,11 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Reset password
+  // Reset password — branded email from KnockScout API with clean /reset-password links
   const resetPassword = async (email) => {
     try {
-      await sendPasswordResetEmail(auth, email)
+      const { requestPasswordResetEmail } = await import('../utils/authPasswordReset')
+      await requestPasswordResetEmail(email)
       showToast('Password reset email sent! Check your inbox.', 'success')
     } catch (error) {
       let errorMessage = 'Failed to send password reset email'
@@ -173,6 +173,9 @@ export const AuthProvider = ({ children }) => {
           break
         case 'auth/invalid-email':
           errorMessage = 'Invalid email address'
+          break
+        case 'auth/too-many-requests':
+          errorMessage = error.message
           break
         default:
           errorMessage = error.message

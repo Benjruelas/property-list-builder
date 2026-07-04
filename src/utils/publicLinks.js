@@ -25,6 +25,9 @@ export function buildReportPublicUrl(token, origin) {
 /** Parse public quote/report/form route from pathname and search. */
 export function parsePublicRoute(pathname = '', search = '') {
   const path = String(pathname || '')
+  if (/^\/reset-password\/?$/.test(path)) {
+    return { type: 'reset-password' }
+  }
   const quoteMatch = path.match(/^\/q\/([^/?#]+)\/?$/)
   if (quoteMatch) {
     return { type: 'quote', token: decodeURIComponent(quoteMatch[1]) }

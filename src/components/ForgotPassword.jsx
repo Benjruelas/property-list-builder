@@ -50,8 +50,8 @@ export function ForgotPassword({ isOpen, onClose, onSwitchToLogin }) {
 
         {emailSent ? (
           <div className="space-y-4">
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-sm text-green-800">
+            <div className="rounded-lg border border-white/20 p-4">
+              <p className="text-sm text-white/90 leading-relaxed">
                 Password reset email sent! Please check your inbox and follow the instructions to reset your password.
               </p>
             </div>

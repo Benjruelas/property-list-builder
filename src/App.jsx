@@ -55,6 +55,7 @@ const BulkEmailPreview = lazy(panelLazy.bulkEmailPreview)
 const HailDataPanel = lazy(panelLazy.hailData)
 import { setCachedDealQuotes, getCachedDealQuotes } from './utils/quotes'
 import { PublicFormPage } from './components/forms/PublicFormPage'
+import { ResetPasswordPage } from './components/ResetPasswordPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
 import { PublicReportPage } from './components/reports/PublicReportPage'
 import { LeadPickerDialog } from './components/photos/LeadPickerDialog'
@@ -4893,6 +4894,15 @@ export function AppWithPublicFormRoute() {
   const formToken = publicRoute?.type === 'form' ? publicRoute.token : null
   const quoteToken = publicRoute?.type === 'quote' ? publicRoute.token : null
   const reportToken = publicRoute?.type === 'report' ? publicRoute.token : null
+  const isResetPassword = publicRoute?.type === 'reset-password'
+  if (isResetPassword) {
+    return (
+      <div className="h-[100dvh] overflow-hidden">
+        <ResetPasswordPage />
+        <ToastContainer />
+      </div>
+    )
+  }
   if (formToken) {
     return (
       <div className="h-[100dvh] overflow-hidden">
