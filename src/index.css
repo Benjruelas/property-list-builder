@@ -4873,6 +4873,21 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   pointer-events: none;
 }
 
+/* Portaled to #modal-root so tour stacks above the desktop action bar (z ~10003). */
+#modal-root .tour-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  pointer-events: none;
+}
+#modal-root .tour-shell .tour-overlay,
+#modal-root .tour-shell .tour-spotlight,
+#modal-root .tour-shell .tour-tooltip,
+#modal-root .tour-shell .tour-parcel-intro-stack,
+#modal-root .tour-shell .tour-demo-parcel-anchor {
+  pointer-events: auto;
+}
+
 .tour-overlay {
   position: fixed;
   inset: 0;

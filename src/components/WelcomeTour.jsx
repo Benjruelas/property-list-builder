@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { TourDemoParcelPopup } from './TourDemoParcelPopup'
 import { resolveTourSelector, stepUsesActionBar as usesActionBar } from './welcomeTourUtils'
+import { getModalPortalContainer } from '@/utils/modalPortal'
 
 const MOBILE_MAX = 767
 
@@ -73,24 +74,28 @@ const TOUR_STEPS_BY_ID = {
     title: 'Address Search',
     desc: 'Jump to any property — search an address or paste coordinates.',
     target: '.map-search-stack button',
+    tooltipPrefer: 'right',
   },
   zoom: {
     id: 'zoom',
     title: 'Zoom Controls',
     desc: 'Zoom in on parcel lines or out to scan a whole neighborhood.',
     target: '[data-tour="zoom-controls"]',
+    tooltipPrefer: 'right',
   },
   recenter: {
     id: 'recenter',
     title: 'Recenter Map',
     desc: 'One tap puts the map back on your current location.',
     target: '[data-tour="recenter"]',
+    tooltipPrefer: 'left',
   },
   compass: {
     id: 'compass',
     title: 'Compass Mode',
     desc: 'Keep the map facing the same direction you are while you walk.',
     target: '[data-tour="compass"]',
+    tooltipPrefer: 'left',
   },
   'photo-mode': {
     id: 'photo-mode',
@@ -98,12 +103,14 @@ const TOUR_STEPS_BY_ID = {
     desc: 'Find this property and start shooting — geolocate, jump to the parcel, and open the camera.',
     target: '[data-tour="photo-mode"]',
     featureId: 'photos',
+    tooltipPrefer: 'left',
   },
   'multi-select': {
     id: 'multi-select',
     title: 'Multi-Select',
     desc: 'Tag a whole street at once — select multiple parcels and add them to a list.',
     target: '[data-tour="multi-select"]',
+    tooltipPrefer: 'left',
   },
   'path-recording': {
     id: 'path-recording',
@@ -111,6 +118,7 @@ const TOUR_STEPS_BY_ID = {
     desc: 'Record your drive or walk and revisit that route anytime.',
     target: '[data-tour="path-recording"]',
     featureId: 'paths',
+    tooltipPrefer: 'left',
   },
   'parcel-intro': {
     id: 'parcel-intro',
@@ -160,6 +168,7 @@ const TOUR_STEPS_BY_ID = {
     title: 'Quick Create',
     desc: 'Spin up a task, lead, deal, quote, or report without leaving the map.',
     target: '[data-tour="quick-create-fab"]',
+    tooltipPrefer: 'above',
   },
   pipes: {
     id: 'pipes',
@@ -303,24 +312,52 @@ const TOUR_STEPS_BY_ID = {
 const PADDING = 8
 const TOOLTIP_GAP = 12
 
+function rectFromPoints(top, left, width, height) {
+  return {
+    top: top - PADDING,
+    left: left - PADDING,
+    width: width + PADDING * 2,
+    height: height + PADDING * 2,
+    right: left + width + PADDING,
+    bottom: top + height + PADDING,
+  }
+}
+
 function getRect(el) {
   const r = el.getBoundingClientRect()
-  return {
-    top: r.top - PADDING,
-    left: r.left - PADDING,
-    width: r.width + PADDING * 2,
-    height: r.height + PADDING * 2,
-    right: r.right + PADDING,
-    bottom: r.bottom + PADDING,
+  if (r.width >= 1 && r.height >= 1) {
+    return rectFromPoints(r.top, r.left, r.width, r.height)
   }
+
+  let top = Infinity
+  let left = Infinity
+  let right = -Infinity
+  let bottom = -Infinity
+  for (const child of el.children) {
+    const cr = child.getBoundingClientRect()
+    if (cr.width < 1 || cr.height < 1) continue
+    top = Math.min(top, cr.top)
+    left = Math.min(left, cr.left)
+    right = Math.max(right, cr.right)
+    bottom = Math.max(bottom, cr.bottom)
+  }
+  if (!Number.isFinite(top)) {
+    return rectFromPoints(r.top, r.left, Math.max(r.width, 0), Math.max(r.height, 0))
+  }
+  return rectFromPoints(top, left, right - left, bottom - top)
 }
 
 function isTourTargetVisible(el) {
   const r = el.getBoundingClientRect()
-  if (r.width < 1 || r.height < 1) return false
   const style = window.getComputedStyle(el)
   if (style.display === 'none' || style.visibility === 'hidden') return false
-  return true
+
+  if (r.width >= 1 && r.height >= 1) return true
+
+  for (const child of el.children) {
+    if (isTourTargetVisible(child)) return true
+  }
+  return false
 }
 
 /** Prefer the visible match — desktop and mobile both render duplicate menu targets. */
@@ -568,11 +605,24 @@ export default function WelcomeTour({
     const spaceAbove = rect.top
     const spaceLeft = rect.left
     const spaceRight = vw - rect.right
-    const preferAbove = current?.tooltipPrefer === 'above'
+    const selector = resolveSelector(current, isMobile)
+    const preferAbove =
+      current?.tooltipPrefer === 'above' ||
+      selector?.includes('action-bar') ||
+      selector?.includes('menu-') ||
+      selector?.includes('quick-create-fab')
+    const preferRight = current?.tooltipPrefer === 'right'
+    const preferLeft = current?.tooltipPrefer === 'left'
 
     if (preferAbove && spaceAbove >= tt.height + TOOLTIP_GAP) {
       top = rect.top - tt.height - TOOLTIP_GAP
       left = rect.left + rect.width / 2 - tt.width / 2
+    } else if (preferRight && spaceRight >= tt.width + TOOLTIP_GAP) {
+      left = rect.right + TOOLTIP_GAP
+      top = rect.top + rect.height / 2 - tt.height / 2
+    } else if (preferLeft && spaceLeft >= tt.width + TOOLTIP_GAP) {
+      left = rect.left - tt.width - TOOLTIP_GAP
+      top = rect.top + rect.height / 2 - tt.height / 2
     } else if (spaceLeft >= tt.width + TOOLTIP_GAP) {
       left = rect.left - tt.width - TOOLTIP_GAP
       top = rect.top + rect.height / 2 - tt.height / 2
@@ -590,10 +640,14 @@ export default function WelcomeTour({
       left = vw / 2 - tt.width / 2
     }
 
+    const actionBarReserve = 96
     top = Math.max(12, Math.min(vh - tt.height - 12, top))
+    if (preferAbove || selector?.includes('action-bar')) {
+      top = Math.min(top, vh - actionBarReserve - tt.height - 12)
+    }
     left = Math.max(12, Math.min(vw - tt.width - 12, left))
     setTooltipPos((prev) => (prev.top === top && prev.left === left ? prev : { top, left }))
-  }, [rect, centered, current?.parcelLayout, current?.tooltipPrefer, stepReady])
+  }, [rect, centered, current, current?.parcelLayout, current?.tooltipPrefer, isMobile, stepReady])
 
   const finish = useCallback(() => {
     if (exiting) return
@@ -698,6 +752,6 @@ export default function WelcomeTour({
         </div>
       )}
     </div>,
-    document.body
+    getModalPortalContainer() || document.body
   )
 }

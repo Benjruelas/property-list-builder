@@ -117,7 +117,7 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
         </div>
       )}
 
-      <div className="contents" data-tour="zoom-controls">
+      <div className="map-chrome-btn-group" data-tour="zoom-controls">
         <Button
           onClick={() => {
             onCloseParcelPopup?.()
