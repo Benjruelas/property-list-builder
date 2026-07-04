@@ -4,6 +4,8 @@
 
 import { getApiBase } from './apiBase'
 
+const SW_SCRIPT_URL = '/sw.js'
+
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -13,6 +15,27 @@ function urlBase64ToUint8Array(base64String) {
     outputArray[i] = rawData.charCodeAt(i)
   }
   return outputArray
+}
+
+/**
+ * After "Clear site data" the page can keep running without a registered SW.
+ * Re-register and wait for an active worker before PushManager calls.
+ */
+export async function ensurePushServiceWorker() {
+  if (!('serviceWorker' in navigator)) {
+    throw new Error('Service workers not supported')
+  }
+
+  const existing = await navigator.serviceWorker.getRegistration()
+  if (!existing?.active) {
+    await navigator.serviceWorker.register(SW_SCRIPT_URL)
+  }
+
+  const registration = await navigator.serviceWorker.ready
+  if (!registration.active) {
+    throw new Error('No active service worker')
+  }
+  return registration
 }
 
 /**
@@ -27,19 +50,19 @@ export async function subscribeToWebPush(getToken) {
   const token = await getToken()
   if (!token) return false
 
-  const reg = await navigator.serviceWorker.ready
+  const reg = await ensurePushServiceWorker()
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(vapid)
+    applicationServerKey: urlBase64ToUint8Array(vapid),
   })
 
   const res = await fetch(`${getApiBase()}/push-subscribe`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
+      Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ subscription: sub.toJSON() })
+    body: JSON.stringify({ subscription: sub.toJSON() }),
   })
   return res.ok
 }
@@ -51,15 +74,15 @@ export async function unsubscribeWebPush(getToken) {
   const token = await getToken()
   if (!token) return
   try {
-    const reg = await navigator.serviceWorker.ready
-    const sub = await reg.pushManager.getSubscription()
+    const reg = await navigator.serviceWorker.getRegistration()
+    const sub = reg ? await reg.pushManager.getSubscription() : null
     if (sub) await sub.unsubscribe()
   } catch {
     /* ignore */
   }
   await fetch(`${getApiBase()}/push-subscribe`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}` },
   }).catch(() => {})
 }
 
@@ -70,11 +93,11 @@ export async function showLocalNotification(title, options = {}) {
   if (typeof window === 'undefined' || !('Notification' in window)) return
   if (Notification.permission !== 'granted') return
   try {
-    const reg = await navigator.serviceWorker.ready
+    const reg = await ensurePushServiceWorker()
     await reg.showNotification(title, {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
-      ...options
+      ...options,
     })
   } catch {
     try {

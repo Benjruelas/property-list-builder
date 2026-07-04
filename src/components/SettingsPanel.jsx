@@ -307,13 +307,20 @@ export function SettingsPanel({
         showToast('Notification permission denied', 'error')
         return
       }
-      update({ notifications: { ...base, pushEnabled: true } })
       if (getToken) {
-        const ok = await subscribeToWebPush(getToken)
-        if (!ok) {
-          showToast('Could not enable server push. Sign in and ensure VAPID keys are set.', 'warning')
+        try {
+          const ok = await subscribeToWebPush(getToken)
+          if (!ok) {
+            showToast('Could not enable server push. Sign in and ensure VAPID keys are set.', 'warning')
+            return
+          }
+        } catch (err) {
+          console.warn('Push subscribe failed:', err)
+          showToast('Could not enable push notifications. Refresh the page and try again.', 'warning')
+          return
         }
       }
+      update({ notifications: { ...base, pushEnabled: true } })
     } else {
       if (getToken) await unsubscribeWebPush(getToken)
       update({ notifications: { ...base, pushEnabled: false } })

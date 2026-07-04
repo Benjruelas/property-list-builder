@@ -15,11 +15,10 @@ import { NavigationProvider } from './navigation/NavigationContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
+  const registerServiceWorker = () => {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
-        // Pick up new SW versions when the user returns to the tab.
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
             registration.update().catch(() => {})
@@ -29,7 +28,12 @@ if ('serviceWorker' in navigator) {
       .catch((err) => {
         console.warn('Service worker registration failed:', err?.message || err)
       })
-  })
+  }
+  if (document.readyState === 'complete') {
+    registerServiceWorker()
+  } else {
+    window.addEventListener('load', registerServiceWorker)
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
