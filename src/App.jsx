@@ -36,6 +36,7 @@ import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skip
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import PathTracker from './components/PathTracker'
 import { getUserLocation, setCurrentUserLocation, subscribeUserLocation, useUserLocation } from './utils/locationStore'
+import { getCurrentPositionWithFallback, getWatchPositionOptions } from './utils/geolocation'
 import { panelLazy, prefetchPanel } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
 const FormsPanel = lazy(panelLazy.forms)
@@ -802,76 +803,76 @@ function App() {
   useEffect(() => {
     if (!permissionsReady) return
     let watchId = null
+    let cancelled = false
     let lastUpdateTime = 0
     const UPDATE_THROTTLE_MS = 1000
+    const defaultLocation = { lat: 32.7767, lng: -96.7970, accuracy: null }
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCurrentUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          })
-          lastUpdateTime = Date.now()
-        },
-        (error) => {
-          console.error('Error getting initial location:', error)
-          setCurrentUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      )
-
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const now = Date.now()
-          if (now - lastUpdateTime < UPDATE_THROTTLE_MS) return
-
-          const location = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          }
-
-          const prevLocation = getUserLocation()
-          if (!prevLocation) {
-            lastUpdateTime = now
-            setCurrentUserLocation(location)
-            return
-          }
-
-          const latDiff = Math.abs(location.lat - prevLocation.lat)
-          const lngDiff = Math.abs(location.lng - prevLocation.lng)
-          const distanceMeters = Math.sqrt(
-            Math.pow(latDiff * 111000, 2) +
-            Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
-          )
-
-          if (distanceMeters >= 2) {
-            lastUpdateTime = now
-            setCurrentUserLocation(location)
-          }
-        },
-        (error) => {
-          console.error('Error watching location:', error)
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      )
-
-    } else {
-      setCurrentUserLocation({ lat: 32.7767, lng: -96.7970, accuracy: null })
+    const applyPosition = (position) => {
+      setCurrentUserLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      })
+      lastUpdateTime = Date.now()
     }
 
+    if (!navigator.geolocation) {
+      setCurrentUserLocation(defaultLocation)
+      return undefined
+    }
+
+    getCurrentPositionWithFallback()
+      .then((position) => {
+        if (!cancelled) applyPosition(position)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.warn('Initial location unavailable; using default map center.', error?.code ?? error)
+        setCurrentUserLocation(defaultLocation)
+      })
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const now = Date.now()
+        if (now - lastUpdateTime < UPDATE_THROTTLE_MS) return
+
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        }
+
+        const prevLocation = getUserLocation()
+        if (!prevLocation) {
+          lastUpdateTime = now
+          setCurrentUserLocation(location)
+          return
+        }
+
+        const latDiff = Math.abs(location.lat - prevLocation.lat)
+        const lngDiff = Math.abs(location.lng - prevLocation.lng)
+        const distanceMeters = Math.sqrt(
+          Math.pow(latDiff * 111000, 2) +
+          Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
+        )
+
+        if (distanceMeters >= 2) {
+          lastUpdateTime = now
+          setCurrentUserLocation(location)
+        }
+      },
+      (error) => {
+        // code 2 (POSITION_UNAVAILABLE) is common on desktop Mac when Core Location has no fix.
+        if (error?.code === 2) return
+        console.warn('Error watching location:', error)
+      },
+      getWatchPositionOptions()
+    )
+
     return () => {
-      if (watchId !== null && navigator.geolocation) {
+      cancelled = true
+      if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId)
       }
     }

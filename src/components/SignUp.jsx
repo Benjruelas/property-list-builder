@@ -1,15 +1,59 @@
 import { useState, useEffect } from 'react'
-import { Mail, Lock, User, UserPlus, ArrowRight } from 'lucide-react'
+import { Mail, Lock, User, UserPlus, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { useAuth } from '../contexts/AuthContext'
+
+function SignUpPasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  visible,
+  onToggleVisible,
+  placeholder,
+  disabled,
+}) {
+  return (
+    <div className="space-y-2">
+      <label htmlFor={id} className="text-sm font-medium text-gray-700">
+        {label}
+      </label>
+      <div className="relative">
+        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          className="pl-10 pr-10"
+          required
+          minLength={6}
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          onClick={onToggleVisible}
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          disabled={disabled}
+        >
+          {visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { signup, signInWithGoogle, currentUser, loading: authLoading } = useAuth()
 
@@ -21,6 +65,8 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
       setEmail('')
       setPassword('')
       setConfirmPassword('')
+      setShowPassword(false)
+      setShowConfirmPassword(false)
     }
   }, [isOpen])
 
@@ -132,45 +178,27 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                id="password"
-                type="password"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10"
-                required
-                minLength={6}
-                disabled={isLoading}
-              />
-            </div>
-          </div>
+          <SignUpPasswordField
+            id="password"
+            label="Password"
+            placeholder="At least 6 characters"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            visible={showPassword}
+            onToggleVisible={() => setShowPassword((v) => !v)}
+            disabled={isLoading}
+          />
 
-          <div className="space-y-2">
-            <label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
-              Confirm Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="pl-10"
-                required
-                minLength={6}
-                disabled={isLoading}
-              />
-            </div>
-          </div>
+          <SignUpPasswordField
+            id="confirmPassword"
+            label="Confirm Password"
+            placeholder="Confirm your password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            visible={showConfirmPassword}
+            onToggleVisible={() => setShowConfirmPassword((v) => !v)}
+            disabled={isLoading}
+          />
 
           <Button
             type="submit"

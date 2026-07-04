@@ -14,6 +14,9 @@ function parseResetParams() {
   }
 }
 
+const RESET_INPUT_CLASS =
+  'bg-white text-gray-900 border-white/25 placeholder:text-gray-500 focus-visible:ring-blue-500 focus-visible:ring-offset-0'
+
 export function ResetPasswordPage() {
   const [oobCode] = useState(() => parseResetParams().oobCode)
   const [email, setEmail] = useState(() => parseResetParams().email || '')
@@ -169,6 +172,7 @@ export function ResetPasswordPage() {
               minLength={6}
               required
               disabled={submitting}
+              className={RESET_INPUT_CLASS}
             />
           </div>
           <div>
@@ -184,6 +188,7 @@ export function ResetPasswordPage() {
               minLength={6}
               required
               disabled={submitting}
+              className={RESET_INPUT_CLASS}
             />
           </div>
           <Button type="submit" className="w-full" disabled={submitting}>
