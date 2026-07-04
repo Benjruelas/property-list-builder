@@ -87,23 +87,6 @@ export const AuthProvider = ({ children }) => {
       showToast('Signed in successfully!', 'success')
       return userCredential
     } catch (error) {
-      const code = error?.code || ''
-      const invalidCredentials = [
-        'auth/user-not-found',
-        'auth/wrong-password',
-        'auth/invalid-credential',
-        'auth/invalid-login-credentials',
-        'auth/invalid-email',
-      ]
-      let errorMessage = 'Unable to sign in. Please try again.'
-      if (invalidCredentials.includes(code)) {
-        errorMessage = 'Invalid email or password.'
-      } else if (code === 'auth/user-disabled') {
-        errorMessage = 'This account has been disabled.'
-      } else if (code === 'auth/too-many-requests') {
-        errorMessage = 'Too many attempts. Please wait a moment and try again.'
-      }
-      showToast(errorMessage, 'error')
       throw error
     }
   }

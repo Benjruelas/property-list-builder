@@ -5,10 +5,13 @@ import { Input } from './ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { useAuth } from '../contexts/AuthContext'
 
+const SIGN_IN_ERROR = 'Incorrect email or password'
+
 export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassword }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [signInError, setSignInError] = useState('')
   const { login, signInWithGoogle, currentUser, loading: authLoading } = useAuth()
 
   // Reset loading state when dialog closes
@@ -17,6 +20,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
       setIsLoading(false)
       setEmail('')
       setPassword('')
+      setSignInError('')
     }
   }, [isOpen])
 
@@ -37,17 +41,19 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
     }
 
     setIsLoading(true)
+    setSignInError('')
     try {
       await login(email, password)
       // Reset loading state - dialog will close via useEffect when currentUser is set
       setIsLoading(false)
-    } catch (error) {
-      // Error is handled in AuthContext
+    } catch {
+      setSignInError(SIGN_IN_ERROR)
       setIsLoading(false)
     }
   }
 
   const handleGoogleSignIn = async () => {
+    setSignInError('')
     setIsLoading(true)
     try {
       await signInWithGoogle()
@@ -88,7 +94,10 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
                 type="email"
                 placeholder="your@email.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  setSignInError('')
+                }}
                 className="pl-10"
                 required
                 disabled={isLoading}
@@ -118,7 +127,10 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
                 type="password"
                 placeholder="Enter your password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  setSignInError('')
+                }}
                 className="pl-10"
                 required
                 disabled={isLoading}
@@ -144,6 +156,11 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
               </>
             )}
           </Button>
+          {signInError && (
+            <p className="text-sm text-red-600 text-center" role="alert">
+              {signInError}
+            </p>
+          )}
         </form>
 
         <div className="flex items-center gap-3 my-4">
