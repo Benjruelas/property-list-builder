@@ -305,7 +305,7 @@ function useTemplateTab(config) {
 }
 
 const TemplateTabPane = forwardRef(function TemplateTabPane(
-  { tab, onUseTemplate, searchQuery, onNavChange },
+  { tab, searchQuery, onNavChange },
   ref
 ) {
   const config = tab === 'email' ? EMAIL_CONFIG : TEXT_CONFIG
@@ -425,17 +425,6 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
       >
         {menuTemplate && (
           <>
-            {onUseTemplate && tab === 'email' && (
-              <OptionsMenuItem
-                onClick={() => {
-                  onUseTemplate(menuTemplate)
-                  setMenuOpen(false)
-                }}
-              >
-                <FileText className="h-4 w-4 shrink-0" />
-                Use template
-              </OptionsMenuItem>
-            )}
             <OptionsMenuItem
               onClick={() => {
                 openEdit(menuTemplate)
@@ -473,7 +462,7 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
   )
 })
 
-export function OutreachPanel({ isOpen, onClose, onUseTemplate, initialTab = 'email', panelDockSlot }) {
+export function OutreachPanel({ isOpen, onClose, initialTab = 'email', panelDockSlot }) {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
   const [nav, setNav] = useState({ screen: 'list', title: null })
@@ -551,7 +540,6 @@ export function OutreachPanel({ isOpen, onClose, onUseTemplate, initialTab = 'em
             key={activeTab}
             ref={activeTabRef}
             tab={activeTab}
-            onUseTemplate={onUseTemplate}
             searchQuery={searchQuery}
             onNavChange={setNav}
           />

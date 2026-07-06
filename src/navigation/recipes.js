@@ -496,6 +496,3 @@ export function recipeOpenEmailComposer(currentStack, payload) {
   return [...currentStack.filter((f) => f.type !== 'emailComposer'), { type: 'emailComposer', payload }]
 }
 
-export function recipeOpenBulkEmailPreview(currentStack, listId) {
-  return [...currentStack.filter((f) => f.type !== 'bulkEmailPreview'), { type: 'bulkEmailPreview', listId }]
-}

@@ -57,7 +57,7 @@ export function selectAnyPanelOpen(state) {
   return (
     state.navStack.length > 0 ||
     state.mapOverlayStack.some((o) => o.type === 'parcelDetails' || o.type === 'hail') ||
-    state.navStack.some((f) => f.type === 'outreach' || f.type === 'emailComposer' || f.type === 'bulkEmailPreview')
+    state.navStack.some((f) => f.type === 'outreach' || f.type === 'emailComposer')
   )
 }
 
@@ -160,12 +160,11 @@ export function selectPanelProps(state) {
   const teamsDetail = findFrame(state, 'teams.detail')
   const outreachFrame = findFrame(state, 'outreach')
   const emailComposerFrame = findFrame(state, 'emailComposer')
-  const bulkEmailFrame = findFrame(state, 'bulkEmailPreview')
-
   const popupOverlay = state.mapOverlayStack.find((o) => o.type === 'popup')
   const detailsOverlay = state.mapOverlayStack.find((o) => o.type === 'parcelDetails')
   const hailOverlay = state.mapOverlayStack.find((o) => o.type === 'hail')
   const phoneOverlay = state.mapOverlayStack.find((o) => o.type === 'phone')
+  const emailOverlay = state.mapOverlayStack.find((o) => o.type === 'email')
   const topOverlay = selectTopOverlay(state)
 
   return {
@@ -222,8 +221,6 @@ export function selectPanelProps(state) {
     isOutreachPanelOpen: !!outreachFrame,
     outreachInitialTab: outreachFrame?.initialTab ?? 'email',
     isEmailComposerOpen: !!emailComposerFrame,
-    isBulkEmailPreviewOpen: !!bulkEmailFrame,
-    bulkEmailListId: bulkEmailFrame?.listId ?? null,
     /** True while parcel details remain on the overlay stack (including under hail). */
     isParcelDetailsOpen: !!detailsOverlay,
     parcelDetailsSource: detailsOverlay?.source ?? 'map',
@@ -234,6 +231,11 @@ export function selectPanelProps(state) {
       parcelData: phoneOverlay.parcelData,
       leadId: phoneOverlay.leadId ?? null,
       initialStep: phoneOverlay.initialStep ?? 1,
+    } : null,
+    emailActionPanel: emailOverlay ? {
+      email: emailOverlay.email,
+      parcelData: emailOverlay.parcelData,
+      leadId: emailOverlay.leadId ?? null,
     } : null,
     popupData: popupOverlay?.popupData ?? null,
     clickedParcelId: detailsOverlay?.parcelId ?? popupOverlay?.parcelId ?? hailOverlay?.parcelId ?? null,

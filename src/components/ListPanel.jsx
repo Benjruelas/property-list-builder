@@ -90,7 +90,6 @@ export function ListPanel({
   onViewListContents,
   onExportList,
   isAddingSingleParcel = false,
-  isBulkEmailMode = false,
   /** Matches Settings → Parcel boundary color (list add / multi-select prompts). */
   parcelBoundaryColor = '#2563eb',
   getToken,
@@ -430,11 +429,6 @@ export function ListPanel({
               {selectedParcelsCount} parcel{selectedParcelsCount !== 1 ? 's' : ''} selected
             </div>
           )}
-          {!isAddingSingleParcel && selectedParcelsCount === 0 && isBulkEmailMode && (
-            <div className="mb-3 p-3 rounded-lg text-sm font-medium text-center border" style={{ color: 'white', borderColor: '#16a34a' }}>
-              Select a list to send emails to
-            </div>
-          )}
 
           <div className="mb-3 space-y-2">
             <div className="hidden md:flex gap-4 flex-wrap" role="tablist" aria-label="List filters">
@@ -493,7 +487,7 @@ export function ListPanel({
               const listColorIndex = isSelected ? selectedListIds.indexOf(list.id) : -1
               const listColor = listColorIndex >= 0 ? LIST_HIGHLIGHT_COLORS[listColorIndex] : undefined
               const parcelCount = list.parcels?.length ?? 0
-              const rowDisabled = !isAddingSingleParcel && !isBulkEmailMode && parcelCount === 0
+              const rowDisabled = !isAddingSingleParcel && parcelCount === 0
               const createdLabel = formatListCreatedAt(list.createdAt)
 
               return (
@@ -511,7 +505,7 @@ export function ListPanel({
                     backgroundColor: 'rgba(255, 255, 255, 0.08)',
                   } : undefined}
                   onClick={() => {
-                    if (isAddingSingleParcel || isBulkEmailMode) {
+                    if (isAddingSingleParcel) {
                       onAddParcelsToList?.(list.id)
                       return
                     }
@@ -521,18 +515,16 @@ export function ListPanel({
                     if (rowDisabled) return
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      if (isAddingSingleParcel || isBulkEmailMode) onAddParcelsToList?.(list.id)
+                      if (isAddingSingleParcel) onAddParcelsToList?.(list.id)
                       else if (parcelCount > 0) onViewListContents?.(list.id)
                     }
                   }}
                   title={
                     isAddingSingleParcel
                       ? 'Click to add parcel to this list'
-                      : isBulkEmailMode
-                        ? 'Click to send emails to this list'
-                        : parcelCount > 0
-                          ? 'Click to view list contents'
-                          : 'List is empty'
+                      : parcelCount > 0
+                        ? 'Click to view list contents'
+                        : 'List is empty'
                   }
                 >
                   <div className="flex-1 min-w-0">

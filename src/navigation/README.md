@@ -14,7 +14,7 @@ Non-route UI context (e.g. `showMenu`, `activePipelineId`) stays in `App.jsx`.
 
 ## Frame catalog
 
-Root panels: `activity`, `lists`, `leads`, `deals`, `pipes`, `tasks`, `schedule`, `paths`, `forms`, `quotes`, `teams`, `settings`, `skipTraced`, `outreach`, `emailComposer`, `bulkEmailPreview`.
+Root panels: `activity`, `lists`, `leads`, `deals`, `pipes`, `tasks`, `schedule`, `paths`, `forms`, `quotes`, `teams`, `settings`, `skipTraced`, `outreach`, `emailComposer`.
 
 Nested frames use dot notation, e.g. `leads.detail`, `pipes.deal`, `schedule.lead`, `forms.edit`, `quotes.editor`.
 

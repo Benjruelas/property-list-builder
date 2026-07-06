@@ -53,7 +53,7 @@
       "destination": "/api/:path*"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|@vite|@react-refresh|@fs/|src/|node_modules/|assets/|manifest\\.webmanifest|favicon|icon-|sw\\.js).*)",
       "destination": "/index.html"
     }
   ],

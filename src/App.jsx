@@ -16,6 +16,7 @@ import { ParcelListPanel } from './components/ParcelListPanel'
 import { ParcelDetailsV3 as ParcelDetails } from './components/parcel-details'
 import { ParcelPopupV1 } from './components/parcel-popup'
 import { PhoneActionPanel } from './components/PhoneActionPanel'
+import { EmailActionPanel } from './components/EmailActionPanel'
 import { Login } from './components/Login'
 import { SignUp } from './components/SignUp'
 import { ForgotPassword } from './components/ForgotPassword'
@@ -52,7 +53,6 @@ const LeadsPanel = lazy(panelLazy.leads)
 const DealsPanel = lazy(panelLazy.deals)
 const OutreachPanel = lazy(panelLazy.outreach)
 const EmailComposer = lazy(panelLazy.emailComposer)
-const BulkEmailPreview = lazy(panelLazy.bulkEmailPreview)
 const HailDataPanel = lazy(panelLazy.hailData)
 import { setCachedDealQuotes, getCachedDealQuotes } from './utils/quotes'
 import { PublicFormPage } from './components/forms/PublicFormPage'
@@ -67,6 +67,7 @@ import { fetchPaths, createPath, renamePath as renamePathApi, deletePath as dele
 import { buildPathColorMap } from './utils/pathColors'
 import { shareTemplate as shareTemplateApi, shareTemplateWithTeams as shareTemplateWithTeamsApi } from './utils/forms'
 import { fetchTeamContext } from './utils/teams'
+import { getAllTeamMembers } from './utils/teamTaskUtils'
 import { resolveTeamMemberFeatures, canAccessTeamFeature, canSeeDealAmounts, TEAM_FEATURE_ACCESS_DENIED_MESSAGE, featureIdForFeedNav } from './utils/teamFeatures'
 import { subscribeToWebPush } from './utils/pushNotifications'
 import { reverseGeocodeCity, addressFromProperties, resolveParcelDisplayAddress } from './utils/reverseGeocode'
@@ -262,13 +263,12 @@ function App() {
     isOutreachPanelOpen,
     outreachInitialTab,
     isEmailComposerOpen,
-    isBulkEmailPreviewOpen,
-    bulkEmailListId: navBulkEmailListId,
     isParcelDetailsOpen,
     parcelDetailsSource,
     isHailDataOpen,
     hailDataParcel,
     phoneActionPanel,
+    emailActionPanel,
     popupData,
     clickedParcelId,
     clickedParcelData,
@@ -329,7 +329,6 @@ function App() {
   const outreachPanelMounted = useStickyPanelMount(isOutreachPanelOpen)
   const settingsPanelMounted = useStickyPanelMount(isSettingsPanelOpen)
   const emailComposerMounted = useStickyPanelMount(isEmailComposerOpen)
-  const bulkEmailMounted = useStickyPanelMount(isBulkEmailPreviewOpen)
   const hailDataMounted = useStickyPanelMount(isHailDataOpen)
   
   // Debug: Log current user state
@@ -360,9 +359,6 @@ function App() {
   const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
   const [emailComposerRecipient, setEmailComposerRecipient] = useState({ email: '', name: '' })
   const [emailComposerLeadId, setEmailComposerLeadId] = useState(null)
-  const [bulkEmailList, setBulkEmailList] = useState(null)
-  const [bulkEmailListId, setBulkEmailListId] = useState(null)
-  const [isSendingBulkEmails, setIsSendingBulkEmails] = useState(false)
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
   // On fresh visits (prompt shown), compass starts from settings default.
   // On return visits where iOS needs a gesture, start OFF until orientation is confirmed.
@@ -441,6 +437,7 @@ function App() {
     () => (teamsDetailTeamId ? teams.find((t) => t.id === teamsDetailTeamId) : null),
     [teams, teamsDetailTeamId],
   )
+  const teamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
   const [selectedHailEvent, setSelectedHailEvent] = useState(null)
   /** Parcel context for storm map view after hail/parcel panels are dismissed */
   const [hailStormParcel, setHailStormParcel] = useState(null)
@@ -2885,14 +2882,19 @@ function App() {
       return
     }
     guardFeature('outreach', () => {
-      prefetchPanel('outreach')
-      setIsBulkEmailMode(false)
+      prefetchPanel('emailComposer')
       setEmailComposerParcelData(parcelData)
       setEmailComposerRecipient({ email, name: parcelData?.properties?.OWNER_NAME || '' })
       setEmailComposerLeadId(leadId || null)
-      nav.push({ type: 'outreach', initialTab: 'email' })
+      nav.showEmailOverlay({ type: 'email', email, parcelData: parcelData || null, leadId: leadId || null })
     })
   }, [currentUser, authLoading, nav, guardFeature])
+
+  const handleOpenEmailComposer = useCallback((template) => {
+    setSelectedEmailTemplate(template ?? null)
+    nav.popMapOverlay()
+    nav.push({ type: 'emailComposer' })
+  }, [nav])
 
   const handleOpenOutreach = useCallback(() => {
     if (authLoading) return
@@ -2902,11 +2904,8 @@ function App() {
     }
     guardFeature('outreach', () => {
       prefetchPanel('outreach')
-      setIsBulkEmailMode(false)
       setEmailComposerParcelData(null)
       setEmailComposerRecipient({ email: '', name: '' })
-      setBulkEmailList(null)
-      setBulkEmailListId(null)
       nav.openOutreach('email')
     })
   }, [currentUser, authLoading, nav, guardFeature])
@@ -3312,176 +3311,6 @@ function App() {
   const openSettingsPanel = useCallback(() => nav.openSettings(), [nav])
   const openLogin = useCallback(() => nav.openLogin(), [nav])
 
-  // Handle email button click from list (opens template selection, then preview)
-  const handleBulkEmailFromList = useCallback((listId) => {
-    guardFeature('outreach', () => {
-      prefetchPanel('outreach')
-      setBulkEmailListId(listId)
-      setIsBulkEmailMode(true)
-      setEmailComposerParcelData(null)
-      setEmailComposerRecipient({ email: '', name: '' })
-      nav.openOutreach('email')
-    })
-  }, [nav, guardFeature])
-
-  const [isBulkEmailMode, setIsBulkEmailMode] = useState(false)
-
-  const handleTemplateSelect = useCallback(async (template) => {
-    if (isBulkEmailMode) {
-      if (bulkEmailListId) {
-        setSelectedEmailTemplate(template)
-        nav.pop()
-        try {
-          const list = lists.find(l => l.id === bulkEmailListId)
-          if (!list) {
-            showToast('List not found', 'error')
-            return
-          }
-
-          const { getSkipTracedParcel } = await import('./utils/skipTrace')
-          const parcelsWithEmails = list.parcels.filter(parcel => {
-            const parcelId = parcel.id || parcel.properties?.PROP_ID || parcel
-            const skipTracedInfo = getSkipTracedParcel(parcelId)
-            return skipTracedInfo && skipTracedInfo.email
-          })
-
-          if (parcelsWithEmails.length === 0) {
-            showToast('No parcels in this list have email addresses', 'warning')
-            return
-          }
-
-          setBulkEmailList(list)
-          nav.push({ type: 'bulkEmailPreview', listId: bulkEmailListId })
-        } catch (error) {
-          console.error('Error showing preview:', error)
-          showToast('Error loading list preview', 'error')
-        }
-      } else {
-        setSelectedEmailTemplate(template)
-        nav.pop()
-        guardFeature('lists', () => {
-          nav.openLists()
-          setShowListSelector(true)
-          showToast('Select a list to email', 'info')
-        })
-      }
-    } else {
-      setSelectedEmailTemplate(template)
-      nav.pop()
-      nav.push({ type: 'emailComposer' })
-    }
-  }, [isBulkEmailMode, bulkEmailListId, lists, nav, guardFeature])
-
-  // Handle list selection for bulk email (after template is selected)
-  const handleBulkEmailListSelected = useCallback(async (listId) => {
-    if (!selectedEmailTemplate) {
-      showToast('No template selected', 'error')
-      return
-    }
-    const list = lists.find(l => l.id === listId)
-    if (!list || !list.parcels || list.parcels.length === 0) {
-      showToast('List is empty', 'warning')
-      return
-    }
-
-    // Check if list has any parcels with emails
-    const { getSkipTracedParcel } = await import('./utils/skipTrace')
-    const parcelsWithEmails = list.parcels.filter(parcel => {
-      const parcelId = parcel.id || parcel.properties?.PROP_ID || parcel
-      const skipTracedInfo = getSkipTracedParcel(parcelId)
-      return skipTracedInfo && skipTracedInfo.email
-    })
-
-    if (parcelsWithEmails.length === 0) {
-      showToast('No parcels in this list have email addresses', 'warning')
-      return
-    }
-
-    setBulkEmailList(list)
-    setBulkEmailListId(listId)
-    setShowListSelector(false)
-    nav.replaceStack(nav.recipeClosePrimaryExcept(nav.state.navStack, { list: true }, [{ type: 'bulkEmailPreview', listId }]))
-  }, [selectedEmailTemplate, lists, nav])
-
-  // Handle bulk email confirmation from preview panel
-  const handleBulkEmailConfirm = useCallback(async ({ template, listId }) => {
-    if (!template) {
-      showToast('No template selected', 'error')
-      return
-    }
-    const testMode = settings.emailTestMode && settings.defaultEmail
-    const list = lists.find(l => l.id === listId)
-    if (!list || !list.parcels || list.parcels.length === 0) {
-      showToast('List is empty', 'warning')
-      return
-    }
-
-    const { getSkipTracedParcel } = await import('./utils/skipTrace')
-    const { replaceTemplateTags } = await import('./utils/emailTemplates')
-
-    const parcelsWithEmails = []
-    for (const parcel of list.parcels) {
-      const parcelId = parcel.id || parcel.properties?.PROP_ID || parcel
-      const skipTracedInfo = getSkipTracedParcel(parcelId)
-      
-      if (skipTracedInfo && skipTracedInfo.email) {
-        parcelsWithEmails.push({
-          parcel,
-          email: skipTracedInfo.email,
-          skipTracedInfo
-        })
-      }
-    }
-
-    if (parcelsWithEmails.length === 0) {
-      showToast('No parcels in this list have email addresses', 'warning')
-      return
-    }
-
-    const confirmMsg = testMode
-      ? `Send email to ${parcelsWithEmails.length} parcel${parcelsWithEmails.length > 1 ? 's' : ''} in "${list.name}"? (Test mode - all emails will go to ${settings.defaultEmail})`
-      : `Send email to ${parcelsWithEmails.length} parcel${parcelsWithEmails.length > 1 ? 's' : ''} in "${list.name}"?`
-    const confirmed = await showConfirm(confirmMsg, 'Bulk Email')
-    if (!confirmed) return
-
-    let sentCount = 0
-    for (const { parcel, email, skipTracedInfo } of parcelsWithEmails) {
-      const parcelData = {
-        id: parcel.id || parcel.properties?.PROP_ID || parcel,
-        properties: parcel.properties || parcel,
-        address: parcel.address || parcel.properties?.SITUS_ADDR || parcel.properties?.SITE_ADDR || '',
-        ownerName: parcel.properties?.OWNER_NAME || ''
-      }
-
-      const subject = replaceTemplateTags(template.subject || '', parcelData)
-      const body = replaceTemplateTags(template.body || '', parcelData)
-
-      const recipient = testMode ? settings.defaultEmail : email
-      const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      
-      window.open(mailtoLink, '_blank')
-      sentCount++
-
-      if (sentCount < parcelsWithEmails.length) {
-        await new Promise(resolve => setTimeout(resolve, 500))
-      }
-    }
-
-    const toastMsg = testMode
-      ? `Successfully sent ${sentCount} email${sentCount > 1 ? 's' : ''} to ${settings.defaultEmail}!`
-      : `Successfully sent ${sentCount} email${sentCount > 1 ? 's' : ''}!`
-    showToast(toastMsg, 'success', 8000)
-    
-    // Reset state
-    setSelectedEmailTemplate(null)
-    setShowListSelector(false)
-    setIsBulkEmailMode(false)
-    nav.pop()
-    setBulkEmailList(null)
-    setBulkEmailListId(null)
-    setIsSendingBulkEmails(false)
-  }, [lists, settings.emailTestMode, settings.defaultEmail, nav])
-
   // Handle export list as CSV and email to user
   const handleExportList = useCallback(async (listId) => {
     const list = lists.find(l => l.id === listId)
@@ -3526,10 +3355,6 @@ function App() {
       showToast(err.message || 'Failed to export list', 'error')
     }
   }, [lists, currentUser, getToken])
-
-  const handleBulkEmailList = useCallback(async (listId) => {
-    await handleBulkEmailListSelected(listId)
-  }, [handleBulkEmailListSelected])
 
   const handleSkipTraceList = useCallback(async (listId) => {
     if (authLoading) return
@@ -4061,9 +3886,7 @@ function App() {
         }}
         onAddParcelsToList={showListSelector && parcelPendingForList
           ? handleAddSingleParcelToList
-          : (showListSelector && selectedEmailTemplate
-            ? handleBulkEmailListSelected
-            : handleAddParcelsToList)}
+          : handleAddParcelsToList}
         selectedParcelsCount={showListSelector && parcelPendingForList ? 1 : selectedParcels.size}
         lists={lists}
         onListsChange={refreshLists}
@@ -4078,7 +3901,6 @@ function App() {
         onViewListContents={(listId) => nav.viewListContents(listId)}
         onExportList={handleExportList}
         isAddingSingleParcel={showListSelector && !!parcelPendingForList}
-        isBulkEmailMode={showListSelector && !!selectedEmailTemplate}
         parcelBoundaryColor={settings.parcelBoundaryColor}
         getToken={getToken}
         tagRegistry={tagRegistry}
@@ -4336,6 +4158,15 @@ function App() {
         onOutreach={(type) => handleLogLeadOutreach(phoneActionPanel?.leadId, type, phoneActionPanel?.phone)}
       />
 
+      <EmailActionPanel
+        isOpen={!!emailActionPanel}
+        onClose={() => nav.popMapOverlay()}
+        email={emailActionPanel?.email}
+        parcelData={emailActionPanel?.parcelData}
+        onSelectTemplate={handleOpenEmailComposer}
+        onNoTemplate={() => handleOpenEmailComposer(null)}
+      />
+
       {outreachPanelMounted && (
       <Suspense fallback={null}>
       <OutreachPanel
@@ -4344,13 +4175,7 @@ function App() {
         onClose={() => {
           nav.pop()
           setSelectedEmailTemplate(null)
-          setIsBulkEmailMode(false)
         }}
-        onUseTemplate={
-          isBulkEmailMode || emailComposerParcelData || emailComposerRecipient.email
-            ? handleTemplateSelect
-            : undefined
-        }
         initialTab={outreachInitialTab}
       />
       </Suspense>
@@ -4373,33 +4198,11 @@ function App() {
         recipientName={emailComposerRecipient.name}
         leadId={emailComposerLeadId}
         onOutreach={() => handleLogLeadOutreach(emailComposerLeadId, 'email', emailComposerRecipient.email)}
-        onSend={(emailData) => {
-          showToast('Email opened in your email client', 'success')
-        }}
+        getToken={getToken}
+        currentUser={currentUser}
+        teamMembers={teamMembers}
         emailTestMode={settings.emailTestMode}
         testEmail={settings.defaultEmail}
-      />
-      </Suspense>
-      )}
-
-      {bulkEmailMounted && (
-      <Suspense fallback={null}>
-      <BulkEmailPreview
-        isOpen={isBulkEmailPreviewOpen}
-        onClose={() => {
-          nav.pop()
-          setBulkEmailList(null)
-          setBulkEmailListId(null)
-        }}
-        template={selectedEmailTemplate}
-        list={bulkEmailList}
-        listId={bulkEmailListId || navBulkEmailListId}
-        onConfirm={handleBulkEmailConfirm}
-        onCancel={() => {
-          nav.pop()
-          setBulkEmailList(null)
-          setBulkEmailListId(null)
-        }}
       />
       </Suspense>
       )}

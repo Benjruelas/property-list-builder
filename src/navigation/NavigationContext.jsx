@@ -52,7 +52,6 @@ import {
   recipeOpenLeads,
   recipeReturnToActivity,
   recipeViewListContents,
-  recipeOpenBulkEmailPreview,
   recipeOpenEmailComposer,
 } from './recipes.js'
 import {
@@ -483,6 +482,10 @@ export function NavigationProvider({ children }) {
     dispatch({ type: NAV_ACTIONS.REPLACE_OVERLAY, payload: overlay })
   }, [])
 
+  const showEmailOverlay = useCallback((overlay) => {
+    dispatch({ type: NAV_ACTIONS.REPLACE_OVERLAY, payload: overlay })
+  }, [])
+
   // Modals
   const pushModal = useCallback((modal) => {
     dispatch({ type: NAV_ACTIONS.PUSH_MODAL, payload: modal })
@@ -586,6 +589,7 @@ export function NavigationProvider({ children }) {
     openHailOverlay,
     dismissParcelAndHailPanels,
     showPhoneOverlay,
+    showEmailOverlay,
     pushModal,
     popModal,
     replaceModals,
@@ -670,6 +674,7 @@ export function NavigationProvider({ children }) {
     openHailOverlay,
     dismissParcelAndHailPanels,
     showPhoneOverlay,
+    showEmailOverlay,
     pushModal,
     popModal,
     replaceModals,

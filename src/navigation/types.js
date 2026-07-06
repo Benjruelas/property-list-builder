@@ -187,12 +187,6 @@
  */
 
 /**
- * @typedef {object} BulkEmailPreviewFrame
- * @property {'bulkEmailPreview'} type
- * @property {string} [listId]
- */
-
-/**
  * @typedef {ActivityFrame | ListsFrame | ListsParcelsFrame | LeadsFrame | LeadsDetailFrame |
  *   DealsFrame | DealsDetailFrame | DealsClosedFrame | DealsLeadFrame |
  *   PipesFrame | PipesDealFrame | PipesLeadFrame | TasksFrame | ScheduleFrame | ScheduleLeadFrame |
@@ -200,7 +194,7 @@
  *   QuotesFrame | QuotesEditorFrame | QuotesDetailFrame |
  *   ReportsFrame | ReportsEditorFrame | ReportsDetailFrame |
  *   TeamsFrame | TeamsDetailFrame | SettingsFrame | SkipTracedFrame |
- *   OutreachFrame | EmailComposerFrame | BulkEmailPreviewFrame} NavFrame
+ *   OutreachFrame | EmailComposerFrame} NavFrame
  */
 
 /**
@@ -233,9 +227,19 @@
  * @property {'phone'} type
  * @property {string} phone
  * @property {object} [parcelData]
+ * @property {string} [leadId]
+ * @property {number} [initialStep]
  */
 
-/** @typedef {PopupOverlay | ParcelDetailsOverlay | HailOverlay | PhoneOverlay} MapOverlayFrame */
+/**
+ * @typedef {object} EmailOverlay
+ * @property {'email'} type
+ * @property {string} email
+ * @property {object} [parcelData]
+ * @property {string} [leadId]
+ */
+
+/** @typedef {PopupOverlay | ParcelDetailsOverlay | HailOverlay | PhoneOverlay | EmailOverlay} MapOverlayFrame */
 
 /**
  * @typedef {object} LoginModal
@@ -315,7 +319,6 @@ export const ROOT_PANEL_TYPES = new Set([
   'skipTraced',
   'outreach',
   'emailComposer',
-  'bulkEmailPreview',
 ])
 
 /** Panels that can sit under a stacked schedule overlay. */

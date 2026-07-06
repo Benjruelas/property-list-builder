@@ -3,8 +3,11 @@
  * iframe from /__/auth/handler. Any X-Frame-Options (including cached DENY)
  * on the SPA shell breaks OAuth and shows chrome-error://chromewebdata/.
  *
- * For iframe navigations to /, serve index.html with framing-safe headers only.
+ * For iframe navigations to /, serve a blank shell (not the full app) so OAuth
+ * never flashes KnockScout or Firebase links inside the relay iframe.
  */
+const AUTH_IFRAME_SHELL = '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>'
+
 export const config = {
   matcher: '/',
 }
@@ -14,21 +17,7 @@ export default async function middleware(request) {
     return
   }
 
-  const url = new URL(request.url)
-  const indexUrl = new URL('/index.html', url.origin)
-
-  let html
-  try {
-    const upstream = await fetch(indexUrl.toString(), {
-      headers: { accept: 'text/html' },
-    })
-    if (!upstream.ok) return
-    html = await upstream.text()
-  } catch {
-    return
-  }
-
-  return new Response(html, {
+  return new Response(AUTH_IFRAME_SHELL, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',

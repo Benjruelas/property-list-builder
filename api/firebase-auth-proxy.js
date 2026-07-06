@@ -28,7 +28,12 @@ export default async function handler(req, res) {
     })
 
     res.status(fetchRes.status)
-    const body = await fetchRes.text()
+    let body = await fetchRes.text()
+    const contentType = fetchRes.headers.get('content-type') || ''
+    if (contentType.includes('text/html')) {
+      const hideStyle = '<style>html,body,a,*{visibility:hidden!important;opacity:0!important;pointer-events:none!important}</style>'
+      body = body.includes('</head>') ? body.replace('</head>', `${hideStyle}</head>`) : hideStyle + body
+    }
     // Don't forward encoding/length: fetch().text() decompresses the body,
     // so forwarding Content-Encoding causes ERR_CONTENT_DECODING_FAILED.
     // Strip X-Frame-Options — Firebase Auth embeds /__/auth/iframe during

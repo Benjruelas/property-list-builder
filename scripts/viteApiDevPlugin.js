@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { loadEnv } from 'vite'
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -25,6 +26,12 @@ export function viteApiDevPlugin({ apiDir }) {
   return {
     name: 'vite-api-dev',
     configureServer(server) {
+      // Vite only exposes VITE_* to client code; API handlers need full .env.* vars.
+      const env = loadEnv(server.config.mode, process.cwd(), '')
+      for (const [key, value] of Object.entries(env)) {
+        if (process.env[key] === undefined) process.env[key] = value
+      }
+
       server.middlewares.use(async (req, res, next) => {
         const rawUrl = req.url || ''
         if (!rawUrl.startsWith('/api/')) return next()

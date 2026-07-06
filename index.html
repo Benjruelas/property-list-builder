@@ -178,6 +178,20 @@
         background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, transparent);
         animation: boot-progress 1.35s ease-in-out infinite;
       }
+      /* Firebase OAuth relay iframes — keep off-screen if layout glitches */
+      iframe[src*="/__/auth/"],
+      iframe[src*=".firebaseapp.com/__/auth"] {
+        position: fixed !important;
+        left: -9999px !important;
+        top: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        border: 0 !important;
+        clip: rect(0, 0, 0, 0) !important;
+      }
     </style>
   </head>
   <body>
