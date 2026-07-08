@@ -7337,8 +7337,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 .hail-storm-panel {
   pointer-events: auto;
-  width: min(92vw, 26rem);
-  border-radius: 14px;
+  width: min(94vw, 32rem);
+  border-radius: 16px;
   border: 1px solid var(--map-panel-surface-border);
   background: var(--map-panel-surface) !important;
   backdrop-filter: blur(24px) saturate(180%);
@@ -7349,14 +7349,73 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 .hail-storm-panel-header {
   display: grid;
-  grid-template-columns: 2.5rem 1fr 2.5rem;
+  grid-template-columns: 2.75rem 1fr 2.75rem;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.65rem;
-  min-height: 3.75rem;
-  max-height: 3.75rem;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  min-height: 4.25rem;
   box-sizing: border-box;
   border-bottom: 1px solid var(--map-panel-header-border);
+}
+.hail-storm-panel-title-wrap {
+  min-width: 0;
+  text-align: center;
+}
+.hail-storm-panel-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--map-panel-text);
+}
+.hail-storm-panel-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--map-panel-text-muted);
+}
+.hail-storm-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 1rem;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--map-panel-section-border);
+}
+.hail-storm-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.hail-storm-detail-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--map-panel-text-muted);
+}
+.hail-storm-detail-value {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--map-panel-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hail-storm-detail-value-highlight {
+  color: var(--map-accent-amber);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.hail-storm-radar-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--map-panel-text-muted);
 }
 .hail-storm-exit-btn {
   display: inline-flex;
@@ -7406,10 +7465,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   color: var(--map-accent-blue);
 }
 .hail-storm-panel-radar {
-  padding: 0.35rem 0.6rem 0.45rem;
+  padding: 0.55rem 0.85rem 0.65rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
 }
 .hail-storm-panel-timeline {
   display: flex;
@@ -7453,9 +7512,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   padding: 0 0.1rem;
 }
 .hail-storm-frame-time {
-  font-size: 1.0625rem;
+  font-size: 1.125rem;
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1.2;
   color: var(--map-panel-text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -7465,10 +7524,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .hail-storm-frame-loading {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.9375rem;
+  gap: 0.4rem;
+  font-size: 1rem;
   font-weight: 500;
-  line-height: 1.1;
+  line-height: 1.2;
   color: var(--map-panel-text-muted);
 }
 .hail-storm-frame-loading svg {
@@ -7529,10 +7588,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 .hail-storm-panel-status {
   margin: 0;
-  padding: 0 0.65rem 0.45rem;
-  font-size: 0.875rem;
+  padding: 0 0.85rem 0.65rem;
+  font-size: 0.9375rem;
   font-weight: 500;
-  line-height: 1.15;
+  line-height: 1.25;
   text-align: center;
   color: var(--map-panel-text-muted);
 }
@@ -7649,9 +7708,65 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   color: var(--map-panel-text-secondary);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--map-panel-section-border) !important;
+  background: var(--map-panel-list-item-bg) !important;
 }
 .hail-event-row:hover {
   background: var(--map-panel-list-item-hover) !important;
+}
+.hail-event-row-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 0.85rem;
+}
+.hail-data-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.hail-data-field-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--map-panel-text-muted);
+}
+.hail-data-field-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--map-panel-text);
+}
+.hail-size-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  min-width: 2.25rem;
+  height: 1.375rem;
+  padding: 0 0.45rem;
+}
+.hail-size-badge-lg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  min-width: 2.25rem;
+  height: 1.375rem;
+  padding: 0 0.45rem;
+}
+.hail-data-stat-label {
+  color: var(--map-panel-text-muted);
+  font-weight: 600;
 }
 .hail-data-year-group {
   border-bottom: 1px solid var(--map-panel-section-border);
@@ -7662,9 +7777,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .hail-data-stat-card {
   background: var(--map-panel-list-item-bg);
   color: var(--map-panel-text);
-}
-.hail-data-stat-label {
-  color: var(--map-panel-text-muted);
 }
 .hail-data-severity-high {
   color: var(--map-accent-red);

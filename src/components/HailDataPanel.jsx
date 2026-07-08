@@ -1,18 +1,89 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { X, CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
+import { CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 
 const hailDataCache = new Map()
 const HAIL_CACHE_TTL_MS = 30 * 60 * 1000
 
-function HailSizeIndicator({ inches }) {
-  if (!inches) return null
-  const color = inches < 1 ? 'bg-yellow-500' : inches < 2 ? 'bg-orange-500' : 'bg-red-500'
+function resolveParcelCoords(parcelData) {
+  if (!parcelData) return { lat: null, lng: null }
+  const props = parcelData.properties ?? {}
+  const lat =
+    parcelData.lat ??
+    parcelData.latlng?.lat ??
+    props.LATITUDE ??
+    props.latitude
+  const lng =
+    parcelData.lng ??
+    parcelData.latlng?.lng ??
+    props.LONGITUDE ??
+    props.longitude
+  const latN = lat != null ? Number(lat) : null
+  const lngN = lng != null ? Number(lng) : null
+  return {
+    lat: latN != null && !Number.isNaN(latN) ? latN : null,
+    lng: lngN != null && !Number.isNaN(lngN) ? lngN : null,
+  }
+}
+
+function formatEventTime(timeUtc) {
+  if (!timeUtc) return null
+  const [h, m] = String(timeUtc).split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return timeUtc
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 || 12
+  return `${hour12}:${String(m).padStart(2, '0')} ${period} UTC`
+}
+
+function hailSizeColor(inches) {
+  if (!inches) return 'bg-slate-500'
+  if (inches < 1) return 'bg-yellow-500'
+  if (inches < 2) return 'bg-orange-500'
+  return 'bg-red-500'
+}
+
+function HailSizeIndicator({ inches, size = 'md' }) {
+  if (!inches) return <span className="hail-data-field-value">—</span>
+  const sizeClass = size === 'lg' ? 'hail-size-badge-lg' : 'hail-size-badge'
   return (
-    <span className={`inline-flex items-center justify-center rounded-full text-[10px] font-bold text-white min-w-[2rem] h-5 px-1.5 ${color}`}>
+    <span className={`${sizeClass} ${hailSizeColor(inches)}`}>
       {inches}"
     </span>
+  )
+}
+
+function HailEventRow({ evt, year, onSelectEvent }) {
+  const timeLabel = formatEventTime(evt.time_utc)
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectEvent?.(evt)}
+      className="hail-event-row w-full text-left bg-transparent transition-colors"
+      title="View storm on map"
+    >
+      <div className="hail-event-row-grid">
+        <div className="hail-data-field">
+          <span className="hail-data-field-label">Date</span>
+          <span className="hail-data-field-value">{evt.date || year}</span>
+        </div>
+        <div className="hail-data-field">
+          <span className="hail-data-field-label">Size</span>
+          <HailSizeIndicator inches={evt.hail_size_inches} />
+        </div>
+        <div className="hail-data-field">
+          <span className="hail-data-field-label">Distance</span>
+          <span className="hail-data-field-value">{evt.distance_mi != null ? `${evt.distance_mi} mi` : '—'}</span>
+        </div>
+        {timeLabel ? (
+          <div className="hail-data-field">
+            <span className="hail-data-field-label">Time</span>
+            <span className="hail-data-field-value">{timeLabel}</span>
+          </div>
+        ) : null}
+      </div>
+    </button>
   )
 }
 
@@ -27,27 +98,17 @@ function HailYearGroup({ year, events, defaultOpen, onSelectEvent }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 py-2 text-left bg-transparent"
+        className="w-full flex items-center gap-2 py-2.5 text-left bg-transparent"
       >
-        <ChevronDown className={`h-3.5 w-3.5 hail-data-muted transition-transform ${open ? '' : '-rotate-90'}`} />
-        <span className="text-xs font-semibold flex-1">{year}</span>
-        <span className={`text-[10px] font-medium ${severityClass}`}>{events.length} event{events.length !== 1 ? 's' : ''}</span>
+        <ChevronDown className={`h-4 w-4 hail-data-muted transition-transform ${open ? '' : '-rotate-90'}`} />
+        <span className="text-sm font-semibold flex-1">{year}</span>
+        <span className={`text-xs font-medium ${severityClass}`}>{events.length} event{events.length !== 1 ? 's' : ''}</span>
         {maxSize > 0 && <HailSizeIndicator inches={maxSize} />}
       </button>
       {open && (
-        <div className="pl-6 pb-2 space-y-0.5">
+        <div className="pl-2 pb-2 space-y-2">
           {events.map((evt, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => onSelectEvent?.(evt)}
-              className="hail-event-row w-full flex items-center gap-2 text-xs py-1.5 px-2 -mx-2 rounded-md text-left bg-transparent transition-colors"
-              title="View storm on map"
-            >
-              <span className="hail-data-muted w-20 shrink-0">{evt.date || year}</span>
-              <HailSizeIndicator inches={evt.hail_size_inches} />
-              <span className="hail-data-muted ml-auto shrink-0">{evt.distance_mi} mi</span>
-            </button>
+            <HailEventRow key={i} evt={evt} year={year} onSelectEvent={onSelectEvent} />
           ))}
         </div>
       )}
@@ -61,8 +122,8 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
   const [error, setError] = useState(null)
 
   const address = parcelData?.address || parcelData?.properties?.SITUS_ADDR || 'Unknown address'
-  const lat = parcelData?.lat ?? parcelData?.properties?.LATITUDE
-  const lng = parcelData?.lng ?? parcelData?.properties?.LONGITUDE
+  const { lat, lng } = resolveParcelCoords(parcelData)
+  const coordKey = lat != null && lng != null ? `${lat},${lng}` : null
 
   const loadHail = useCallback(async () => {
     if (!lat || !lng) return
@@ -93,10 +154,11 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
   }, [lat, lng])
 
   useEffect(() => {
-    if (isOpen && lat && lng) {
-      loadHail()
-    }
-  }, [isOpen, lat, lng, loadHail])
+    if (!isOpen || !lat || !lng) return
+    setHailData(null)
+    setError(null)
+    loadHail()
+  }, [isOpen, coordKey, loadHail, lat, lng])
 
   const hailByYear = useMemo(() => {
     if (!hailData?.events?.length) return []
@@ -130,37 +192,37 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
           {loading ? (
             <div className="flex items-center justify-center py-12 hail-data-muted">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              <span className="text-sm">Loading hail history...</span>
+              <span className="text-base">Loading hail history...</span>
             </div>
           ) : error ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 py-4 text-sm hail-data-error-text">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+              <div className="flex items-center gap-2 py-4 text-base hail-data-error-text">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
                 <span>Could not load hail data: {error}</span>
               </div>
               <button
                 type="button"
                 onClick={loadHail}
-                className="hail-data-retry-btn w-full flex items-center justify-center gap-2 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+                className="hail-data-retry-btn w-full flex items-center justify-center gap-2 text-base font-medium px-4 py-3 rounded-lg transition-colors"
               >
-                <CloudRain className="h-4 w-4" />
+                <CloudRain className="h-5 w-5" />
                 Retry
               </button>
             </div>
           ) : hailData ? (
             <div>
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="hail-data-stat-card rounded-lg px-3 py-2 text-center">
-                  <div className="text-lg font-bold">{hailData.summary?.total_events ?? 0}</div>
-                  <div className="text-[10px] hail-data-stat-label">Events</div>
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <div className="hail-data-stat-card rounded-lg px-3 py-3 text-center">
+                  <div className="text-2xl font-bold">{hailData.summary?.total_events ?? 0}</div>
+                  <div className="text-xs hail-data-stat-label mt-0.5">Total Events</div>
                 </div>
-                <div className="hail-data-stat-card rounded-lg px-3 py-2 text-center">
-                  <div className="text-lg font-bold">{hailData.summary?.max_hail_size ? `${hailData.summary.max_hail_size}"` : '--'}</div>
-                  <div className="text-[10px] hail-data-stat-label">Max Size</div>
+                <div className="hail-data-stat-card rounded-lg px-3 py-3 text-center">
+                  <div className="text-2xl font-bold">{hailData.summary?.max_hail_size ? `${hailData.summary.max_hail_size}"` : '—'}</div>
+                  <div className="text-xs hail-data-stat-label mt-0.5">Max Size</div>
                 </div>
-                <div className="hail-data-stat-card rounded-lg px-3 py-2 text-center">
-                  <div className="text-lg font-bold">{hailData.summary?.years_with_hail?.length ?? 0}</div>
-                  <div className="text-[10px] hail-data-stat-label">Years</div>
+                <div className="hail-data-stat-card rounded-lg px-3 py-3 text-center">
+                  <div className="text-2xl font-bold">{hailData.summary?.years_with_hail?.length ?? 0}</div>
+                  <div className="text-xs hail-data-stat-label mt-0.5">Years w/ Hail</div>
                 </div>
               </div>
 
@@ -177,10 +239,12 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
                   ))}
                 </div>
               ) : (
-                <div className="text-sm hail-data-muted text-center py-4">No hail events found within 5 miles</div>
+                <div className="text-base hail-data-muted text-center py-4">
+                  No hail events found within {hailData.radius_miles ?? 10} miles
+                </div>
               )}
 
-              <div className="text-[10px] hail-data-muted text-center mt-4">
+              <div className="text-xs hail-data-muted text-center mt-4">
                 NOAA Storm Prediction Center · Within {hailData.radius_miles} miles · Since {Math.min(...(hailData.summary?.years_with_hail || [new Date().getFullYear()]))}
               </div>
             </div>

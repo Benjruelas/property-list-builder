@@ -454,8 +454,18 @@
   color: #fff;
 }
 [data-ui-theme='glass'] .hail-storm-summary,
-[data-ui-theme='glass'] .hail-storm-frame-time {
+[data-ui-theme='glass'] .hail-storm-frame-time,
+[data-ui-theme='glass'] .hail-storm-panel-title,
+[data-ui-theme='glass'] .hail-storm-detail-value {
   color: #fff;
+}
+[data-ui-theme='glass'] .hail-storm-panel-subtitle,
+[data-ui-theme='glass'] .hail-storm-detail-label,
+[data-ui-theme='glass'] .hail-storm-radar-label {
+  color: rgba(255, 255, 255, 0.65);
+}
+[data-ui-theme='glass'] .hail-storm-detail-value-highlight {
+  color: #fbbf24;
 }
 [data-ui-theme='glass'] .hail-storm-exit-btn,
 [data-ui-theme='glass'] .hail-storm-step-btn {

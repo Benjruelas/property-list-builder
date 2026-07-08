@@ -67,16 +67,24 @@ export function HailStormOverlay({ tileUrl }) {
   )
 }
 
-function formatStormSummary(event) {
-  const parts = [event.date]
-  if (event.hail_size_inches) parts.push(`${event.hail_size_inches}" hail`)
-  if (event.distance_mi != null) parts.push(`${event.distance_mi} mi`)
-  return parts.join(' · ')
+function formatEventTime(timeUtc) {
+  if (!timeUtc) return null
+  const [h, m] = String(timeUtc).split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return timeUtc
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 || 12
+  return `${hour12}:${String(m).padStart(2, '0')} ${period} UTC`
 }
 
-function timelineProgress(frameIndex, frameCount) {
-  if (!frameCount || frameCount <= 1) return 0
-  return (frameIndex / (frameCount - 1)) * 100
+function StormDetailField({ label, value, highlight }) {
+  return (
+    <div className="hail-storm-detail-field">
+      <span className="hail-storm-detail-label">{label}</span>
+      <span className={`hail-storm-detail-value${highlight ? ' hail-storm-detail-value-highlight' : ''}`}>
+        {value ?? '—'}
+      </span>
+    </div>
+  )
 }
 
 /** Storm map controls — docked above the mobile action bar. */
@@ -103,7 +111,7 @@ export function HailStormDismissPill({
   } = timeline ?? {}
 
   const radarOk = event?.year >= 1995
-  const summary = formatStormSummary(event)
+  const timeLabel = formatEventTime(event.time_utc)
   const progressPct = timelineProgress(frameIndex, frameCount)
   const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
   const reportMarkerPct =
@@ -122,16 +130,34 @@ export function HailStormDismissPill({
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
-          <p className="hail-storm-summary" title={summary}>
-            {summary}
-          </p>
+          <div className="hail-storm-panel-title-wrap">
+            <p className="hail-storm-panel-title">Storm Event</p>
+            <p className="hail-storm-panel-subtitle">NEXRAD radar replay</p>
+          </div>
           <span className="hail-storm-panel-badge" aria-hidden>
-            <CloudRain className="h-4 w-4" />
+            <CloudRain className="h-5 w-5" />
           </span>
         </header>
 
+        <div className="hail-storm-details">
+          <StormDetailField label="Date" value={event.date} />
+          <StormDetailField
+            label="Hail Size"
+            value={event.hail_size_inches ? `${event.hail_size_inches}"` : null}
+            highlight
+          />
+          <StormDetailField
+            label="Distance"
+            value={event.distance_mi != null ? `${event.distance_mi} mi` : null}
+          />
+          {timeLabel ? (
+            <StormDetailField label="Report Time" value={timeLabel} />
+          ) : null}
+        </div>
+
         {radarOk && canStep ? (
           <div className="hail-storm-panel-radar">
+            <p className="hail-storm-radar-label">Radar Timeline</p>
             <div className="hail-storm-panel-timeline" role="toolbar" aria-label="Storm radar timeline">
               <button
                 type="button"
@@ -146,7 +172,7 @@ export function HailStormDismissPill({
               <div className="hail-storm-frame-info" aria-live="polite">
                 {loading ? (
                   <span className="hail-storm-frame-loading">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
                     Loading radar…
                   </span>
                 ) : (
@@ -209,4 +235,9 @@ export function HailStormDismissPill({
       </div>
     </div>
   )
+}
+
+function timelineProgress(frameIndex, frameCount) {
+  if (!frameCount || frameCount <= 1) return 0
+  return (frameIndex / (frameCount - 1)) * 100
 }

@@ -113,6 +113,11 @@ function gridKey(lat, lng) {
   return `${Math.floor(lat)}/${Math.floor(lng)}`
 }
 
+/** Per-property response cache — must not use gridKey (1° cells) or all metroplex properties share one payload. */
+function responseCacheCoordKey(lat, lng) {
+  return `${lat.toFixed(4)}/${lng.toFixed(4)}`
+}
+
 function parseSpcCsv(csvText) {
   const lines = csvText.split('\n')
   const grid = {}
@@ -467,7 +472,7 @@ export default async function handler(req, res) {
 
   try {
     const responseCacheKey =
-      `hail/response/v1/${Math.floor(latF)}/${Math.floor(lngF)}/${radius}/${startYear}.json`
+      `hail/response/v2/${responseCacheCoordKey(latF, lngF)}/${radius}/${startYear}.json`
     const cachedResponse = await getJsonFromR2(responseCacheKey, RESPONSE_CACHE_TTL_MS)
     if (cachedResponse) {
       res.setHeader('Cache-Control', 'public, max-age=3600')
