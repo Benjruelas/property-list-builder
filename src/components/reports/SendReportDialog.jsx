@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Loader2, Copy, MessageSquare, Mail, CheckCircle2 } from 'lucide-react'
 import {
   Dialog,
@@ -49,6 +49,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   const [generatingLink, setGeneratingLink] = useState(false)
   const [sentTo, setSentTo] = useState(null)
   const [lastLink, setLastLink] = useState('')
+  const initSessionRef = useRef(null)
 
   const teamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
 
@@ -107,15 +108,22 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
       applyLinkToMessages(link)
-      onSent?.(res.report)
       return link
     } finally {
       setGeneratingLink(false)
     }
-  }, [getToken, report?.id, applyLinkToMessages, onSent])
+  }, [getToken, report?.id, applyLinkToMessages])
 
   useEffect(() => {
-    if (!open || !report) return undefined
+    if (!open) {
+      initSessionRef.current = null
+      return undefined
+    }
+    if (!report) return undefined
+
+    const sessionKey = report.id
+    if (initSessionRef.current === sessionKey) return undefined
+    initSessionRef.current = sessionKey
 
     setTab('email')
     setRecipient(linkedLead?.email || '')
@@ -145,7 +153,6 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         const link = res.publicUrl || buildReportPublicUrl(res.token)
         setLastLink(link)
         applyLinkToMessages(link)
-        onSent?.(res.report)
       } catch (e) {
         if (!cancelled) showToast(e.message || 'Could not create report link', 'error')
       } finally {
@@ -155,7 +162,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
 
     bootstrapLink()
     return () => { cancelled = true }
-  }, [open, report?.id, report?.publicToken, linkedLead?.id, getToken, loadTemplates, applyLinkToMessages, onSent])
+  }, [open, report?.id, linkedLead?.id, getToken, loadTemplates, applyLinkToMessages])
 
   const resetAndClose = () => {
     if (sending || generatingLink) return
