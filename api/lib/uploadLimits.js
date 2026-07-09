@@ -6,7 +6,7 @@
 export const ENTITY_STORAGE_LIMITS = {
   deal: 10 * 1024 * 1024,
   dealPhotos: 100 * 1024 * 1024,
-  lead: 100 * 1024 * 1024,
+  lead: 250 * 1024 * 1024,
   leadFiles: 10 * 1024 * 1024,
 }
 
