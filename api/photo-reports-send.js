@@ -26,6 +26,19 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
 const FROM_ADDRESS = process.env.FORMS_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || DEFAULT_FROM
 
+function normalizeEmailList(raw) {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set()
+  const out = []
+  for (const item of raw) {
+    const email = typeof item === 'string' ? item.trim().toLowerCase() : ''
+    if (!isValidReportEmail(email) || seen.has(email)) continue
+    seen.add(email)
+    out.push(email)
+  }
+  return out
+}
+
 function resolveOrigin(req) {
   const proto = req.headers['x-forwarded-proto'] || 'https'
   const host = req.headers['x-forwarded-host'] || req.headers.host || ''
@@ -55,7 +68,15 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-    const { reportId, recipientEmail, subject, message, generateOnly } = body
+    const {
+      reportId,
+      recipientEmail,
+      subject,
+      message,
+      generateOnly,
+      cc: ccRaw,
+      sendMeCopy,
+    } = body
     if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
     const { report, index, all } = await getPhotoReportById(reportId)
@@ -66,9 +87,6 @@ export default async function handler(req, res) {
     const trimmedRecipient = String(recipientEmail || '').trim().toLowerCase()
     if (!generateOnly && !isValidReportEmail(trimmedRecipient)) {
       return res.status(400).json({ error: 'Valid recipientEmail is required' })
-    }
-    if (generateOnly && !isValidReportEmail(trimmedRecipient)) {
-      return res.status(400).json({ error: 'Valid recipientEmail is required for link generation' })
     }
 
     const token = generateReportToken()
@@ -107,11 +125,12 @@ export default async function handler(req, res) {
     nextInvites.push(invite)
     await saveAllReportInvites(nextInvites)
 
+    const linkOnly = generateOnly && !trimmedRecipient
     const updated = {
       ...report,
       publicToken: token,
-      status: report.status === 'draft' ? 'sent' : report.status,
-      sentAt: now.toISOString(),
+      status: linkOnly ? report.status : (report.status === 'draft' ? 'sent' : report.status),
+      sentAt: linkOnly ? report.sentAt : now.toISOString(),
       updatedAt: now.toISOString(),
     }
     await updatePhotoReportAtIndex(all, index, updated)
@@ -145,16 +164,24 @@ export default async function handler(req, res) {
     `
     const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
-    const userEmail = isValidReportEmail(user.email) ? user.email.trim() : null
+    const userEmail = isValidReportEmail(user.email) ? user.email.trim().toLowerCase() : null
     const replyTo =
       branding.companyEmail && isValidReportEmail(branding.companyEmail)
         ? branding.companyEmail.trim()
         : userEmail
 
+    const cc = normalizeEmailList(ccRaw).filter((email) => email !== trimmedRecipient)
+    const alreadyRecipient = new Set([trimmedRecipient, ...cc])
+    const bccList = (sendMeCopy && userEmail && !alreadyRecipient.has(userEmail))
+      ? [userEmail]
+      : null
+
     await resend.emails.send({
       from: buildFromAddress(FROM_ADDRESS, branding.businessName),
       to: [trimmedRecipient],
+      ...(cc.length ? { cc } : {}),
       ...(replyTo ? { replyTo } : {}),
+      ...(bccList ? { bcc: bccList } : {}),
       subject: safeSubject,
       html: htmlBody,
       headers: { 'X-Entity-Ref-ID': invite.id },
@@ -165,6 +192,7 @@ export default async function handler(req, res) {
       publicUrl,
       token,
       sentTo: trimmedRecipient,
+      sentCopyToSender: !!bccList,
       inviteId: invite.id,
       expiresAt: invite.expiresAt,
     })

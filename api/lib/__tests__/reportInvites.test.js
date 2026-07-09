@@ -3,6 +3,8 @@ import {
   findReportInviteByToken,
   saveAllReportInvites,
   generateReportToken,
+  supersedePendingReportInvites,
+  hasPriorReportInvite,
 } from '../reportInvites.js'
 
 describe('findReportInviteByToken', () => {
@@ -34,5 +36,43 @@ describe('findReportInviteByToken', () => {
     const result = await findReportInviteByToken('abc1234')
     expect(result.error).toBe('not_found')
     expect(result.invite).toBeNull()
+  })
+})
+
+describe('link-only report invites', () => {
+  const future = new Date(Date.now() + 86400000).toISOString()
+
+  it('supersedes prior link-only invites for the same report', () => {
+    const oldToken = 'tok_old_link_only_abc'
+    const newToken = 'tok_new_link_only_xyz'
+    const invites = [
+      {
+        token: oldToken,
+        reportId: 'preport_1',
+        recipientEmail: '',
+        status: 'pending',
+        expiresAt: future,
+      },
+    ]
+
+    const { invites: next, supersededCount } = supersedePendingReportInvites(invites, {
+      reportId: 'preport_1',
+      recipientEmail: '',
+      keepToken: newToken,
+    })
+
+    expect(supersededCount).toBe(1)
+    expect(next[0].status).toBe('revoked')
+  })
+
+  it('tracks prior link-only invites separately from addressed invites', () => {
+    const invites = [
+      { reportId: 'preport_1', recipientEmail: '', status: 'pending' },
+      { reportId: 'preport_1', recipientEmail: 'client@example.com', status: 'pending' },
+    ]
+
+    expect(hasPriorReportInvite(invites, { reportId: 'preport_1', recipientEmail: '' })).toBe(true)
+    expect(hasPriorReportInvite(invites, { reportId: 'preport_1', recipientEmail: 'client@example.com' })).toBe(true)
+    expect(hasPriorReportInvite(invites, { reportId: 'preport_1', recipientEmail: 'other@example.com' })).toBe(false)
   })
 })
