@@ -13,6 +13,7 @@ import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
 import { useAuth } from '../../contexts/AuthContext'
 import { sendPhotoReportEmail, buildReportPublicUrl } from '../../utils/photoReports'
+import { parseReportTokenFromPublicUrl } from '@/utils/publicLinks'
 import {
   replaceReportTags,
   applyReportLinkToText,
@@ -104,6 +105,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
       const res = await sendPhotoReportEmail(getToken, {
         reportId: report.id,
         generateOnly: true,
+        token: parseReportTokenFromPublicUrl(lastLink) || report.publicToken || undefined,
       })
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
@@ -139,15 +141,12 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     let cancelled = false
 
     const bootstrapLink = async () => {
-      if (existingLink) {
-        applyLinkToMessages(existingLink)
-        return
-      }
       setGeneratingLink(true)
       try {
         const res = await sendPhotoReportEmail(getToken, {
           reportId: report.id,
           generateOnly: true,
+          token: report.publicToken || parseReportTokenFromPublicUrl(existingLink) || undefined,
         })
         if (cancelled) return
         const link = res.publicUrl || buildReportPublicUrl(res.token)
@@ -198,6 +197,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
       const res = await sendPhotoReportEmail(getToken, {
         reportId: report.id,
         recipientEmail: trimmed,
+        token: parseReportTokenFromPublicUrl(lastLink) || report.publicToken || undefined,
         cc: resolvedCcEmails,
         sendMeCopy,
         subject: replaceReportTags(subject, tagData),

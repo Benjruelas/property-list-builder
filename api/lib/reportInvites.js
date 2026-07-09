@@ -129,3 +129,34 @@ export function findActivePreviewReportInvite(allInvites, { reportId, ownerId })
       String(inv.ownerId) === normalizedOwnerId
   ) || null
 }
+
+export function findActiveReportInviteByToken(allInvites, { token, reportId, ownerId }) {
+  const normalizedToken = String(token || '').trim()
+  const normalizedReportId = String(reportId || '')
+  const normalizedOwnerId = String(ownerId || '')
+  if (!normalizedToken || normalizedToken.length < 8) return null
+  const invite = (allInvites || []).find(
+    (inv) =>
+      inv.token === normalizedToken &&
+      String(inv.reportId) === normalizedReportId &&
+      String(inv.ownerId || '') === normalizedOwnerId &&
+      inv.status === 'pending' &&
+      !inv.preview &&
+      !isReportInviteExpired(inv)
+  )
+  return invite || null
+}
+
+export function findActiveLinkOnlyReportInvite(allInvites, { reportId, ownerId }) {
+  const normalizedReportId = String(reportId || '')
+  const normalizedOwnerId = String(ownerId || '')
+  return (allInvites || []).find(
+    (inv) =>
+      String(inv.reportId) === normalizedReportId &&
+      String(inv.ownerId || '') === normalizedOwnerId &&
+      String(inv.recipientEmail || '').trim().toLowerCase() === '' &&
+      inv.status === 'pending' &&
+      !inv.preview &&
+      !isReportInviteExpired(inv)
+  ) || null
+}

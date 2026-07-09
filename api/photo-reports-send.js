@@ -8,6 +8,8 @@ import {
   isValidReportEmail,
   supersedePendingReportInvites,
   hasPriorReportInvite,
+  findActiveReportInviteByToken,
+  findActiveLinkOnlyReportInvite,
 } from './lib/reportInvites.js'
 import { buildReportPublicUrl } from './lib/publicLinks.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.js'
@@ -46,6 +48,30 @@ function resolveOrigin(req) {
   return req.headers.origin || 'https://localhost'
 }
 
+function findReusableReportInvite(allInvites, { report, ownerId, preferToken }) {
+  const normalizedPrefer = String(preferToken || '').trim()
+  if (normalizedPrefer) {
+    const byToken = findActiveReportInviteByToken(allInvites, {
+      token: normalizedPrefer,
+      reportId: report.id,
+      ownerId,
+    })
+    if (byToken) return byToken
+  }
+
+  const reportToken = String(report.publicToken || '').trim()
+  if (reportToken) {
+    const byReportToken = findActiveReportInviteByToken(allInvites, {
+      token: reportToken,
+      reportId: report.id,
+      ownerId,
+    })
+    if (byReportToken) return byReportToken
+  }
+
+  return findActiveLinkOnlyReportInvite(allInvites, { reportId: report.id, ownerId })
+}
+
 export const config = {
   api: { bodyParser: { sizeLimit: '2mb' } },
 }
@@ -76,6 +102,7 @@ export default async function handler(req, res) {
       generateOnly,
       cc: ccRaw,
       sendMeCopy,
+      token: preferToken,
     } = body
     if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
@@ -89,43 +116,83 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Valid recipientEmail is required' })
     }
 
-    const token = generateReportToken()
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + REPORT_INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
     const appOrigin = resolveOrigin(req)
+    const allInvites = await getAllReportInvites()
+    const linkOnly = generateOnly && !trimmedRecipient
+    const reusable = findReusableReportInvite(allInvites, {
+      report,
+      ownerId: user.uid,
+      preferToken,
+    })
+
+    if (linkOnly && reusable) {
+      const token = reusable.token
+      const publicUrl = buildReportPublicUrl(appOrigin, token)
+      const updated = {
+        ...report,
+        publicToken: token,
+        updatedAt: now.toISOString(),
+      }
+      if (report.publicToken !== token) {
+        await updatePhotoReportAtIndex(all, index, updated)
+      }
+      return res.status(200).json({
+        report: updated,
+        publicUrl,
+        token,
+        inviteId: reusable.id,
+        expiresAt: reusable.expiresAt,
+        reused: true,
+      })
+    }
+
+    const expiresAt = new Date(now.getTime() + REPORT_INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    const token = reusable?.token || generateReportToken()
     const publicUrl = buildReportPublicUrl(appOrigin, token)
     const safeMessage = String(message || '').slice(0, 4000)
       .replace(/\{ReportLink\}/g, publicUrl)
       .replace(/\{\{ReportLink\}\}/g, publicUrl)
     const reportTitle = String(report.title || 'Photo Report').trim()
 
-    const allInvites = await getAllReportInvites()
     const isResend = hasPriorReportInvite(allInvites, {
       reportId: report.id,
       recipientEmail: trimmedRecipient,
     })
 
-    const invite = {
-      id: `rinv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-      token,
-      reportId: report.id,
-      ownerId: user.uid,
-      recipientEmail: trimmedRecipient,
-      message: safeMessage,
-      status: 'pending',
-      createdAt: now.toISOString(),
-      expiresAt,
-    }
+    const invite = reusable
+      ? {
+          ...reusable,
+          recipientEmail: trimmedRecipient,
+          message: safeMessage,
+          updatedAt: now.toISOString(),
+        }
+      : {
+          id: `rinv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+          token,
+          reportId: report.id,
+          ownerId: user.uid,
+          recipientEmail: trimmedRecipient,
+          message: safeMessage,
+          status: 'pending',
+          createdAt: now.toISOString(),
+          expiresAt,
+        }
 
-    const { invites: nextInvites } = supersedePendingReportInvites(allInvites, {
+    const { invites: supersededInvites } = supersedePendingReportInvites(allInvites, {
       reportId: report.id,
       recipientEmail: trimmedRecipient,
       keepToken: token,
     })
-    nextInvites.push(invite)
+
+    let nextInvites
+    if (reusable) {
+      nextInvites = supersededInvites.map((inv) => (inv.token === token ? invite : inv))
+    } else {
+      nextInvites = [...supersededInvites, invite]
+    }
     await saveAllReportInvites(nextInvites)
 
-    const linkOnly = generateOnly && !trimmedRecipient
     const updated = {
       ...report,
       publicToken: token,

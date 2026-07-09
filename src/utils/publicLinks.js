@@ -22,7 +22,11 @@ export function buildReportPublicUrl(token, origin) {
   return `${base}/r/${encodePublicLinkToken(token)}`
 }
 
-/** Parse public quote/report/form route from pathname and search. */
+export function parseReportTokenFromPublicUrl(url) {
+  const match = String(url || '').match(/\/r\/([^/?#]+)/)
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
 export function parsePublicRoute(pathname = '', search = '') {
   const path = String(pathname || '')
   if (/^\/reset-password\/?$/.test(path)) {

@@ -3,6 +3,7 @@ import {
   buildQuotePublicUrl,
   buildReportPublicUrl,
   parsePublicRoute,
+  parseReportTokenFromPublicUrl,
 } from '../publicLinks'
 
 describe('publicLinks', () => {
@@ -19,5 +20,10 @@ describe('publicLinks', () => {
   it('still supports legacy query param routes', () => {
     expect(parsePublicRoute('/', '?quote=legacy-token')).toEqual({ type: 'quote', token: 'legacy-token' })
     expect(parsePublicRoute('/', '?report=legacy-token')).toEqual({ type: 'report', token: 'legacy-token' })
+  })
+
+  it('parses report tokens from public URLs', () => {
+    expect(parseReportTokenFromPublicUrl('https://app.test/r/0ta0xaVdQbdJY3kSIRKQHP'))
+      .toBe('0ta0xaVdQbdJY3kSIRKQHP')
   })
 })
