@@ -8,7 +8,7 @@ import { kvSAdd, kvSMembers, kvMSet } from './kvOps.js'
 import { withTiming } from './timing.js'
 import { getAllTeams } from './teams.js'
 import { buildAccessContext, filterVisibleResources } from './resourceContext.js'
-import { collectAffectedUidsForResource } from './shareIndex.js'
+import { collectAffectedUidsForResource, syncSharedOwnerIndex } from './shareIndex.js'
 
 export const LEAD_INDEX_PREFIX = 'lead-index:'
 export const LEADS_SHARD_PREFIX = 'leads:'
@@ -88,16 +88,37 @@ export async function getLeadOwnerId(leadId) {
   }
 }
 
-export async function rebuildSharedIndexForLead(lead, allTeams) {
-  if (!lead?.ownerId) return
-  const uids = collectAffectedUidsForResource(lead, allTeams)
-  for (const uid of uids) {
-    if (uid === lead.ownerId) continue
-    await kvSAdd(sharedIndexKey(uid), lead.ownerId)
-  }
+export async function rebuildSharedIndexForLead(lead, allTeams, prevLead = null) {
+  await syncSharedIndexForLead(lead, prevLead, allTeams)
 }
 
-export async function writeLeadToShards(allLeads) {
+export async function syncSharedIndexForLead(lead, prevLead, allTeams) {
+  await syncSharedOwnerIndex({
+    resource: lead,
+    prevResource: prevLead,
+    allTeams,
+    sharedKeyPrefix: SHARED_LEADS_PREFIX,
+  })
+}
+
+async function syncSharedIndexesForLeads(allLeads, allTeams) {
+  if (!kvAvailable) return
+  const byUid = new Map()
+  for (const lead of allLeads || []) {
+    const ownerId = lead?.ownerId
+    if (!ownerId) continue
+    for (const uid of collectAffectedUidsForResource(lead, allTeams)) {
+      if (uid === ownerId) continue
+      if (!byUid.has(uid)) byUid.set(uid, new Set())
+      byUid.get(uid).add(ownerId)
+    }
+  }
+  await Promise.all([...byUid.entries()].map(([uid, owners]) =>
+    kvSAdd(sharedIndexKey(uid), ...owners),
+  ))
+}
+
+export async function writeLeadToShards(allLeads, { allTeams } = {}) {
   const mode = flags.LEADS_SHARDED()
   if (mode === 'off' || !kvAvailable) return
   const byOwner = new Map()
@@ -109,10 +130,12 @@ export async function writeLeadToShards(allLeads) {
     byOwner.get(ownerId).push(lead)
     if (lead.id) indexEntries[leadIndexKey(lead.id)] = ownerId
   }
+  const teams = allTeams || await getAllTeams()
   // Batch the lead->owner index writes into one round trip instead of N.
   await Promise.all([
     kvMSet(indexEntries),
     ...[...byOwner.entries()].map(([ownerId, leads]) => saveOwnerLeads(ownerId, leads)),
+    syncSharedIndexesForLeads(allLeads, teams),
   ])
 }
 

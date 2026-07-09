@@ -13,8 +13,8 @@
  *         (same rules as the pipeline's own PATCH leads path).
  */
 
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess, verifyFirebaseToken } from './lib/teams.js'
+import { authenticate } from './lib/auth.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
 import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
 
 function num(v) {
@@ -97,13 +97,9 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
   if (!user) {
-    return res.status(401).json({ error: 'Unauthorized' })
+    return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
   }
 
   const { pipelineId, leadId, action, task = {} } = req.body || {}

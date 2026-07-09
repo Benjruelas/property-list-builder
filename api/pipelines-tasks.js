@@ -14,58 +14,9 @@
  *     actions: 'add' | 'update' | 'remove' | 'toggle-complete'
  */
 
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess, verifyFirebaseToken } from './lib/teams.js'
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
-
-const PIPELINES_KV_KEY = 'user_pipelines'
-let fallbackStore = []
-
-async function getAllPipelines() {
-  if (!kvAvailable || !kv) return fallbackStore
-  try {
-    const data = await kv.get(PIPELINES_KV_KEY)
-    const rows = typeof data === 'string' ? (data ? JSON.parse(data) : []) : data
-    const result = Array.isArray(rows) ? rows : []
-    fallbackStore = result
-    return result
-  } catch {
-    return fallbackStore
-  }
-}
-
-async function savePipelines(rows) {
-  fallbackStore = rows
-  if (!kvAvailable || !kv) return
-  try {
-    await kv
-      .set(PIPELINES_KV_KEY, rows)
-      .catch(() => kv.set(PIPELINES_KV_KEY, JSON.stringify(rows)))
-  } catch (e) {
-    console.warn('pipeline-tasks save failed', e.message)
-  }
-}
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
+import { authenticate } from './lib/auth.js'
 
 function num(v) {
   if (v == null) return null
@@ -117,11 +68,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   const { pipelineId, action, task = {} } = req.body || {}
@@ -228,9 +175,16 @@ export default async function handler(req, res) {
     }
 
     pipeline.updatedAt = new Date().toISOString()
-    all[idx] = pipeline
-    await savePipelines(all)
-    return res.status(200).json({ pipeline })
+    const updated = { ...pipeline }
+    await mutatePipelines((current) => {
+      const at = current.findIndex((p) => p.id === pipelineId)
+      if (at === -1) return undefined
+      const prev = current[at]
+      const next = [...current]
+      next[at] = updated
+      return next
+    }, { changedResources: [{ resource: updated, prevResource: all[idx] }] })
+    return res.status(200).json({ pipeline: updated })
   } catch (err) {
     console.error('pipelines-tasks error', err)
     return res.status(500).json({ error: 'Internal server error', message: err.message })

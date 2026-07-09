@@ -1,5 +1,7 @@
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import {resolveDevBypassUser, isDevBypassToken, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { isDevBypassToken } from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
+import { getAllFormTemplates, saveAllFormTemplates } from './lib/formTemplateStore.js'
 import {
   getAllTeams,
 } from './lib/teams.js'
@@ -28,77 +30,6 @@ import {
  *            template; only `lastUsedAt` is collaborator-writable here).
  * - DELETE : owner-only delete (best-effort R2 cleanup of originalPdfKey)
  */
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-}
-
-const KV_KEY = 'user_form_templates'
-let fallbackStore = []
-
-async function getAllTemplates() {
-  if (!kvAvailable || !kv) return fallbackStore
-  try {
-    const data = await kv.get(KV_KEY)
-    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    const result = Array.isArray(parsed) ? parsed : []
-    fallbackStore = result
-    return result
-  } catch (e) {
-    return fallbackStore
-  }
-}
-
-async function saveAllTemplates(templates) {
-  fallbackStore = templates
-  if (!kvAvailable || !kv) return
-  try {
-    await kv.set(KV_KEY, templates).catch(() => kv.set(KV_KEY, JSON.stringify(templates)))
-  } catch (e) {
-    console.warn('KV save failed', e.message)
-  }
-}
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
 
 const ALLOWED_FIELD_TYPES = new Set(['text', 'date', 'checkbox', 'signature'])
 
@@ -157,11 +88,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user, allowDevBypass, idToken } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
@@ -171,7 +98,7 @@ export default async function handler(req, res) {
 
   try {
     if (method === 'GET') {
-      const [all, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
+      const [all, allTeams] = await Promise.all([getAllFormTemplates(), getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
       const templates = filterVisibleResources(all, user, ctx)
       return res.status(200).json({ templates })
@@ -202,9 +129,9 @@ export default async function handler(req, res) {
         createdAt: now,
         updatedAt: now
       }
-      const all = await getAllTemplates()
+      const all = await getAllFormTemplates()
       all.push(newTemplate)
-      await saveAllTemplates(all)
+      await saveAllFormTemplates(all)
       return res.status(201).json({ template: newTemplate })
     }
 
@@ -222,7 +149,7 @@ export default async function handler(req, res) {
       } = body
       if (!templateId) return res.status(400).json({ error: 'templateId is required' })
 
-      const [all, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
+      const [all, allTeams] = await Promise.all([getAllFormTemplates(), getAllTeams()])
       const idx = all.findIndex((t) => t.id === templateId)
       if (idx === -1) return res.status(404).json({ error: 'Template not found' })
 
@@ -357,7 +284,7 @@ export default async function handler(req, res) {
 
       t.updatedAt = new Date().toISOString()
       all[idx] = t
-      await saveAllTemplates(all)
+      await saveAllFormTemplates(all)
       return res.status(200).json({ template: t })
     }
 
@@ -365,7 +292,7 @@ export default async function handler(req, res) {
       const { templateId } = body
       if (!templateId) return res.status(400).json({ error: 'templateId is required' })
 
-      const [all, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
+      const [all, allTeams] = await Promise.all([getAllFormTemplates(), getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
       const idx = all.findIndex((t) => t.id === templateId)
       if (idx === -1) return res.status(404).json({ error: 'Template not found' })
@@ -375,7 +302,7 @@ export default async function handler(req, res) {
       }
       const removed = all[idx]
       all.splice(idx, 1)
-      await saveAllTemplates(all)
+      await saveAllFormTemplates(all)
       if (removed.originalPdfKey) {
         deleteR2Key(removed.originalPdfKey).catch(() => {})
       }

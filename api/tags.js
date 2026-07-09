@@ -1,4 +1,6 @@
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
+import { mutateLeads } from './lib/leadStore.js'
+import { mutatePipelines } from './lib/pipelineStoreFull.js'
 import {
   TAG_TYPES,
   DEFAULT_TAG_COLORS,
@@ -32,17 +34,13 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
   }
 }
 
-const LEADS_KEY = 'user_leads'
 const LISTS_KEY = 'user_lists'
 const PATHS_KEY = 'user_paths'
-const PIPELINES_KEY = 'user_pipelines'
 
 let fallbackRegistry = emptyTagRegistry()
 const fallbackStores = {
-  leads: [],
   lists: [],
   paths: [],
-  pipelines: [],
 }
 
 async function readArray(key, storeKey) {
@@ -68,43 +66,21 @@ async function writeArray(key, storeKey, arr) {
   }
 }
 
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
-
 function pickColor(index) {
   return DEFAULT_TAG_COLORS[index % DEFAULT_TAG_COLORS.length]
 }
 
 async function sweepTagFromEntities(uid, type, tagId) {
   if (type === 'leads') {
-    const all = await readArray(LEADS_KEY, 'leads')
-    let changed = false
-    const next = all.map((item) => {
-      if (item.ownerId !== uid || !(item.tagIds || []).includes(tagId)) return item
-      changed = true
-      return stripTagFromEntity(item, tagId)
+    await mutateLeads((all) => {
+      let changed = false
+      const next = all.map((item) => {
+        if (item.ownerId !== uid || !(item.tagIds || []).includes(tagId)) return item
+        changed = true
+        return stripTagFromEntity(item, tagId)
+      })
+      return changed ? next : undefined
     })
-    if (changed) await writeArray(LEADS_KEY, 'leads', next)
     return
   }
 
@@ -133,23 +109,24 @@ async function sweepTagFromEntities(uid, type, tagId) {
   }
 
   if (type === 'deals') {
-    const all = await readArray(PIPELINES_KEY, 'pipelines')
-    let changed = false
-    const next = all.map((pipeline) => {
-      if (pipeline.ownerId !== uid || !Array.isArray(pipeline.deals)) return pipeline
-      let pipeChanged = false
-      const deals = pipeline.deals.map((deal) => {
-        if (!(deal.tagIds || []).includes(tagId)) return deal
-        pipeChanged = true
-        return stripTagFromEntity(deal, tagId)
+    await mutatePipelines((all) => {
+      let changed = false
+      const next = all.map((pipeline) => {
+        if (pipeline.ownerId !== uid || !Array.isArray(pipeline.deals)) return pipeline
+        let pipeChanged = false
+        const deals = pipeline.deals.map((deal) => {
+          if (!(deal.tagIds || []).includes(tagId)) return deal
+          pipeChanged = true
+          return stripTagFromEntity(deal, tagId)
+        })
+        if (pipeChanged) {
+          changed = true
+          return { ...pipeline, deals }
+        }
+        return pipeline
       })
-      if (pipeChanged) {
-        changed = true
-        return { ...pipeline, deals }
-      }
-      return pipeline
+      return changed ? next : undefined
     })
-    if (changed) await writeArray(PIPELINES_KEY, 'pipelines', next)
   }
 }
 
@@ -172,11 +149,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })

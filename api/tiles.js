@@ -3,6 +3,7 @@ import { enforceIpRateLimit } from './lib/rateLimit.js'
 
 const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 const EMPTY_MARKER = Buffer.alloc(0)
+const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'
 
 let _s3
 function getS3() {
@@ -64,11 +65,11 @@ export default async function handler(req, res) {
     if (cached !== null) {
       if (cached.length === 0) {
         // Empty marker — no parcels for this tile
-        res.setHeader('Cache-Control', 'public, max-age=86400')
+        res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
         return res.status(204).end()
       }
       res.setHeader('Content-Type', 'application/x-protobuf')
-      res.setHeader('Cache-Control', 'public, max-age=86400')
+      res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
       return res.status(200).send(cached)
     }
   } catch (e) {
@@ -92,7 +93,7 @@ export default async function handler(req, res) {
   if (upstream.status === 404 || upstream.status === 204) {
     // No parcels — cache empty marker so we don't re-fetch
     putToR2(r2Key, EMPTY_MARKER).catch(() => {})
-    res.setHeader('Cache-Control', 'public, max-age=86400')
+    res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
     return res.status(204).end()
   }
 
@@ -104,7 +105,7 @@ export default async function handler(req, res) {
 
   if (buf.length === 0) {
     putToR2(r2Key, EMPTY_MARKER).catch(() => {})
-    res.setHeader('Cache-Control', 'public, max-age=86400')
+    res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
     return res.status(204).end()
   }
 
@@ -113,6 +114,6 @@ export default async function handler(req, res) {
 
   // 4. Return tile
   res.setHeader('Content-Type', 'application/x-protobuf')
-  res.setHeader('Cache-Control', 'public, max-age=86400')
+  res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
   return res.status(200).send(buf)
 }

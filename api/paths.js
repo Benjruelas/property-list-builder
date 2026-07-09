@@ -9,8 +9,10 @@
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
 
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
 import { getAllTeams } from './lib/teams.js'
+import { getAllPaths, saveAllPaths } from './lib/pathStore.js'
+import { kv, kvAvailable } from './lib/kvBootstrap.js'
+import { authenticate } from './lib/auth.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -23,77 +25,6 @@ import {
 } from './lib/resourceContext.js'
 import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
 
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-}
-
-const KV_KEY = 'user_paths'
-let fallbackStore = []
-
-async function getAllPaths() {
-  if (!kvAvailable || !kv) return fallbackStore
-  try {
-    const data = await kv.get(KV_KEY)
-    const paths = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    const result = Array.isArray(paths) ? paths : []
-    fallbackStore = result
-    return result
-  } catch (e) {
-    return fallbackStore
-  }
-}
-
-async function saveAllPaths(paths) {
-  fallbackStore = paths
-  if (!kvAvailable || !kv) return
-  try {
-    await kv.set(KV_KEY, paths).catch(() => kv.set(KV_KEY, JSON.stringify(paths)))
-  } catch (e) {
-    console.warn('KV save failed', e.message)
-  }
-}
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
@@ -101,11 +32,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })

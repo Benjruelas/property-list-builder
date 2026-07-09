@@ -3,6 +3,7 @@
  */
 
 import { fullTeamsIndex } from './teams.js'
+import { kvSAdd, kvSRem, kvAvailable } from './kvOps.js'
 
 export function collectAffectedUidsForResource(resource, allTeams = []) {
   if (!resource) return []
@@ -21,6 +22,34 @@ export function collectAffectedUidsForResource(resource, allTeams = []) {
     }
   }
   return [...uids]
+}
+
+/**
+ * Keep shared-{leads|pipelines}:{uid} sets in sync when resource visibility changes.
+ */
+export async function syncSharedOwnerIndex({
+  resource,
+  prevResource,
+  allTeams,
+  sharedKeyPrefix,
+}) {
+  if (!kvAvailable) return
+  const ownerId = resource?.ownerId || prevResource?.ownerId
+  if (!ownerId) return
+  const prevUids = new Set(
+    prevResource ? collectAffectedUidsForResource(prevResource, allTeams) : [],
+  )
+  const nextUids = new Set(
+    resource ? collectAffectedUidsForResource(resource, allTeams) : [],
+  )
+
+  const removals = [...prevUids].filter((uid) => uid !== ownerId && !nextUids.has(uid))
+  const additions = [...nextUids].filter((uid) => uid !== ownerId && !prevUids.has(uid))
+
+  await Promise.all([
+    ...removals.map((uid) => kvSRem(`${sharedKeyPrefix}${uid}`, ownerId)),
+    ...additions.map((uid) => kvSAdd(`${sharedKeyPrefix}${uid}`, ownerId)),
+  ])
 }
 
 export default collectAffectedUidsForResource

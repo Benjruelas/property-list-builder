@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { requireAuth } from './lib/apiAuth.js'
 import {
   resolveSenderBranding,
   buildBrandedEmailHtml,
@@ -70,29 +70,6 @@ async function appendSubmission(record) {
   }
 }
 
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
-
 function sanitizeFilename(s) {
   return String(s || 'form').replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 60) || 'form'
 }
@@ -112,12 +89,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
-  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const user = await requireAuth(req, res)
+  if (!user) return
 
   const rl = await rateLimit({ key: `forms-send:${user.uid}`, limit: 100, windowSec: 3600 })
   if (!rl.allowed) {

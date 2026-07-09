@@ -1,5 +1,8 @@
-import {resolveDevBypassUser, isDevBypassToken, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { isDevBypassToken } from './lib/devBypassUsers.js'
 import { getAllTeams } from './lib/teams.js'
+import { getAllLists, saveAllLists } from './lib/listStore.js'
+import { kv, kvAvailable } from './lib/kvBootstrap.js'
+import { authenticate } from './lib/auth.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -23,77 +26,6 @@ import { paginateArray } from './lib/pagination.js'
  * - DELETE: delete list (owner only)
  */
 
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch (e) {
-    kvAvailable = false
-  }
-}
-
-const KV_KEY = 'user_lists'
-let fallbackStore = []
-
-async function getAllLists() {
-  if (!kvAvailable || !kv) return fallbackStore
-  try {
-    const data = await kv.get(KV_KEY)
-    const lists = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    const result = Array.isArray(lists) ? lists : []
-    fallbackStore = result
-    return result
-  } catch (e) {
-    return fallbackStore
-  }
-}
-
-async function saveAllLists(lists) {
-  fallbackStore = lists
-  if (!kvAvailable || !kv) return
-  try {
-    await kv.set(KV_KEY, lists).catch(() => kv.set(KV_KEY, JSON.stringify(lists)))
-  } catch (e) {
-    console.warn('KV save failed', e.message)
-  }
-}
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
-
 function normalizeParcel(p) {
   if (typeof p === 'string') return { id: p, addedAt: new Date().toISOString() }
   if (p && p.id) {
@@ -116,11 +48,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user, allowDevBypass, idToken } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })

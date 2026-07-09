@@ -8,6 +8,7 @@ import {
   getResourceAccess,
   canEdit,
 } from './resourceContext.js'
+import { flags } from './flags.js'
 import { getAllLeads, saveAllLeads, mutateLeads, mutateSingleLead } from './leadStore.js'
 import {
   isLeadOwner,
@@ -25,8 +26,19 @@ export async function buildLeadAccessContext(user) {
 }
 
 export async function getLeadWithAccess(user, leadId) {
-  const all = await getAllLeads()
   const ctx = await buildLeadAccessContext(user)
+  const mode = flags.LEADS_SHARDED()
+
+  if (mode !== 'off') {
+    const { findLeadById } = await import('./leadRepo.js')
+    const { lead, all, index } = await findLeadById(user, ctx, leadId)
+    if (!lead) return { lead: null, access: null, all, ctx, index: -1 }
+    const access = getResourceAccess(lead, user, ctx)
+    if (!access) return { lead: null, access: null, all, ctx, index: -1 }
+    return { lead, access, all, ctx, index }
+  }
+
+  const all = await getAllLeads()
   const index = all.findIndex((l) => l.id === leadId)
   const lead = index >= 0 ? all[index] : null
   if (!lead) return { lead: null, access: null, all, ctx, index: -1 }

@@ -7,7 +7,7 @@ import { kv, kvAvailable } from './kvBootstrap.js'
 import { kvSAdd, kvSMembers, kvMSet } from './kvOps.js'
 import { withTiming } from './timing.js'
 import { filterVisibleResources } from './resourceContext.js'
-import { collectAffectedUidsForResource } from './shareIndex.js'
+import { collectAffectedUidsForResource, syncSharedOwnerIndex } from './shareIndex.js'
 import { getAllTeams } from './teams.js'
 
 export const PIPELINE_INDEX_PREFIX = 'pipeline-index:'
@@ -88,7 +88,33 @@ export async function getPipelineOwnerId(pipelineId) {
   }
 }
 
-export async function writePipelinesToShards(allPipelines) {
+export async function syncSharedIndexForPipeline(pipeline, prevPipeline, allTeams) {
+  await syncSharedOwnerIndex({
+    resource: pipeline,
+    prevResource: prevPipeline,
+    allTeams,
+    sharedKeyPrefix: SHARED_PIPELINES_PREFIX,
+  })
+}
+
+async function syncSharedIndexesForPipelines(allPipelines, allTeams) {
+  if (!kvAvailable) return
+  const byUid = new Map()
+  for (const pipeline of allPipelines || []) {
+    const ownerId = pipeline?.ownerId
+    if (!ownerId) continue
+    for (const uid of collectAffectedUidsForResource(pipeline, allTeams)) {
+      if (uid === ownerId) continue
+      if (!byUid.has(uid)) byUid.set(uid, new Set())
+      byUid.get(uid).add(ownerId)
+    }
+  }
+  await Promise.all([...byUid.entries()].map(([uid, owners]) =>
+    kvSAdd(sharedIndexKey(uid), ...owners),
+  ))
+}
+
+export async function writePipelinesToShards(allPipelines, { allTeams } = {}) {
   const mode = flags.PIPELINES_SHARDED()
   if (mode === 'off' || !kvAvailable) return
   const byOwner = new Map()
@@ -100,10 +126,12 @@ export async function writePipelinesToShards(allPipelines) {
     byOwner.get(ownerId).push(pipeline)
     if (pipeline.id) indexEntries[pipelineIndexKey(pipeline.id)] = ownerId
   }
+  const teams = allTeams || await getAllTeams()
   // Batch the pipeline->owner index writes into one round trip instead of N.
   await Promise.all([
     kvMSet(indexEntries),
     ...[...byOwner.entries()].map(([ownerId, pipes]) => saveOwnerPipelines(ownerId, pipes)),
+    syncSharedIndexesForPipelines(allPipelines, teams),
   ])
 }
 

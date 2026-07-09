@@ -8,8 +8,9 @@ import { readLocalDevArray, writeLocalDevArray } from './localDevPersistence.js'
 import { flags } from './flags.js'
 import { withKvLock } from './kvLock.js'
 import { withTiming } from './timing.js'
-import { writeLeadToShards, removeLeadIndex } from './leadRepo.js'
+import { writeLeadToShards, removeLeadIndex, syncSharedIndexForLead } from './leadRepo.js'
 import { bumpLeadsVersionsForResource } from './dataVersion.js'
+import { getAllTeams } from './teams.js'
 
 export const LEADS_KV_KEY = 'user_leads'
 const LOCK_KEY = 'lock:user_leads'
@@ -68,6 +69,16 @@ export async function saveAllLeads(leads, { changedResources = [] } = {}) {
       }
     }
     await writeLeadToShards(leads)
+    if (flags.LEADS_SHARDED() !== 'off' && changedResources.length) {
+      const allTeams = await getAllTeams()
+      for (const item of changedResources) {
+        if (item.resource) {
+          await syncSharedIndexForLead(item.resource, item.prevResource || null, allTeams)
+        } else if (item.prevResource) {
+          await syncSharedIndexForLead(null, item.prevResource, allTeams)
+        }
+      }
+    }
     if (flags.VERSIONED_POLL()) {
       for (const item of changedResources) {
         await bumpLeadsVersionsForResource(item.resource, { prevResource: item.prevResource })

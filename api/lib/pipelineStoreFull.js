@@ -7,8 +7,9 @@ import { flags } from './flags.js'
 import { withKvLock } from './kvLock.js'
 import { withTiming } from './timing.js'
 import { normalizePipelineStore } from './pipelineStore.js'
-import { writePipelinesToShards } from './pipelineRepo.js'
+import { writePipelinesToShards, syncSharedIndexForPipeline } from './pipelineRepo.js'
 import { bumpPipelinesVersionsForResource } from './dataVersion.js'
+import { getAllTeams } from './teams.js'
 
 export const PIPELINES_KV_KEY = 'user_pipelines'
 const LOCK_KEY = 'lock:user_pipelines'
@@ -71,6 +72,16 @@ export async function saveAllPipelines(pipelines, { changedResources = [] } = {}
       }
     }
     await writePipelinesToShards(normalized)
+    if (flags.PIPELINES_SHARDED() !== 'off' && changedResources.length) {
+      const allTeams = await getAllTeams()
+      for (const item of changedResources) {
+        if (item.resource) {
+          await syncSharedIndexForPipeline(item.resource, item.prevResource || null, allTeams)
+        } else if (item.prevResource) {
+          await syncSharedIndexForPipeline(null, item.prevResource, allTeams)
+        }
+      }
+    }
     if (flags.VERSIONED_POLL()) {
       for (const item of changedResources) {
         await bumpPipelinesVersionsForResource(item.resource, { prevResource: item.prevResource })

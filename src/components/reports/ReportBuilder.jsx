@@ -224,14 +224,17 @@ export function ReportBuilder({
     if (!open || !getToken || isTemplate) return undefined
 
     let cancelled = false
-    const objectUrls = []
+    const managedUrls = new Map()
 
     const loadThumbnails = async () => {
       await Promise.all(
         photos.map(async (p) => {
+          if (!p?.id) return
           if (p._localThumbUrl) {
             if (!cancelled) {
-              setThumbUrls((prev) => (prev[p.id] ? prev : { ...prev, [p.id]: p._localThumbUrl }))
+              setThumbUrls((prev) => (
+                prev[p.id] === p._localThumbUrl ? prev : { ...prev, [p.id]: p._localThumbUrl }
+              ))
             }
             return
           }
@@ -240,8 +243,12 @@ export function ReportBuilder({
             const blob = await fetchPhotoThumbnailBlob(getToken, p, cacheVersion)
             if (cancelled) return
             const objectUrl = URL.createObjectURL(blob)
-            objectUrls.push(objectUrl)
-            setThumbUrls((prev) => (prev[p.id] ? prev : { ...prev, [p.id]: objectUrl }))
+            managedUrls.set(p.id, objectUrl)
+            setThumbUrls((prev) => {
+              const old = prev[p.id]
+              if (old?.startsWith?.('blob:') && old !== objectUrl) URL.revokeObjectURL(old)
+              return { ...prev, [p.id]: objectUrl }
+            })
           } catch {
             /* ignore — tile stays as placeholder */
           }
@@ -253,7 +260,17 @@ export function ReportBuilder({
 
     return () => {
       cancelled = true
-      objectUrls.forEach((url) => URL.revokeObjectURL(url))
+      const ids = [...managedUrls.keys()]
+      for (const url of managedUrls.values()) URL.revokeObjectURL(url)
+      if (ids.length) {
+        setThumbUrls((prev) => {
+          const next = { ...prev }
+          for (const id of ids) {
+            if (next[id]?.startsWith?.('blob:')) delete next[id]
+          }
+          return next
+        })
+      }
     }
   }, [open, photos, getToken, isTemplate])
 

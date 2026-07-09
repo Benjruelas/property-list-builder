@@ -198,6 +198,15 @@ export default async function handler(req, res) {
   const query = req.query || {}
 
   try {
+    if (method === 'GET' && flags.VERSIONED_POLL()) {
+      const clientVer = parseIfNoneMatch(req)
+      const serverVer = await getUserDataVersion(DATAVER_LEADS, user.uid)
+      if (clientVer && clientVer === serverVer) {
+        res.setHeader('ETag', `"${serverVer}"`)
+        return res.status(304).end()
+      }
+    }
+
     const [allTeams, userAppSettings] = await Promise.all([
       getAllTeams(),
       loadUserAppSettings(user.uid),
@@ -206,15 +215,6 @@ export default async function handler(req, res) {
     const allowedStatusIds = resolveAllowedLeadStatusIds(ctx, userAppSettings)
 
     if (method === 'GET') {
-      if (flags.VERSIONED_POLL()) {
-        const clientVer = parseIfNoneMatch(req)
-        const serverVer = await getUserDataVersion(DATAVER_LEADS, user.uid)
-        if (clientVer && clientVer === serverVer) {
-          res.setHeader('ETag', `"${serverVer}"`)
-          return res.status(304).end()
-        }
-      }
-
       const leads = await getLeadsForUser(user, ctx)
       const singleLeadId = String(query.leadId || '').trim()
       if (singleLeadId) {
@@ -397,8 +397,6 @@ export default async function handler(req, res) {
       const name = leadDisplayName(lead)
       if (visibilityChanged) {
         await logLeadActivity('lead.shared', lead, user, `${label} updated sharing on lead ${name}`)
-        const { rebuildSharedIndexForLead } = await import('./lib/leadRepo.js')
-        await rebuildSharedIndexForLead(lead, allTeams)
       } else {
         await logLeadActivity('lead.updated', lead, user, `${label} updated lead ${name}`)
       }

@@ -15,14 +15,27 @@ export const TEAMS_KV_KEY = 'teams'
 export const DEFAULT_SEAT_LIMIT = 10
 
 let fallbackStore = []
+let teamsReadCache = null
+let teamsReadCacheAt = 0
+const TEAMS_READ_CACHE_MS = 3000
+
+function invalidateTeamsReadCache() {
+  teamsReadCache = null
+  teamsReadCacheAt = 0
+}
 
 export async function getAllTeams() {
+  if (teamsReadCache && Date.now() - teamsReadCacheAt < TEAMS_READ_CACHE_MS) {
+    return teamsReadCache
+  }
   if (!kvAvailable || !kv) return fallbackStore
   try {
     const data = await kv.get(TEAMS_KV_KEY)
     const teams = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
     const result = Array.isArray(teams) ? teams : []
     fallbackStore = result
+    teamsReadCache = result
+    teamsReadCacheAt = Date.now()
     return result
   } catch {
     return fallbackStore
@@ -30,6 +43,7 @@ export async function getAllTeams() {
 }
 
 export async function saveAllTeams(teams) {
+  invalidateTeamsReadCache()
   fallbackStore = teams
   if (!kvAvailable || !kv) return
   try {

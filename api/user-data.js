@@ -9,7 +9,7 @@
  * Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
 
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
 import { kv, kvAvailable } from './lib/kvBootstrap.js'
 import { withKvLock } from './lib/kvLock.js'
 
@@ -19,30 +19,6 @@ function kvKey(uid) {
 
 function lockKey(uid) {
   return `lock:user_data_${uid}`
-}
-
-/** Verify Firebase ID token; returns { uid, email } or null */
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
 }
 
 async function getUserData(uid) {
@@ -74,11 +50,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })

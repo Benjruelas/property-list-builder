@@ -13,7 +13,7 @@ import {
   leadContactMatchesQuery,
   skipTraceContactDetails,
 } from './leadContact'
-import { mergePhotoRecord, dedupePhotosById } from './photoDisplay'
+import { mergePhotoRecord, dedupePhotosById, getPhotoThumbnailKey } from './photoDisplay'
 export {
   getLeadPhones,
   getLeadEmails,
@@ -195,6 +195,14 @@ export function mergeListViewLeads(existing, incoming, { excludeIds } = {}) {
   return exclude ? merged.filter(Boolean) : merged
 }
 
+function cachedPhotosMissingStorageKeys(photos) {
+  if (!Array.isArray(photos) || photos.length === 0) return false
+  return photos.some((p) => {
+    if (!p?.id || p._localThumbUrl || p._uploadStatus) return false
+    return !getPhotoThumbnailKey(p)
+  })
+}
+
 /** Whether a list-view lead needs a full fetch to load photo metadata. */
 export function leadNeedsPhotoHydrate(lead, { pendingUploadCount = 0 } = {}) {
   if (!lead?.id) return false
@@ -208,6 +216,7 @@ export function leadNeedsPhotoHydrate(lead, { pendingUploadCount = 0 } = {}) {
   if (photoCount > cachedPhotoCount) return true
   if (photoCount < cachedPhotoCount) return pendingUploadCount === 0
   if (lead._listView && photoCount > 0 && cachedPhotoCount === 0) return true
+  if (cachedPhotosMissingStorageKeys(cachedPhotos)) return true
   return false
 }
 

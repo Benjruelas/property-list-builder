@@ -40,14 +40,27 @@ describe('leadNeedsPhotoHydrate', () => {
     expect(leadNeedsPhotoHydrate(lead)).toBe(true)
   })
 
-  it('does not hydrate when counts already match', () => {
+  it('does not hydrate when counts match and photos have storage keys', () => {
+    const lead = {
+      id: 'lead_1',
+      _listView: true,
+      photoCount: 2,
+      photos: [
+        { id: 'p1', thumbnailKey: 'lead-photos/u1/l1/p1/thumb.jpg' },
+        { id: 'p2', thumbnailKey: 'lead-photos/u1/l1/p2/thumb.jpg' },
+      ],
+    }
+    expect(leadNeedsPhotoHydrate(lead)).toBe(false)
+  })
+
+  it('requires hydration when cached photos are id-only stubs', () => {
     const lead = {
       id: 'lead_1',
       _listView: true,
       photoCount: 2,
       photos: [{ id: 'p1' }, { id: 'p2' }],
     }
-    expect(leadNeedsPhotoHydrate(lead)).toBe(false)
+    expect(leadNeedsPhotoHydrate(lead)).toBe(true)
   })
 })
 

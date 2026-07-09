@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Mail, Send, Paperclip, X, Loader2 } from 'lucide-react'
 import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
@@ -35,8 +35,7 @@ export function EmailComposer({
   const [body, setBody] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [sendMeCopy, setSendMeCopy] = useState(false)
-  const [ccMemberUids, setCcMemberUids] = useState([])
-  const [externalCcEmails, setExternalCcEmails] = useState([])
+  const [ccEmails, setCcEmails] = useState([])
   const [attachments, setAttachments] = useState([])
   const fileInputRef = useRef(null)
 
@@ -45,8 +44,7 @@ export function EmailComposer({
   useEffect(() => {
     if (!isOpen) return
     setSendMeCopy(false)
-    setCcMemberUids([])
-    setExternalCcEmails([])
+    setCcEmails([])
     setAttachments([])
     if (template && parcelData) {
       setSubject(replaceTemplateTags(template.subject, parcelData))
@@ -65,34 +63,15 @@ export function EmailComposer({
     [attachments],
   )
 
-  const ccEmails = useMemo(() => {
-    const selected = new Set(ccMemberUids)
-    const fromMembers = (teamMembers || [])
-      .filter((m) => selected.has(m.uid))
-      .map((m) => normalizeEmailAddress(m.email))
-    const combined = [...fromMembers, ...externalCcEmails.map(normalizeEmailAddress)]
+  const resolvedCcEmails = useMemo(() => {
     const seen = new Set()
     const to = normalizeEmailAddress(actualRecipientEmail)
-    return combined.filter((email) => {
+    return (ccEmails || []).map(normalizeEmailAddress).filter((email) => {
       if (!email || email === to || seen.has(email)) return false
       seen.add(email)
       return true
     })
-  }, [ccMemberUids, externalCcEmails, teamMembers, actualRecipientEmail])
-
-  const handleToggleCcMember = useCallback((uid) => {
-    setCcMemberUids((prev) => (
-      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
-    ))
-  }, [])
-
-  const handleAddExternalCc = useCallback((email) => {
-    setExternalCcEmails((prev) => (prev.includes(email) ? prev : [...prev, email]))
-  }, [])
-
-  const handleRemoveExternalCc = useCallback((email) => {
-    setExternalCcEmails((prev) => prev.filter((e) => e !== email))
-  }, [])
+  }, [ccEmails, actualRecipientEmail])
 
   const handleAttachmentPick = async (e) => {
     const files = Array.from(e.target.files || [])
@@ -129,7 +108,7 @@ export function EmailComposer({
       return
     }
 
-    const ccSummary = ccEmails.length ? `\nCC: ${ccEmails.join(', ')}` : ''
+    const ccSummary = resolvedCcEmails.length ? `\nCC: ${resolvedCcEmails.join(', ')}` : ''
     const confirmed = await showConfirm(
       `Send email to ${actualRecipientEmail}${actualRecipientEmail !== recipientEmail ? ` (testing - original: ${recipientEmail})` : ''}?${ccSummary}`,
       'Confirm Send',
@@ -149,7 +128,7 @@ export function EmailComposer({
 
       await sendOutreachEmail(getToken, {
         recipientEmail: actualRecipientEmail,
-        cc: ccEmails,
+        cc: resolvedCcEmails,
         subject,
         message: finalBody,
         sendMeCopy,
@@ -186,52 +165,49 @@ export function EmailComposer({
 
         <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(90vh-200px)] space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-white/75 mb-1">
               To
             </label>
-            <div className="p-2 bg-gray-50 rounded border text-sm">
+            <div className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/90">
               {actualRecipientEmail}
               {actualRecipientEmail !== recipientEmail && (
-                <span className="text-orange-600 ml-2 text-xs">(Testing - Original: {recipientEmail})</span>
+                <span className="text-amber-300 ml-2 text-xs">(Testing - Original: {recipientEmail})</span>
               )}
               {recipientName && actualRecipientEmail === recipientEmail && (
-                <span className="text-gray-500 ml-2">({recipientName})</span>
+                <span className="text-white/55 ml-2">({recipientName})</span>
               )}
             </div>
           </div>
 
           <OutreachCcField
             teamMembers={teamMembers}
-            selectedMemberUids={ccMemberUids}
-            onToggleMember={handleToggleCcMember}
-            externalEmails={externalCcEmails}
-            onAddExternalEmail={handleAddExternalCc}
-            onRemoveExternalEmail={handleRemoveExternalCc}
+            ccEmails={ccEmails}
+            onChangeCcEmails={setCcEmails}
             excludeEmail={actualRecipientEmail}
             disabled={isSending}
           />
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-white/75 mb-1">
               Subject
             </label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Email subject"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-white/75 mb-1">
               Body
             </label>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              className="w-full min-h-[240px] p-3 border border-gray-300 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full min-h-[240px] p-3 border border-white/15 rounded-lg bg-white/5 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows={10}
               placeholder="Email body"
             />
@@ -239,10 +215,10 @@ export function EmailComposer({
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-white/75">
                 Attachments
               </label>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-white/50">
                 {formatStorageBytes(attachmentBytes)} / {formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)}
               </span>
             </div>
@@ -268,15 +244,15 @@ export function EmailComposer({
                 {attachments.map((item) => (
                   <li
                     key={item.id}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                    className="flex items-center justify-between gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm"
                   >
                     <span className="truncate">{item.name}</span>
-                    <span className="shrink-0 text-xs text-gray-500">{formatStorageBytes(item.size)}</span>
+                    <span className="shrink-0 text-xs text-white/50">{formatStorageBytes(item.size)}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveAttachment(item.id)}
                       disabled={isSending}
-                      className="shrink-0 rounded p-1 hover:bg-gray-200 disabled:opacity-50"
+                      className="shrink-0 rounded p-1 hover:bg-white/10 disabled:opacity-50"
                       aria-label={`Remove ${item.name}`}
                     >
                       <X className="h-4 w-4" />
@@ -287,7 +263,7 @@ export function EmailComposer({
             )}
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-sm text-white/75 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={sendMeCopy}

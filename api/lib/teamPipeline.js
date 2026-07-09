@@ -2,6 +2,8 @@
  * Create team Pipe in user_pipelines KV (shared helper for teams API).
  */
 
+import { mutatePipelines } from './pipelineStoreFull.js'
+
 const DEFAULT_COLUMNS = ['Open', 'Pending', 'Closed']
 
 function normalizeColumns(cols) {
@@ -14,13 +16,9 @@ function normalizeColumns(cols) {
   })).filter((c) => c.name)
 }
 
-export async function createTeamPipeline(kv, team, ownerUser) {
-  if (!kv || !team?.id) return null
+export async function createTeamPipeline(_kv, team, ownerUser) {
+  if (!team?.id) return null
   try {
-    const data = await kv.get('user_pipelines')
-    const pipelines = typeof data === 'string' ? (data ? JSON.parse(data) : []) : (data || [])
-    const arr = Array.isArray(pipelines) ? pipelines : []
-
     const now = new Date().toISOString()
     const pipeline = {
       id: `pipe_team_${team.id.replace(/^team_/, '')}`,
@@ -39,14 +37,17 @@ export async function createTeamPipeline(kv, team, ownerUser) {
       updatedAt: now,
     }
 
-    const existingIdx = arr.findIndex((p) => p.id === pipeline.id || (p.isTeamPipe && p.teamId === team.id))
-    if (existingIdx >= 0) {
-      return arr[existingIdx]
-    }
-
-    arr.push(pipeline)
-    await kv.set('user_pipelines', arr).catch(() => kv.set('user_pipelines', JSON.stringify(arr)))
-    return pipeline
+    let result = null
+    await mutatePipelines((arr) => {
+      const existingIdx = arr.findIndex((p) => p.id === pipeline.id || (p.isTeamPipe && p.teamId === team.id))
+      if (existingIdx >= 0) {
+        result = arr[existingIdx]
+        return undefined
+      }
+      result = pipeline
+      return [...arr, pipeline]
+    }, { changedResources: [{ resource: pipeline }] })
+    return result
   } catch (e) {
     console.warn('createTeamPipeline failed', e.message)
     return null

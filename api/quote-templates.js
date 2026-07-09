@@ -1,4 +1,4 @@
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { requireAuth } from './lib/apiAuth.js'
 import { getAllTeams } from './lib/teams.js'
 import {
   buildAccessContext,
@@ -16,29 +16,6 @@ import { computeQuoteTotals, defaultValidUntil } from './lib/quoteMath.js'
 /**
  * Quote templates CRUD — mirrors api/forms.js pattern.
  */
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
 
 function buildTemplateFromBody(body, user, existing = null) {
   const now = new Date().toISOString()
@@ -79,12 +56,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
-  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const user = await requireAuth(req, res)
+  if (!user) return
 
   const { method, body = {} } = req
 

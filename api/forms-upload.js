@@ -1,5 +1,5 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
 
 /**
@@ -65,36 +65,6 @@ function s3() {
   return _s3
 }
 
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch (e) {
-    console.error('Token verify error', e.message)
-    return null
-  }
-}
-
-function resolveUser(req) {
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  return { idToken, allowDevBypass }
-}
-
 function sanitizeId(v) {
   return String(v || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 80)
 }
@@ -109,10 +79,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const { idToken, allowDevBypass } = resolveUser(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
-  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const { user } = await authenticate(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
 
   try {
     if (req.method === 'POST') {

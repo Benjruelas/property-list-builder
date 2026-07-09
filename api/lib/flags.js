@@ -25,6 +25,10 @@ export const flags = {
   // production to prevent lost updates from concurrent edits.
   LEADS_LOCK: () => envFlag('FLAG_LEADS_LOCK', isProd()),
   PIPELINES_LOCK: () => envFlag('FLAG_PIPELINES_LOCK', envFlag('FLAG_LEADS_LOCK', isProd())),
+  LISTS_LOCK: () => envFlag('FLAG_LISTS_LOCK', isProd()),
+  PATHS_LOCK: () => envFlag('FLAG_PATHS_LOCK', isProd()),
+  FORM_TEMPLATES_LOCK: () => envFlag('FLAG_FORM_TEMPLATES_LOCK', isProd()),
+  TASKS_LOCK: () => envFlag('FLAG_TASKS_LOCK', isProd()),
   VERSIONED_POLL: () => envFlag('FLAG_VERSIONED_POLL'),
   LEADS_SHARDED: () => envShardMode('FLAG_LEADS_SHARDED'),
   PIPELINES_SHARDED: () => envShardMode('FLAG_PIPELINES_SHARDED'),

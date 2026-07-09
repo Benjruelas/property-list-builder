@@ -8,14 +8,13 @@
  * DELETE -> delete team (admin only)
  */
 
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
 import { normalizeEmailBranding } from './lib/senderBranding.js'
 import {
   getAllTeams,
   saveAllTeams,
   loadTeamsForUser,
   lookupFirebaseUidByEmail,
-  verifyFirebaseToken,
   DEFAULT_SEAT_LIMIT,
 } from './lib/teams.js'
 import { isTeamAdmin, getTeamMemberRole, userHasTeamMembership } from './lib/access.js'
@@ -28,6 +27,8 @@ import {
   cancelInvitesForTeamEmail,
 } from './lib/teamInvites.js'
 import { createTeamPipeline } from './lib/teamPipeline.js'
+import { mutateLeads } from './lib/leadStore.js'
+import { mutatePipelines } from './lib/pipelineStoreFull.js'
 import {
   normalizeMemberFeatures,
   resolveMemberFeatures,
@@ -59,7 +60,40 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
 
 async function stripTeamIdFromAllResources(teamId) {
   if (!kvAvailable || !kv) return
-  for (const key of ['user_lists', 'user_pipelines', 'user_paths', 'user_leads', 'user_form_templates']) {
+
+  await mutateLeads((arr) => {
+    let changed = false
+    for (const r of arr) {
+      if (Array.isArray(r.teamShares) && r.teamShares.includes(teamId)) {
+        r.teamShares = r.teamShares.filter((id) => id !== teamId)
+        changed = true
+      }
+      if (r.teamId === teamId && r.visibility === 'team') {
+        r.visibility = 'private'
+        r.teamId = null
+        changed = true
+      }
+    }
+    return changed ? [...arr] : undefined
+  })
+
+  await mutatePipelines((arr) => {
+    let changed = false
+    for (const r of arr) {
+      if (Array.isArray(r.teamShares) && r.teamShares.includes(teamId)) {
+        r.teamShares = r.teamShares.filter((id) => id !== teamId)
+        changed = true
+      }
+      if (r.teamId === teamId && r.visibility === 'team') {
+        r.visibility = 'private'
+        r.teamId = null
+        changed = true
+      }
+    }
+    return changed ? [...arr] : undefined
+  })
+
+  for (const key of ['user_lists', 'user_paths', 'user_form_templates']) {
     try {
       const d = await kv.get(key)
       const rows = typeof d === 'string' ? (d ? JSON.parse(d) : []) : d
@@ -132,11 +166,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
+  const { user, allowDevBypass, idToken } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })

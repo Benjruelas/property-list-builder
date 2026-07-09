@@ -3,78 +3,13 @@
  * Team users store tasks in KV user_tasks; solo users keep local fallback on client.
  */
 
-import {resolveDevBypassUser, isDevBypassAllowed} from './lib/devBypassUsers.js'
+import { authenticate } from './lib/auth.js'
+import { getAllTasks, saveAllTasks } from './lib/taskStore.js'
 import { getAllTeams, fullTeamsIndex } from './lib/teams.js'
 import { userHasTeamMembership } from './lib/access.js'
 import { logTeamActivity, actorLabel } from './lib/activityLog.js'
 import { taskVisibleToUser, canManageTask, sharedViewerMayPatch } from './lib/taskAccess.js'
 import { paginateArray } from './lib/pagination.js'
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
-
-const KV_KEY = 'user_tasks'
-let fallbackStore = []
-
-async function getAllTasks() {
-  if (!kvAvailable || !kv) return fallbackStore
-  try {
-    const data = await kv.get(KV_KEY)
-    const rows = typeof data === 'string' ? (data ? JSON.parse(data) : []) : data
-    const result = Array.isArray(rows) ? rows : []
-    fallbackStore = result
-    return result
-  } catch {
-    return fallbackStore
-  }
-}
-
-async function saveAllTasks(tasks) {
-  fallbackStore = tasks
-  if (!kvAvailable || !kv) return
-  try {
-    await kv.set(KV_KEY, tasks).catch(() => kv.set(KV_KEY, JSON.stringify(tasks)))
-  } catch (e) {
-    console.warn('tasks KV save failed', e.message)
-  }
-}
-
-async function verifyFirebaseToken(idToken) {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY
-  if (!apiKey || !idToken) return null
-  try {
-    const r = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }) }
-    )
-    if (!r.ok) return null
-    const data = await r.json()
-    const user = data.users && data.users[0]
-    if (!user) return null
-    return { uid: user.localId, email: (user.email || '').toLowerCase() }
-  } catch {
-    return null
-  }
-}
 
 function normalizeAssignedUids(body, existing, membership) {
   const raw = body.assignedUids !== undefined ? body.assignedUids : (existing?.assignedUids || [])
@@ -88,17 +23,14 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const authHeader = req.headers.authorization
-  const idToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const allowDevBypass = isDevBypassAllowed(req)
-  let user = allowDevBypass ? resolveDevBypassUser(idToken) : null
-  if (!user) user = await verifyFirebaseToken(idToken)
-  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const { user } = await authenticate(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
 
   const { method, body = {} } = req
 
   try {
     const allTeams = await getAllTeams()
+    const teamsIndex = fullTeamsIndex(allTeams)
     const membership = userHasTeamMembership(allTeams, user.uid)
     const all = await getAllTasks()
 
@@ -162,13 +94,12 @@ export default async function handler(req, res) {
       })
 
       try {
-        const allTeams = await getAllTeams()
         const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
         await notifyTaskAssigned(assignedUids.filter((uid) => uid !== user.uid), {
           taskTitle: title,
           taskId: task.id,
           actorEmail: user.email,
-        }, fullTeamsIndex(allTeams))
+        }, teamsIndex)
       } catch {
         /* ignore */
       }
@@ -206,13 +137,12 @@ export default async function handler(req, res) {
           )
           if (newlyAssigned.length) {
             try {
-              const allTeams = await getAllTeams()
               const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
               await notifyTaskAssigned(newlyAssigned, {
                 taskTitle: task.title,
                 taskId: task.id,
                 actorEmail: user.email,
-              }, fullTeamsIndex(allTeams))
+              }, teamsIndex)
             } catch {
               /* ignore */
             }
