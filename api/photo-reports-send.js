@@ -24,6 +24,12 @@ import { leadDisplayName } from './lib/publicReportPayload.js'
 import { rateLimit } from './lib/rateLimit.js'
 import { sanitizeHeader } from './lib/emailSafety.js'
 
+async function canAccessReport(user, report) {
+  if (report.ownerId === user.uid) return true
+  const { lead } = await getLeadWithAccess(user, report.leadId)
+  return !!lead
+}
+
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
 const FROM_ADDRESS = process.env.FORMS_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || DEFAULT_FROM
@@ -107,7 +113,7 @@ export default async function handler(req, res) {
     if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
     const { report, index, all } = await getPhotoReportById(reportId)
-    if (!report || report.ownerId !== user.uid) {
+    if (!report || !(await canAccessReport(user, report))) {
       return res.status(404).json({ error: 'Report not found' })
     }
 
@@ -120,9 +126,10 @@ export default async function handler(req, res) {
     const appOrigin = resolveOrigin(req)
     const allInvites = await getAllReportInvites()
     const linkOnly = generateOnly && !trimmedRecipient
+    const inviteOwnerId = report.ownerId || user.uid
     const reusable = findReusableReportInvite(allInvites, {
       report,
-      ownerId: user.uid,
+      ownerId: inviteOwnerId,
       preferToken,
     })
 
@@ -171,7 +178,7 @@ export default async function handler(req, res) {
           id: `rinv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
           token,
           reportId: report.id,
-          ownerId: user.uid,
+          ownerId: inviteOwnerId,
           recipientEmail: trimmedRecipient,
           message: safeMessage,
           status: 'pending',

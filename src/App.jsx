@@ -1699,6 +1699,10 @@ function App() {
     if (open) nav.setShowMenu(false)
   }, [nav])
 
+  useEffect(() => {
+    if (selectedHailEvent) setQuickCreateOpen(false)
+  }, [selectedHailEvent])
+
   const handleActionBarMenuChange = useCallback((valueOrFn) => {
     const next = typeof valueOrFn === 'function' ? valueOrFn(showMenu) : valueOrFn
     if (next) setQuickCreateOpen(false)
@@ -3868,6 +3872,7 @@ function App() {
         canAccessFeature={canAccessFeature}
         accentColor={settings.parcelBoundaryColor || '#2563eb'}
         actionBarMenuOpen={showMenu}
+        stormViewActive={!!selectedHailEvent}
       />
 
       <ListPanel

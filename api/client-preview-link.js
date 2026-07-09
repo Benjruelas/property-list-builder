@@ -25,8 +25,13 @@ async function getOrCreateQuotePreviewUrl(user, quoteId, origin) {
 
 async function getOrCreateReportPreviewUrl(user, reportId, origin) {
   const { report } = await getPhotoReportById(reportId)
-  if (!report || report.ownerId !== user.uid) {
+  if (!report) {
     return { error: 'Report not found', status: 404 }
+  }
+  if (report.ownerId !== user.uid) {
+    const { getLeadWithAccess } = await import('./lib/leadAccess.js')
+    const { lead } = await getLeadWithAccess(user, report.leadId)
+    if (!lead) return { error: 'Report not found', status: 404 }
   }
 
   const token = mintReportPreviewToken(report.id)

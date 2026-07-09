@@ -5605,6 +5605,19 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   max-width: min(96vw, 40rem) !important;
   max-height: min(90vh, 820px) !important;
 }
+.map-panel.send-report-dialog {
+  width: min(96vw, 42rem) !important;
+  max-width: min(96vw, 42rem) !important;
+  max-height: min(90vh, 820px) !important;
+}
+@media (max-width: 767px) {
+  .map-panel.send-report-dialog.fullscreen-panel {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+}
 .map-panel.forms-send-dialog {
   border-radius: 0.75rem !important;
 }

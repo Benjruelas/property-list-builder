@@ -1,8 +1,26 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, ListTodo, UserSearch, Briefcase, FileText } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { cn } from '@/lib/utils'
+
+const MOBILE_VIEWPORT_MQ = '(max-width: 767px)'
+
+function useMobileViewport() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(MOBILE_VIEWPORT_MQ).matches
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_VIEWPORT_MQ)
+    const onChange = () => setIsMobile(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  return isMobile
+}
 
 const CREATE_ITEMS = [
   { id: 'task', label: 'New Task', Icon: ListTodo, featureId: 'tasks' },
@@ -46,7 +64,10 @@ export function QuickCreateFab({
   canAccessFeature = () => true,
   accentColor = '#2563eb',
   actionBarMenuOpen = false,
+  stormViewActive = false,
 }) {
+  const isMobile = useMobileViewport()
+  const hidden = actionBarMenuOpen || (stormViewActive && isMobile)
   const handlers = {
     task: onCreateTask,
     lead: onCreateLead,
@@ -77,7 +98,7 @@ export function QuickCreateFab({
 
   const chrome = (
     <>
-      {open && (
+      {open && !hidden && (
         <>
           <div
             className="quick-create-fab-menu-backdrop"
@@ -101,7 +122,7 @@ export function QuickCreateFab({
         className={cn(
           'quick-create-fab-btn',
           open && 'is-open',
-          actionBarMenuOpen && 'quick-create-fab-btn--hidden'
+          hidden && 'quick-create-fab-btn--hidden'
         )}
         style={{ '--quick-create-fab-accent': fillColor }}
         aria-label="Create"

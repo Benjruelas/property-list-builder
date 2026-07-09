@@ -10,6 +10,7 @@ import {
 } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { PanelHeader } from '../ui/panel-header'
 import { showToast } from '../ui/toast'
 import { useAuth } from '../../contexts/AuthContext'
 import { sendPhotoReportEmail, buildReportPublicUrl } from '../../utils/photoReports'
@@ -255,21 +256,25 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose() }}>
       <DialogContent
-        className="map-panel email-panel max-w-2xl max-h-[90vh] p-0"
+        className="map-panel email-panel send-report-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl md:max-h-[90vh]"
+        showCloseButton={false}
         nestedOverlay
         topLayer
         data-send-report-dialog
       >
         {sentTo ? (
           <>
-            <DialogHeader className="px-6 pt-6 pb-3">
+            <DialogHeader
+              className="px-6 pt-6 pb-3 flex-shrink-0"
+              style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+            >
               <div className="flex flex-col items-center text-center gap-3 pt-2">
                 <CheckCircle2 className="h-10 w-10 text-green-400" />
                 <DialogTitle>Report sent</DialogTitle>
                 <DialogDescription className="text-sm opacity-90">to: {sentTo}</DialogDescription>
               </div>
             </DialogHeader>
-            <div className="px-6 pb-4 space-y-3">
+            <div className="px-6 pb-4 space-y-3 flex-1 overflow-y-auto scrollbar-hide">
               {lastLink && (
                 <p className="text-xs opacity-60 break-all">{lastLink}</p>
               )}
@@ -278,21 +283,27 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 Copy report link
               </Button>
             </div>
-            <DialogFooter className="px-6 pb-6">
+            <DialogFooter className="px-6 pb-6 flex-shrink-0" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
               <Button className="w-full create-list-btn min-h-[44px]" onClick={resetAndClose}>Done</Button>
             </DialogFooter>
           </>
         ) : (
           <>
-            <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/10">
-              <DialogTitle>Send photo report</DialogTitle>
-              <DialogDescription className="text-sm opacity-80">
+            <DialogHeader
+              className="px-6 pt-6 pb-4 border-b border-white/10 flex-shrink-0 text-left"
+              style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+            >
+              <PanelHeader onBack={resetAndClose} title="Send photo report" icon={Mail} />
+              <DialogDescription className="text-sm opacity-80 mt-1">
                 {report.title || 'Photo Report'}
                 {linkedLead ? ` — ${displayLeadName(linkedLead)}` : ''}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="px-6 py-4 overflow-y-auto scrollbar-hide max-h-[calc(90vh-200px)] space-y-4">
+            <div
+              className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-4 md:max-h-[calc(90vh-200px)]"
+              style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+            >
               <div className="flex gap-2">
                 {['email', 'text'].map((id) => (
                   <button
