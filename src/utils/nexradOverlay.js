@@ -1,8 +1,10 @@
 const IEM_TILE_BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0'
 
-/** Hourly steps within ±N hours of the hail report time. */
+/** Hourly steps from N hours before the hail report through report time. */
 export const STORM_TIMELINE_STEP_HOURS = 1
-export const STORM_TIMELINE_RADIUS_HOURS = 8
+export const STORM_TIMELINE_LOOKBACK_HOURS = 24
+/** @deprecated Use STORM_TIMELINE_LOOKBACK_HOURS — kept for callers expecting the old name. */
+export const STORM_TIMELINE_RADIUS_HOURS = STORM_TIMELINE_LOOKBACK_HOURS
 
 /** Round a Date down to the nearest N minutes (NEXRAD volumes ~every 5 min). */
 export function iemTimestamp(date) {
@@ -59,7 +61,7 @@ const SCAN_CACHE_TTL_MS = 10 * 60 * 1000
 
 export function hailEventTimelineKey(evt) {
   if (!evt) return ''
-  return `${evt.date}|${evt.time_utc ?? ''}|${evt.lat}|${evt.lng}|${evt.year}`
+  return `lb${STORM_TIMELINE_LOOKBACK_HOURS}|${evt.date}|${evt.time_utc ?? ''}|${evt.lat}|${evt.lng}|${evt.year}`
 }
 
 export function getCachedStormTimeline(evt) {
@@ -105,13 +107,13 @@ function pickNearestScanTimestamp(scans, at) {
   return iemTimestamp(new Date(bestTs))
 }
 
-/** Hour offsets from report time: -8 … 0 … +8 (hourly). */
+/** Hour offsets from report time: -24 … 0 (hourly), scrubbing toward the storm. */
 export function buildStormTimelineOffsets(
-  radiusHours = STORM_TIMELINE_RADIUS_HOURS,
+  lookbackHours = STORM_TIMELINE_LOOKBACK_HOURS,
   stepHours = STORM_TIMELINE_STEP_HOURS
 ) {
   const offsets = []
-  for (let h = -radiusHours; h <= radiusHours; h += stepHours) {
+  for (let h = -lookbackHours; h <= 0; h += stepHours) {
     offsets.push(h)
   }
   return offsets
@@ -161,7 +163,7 @@ export async function resolveNearestScanTimestamp(evt, windowMinutes = 60) {
   return resolveNearestScanTimestampAt(dt, windowMinutes)
 }
 
-/** Resolve radar frames hourly within ±8h of the hail report. */
+/** Resolve radar frames hourly from 24h before the hail report through report time. */
 export async function resolveStormTimeline(evt) {
   const cacheKey = hailEventTimelineKey(evt)
   if (cacheKey && TIMELINE_CACHE.has(cacheKey)) {
@@ -172,8 +174,8 @@ export async function resolveStormTimeline(evt) {
   if (!reportAt || !radarAvailableForEvent(evt)) return []
 
   const padMs = 60 * 60 * 1000
-  const start = new Date(reportAt.getTime() - STORM_TIMELINE_RADIUS_HOURS * 3600000 - padMs)
-  const end = new Date(reportAt.getTime() + STORM_TIMELINE_RADIUS_HOURS * 3600000 + padMs)
+  const start = new Date(reportAt.getTime() - STORM_TIMELINE_LOOKBACK_HOURS * 3600000 - padMs)
+  const end = new Date(reportAt.getTime() + padMs)
 
   let scans = []
   try {

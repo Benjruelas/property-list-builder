@@ -8,8 +8,8 @@ import {
 
 function applyTimelineFrames(frames, setFrames, setFrameIndex) {
   setFrames(frames)
-  const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
-  setFrameIndex(reportIdx >= 0 ? reportIdx : 0)
+  // Always open at the start of the lookback window (progress at 0).
+  setFrameIndex(0)
 }
 
 export function useHailStormTimeline(event) {

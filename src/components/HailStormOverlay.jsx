@@ -76,6 +76,19 @@ function formatEventTime(timeUtc) {
   return `${hour12}:${String(m).padStart(2, '0')} ${period} UTC`
 }
 
+function formatStormTitleDate(dateStr) {
+  if (!dateStr) return 'Storm Event'
+  const [y, m, d] = String(dateStr).split('-').map(Number)
+  if (!y || !m || !d) return dateStr
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 function StormDetailField({ label, value, highlight }) {
   return (
     <div className="hail-storm-detail-field">
@@ -131,28 +144,26 @@ export function HailStormDismissPill({
             <X className="h-5 w-5" aria-hidden />
           </button>
           <div className="hail-storm-panel-title-wrap">
-            <p className="hail-storm-panel-title">Storm Event</p>
-            <p className="hail-storm-panel-subtitle">NEXRAD radar replay</p>
+            <p className="hail-storm-panel-title">{formatStormTitleDate(event.date)}</p>
+            <p className="hail-storm-panel-subtitle">
+              {timeLabel ? `Report ${timeLabel}` : 'NEXRAD radar replay'}
+            </p>
           </div>
           <span className="hail-storm-panel-badge" aria-hidden>
             <CloudRain className="h-5 w-5" />
           </span>
         </header>
 
-        <div className="hail-storm-details">
-          <StormDetailField label="Date" value={event.date} />
+        <div className="hail-storm-details hail-storm-details--row">
+          <StormDetailField
+            label="Distance from center"
+            value={event.distance_mi != null ? `${event.distance_mi} mi` : null}
+          />
           <StormDetailField
             label="Hail Size"
             value={event.hail_size_inches ? `${event.hail_size_inches}"` : null}
             highlight
           />
-          <StormDetailField
-            label="Distance"
-            value={event.distance_mi != null ? `${event.distance_mi} mi` : null}
-          />
-          {timeLabel ? (
-            <StormDetailField label="Report Time" value={timeLabel} />
-          ) : null}
         </div>
 
         {radarOk && canStep ? (
