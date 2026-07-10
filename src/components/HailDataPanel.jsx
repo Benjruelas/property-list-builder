@@ -3,6 +3,7 @@ import { CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { resolveParcelCenter } from '../utils/parcelGeometry'
+import { formatEventTimeLocal } from '../utils/nexradOverlay'
 
 const hailDataCache = new Map()
 const HAIL_CACHE_TTL_MS = 30 * 60 * 1000
@@ -11,15 +12,6 @@ function resolveParcelCoords(parcelData) {
   if (!parcelData) return { lat: null, lng: null }
   const center = resolveParcelCenter(parcelData)
   return center ?? { lat: null, lng: null }
-}
-
-function formatEventTime(timeUtc) {
-  if (!timeUtc) return null
-  const [h, m] = String(timeUtc).split(':').map(Number)
-  if (Number.isNaN(h) || Number.isNaN(m)) return timeUtc
-  const period = h >= 12 ? 'PM' : 'AM'
-  const hour12 = h % 12 || 12
-  return `${hour12}:${String(m).padStart(2, '0')} ${period} UTC`
 }
 
 function hailSizeColor(inches) {
@@ -40,7 +32,7 @@ function HailSizeIndicator({ inches, size = 'md' }) {
 }
 
 function HailEventRow({ evt, year, onSelectEvent }) {
-  const timeLabel = formatEventTime(evt.time_utc)
+  const timeLabel = formatEventTimeLocal(evt.time_utc, evt.date || String(year))
 
   return (
     <button
