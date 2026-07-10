@@ -156,7 +156,7 @@ export function HailStormDismissPill({
 
         <div className="hail-storm-details hail-storm-details--row">
           <StormDetailField
-            label="Distance from center"
+            label="Distance"
             value={event.distance_mi != null ? `${event.distance_mi} mi` : null}
           />
           <StormDetailField

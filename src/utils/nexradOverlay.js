@@ -119,6 +119,13 @@ export function buildStormTimelineOffsets(
   return offsets
 }
 
+/** Index of the hail-report frame (offset 0). Prefer last frame if missing. */
+export function initialStormFrameIndex(frames) {
+  if (!frames?.length) return 0
+  const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
+  return reportIdx >= 0 ? reportIdx : frames.length - 1
+}
+
 export function stormTimelineDate(evt, offsetHours) {
   const reportAt = eventDateTimeUTC(evt)
   if (!reportAt) return null
