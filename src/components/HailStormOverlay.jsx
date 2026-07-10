@@ -1,5 +1,6 @@
 import { Source, Layer, Marker as MapMarker } from 'react-map-gl/maplibre'
 import { ChevronLeft, ChevronRight, CloudRain, Home, Loader2, X } from 'lucide-react'
+import { formatEventTimeLocal } from '../utils/nexradOverlay'
 
 /** Parcel + hail report pins while viewing storm radar. */
 export function HailStormMapMarkers({ parcel, event, address }) {
@@ -67,15 +68,6 @@ export function HailStormOverlay({ tileUrl }) {
   )
 }
 
-function formatEventTime(timeUtc) {
-  if (!timeUtc) return null
-  const [h, m] = String(timeUtc).split(':').map(Number)
-  if (Number.isNaN(h) || Number.isNaN(m)) return timeUtc
-  const period = h >= 12 ? 'PM' : 'AM'
-  const hour12 = h % 12 || 12
-  return `${hour12}:${String(m).padStart(2, '0')} ${period} UTC`
-}
-
 function formatStormTitleDate(dateStr) {
   if (!dateStr) return 'Storm Event'
   const [y, m, d] = String(dateStr).split('-').map(Number)
@@ -124,7 +116,7 @@ export function HailStormDismissPill({
   } = timeline ?? {}
 
   const radarOk = event?.year >= 1995
-  const timeLabel = formatEventTime(event.time_utc)
+  const timeLabel = formatEventTimeLocal(event.time_utc, event.date)
   const progressPct = timelineProgress(frameIndex, frameCount)
   const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
   const reportMarkerPct =
@@ -175,7 +167,7 @@ export function HailStormDismissPill({
                 className="hail-storm-step-btn"
                 onClick={stepPrev}
                 disabled={loading || !canPrev}
-                title="One hour earlier"
+                title="Earlier radar frame"
                 aria-label="Earlier radar frame"
               >
                 <ChevronLeft aria-hidden />
@@ -195,7 +187,7 @@ export function HailStormDismissPill({
                 className="hail-storm-step-btn"
                 onClick={stepNext}
                 disabled={loading || !canNext}
-                title="One hour later"
+                title="Later radar frame"
                 aria-label="Later radar frame"
               >
                 <ChevronRight aria-hidden />

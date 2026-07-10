@@ -644,19 +644,19 @@ function App() {
       const maxLng = Math.max(hailParcelCoords.lng, selectedHailEvent.lng)
       const minLat = Math.min(hailParcelCoords.lat, selectedHailEvent.lat)
       const maxLat = Math.max(hailParcelCoords.lat, selectedHailEvent.lat)
-      const lngPad = Math.max(0.08, (maxLng - minLng) * 0.35)
-      const latPad = Math.max(0.08, (maxLat - minLat) * 0.35)
+      const lngPad = Math.max(0.035, (maxLng - minLng) * 0.25)
+      const latPad = Math.max(0.035, (maxLat - minLat) * 0.25)
       map.fitBounds(
         [
           [minLng - lngPad, minLat - latPad],
           [maxLng + lngPad, maxLat + latPad],
         ],
-        { padding: 72, maxZoom: 13, duration: 700 }
+        { padding: 64, maxZoom: 11, duration: 700 }
       )
     } else if (selectedHailEvent.lng != null && selectedHailEvent.lat != null) {
       map.easeTo({
         center: [selectedHailEvent.lng, selectedHailEvent.lat],
-        zoom: 11,
+        zoom: 10,
         duration: 700,
       })
     }
