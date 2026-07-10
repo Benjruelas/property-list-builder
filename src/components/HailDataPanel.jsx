@@ -8,6 +8,7 @@ const hailDataCache = new Map()
 const HAIL_CACHE_TTL_MS = 30 * 60 * 1000
 
 function resolveParcelCoords(parcelData) {
+  if (!parcelData) return { lat: null, lng: null }
   const center = resolveParcelCenter(parcelData)
   return center ?? { lat: null, lng: null }
 }

@@ -51,4 +51,10 @@ describe('parcelGeometry', () => {
       lng: -96.2,
     })
   })
+
+  it('returns null for missing or invalid parcel input', () => {
+    expect(resolveParcelCenter(null)).toBeNull()
+    expect(resolveParcelCenter(undefined)).toBeNull()
+    expect(resolveParcelCenter('bad')).toBeNull()
+  })
 })

@@ -68,7 +68,9 @@ export function centroidFromProperties(properties) {
  * Best map anchor for a parcel: polygon centroid → tile centroid → props → fallback coords.
  * @returns {{ lat: number, lng: number } | null}
  */
-export function resolveParcelCenter(input = {}) {
+export function resolveParcelCenter(input) {
+  if (input == null || typeof input !== 'object') return null
+
   const fromGeometry = centroidFromGeometry(input.geometry)
   if (fromGeometry) return fromGeometry
 
