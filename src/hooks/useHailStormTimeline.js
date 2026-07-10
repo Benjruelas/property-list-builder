@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getCachedStormTimeline,
   hailEventTimelineKey,
+  initialStormFrameIndex,
   radarAvailableForEvent,
   resolveStormTimeline,
 } from '../utils/nexradOverlay'
 
 function applyTimelineFrames(frames, setFrames, setFrameIndex) {
   setFrames(frames)
-  // Always open at the start of the lookback window (progress at 0).
-  setFrameIndex(0)
+  setFrameIndex(initialStormFrameIndex(frames))
 }
 
 export function useHailStormTimeline(event) {
@@ -66,8 +66,7 @@ export function useHailStormTimeline(event) {
   }, [frames.length])
 
   const goToReportFrame = useCallback(() => {
-    const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
-    if (reportIdx >= 0) setFrameIndex(reportIdx)
+    setFrameIndex(initialStormFrameIndex(frames))
   }, [frames])
 
   return useMemo(() => ({

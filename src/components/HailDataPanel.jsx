@@ -2,29 +2,14 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { resolveParcelCenter } from '../utils/parcelGeometry'
 
 const hailDataCache = new Map()
 const HAIL_CACHE_TTL_MS = 30 * 60 * 1000
 
 function resolveParcelCoords(parcelData) {
-  if (!parcelData) return { lat: null, lng: null }
-  const props = parcelData.properties ?? {}
-  const lat =
-    parcelData.lat ??
-    parcelData.latlng?.lat ??
-    props.LATITUDE ??
-    props.latitude
-  const lng =
-    parcelData.lng ??
-    parcelData.latlng?.lng ??
-    props.LONGITUDE ??
-    props.longitude
-  const latN = lat != null ? Number(lat) : null
-  const lngN = lng != null ? Number(lng) : null
-  return {
-    lat: latN != null && !Number.isNaN(latN) ? latN : null,
-    lng: lngN != null && !Number.isNaN(lngN) ? lngN : null,
-  }
+  const center = resolveParcelCenter(parcelData)
+  return center ?? { lat: null, lng: null }
 }
 
 function formatEventTime(timeUtc) {

@@ -596,13 +596,7 @@ function App() {
   const hailParcelCoords = useMemo(() => {
     const parcel = hailStormParcel ?? hailDataParcel
     if (!parcel) return null
-    const lat = parcel.lat ?? parcel.properties?.LATITUDE
-    const lng = parcel.lng ?? parcel.properties?.LONGITUDE
-    if (lat == null || lng == null) return null
-    const latN = Number(lat)
-    const lngN = Number(lng)
-    if (Number.isNaN(latN) || Number.isNaN(lngN)) return null
-    return { lat: latN, lng: lngN }
+    return resolveParcelCenter(parcel)
   }, [hailStormParcel, hailDataParcel])
 
   const handleSelectHailEvent = useCallback((evt) => {
