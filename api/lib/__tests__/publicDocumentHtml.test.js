@@ -8,11 +8,19 @@ import { resolveReportPhotoImageKey } from '../buildReportPdf.js'
 import { reportPdfContentChanged, isReportPdfStale } from '../ensureReportPdf.js'
 
 describe('publicDocumentHtml', () => {
-  it('includes shared public-page styles', () => {
-    const css = publicDocumentStyles()
-    expect(css).toContain('quote-brand-header')
-    expect(css).toContain('photo-grid')
-    expect(css).toContain('#f3f4f6')
+  it('uses column-width pages that match the public link layout', () => {
+    const quoteCss = publicDocumentStyles({ width: 544, height: 860 })
+    expect(quoteCss).toContain('quote-brand-header')
+    expect(quoteCss).toContain('photo-grid')
+    expect(quoteCss).toContain('#f3f4f6')
+    expect(quoteCss).toContain('size: 544px 860px')
+    expect(quoteCss).toContain('margin: 0')
+    // Sections may split across pages; only tiles/title blocks stay atomic.
+    expect(quoteCss).not.toMatch(/\.section-card\s*\{[^}]*break-inside:\s*avoid/)
+    expect(quoteCss).toMatch(/\.photo-tile\s*\{[^}]*break-inside:\s*avoid/s)
+
+    const reportCss = publicDocumentStyles({ width: 704, height: 990 })
+    expect(reportCss).toContain('size: 704px 990px')
   })
 
   it('builds quote HTML matching the public page structure', () => {
@@ -78,6 +86,7 @@ describe('publicDocumentHtml', () => {
     expect(html).toContain('$400.00')
     // Required-only total (optional not selected yet).
     expect(html).toMatch(/Total[\s\S]*\$1,296\.00/)
+    expect(html).toContain('size: 544px 860px')
   })
 
   it('builds accepted quote with selected add-ons only', () => {
@@ -143,6 +152,7 @@ describe('publicDocumentHtml', () => {
     expect(html).toContain('data:image/jpeg;base64,/9j/abc')
     expect(html).toContain('Storm Pros')
     expect(html).toContain('Casey')
+    expect(html).toContain('size: 704px 990px')
   })
 })
 
@@ -173,7 +183,8 @@ describe('isReportPdfStale', () => {
     expect(isReportPdfStale({ pdfKey: null })).toBe(true)
     expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf' })).toBe(true)
     expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 1 })).toBe(true)
-    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 2 })).toBe(false)
+    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 2 })).toBe(true)
+    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 3 })).toBe(false)
   })
 })
 

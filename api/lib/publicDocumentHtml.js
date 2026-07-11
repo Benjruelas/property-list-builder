@@ -2,6 +2,10 @@
  * Printable HTML for public quote/report pages.
  * Intentionally mirrors PublicQuotePage / PublicReportPage layout + chrome
  * so PDF output matches the link view.
+ *
+ * Page size matches the public content column (not Letter-with-side-gutters),
+ * so PDFs read as a continuous scroll of the link page rather than screenshots
+ * pasted onto letter paper.
  */
 
 import { escapeHtml } from './senderBranding.js'
@@ -9,6 +13,18 @@ import {
   computeQuoteTotals,
   resolveAcceptedLineIds,
 } from './quoteMath.js'
+
+/** Public quote column: max-w-lg (32rem) + px-4 gutters. */
+export const QUOTE_PDF_VIEWPORT = {
+  width: 544,
+  height: 860,
+}
+
+/** Public report column: max-w-2xl (42rem) + px-4 gutters. */
+export const REPORT_PDF_VIEWPORT = {
+  width: 704,
+  height: 990,
+}
 
 function formatMoney(amount) {
   const n = Number(amount)
@@ -20,39 +36,47 @@ function nl2br(text) {
   return escapeHtml(text).replace(/\n/g, '<br/>')
 }
 
-/** Shared stylesheet matching public-form-page / quote-brand-header / report cards. */
-export function publicDocumentStyles() {
+/**
+ * Shared stylesheet matching public-form-page / quote-brand-header / report cards.
+ * @param {{ widthPx: number, heightPx: number }} pageSize
+ */
+export function publicDocumentStyles(pageSize = QUOTE_PDF_VIEWPORT) {
+  const width = Math.round(pageSize.width || QUOTE_PDF_VIEWPORT.width)
+  const height = Math.round(pageSize.height || QUOTE_PDF_VIEWPORT.height)
+
   return `
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
       padding: 0;
+      width: ${width}px;
       background: #f3f4f6;
       color: #111827;
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    @page { size: letter; margin: 0.4in; }
+    @page {
+      size: ${width}px ${height}px;
+      margin: 0;
+    }
     .page {
+      width: ${width}px;
       background: #f3f4f6;
       min-height: 100%;
-      padding: 0 0 1.5rem;
+      padding: 0 0 2rem;
     }
     .quote-brand-header {
       width: 100%;
       padding: 0.75rem 1rem 0.75rem;
-      max-width: 32rem;
-      margin: 0 auto;
-    }
-    .quote-brand-header--report {
-      max-width: 42rem;
+      margin: 0;
     }
     .quote-brand-header__main {
       display: flex;
       align-items: center;
       gap: 0.875rem;
-      padding: 0.75rem 1rem;
+      padding: 0.875rem 1rem;
       border: 1px solid #e5e7eb;
       border-radius: 0.75rem;
       background: #ffffff;
@@ -64,6 +88,7 @@ export function publicDocumentStyles() {
       width: auto;
       height: auto;
       object-fit: contain;
+      border-radius: 0.375rem;
     }
     .quote-brand-header__copy {
       min-width: 0;
@@ -75,8 +100,8 @@ export function publicDocumentStyles() {
       font-size: 1.0625rem;
       font-weight: 700;
       letter-spacing: -0.02em;
-      color: #111827;
-      line-height: 1.25;
+      color: #0f172a;
+      line-height: 1.2;
     }
     .quote-brand-header__sender {
       font-size: 0.875rem;
@@ -91,12 +116,10 @@ export function publicDocumentStyles() {
       line-height: 1.3;
     }
     .content {
-      margin: 0 auto;
       width: 100%;
+      margin: 0;
       padding: 1.5rem 1rem 0;
     }
-    .content--quote { max-width: 32rem; }
-    .content--report { max-width: 42rem; }
     .doc-title {
       margin: 0;
       font-size: 1.5rem;
@@ -128,7 +151,6 @@ export function publicDocumentStyles() {
       overflow: hidden;
       margin: 1.5rem 0 0;
     }
-    .card--flush { margin-top: 1.5rem; }
     table.lines {
       width: 100%;
       border-collapse: collapse;
@@ -138,6 +160,10 @@ export function publicDocumentStyles() {
       background: #f9fafb;
       color: #4b5563;
       text-align: left;
+    }
+    table.lines thead {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     table.lines th {
       padding: 0.5rem 1rem;
@@ -180,6 +206,8 @@ export function publicDocumentStyles() {
     table.lines tfoot {
       border-top: 1px solid #e5e7eb;
       background: #f9fafb;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     table.lines tfoot td {
       padding: 0.5rem 1rem;
@@ -205,6 +233,8 @@ export function publicDocumentStyles() {
       border: 1px solid #e5e7eb;
       border-radius: 0.75rem;
       padding: 1rem;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .terms-card h2 {
       margin: 0 0 0.5rem;
@@ -221,17 +251,22 @@ export function publicDocumentStyles() {
       white-space: pre-wrap;
       line-height: 1.45;
     }
+    .sections {
+      margin-top: 1.5rem;
+    }
     .section-card {
       margin: 0 0 1.5rem;
       background: #ffffff;
       border: 1px solid #e5e7eb;
       border-radius: 0.75rem;
       overflow: hidden;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    .section-body {
+      padding: 1.25rem 1.25rem 0.75rem;
       break-inside: avoid;
       page-break-inside: avoid;
     }
-    .section-body { padding: 1.25rem 1.25rem 0.75rem; }
     .section-title {
       margin: 0;
       font-size: 1.125rem;
@@ -247,6 +282,7 @@ export function publicDocumentStyles() {
       line-height: 1.45;
     }
     .photo-grid {
+      margin-top: 0.25rem;
       padding: 0 1.25rem 1.25rem;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -259,6 +295,8 @@ export function publicDocumentStyles() {
       overflow: hidden;
       border: 1px solid #e5e7eb;
       background: #f3f4f6;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .photo-tile img {
       width: 100%;
@@ -275,7 +313,7 @@ export function publicDocumentStyles() {
   `
 }
 
-function brandHeaderHtml(branding, { report = false } = {}) {
+function brandHeaderHtml(branding) {
   if (!branding) return ''
   const company = (branding.businessName || '').trim()
   const sender = (branding.senderName || '').trim()
@@ -284,7 +322,7 @@ function brandHeaderHtml(branding, { report = false } = {}) {
   if (!company && !logo && !sender && !email) return ''
 
   return `
-    <header class="quote-brand-header${report ? ' quote-brand-header--report' : ''}">
+    <header class="quote-brand-header">
       <div class="quote-brand-header__main">
         ${logo ? `<img class="quote-brand-header__logo" src="${escapeHtml(logo)}" alt="" />` : ''}
         <div class="quote-brand-header__copy">
@@ -297,14 +335,14 @@ function brandHeaderHtml(branding, { report = false } = {}) {
   `
 }
 
-function wrapDocument({ title, bodyHtml }) {
+function wrapDocument({ title, bodyHtml, pageSize }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=${pageSize.width}, initial-scale=1" />
   <title>${escapeHtml(title || 'Document')}</title>
-  <style>${publicDocumentStyles()}</style>
+  <style>${publicDocumentStyles(pageSize)}</style>
 </head>
 <body>
   <div class="page">
@@ -376,7 +414,7 @@ export function buildQuoteDocumentHtml({ quote, invite, branding }) {
 
   const bodyHtml = `
     ${brandHeaderHtml(pdfBranding)}
-    <div class="content content--quote">
+    <div class="content">
       <h1 class="doc-title">${escapeHtml(quote.title || 'Quote')}</h1>
       ${clientLabel ? `<p class="meta">Prepared for ${escapeHtml(clientLabel)}</p>` : ''}
       ${message ? `<p class="message">${nl2br(message)}</p>` : ''}
@@ -420,7 +458,11 @@ export function buildQuoteDocumentHtml({ quote, invite, branding }) {
     </div>
   `
 
-  return wrapDocument({ title: quote.title || 'Quote', bodyHtml })
+  return wrapDocument({
+    title: quote.title || 'Quote',
+    bodyHtml,
+    pageSize: QUOTE_PDF_VIEWPORT,
+  })
 }
 
 /**
@@ -464,17 +506,21 @@ export function buildReportDocumentHtml({ report, lead, branding, message = '', 
   }).join('')
 
   const bodyHtml = `
-    ${brandHeaderHtml(branding, { report: true })}
-    <div class="content content--report">
+    ${brandHeaderHtml(branding)}
+    <div class="content">
       <h1 class="doc-title">${escapeHtml(report?.title || 'Photo Report')}</h1>
       ${leadName ? `<p class="meta">Prepared for ${escapeHtml(leadName)}</p>` : ''}
       ${address ? `<p class="meta">${escapeHtml(address)}</p>` : ''}
       ${message?.trim() ? `<p class="message">${nl2br(message.trim())}</p>` : ''}
-      <div style="margin-top:1.5rem;">
+      <div class="sections">
         ${sectionHtml}
       </div>
     </div>
   `
 
-  return wrapDocument({ title: report?.title || 'Photo Report', bodyHtml })
+  return wrapDocument({
+    title: report?.title || 'Photo Report',
+    bodyHtml,
+    pageSize: REPORT_PDF_VIEWPORT,
+  })
 }

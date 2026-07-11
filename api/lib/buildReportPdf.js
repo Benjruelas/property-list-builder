@@ -1,4 +1,4 @@
-import { buildReportDocumentHtml } from './publicDocumentHtml.js'
+import { buildReportDocumentHtml, REPORT_PDF_VIEWPORT } from './publicDocumentHtml.js'
 import { htmlToPdfBuffer } from './htmlToPdf.js'
 import { leadDisplayName } from './publicReportPayload.js'
 
@@ -109,7 +109,10 @@ export async function buildReportPdfBuffer({
     photos,
   })
 
-  return htmlToPdfBuffer(html, { waitUntil: 'networkidle0' })
+  return htmlToPdfBuffer(html, {
+    waitUntil: 'networkidle0',
+    viewport: REPORT_PDF_VIEWPORT,
+  })
 }
 
 export function reportPdfStorageKey(ownerId, reportId) {

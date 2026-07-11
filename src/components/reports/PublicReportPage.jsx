@@ -85,7 +85,7 @@ export function PublicReportPage({ token }) {
   const brandChrome = branding ? (
     <QuoteBrandHeader
       variant="public"
-      className="quote-brand-header--page"
+      className="quote-brand-header--page quote-brand-header--wide"
       businessName={branding.businessName}
       logoBase64={branding.logoBase64}
       senderName={branding.senderName}

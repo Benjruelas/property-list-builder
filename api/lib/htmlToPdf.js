@@ -5,6 +5,7 @@
 
 import puppeteer from 'puppeteer-core'
 import chromium from '@sparticuz/chromium'
+import { QUOTE_PDF_VIEWPORT } from './publicDocumentHtml.js'
 
 let _browserPromise = null
 
@@ -23,9 +24,9 @@ async function getBrowser() {
     return puppeteer.launch({
       args: chromium.args,
       defaultViewport: {
-        width: 820,
-        height: 1100,
-        deviceScaleFactor: 1,
+        width: QUOTE_PDF_VIEWPORT.width,
+        height: QUOTE_PDF_VIEWPORT.height,
+        deviceScaleFactor: 2,
       },
       executablePath,
       headless: chromium.headless,
@@ -43,20 +44,30 @@ async function getBrowser() {
 
 /**
  * @param {string} html
- * @param {{ waitUntil?: string }} [opts]
+ * @param {{
+ *   waitUntil?: string,
+ *   viewport?: { width: number, height: number }
+ * }} [opts]
  * @returns {Promise<Buffer>}
  */
-export async function htmlToPdfBuffer(html, { waitUntil = 'networkidle0' } = {}) {
+export async function htmlToPdfBuffer(html, {
+  waitUntil = 'networkidle0',
+  viewport = QUOTE_PDF_VIEWPORT,
+} = {}) {
   const browser = await getBrowser()
   const page = await browser.newPage()
   try {
+    await page.setViewport({
+      width: Math.round(viewport.width),
+      height: Math.round(viewport.height),
+      deviceScaleFactor: 2,
+    })
     // Images are inlined as data URIs; domcontentloaded is enough for quotes.
     await page.setContent(html, { waitUntil, timeout: 60_000 })
     const pdf = await page.pdf({
-      format: 'Letter',
       printBackground: true,
       preferCSSPageSize: true,
-      // Margins come from the document @page rule to match the HTML layout.
+      // Page size/margins come from the document @page rule (column-width pages).
       margin: { top: '0', right: '0', bottom: '0', left: '0' },
     })
     return Buffer.from(pdf)

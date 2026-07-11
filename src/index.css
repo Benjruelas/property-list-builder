@@ -7190,6 +7190,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   max-width: 32rem;
   margin: 0 auto;
 }
+.quote-brand-header--page.quote-brand-header--wide {
+  max-width: 42rem;
+}
 .quote-brand-header__main {
   display: flex;
   align-items: center;
