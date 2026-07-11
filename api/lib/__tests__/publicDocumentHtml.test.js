@@ -5,7 +5,7 @@ import {
   publicDocumentStyles,
 } from '../publicDocumentHtml.js'
 import { resolveReportPhotoImageKey } from '../buildReportPdf.js'
-import { reportPdfContentChanged } from '../ensureReportPdf.js'
+import { reportPdfContentChanged, isReportPdfStale } from '../ensureReportPdf.js'
 
 describe('publicDocumentHtml', () => {
   it('includes shared public-page styles', () => {
@@ -165,6 +165,15 @@ describe('resolveReportPhotoImageKey', () => {
     })).toBe('ann')
     expect(resolveReportPhotoImageKey({ key: 'full' })).toBe('full')
     expect(resolveReportPhotoImageKey(null)).toBe(null)
+  })
+})
+
+describe('isReportPdfStale', () => {
+  it('treats missing pdfKey or outdated pdfVersion as stale', () => {
+    expect(isReportPdfStale({ pdfKey: null })).toBe(true)
+    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf' })).toBe(true)
+    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 1 })).toBe(true)
+    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 2 })).toBe(false)
   })
 })
 
