@@ -171,7 +171,7 @@ async function loadQuoteContext(token) {
 
 export const config = {
   maxDuration: 60,
-  memory: 512,
+  memory: 1024,
 }
 
 export default async function handler(req, res) {

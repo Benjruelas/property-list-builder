@@ -1,10 +1,11 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { requireAuth } from './lib/apiAuth.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.js'
 import { getLeadWithAccess } from './lib/leadAccess.js'
 import { resolveSenderBranding } from './lib/senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './lib/buildReportPdf.js'
+import { r2GetBuffer } from './lib/ensureReportPdf.js'
 import { presignedPhotosEnabled, createPresignedGetUrl } from './lib/photoPresign.js'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
 let _s3
 function s3() {
@@ -18,16 +19,6 @@ function s3() {
     },
   })
   return _s3
-}
-
-async function r2GetBuffer(key) {
-  const r = await s3().send(new GetObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME,
-    Key: key,
-  }))
-  const chunks = []
-  for await (const c of r.Body) chunks.push(c)
-  return Buffer.concat(chunks)
 }
 
 export const config = {
@@ -81,8 +72,6 @@ export default async function handler(req, res) {
     }
     await updatePhotoReportAtIndex(all, index, updated)
 
-    // Prefer a presigned direct-download URL; keep the proxy URL for clients
-    // that expect it.
     let pdfDownloadUrl = null
     if (presignedPhotosEnabled()) {
       try {

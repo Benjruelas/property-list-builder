@@ -23,6 +23,8 @@ import {
 import { leadDisplayName } from './lib/publicReportPayload.js'
 import { rateLimit } from './lib/rateLimit.js'
 import { sanitizeHeader } from './lib/emailSafety.js'
+import { ensureReportPdf } from './lib/ensureReportPdf.js'
+import { getAllLeads } from './lib/leadAccess.js'
 
 async function canAccessReport(user, report) {
   if (report.ownerId === user.uid) return true
@@ -80,6 +82,8 @@ function findReusableReportInvite(allInvites, { report, ownerId, preferToken }) 
 
 export const config = {
   api: { bodyParser: { sizeLimit: '2mb' } },
+  maxDuration: 120,
+  memory: 1024,
 }
 
 export default async function handler(req, res) {
@@ -144,8 +148,21 @@ export default async function handler(req, res) {
       if (report.publicToken !== token) {
         await updatePhotoReportAtIndex(all, index, updated)
       }
+      let reportOut = updated
+      try {
+        const { lead } = await getLeadWithAccess(user, report.leadId)
+        if (lead) {
+          await ensureReportPdf(updated, index, all, lead, {
+            message: reusable.message || '',
+          })
+          const refreshed = await getPhotoReportById(report.id)
+          if (refreshed?.report) reportOut = refreshed.report
+        }
+      } catch (pdfErr) {
+        console.warn('report pdf pre-generate failed', pdfErr?.message || pdfErr)
+      }
       return res.status(200).json({
-        report: updated,
+        report: reportOut,
         publicUrl,
         token,
         inviteId: reusable.id,
@@ -209,9 +226,28 @@ export default async function handler(req, res) {
     }
     await updatePhotoReportAtIndex(all, index, updated)
 
+    // Warm the PDF cache while sending so client download is a fast R2 hit.
+    // Prefer the invite message so the PDF matches the public HTML view.
+    let reportForPdf = updated
+    try {
+      const { lead: accessLead } = await getLeadWithAccess(user, report.leadId)
+      let lead = accessLead
+      if (!lead) {
+        const allLeads = await getAllLeads()
+        lead = allLeads.find((l) => l.id === report.leadId) || null
+      }
+      if (lead) {
+        await ensureReportPdf(updated, index, all, lead, { message: safeMessage })
+        const refreshed = await getPhotoReportById(report.id)
+        if (refreshed?.report) reportForPdf = refreshed.report
+      }
+    } catch (pdfErr) {
+      console.warn('report pdf pre-generate failed', pdfErr?.message || pdfErr)
+    }
+
     if (generateOnly) {
       return res.status(200).json({
-        report: updated,
+        report: reportForPdf,
         publicUrl,
         token,
         inviteId: invite.id,
@@ -262,7 +298,7 @@ export default async function handler(req, res) {
     })
 
     return res.status(200).json({
-      report: updated,
+      report: reportForPdf,
       publicUrl,
       token,
       sentTo: trimmedRecipient,

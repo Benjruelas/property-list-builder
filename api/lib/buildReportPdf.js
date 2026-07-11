@@ -1,148 +1,115 @@
-import PDFDocument from 'pdfkit'
+import { buildReportDocumentHtml } from './publicDocumentHtml.js'
+import { htmlToPdfBuffer } from './htmlToPdf.js'
+import { leadDisplayName } from './publicReportPayload.js'
 
-const PW = 612
-const PH = 792
-const MG = 48
-const CW = PW - 2 * MG
-
-export function leadDisplayName(lead) {
-  const parts = [lead?.firstName, lead?.lastName].filter(Boolean)
-  if (parts.length) return parts.join(' ')
-  return (lead?.address || 'Lead').trim()
+/**
+ * Prefer annotated/display thumbnails so PDFs match the public grid and stay fast.
+ */
+export function resolveReportPhotoImageKey(photo) {
+  if (!photo) return null
+  return (
+    photo.annotatedThumbnailKey
+    || photo.thumbnailKey
+    || photo.annotatedKey
+    || photo.key
+    || null
+  )
 }
 
-function pdfToBuffer(doc) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    doc.on('data', (c) => chunks.push(c))
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.on('error', reject)
-    doc.end()
-  })
+function detectImageMime(buf) {
+  if (!buf || buf.length < 4) return 'image/jpeg'
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg'
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) return 'image/webp'
+  return 'image/jpeg'
+}
+
+function bufferToDataUri(buf) {
+  const mime = detectImageMime(buf)
+  return `data:${mime};base64,${buf.toString('base64')}`
 }
 
 /**
- * Fetch all image buffers needed by the report up front, with a bounded
- * concurrency so large reports neither serialize downloads nor open an
- * unbounded number of parallel R2 connections.
+ * Fetch image buffers needed by the report up front, with bounded concurrency.
+ * Uses thumbnails when available (same assets the HTML page shows in the grid).
  */
-async function prefetchImageBuffers({ report, photosById, getImageBuffer, concurrency = 4 }) {
-  const keys = []
+async function prefetchPhotoDataUris({ report, photosById, getImageBuffer, concurrency = 8 }) {
+  const jobs = []
   const seen = new Set()
   for (const section of report?.sections || []) {
     for (const photoId of section.photoIds || []) {
+      if (seen.has(photoId)) continue
+      seen.add(photoId)
       const photo = photosById[photoId]
-      const imgKey = photo && (photo.annotatedKey || photo.key)
-      if (imgKey && !seen.has(imgKey)) {
-        seen.add(imgKey)
-        keys.push(imgKey)
-      }
+      const imgKey = resolveReportPhotoImageKey(photo)
+      if (!imgKey) continue
+      jobs.push({ photoId, imgKey, caption: photo.caption || photo.note || '' })
     }
   }
 
-  const buffers = new Map()
+  const out = []
   let next = 0
   async function worker() {
-    while (next < keys.length) {
-      const key = keys[next++]
+    while (next < jobs.length) {
+      const job = jobs[next++]
       try {
-        buffers.set(key, await getImageBuffer(key))
+        const buf = await getImageBuffer(job.imgKey)
+        if (!buf?.length) continue
+        out.push({
+          id: job.photoId,
+          caption: job.caption,
+          dataUri: bufferToDataUri(buf),
+        })
       } catch (e) {
-        console.warn('skip photo in pdf', key, e.message)
+        console.warn('skip photo in pdf', job.imgKey, e.message)
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, keys.length) }, worker))
-  return buffers
+  await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(jobs.length, 1)) }, worker))
+  return out
 }
 
 /**
- * @param {{ report: object, lead: object, branding: object, getImageBuffer: (key: string) => Promise<Buffer> }} opts
+ * Build a photo-report PDF that matches the public `/r/{token}` HTML page.
+ * @param {{
+ *   report: object,
+ *   lead: object,
+ *   branding: object,
+ *   message?: string,
+ *   getImageBuffer: (key: string) => Promise<Buffer>
+ * }} opts
  */
-export async function buildReportPdfBuffer({ report, lead, branding, getImageBuffer }) {
+export async function buildReportPdfBuffer({
+  report,
+  lead,
+  branding,
+  message = '',
+  getImageBuffer,
+}) {
   const photosById = Object.fromEntries((lead?.photos || []).map((p) => [p.id, p]))
-  const imageBuffers = getImageBuffer
-    ? await prefetchImageBuffers({ report, photosById, getImageBuffer })
-    : new Map()
+  const photos = getImageBuffer
+    ? await prefetchPhotoDataUris({ report, photosById, getImageBuffer })
+    : []
 
-  const doc = new PDFDocument({ size: 'LETTER', margin: MG })
-  let y = MG
-
-  if (branding?.logoBase64) {
-    try {
-      const logoBuf = Buffer.from(branding.logoBase64.replace(/^data:[^;]+;base64,/, ''), 'base64')
-      doc.image(logoBuf, MG, y, { width: 80 })
-      y += 50
-    } catch {
-      /* skip logo */
-    }
-  }
-
-  doc.fontSize(10).fillColor('#555555')
-  const companyLines = [
-    branding?.businessName,
-    branding?.companyPhone,
-    branding?.companyEmail,
-    branding?.companyWebsite,
-  ].filter(Boolean)
-  companyLines.forEach((line) => {
-    doc.text(line, MG, y, { width: CW })
-    y += 14
-  })
-  y += 12
-
-  doc.fontSize(22).fillColor('#111111').text(report.title || 'Photo Report', MG, y, { width: CW })
-  y = doc.y + 8
-  doc.fontSize(12).fillColor('#333333')
-  doc.text(leadDisplayName(lead), MG, y, { width: CW })
-  y = doc.y + 4
-  if (lead?.address) {
-    doc.fontSize(10).fillColor('#666666').text(lead.address, MG, y, { width: CW })
-    y = doc.y + 16
-  }
-
-  const sections = [...(report?.sections || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-
-  for (const section of sections) {
-    if (y > PH - 120) {
-      doc.addPage()
-      y = MG
-    }
-
-    if (section.subtitle) {
-      doc.fontSize(16).fillColor('#111111').text(section.subtitle, MG, y, { width: CW })
-      y = doc.y + 6
-    }
-    if (section.description) {
-      doc.fontSize(10).fillColor('#444444').text(section.description, MG, y, { width: CW, align: 'left' })
-      y = doc.y + 12
-    }
-
-    for (const photoId of section.photoIds || []) {
-      const photo = photosById[photoId]
-      if (!photo) continue
-      const imgKey = photo.annotatedKey || photo.key
-      if (!imgKey) continue
-      const imgBuf = imageBuffers.get(imgKey)
-      if (!imgBuf) continue
-
-      try {
-        const maxH = PH - MG * 2 - 40
-        const maxW = CW
-        if (y > PH - maxH - 40) {
-          doc.addPage()
-          y = MG
+  const html = buildReportDocumentHtml({
+    report,
+    lead: {
+      name: leadDisplayName(lead),
+      address: lead?.address || '',
+    },
+    branding: branding
+      ? {
+          businessName: branding.businessName,
+          logoBase64: branding.logoBase64,
+          senderName: branding.senderName,
+          senderEmail: branding.senderEmail || report.ownerEmail || '',
         }
-        doc.image(imgBuf, MG, y, { fit: [maxW, maxH], align: 'center' })
-        y = doc.y + 16
-      } catch (e) {
-        console.warn('skip photo in pdf', photoId, e.message)
-      }
-    }
-    y += 8
-  }
+      : null,
+    message,
+    photos,
+  })
 
-  return pdfToBuffer(doc)
+  return htmlToPdfBuffer(html, { waitUntil: 'networkidle0' })
 }
 
 export function reportPdfStorageKey(ownerId, reportId) {
@@ -153,3 +120,5 @@ export function safePdfFilename(title) {
   const base = String(title || 'report').replace(/[^\w\s-]/g, '').trim() || 'report'
   return `${base.slice(0, 80)}.pdf`
 }
+
+export { leadDisplayName }

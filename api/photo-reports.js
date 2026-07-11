@@ -9,6 +9,7 @@ import {
 import { getLeadWithAccess, getVisibleLeads } from './lib/leadAccess.js'
 import { paginateArray } from './lib/pagination.js'
 import { presignedPhotosEnabled, createPresignedGetUrl } from './lib/photoPresign.js'
+import { reportPdfContentChanged } from './lib/ensureReportPdf.js'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 
 function buildReportFromBody(body, user, existing = null) {
@@ -185,6 +186,11 @@ export default async function handler(req, res) {
         updated = buildReportFromBody(body, user, report)
       } catch (e) {
         return res.status(400).json({ error: e.message })
+      }
+
+      // Drop cached PDF when content changes so the next download matches the HTML page.
+      if (reportPdfContentChanged(report, updated)) {
+        updated = { ...updated, pdfKey: null }
       }
 
       await updatePhotoReportAtIndex(all, index, updated)
