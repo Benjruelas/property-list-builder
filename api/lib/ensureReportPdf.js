@@ -3,6 +3,9 @@ import { updatePhotoReportAtIndex } from './reportStore.js'
 import { resolveSenderBranding } from './senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './buildReportPdf.js'
 
+/** Bump when PDF layout/generation changes so pre-existing cached PDFs regenerate. */
+export const REPORT_PDF_VERSION = 2
+
 let _s3
 function s3() {
   if (_s3) return _s3
@@ -28,10 +31,17 @@ export async function r2GetBuffer(key) {
 }
 
 /**
- * Return a cached report PDF when present; otherwise build, upload, and persist pdfKey.
+ * Cached PDFs from before REPORT_PDF_VERSION must be rebuilt (e.g. old PDFKit layout).
+ */
+export function isReportPdfStale(report) {
+  return !report?.pdfKey || report.pdfVersion !== REPORT_PDF_VERSION
+}
+
+/**
+ * Return a cached report PDF when present and current; otherwise build, upload, and persist pdfKey.
  */
 export async function ensureReportPdf(report, index, all, lead, { message = '' } = {}) {
-  if (report.pdfKey) {
+  if (!isReportPdfStale(report)) {
     try {
       return await r2GetBuffer(report.pdfKey)
     } catch {
@@ -63,6 +73,7 @@ export async function ensureReportPdf(report, index, all, lead, { message = '' }
   const updated = {
     ...report,
     pdfKey,
+    pdfVersion: REPORT_PDF_VERSION,
     updatedAt: new Date().toISOString(),
   }
   await updatePhotoReportAtIndex(all, index, updated)

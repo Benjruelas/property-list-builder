@@ -68,6 +68,7 @@ export default async function handler(req, res) {
     const updated = {
       ...report,
       pdfKey,
+      pdfVersion: REPORT_PDF_VERSION,
       updatedAt: new Date().toISOString(),
     }
     await updatePhotoReportAtIndex(all, index, updated)
