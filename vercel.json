@@ -27,6 +27,18 @@
       "maxDuration": 120,
       "memory": 1024
     },
+    "api/photo-reports-send.js": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "api/public-report.js": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "api/public-quote.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
     "api/eagleview-imagery.js": {
       "maxDuration": 30
     }
