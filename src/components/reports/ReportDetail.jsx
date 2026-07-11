@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Send, Pencil, Trash2 } from 'lucide-react'
+import { Send, Pencil, Trash2, Eye } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
@@ -7,11 +7,31 @@ import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { logLeadReportEvent } from '@/utils/leadActivity'
 import { SendReportDialog } from './SendReportDialog'
 import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
-import { ViewAsClientButton } from '../ViewAsClientButton'
-import { PanelActionButton } from '../ui/panel-action-button'
+import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
+import { showToast } from '../ui/toast'
 import { showConfirm } from '../ui/confirm-dialog'
 import { getTeamEmailBranding, getTeamForMembership, getSenderDisplayName } from '@/utils/profile'
 import { useAuth } from '@/contexts/AuthContext'
+import { cn } from '@/lib/utils'
+
+function ReportActionTile({ icon: Icon, label, onClick, disabled, danger = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      className={cn(
+        'report-detail-action-tile',
+        danger && 'report-detail-action-tile--danger',
+        disabled && 'opacity-40',
+      )}
+    >
+      <Icon className="report-detail-action-icon" aria-hidden />
+      <span className="report-detail-action-label">{label}</span>
+    </button>
+  )
+}
 
 export function ReportDetail({
   open,
@@ -30,6 +50,7 @@ export function ReportDetail({
   const { getToken: authGetToken, currentUser } = useAuth()
   const resolveToken = getToken || authGetToken
   const [sendOpen, setSendOpen] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   if (!open || !report) return null
 
@@ -40,6 +61,39 @@ export function ReportDetail({
     || (report.ownerEmail || '').split('@')[0]
     || ''
   const senderEmail = report.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
+  const statusLabel = String(report.status || 'draft').replace(/_/g, ' ')
+
+  const handleViewAsClient = async () => {
+    if (previewLoading || !report.id) return
+    const previewWindow = prepareClientPreviewTab()
+    if (!previewWindow) {
+      showToast('Allow popups to open the client preview', 'error')
+      return
+    }
+    setPreviewLoading(true)
+    try {
+      const url = await fetchClientPreviewUrl(resolveToken, { type: 'report', id: report.id })
+      if (!openClientPreviewUrl(url, previewWindow)) {
+        closeClientPreviewTab(previewWindow)
+        showToast('Could not open client preview tab', 'error')
+      }
+    } catch (e) {
+      closeClientPreviewTab(previewWindow)
+      showToast(e.message || 'Could not load client preview link', 'error')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    const ok = await showConfirm({
+      title: 'Delete report?',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (ok) onDelete?.(report)
+  }
 
   return (
     <>
@@ -52,7 +106,7 @@ export function ReportDetail({
         })}
       >
         <DialogContent
-          className="map-panel list-panel reports-panel report-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full w-[min(96vw,32rem)] max-w-lg"
+          className="map-panel list-panel reports-panel report-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,36rem)] max-w-xl"
           showCloseButton={false}
           nestedOverlay
           topLayer
@@ -62,7 +116,7 @@ export function ReportDetail({
             <PanelHeader onBack={onBack ?? onClose} title={report.title || 'Report'} />
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-5 py-4 space-y-4">
             <QuoteBrandHeader
               variant="panel"
               businessName={teamBranding.businessName}
@@ -71,46 +125,63 @@ export function ReportDetail({
               senderEmail={senderEmail}
             />
 
-            {lead && (
-              <div>
-                <div className="text-sm font-medium">{displayLeadName(lead)}</div>
-                <div className="text-xs opacity-60">{formatLeadAddress(lead)}</div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {lead ? (
+                  <>
+                    <div className="text-sm font-medium truncate">{displayLeadName(lead)}</div>
+                    <div className="text-xs opacity-60 truncate">{formatLeadAddress(lead)}</div>
+                  </>
+                ) : (
+                  <div className="text-sm opacity-60">No linked lead</div>
+                )}
               </div>
-            )}
-            <div className="text-xs opacity-50 uppercase tracking-wide">{report.status || 'draft'}</div>
+              <span className="report-detail-status shrink-0">{statusLabel}</span>
+            </div>
 
-            {(report.sections || []).map((sec, i) => (
-              <div key={sec.id} className="report-section-card">
-                <div className="text-sm font-semibold">{sec.subtitle || `Section ${i + 1}`}</div>
-                {sec.description && <p className="text-xs opacity-70 mt-1">{sec.description}</p>}
-                <p className="text-[10px] opacity-40 mt-2">{sec.photoIds?.length || 0} photos</p>
-              </div>
-            ))}
+            <div className="space-y-3">
+              <p className="text-[11px] font-medium uppercase tracking-wide opacity-45">Sections</p>
+              {(report.sections || []).length === 0 ? (
+                <p className="text-sm opacity-50">No sections yet</p>
+              ) : (
+                (report.sections || []).map((sec, i) => (
+                  <div key={sec.id} className="report-section-card">
+                    <div className="text-sm font-semibold">{sec.subtitle || `Section ${i + 1}`}</div>
+                    {sec.description && <p className="text-xs opacity-70 mt-1">{sec.description}</p>}
+                    <p className="text-[10px] opacity-40 mt-2">{sec.photoIds?.length || 0} photos</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
 
-            <div className="quote-details-actions flex flex-col gap-2.5 pt-2">
-              <PanelActionButton variant="primary" onClick={() => setSendOpen(true)}>
-                <Send className="h-4 w-4 shrink-0" />
-                Send report
-              </PanelActionButton>
-              <ViewAsClientButton getToken={resolveToken} type="report" entityId={report.id} />
-              <PanelActionButton onClick={() => onEdit?.(report)}>
-                <Pencil className="h-4 w-4 shrink-0" />
-                Edit report
-              </PanelActionButton>
-              <PanelActionButton
-                variant="danger"
-                onClick={async () => {
-                  const ok = await showConfirm({
-                    title: 'Delete report?',
-                    message: 'This cannot be undone.',
-                    confirmLabel: 'Delete',
-                    destructive: true,
-                  })
-                  if (ok) onDelete?.(report)
-                }}
-              >
-                <Trash2 className="h-4 w-4 shrink-0" /> Delete
-              </PanelActionButton>
+          <div
+            className="report-detail-footer flex-shrink-0"
+            style={{ paddingBottom: 'calc(0.85rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="report-detail-actions-row" role="toolbar" aria-label="Report actions">
+              <ReportActionTile
+                icon={Send}
+                label="Send"
+                onClick={() => setSendOpen(true)}
+              />
+              <ReportActionTile
+                icon={Eye}
+                label={previewLoading ? 'Opening…' : 'View'}
+                onClick={handleViewAsClient}
+                disabled={previewLoading}
+              />
+              <ReportActionTile
+                icon={Pencil}
+                label="Edit"
+                onClick={() => onEdit?.(report)}
+              />
+              <ReportActionTile
+                icon={Trash2}
+                label="Delete"
+                danger
+                onClick={handleDelete}
+              />
             </div>
           </div>
         </DialogContent>

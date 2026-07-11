@@ -556,7 +556,7 @@
 
 @media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
-  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.create-lead-panel) {
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.create-lead-panel) {
     width: auto !important;
     min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
@@ -564,6 +564,16 @@
     max-height: var(--ui-panel-height) !important;
     display: flex !important;
     flex-direction: column !important;
+  }
+
+  /* Desktop: report details — grow with content, capped at CRM panel height */
+  .report-details-panel.fullscreen-panel {
+    width: min(36rem, 92vw) !important;
+    min-width: min(28rem, 92vw) !important;
+    max-width: min(36rem, 92vw) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: var(--ui-panel-height) !important;
   }
 
   /* Desktop: outreach panel — fixed width so Email/Text tabs don't resize */
@@ -3269,15 +3279,15 @@
 
 /* List panel - no fills on buttons (except delete, create form actions) */
 /* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams); action tiles (parcel/lead details) */
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled) {
   background: transparent !important;
 }
 
@@ -9344,6 +9354,133 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   border-radius: 12px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.04);
+}
+
+.report-detail-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.report-detail-actions-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.report-detail-actions-row > * {
+  min-width: 0;
+  width: 100%;
+}
+
+.report-detail-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.85rem 1.25rem 0.85rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+[data-ui-theme='light'] .report-detail-footer {
+  border-top-color: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+@media (max-width: 767px) {
+  .report-details-panel.fullscreen-panel {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+}
+
+.report-details-panel .report-detail-action-tile {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 4rem;
+  padding: 0.625rem 0.35rem !important;
+  border-radius: 0.75rem !important;
+  border: 2px solid rgba(255, 255, 255, 0.24) !important;
+  border-style: solid !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  text-align: center;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.report-details-panel .report-detail-action-tile:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.report-details-panel .report-detail-action-tile:disabled {
+  cursor: not-allowed;
+}
+
+.report-details-panel .report-detail-action-tile--danger {
+  border-color: rgba(248, 113, 113, 0.42) !important;
+  color: rgba(254, 202, 202, 0.95) !important;
+}
+
+.report-details-panel .report-detail-action-tile--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12) !important;
+  border-color: rgba(252, 165, 165, 0.62) !important;
+  color: rgba(254, 226, 226, 1) !important;
+}
+
+.report-detail-action-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.report-detail-action-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.15;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-ui-theme='light'] .report-details-panel .report-detail-action-tile {
+  border-color: var(--map-panel-stroke-strong) !important;
+  background: rgba(0, 0, 0, 0.03) !important;
+  color: var(--map-panel-text) !important;
+}
+
+[data-ui-theme='light'] .report-details-panel .report-detail-action-tile:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.28) !important;
+}
+
+[data-ui-theme='light'] .report-details-panel .report-detail-action-tile--danger {
+  border-color: rgba(185, 28, 28, 0.4) !important;
+  color: rgb(185, 28, 28) !important;
+}
+
+[data-ui-theme='light'] .report-detail-status {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .report-section-photo-grid {

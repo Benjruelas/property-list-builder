@@ -234,13 +234,15 @@
   color: var(--map-panel-ink-faint) !important;
 }
 [data-ui-theme='light'] .lead-detail-action-tile,
-[data-ui-theme='light'] .parcel-details-action-tile {
+[data-ui-theme='light'] .parcel-details-action-tile,
+[data-ui-theme='light'] .report-detail-action-tile {
   color: var(--map-panel-text) !important;
   background: var(--map-panel-surface-muted) !important;
   border-color: var(--map-panel-stroke-strong) !important;
 }
 [data-ui-theme='light'] .lead-detail-action-tile:hover:not(:disabled),
-[data-ui-theme='light'] .parcel-details-action-tile:hover:not(:disabled) {
+[data-ui-theme='light'] .parcel-details-action-tile:hover:not(:disabled),
+[data-ui-theme='light'] .report-detail-action-tile:hover:not(:disabled) {
   background: var(--map-panel-surface-hover) !important;
   border-color: rgba(0, 0, 0, 0.22) !important;
 }
