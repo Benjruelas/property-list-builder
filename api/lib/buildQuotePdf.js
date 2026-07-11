@@ -1,4 +1,4 @@
-import { buildQuoteDocumentHtml } from './publicDocumentHtml.js'
+import { buildQuoteDocumentHtml, QUOTE_PDF_VIEWPORT } from './publicDocumentHtml.js'
 import { htmlToPdfBuffer } from './htmlToPdf.js'
 
 /**
@@ -7,7 +7,10 @@ import { htmlToPdfBuffer } from './htmlToPdf.js'
  */
 export async function buildQuotePdfBuffer({ quote, invite, branding }) {
   const html = buildQuoteDocumentHtml({ quote, invite, branding })
-  return htmlToPdfBuffer(html, { waitUntil: 'domcontentloaded' })
+  return htmlToPdfBuffer(html, {
+    waitUntil: 'domcontentloaded',
+    viewport: QUOTE_PDF_VIEWPORT,
+  })
 }
 
 export function safeQuotePdfFilename(title) {
