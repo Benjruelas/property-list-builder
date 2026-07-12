@@ -65,9 +65,10 @@ export function QuickCreateFab({
   accentColor = '#2563eb',
   actionBarMenuOpen = false,
   stormViewActive = false,
+  appLoading = false,
 }) {
   const isMobile = useMobileViewport()
-  const hidden = actionBarMenuOpen || (stormViewActive && isMobile)
+  const hidden = appLoading || actionBarMenuOpen || (stormViewActive && isMobile)
   const handlers = {
     task: onCreateTask,
     lead: onCreateLead,
@@ -79,6 +80,10 @@ export function QuickCreateFab({
   const visibleItems = CREATE_ITEMS.filter(
     (item) => !item.featureId || canAccessFeature(item.featureId)
   )
+
+  useEffect(() => {
+    if (appLoading && open) onOpenChange?.(false)
+  }, [appLoading, open, onOpenChange])
 
   useEffect(() => {
     if (!open) return undefined

@@ -3867,6 +3867,7 @@ function App() {
         accentColor={settings.parcelBoundaryColor || '#2563eb'}
         actionBarMenuOpen={showMenu}
         stormViewActive={!!selectedHailEvent}
+        appLoading={showAppLoading}
       />
 
       <ListPanel

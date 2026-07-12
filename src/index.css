@@ -4572,6 +4572,11 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   background: #0a0a0c;
   overflow: hidden;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  pointer-events: auto;
+}
+/* Cover FAB / action bar / menus that also portal into #modal-root */
+#modal-root .app-loading-screen {
+  z-index: 10100;
 }
 .app-loading-screen--visible {
   animation: app-loader-fade-in 0.35s ease-out both;
