@@ -173,14 +173,15 @@ export function QuoteEditor({
 
   const selectedPipeline = pipelines.find((p) => p.id === pipelineId)
   const selectedDeal = selectedPipeline?.deals?.find((d) => d.id === dealId)
-  const dealOptions = useMemo(
-    () =>
-      (selectedPipeline?.deals || []).map((d) => ({
-        id: d.id,
-        label: d.title || d.leadName || d.id,
-      })),
-    [selectedPipeline]
-  )
+  const dealOptions = useMemo(() => {
+    const seen = new Set()
+    return (selectedPipeline?.deals || []).reduce((acc, d) => {
+      if (!d?.id || seen.has(d.id)) return acc
+      seen.add(d.id)
+      acc.push({ id: d.id, label: d.title || d.leadName || d.id })
+      return acc
+    }, [])
+  }, [selectedPipeline])
 
   useEffect(() => {
     if (selectedDeal?.leadId && !leadId) {

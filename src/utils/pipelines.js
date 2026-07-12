@@ -33,6 +33,45 @@ export function dedupePipelinesById(pipelines) {
   return [...byId.values()]
 }
 
+const DEFAULT_PIPELINE_TITLES = new Set(['deal pipeline', 'pipes'])
+
+function isEmptyPipeline(p) {
+  const deals = Array.isArray(p.deals) ? p.deals.length : 0
+  const tasks = Array.isArray(p.tasks) ? p.tasks.length : 0
+  return deals === 0 && tasks === 0
+}
+
+function isDefaultPipelineTitle(title) {
+  return DEFAULT_PIPELINE_TITLES.has((title || 'deal pipeline').trim().toLowerCase())
+}
+
+/** Drop redundant empty default-titled pipelines per owner (keeps newest). */
+export function consolidateRedundantDefaultPipelines(pipelines) {
+  const list = dedupePipelinesById(pipelines)
+  const removeIds = new Set()
+  const byOwner = new Map()
+
+  for (const p of list) {
+    if (!p?.ownerId || !isDefaultPipelineTitle(p.title) || !isEmptyPipeline(p)) continue
+    const group = byOwner.get(p.ownerId) || []
+    group.push(p)
+    byOwner.set(p.ownerId, group)
+  }
+
+  for (const group of byOwner.values()) {
+    if (group.length <= 1) continue
+    group.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''))
+    for (let i = 1; i < group.length; i++) removeIds.add(group[i].id)
+  }
+
+  if (removeIds.size === 0) return list
+  return list.filter((p) => !removeIds.has(p.id))
+}
+
+export function normalizePipelineList(pipelines) {
+  return consolidateRedundantDefaultPipelines(pipelines)
+}
+
 import { getApiBase } from './apiBase'
 
 /**
@@ -80,7 +119,7 @@ export async function fetchPipelines(getToken) {
   const etag = res.headers.get('ETag')
   if (etag) pipelinesListEtag = etag.replace(/^W\//, '').replace(/"/g, '')
   const data = await res.json()
-  return dedupePipelinesById(data.pipelines || []).map(normalizePipelineForClient)
+  return normalizePipelineList(data.pipelines || []).map(normalizePipelineForClient)
 }
 
 export async function createPipeline(getToken, input = {}) {
