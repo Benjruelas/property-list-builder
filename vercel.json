@@ -65,6 +65,14 @@
       "destination": "/api/:path*"
     },
     {
+      "source": "/apple-touch-icon.png",
+      "destination": "/icon-180.png"
+    },
+    {
+      "source": "/apple-touch-icon-precomposed.png",
+      "destination": "/icon-180.png"
+    },
+    {
       "source": "/((?!api/|@vite|@react-refresh|@fs/|src/|node_modules/|assets/|brand/|emblem-|manifest\\.webmanifest|favicon|apple-touch-icon|icon-|sw\\.js).*)",
       "destination": "/index.html"
     }
