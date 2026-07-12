@@ -283,7 +283,7 @@ export function QuoteEditor({
   return (
     <Dialog open={open} onOpenChange={(o) => handleChildPanelDismiss(o, onClose, { wasOpen: open })}>
       <DialogContent
-        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 min-w-0 max-w-full overflow-hidden p-0 max-md:w-full max-md:max-w-none"
+        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none"
         showCloseButton={false}
         nestedOverlay
         topLayer
