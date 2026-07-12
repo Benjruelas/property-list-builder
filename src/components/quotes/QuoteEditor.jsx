@@ -71,12 +71,12 @@ function SelectedLeadCard({ lead, onClear }) {
 function DateField({ value, onChange }) {
   const inputRef = useRef(null)
   return (
-    <div className="relative">
+    <div className="relative w-full min-w-0">
       <input
         ref={inputRef}
         className={cn(
           FIELD_TRAILING,
-          'quotes-field-date [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-2 [&::-webkit-calendar-picker-indicator]:w-8 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer'
+          'quotes-field-date block min-w-0 max-w-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-0 [&::-webkit-calendar-picker-indicator]:p-0 [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer'
         )}
         type="date"
         value={value}
@@ -291,7 +291,7 @@ export function QuoteEditor({
   return (
     <Dialog open={open} onOpenChange={(o) => handleChildPanelDismiss(o, onClose, { wasOpen: open })}>
       <DialogContent
-        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0"
+        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none"
         showCloseButton={false}
         nestedOverlay
         topLayer
@@ -366,7 +366,7 @@ export function QuoteEditor({
                 )}
               </div>
 
-              <label className="block space-y-1">
+              <label className="block min-w-0 space-y-1">
                 <span className="text-xs opacity-70">Valid until</span>
                 <DateField
                   value={validUntil?.slice(0, 10) || ''}
