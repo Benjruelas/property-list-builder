@@ -71,19 +71,14 @@ export default async function handler(req, res) {
         'dealTemplates', 'skipTraceJobs', 'skipTracedList', 'appSettings', 'closedLeads'
       ]
 
-      // Optimistic concurrency: if the client sends baseVersion and it no longer
-      // matches, reject so it can re-read and re-merge instead of clobbering a
-      // newer write from another tab/device.
-      const baseVersion = body.__baseVersion
-
       // Serialize the read-modify-write under a short lock so concurrent PATCHes
-      // (multiple tabs/devices) can't lose each other's field updates.
+      // (multiple tabs/devices) can't lose each other's *other* field updates.
+      // Clients may still send __baseVersion for compatibility; we ignore it for
+      // conflict rejection because delta merges under the lock are safe, and a
+      // 409 only produced noisy retries without improving same-key last-write-wins.
       const applyMerge = async () => {
         const existing = await getUserData(user.uid) || {}
         const currentVersion = Number(existing.__version) || 0
-        if (baseVersion !== undefined && Number(baseVersion) !== currentVersion) {
-          return { conflict: true, currentVersion, data: existing }
-        }
         const merged = { ...existing }
         for (const key of allowedKeys) {
           if (key in body && body[key] !== undefined) {
@@ -92,19 +87,12 @@ export default async function handler(req, res) {
         }
         merged.__version = currentVersion + 1
         await saveUserData(user.uid, merged)
-        return { conflict: false, currentVersion: merged.__version, data: merged }
+        return { currentVersion: merged.__version, data: merged }
       }
 
       const locked = await withKvLock(lockKey(user.uid), applyMerge, { ttlMs: 5000, maxWaitMs: 3000 })
       const result = locked !== null ? locked : await applyMerge()
 
-      if (result.conflict) {
-        return res.status(409).json({
-          error: 'Version conflict — reload and retry.',
-          version: result.currentVersion,
-          data: result.data,
-        })
-      }
       return res.status(200).json({ data: result.data, version: result.currentVersion })
     }
 

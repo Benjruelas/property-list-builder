@@ -23,10 +23,11 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#111" />
     <title>KnockScout</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=4" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png?v=4" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=4" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png?v=4" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png?v=4" />
     <meta name="apple-mobile-web-app-title" content="KnockScout" />
     <meta name="application-name" content="KnockScout" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -133,13 +134,9 @@
       #initial-loader .boot-logo {
         position: relative;
         z-index: 1;
-        width: 5.5rem;
-        height: 5.5rem;
-        border-radius: 1.125rem;
-        box-shadow:
-          0 0 0 1px rgba(255, 255, 255, 0.12),
-          0 12px 40px rgba(0, 0, 0, 0.45),
-          0 0 48px rgba(59, 130, 246, 0.15);
+        width: 6rem;
+        height: 6rem;
+        object-fit: contain;
         animation: boot-logo-pulse 2.2s ease-in-out infinite;
       }
       #initial-loader .boot-brand {
@@ -223,7 +220,7 @@
           <div class="boot-logo-wrap">
             <div class="boot-ring"></div>
             <div class="boot-ring boot-ring--inner"></div>
-            <img src="/icon-512.png" alt="" class="boot-logo" width="88" height="88" />
+            <img src="/emblem-white.png" alt="" class="boot-logo" width="96" height="96" />
           </div>
           <div class="boot-brand">
             <span class="boot-name">KnockScout</span>

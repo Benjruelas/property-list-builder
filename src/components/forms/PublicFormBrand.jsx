@@ -12,7 +12,7 @@ export function PublicFormBrand({ variant = 'compact', logoOnly = false, classNa
       )}
     >
       <img
-        src="/icon-192.png"
+        src="/emblem-blue.png"
         alt="KnockScout"
         className="public-form-brand__mark"
         width={variant === 'header' ? 36 : 28}

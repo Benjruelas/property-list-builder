@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 const MIN_VISIBLE_MS = 400
-const LOGO_SRC = '/icon-512.png'
+const LOGO_SRC = '/emblem-white.png'
 
 /**
  * Full-screen KnockScout boot splash (auth + basemap + first map paint).

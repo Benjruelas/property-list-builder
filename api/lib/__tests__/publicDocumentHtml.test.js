@@ -5,7 +5,7 @@ import {
   publicDocumentStyles,
 } from '../publicDocumentHtml.js'
 import { resolveReportPhotoImageKey } from '../buildReportPdf.js'
-import { reportPdfContentChanged, isReportPdfStale } from '../ensureReportPdf.js'
+import { reportPdfContentChanged, isReportPdfStale } from '../reportPdfMeta.js'
 
 describe('publicDocumentHtml', () => {
   it('uses column-width pages that match the public link layout', () => {

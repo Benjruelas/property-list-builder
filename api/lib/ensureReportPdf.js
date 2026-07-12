@@ -2,9 +2,9 @@ import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3
 import { updatePhotoReportAtIndex } from './reportStore.js'
 import { resolveSenderBranding } from './senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './buildReportPdf.js'
+import { REPORT_PDF_VERSION, isReportPdfStale } from './reportPdfMeta.js'
 
-/** Bump when PDF layout/generation changes so pre-existing cached PDFs regenerate. */
-export const REPORT_PDF_VERSION = 4
+export { REPORT_PDF_VERSION, isReportPdfStale, reportPdfContentChanged } from './reportPdfMeta.js'
 
 let _s3
 function s3() {
@@ -28,13 +28,6 @@ export async function r2GetBuffer(key) {
   const chunks = []
   for await (const c of r.Body) chunks.push(c)
   return Buffer.concat(chunks)
-}
-
-/**
- * Cached PDFs from before REPORT_PDF_VERSION must be rebuilt (e.g. old PDFKit layout).
- */
-export function isReportPdfStale(report) {
-  return !report?.pdfKey || report.pdfVersion !== REPORT_PDF_VERSION
 }
 
 /**
@@ -79,11 +72,4 @@ export async function ensureReportPdf(report, index, all, lead, { message = '' }
   await updatePhotoReportAtIndex(all, index, updated)
 
   return pdfBuf
-}
-
-/** True when title/sections changed enough that a cached PDF is stale. */
-export function reportPdfContentChanged(existing, next) {
-  if (!existing) return true
-  if ((existing.title || '') !== (next.title || '')) return true
-  return JSON.stringify(existing.sections || []) !== JSON.stringify(next.sections || [])
 }

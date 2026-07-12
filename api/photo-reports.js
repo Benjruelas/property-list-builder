@@ -9,7 +9,7 @@ import {
 import { getLeadWithAccess, getVisibleLeads } from './lib/leadAccess.js'
 import { paginateArray } from './lib/pagination.js'
 import { presignedPhotosEnabled, createPresignedGetUrl } from './lib/photoPresign.js'
-import { reportPdfContentChanged } from './lib/ensureReportPdf.js'
+import { reportPdfContentChanged } from './lib/reportPdfMeta.js'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 
 function buildReportFromBody(body, user, existing = null) {
