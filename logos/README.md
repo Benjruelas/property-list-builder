@@ -15,11 +15,9 @@ Curated from the designer logo pack. Runtime web assets live in `public/brand/` 
 - `wordmark-variant-*.svg` / `lockup-variant-*.svg` — alternate colorways
 
 ## App icons
-Generated squares with **white emblem on dark (`#111`)** for browser tabs (visible on light chrome):
-- `/favicon-16.png`, `/favicon-32.png`
-
-Homescreen / PWA icons use brand blue (`#1151ef`) + white emblem:
-- `/icon-192.png`, `/icon-512.png`
+Generated squares with **black emblem on white** (from `emblem-black.svg`):
+- `/favicon-16.png`, `/favicon-32.png` — browser tab / bookmark
+- `/icon-192.png`, `/icon-512.png` — homescreen / PWA / apple-touch
 
 Boot / loading screens use `/brand/lockup-variant-2.svg` (white lockup on dark).
 
