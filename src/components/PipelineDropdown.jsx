@@ -1,4 +1,5 @@
 import { InlineDropdown } from './InlineDropdown'
+import { normalizePipelineList } from '@/utils/pipelines'
 
 /**
  * Inline pipeline picker — expands below trigger (no native select; safe inside transformed dialogs).
@@ -13,7 +14,7 @@ export function PipelineDropdown({
   label = 'Pipeline',
   className,
 }) {
-  const options = pipelines.map((p) => ({
+  const options = normalizePipelineList(pipelines).map((p) => ({
     id: p.id,
     label: p.title || 'Pipeline',
   }))
