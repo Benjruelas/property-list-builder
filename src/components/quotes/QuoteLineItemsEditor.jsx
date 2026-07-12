@@ -323,10 +323,10 @@ export function QuoteLineItemsEditor({
       </OptionsMenuDropdown>
 
       {showAmounts && (
-      <div className={cn('space-y-1 text-sm pt-2 border-t border-white/10')}>
-        <div className="flex justify-between items-center opacity-80">
-          <span>Subtotal</span>
-          <span className="tabular-nums">{formatQuoteMoney(totals.subtotal)}</span>
+      <div className={cn('space-y-1 text-sm pt-2 border-t border-white/10 min-w-0 max-w-full')}>
+        <div className="flex justify-between items-center gap-2 min-w-0 opacity-80">
+          <span className="shrink-0">Subtotal</span>
+          <span className="tabular-nums shrink-0">{formatQuoteMoney(totals.subtotal)}</span>
         </div>
         {canEdit ? (
           <div className="flex justify-between items-center gap-2">
@@ -343,9 +343,9 @@ export function QuoteLineItemsEditor({
             <span className="tabular-nums">{formatQuoteMoney(totals.taxAmount)}</span>
           </div>
         ) : null}
-        <div className="flex justify-between items-center font-semibold text-base pt-1">
-          <span>Total</span>
-          <span className="tabular-nums">{formatQuoteMoney(totals.total)}</span>
+        <div className="flex justify-between items-center gap-2 min-w-0 font-semibold text-base pt-1">
+          <span className="shrink-0">Total</span>
+          <span className="tabular-nums shrink-0">{formatQuoteMoney(totals.total)}</span>
         </div>
         {effectiveShowProfit && profit && (
           <div className={cn(FINANCES_SUMMARY_ROW, 'rounded-lg border border-white/10 mt-2 items-center flex-wrap gap-y-1')}>
