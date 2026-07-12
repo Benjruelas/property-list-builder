@@ -14,17 +14,26 @@ function loadingPortalTarget() {
 /**
  * Full-screen KnockScout boot splash (auth + basemap + first map paint).
  * Portaled above map chrome; hands off from #initial-loader in index.html on mount.
+ *
+ * @param {{ active: boolean, message?: string, onVisibleChange?: (visible: boolean) => void }} props
  */
 export function AppLoadingScreen({
   active,
   message = APP_LOADING_MESSAGES.mapAuth,
+  onVisibleChange,
 }) {
   const [visible, setVisible] = useState(active)
   const shownAtRef = useRef(0)
+  const onVisibleChangeRef = useRef(onVisibleChange)
+  onVisibleChangeRef.current = onVisibleChange
 
   useLayoutEffect(() => {
     window.__removeInitialLoader?.()
   }, [])
+
+  useEffect(() => {
+    onVisibleChangeRef.current?.(visible)
+  }, [visible])
 
   useEffect(() => {
     if (active) {

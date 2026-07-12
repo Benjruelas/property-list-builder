@@ -4579,7 +4579,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   z-index: 10100;
 }
 .app-loading-screen--visible {
-  animation: app-loader-fade-in 0.35s ease-out both;
+  /* Stay fully opaque — fade-in from 0 let map chrome / FAB show through. */
+  opacity: 1;
 }
 .app-loading-screen__bg {
   position: absolute;
@@ -4636,6 +4637,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   align-items: center;
   gap: 1.5rem;
   padding: 2rem;
+  animation: app-loader-fade-in 0.35s ease-out both;
 }
 .app-loading-screen__logo-wrap {
   position: relative;
@@ -4742,12 +4744,11 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   background: rgba(127, 29, 29, 0.55);
 }
 
-/* Permission prompt overlay — must be body-level (see PermissionPrompt portal) so it
-   stacks above #root (z-index 0) and above body-portaled map chrome e.g. .north-indicator (z-900). */
+/* Permission prompt overlay — portaled into #modal-root above FAB / action bar. */
 .permission-prompt-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10050;
+  z-index: 10100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4757,6 +4758,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   padding: 1.5rem;
   padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  pointer-events: auto;
 }
 .permission-prompt-card {
   max-width: 340px;

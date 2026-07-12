@@ -82,5 +82,7 @@ export function PermissionPrompt({ onComplete }) {
     </div>
   )
 
-  return typeof document !== 'undefined' ? createPortal(ui, document.body) : null
+  return typeof document !== 'undefined'
+    ? createPortal(ui, document.getElementById('modal-root') || document.body)
+    : null
 }
