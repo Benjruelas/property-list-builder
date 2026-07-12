@@ -14,10 +14,14 @@ import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { cn } from '@/lib/utils'
 
 const FIELD =
-  'w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[44px]'
+  'w-full min-w-0 max-w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[44px] box-border'
 const FIELD_TRAILING = `${FIELD} pr-12`
 const TRAILING_SLOT =
   'absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center opacity-60'
+const PANEL_HORIZONTAL_PADDING = {
+  paddingLeft: 'calc(1rem + env(safe-area-inset-left, 0px))',
+  paddingRight: 'calc(1rem + env(safe-area-inset-right, 0px))',
+}
 const leadRowClass =
   'map-panel-list-item flex flex-col gap-0.5 w-full text-left px-3 py-2.5 rounded-lg border transition-all cursor-pointer min-h-[44px]'
 
@@ -68,32 +72,48 @@ function SelectedLeadCard({ lead, onClear }) {
   )
 }
 
+function formatDateDisplay(isoDate) {
+  if (!isoDate) return ''
+  try {
+    return new Date(`${isoDate.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  } catch {
+    return isoDate.slice(0, 10)
+  }
+}
+
 function DateField({ value, onChange }) {
   const inputRef = useRef(null)
+  const isoValue = value?.slice(0, 10) || ''
+  const display = formatDateDisplay(isoValue)
+
+  const openPicker = () => {
+    try {
+      inputRef.current?.showPicker?.()
+    } catch {
+      inputRef.current?.focus()
+    }
+  }
+
   return (
-    <div className="relative w-full min-w-0">
+    <div className="relative w-full min-w-0 max-w-full overflow-hidden">
+      <div className={cn(FIELD_TRAILING, 'truncate text-left pointer-events-none')}>
+        {display || <span className="opacity-50">Select date</span>}
+      </div>
       <input
         ref={inputRef}
-        className={cn(
-          FIELD_TRAILING,
-          'quotes-field-date block min-w-0 max-w-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-0 [&::-webkit-calendar-picker-indicator]:p-0 [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer'
-        )}
+        className="quotes-field-date-input absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer opacity-0"
         type="date"
-        value={value}
+        value={isoValue}
         onChange={onChange}
+        aria-label="Valid until"
+        onClick={openPicker}
       />
-      <div
-        className={cn(TRAILING_SLOT, 'pointer-events-auto cursor-pointer')}
-        aria-hidden
-        onClick={() => {
-          try {
-            inputRef.current?.showPicker?.()
-          } catch {
-            inputRef.current?.focus()
-          }
-        }}
-      >
-        <Calendar className="h-4 w-4 pointer-events-none" />
+      <div className={cn(TRAILING_SLOT, 'z-20 pointer-events-none')} aria-hidden>
+        <Calendar className="h-4 w-4" />
       </div>
     </div>
   )
@@ -291,14 +311,14 @@ export function QuoteEditor({
   return (
     <Dialog open={open} onOpenChange={(o) => handleChildPanelDismiss(o, onClose, { wasOpen: open })}>
       <DialogContent
-        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none"
+        className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 min-w-0 max-w-full overflow-hidden p-0 max-md:w-full max-md:max-w-none"
         showCloseButton={false}
         nestedOverlay
         topLayer
       >
         <DialogHeader
-          className="flex-shrink-0 px-4 pb-3 border-b border-white/20 text-left"
-          style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}
+          className="flex-shrink-0 pb-3 border-b border-white/20 text-left"
+          style={{ ...PANEL_HORIZONTAL_PADDING, paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}
         >
           <DialogDescription className="sr-only">
             {isTemplate ? 'Edit quote template' : 'Edit quote'}
@@ -310,8 +330,11 @@ export function QuoteEditor({
         </DialogHeader>
 
         <div
-          className="flex-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto scrollbar-hide overscroll-contain px-4 py-4 space-y-4"
-          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+          className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-clip overflow-y-auto scrollbar-hide overscroll-contain py-4 space-y-4"
+          style={{
+            ...PANEL_HORIZONTAL_PADDING,
+            paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
+          }}
         >
           {isTemplate && (
             <label className="block space-y-1">

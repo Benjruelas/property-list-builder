@@ -443,19 +443,18 @@
     max-height: 100dvh !important;
   }
 
-  /* Native date inputs ignore flex min-width on mobile WebKit unless constrained */
-  .quotes-field-date {
+  .quote-editor-panel.fullscreen-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Hidden native date input — visible label is a truncated div */
+  .quotes-field-date-input {
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
-  }
-
-  .quotes-field-date::-webkit-date-and-time-value {
-    min-width: 0;
-    max-width: calc(100% - 2.5rem);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: left;
   }
 
   /* Photo mode: true fullscreen — override list-panel center anchor (left/top 50% without translate) */
