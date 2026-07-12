@@ -4,7 +4,7 @@ import { resolveSenderBranding } from './senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './buildReportPdf.js'
 
 /** Bump when PDF layout/generation changes so pre-existing cached PDFs regenerate. */
-export const REPORT_PDF_VERSION = 3
+export const REPORT_PDF_VERSION = 4
 
 let _s3
 function s3() {

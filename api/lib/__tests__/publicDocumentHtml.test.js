@@ -15,9 +15,8 @@ describe('publicDocumentHtml', () => {
     expect(quoteCss).toContain('#f3f4f6')
     expect(quoteCss).toContain('size: 544px 860px')
     expect(quoteCss).toContain('margin: 0')
-    // Sections may split across pages; only tiles/title blocks stay atomic.
-    expect(quoteCss).not.toMatch(/\.section-card\s*\{[^}]*break-inside:\s*avoid/)
-    expect(quoteCss).toMatch(/\.photo-tile\s*\{[^}]*break-inside:\s*avoid/s)
+    expect(quoteCss).toContain('pdf-sheet--centered')
+    expect(quoteCss).toContain('justify-content: center')
 
     const reportCss = publicDocumentStyles({ width: 704, height: 990 })
     expect(reportCss).toContain('size: 704px 990px')
@@ -149,6 +148,8 @@ describe('publicDocumentHtml', () => {
     expect(html).toContain('North elevation')
     expect(html).toContain('Hail hits visible')
     expect(html).toContain('photo-grid')
+    expect(html).toContain('photo-row')
+    expect(html).toContain('data-pdf-block')
     expect(html).toContain('data:image/jpeg;base64,/9j/abc')
     expect(html).toContain('Storm Pros')
     expect(html).toContain('Casey')
@@ -184,7 +185,8 @@ describe('isReportPdfStale', () => {
     expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf' })).toBe(true)
     expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 1 })).toBe(true)
     expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 2 })).toBe(true)
-    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 3 })).toBe(false)
+    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 3 })).toBe(true)
+    expect(isReportPdfStale({ pdfKey: 'report-pdfs/u/r.pdf', pdfVersion: 4 })).toBe(false)
   })
 })
 
