@@ -72,16 +72,19 @@ function SelectedLeadCard({ lead, onClear }) {
 
 function validUntilToTimestamp(iso) {
   if (!iso) return null
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
-  if (!y || !m || !d) return null
-  return new Date(y, m - 1, d, 12, 0, 0).getTime()
+  const datePart = iso.slice(0, 10)
+  if (iso.length <= 10) {
+    const [y, m, d] = datePart.split('-').map(Number)
+    if (!y || !m || !d) return null
+    return new Date(y, m - 1, d, 9, 0, 0).getTime()
+  }
+  const parsed = new Date(iso)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime()
 }
 
 function timestampToValidUntil(ts) {
   if (!ts) return ''
-  const date = new Date(ts)
-  date.setHours(12, 0, 0, 0)
-  return date.toISOString()
+  return new Date(ts).toISOString()
 }
 
 function startOfTodayTimestamp() {
