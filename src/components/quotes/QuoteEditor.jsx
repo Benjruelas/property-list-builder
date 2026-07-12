@@ -7,7 +7,7 @@ import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
-import { ValidUntilPicker } from '../SchedulePicker'
+import { SchedulePicker } from '../SchedulePicker'
 import { QuoteLineItemsEditor } from './QuoteLineItemsEditor'
 import { computeQuoteTotals, defaultValidUntil, createQuoteLineItem } from '@/utils/quoteMath'
 import { createQuote, updateQuote, createQuoteTemplate } from '@/utils/quotes'
@@ -70,18 +70,23 @@ function SelectedLeadCard({ lead, onClear }) {
   )
 }
 
-function formatValidUntilSummary(isoDate) {
-  if (!isoDate) return 'Select date'
-  try {
-    const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number)
-    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  } catch {
-    return isoDate.slice(0, 10)
-  }
+function validUntilToTimestamp(iso) {
+  if (!iso) return null
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(y, m - 1, d, 12, 0, 0).getTime()
+}
+
+function timestampToValidUntil(ts) {
+  if (!ts) return ''
+  const date = new Date(ts)
+  date.setHours(12, 0, 0, 0)
+  return date.toISOString()
+}
+
+function startOfTodayTimestamp() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
 }
 
 function leadClientFields(lead) {
@@ -368,20 +373,18 @@ export function QuoteEditor({
                   ) : (
                     <ChevronRight className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
                   )}
-                  <span className="shrink-0">Valid until</span>
-                  {!validUntilExpanded && (
-                    <span className="ml-auto min-w-0 truncate text-white/70 font-normal tabular-nums">
-                      {formatValidUntilSummary(validUntil)}
-                    </span>
-                  )}
+                  <span>Valid until</span>
                 </button>
                 {validUntilExpanded && (
-                  <div className="border-t border-white/15 px-3 pb-3 pt-2 min-w-0 max-w-full overflow-hidden">
-                    <ValidUntilPicker
+                  <div className="border-t border-white/15 px-3 pb-3 pt-2 space-y-1 min-w-0 max-w-full overflow-hidden">
+                    <SchedulePicker
+                      inline
                       hideLabel
-                      value={validUntil?.slice(0, 10) || ''}
-                      onChange={setValidUntil}
-                      onSet={() => setValidUntilExpanded(false)}
+                      dateOnly
+                      untilLabel="Until"
+                      value={validUntilToTimestamp(validUntil)}
+                      onChange={(ts) => setValidUntil(timestampToValidUntil(ts))}
+                      minDate={startOfTodayTimestamp()}
                     />
                   </div>
                 )}
