@@ -214,7 +214,7 @@ function ScheduleMonthNav({ viewYear, viewMonth, onPrev, onNext, monthFormat = '
 
 function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey, activeDropdown, dropdownRef, onToggleDropdown, onHourChange, onMinuteChange, onAMPMChange }) {
   return (
-    <div className="schedule-time-row flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2">
+    <div className="schedule-time-row flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2">
       <span className="text-xs font-medium text-white/65 w-9 shrink-0">{label}</span>
       <TimeNumberField
         kind="hour"
@@ -242,20 +242,6 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
         className="min-w-[3.5rem]"
       />
       <AmPmToggle isPM={isPM} onChange={onAMPMChange} />
-    </div>
-  )
-}
-
-function UntilDateRow({ label, date }) {
-  const display = date
-    ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    : 'Select date'
-  return (
-    <div className="schedule-time-row flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2 min-w-0 max-w-full">
-      <span className="text-xs font-medium text-white/65 w-9 shrink-0">{label}</span>
-      <div className="schedule-time-select-btn flex-1 min-w-0 text-sm px-2.5 py-1.5 truncate text-left">
-        {display}
-      </div>
     </div>
   )
 }
@@ -404,7 +390,7 @@ export function SchedulePicker({
     if (isPast) return
     setSelectedDate(d)
     if (inline && dateOnly) {
-      const ts = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0).getTime()
+      const ts = buildTs(d, hour12, minute, isPM)
       if (ts >= minDate) onChange(ts)
       return
     }
@@ -431,6 +417,12 @@ export function SchedulePicker({
       }
     }
   }, [selectedDate, minDate, buildTs, onChange, inline, onEndChange, endValue])
+
+  const commitUntilTimeChange = useCallback((h12Val, minuteVal, isPMVal) => {
+    const d = selectedDate || new Date(Math.max(minDate, Date.now()))
+    const ts = buildTs(d, h12Val, minuteVal, isPMVal)
+    if (ts >= minDate) onChange(ts)
+  }, [selectedDate, minDate, buildTs, onChange])
 
   const commitEndTimeChange = useCallback((h12Val, minuteVal, isPMVal) => {
     const d = selectedDate || new Date(Math.max(minDate, Date.now()))
@@ -565,8 +557,8 @@ export function SchedulePicker({
   if (inline) {
     const summary = dateOnly
       ? value
-        ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-        : 'Select date'
+        ? new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : 'Select date and time'
       : onEndChange && value && endValue
         ? formatScheduleRange(value, endValue)
         : value
@@ -608,7 +600,20 @@ export function SchedulePicker({
         <InlineScheduleCalendar days={days} minD={minD} selectedDate={selectedDate} onDayClick={handleDayClick} />
         <div className="space-y-2 pt-3 border-t border-white/15 min-w-0 max-w-full">
           {dateOnly ? (
-            <UntilDateRow label={untilLabel} date={selectedDate} />
+            <TimeRow
+              label={untilLabel}
+              hour={hour12}
+              minute={minute}
+              isPM={isPM}
+              hourDropdownKey="untilHour"
+              minuteDropdownKey="untilMin"
+              activeDropdown={inlineDropdown}
+              dropdownRef={inlineDropdownRef}
+              onToggleDropdown={setInlineDropdown}
+              onHourChange={(h) => { setHour12(h); commitUntilTimeChange(h, minute, isPM) }}
+              onMinuteChange={(m) => { setMinute(m); commitUntilTimeChange(hour12, m, isPM) }}
+              onAMPMChange={(pm) => { setIsPM(pm); commitUntilTimeChange(hour12, minute, pm) }}
+            />
           ) : (
             <>
               <TimeRow
