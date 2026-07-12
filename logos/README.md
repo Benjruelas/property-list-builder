@@ -17,7 +17,10 @@ Curated from the designer logo pack. Runtime web assets live in `public/brand/` 
 ## App icons
 Generated squares with **black emblem on white** (from `emblem-black.svg`):
 - `/favicon-16.png`, `/favicon-32.png` — browser tab / bookmark
-- `/icon-192.png`, `/icon-512.png` — homescreen / PWA / apple-touch
+- `/apple-touch-icon.png` (180×180) — iOS Add to Home Screen (also at `/apple-touch-icon.png` root)
+- `/icon-192.png`, `/icon-512.png` — Android / PWA install
+
+Manifest uses `?v=6` cache bust and white `theme_color` / `background_color`.
 
 Boot / loading screens use `/brand/lockup-variant-2.svg` (white lockup on dark).
 

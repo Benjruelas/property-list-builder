@@ -4,8 +4,8 @@ import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 /** Keep the splash up long enough to read the brand lockup (~1.5s). */
 const MIN_VISIBLE_MS = 1500
-/** Match `.app-loading-screen.is-exiting` opacity transition. */
-const FADE_OUT_MS = 450
+/** Match `.app-loading-screen.is-exiting` animation duration. */
+const FADE_OUT_MS = 700
 /** Official white lockup from the designer pack (fist + KnockScout + tagline). */
 const LOCKUP_SRC = '/brand/lockup-variant-2.svg'
 
@@ -29,6 +29,7 @@ export function AppLoadingScreen({
 }) {
   const [mounted, setMounted] = useState(active)
   const [exiting, setExiting] = useState(false)
+  const screenRef = useRef(null)
   const shownAtRef = useRef(0)
   const onVisibleChangeRef = useRef(onVisibleChange)
   onVisibleChangeRef.current = onVisibleChange
@@ -57,6 +58,27 @@ export function AppLoadingScreen({
     return () => window.clearTimeout(t)
   }, [active, mounted, exiting])
 
+  // Double rAF ensures the browser paints opacity:1 before the exit animation starts.
+  useLayoutEffect(() => {
+    if (!exiting || !screenRef.current) return undefined
+
+    const el = screenRef.current
+    el.classList.remove('is-exiting')
+    void el.offsetHeight
+
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        el.classList.add('is-exiting')
+      })
+    })
+
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [exiting])
+
   useEffect(() => {
     if (!exiting) return undefined
     const reduceMotion =
@@ -76,11 +98,8 @@ export function AppLoadingScreen({
 
   return createPortal(
     <div
-      className={
-        exiting
-          ? 'app-loading-screen app-loading-screen--visible is-exiting'
-          : 'app-loading-screen app-loading-screen--visible'
-      }
+      ref={screenRef}
+      className="app-loading-screen app-loading-screen--visible"
       role="status"
       aria-live="polite"
       aria-label={message}
