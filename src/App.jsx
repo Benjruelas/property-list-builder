@@ -511,6 +511,7 @@ function App() {
   const prevFollowingRef = useRef(false)
   const lastAutoZoomRef = useRef(null)
   const [mapReady, setMapReady] = useState(false)
+  const [bootSplashVisible, setBootSplashVisible] = useState(true)
   const refreshBasemapTiles = useCallback((tileUrl) => {
     const map = mapInstanceRef.current
     if (!map || !tileUrl) return
@@ -530,6 +531,11 @@ function App() {
     onTileUrlRefresh: refreshBasemapTiles,
   })
   const showAppLoading = authLoading || basemapStatus === 'loading'
+  /** FAB lives in #modal-root — keep it unmounted through boot splash + permission gate. */
+  const showQuickCreateFab = permissionsReady && !showAppLoading && !bootSplashVisible
+  useEffect(() => {
+    if (!showQuickCreateFab && quickCreateOpen) setQuickCreateOpen(false)
+  }, [showQuickCreateFab, quickCreateOpen])
   const appLoadingMessage = useMemo(
     () => getAppLoadingMessage({
       authLoading,
@@ -3619,7 +3625,11 @@ function App() {
   return (
     <UserDataSyncProvider getToken={getToken}>
     <PhotoUploadProvider getToken={getToken} onEntityUpdated={handlePhotoEntityUpdated}>
-    <AppLoadingScreen active={showAppLoading} message={appLoadingMessage} />
+    <AppLoadingScreen
+      active={showAppLoading}
+      message={appLoadingMessage}
+      onVisibleChange={setBootSplashVisible}
+    />
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
         <PermissionPrompt onComplete={(orientationGranted) => {
@@ -3855,20 +3865,21 @@ function App() {
         onLogin={openLogin}
       />
 
-      <QuickCreateFab
-        open={quickCreateOpen}
-        onOpenChange={handleQuickCreateOpenChange}
-        onCreateTask={openQuickCreateTask}
-        onCreateLead={openQuickCreateLead}
-        onCreateDeal={openQuickCreateDeal}
-        onCreateQuote={openQuickCreateQuote}
-        onCreateReport={openQuickCreateReport}
-        canAccessFeature={canAccessFeature}
-        accentColor={settings.parcelBoundaryColor || '#2563eb'}
-        actionBarMenuOpen={showMenu}
-        stormViewActive={!!selectedHailEvent}
-        appLoading={showAppLoading}
-      />
+      {showQuickCreateFab ? (
+        <QuickCreateFab
+          open={quickCreateOpen}
+          onOpenChange={handleQuickCreateOpenChange}
+          onCreateTask={openQuickCreateTask}
+          onCreateLead={openQuickCreateLead}
+          onCreateDeal={openQuickCreateDeal}
+          onCreateQuote={openQuickCreateQuote}
+          onCreateReport={openQuickCreateReport}
+          canAccessFeature={canAccessFeature}
+          accentColor={settings.parcelBoundaryColor || '#2563eb'}
+          actionBarMenuOpen={showMenu}
+          stormViewActive={!!selectedHailEvent}
+        />
+      ) : null}
 
       <ListPanel
         currentUser={currentUser}
