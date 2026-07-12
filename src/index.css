@@ -4549,9 +4549,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   0%, 100% { transform: scale(0.92); opacity: 0.45; }
   50% { transform: scale(1.08); opacity: 0.75; }
 }
-@keyframes app-loader-orbit {
-  to { transform: rotate(360deg); }
-}
 @keyframes app-loader-emblem {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-5px) scale(1.025); }
@@ -4675,66 +4672,33 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .app-loading-screen__mark,
 #initial-loader .boot-mark {
   position: relative;
-  width: 9.5rem;
-  height: 11.25rem;
+  width: min(20rem, 84vw);
+  height: auto;
+  min-height: 5.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 1.25rem 0.5rem;
 }
 .app-loading-screen__bloom,
 #initial-loader .boot-bloom {
   position: absolute;
-  inset: 8% 4%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(17, 81, 239, 0.55) 0%, rgba(17, 81, 239, 0.12) 42%, transparent 70%);
-  filter: blur(18px);
+  inset: 0% 2%;
+  border-radius: 40%;
+  background: radial-gradient(circle, rgba(17, 81, 239, 0.5) 0%, rgba(17, 81, 239, 0.12) 42%, transparent 70%);
+  filter: blur(22px);
   animation: app-loader-bloom 3.4s ease-in-out infinite;
 }
-.app-loading-screen__orbit,
-#initial-loader .boot-orbit {
-  position: absolute;
-  inset: 0;
-  border-radius: 48% 52% 50% 50% / 42% 42% 58% 58%;
-  background: conic-gradient(
-    from 210deg,
-    transparent 0deg,
-    transparent 250deg,
-    rgba(147, 197, 253, 0.05) 280deg,
-    rgba(147, 197, 253, 0.55) 310deg,
-    #1151ef 335deg,
-    rgba(125, 211, 252, 0.9) 348deg,
-    transparent 360deg
-  );
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
-  animation: app-loader-orbit 3.6s linear infinite;
-  opacity: 0.95;
-}
-.app-loading-screen__emblem,
-#initial-loader .boot-emblem {
+.app-loading-screen__lockup,
+#initial-loader .boot-lockup {
   position: relative;
   z-index: 1;
-  width: 5.75rem;
+  width: min(20rem, 84vw);
   height: auto;
-  aspect-ratio: 830 / 1078;
+  aspect-ratio: 3006 / 917;
   object-fit: contain;
-  filter: drop-shadow(0 12px 28px rgba(17, 81, 239, 0.35));
+  filter: drop-shadow(0 12px 28px rgba(17, 81, 239, 0.28));
   animation: app-loader-emblem 3.2s ease-in-out infinite;
-}
-.app-loading-screen__brand,
-#initial-loader .boot-brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.65rem;
-  text-align: center;
-}
-.app-loading-screen__wordmark,
-#initial-loader .boot-wordmark {
-  width: min(13.75rem, 62vw);
-  height: auto;
-  display: block;
-  filter: drop-shadow(0 2px 16px rgba(17, 81, 239, 0.25));
 }
 .app-loading-screen__tagline,
 #initial-loader .boot-tagline {
@@ -4772,10 +4736,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   #initial-loader .boot-sheen,
   .app-loading-screen__bloom,
   #initial-loader .boot-bloom,
-  .app-loading-screen__orbit,
-  #initial-loader .boot-orbit,
-  .app-loading-screen__emblem,
-  #initial-loader .boot-emblem,
+  .app-loading-screen__lockup,
+  #initial-loader .boot-lockup,
   .app-loading-screen__tagline,
   #initial-loader .boot-tagline,
   .app-loading-screen__progress-fill,
@@ -4783,10 +4745,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   .app-loading-screen__content,
   #initial-loader .boot-content {
     animation: none !important;
-  }
-  .app-loading-screen__orbit,
-  #initial-loader .boot-orbit {
-    opacity: 0.35;
   }
   .app-loading-screen__tagline,
   #initial-loader .boot-tagline {

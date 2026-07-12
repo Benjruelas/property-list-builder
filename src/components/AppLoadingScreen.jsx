@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 const MIN_VISIBLE_MS = 400
-const EMBLEM_SRC = '/brand/emblem-white.svg'
-const WORDMARK_SRC = '/brand/wordmark-white.svg'
+/** Official white lockup from the designer pack (fist + KnockScout + tagline). */
+const LOCKUP_SRC = '/brand/lockup-variant-2.svg'
 
 function loadingPortalTarget() {
   // #modal-root sits at max z-index (map chrome / FAB / action bar live there).
@@ -69,28 +69,17 @@ export function AppLoadingScreen({
         <div className="app-loading-screen__content">
           <div className="app-loading-screen__mark">
             <div className="app-loading-screen__bloom" />
-            <div className="app-loading-screen__orbit" aria-hidden />
             <img
-              src={EMBLEM_SRC}
-              alt=""
-              className="app-loading-screen__emblem"
-              width={92}
-              height={120}
+              src={LOCKUP_SRC}
+              alt="KnockScout"
+              className="app-loading-screen__lockup"
+              width={320}
+              height={98}
               decoding="async"
             />
           </div>
 
-          <div className="app-loading-screen__brand">
-            <img
-              src={WORDMARK_SRC}
-              alt="KnockScout"
-              className="app-loading-screen__wordmark"
-              width={220}
-              height={29}
-              decoding="async"
-            />
-            <span className="app-loading-screen__tagline">{message}</span>
-          </div>
+          <span className="app-loading-screen__tagline">{message}</span>
 
           <div className="app-loading-screen__progress" aria-hidden>
             <div className="app-loading-screen__progress-fill" />
