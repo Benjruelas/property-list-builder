@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 const MIN_VISIBLE_MS = 400
-const LOGO_SRC = '/emblem-white.png'
+/** Official white lockup from the designer pack (fist + KnockScout + tagline). */
+const LOCKUP_SRC = '/brand/lockup-variant-2.svg'
 
 function loadingPortalTarget() {
   // #modal-root sits at max z-index (map chrome / FAB / action bar live there).
@@ -58,30 +59,29 @@ export function AppLoadingScreen({
         aria-label={message}
       >
         <div className="app-loading-screen__bg" aria-hidden>
-          <div className="app-loading-screen__orb app-loading-screen__orb--a" />
-          <div className="app-loading-screen__orb app-loading-screen__orb--b" />
-          <div className="app-loading-screen__grid" />
+          <div className="app-loading-screen__wash" />
+          <div className="app-loading-screen__aurora app-loading-screen__aurora--a" />
+          <div className="app-loading-screen__aurora app-loading-screen__aurora--b" />
+          <div className="app-loading-screen__aurora app-loading-screen__aurora--c" />
+          <div className="app-loading-screen__sheen" />
         </div>
 
         <div className="app-loading-screen__content">
-          <div className="app-loading-screen__logo-wrap">
-            <div className="app-loading-screen__ring" />
-            <div className="app-loading-screen__ring app-loading-screen__ring--inner" />
+          <div className="app-loading-screen__mark">
+            <div className="app-loading-screen__bloom" />
             <img
-              src={LOGO_SRC}
-              alt=""
-              className="app-loading-screen__logo"
-              width={88}
-              height={88}
+              src={LOCKUP_SRC}
+              alt="KnockScout"
+              className="app-loading-screen__lockup"
+              width={320}
+              height={98}
+              decoding="async"
             />
           </div>
 
-          <div className="app-loading-screen__brand">
-            <span className="app-loading-screen__name">KnockScout</span>
-            <span className="app-loading-screen__tagline">{message}</span>
-          </div>
+          <span className="app-loading-screen__tagline">{message}</span>
 
-          <div className="app-loading-screen__progress">
+          <div className="app-loading-screen__progress" aria-hidden>
             <div className="app-loading-screen__progress-fill" />
           </div>
         </div>
