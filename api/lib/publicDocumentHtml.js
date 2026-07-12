@@ -264,8 +264,6 @@ export function publicDocumentStyles(pageSize = QUOTE_PDF_VIEWPORT) {
     }
     .section-body {
       padding: 1.25rem 1.25rem 0.75rem;
-      break-inside: avoid;
-      page-break-inside: avoid;
     }
     .section-title {
       margin: 0;
@@ -284,6 +282,11 @@ export function publicDocumentStyles(pageSize = QUOTE_PDF_VIEWPORT) {
     .photo-grid {
       margin-top: 0.25rem;
       padding: 0 1.25rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .photo-row {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 0.5rem;
@@ -295,8 +298,6 @@ export function publicDocumentStyles(pageSize = QUOTE_PDF_VIEWPORT) {
       overflow: hidden;
       border: 1px solid #e5e7eb;
       background: #f3f4f6;
-      break-inside: avoid;
-      page-break-inside: avoid;
     }
     .photo-tile img {
       width: 100%;
@@ -310,6 +311,46 @@ export function publicDocumentStyles(pageSize = QUOTE_PDF_VIEWPORT) {
       font-size: 0.75rem;
       color: #9ca3af;
     }
+    /* Discrete print sheets: page 1 top-aligned, later pages vertically centered. */
+    .pdf-shell {
+      width: ${width}px;
+      background: #f3f4f6;
+    }
+    .pdf-sheet {
+      width: ${width}px;
+      height: ${height}px;
+      background: #f3f4f6;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      box-sizing: border-box;
+      padding: 1.25rem 0;
+      page-break-after: always;
+      break-after: page;
+    }
+    .pdf-sheet--centered {
+      justify-content: center;
+    }
+    .pdf-sheet:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .pdf-sheet__inner {
+      width: 100%;
+    }
+    .pdf-sheet__inner > .quote-brand-header:first-child {
+      padding-top: 0;
+    }
+    .pdf-sheet--centered .content {
+      padding-top: 0;
+    }
+    .pdf-sheet .sections {
+      margin-top: 0;
+    }
+    .pdf-sheet .section-card:last-child {
+      margin-bottom: 0;
+    }
   `
 }
 
@@ -322,7 +363,7 @@ function brandHeaderHtml(branding) {
   if (!company && !logo && !sender && !email) return ''
 
   return `
-    <header class="quote-brand-header">
+    <header class="quote-brand-header" data-pdf-block>
       <div class="quote-brand-header__main">
         ${logo ? `<img class="quote-brand-header__logo" src="${escapeHtml(logo)}" alt="" />` : ''}
         <div class="quote-brand-header__copy">
@@ -415,11 +456,13 @@ export function buildQuoteDocumentHtml({ quote, invite, branding }) {
   const bodyHtml = `
     ${brandHeaderHtml(pdfBranding)}
     <div class="content">
-      <h1 class="doc-title">${escapeHtml(quote.title || 'Quote')}</h1>
-      ${clientLabel ? `<p class="meta">Prepared for ${escapeHtml(clientLabel)}</p>` : ''}
-      ${message ? `<p class="message">${nl2br(message)}</p>` : ''}
+      <div data-pdf-block>
+        <h1 class="doc-title">${escapeHtml(quote.title || 'Quote')}</h1>
+        ${clientLabel ? `<p class="meta">Prepared for ${escapeHtml(clientLabel)}</p>` : ''}
+        ${message ? `<p class="message">${nl2br(message)}</p>` : ''}
+      </div>
 
-      <div class="card">
+      <div class="card" data-pdf-block>
         <table class="lines">
           <thead>
             <tr>
@@ -447,11 +490,11 @@ export function buildQuoteDocumentHtml({ quote, invite, branding }) {
       </div>
 
       ${quote.validUntil
-        ? `<p class="valid-until">Valid until ${escapeHtml(String(quote.validUntil).slice(0, 10))}</p>`
+        ? `<p class="valid-until" data-pdf-block>Valid until ${escapeHtml(String(quote.validUntil).slice(0, 10))}</p>`
         : ''}
 
       ${quote.terms?.trim() ? `
-      <div class="terms-card">
+      <div class="terms-card" data-pdf-block>
         <h2>Terms</h2>
         <p>${nl2br(quote.terms.trim())}</p>
       </div>` : ''}
@@ -480,27 +523,35 @@ export function buildReportDocumentHtml({ report, lead, branding, message = '', 
   const address = lead?.address || ''
   const sections = [...(report?.sections || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
-  const sectionHtml = sections.map((sec) => {
+  const sectionHtml = sections.map((sec, secIndex) => {
+    const groupId = `sec-${sec.id || secIndex}`
     const photoIds = sec.photoIds || []
-    const tiles = photoIds
+    const photoRecords = photoIds
       .map((id) => photosById[id])
       .filter(Boolean)
-      .map((photo) => `
+
+    const rows = []
+    for (let i = 0; i < photoRecords.length; i += 3) {
+      const slice = photoRecords.slice(i, i + 3)
+      const tiles = slice.map((photo) => `
         <div class="photo-tile">
           <img src="${escapeHtml(photo.dataUri)}" alt="${escapeHtml(photo.caption || 'Report photo')}" />
         </div>
-      `)
-      .join('')
+      `).join('')
+      rows.push(`<div class="photo-row" data-pdf-block data-pdf-group="${escapeHtml(groupId)}">${tiles}</div>`)
+    }
 
+    const hasBody = !!(sec.subtitle || sec.description)
     return `
-      <section class="section-card">
-        <div class="section-body">
+      <section class="section-card" data-pdf-section="${escapeHtml(groupId)}">
+        ${hasBody ? `
+        <div class="section-body" data-pdf-block data-pdf-group="${escapeHtml(groupId)}">
           ${sec.subtitle ? `<h2 class="section-title">${escapeHtml(sec.subtitle)}</h2>` : ''}
           ${sec.description ? `<p class="section-desc">${nl2br(sec.description)}</p>` : ''}
-        </div>
-        ${tiles
-          ? `<div class="photo-grid">${tiles}</div>`
-          : `<p class="empty-photos">No photos in this section</p>`}
+        </div>` : ''}
+        ${rows.length
+          ? `<div class="photo-grid">${rows.join('')}</div>`
+          : `<p class="empty-photos" data-pdf-block data-pdf-group="${escapeHtml(groupId)}">No photos in this section</p>`}
       </section>
     `
   }).join('')
@@ -508,10 +559,12 @@ export function buildReportDocumentHtml({ report, lead, branding, message = '', 
   const bodyHtml = `
     ${brandHeaderHtml(branding)}
     <div class="content">
-      <h1 class="doc-title">${escapeHtml(report?.title || 'Photo Report')}</h1>
-      ${leadName ? `<p class="meta">Prepared for ${escapeHtml(leadName)}</p>` : ''}
-      ${address ? `<p class="meta">${escapeHtml(address)}</p>` : ''}
-      ${message?.trim() ? `<p class="message">${nl2br(message.trim())}</p>` : ''}
+      <div data-pdf-block>
+        <h1 class="doc-title">${escapeHtml(report?.title || 'Photo Report')}</h1>
+        ${leadName ? `<p class="meta">Prepared for ${escapeHtml(leadName)}</p>` : ''}
+        ${address ? `<p class="meta">${escapeHtml(address)}</p>` : ''}
+        ${message?.trim() ? `<p class="message">${nl2br(message.trim())}</p>` : ''}
+      </div>
       <div class="sections">
         ${sectionHtml}
       </div>
