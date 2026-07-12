@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { CloudRain, Loader2, AlertTriangle, ChevronDown } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { resolveParcelCenter } from '../utils/parcelGeometry'
 import { formatEventTimeLocal } from '../utils/nexradOverlay'
+import { groupHailEventsByDate } from '../utils/hailEvents'
 
 const hailDataCache = new Map()
 const HAIL_CACHE_TTL_MS = 30 * 60 * 1000
@@ -31,9 +32,36 @@ function HailSizeIndicator({ inches, size = 'md' }) {
   )
 }
 
-function HailEventRow({ evt, year, onSelectEvent }) {
+function HailReportFields({ evt, year, showDate = true }) {
   const timeLabel = formatEventTimeLocal(evt.time_utc, evt.date || String(year))
 
+  return (
+    <div className="hail-event-row-grid">
+      {showDate ? (
+        <div className="hail-data-field">
+          <span className="hail-data-field-label">Date</span>
+          <span className="hail-data-field-value">{evt.date || year}</span>
+        </div>
+      ) : null}
+      <div className="hail-data-field">
+        <span className="hail-data-field-label">Size</span>
+        <HailSizeIndicator inches={evt.hail_size_inches} />
+      </div>
+      <div className="hail-data-field">
+        <span className="hail-data-field-label">Distance</span>
+        <span className="hail-data-field-value">{evt.distance_mi != null ? `${evt.distance_mi} mi` : '—'}</span>
+      </div>
+      {timeLabel ? (
+        <div className="hail-data-field">
+          <span className="hail-data-field-label">Time</span>
+          <span className="hail-data-field-value">{timeLabel}</span>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function HailEventRow({ evt, year, onSelectEvent, showDate = true }) {
   return (
     <button
       type="button"
@@ -41,35 +69,68 @@ function HailEventRow({ evt, year, onSelectEvent }) {
       className="hail-event-row w-full text-left bg-transparent transition-colors"
       title="View storm on map"
     >
-      <div className="hail-event-row-grid">
-        <div className="hail-data-field">
-          <span className="hail-data-field-label">Date</span>
-          <span className="hail-data-field-value">{evt.date || year}</span>
-        </div>
-        <div className="hail-data-field">
-          <span className="hail-data-field-label">Size</span>
-          <HailSizeIndicator inches={evt.hail_size_inches} />
-        </div>
-        <div className="hail-data-field">
-          <span className="hail-data-field-label">Distance</span>
-          <span className="hail-data-field-value">{evt.distance_mi != null ? `${evt.distance_mi} mi` : '—'}</span>
-        </div>
-        {timeLabel ? (
-          <div className="hail-data-field">
-            <span className="hail-data-field-label">Time</span>
-            <span className="hail-data-field-value">{timeLabel}</span>
-          </div>
-        ) : null}
-      </div>
+      <HailReportFields evt={evt} year={year} showDate={showDate} />
     </button>
+  )
+}
+
+function HailStormDayGroup({ day, year, onSelectEvent }) {
+  if (day.report_count <= 1) {
+    const evt = day.reports[0]
+    if (!evt) return null
+    return <HailEventRow evt={evt} year={year} onSelectEvent={onSelectEvent} />
+  }
+
+  return (
+    <div className="hail-storm-day-group">
+      <div className="hail-storm-day-summary" aria-label={`${day.date}: ${day.report_count} hail reports`}>
+        <div className="hail-event-row-grid">
+          <div className="hail-data-field">
+            <span className="hail-data-field-label">Date</span>
+            <span className="hail-data-field-value">{day.date || year}</span>
+          </div>
+          <div className="hail-data-field">
+            <span className="hail-data-field-label">Max Size</span>
+            <HailSizeIndicator inches={day.max_hail_size_inches} />
+          </div>
+          <div className="hail-data-field">
+            <span className="hail-data-field-label">Closest</span>
+            <span className="hail-data-field-value">
+              {day.closest_distance_mi != null ? `${day.closest_distance_mi} mi` : '—'}
+            </span>
+          </div>
+          <div className="hail-data-field">
+            <span className="hail-data-field-label">Reports</span>
+            <span className="hail-data-field-value">{day.report_count}</span>
+          </div>
+        </div>
+      </div>
+      <div className="hail-storm-day-reports">
+        {day.reports.map((evt, i) => (
+          <HailEventRow
+            key={`${evt.date}-${evt.lat}-${evt.lng}-${evt.time_utc || i}-${evt.hail_size_inches || i}`}
+            evt={evt}
+            year={year}
+            onSelectEvent={onSelectEvent}
+            showDate={false}
+          />
+        ))}
+      </div>
+    </div>
   )
 }
 
 function HailYearGroup({ year, events, defaultOpen, onSelectEvent }) {
   const [open, setOpen] = useState(defaultOpen)
+  const stormDays = useMemo(() => groupHailEventsByDate(events), [events])
   const maxSize = events.reduce((m, e) => Math.max(m, e.hail_size_inches || 0), 0)
   const severityClass =
     maxSize >= 2 ? 'hail-data-severity-high' : maxSize >= 1 ? 'hail-data-severity-mid' : 'hail-data-severity-low'
+  const reportLabel = `${events.length} report${events.length !== 1 ? 's' : ''}`
+  const dayLabel =
+    stormDays.length !== events.length
+      ? ` · ${stormDays.length} day${stormDays.length !== 1 ? 's' : ''}`
+      : ''
 
   return (
     <div className="hail-data-year-group">
@@ -80,13 +141,20 @@ function HailYearGroup({ year, events, defaultOpen, onSelectEvent }) {
       >
         <ChevronDown className={`h-4 w-4 hail-data-muted transition-transform ${open ? '' : '-rotate-90'}`} />
         <span className="text-sm font-semibold flex-1">{year}</span>
-        <span className={`text-xs font-medium ${severityClass}`}>{events.length} event{events.length !== 1 ? 's' : ''}</span>
+        <span className={`text-xs font-medium ${severityClass}`}>
+          {reportLabel}{dayLabel}
+        </span>
         {maxSize > 0 && <HailSizeIndicator inches={maxSize} />}
       </button>
       {open && (
         <div className="pl-2 pb-2 space-y-2">
-          {events.map((evt, i) => (
-            <HailEventRow key={i} evt={evt} year={year} onSelectEvent={onSelectEvent} />
+          {stormDays.map((day) => (
+            <HailStormDayGroup
+              key={day.date || year}
+              day={day}
+              year={year}
+              onSelectEvent={onSelectEvent}
+            />
           ))}
         </div>
       )}
@@ -192,7 +260,7 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div className="hail-data-stat-card rounded-lg px-3 py-3 text-center">
                   <div className="text-2xl font-bold">{hailData.summary?.total_events ?? 0}</div>
-                  <div className="text-xs hail-data-stat-label mt-0.5">Total Events</div>
+                  <div className="text-xs hail-data-stat-label mt-0.5">Total Reports</div>
                 </div>
                 <div className="hail-data-stat-card rounded-lg px-3 py-3 text-center">
                   <div className="text-2xl font-bold">{hailData.summary?.max_hail_size ? `${hailData.summary.max_hail_size}"` : '—'}</div>
@@ -222,8 +290,11 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
                 </div>
               )}
 
-              <div className="text-xs hail-data-muted text-center mt-4">
-                NOAA Storm Prediction Center · Within {hailData.radius_miles} miles · Since {Math.min(...(hailData.summary?.years_with_hail || [new Date().getFullYear()]))}
+              <div className="text-xs hail-data-muted text-center mt-4 space-y-1">
+                <div>
+                  NOAA Storm Prediction Center · Within {hailData.radius_miles} miles · Since {Math.min(...(hailData.summary?.years_with_hail || [new Date().getFullYear()]))}
+                </div>
+                <div>Same-day rows are separate nearby hail reports, not duplicate storms.</div>
               </div>
             </div>
           ) : null}
