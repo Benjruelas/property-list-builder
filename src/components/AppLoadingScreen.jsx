@@ -5,9 +5,15 @@ import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 const MIN_VISIBLE_MS = 400
 const LOGO_SRC = '/emblem-white.png'
 
+function loadingPortalTarget() {
+  // #modal-root sits at max z-index (map chrome / FAB / action bar live there).
+  // Portaling here keeps the splash above that chrome; body alone cannot.
+  return document.getElementById('modal-root') || document.body
+}
+
 /**
  * Full-screen KnockScout boot splash (auth + basemap + first map paint).
- * Portaled above the app; hands off from #initial-loader in index.html on mount.
+ * Portaled above map chrome; hands off from #initial-loader in index.html on mount.
  */
 export function AppLoadingScreen({
   active,
@@ -72,7 +78,7 @@ export function AppLoadingScreen({
         </div>
       </div>
     ) : null,
-    document.body
+    loadingPortalTarget()
   )
 }
 
