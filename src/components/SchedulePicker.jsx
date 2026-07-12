@@ -246,7 +246,89 @@ function TimeRow({ label, hour, minute, isPM, hourDropdownKey, minuteDropdownKey
   )
 }
 
-export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue = null, onEndChange, triggerClassName, title = 'Schedule', size = 'default', taskTitle, leadAddress, leadName, inline = false, hideLabel = false }) {
+function UntilDateRow({ label, date }) {
+  const display = date
+    ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Select date'
+  return (
+    <div className="schedule-time-row flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2 min-w-0 max-w-full">
+      <span className="text-xs font-medium text-white/65 w-9 shrink-0">{label}</span>
+      <div className="schedule-time-select-btn flex-1 min-w-0 text-sm px-2.5 py-1.5 truncate text-left">
+        {display}
+      </div>
+    </div>
+  )
+}
+
+function InlineScheduleCalendar({ days, minD, selectedDate, onDayClick }) {
+  return (
+    <div className="calendar-days-grid schedule-picker-calendar grid w-full min-w-0 max-w-full grid-cols-7 text-[10px] border border-white/20 rounded-lg overflow-hidden">
+      {DAYS.map((d) => (
+        <div
+          key={d}
+          className="text-center text-white/55 py-1.5 px-0.5 border-b border-r border-white/15 bg-white/[0.04] font-medium uppercase tracking-wide text-[9px]"
+        >
+          {d}
+        </div>
+      ))}
+      {days.map((d, i) => {
+        if (!d) {
+          return <div key={`pad-${i}`} className="min-h-[28px] border-b border-r border-white/20 bg-white/5" />
+        }
+        const isSelected = selectedDate && d.toDateString() === selectedDate.toDateString()
+        const isToday = d.toDateString() === new Date().toDateString()
+        const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())
+        return (
+          <button
+            key={d.toISOString()}
+            type="button"
+            disabled={isPast}
+            onClick={() => onDayClick(d)}
+            className={`calendar-day-btn schedule-picker-day py-1.5 text-xs transition-colors min-h-[30px] border-b border-r border-white/15 ${
+              isPast
+                ? 'text-white/30 cursor-not-allowed bg-white/[0.02]'
+                : isSelected
+                  ? 'bg-white/22 text-white font-semibold ring-2 ring-white/45 ring-inset'
+                  : isToday
+                    ? 'bg-white/10 text-white font-medium'
+                    : 'text-white/90 hover:bg-white/10 bg-transparent'
+            }`}
+          >
+            {d.getDate()}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function shiftMonth(viewYear, viewMonth, delta) {
+  if (delta < 0) {
+    if (viewMonth === 0) return { year: viewYear - 1, month: 11 }
+    return { year: viewYear, month: viewMonth - 1 }
+  }
+  if (viewMonth === 11) return { year: viewYear + 1, month: 0 }
+  return { year: viewYear, month: viewMonth + 1 }
+}
+
+export function SchedulePicker({
+  value,
+  onChange,
+  minDate = Date.now(),
+  endValue = null,
+  onEndChange,
+  triggerClassName,
+  title = 'Schedule',
+  size = 'default',
+  taskTitle,
+  leadAddress,
+  leadName,
+  inline = false,
+  hideLabel = false,
+  dateOnly = false,
+  untilLabel = 'Until',
+  dateOnlyLabel = 'Valid until',
+}) {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState(null)
   const [inlineDropdown, setInlineDropdown] = useState(null) // 'fromHour' | 'fromMin' | 'toHour' | 'toMin' | 'popupHour' | 'popupMin' | null
@@ -321,6 +403,11 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
     const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())
     if (isPast) return
     setSelectedDate(d)
+    if (inline && dateOnly) {
+      const ts = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0).getTime()
+      if (ts >= minDate) onChange(ts)
+      return
+    }
     if (inline) {
       const ts = buildTs(d, hour12, minute, isPM)
       if (ts >= minDate) {
@@ -373,10 +460,22 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
 
   const days = getDaysInMonth(viewYear, viewMonth)
   const hasContext = taskTitle || leadAddress || leadName
-  const isComplete = inline && value && (onEndChange ? endValue : true)
+  const isComplete = inline && value && (dateOnly ? true : (onEndChange ? endValue : true))
 
   const handleSet = () => {
     if (isComplete) setExpanded(false)
+  }
+
+  const goPrevMonth = () => {
+    const next = shiftMonth(viewYear, viewMonth, -1)
+    setViewYear(next.year)
+    setViewMonth(next.month)
+  }
+
+  const goNextMonth = () => {
+    const next = shiftMonth(viewYear, viewMonth, 1)
+    setViewYear(next.year)
+    setViewMonth(next.month)
   }
 
   const panel = open && anchor && (
@@ -464,15 +563,23 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
   )
 
   if (inline) {
-    const summary = onEndChange && value && endValue
-      ? formatScheduleRange(value, endValue)
-      : value
-        ? new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-        : 'Select date and time'
+    const summary = dateOnly
+      ? value
+        ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'Select date'
+      : onEndChange && value && endValue
+        ? formatScheduleRange(value, endValue)
+        : value
+          ? new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+          : 'Select date and time'
     if (isComplete && !expanded) {
       return (
         <div className={hideLabel ? '' : 'rounded-lg border border-white/20 p-3 bg-white/5'}>
-          {!hideLabel && <label className="text-xs font-medium block opacity-90 mb-1">Date & time</label>}
+          {!hideLabel && (
+            <label className="text-xs font-medium block opacity-90 mb-1">
+              {dateOnly ? dateOnlyLabel : 'Date & time'}
+            </label>
+          )}
           <button
             type="button"
             onClick={() => setExpanded(true)}
@@ -485,80 +592,56 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
       )
     }
     return (
-      <div className={hideLabel ? 'space-y-3' : 'space-y-3 rounded-lg border border-white/20 p-3 bg-white/5'}>
-        {!hideLabel && <label className="text-xs font-medium block opacity-90">Date & time</label>}
-        <ScheduleMonthNav
-          viewYear={viewYear}
-          viewMonth={viewMonth}
-          onPrev={() => {
-            if (viewMonth === 0) {
-              setViewMonth(11)
-              setViewYear((y) => y - 1)
-            } else setViewMonth((m) => m - 1)
-          }}
-          onNext={() => {
-            if (viewMonth === 11) {
-              setViewMonth(0)
-              setViewYear((y) => y + 1)
-            } else setViewMonth((m) => m + 1)
-          }}
-        />
-        <div className="calendar-days-grid schedule-picker-calendar grid grid-cols-7 text-[10px] border border-white/20 rounded-lg overflow-hidden">
-          {DAYS.map((d) => (
-            <div key={d} className="text-center text-white/55 py-1.5 px-0.5 border-b border-r border-white/15 bg-white/[0.04] font-medium uppercase tracking-wide text-[9px]">{d}</div>
-          ))}
-          {days.map((d, i) => {
-            if (!d) return <div key={`pad-${i}`} className="min-h-[28px] border-b border-r border-white/20 bg-white/5" />
-            const isSelected = selectedDate && d.toDateString() === selectedDate.toDateString()
-            const isToday = d.toDateString() === new Date().toDateString()
-            const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())
-            return (
-              <button
-                key={d.toISOString()}
-                type="button"
-                disabled={isPast}
-                onClick={() => handleDayClick(d)}
-                className={`calendar-day-btn schedule-picker-day py-1.5 text-xs transition-colors min-h-[30px] border-b border-r border-white/15 ${
-                  isPast ? 'text-white/30 cursor-not-allowed bg-white/[0.02]' :
-                  isSelected ? 'bg-white/22 text-white font-semibold ring-2 ring-white/45 ring-inset' :
-                  isToday ? 'bg-white/10 text-white font-medium' : 'text-white/90 hover:bg-white/10 bg-transparent'
-                }`}
-              >
-                {d.getDate()}
-              </button>
-            )
-          })}
-        </div>
-        <div className="space-y-2 pt-3 border-t border-white/15">
-          <TimeRow
-            label="From"
-            hour={hour12}
-            minute={minute}
-            isPM={isPM}
-            hourDropdownKey="fromHour"
-            minuteDropdownKey="fromMin"
-            activeDropdown={inlineDropdown}
-            dropdownRef={inlineDropdownRef}
-            onToggleDropdown={setInlineDropdown}
-            onHourChange={(h) => { setHour12(h); commitTimeChange(h, minute, isPM) }}
-            onMinuteChange={(m) => { setMinute(m); commitTimeChange(hour12, m, isPM) }}
-            onAMPMChange={(pm) => { setIsPM(pm); commitTimeChange(hour12, minute, pm) }}
-          />
-          {onEndChange && (
-            <TimeRow
-              label="To"
-              hour={hour12End}
-              minute={minuteEnd}
-              isPM={isPMEnd}
-              hourDropdownKey="toHour"
-              minuteDropdownKey="toMin"
-              activeDropdown={inlineDropdown}
-              dropdownRef={inlineDropdownRef}
-              onToggleDropdown={setInlineDropdown}
-              onHourChange={(h) => { setHour12End(h); commitEndTimeChange(h, minuteEnd, isPMEnd) }}
-              onMinuteChange={(m) => { setMinuteEnd(m); commitEndTimeChange(hour12End, m, isPMEnd) }}
-              onAMPMChange={(pm) => { setIsPMEnd(pm); commitEndTimeChange(hour12End, minuteEnd, pm) }}
-            />
+      <div
+        className={
+          hideLabel
+            ? 'space-y-3 min-w-0 max-w-full overflow-hidden'
+            : 'space-y-3 rounded-lg border border-white/20 p-3 bg-white/5 min-w-0 max-w-full overflow-hidden'
+        }
+      >
+        {!hideLabel && (
+          <label className="text-xs font-medium block opacity-90">
+            {dateOnly ? dateOnlyLabel : 'Date & time'}
+          </label>
+        )}
+        <ScheduleMonthNav viewYear={viewYear} viewMonth={viewMonth} onPrev={goPrevMonth} onNext={goNextMonth} />
+        <InlineScheduleCalendar days={days} minD={minD} selectedDate={selectedDate} onDayClick={handleDayClick} />
+        <div className="space-y-2 pt-3 border-t border-white/15 min-w-0 max-w-full">
+          {dateOnly ? (
+            <UntilDateRow label={untilLabel} date={selectedDate} />
+          ) : (
+            <>
+              <TimeRow
+                label="From"
+                hour={hour12}
+                minute={minute}
+                isPM={isPM}
+                hourDropdownKey="fromHour"
+                minuteDropdownKey="fromMin"
+                activeDropdown={inlineDropdown}
+                dropdownRef={inlineDropdownRef}
+                onToggleDropdown={setInlineDropdown}
+                onHourChange={(h) => { setHour12(h); commitTimeChange(h, minute, isPM) }}
+                onMinuteChange={(m) => { setMinute(m); commitTimeChange(hour12, m, isPM) }}
+                onAMPMChange={(pm) => { setIsPM(pm); commitTimeChange(hour12, minute, pm) }}
+              />
+              {onEndChange && (
+                <TimeRow
+                  label="To"
+                  hour={hour12End}
+                  minute={minuteEnd}
+                  isPM={isPMEnd}
+                  hourDropdownKey="toHour"
+                  minuteDropdownKey="toMin"
+                  activeDropdown={inlineDropdown}
+                  dropdownRef={inlineDropdownRef}
+                  onToggleDropdown={setInlineDropdown}
+                  onHourChange={(h) => { setHour12End(h); commitEndTimeChange(h, minuteEnd, isPMEnd) }}
+                  onMinuteChange={(m) => { setMinuteEnd(m); commitEndTimeChange(hour12End, m, isPMEnd) }}
+                  onAMPMChange={(pm) => { setIsPMEnd(pm); commitEndTimeChange(hour12End, minuteEnd, pm) }}
+                />
+              )}
+            </>
           )}
           <ScheduleFooterActions
             onClear={handleClear}
@@ -586,142 +669,5 @@ export function SchedulePicker({ value, onChange, minDate = Date.now(), endValue
       </button>
       {createPortal(panel, document.getElementById('modal-root') || document.body)}
     </>
-  )
-}
-
-function parseIsoDate(iso) {
-  if (!iso) return null
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
-  if (!y || !m || !d) return null
-  return new Date(y, m - 1, d)
-}
-
-function toIsoDate(date) {
-  if (!date) return ''
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function startOfTodayMs() {
-  const now = new Date()
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-}
-
-function formatUntilDate(date) {
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-/** Date-only picker for quote valid-until — matches inline task calendar, single Until row (no From/To times). */
-export function ValidUntilPicker({
-  value,
-  onChange,
-  onSet,
-  minDate = startOfTodayMs(),
-  hideLabel = false,
-}) {
-  const parsed = parseIsoDate(value)
-  const minD = new Date(minDate)
-  const base = parsed || new Date(Math.max(minDate, Date.now()))
-
-  const [viewYear, setViewYear] = useState(base.getFullYear())
-  const [viewMonth, setViewMonth] = useState(base.getMonth())
-  const [selectedDate, setSelectedDate] = useState(parsed)
-
-  useEffect(() => {
-    const next = parseIsoDate(value)
-    const anchor = next || new Date(Math.max(minDate, Date.now()))
-    setSelectedDate(next)
-    setViewYear(anchor.getFullYear())
-    setViewMonth(anchor.getMonth())
-  }, [value, minDate])
-
-  const days = getDaysInMonth(viewYear, viewMonth)
-
-  const handleDayClick = (d) => {
-    if (!d) return
-    const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())
-    if (isPast) return
-    setSelectedDate(d)
-    onChange(toIsoDate(d))
-  }
-
-  const handleClear = () => {
-    setSelectedDate(null)
-    onChange('')
-  }
-
-  const handleSet = () => {
-    if (selectedDate) onSet?.()
-  }
-
-  return (
-    <div className="space-y-3 min-w-0 max-w-full overflow-hidden">
-      {!hideLabel && <label className="text-xs font-medium block opacity-90">Valid until</label>}
-      <ScheduleMonthNav
-        viewYear={viewYear}
-        viewMonth={viewMonth}
-        onPrev={() => {
-          if (viewMonth === 0) {
-            setViewMonth(11)
-            setViewYear((y) => y - 1)
-          } else setViewMonth((m) => m - 1)
-        }}
-        onNext={() => {
-          if (viewMonth === 11) {
-            setViewMonth(0)
-            setViewYear((y) => y + 1)
-          } else setViewMonth((m) => m + 1)
-        }}
-      />
-      <div className="calendar-days-grid schedule-picker-calendar grid w-full min-w-0 max-w-full grid-cols-7 text-[10px] border border-white/20 rounded-lg overflow-hidden">
-        {DAYS.map((d) => (
-          <div key={d} className="text-center text-white/55 py-1.5 px-0.5 border-b border-r border-white/15 bg-white/[0.04] font-medium uppercase tracking-wide text-[9px]">
-            {d}
-          </div>
-        ))}
-        {days.map((d, i) => {
-          if (!d) {
-            return <div key={`pad-${i}`} className="min-h-[28px] border-b border-r border-white/20 bg-white/5" />
-          }
-          const isSelected = selectedDate && d.toDateString() === selectedDate.toDateString()
-          const isToday = d.toDateString() === new Date().toDateString()
-          const isPast = d < new Date(minD.getFullYear(), minD.getMonth(), minD.getDate())
-          return (
-            <button
-              key={d.toISOString()}
-              type="button"
-              disabled={isPast}
-              onClick={() => handleDayClick(d)}
-              className={`calendar-day-btn schedule-picker-day py-1.5 text-xs transition-colors min-h-[30px] border-b border-r border-white/15 ${
-                isPast
-                  ? 'text-white/30 cursor-not-allowed bg-white/[0.02]'
-                  : isSelected
-                    ? 'bg-white/22 text-white font-semibold ring-2 ring-white/45 ring-inset'
-                    : isToday
-                      ? 'bg-white/10 text-white font-medium'
-                      : 'text-white/90 hover:bg-white/10 bg-transparent'
-              }`}
-            >
-              {d.getDate()}
-            </button>
-          )
-        })}
-      </div>
-      <div className="space-y-2 pt-3 border-t border-white/15 min-w-0 max-w-full">
-        <div className="schedule-time-row flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2 min-w-0 max-w-full">
-          <span className="text-xs font-medium text-white/65 w-9 shrink-0">Until</span>
-          <span className="text-sm text-white/95 flex-1 min-w-0 truncate tabular-nums">
-            {selectedDate ? formatUntilDate(selectedDate) : 'Select date'}
-          </span>
-        </div>
-        <ScheduleFooterActions
-          onClear={handleClear}
-          onPrimary={handleSet}
-          primaryDisabled={!selectedDate}
-        />
-      </div>
-    </div>
   )
 }
