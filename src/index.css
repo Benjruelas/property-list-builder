@@ -4527,49 +4527,60 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 /* App boot splash — index.html #initial-loader + portaled AppLoadingScreen */
-@keyframes app-loader-spin {
+@keyframes app-loader-aurora-a {
+  0%, 100% { transform: translate3d(-8%, -4%, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(10%, 8%, 0) scale(1.12) rotate(8deg); }
+}
+@keyframes app-loader-aurora-b {
+  0%, 100% { transform: translate3d(6%, 4%, 0) scale(1.05) rotate(0deg); }
+  50% { transform: translate3d(-12%, -6%, 0) scale(1.18) rotate(-10deg); }
+}
+@keyframes app-loader-aurora-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.45; }
+  50% { transform: translate3d(-4%, 10%, 0) scale(1.2); opacity: 0.7; }
+}
+@keyframes app-loader-sheen {
+  0% { transform: translateX(-40%) rotate(12deg); opacity: 0; }
+  30% { opacity: 0.35; }
+  55% { opacity: 0.2; }
+  100% { transform: translateX(60%) rotate(12deg); opacity: 0; }
+}
+@keyframes app-loader-bloom {
+  0%, 100% { transform: scale(0.92); opacity: 0.45; }
+  50% { transform: scale(1.08); opacity: 0.75; }
+}
+@keyframes app-loader-orbit {
   to { transform: rotate(360deg); }
 }
-@keyframes app-loader-logo-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
+@keyframes app-loader-emblem {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-5px) scale(1.025); }
 }
 @keyframes app-loader-tagline-pulse {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.85; }
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.92; }
 }
 @keyframes app-loader-progress {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(120%); }
-}
-@keyframes app-loader-orb-a {
-  0%, 100% { transform: translateX(-50%) translate(0, 0) scale(1); }
-  33% { transform: translateX(-50%) translate(28px, -20px) scale(1.12); }
-  66% { transform: translateX(-50%) translate(-12px, 14px) scale(0.95); }
-}
-@keyframes app-loader-orb-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(-24px, 22px) scale(0.92); }
-  66% { transform: translate(18px, -10px) scale(1.08); }
-}
-@keyframes app-loader-grid-pulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 0.55; }
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
 }
 @keyframes app-loader-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .app-loading-screen,
 #initial-loader {
+  --ks-blue: #1151ef;
+  --ks-blue-soft: rgba(17, 81, 239, 0.55);
+  --ks-ink: #060912;
   position: fixed;
   inset: 0;
   z-index: 10045;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0a0a0c;
+  background: var(--ks-ink);
   overflow: hidden;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   pointer-events: auto;
@@ -4582,130 +4593,205 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   /* Stay fully opaque — fade-in from 0 let map chrome / FAB show through. */
   opacity: 1;
 }
-.app-loading-screen__bg {
+.app-loading-screen__bg,
+#initial-loader .boot-bg {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  overflow: hidden;
 }
-.app-loading-screen__orb {
+.app-loading-screen__wash,
+#initial-loader .boot-wash {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 38%, rgba(17, 81, 239, 0.28) 0%, transparent 58%),
+    radial-gradient(ellipse 55% 45% at 78% 78%, rgba(17, 81, 239, 0.16) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 18% 72%, rgba(56, 120, 255, 0.12) 0%, transparent 55%),
+    linear-gradient(180deg, #0a1224 0%, var(--ks-ink) 48%, #04060d 100%);
+}
+.app-loading-screen__aurora,
+#initial-loader .boot-aurora {
   position: absolute;
   border-radius: 50%;
-  filter: blur(72px);
-  opacity: 0.55;
+  filter: blur(56px);
+  will-change: transform;
 }
-.app-loading-screen__orb--a,
-#initial-loader .app-loading-screen__orb--a {
-  width: min(70vw, 320px);
-  height: min(70vw, 320px);
-  top: 18%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.55) 0%, transparent 70%);
-  animation: app-loader-orb-a 9s ease-in-out infinite;
+.app-loading-screen__aurora--a,
+#initial-loader .boot-aurora--a {
+  width: min(88vw, 420px);
+  height: min(88vw, 420px);
+  top: -8%;
+  left: 18%;
+  background: radial-gradient(circle, rgba(17, 81, 239, 0.55) 0%, rgba(17, 81, 239, 0.08) 48%, transparent 70%);
+  animation: app-loader-aurora-a 11s ease-in-out infinite;
 }
-.app-loading-screen__orb--b,
-#initial-loader .app-loading-screen__orb--b {
-  width: min(55vw, 260px);
-  height: min(55vw, 260px);
-  bottom: 12%;
-  right: 8%;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.4) 0%, transparent 72%);
-  animation: app-loader-orb-b 11s ease-in-out infinite;
+.app-loading-screen__aurora--b,
+#initial-loader .boot-aurora--b {
+  width: min(75vw, 360px);
+  height: min(75vw, 360px);
+  right: -12%;
+  bottom: 8%;
+  background: radial-gradient(circle, rgba(56, 120, 255, 0.4) 0%, transparent 68%);
+  animation: app-loader-aurora-b 14s ease-in-out infinite;
 }
-.app-loading-screen__grid,
-#initial-loader .app-loading-screen__grid {
+.app-loading-screen__aurora--c,
+#initial-loader .boot-aurora--c {
+  width: min(60vw, 280px);
+  height: min(60vw, 280px);
+  left: -8%;
+  bottom: 18%;
+  background: radial-gradient(circle, rgba(96, 156, 255, 0.28) 0%, transparent 70%);
+  animation: app-loader-aurora-c 9s ease-in-out infinite;
+}
+.app-loading-screen__sheen,
+#initial-loader .boot-sheen {
   position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 75%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 75%);
-  animation: app-loader-grid-pulse 4s ease-in-out infinite;
+  top: -30%;
+  left: 0;
+  width: 42%;
+  height: 160%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 42%,
+    rgba(147, 197, 253, 0.1) 50%,
+    rgba(255, 255, 255, 0.03) 58%,
+    transparent 100%
+  );
+  animation: app-loader-sheen 7.5s ease-in-out infinite;
 }
-#initial-loader .app-loading-screen__bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.app-loading-screen__content {
+.app-loading-screen__content,
+#initial-loader .boot-content {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.75rem;
   padding: 2rem;
-  animation: app-loader-fade-in 0.35s ease-out both;
+  animation: app-loader-fade-in 0.45s ease-out both;
 }
-.app-loading-screen__logo-wrap {
+.app-loading-screen__mark,
+#initial-loader .boot-mark {
   position: relative;
-  width: 7.5rem;
-  height: 7.5rem;
+  width: 9.5rem;
+  height: 11.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.app-loading-screen__ring {
+.app-loading-screen__bloom,
+#initial-loader .boot-bloom {
+  position: absolute;
+  inset: 8% 4%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(17, 81, 239, 0.55) 0%, rgba(17, 81, 239, 0.12) 42%, transparent 70%);
+  filter: blur(18px);
+  animation: app-loader-bloom 3.4s ease-in-out infinite;
+}
+.app-loading-screen__orbit,
+#initial-loader .boot-orbit {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  border-top-color: rgba(96, 165, 250, 0.85);
-  border-right-color: rgba(59, 130, 246, 0.25);
-  box-shadow: 0 0 24px rgba(59, 130, 246, 0.2);
-  animation: app-loader-spin 2.8s linear infinite;
+  border-radius: 48% 52% 50% 50% / 42% 42% 58% 58%;
+  background: conic-gradient(
+    from 210deg,
+    transparent 0deg,
+    transparent 250deg,
+    rgba(147, 197, 253, 0.05) 280deg,
+    rgba(147, 197, 253, 0.55) 310deg,
+    #1151ef 335deg,
+    rgba(125, 211, 252, 0.9) 348deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  animation: app-loader-orbit 3.6s linear infinite;
+  opacity: 0.95;
 }
-.app-loading-screen__ring--inner {
-  inset: 0.5rem;
-  border-top-color: rgba(147, 197, 253, 0.5);
-  border-right-color: transparent;
-  box-shadow: none;
-  animation: app-loader-spin 4.2s linear infinite reverse;
-}
-.app-loading-screen__logo {
+.app-loading-screen__emblem,
+#initial-loader .boot-emblem {
   position: relative;
   z-index: 1;
-  width: 6rem;
-  height: 6rem;
+  width: 5.75rem;
+  height: auto;
+  aspect-ratio: 830 / 1078;
   object-fit: contain;
-  animation: app-loader-logo-pulse 2.2s ease-in-out infinite;
+  filter: drop-shadow(0 12px 28px rgba(17, 81, 239, 0.35));
+  animation: app-loader-emblem 3.2s ease-in-out infinite;
 }
-.app-loading-screen__brand {
+.app-loading-screen__brand,
+#initial-loader .boot-brand {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.65rem;
   text-align: center;
 }
-.app-loading-screen__name {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  color: #f8fafc;
-  text-shadow: 0 2px 20px rgba(59, 130, 246, 0.35);
+.app-loading-screen__wordmark,
+#initial-loader .boot-wordmark {
+  width: min(13.75rem, 62vw);
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 2px 16px rgba(17, 81, 239, 0.25));
 }
-.app-loading-screen__tagline {
+.app-loading-screen__tagline,
+#initial-loader .boot-tagline {
+  font-family: 'Sora', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: rgba(148, 163, 184, 0.95);
-  letter-spacing: 0.02em;
-  animation: app-loader-tagline-pulse 2.5s ease-in-out infinite;
+  letter-spacing: 0.04em;
+  color: rgba(186, 198, 220, 0.92);
+  animation: app-loader-tagline-pulse 2.6s ease-in-out infinite;
 }
-.app-loading-screen__progress {
-  width: min(12rem, 56vw);
-  height: 3px;
+.app-loading-screen__progress,
+#initial-loader .boot-progress {
+  width: min(11rem, 52vw);
+  height: 2px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
+  position: relative;
 }
-.app-loading-screen__progress-fill {
-  width: 45%;
-  height: 100%;
+.app-loading-screen__progress-fill,
+#initial-loader .boot-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
   border-radius: inherit;
-  background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, transparent);
-  animation: app-loader-progress 1.35s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, #1151ef 35%, #7dd3fc 55%, #1151ef 75%, transparent);
+  box-shadow: 0 0 12px rgba(17, 81, 239, 0.55);
+  animation: app-loader-progress 1.55s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-screen__aurora,
+  #initial-loader .boot-aurora,
+  .app-loading-screen__sheen,
+  #initial-loader .boot-sheen,
+  .app-loading-screen__bloom,
+  #initial-loader .boot-bloom,
+  .app-loading-screen__orbit,
+  #initial-loader .boot-orbit,
+  .app-loading-screen__emblem,
+  #initial-loader .boot-emblem,
+  .app-loading-screen__tagline,
+  #initial-loader .boot-tagline,
+  .app-loading-screen__progress-fill,
+  #initial-loader .boot-progress-fill,
+  .app-loading-screen__content,
+  #initial-loader .boot-content {
+    animation: none !important;
+  }
+  .app-loading-screen__orbit,
+  #initial-loader .boot-orbit {
+    opacity: 0.35;
+  }
+  .app-loading-screen__tagline,
+  #initial-loader .boot-tagline {
+    opacity: 0.75;
+  }
 }
 
 .basemap-error-banner {

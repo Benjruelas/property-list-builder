@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
 const MIN_VISIBLE_MS = 400
-const LOGO_SRC = '/emblem-white.png'
+const EMBLEM_SRC = '/brand/emblem-white.svg'
+const WORDMARK_SRC = '/brand/wordmark-white.svg'
 
 function loadingPortalTarget() {
   // #modal-root sits at max z-index (map chrome / FAB / action bar live there).
@@ -58,30 +59,40 @@ export function AppLoadingScreen({
         aria-label={message}
       >
         <div className="app-loading-screen__bg" aria-hidden>
-          <div className="app-loading-screen__orb app-loading-screen__orb--a" />
-          <div className="app-loading-screen__orb app-loading-screen__orb--b" />
-          <div className="app-loading-screen__grid" />
+          <div className="app-loading-screen__wash" />
+          <div className="app-loading-screen__aurora app-loading-screen__aurora--a" />
+          <div className="app-loading-screen__aurora app-loading-screen__aurora--b" />
+          <div className="app-loading-screen__aurora app-loading-screen__aurora--c" />
+          <div className="app-loading-screen__sheen" />
         </div>
 
         <div className="app-loading-screen__content">
-          <div className="app-loading-screen__logo-wrap">
-            <div className="app-loading-screen__ring" />
-            <div className="app-loading-screen__ring app-loading-screen__ring--inner" />
+          <div className="app-loading-screen__mark">
+            <div className="app-loading-screen__bloom" />
+            <div className="app-loading-screen__orbit" aria-hidden />
             <img
-              src={LOGO_SRC}
+              src={EMBLEM_SRC}
               alt=""
-              className="app-loading-screen__logo"
-              width={88}
-              height={88}
+              className="app-loading-screen__emblem"
+              width={92}
+              height={120}
+              decoding="async"
             />
           </div>
 
           <div className="app-loading-screen__brand">
-            <span className="app-loading-screen__name">KnockScout</span>
+            <img
+              src={WORDMARK_SRC}
+              alt="KnockScout"
+              className="app-loading-screen__wordmark"
+              width={220}
+              height={29}
+              decoding="async"
+            />
             <span className="app-loading-screen__tagline">{message}</span>
           </div>
 
-          <div className="app-loading-screen__progress">
+          <div className="app-loading-screen__progress" aria-hidden>
             <div className="app-loading-screen__progress-fill" />
           </div>
         </div>
