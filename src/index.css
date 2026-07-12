@@ -4561,9 +4561,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   0% { transform: translateX(-120%); }
   100% { transform: translateX(220%); }
 }
-@keyframes app-loader-fade-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes app-loader-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .app-loading-screen,
@@ -4582,18 +4582,16 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   pointer-events: auto;
   opacity: 1;
-  transition: opacity 0.45s ease;
 }
 /* Cover FAB / action bar / menus that also portal into #modal-root */
 #modal-root .app-loading-screen {
   z-index: 10100;
 }
 .app-loading-screen--visible {
-  /* Stay fully opaque while active — fade-in from 0 let map chrome / FAB show through. */
   opacity: 1;
 }
 .app-loading-screen.is-exiting {
-  opacity: 0;
+  animation: app-loader-fade-out 0.7s ease forwards;
   pointer-events: none;
 }
 .app-loading-screen__bg,
@@ -4736,9 +4734,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-loading-screen,
-  #initial-loader {
-    transition: none;
+  .app-loading-screen.is-exiting {
+    animation: none;
+    opacity: 0;
   }
   .app-loading-screen__aurora,
   #initial-loader .boot-aurora,
