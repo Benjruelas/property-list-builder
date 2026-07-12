@@ -444,17 +444,16 @@
   }
 
   .quote-editor-panel.fullscreen-panel {
+    inset: 0 !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
+    transform: none !important;
     overflow-x: hidden !important;
-  }
-
-  /* Hidden native date input — visible label is a truncated div */
-  .quotes-field-date-input {
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
   }
 
   /* Photo mode: true fullscreen — override list-panel center anchor (left/top 50% without translate) */

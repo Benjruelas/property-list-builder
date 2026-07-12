@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Loader2, Search, X, Calendar, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Loader2, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { PipelineDropdown } from '../PipelineDropdown'
 import { InlineDropdown } from '../InlineDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
@@ -7,6 +7,7 @@ import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
+import { ValidUntilPicker } from '../SchedulePicker'
 import { QuoteLineItemsEditor } from './QuoteLineItemsEditor'
 import { computeQuoteTotals, defaultValidUntil, createQuoteLineItem } from '@/utils/quoteMath'
 import { createQuote, updateQuote, createQuoteTemplate } from '@/utils/quotes'
@@ -15,9 +16,6 @@ import { cn } from '@/lib/utils'
 
 const FIELD =
   'w-full min-w-0 max-w-full bg-white/5 border border-white/15 rounded-md px-3 py-2.5 text-sm min-h-[44px] box-border'
-const FIELD_TRAILING = `${FIELD} pr-12`
-const TRAILING_SLOT =
-  'absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center opacity-60'
 const PANEL_HORIZONTAL_PADDING = {
   paddingLeft: 'calc(1rem + env(safe-area-inset-left, 0px))',
   paddingRight: 'calc(1rem + env(safe-area-inset-right, 0px))',
@@ -72,10 +70,11 @@ function SelectedLeadCard({ lead, onClear }) {
   )
 }
 
-function formatDateDisplay(isoDate) {
-  if (!isoDate) return ''
+function formatValidUntilSummary(isoDate) {
+  if (!isoDate) return 'Select date'
   try {
-    return new Date(`${isoDate.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, {
+    const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -83,40 +82,6 @@ function formatDateDisplay(isoDate) {
   } catch {
     return isoDate.slice(0, 10)
   }
-}
-
-function DateField({ value, onChange }) {
-  const inputRef = useRef(null)
-  const isoValue = value?.slice(0, 10) || ''
-  const display = formatDateDisplay(isoValue)
-
-  const openPicker = () => {
-    try {
-      inputRef.current?.showPicker?.()
-    } catch {
-      inputRef.current?.focus()
-    }
-  }
-
-  return (
-    <div className="relative w-full min-w-0 max-w-full overflow-hidden">
-      <div className={cn(FIELD_TRAILING, 'truncate text-left pointer-events-none')}>
-        {display || <span className="opacity-50">Select date</span>}
-      </div>
-      <input
-        ref={inputRef}
-        className="quotes-field-date-input absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer opacity-0"
-        type="date"
-        value={isoValue}
-        onChange={onChange}
-        aria-label="Valid until"
-        onClick={openPicker}
-      />
-      <div className={cn(TRAILING_SLOT, 'z-20 pointer-events-none')} aria-hidden>
-        <Calendar className="h-4 w-4" />
-      </div>
-    </div>
-  )
 }
 
 function leadClientFields(lead) {
@@ -155,6 +120,7 @@ export function QuoteEditor({
   const [leadPickerOpen, setLeadPickerOpen] = useState(true)
   const [pipelineId, setPipelineId] = useState('')
   const [dealId, setDealId] = useState('')
+  const [validUntilExpanded, setValidUntilExpanded] = useState(true)
 
   const selectedLead = useMemo(() => leads.find((l) => l.id === leadId) || null, [leads, leadId])
   const filteredLeads = useMemo(() => filterLeads(leads, leadSearch), [leads, leadSearch])
@@ -194,6 +160,7 @@ export function QuoteEditor({
       setPipelineId('')
       setDealId('')
     }
+    setValidUntilExpanded(true)
   }, [open, quote, template])
 
   const selectedPipeline = pipelines.find((p) => p.id === pipelineId)
@@ -389,13 +356,36 @@ export function QuoteEditor({
                 )}
               </div>
 
-              <label className="block min-w-0 space-y-1">
-                <span className="text-xs opacity-70">Valid until</span>
-                <DateField
-                  value={validUntil?.slice(0, 10) || ''}
-                  onChange={(e) => setValidUntil(e.target.value)}
-                />
-              </label>
+              <div className="min-w-0 max-w-full rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setValidUntilExpanded((v) => !v)}
+                  className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-white/90 hover:bg-white/5 transition-colors"
+                  aria-expanded={validUntilExpanded}
+                >
+                  {validUntilExpanded ? (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-white/60" aria-hidden />
+                  )}
+                  <span className="shrink-0">Valid until</span>
+                  {!validUntilExpanded && (
+                    <span className="ml-auto min-w-0 truncate text-white/70 font-normal tabular-nums">
+                      {formatValidUntilSummary(validUntil)}
+                    </span>
+                  )}
+                </button>
+                {validUntilExpanded && (
+                  <div className="border-t border-white/15 px-3 pb-3 pt-2 min-w-0 max-w-full overflow-hidden">
+                    <ValidUntilPicker
+                      hideLabel
+                      value={validUntil?.slice(0, 10) || ''}
+                      onChange={setValidUntil}
+                      onSet={() => setValidUntilExpanded(false)}
+                    />
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-2 pt-1 border-t border-white/10">
                 <span className="text-xs opacity-70">Link to deal (optional)</span>
