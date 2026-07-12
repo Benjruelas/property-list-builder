@@ -7746,6 +7746,23 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem 0.85rem;
 }
+.hail-storm-day-group {
+  border: 1px solid var(--map-panel-section-border);
+  border-radius: 12px;
+  padding: 0.55rem;
+  background: color-mix(in srgb, var(--map-panel-list-item-bg) 72%, transparent);
+}
+.hail-storm-day-summary {
+  padding: 0.35rem 0.45rem 0.55rem;
+}
+.hail-storm-day-reports {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.hail-storm-day-reports .hail-event-row {
+  border-style: dashed !important;
+}
 .hail-data-field {
   display: flex;
   flex-direction: column;
