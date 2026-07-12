@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
-const MIN_VISIBLE_MS = 400
+/** Keep the splash up long enough to read the brand lockup (~1.5s). */
+const MIN_VISIBLE_MS = 1500
 /** Official white lockup from the designer pack (fist + KnockScout + tagline). */
 const LOCKUP_SRC = '/brand/lockup-variant-2.svg'
 
