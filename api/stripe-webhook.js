@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { markQuotePaidFromStripe } from './public-quote.js'
+import { claimStripeEvent } from './lib/idempotency.js'
 
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
@@ -36,6 +37,9 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (!(await claimStripeEvent(event.id))) {
+      return res.status(200).json({ received: true, duplicate: true })
+    }
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object
       if (session.payment_status === 'paid') {

@@ -22,8 +22,8 @@ function googleSessionBody(mapType) {
   return { ...base, mapType: 'roadmap' }
 }
 
-function tileUrlForSession(session, key) {
-  return `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${session}&key=${key}`
+function tileUrlForSession(session) {
+  return `/api/google-tiles-proxy?z={z}&x={x}&y={y}&session=${encodeURIComponent(session)}`
 }
 
 function clientFallbackResponse(res, mapType) {
@@ -64,7 +64,7 @@ export default async function handler(req, res) {
   if (cached && Date.now() < cached.expiry - 60_000) {
     res.setHeader('Cache-Control', 'public, max-age=3600')
     return res.status(200).json({
-      tileUrl: tileUrlForSession(cached.session, key),
+      tileUrl: tileUrlForSession(cached.session),
       expiry: cached.expiry,
       provider: 'google',
       mapType,
@@ -82,7 +82,7 @@ export default async function handler(req, res) {
       if (cached) {
         res.setHeader('Cache-Control', 'public, max-age=300')
         return res.status(200).json({
-          tileUrl: tileUrlForSession(cached.session, key),
+          tileUrl: tileUrlForSession(cached.session),
           expiry: cached.expiry,
           provider: 'google',
           mapType,
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
 
     res.setHeader('Cache-Control', 'public, max-age=3600')
     return res.status(200).json({
-      tileUrl: tileUrlForSession(data.session, key),
+      tileUrl: tileUrlForSession(data.session),
       expiry,
       provider: 'google',
       mapType,
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
     if (cached) {
       res.setHeader('Cache-Control', 'public, max-age=300')
       return res.status(200).json({
-        tileUrl: tileUrlForSession(cached.session, key),
+        tileUrl: tileUrlForSession(cached.session),
         expiry: cached.expiry,
         provider: 'google',
         mapType,

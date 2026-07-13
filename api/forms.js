@@ -15,6 +15,7 @@ import {
   applyResourceVisibilityPatch,
   isTeamAdmin,
 } from './lib/resourceContext.js'
+import { canonicalFormPdfKey, assertCanonicalFormPdfKey } from './lib/formPdfKey.js'
 
 /**
  * Vercel Serverless Function - form templates. Firebase Bearer auth.
@@ -110,12 +111,21 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Template name is required' })
       }
       const now = new Date().toISOString()
+      const templateId = `form_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+      const canonicalKey = canonicalFormPdfKey(user.uid, templateId)
+      let resolvedPdfKey = null
+      if (originalPdfKey) {
+        resolvedPdfKey = assertCanonicalFormPdfKey(originalPdfKey, user.uid, templateId)
+        if (!resolvedPdfKey) {
+          return res.status(400).json({ error: 'originalPdfKey must match the canonical form PDF path' })
+        }
+      }
       const newTemplate = {
-        id: `form_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        id: templateId,
         ownerId: user.uid,
         ownerEmail: user.email,
         name: String(name).trim().slice(0, 200),
-        originalPdfKey: originalPdfKey ? String(originalPdfKey) : null,
+        originalPdfKey: resolvedPdfKey,
         originalPdfUrl: originalPdfUrl ? String(originalPdfUrl) : null,
         pageCount: Math.max(0, parseInt(pageCount, 10) || 0),
         fields: normalizeFields(fields),
@@ -193,7 +203,17 @@ export default async function handler(req, res) {
       if (fields !== undefined) {
         t.fields = normalizeFields(fields)
       }
-      if (originalPdfKey !== undefined) t.originalPdfKey = originalPdfKey ? String(originalPdfKey) : null
+      if (originalPdfKey !== undefined) {
+        if (!originalPdfKey) {
+          t.originalPdfKey = null
+        } else {
+          const validated = assertCanonicalFormPdfKey(originalPdfKey, t.ownerId, t.id)
+          if (!validated) {
+            return res.status(400).json({ error: 'originalPdfKey must match the canonical form PDF path' })
+          }
+          t.originalPdfKey = validated
+        }
+      }
       if (originalPdfUrl !== undefined) t.originalPdfUrl = originalPdfUrl ? String(originalPdfUrl) : null
       if (pageCount !== undefined) t.pageCount = Math.max(0, parseInt(pageCount, 10) || 0)
       if (lastUsedAt !== undefined) t.lastUsedAt = lastUsedAt ? String(lastUsedAt) : null

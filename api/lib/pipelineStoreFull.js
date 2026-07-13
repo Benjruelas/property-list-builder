@@ -5,6 +5,7 @@
 import { kv, kvAvailable } from './kvBootstrap.js'
 import { flags } from './flags.js'
 import { withKvLock } from './kvLock.js'
+import { KvLockUnavailableError } from './kvLockErrors.js'
 import { withTiming } from './timing.js'
 import { normalizePipelineStore } from './pipelineStore.js'
 import { writePipelinesToShards, syncSharedIndexForPipeline } from './pipelineRepo.js'
@@ -99,9 +100,9 @@ export async function mutatePipelines(mutatorFn, { changedResources = [] } = {})
     return saveAllPipelines(next, { changedResources })
   }
   if (!flags.PIPELINES_LOCK()) return run()
-  const locked = await withKvLock(LOCK_KEY, run)
+  const locked = await withKvLock(LOCK_KEY, run, { ttlMs: 10000, maxWaitMs: 5000 })
   if (locked !== null) return locked
-  return run()
+  throw new KvLockUnavailableError(LOCK_KEY)
 }
 
 export default {

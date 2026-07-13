@@ -1,5 +1,5 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getAllLeads } from './lib/leadAccess.js'
+import { getLeadByIdIndexed } from './lib/leadLookup.js'
 import { allowedReportPhotoIds } from './lib/publicReportPayload.js'
 import { loadReportContext } from './lib/publicReportAccess.js'
 
@@ -42,8 +42,7 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Photo not in this report' })
     }
 
-    const allLeads = await getAllLeads()
-    const lead = allLeads.find((l) => l.id === report.leadId)
+    const lead = await getLeadByIdIndexed(report.leadId)
     const photo = (lead?.photos || []).find((p) => p.id === photoId)
     if (!photo) return res.status(404).json({ error: 'Photo not found' })
 

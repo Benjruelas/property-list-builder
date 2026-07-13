@@ -1,3 +1,4 @@
+import { enforceIpRateLimit } from './lib/rateLimit.js'
 import { requireAuth } from './lib/apiAuth.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.js'
 import { getLeadWithAccess } from './lib/leadAccess.js'
@@ -5,6 +6,7 @@ import { resolveSenderBranding } from './lib/senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './lib/buildReportPdf.js'
 import { r2GetBuffer } from './lib/ensureReportPdf.js'
 import { presignedPhotosEnabled, createPresignedGetUrl } from './lib/photoPresign.js'
+import { REPORT_PDF_VERSION } from './lib/reportPdfMeta.js'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
 let _s3
@@ -35,6 +37,8 @@ export default async function handler(req, res) {
 
   const user = await requireAuth(req, res)
   if (!user) return
+
+  if (await enforceIpRateLimit(req, res, { name: 'photo-reports-generate', limit: 30, windowSec: 3600, user })) return
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})

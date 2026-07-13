@@ -3,6 +3,7 @@ import { updatePhotoReportAtIndex } from './reportStore.js'
 import { resolveSenderBranding } from './senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './buildReportPdf.js'
 import { REPORT_PDF_VERSION, isReportPdfStale } from './reportPdfMeta.js'
+import { enqueuePdfJob } from './pdfJobQueue.js'
 
 export { REPORT_PDF_VERSION, isReportPdfStale, reportPdfContentChanged } from './reportPdfMeta.js'
 
@@ -47,13 +48,14 @@ export async function ensureReportPdf(report, index, all, lead, { message = '' }
     email: report.ownerEmail || '',
   })
 
-  const pdfBuf = await buildReportPdfBuffer({
+  const cacheKey = `${report.id}:${REPORT_PDF_VERSION}:${report.updatedAt || ''}`
+  const pdfBuf = await enqueuePdfJob(cacheKey, () => buildReportPdfBuffer({
     report,
     lead,
     branding,
     message,
     getImageBuffer: r2GetBuffer,
-  })
+  }))
 
   const pdfKey = reportPdfStorageKey(report.ownerId, report.id)
   await s3().send(new PutObjectCommand({

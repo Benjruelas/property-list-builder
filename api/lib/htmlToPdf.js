@@ -35,7 +35,6 @@ async function getBrowser() {
       },
       executablePath,
       headless: chromium.headless,
-      acceptInsecureCerts: true,
     })
   })()
 
@@ -164,7 +163,7 @@ async function paginateIntoCenteredSheets(page, pageHeight) {
  * @returns {Promise<Buffer>}
  */
 export async function htmlToPdfBuffer(html, {
-  waitUntil = 'networkidle0',
+  waitUntil = 'domcontentloaded',
   viewport = QUOTE_PDF_VIEWPORT,
 } = {}) {
   const browser = await getBrowser()

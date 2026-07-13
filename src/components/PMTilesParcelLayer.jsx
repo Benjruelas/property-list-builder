@@ -204,6 +204,7 @@ export function PMTilesParcelLayer({
   const selectedRef = useRef(selectedParcels)
   const colorIndexRef = useRef(new Map())
   const layersAddedRef = useRef(false)
+  const repaintScheduledRef = useRef(false)
   // Tracks promoteId (lrid) values with selected=true feature-state.
   const featureStateIdsRef = useRef(new Set())
   /** PROP_ID → promoteId for reconciling React selection with feature-state. */
@@ -277,7 +278,7 @@ export function PMTilesParcelLayer({
     repaint()
   }, [selectedListIds, lists])
 
-  function repaint() {
+  function repaintNow() {
     const map = mapRef?.current
     if (!map || !layersAddedRef.current) return
     try {
@@ -299,6 +300,15 @@ export function PMTilesParcelLayer({
         (opacityRef.current ?? 80) / 100)
       map.triggerRepaint()
     } catch { /* ignore if layers not ready */ }
+  }
+
+  function repaint() {
+    if (repaintScheduledRef.current) return
+    repaintScheduledRef.current = true
+    requestAnimationFrame(() => {
+      repaintScheduledRef.current = false
+      repaintNow()
+    })
   }
 
   // Repaint + sync clicked feature-state when parent parcel id changes.

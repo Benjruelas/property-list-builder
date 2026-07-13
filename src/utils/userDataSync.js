@@ -4,6 +4,8 @@
  */
 
 import { getApiBase } from './apiBase'
+import { clearLocalLeadsCache, setLocalLeadsUid } from './leads'
+import { resetPipelinesListEtag } from './pipelines'
 
 /** localStorage key -> blob key mapping */
 const LS_TO_BLOB = {
@@ -51,8 +53,11 @@ export function syncLocalBlobStorageIfUserChanged(uid) {
   const prev = sessionStorage.getItem(USER_DATA_BLOB_UID_SESSION_KEY)
   if (prev != null && prev !== uid) {
     clearLocalBlobKeys()
+    clearLocalLeadsCache()
+    resetPipelinesListEtag()
   }
   sessionStorage.setItem(USER_DATA_BLOB_UID_SESSION_KEY, uid)
+  setLocalLeadsUid(uid)
 }
 
 /** Read current localStorage into blob format */

@@ -233,8 +233,8 @@ export default async function handler(req, res) {
       const { lead: accessLead } = await getLeadWithAccess(user, report.leadId)
       let lead = accessLead
       if (!lead) {
-        const allLeads = await getAllLeads()
-        lead = allLeads.find((l) => l.id === report.leadId) || null
+        const { getLeadByIdIndexed } = await import('./lib/leadLookup.js')
+        lead = await getLeadByIdIndexed(report.leadId)
       }
       if (lead) {
         await ensureReportPdf(updated, index, all, lead, { message: safeMessage })

@@ -13,6 +13,7 @@ import {
 } from './lib/resourceContext.js'
 import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './lib/tagHelpers.js'
 import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
+import { isKvLockUnavailable, respondKvLockUnavailable } from './lib/kvLockErrors.js'
 import { getPipelinesForUser } from './lib/pipelineRepo.js'
 import { flags } from './lib/flags.js'
 import {
@@ -547,6 +548,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
+    if (isKvLockUnavailable(err)) return respondKvLockUnavailable(res, err)
     console.error('pipelines API error', err)
     return res.status(500).json({ error: 'Internal server error', message: err.message })
   }

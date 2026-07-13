@@ -81,9 +81,8 @@ async function resolveLeadContext(user, leadId) {
 }
 
 async function resolveDealContext(user, pipelineId, dealId) {
-  const [pipelines, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
-  const pipelineIndex = pipelines.findIndex((p) => p.id === pipelineId)
-  const pipeline = pipelineIndex >= 0 ? pipelines[pipelineIndex] : null
+  const { findPipelineById } = await import('./pipelineRepo.js')
+  const [pipeline, allTeams] = await Promise.all([findPipelineById(pipelineId), getAllTeams()])
   if (!pipeline) return { error: { status: 404, message: 'Pipeline not found' } }
   const teamsIndex = fullTeamsIndex(allTeams)
   const access = resolveAccess(pipeline, user, teamsIndex)
@@ -96,8 +95,6 @@ async function resolveDealContext(user, pipelineId, dealId) {
     entityType: 'deal',
     entity: deal,
     pipeline,
-    pipelineIndex,
-    allPipelines: pipelines,
     dealIndex,
     ownerUid: pipeline.ownerId || user.uid,
     photos: Array.isArray(deal.photos) ? deal.photos : [],
@@ -141,7 +138,7 @@ export async function appendPhotoRecord(user, ctx, photoRecord) {
     photos: [...(ctx.photos || []), photoRecord],
     updatedAt: Date.now(),
   }
-  const prevPipeline = ctx.allPipelines[ctx.pipelineIndex]
+  const prevPipeline = ctx.pipeline
   const deals = [...(prevPipeline.deals || [])]
   deals[ctx.dealIndex] = deal
   const nextPipeline = { ...prevPipeline, deals, updatedAt: new Date().toISOString() }
@@ -177,7 +174,7 @@ export async function updatePhotoRecord(user, ctx, photoId, updater) {
   const updatedPhoto = updater(photos[at])
   photos[at] = updatedPhoto
   const deal = { ...ctx.entity, photos, updatedAt: Date.now() }
-  const prevPipeline = ctx.allPipelines[ctx.pipelineIndex]
+  const prevPipeline = ctx.pipeline
   const deals = [...(prevPipeline.deals || [])]
   deals[ctx.dealIndex] = deal
   const nextPipeline = { ...prevPipeline, deals, updatedAt: new Date().toISOString() }
@@ -209,7 +206,7 @@ export async function deletePhotoRecord(user, ctx, photoId) {
     photos: (ctx.photos || []).filter((p) => p.id !== photoId),
     updatedAt: Date.now(),
   }
-  const prevPipeline = ctx.allPipelines[ctx.pipelineIndex]
+  const prevPipeline = ctx.pipeline
   const deals = [...(prevPipeline.deals || [])]
   deals[ctx.dealIndex] = deal
   const nextPipeline = { ...prevPipeline, deals, updatedAt: new Date().toISOString() }
@@ -237,9 +234,17 @@ export async function canAccessPhotoKey(user, key) {
     const ownerUid = parts[1]
     const dealId = parts[2]
     if (ownerUid === user.uid) return true
-    const pipelines = await getAllPipelines()
+    const { findPipelineById } = await import('./pipelineRepo.js')
     const allTeams = await getAllTeams()
     const teamsIndex = fullTeamsIndex(allTeams)
+    const pipelineIdHint = parts.length > 3 ? parts[3] : null
+    if (pipelineIdHint) {
+      const pipeline = await findPipelineById(pipelineIdHint)
+      if (pipeline && (pipeline.deals || []).some((d) => d.id === dealId) && resolveAccess(pipeline, user, teamsIndex)) {
+        return true
+      }
+    }
+    const pipelines = await getAllPipelines()
     for (const pipeline of pipelines) {
       if ((pipeline.deals || []).some((d) => d.id === dealId) && resolveAccess(pipeline, user, teamsIndex)) {
         return true

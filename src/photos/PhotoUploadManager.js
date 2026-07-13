@@ -39,6 +39,8 @@ class PhotoUploadManager {
     this.hydrated = false
     this.inFlight = new Set()
     this._drainPromise = null
+    this.concurrency = 2
+    this.entityListeners = new Map()
     this._boundOnline = () => {
       photoLog('queue.online', 'Network online — resuming upload queue')
       this.start()
@@ -51,9 +53,10 @@ class PhotoUploadManager {
     }
   }
 
-  configure({ getToken, onEntityUpdated }) {
+  configure({ getToken, onEntityUpdated, concurrency = 2 }) {
     this.getToken = getToken
     this.onEntityUpdated = onEntityUpdated
+    this.concurrency = Math.max(1, Math.min(3, concurrency || 2))
     photoLog('queue.configure', 'Upload manager configured', { hasGetToken: !!getToken })
     if (typeof window !== 'undefined' && import.meta.env.DEV) {
       window.__photoPipelineDump = () => ({
@@ -71,9 +74,25 @@ class PhotoUploadManager {
     return () => this.listeners.delete(fn)
   }
 
+  subscribeEntity(entityKey, fn) {
+    if (!this.entityListeners.has(entityKey)) this.entityListeners.set(entityKey, new Set())
+    const set = this.entityListeners.get(entityKey)
+    set.add(fn)
+    fn()
+    return () => set.delete(fn)
+  }
+
+  emitEntity(entityKey) {
+    const set = this.entityListeners.get(entityKey)
+    if (!set) return
+    for (const fn of set) fn()
+  }
+
   emit() {
     const snap = this.getSnapshot()
     for (const fn of this.listeners) fn(snap)
+    const keys = new Set(snap.map((j) => j.entityKey))
+    for (const key of keys) this.emitEntity(key)
   }
 
   getSnapshot() {
@@ -249,16 +268,16 @@ class PhotoUploadManager {
       )
       if (!queue.length) break
 
+      const batch = queue.slice(0, this.concurrency)
       photoLog('queue.start', 'Processing upload batch', {
-        count: queue.length,
-        jobIds: queue.map((j) => j.jobId),
+        count: batch.length,
+        concurrency: this.concurrency,
+        jobIds: batch.map((j) => j.jobId),
       })
 
       this.processing = true
       try {
-        for (const job of queue) {
-          await this.processJob(job)
-        }
+        await Promise.all(batch.map((job) => this.processJob(job)))
       } finally {
         this.processing = false
       }

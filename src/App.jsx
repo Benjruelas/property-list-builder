@@ -40,6 +40,7 @@ import { getUserLocation, setCurrentUserLocation, subscribeUserLocation, useUser
 import { getCurrentPositionWithFallback, getWatchPositionOptions } from './utils/geolocation'
 import { panelLazy, prefetchPanel } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
+import { useAccountSession } from './hooks/useAccountSession'
 const FormsPanel = lazy(panelLazy.forms)
 const DealPipeline = lazy(panelLazy.dealPipeline)
 const SchedulePanel = lazy(panelLazy.schedule)
@@ -210,6 +211,8 @@ function LocationMarker() {
 
 function App() {
   const { currentUser, getToken, logout, loading: authLoading } = useAuth()
+  const { onLogout: clearAccountCaches } = useAccountSession(currentUser)
+
   const nav = useNavigation()
   const pp = nav.panelProps
 
@@ -1421,6 +1424,7 @@ function App() {
       refreshTags()
     } else {
       deletedLeadIdsRef.current.clear()
+      clearAccountCaches()
       setPipelines([])
       setActivePipelineId(null)
       setLeads([])

@@ -202,8 +202,24 @@ export async function backfillPipelineShards() {
   return { owners: byOwner.size, pipelines: all.length, sharedLinks: sharedPairs.length }
 }
 
+export async function findPipelineById(pipelineId) {
+  if (!pipelineId) return null
+  const ownerId = await getPipelineOwnerId(pipelineId)
+  if (ownerId) {
+    const ownerPipelines = await getOwnerPipelines(ownerId)
+    const fromShard = ownerPipelines.find((p) => p.id === pipelineId) || null
+    if (fromShard) return fromShard
+  }
+  if (flags.PIPELINES_SHARDED() === 'off') {
+    const all = await getMonolithPipelines()
+    return all.find((p) => p.id === pipelineId) || null
+  }
+  return null
+}
+
 export default {
   getPipelinesForUser,
+  findPipelineById,
   writePipelinesToShards,
   backfillPipelineShards,
 }

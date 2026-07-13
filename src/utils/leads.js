@@ -23,11 +23,41 @@ export {
 import { getApiBase } from './apiBase'
 
 const LOCAL_LEADS_KEY = 'user_leads_local'
+const LOCAL_LEADS_UID_KEY = 'user_leads_local_uid'
 const MAX_LEAD_ACTIVITY = 200
 let leadsListEtag = null
 
 export function resetLeadsListEtag() {
   leadsListEtag = null
+}
+
+let currentLeadsUid = null
+
+export function setLocalLeadsUid(uid) {
+  currentLeadsUid = uid || null
+}
+
+export function clearLocalLeadsCache() {
+  try {
+    localStorage.removeItem(LOCAL_LEADS_KEY)
+    localStorage.removeItem(LOCAL_LEADS_UID_KEY)
+  } catch {
+    /* ignore */
+  }
+  currentLeadsUid = null
+  resetLeadsListEtag()
+}
+
+function localLeadsUidMatches(uid) {
+  const check = uid || currentLeadsUid
+  if (!check) return true
+  try {
+    const stored = localStorage.getItem(LOCAL_LEADS_UID_KEY)
+    if (!stored) return true
+    return stored === check
+  } catch {
+    return false
+  }
 }
 
 export {
@@ -65,8 +95,9 @@ export function formatLastContacted(iso) {
   }
 }
 
-export function loadLocalLeads() {
+export function loadLocalLeads(uid) {
   try {
+    if (uid && !localLeadsUidMatches(uid)) return []
     const stored = localStorage.getItem(LOCAL_LEADS_KEY)
     if (!stored) return []
     const parsed = JSON.parse(stored)
@@ -76,8 +107,13 @@ export function loadLocalLeads() {
   }
 }
 
-export function saveLocalLeads(leads) {
+export function saveLocalLeads(leads, uid) {
   try {
+    const resolvedUid = uid || currentLeadsUid
+    if (resolvedUid) {
+      localStorage.setItem(LOCAL_LEADS_UID_KEY, resolvedUid)
+      currentLeadsUid = resolvedUid
+    }
     localStorage.setItem(LOCAL_LEADS_KEY, JSON.stringify(leads))
   } catch (e) {
     console.error('Error saving local leads:', e)

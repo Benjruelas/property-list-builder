@@ -7,8 +7,10 @@ import { kv, kvAvailable } from './kvBootstrap.js'
 import { readLocalDevArray, writeLocalDevArray } from './localDevPersistence.js'
 import { flags } from './flags.js'
 import { withKvLock } from './kvLock.js'
+import { KvLockUnavailableError } from './kvLockErrors.js'
 import { withTiming } from './timing.js'
 import { writeLeadToShards, removeLeadIndex, syncSharedIndexForLead } from './leadRepo.js'
+import { writeLeadEntities, deleteLeadEntity } from './entityLeadStore.js'
 import { bumpLeadsVersionsForResource } from './dataVersion.js'
 import { getAllTeams } from './teams.js'
 
@@ -52,6 +54,10 @@ export async function getAllLeads() {
     fallbackLeads = result
     leadsReadCache = result
     leadsReadCacheAt = Date.now()
+    const bytes = JSON.stringify(result).length
+    if (bytes > 512 * 1024) {
+      console.warn(JSON.stringify({ type: 'user_leads_size_warning', bytes, count: result.length }))
+    }
     return result
   })
 }
@@ -69,6 +75,12 @@ export async function saveAllLeads(leads, { changedResources = [] } = {}) {
       }
     }
     await writeLeadToShards(leads)
+    if (changedResources.length) {
+      const changed = changedResources
+        .map((item) => item.resource)
+        .filter(Boolean)
+      if (changed.length) await writeLeadEntities(changed)
+    }
     if (flags.LEADS_SHARDED() !== 'off' && changedResources.length) {
       const allTeams = await getAllTeams()
       for (const item of changedResources) {
@@ -103,9 +115,9 @@ export async function mutateLeads(mutatorFn, { changedResources = [] } = {}) {
 
   if (!flags.LEADS_LOCK()) return run()
 
-  const locked = await withKvLock(LOCK_KEY, run)
+  const locked = await withKvLock(LOCK_KEY, run, { ttlMs: 10000, maxWaitMs: 5000 })
   if (locked !== null) return locked
-  return run()
+  throw new KvLockUnavailableError(LOCK_KEY)
 }
 
 export async function mutateSingleLead(leadId, mutatorFn, { changedResources = [] } = {}) {
@@ -137,7 +149,10 @@ export async function deleteLeadFromStore(leadId) {
     const next = all.filter((l) => l.id !== leadId)
     return next
   }, { changedResources: removed ? [{ resource: null, prevResource: removed }] : [] })
-  if (removed) await removeLeadIndex(leadId)
+  if (removed) {
+    await removeLeadIndex(leadId)
+    await deleteLeadEntity(leadId)
+  }
   return removed
 }
 

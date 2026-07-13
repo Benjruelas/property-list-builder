@@ -18,6 +18,7 @@ import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDe
 import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './lib/leadStatuses.js'
 import { normalizeLeadContactsForStorage } from './lib/leadContact.js'
 import { getAllLeads, mutateLeads, deleteLeadFromStore } from './lib/leadStore.js'
+import { isKvLockUnavailable, respondKvLockUnavailable } from './lib/kvLockErrors.js'
 import { getLeadsForUser } from './lib/leadRepo.js'
 import { deleteLeadContentFromStorage } from './lib/leadCleanup.js'
 import { withRepairedLeadOwnership } from './lib/leadOwnership.js'
@@ -430,6 +431,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
+    if (isKvLockUnavailable(err)) return respondKvLockUnavailable(res, err)
     console.error('leads API error', err)
     return res.status(500).json({ error: 'Internal server error', message: err.message })
   }

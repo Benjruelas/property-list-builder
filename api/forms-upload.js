@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { authenticate } from './lib/auth.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { canonicalFormPdfKey } from './lib/formPdfKey.js'
 
 /**
  * Vercel Serverless Function - form PDF upload/download via R2.
@@ -104,7 +105,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'File is not a valid PDF' })
       }
 
-      const key = `forms/${user.uid}/${tid}/original.pdf`
+      const key = canonicalFormPdfKey(user.uid, tid)
       await s3().send(new PutObjectCommand({
         Bucket: process.env.R2_BUCKET_NAME,
         Key: key,
@@ -146,6 +147,12 @@ export default async function handler(req, res) {
       }
 
       if (!allowed) {
+        return res.status(403).json({ error: 'Forbidden' })
+      }
+
+      const template = (await loadTemplatesSnapshot()).find((t) => t.id === templateId)
+      const canonical = template ? canonicalFormPdfKey(template.ownerId, template.id) : null
+      if (!canonical || key !== canonical) {
         return res.status(403).json({ error: 'Forbidden' })
       }
 

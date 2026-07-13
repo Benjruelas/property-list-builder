@@ -1,4 +1,5 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { canonicalFormPdfKey } from './lib/formPdfKey.js'
 import { Resend } from 'resend'
 import {
   findInviteByToken,
@@ -110,13 +111,16 @@ export default async function handler(req, res) {
       }
 
       const template = await loadTemplate(invite.templateId)
-      if (!template || !template.originalPdfKey) {
+      const pdfKey = template
+        ? canonicalFormPdfKey(template.ownerId, template.id)
+        : null
+      if (!template || !pdfKey) {
         return res.status(404).json({ error: 'Form template not found' })
       }
 
       if (req.query.pdf === '1' || req.query.pdf === 'true') {
         try {
-          const body = await streamPdfFromR2(template.originalPdfKey)
+          const body = await streamPdfFromR2(pdfKey)
           res.setHeader('Content-Type', 'application/pdf')
           res.setHeader('Cache-Control', 'private, no-store')
           return res.status(200).send(body)

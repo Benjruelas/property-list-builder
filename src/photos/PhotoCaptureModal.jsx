@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, ChevronLeft, RotateCw, Zap, ZapOff, Image as ImageIcon, Camera } from 'lucide-react'
 import { sumPhotoBytes, LEAD_STORAGE_LIMIT_BYTES, DEAL_STORAGE_LIMIT_BYTES, getCurrentPosition } from '@/photos/photosClient'
-import { usePhotoUpload } from './PhotoUploadProvider'
+import { usePhotoUpload, useEntityUploadJobs } from './PhotoUploadProvider'
 import { draftSessionId, entityKey } from './entityRef'
 import { getBlobs } from './photoStoreIdb'
 import { VISIBILITY } from '@/utils/access'
@@ -141,7 +141,8 @@ export function PhotoCaptureModal({
   /** Skip the Upload/Camera chooser and jump straight into the camera (Quick Photo Mode). */
   autoOpenCamera = false,
 }) {
-  const { enqueueCapture, reassignDraftJobs, jobs } = usePhotoUpload()
+  const { enqueueCapture, reassignDraftJobs } = usePhotoUpload()
+  const entityUploadJobs = useEntityUploadJobs(entityRef)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const libraryInputRef = useRef(null)
@@ -237,8 +238,8 @@ export function PhotoCaptureModal({
   const storageFull = photosUsed >= limitBytes
 
   const activeUploadCount = useMemo(
-    () => jobs.filter((j) => j.entityKey === entityKey(entityRef) && j.status !== 'done').length,
-    [jobs, entityRef],
+    () => entityUploadJobs.filter((j) => j.status !== 'done').length,
+    [entityUploadJobs],
   )
 
   const stopCamera = useCallback(() => {

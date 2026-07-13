@@ -3,6 +3,7 @@
  * Secured via CRON_SECRET header (Vercel cron) or Authorization Bearer.
  */
 import { notifyTaskDeadline } from './lib/pushUtils.js'
+import { assertProductionSecrets } from './lib/productionSecrets.js'
 
 let kv = null
 let kvAvailable = false
@@ -126,7 +127,14 @@ async function markSentOnce(cacheKey) {
   }
 }
 
+
 export default async function handler(req, res) {
+  try {
+    assertProductionSecrets(['CRON_SECRET'])
+  } catch (e) {
+    console.error('cron-task-reminders config error', e.message)
+    return res.status(503).json({ error: 'Cron not configured' })
+  }
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

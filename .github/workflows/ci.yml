@@ -13,7 +13,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -25,5 +25,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Audit (high severity, non-blocking)
-        run: npm audit --audit-level=high || true
+      - name: Audit (high severity, blocking with documented exceptions)
+        run: npm audit --audit-level=high
+
+      - name: API security regression tests
+        run: npm test -- api/lib/__tests__/formPdfKey.test.js api/lib/__tests__/reportPdfGenerateImport.test.js api/lib/__tests__/previewToken.test.js

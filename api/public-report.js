@@ -1,5 +1,5 @@
 import { updatePhotoReportAtIndex } from './lib/reportStore.js'
-import { getAllLeads } from './lib/leadAccess.js'
+import { getLeadByIdIndexed } from './lib/leadLookup.js'
 import { publicReportPayload, recordReportView } from './lib/publicReportPayload.js'
 import { loadReportContext } from './lib/publicReportAccess.js'
 import { ensureReportPdf } from './lib/ensureReportPdf.js'
@@ -30,8 +30,7 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'PDF download is disabled for preview links' })
       }
 
-      const allLeads = await getAllLeads()
-      const lead = allLeads.find((l) => l.id === report.leadId)
+      const lead = await getLeadByIdIndexed(report.leadId)
       if (!lead) return res.status(404).json({ error: 'Lead not found' })
 
       const pdfBuf = await ensureReportPdf(report, index, all, lead, {
@@ -44,8 +43,7 @@ export default async function handler(req, res) {
       return res.status(200).send(pdfBuf)
     }
 
-    const allLeads = await getAllLeads()
-    const lead = allLeads.find((l) => l.id === report.leadId)
+    const lead = await getLeadByIdIndexed(report.leadId)
 
     const updatedReport = invite.preview
       ? report
