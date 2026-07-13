@@ -382,7 +382,7 @@ export default async function handler(req, res) {
           invitedByEmail: user.email,
         })
         try {
-          const { notifyTeamMemberAdded } = await import('./lib/pushUtils.js')
+          const { notifyTeamMemberAdded } = await import('./_lib/pushUtils.js')
           await notifyTeamMemberAdded(email, {
             teamName: team.name,
             teamId: team.id,
@@ -446,7 +446,7 @@ export default async function handler(req, res) {
           await cancelInvitesForTeamEmail(team.id, removedMember.email)
         }
         try {
-          const { logTeamActivity, actorLabel } = await import('./lib/activityLog.js')
+          const { logTeamActivity, actorLabel } = await import('./_lib/activityLog.js')
           await logTeamActivity({
             teamIds: [team.id],
             actor: user,

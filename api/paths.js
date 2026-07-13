@@ -126,7 +126,7 @@ export default async function handler(req, res) {
       await saveAllPaths(all)
 
       try {
-        const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+        const { runResourceShareNotifications } = await import('./_lib/shareNotifications.js')
         await runResourceShareNotifications({
           resource: newPath,
           resourceType: 'path',
@@ -216,7 +216,7 @@ export default async function handler(req, res) {
           path.sharedMemberUids = patched.sharedMemberUids
           if (patched.teamShares?.length) path.teamShares = patched.teamShares
           if (patched.visibility === 'team' && ctx.team?.id) {
-            const { teamShareAddedOnVisibility } = await import('./lib/shareNotifications.js')
+            const { teamShareAddedOnVisibility } = await import('./_lib/shareNotifications.js')
             newlyAddedTeamShares = [
               ...newlyAddedTeamShares,
               ...teamShareAddedOnVisibility(prevTeamShares, ctx.team.id),
@@ -244,7 +244,7 @@ export default async function handler(req, res) {
 
       if (canShare) {
         try {
-          const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+          const { runResourceShareNotifications } = await import('./_lib/shareNotifications.js')
           await runResourceShareNotifications({
             resource: path,
             resourceType: 'path',
@@ -262,7 +262,7 @@ export default async function handler(req, res) {
       }
 
       try {
-        const { logTeamActivity, actorLabel } = await import('./lib/activityLog.js')
+        const { logTeamActivity, actorLabel } = await import('./_lib/activityLog.js')
         const label = actorLabel(user)
         for (const tid of newlyAddedTeamShares) {
           await logTeamActivity({

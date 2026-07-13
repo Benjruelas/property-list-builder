@@ -79,9 +79,9 @@ async function runPipelinePushNotifications({
   user
 }) {
   try {
-    const { notifyPipelineDealStatusChanges, diffDealStatusChanges } = await import('./lib/pushUtils.js')
+    const { notifyPipelineDealStatusChanges, diffDealStatusChanges } = await import('./_lib/pushUtils.js')
     if (isOwner) {
-      const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+      const { runResourceShareNotifications } = await import('./_lib/shareNotifications.js')
       await runResourceShareNotifications({
         resource: pipeline,
         resourceType: 'pipeline',
@@ -132,7 +132,7 @@ async function runPipelineActivityLog({
       teamIdsFromResource,
       diffDealChanges,
       dealActivityLabel,
-    } = await import('./lib/activityLog.js')
+    } = await import('./_lib/activityLog.js')
 
     const teamIds = teamIdsFromResource(pipeline)
     if (teamIds.length === 0) return
@@ -306,7 +306,7 @@ export default async function handler(req, res) {
       })
 
       try {
-        const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+        const { runResourceShareNotifications } = await import('./_lib/shareNotifications.js')
         await runResourceShareNotifications({
           resource: newPipeline,
           resourceType: 'pipeline',
@@ -444,7 +444,7 @@ export default async function handler(req, res) {
           pipeline.sharedMemberUids = patched.sharedMemberUids
           if (patched.teamShares?.length) pipeline.teamShares = patched.teamShares
           if (patched.visibility === 'team' && ctx.team?.id) {
-            const { teamShareAddedOnVisibility } = await import('./lib/shareNotifications.js')
+            const { teamShareAddedOnVisibility } = await import('./_lib/shareNotifications.js')
             newlyAddedTeamShares = [
               ...newlyAddedTeamShares,
               ...teamShareAddedOnVisibility(prevTeamShares, ctx.team.id),
@@ -541,7 +541,7 @@ export default async function handler(req, res) {
       await mutatePipelines((current) => current.filter((p) => p.id !== pipelineId), {
         changedResources: [{ resource: null, prevResource: removed }],
       })
-      const { removePipelineIndex } = await import('./lib/pipelineRepo.js')
+      const { removePipelineIndex } = await import('./_lib/pipelineRepo.js')
       await removePipelineIndex(pipelineId)
       return res.status(200).json({ message: 'Pipeline deleted' })
     }

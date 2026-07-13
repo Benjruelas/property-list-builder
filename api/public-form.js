@@ -221,7 +221,7 @@ export default async function handler(req, res) {
       appendSubmission(submission).catch(() => {})
 
       try {
-        const { notifyFormSubmitted } = await import('./lib/pushUtils.js')
+        const { notifyFormSubmitted } = await import('./_lib/pushUtils.js')
         await notifyFormSubmitted(ownerEmail, {
           formName: templateName,
           submitterEmail: recipientEmail,
@@ -233,7 +233,7 @@ export default async function handler(req, res) {
       }
 
       try {
-        const { logTeamActivity, teamIdsFromResource } = await import('./lib/activityLog.js')
+        const { logTeamActivity, teamIdsFromResource } = await import('./_lib/activityLog.js')
         const teamIds = teamIdsFromResource(template || {})
         if (teamIds.length > 0) {
           await logTeamActivity({

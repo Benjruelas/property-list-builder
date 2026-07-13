@@ -233,7 +233,7 @@ export default async function handler(req, res) {
       const { lead: accessLead } = await getLeadWithAccess(user, report.leadId)
       let lead = accessLead
       if (!lead) {
-        const { getLeadByIdIndexed } = await import('./lib/leadLookup.js')
+        const { getLeadByIdIndexed } = await import('./_lib/leadLookup.js')
         lead = await getLeadByIdIndexed(report.leadId)
       }
       if (lead) {

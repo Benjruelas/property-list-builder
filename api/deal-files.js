@@ -203,7 +203,7 @@ export default async function handler(req, res) {
       const url = `/api/deal-files?key=${encodeURIComponent(key)}`
 
       try {
-        const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./lib/activityLog.js')
+        const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./_lib/activityLog.js')
         const teamIds = teamIdsFromResource(pipeline)
         if (teamIds.length > 0) {
           await logTeamActivity({
@@ -318,7 +318,7 @@ export default async function handler(req, res) {
         try {
           if (pipeline && dealIdFromKey) {
             const deal = (pipeline.deals || []).find((d) => d.id === dealIdFromKey)
-            const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./lib/activityLog.js')
+            const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./_lib/activityLog.js')
             const teamIds = teamIdsFromResource(pipeline)
             const fileName = key.split('/').pop()?.replace(/^\d+_[a-z0-9]+_/, '') || 'file'
             if (teamIds.length > 0 && deal) {

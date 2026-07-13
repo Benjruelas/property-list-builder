@@ -1,6 +1,7 @@
 import { requireAuth } from './_lib/apiAuth.js'
 import { getQuoteById } from './_lib/quoteStore.js'
 import { getPhotoReportById } from './_lib/reportStore.js'
+import { getLeadWithAccess } from './_lib/leadAccess.js'
 import { mintQuotePreviewToken, mintReportPreviewToken } from './_lib/previewToken.js'
 import { buildQuotePublicUrl, buildReportPublicUrl } from './_lib/publicLinks.js'
 
@@ -29,7 +30,6 @@ async function getOrCreateReportPreviewUrl(user, reportId, origin) {
     return { error: 'Report not found', status: 404 }
   }
   if (report.ownerId !== user.uid) {
-    const { getLeadWithAccess } = await import('./lib/leadAccess.js')
     const { lead } = await getLeadWithAccess(user, report.leadId)
     if (!lead) return { error: 'Report not found', status: 404 }
   }

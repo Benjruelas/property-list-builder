@@ -44,7 +44,7 @@ function normalizeTask(raw, user) {
 
 async function logPipelineTaskActivity(pipeline, user, type, task, summary) {
   try {
-    const { logTeamActivity, teamIdsFromResource } = await import('./lib/activityLog.js')
+    const { logTeamActivity, teamIdsFromResource } = await import('./_lib/activityLog.js')
     const teamIds = teamIdsFromResource(pipeline)
     if (teamIds.length === 0) return
     await logTeamActivity({
@@ -85,7 +85,7 @@ export default async function handler(req, res) {
     if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
 
     pipeline.tasks = Array.isArray(pipeline.tasks) ? pipeline.tasks : []
-    const { actorLabel } = await import('./lib/activityLog.js')
+    const { actorLabel } = await import('./_lib/activityLog.js')
     const actor = actorLabel(user)
 
     if (action === 'add') {

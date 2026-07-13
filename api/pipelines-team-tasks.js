@@ -73,7 +73,7 @@ function normalizeTask(raw, user, allowedUids) {
 
 async function logTeamTaskActivity(pipeline, user, type, task, summary) {
   try {
-    const { logTeamActivity, teamIdsFromResource } = await import('./lib/activityLog.js')
+    const { logTeamActivity, teamIdsFromResource } = await import('./_lib/activityLog.js')
     const teamIds = teamIdsFromResource(pipeline)
     if (teamIds.length === 0) return
     await logTeamActivity({
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
     if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
 
     const allowedMemberUids = collectAllowedMemberUids(pipelineForAccess, allTeams, user)
-    const { actorLabel } = await import('./lib/activityLog.js')
+    const { actorLabel } = await import('./_lib/activityLog.js')
     const actor = actorLabel(user)
 
     // Applies the requested action to a pipeline in place. Returns a status
@@ -224,7 +224,7 @@ export default async function handler(req, res) {
     }
     if (deferred.notify.length) {
       try {
-        const { notifyTaskAssigned } = await import('./lib/pushUtils.js')
+        const { notifyTaskAssigned } = await import('./_lib/pushUtils.js')
         for (const [uids, payload] of deferred.notify) {
           await notifyTaskAssigned(uids, payload, teamsIndex)
         }

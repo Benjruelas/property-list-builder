@@ -144,7 +144,7 @@ export default async function handler(req, res) {
       await saveAllLists(all)
 
       try {
-        const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+        const { runResourceShareNotifications } = await import('./_lib/shareNotifications.js')
         await runResourceShareNotifications({
           resource: newList,
           resourceType: 'list',
@@ -291,7 +291,7 @@ export default async function handler(req, res) {
 
       if (isOwner) {
         try {
-          const { runResourceShareNotifications } = await import('./lib/shareNotifications.js')
+          const { runResourceShareNotifications } = await import('./_lib/shareNotifications.js')
           await runResourceShareNotifications({
             resource: list,
             resourceType: 'list',
@@ -309,7 +309,7 @@ export default async function handler(req, res) {
       }
 
       try {
-        const { logTeamActivity, actorLabel, teamIdsFromResource } = await import('./lib/activityLog.js')
+        const { logTeamActivity, actorLabel, teamIdsFromResource } = await import('./_lib/activityLog.js')
         const teamIds = teamIdsFromResource(list)
         const label = actorLabel(user)
         if (newlyAddedTeamShares.length > 0) {
