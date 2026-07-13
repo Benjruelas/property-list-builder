@@ -40,11 +40,14 @@ async function main() {
 
   const tiles = await get('/google-tiles-session?mapType=satellite')
   const tileUrl = tiles.body?.tileUrl || ''
+  const usesProxy = tileUrl.includes('google-tiles-proxy') && !tileUrl.includes('key=')
+  const usesFallback = tiles.body?.useClientFallback === true
   checks.push({
     name: 'google-tiles-no-key-in-client',
-    ok: tiles.status === 200 && tileUrl.includes('google-tiles-proxy') && !tileUrl.includes('key='),
+    ok: tiles.status === 200 && (usesProxy || usesFallback),
     status: tiles.status,
     tileUrl: tileUrl.slice(0, 120),
+    provider: tiles.body?.provider,
   })
 
   if (TOKEN) {

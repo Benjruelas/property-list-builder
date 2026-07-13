@@ -68,6 +68,21 @@ node scripts/load-test-polls.mjs
 
 Watch Vercel function duration, 304 rate, and Redis/KV command counts in the dashboard.
 
+## 7. Post-hardening verification (after deploy)
+
+```bash
+# Health + tile proxy (no API key in client responses)
+API_BASE=https://knockscout.app/api node scripts/verify-rollout.mjs
+
+# With auth token — also checks leads load
+FIREBASE_TOKEN=your_id_token API_BASE=https://knockscout.app/api node scripts/verify-rollout.mjs
+
+# Re-run shard backfill (idempotent; requires admin token + migrate secret)
+FIREBASE_TOKEN=... MIGRATE_SECRET=... API_BASE=https://knockscout.app/api node scripts/verify-rollout.mjs --backfill
+```
+
+Expected: `/api/health` returns `{ ok: true, checks: { kv: true } }`. Google session returns either a `google-tiles-proxy` tileUrl (no `key=`) or `useClientFallback: true` when GCP session creation fails.
+
 ## Rollback levers
 
 | Symptom | Action |
