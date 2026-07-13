@@ -4,7 +4,7 @@
  * pro:parcel_us record for a map click point.
  */
 
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 const WMS_BASE = 'https://api.landrecords.us/pro/wms'
 const WFS_BASE = 'https://api.landrecords.us/pro/wfs'

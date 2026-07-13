@@ -1,5 +1,5 @@
-import { authenticate } from './lib/auth.js'
-import { getAllTeams } from './lib/teams.js'
+import { authenticate } from './_lib/auth.js'
+import { getAllTeams } from './_lib/teams.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -8,29 +8,29 @@ import {
   canChangeVisibility,
   applyResourceVisibilityPatch,
   activityAudienceForResource,
-} from './lib/resourceContext.js'
+} from './_lib/resourceContext.js'
 import {
   logTeamActivity,
   actorLabel,
   teamIdsFromResource,
-} from './lib/activityLog.js'
-import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './lib/tagHelpers.js'
-import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './lib/leadStatuses.js'
-import { normalizeLeadContactsForStorage } from './lib/leadContact.js'
-import { getAllLeads, mutateLeads, deleteLeadFromStore } from './lib/leadStore.js'
-import { isKvLockUnavailable, respondKvLockUnavailable } from './lib/kvLockErrors.js'
-import { getLeadsForUser } from './lib/leadRepo.js'
-import { deleteLeadContentFromStorage } from './lib/leadCleanup.js'
-import { withRepairedLeadOwnership } from './lib/leadOwnership.js'
-import { flags } from './lib/flags.js'
+} from './_lib/activityLog.js'
+import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './_lib/tagHelpers.js'
+import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './_lib/leadStatuses.js'
+import { normalizeLeadContactsForStorage } from './_lib/leadContact.js'
+import { getAllLeads, mutateLeads, deleteLeadFromStore } from './_lib/leadStore.js'
+import { isKvLockUnavailable, respondKvLockUnavailable } from './_lib/kvLockErrors.js'
+import { getLeadsForUser } from './_lib/leadRepo.js'
+import { deleteLeadContentFromStorage } from './_lib/leadCleanup.js'
+import { withRepairedLeadOwnership } from './_lib/leadOwnership.js'
+import { flags } from './_lib/flags.js'
 import {
   DATAVER_LEADS,
   getUserDataVersion,
   parseIfNoneMatch,
-} from './lib/dataVersion.js'
-import { projectLeadsForList } from './lib/leadListProjection.js'
-import { paginateArray } from './lib/pagination.js'
-import { kv, kvAvailable } from './lib/kvBootstrap.js'
+} from './_lib/dataVersion.js'
+import { projectLeadsForList } from './_lib/leadListProjection.js'
+import { paginateArray } from './_lib/pagination.js'
+import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 
 /**
  * User-scoped leads CRM with team sharing v2. Firebase Bearer auth.

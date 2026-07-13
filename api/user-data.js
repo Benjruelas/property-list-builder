@@ -9,9 +9,9 @@
  * Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
 
-import { authenticate } from './lib/auth.js'
-import { kv, kvAvailable } from './lib/kvBootstrap.js'
-import { withKvLock } from './lib/kvLock.js'
+import { authenticate } from './_lib/auth.js'
+import { kv, kvAvailable } from './_lib/kvBootstrap.js'
+import { withKvLock } from './_lib/kvLock.js'
 
 function kvKey(uid) {
   return `user_data_${uid}`

@@ -3,13 +3,13 @@
  * Team users store tasks in KV user_tasks; solo users keep local fallback on client.
  */
 
-import { authenticate } from './lib/auth.js'
-import { getAllTasks, saveAllTasks } from './lib/taskStore.js'
-import { getAllTeams, fullTeamsIndex } from './lib/teams.js'
-import { userHasTeamMembership } from './lib/access.js'
-import { logTeamActivity, actorLabel } from './lib/activityLog.js'
-import { taskVisibleToUser, canManageTask, sharedViewerMayPatch } from './lib/taskAccess.js'
-import { paginateArray } from './lib/pagination.js'
+import { authenticate } from './_lib/auth.js'
+import { getAllTasks, saveAllTasks } from './_lib/taskStore.js'
+import { getAllTeams, fullTeamsIndex } from './_lib/teams.js'
+import { userHasTeamMembership } from './_lib/access.js'
+import { logTeamActivity, actorLabel } from './_lib/activityLog.js'
+import { taskVisibleToUser, canManageTask, sharedViewerMayPatch } from './_lib/taskAccess.js'
+import { paginateArray } from './_lib/pagination.js'
 
 function normalizeAssignedUids(body, existing, membership) {
   const raw = body.assignedUids !== undefined ? body.assignedUids : (existing?.assignedUids || [])

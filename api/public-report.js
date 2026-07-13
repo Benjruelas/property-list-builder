@@ -1,10 +1,10 @@
-import { updatePhotoReportAtIndex } from './lib/reportStore.js'
-import { getLeadByIdIndexed } from './lib/leadLookup.js'
-import { publicReportPayload, recordReportView } from './lib/publicReportPayload.js'
-import { loadReportContext } from './lib/publicReportAccess.js'
-import { ensureReportPdf } from './lib/ensureReportPdf.js'
-import { safePdfFilename } from './lib/buildReportPdf.js'
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+import { updatePhotoReportAtIndex } from './_lib/reportStore.js'
+import { getLeadByIdIndexed } from './_lib/leadLookup.js'
+import { publicReportPayload, recordReportView } from './_lib/publicReportPayload.js'
+import { loadReportContext } from './_lib/publicReportAccess.js'
+import { ensureReportPdf } from './_lib/ensureReportPdf.js'
+import { safePdfFilename } from './_lib/buildReportPdf.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')

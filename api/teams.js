@@ -8,16 +8,16 @@
  * DELETE -> delete team (admin only)
  */
 
-import { authenticate } from './lib/auth.js'
-import { normalizeEmailBranding } from './lib/senderBranding.js'
+import { authenticate } from './_lib/auth.js'
+import { normalizeEmailBranding } from './_lib/senderBranding.js'
 import {
   getAllTeams,
   saveAllTeams,
   loadTeamsForUser,
   lookupFirebaseUidByEmail,
   DEFAULT_SEAT_LIMIT,
-} from './lib/teams.js'
-import { isTeamAdmin, getTeamMemberRole, userHasTeamMembership } from './lib/access.js'
+} from './_lib/teams.js'
+import { isTeamAdmin, getTeamMemberRole, userHasTeamMembership } from './_lib/access.js'
 import {
   createInvite,
   findInviteById,
@@ -25,16 +25,16 @@ import {
   getInvitesForEmail,
   getInvitesForTeam,
   cancelInvitesForTeamEmail,
-} from './lib/teamInvites.js'
-import { createTeamPipeline } from './lib/teamPipeline.js'
-import { mutateLeads } from './lib/leadStore.js'
-import { mutatePipelines } from './lib/pipelineStoreFull.js'
+} from './_lib/teamInvites.js'
+import { createTeamPipeline } from './_lib/teamPipeline.js'
+import { mutateLeads } from './_lib/leadStore.js'
+import { mutatePipelines } from './_lib/pipelineStoreFull.js'
 import {
   normalizeMemberFeatures,
   resolveMemberFeatures,
   isTeamAdminMember,
-} from './lib/teamFeatures.js'
-import { normalizeLeadStatuses } from './lib/leadStatuses.js'
+} from './_lib/teamFeatures.js'
+import { normalizeLeadStatuses } from './_lib/leadStatuses.js'
 
 let kv = null
 let kvAvailable = false

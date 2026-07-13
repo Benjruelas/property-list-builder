@@ -4,20 +4,20 @@ import {
   getAllQuoteInvites,
   saveAllQuoteInvites,
   escapeHtml,
-} from './lib/quoteInvites.js'
-import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
-import { parseQuotePreviewToken } from './lib/previewToken.js'
-import { enforceIpRateLimit } from './lib/rateLimit.js'
-import { syncQuotePaymentOnPaid, syncQuoteToDealOnAccept } from './lib/syncQuoteToDeal.js'
+} from './_lib/quoteInvites.js'
+import { getQuoteById, updateQuoteAtIndex } from './_lib/quoteStore.js'
+import { parseQuotePreviewToken } from './_lib/previewToken.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
+import { syncQuotePaymentOnPaid, syncQuoteToDealOnAccept } from './_lib/syncQuoteToDeal.js'
 import {
   computeQuoteTotals,
   publicQuoteLineItem,
   resolveAcceptedLineIds,
-} from './lib/quoteMath.js'
-import { logTeamActivity, actorLabel } from './lib/activityLog.js'
-import { resolveSenderBranding } from './lib/senderBranding.js'
-import { buildQuotePdfBuffer, safeQuotePdfFilename } from './lib/buildQuotePdf.js'
-import { buildQuotePublicPath } from './lib/publicLinks.js'
+} from './_lib/quoteMath.js'
+import { logTeamActivity, actorLabel } from './_lib/activityLog.js'
+import { resolveSenderBranding } from './_lib/senderBranding.js'
+import { buildQuotePdfBuffer, safeQuotePdfFilename } from './_lib/buildQuotePdf.js'
+import { buildQuotePublicPath } from './_lib/publicLinks.js'
 
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const stripe = stripeKey ? new Stripe(stripeKey) : null

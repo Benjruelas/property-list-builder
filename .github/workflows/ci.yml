@@ -29,4 +29,4 @@ jobs:
         run: npm audit --audit-level=high
 
       - name: API security regression tests
-        run: npm test -- api/lib/__tests__/formPdfKey.test.js api/lib/__tests__/reportPdfGenerateImport.test.js api/lib/__tests__/previewToken.test.js
+        run: npm test -- api/_lib/__tests__/formPdfKey.test.js api/_lib/__tests__/reportPdfGenerateImport.test.js api/_lib/__tests__/previewToken.test.js

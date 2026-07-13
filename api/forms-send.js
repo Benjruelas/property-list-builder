@@ -1,15 +1,15 @@
 import { Resend } from 'resend'
-import { requireAuth } from './lib/apiAuth.js'
+import { requireAuth } from './_lib/apiAuth.js'
 import {
   resolveSenderBranding,
   buildBrandedEmailHtml,
   buildFromAddress,
   escapeHtml,
-} from './lib/senderBranding.js'
-import { getAllTemplates } from './lib/formInvites.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
-import { rateLimit } from './lib/rateLimit.js'
-import { sanitizeHeader } from './lib/emailSafety.js'
+} from './_lib/senderBranding.js'
+import { getAllTemplates } from './_lib/formInvites.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { rateLimit } from './_lib/rateLimit.js'
+import { sanitizeHeader } from './_lib/emailSafety.js'
 
 /**
  * Vercel Serverless Function - emails a flattened form PDF and records the submission.

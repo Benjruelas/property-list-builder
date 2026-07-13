@@ -1,4 +1,4 @@
-import { kv, kvAvailable } from './lib/kvBootstrap.js'
+import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

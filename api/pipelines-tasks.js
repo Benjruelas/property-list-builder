@@ -14,9 +14,9 @@
  *     actions: 'add' | 'update' | 'remove' | 'toggle-complete'
  */
 
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
-import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
-import { authenticate } from './lib/auth.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { getAllPipelines, mutatePipelines } from './_lib/pipelineStoreFull.js'
+import { authenticate } from './_lib/auth.js'
 
 function num(v) {
   if (v == null) return null

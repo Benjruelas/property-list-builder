@@ -7,10 +7,10 @@
  */
 
 import { Resend } from 'resend'
-import { requireAuth } from './lib/apiAuth.js'
-import { rateLimit } from './lib/rateLimit.js'
-import { escapeHtml, sanitizeHeader, isValidEmail } from './lib/emailSafety.js'
-import { applyCors } from './lib/cors.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { rateLimit } from './_lib/rateLimit.js'
+import { escapeHtml, sanitizeHeader, isValidEmail } from './_lib/emailSafety.js'
+import { applyCors } from './_lib/cors.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 

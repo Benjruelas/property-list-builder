@@ -3,7 +3,7 @@
  * Use with custom authDomain (your app's domain instead of firebaseapp.com).
  */
 
-import { resolveAuthDomain } from './lib/resolveAuthDomain.js'
+import { resolveAuthDomain } from './_lib/resolveAuthDomain.js'
 
 export default function handler(req, res) {
   const apiKey = process.env.VITE_FIREBASE_API_KEY || ''

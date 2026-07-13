@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
-import { requireAuth } from './lib/apiAuth.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
 import {
   getAllInvites,
   saveAllInvites,
@@ -12,12 +12,12 @@ import {
   supersedePendingInvites,
   hasPriorInviteForRecipient,
   sanitizePrefillValues,
-} from './lib/formInvites.js'
+} from './_lib/formInvites.js'
 import {
   resolveSenderBranding,
   buildBrandedEmailHtml,
   buildFromAddress,
-} from './lib/senderBranding.js'
+} from './_lib/senderBranding.js'
 
 /**
  * Vercel Serverless Function - create a single-use public form invite link

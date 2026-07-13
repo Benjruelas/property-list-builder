@@ -1,6 +1,6 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 const CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000
 

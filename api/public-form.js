@@ -1,5 +1,5 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { canonicalFormPdfKey } from './lib/formPdfKey.js'
+import { canonicalFormPdfKey } from './_lib/formPdfKey.js'
 import { Resend } from 'resend'
 import {
   findInviteByToken,
@@ -10,8 +10,8 @@ import {
   escapeHtml,
   sanitizeFilename,
   mergeInviteValues,
-} from './lib/formInvites.js'
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+} from './_lib/formInvites.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 /**
  * Vercel Serverless Function - token-gated public form access (no auth).

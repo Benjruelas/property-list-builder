@@ -1,4 +1,4 @@
-import { requireAuth } from './lib/apiAuth.js'
+import { requireAuth } from './_lib/apiAuth.js'
 
 /**
  * Register / unregister Web Push subscriptions (KV). Supports multiple devices per user.

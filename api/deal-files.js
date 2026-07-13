@@ -1,7 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { requireAuth } from './lib/apiAuth.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
-import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './lib/photoPresign.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './_lib/photoPresign.js'
 
 import {
   ENTITY_STORAGE_LIMITS,
@@ -9,7 +9,7 @@ import {
   entityStorageError,
   formatStorageBytes,
   sumDealFileBytes,
-} from './lib/uploadLimits.js'
+} from './_lib/uploadLimits.js'
 
 /**
  * Deal file upload/download via R2.

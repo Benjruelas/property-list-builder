@@ -1,4 +1,4 @@
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 const VALID_MAP_TYPES = new Set(['satellite', 'street', 'hybrid'])
 const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'

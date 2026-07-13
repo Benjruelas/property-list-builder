@@ -1,4 +1,4 @@
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 const SANDBOX_BASE = 'https://sandbox.apis.eagleview.com'
 const PROD_BASE = 'https://apis.eagleview.com'

@@ -1,11 +1,11 @@
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
-import { createPresignedGetUrl } from './lib/photoPresign.js'
+import { createPresignedGetUrl } from './_lib/photoPresign.js'
 import sharp from 'sharp'
 import { fromArrayBuffer } from 'geotiff'
 import PDFDocument from 'pdfkit'
 import crypto from 'crypto'
-import { requireAuth } from './lib/apiAuth.js'
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 const CACHE_TTL = 30 * 24 * 3600 * 1000
 const M_FT = 3.28084

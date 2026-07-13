@@ -1,8 +1,8 @@
-import { requireAuth } from './lib/apiAuth.js'
-import { getQuoteById } from './lib/quoteStore.js'
-import { getPhotoReportById } from './lib/reportStore.js'
-import { mintQuotePreviewToken, mintReportPreviewToken } from './lib/previewToken.js'
-import { buildQuotePublicUrl, buildReportPublicUrl } from './lib/publicLinks.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { getQuoteById } from './_lib/quoteStore.js'
+import { getPhotoReportById } from './_lib/reportStore.js'
+import { mintQuotePreviewToken, mintReportPreviewToken } from './_lib/previewToken.js'
+import { buildQuotePublicUrl, buildReportPublicUrl } from './_lib/publicLinks.js'
 
 function resolveOrigin(req) {
   const proto = req.headers['x-forwarded-proto'] || 'https'

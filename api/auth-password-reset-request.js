@@ -4,15 +4,15 @@
  */
 
 import { Resend } from 'resend'
-import { applyCors } from './lib/cors.js'
-import { rateLimit } from './lib/rateLimit.js'
-import { isValidEmail, sanitizeHeader } from './lib/emailSafety.js'
-import { createPasswordResetLink } from './lib/firebaseAdmin.js'
+import { applyCors } from './_lib/cors.js'
+import { rateLimit } from './_lib/rateLimit.js'
+import { isValidEmail, sanitizeHeader } from './_lib/emailSafety.js'
+import { createPasswordResetLink } from './_lib/firebaseAdmin.js'
 import {
   buildPasswordResetEmailHtml,
   buildPasswordResetSubject,
   getAuthFromAddress,
-} from './lib/authEmail.js'
+} from './_lib/authEmail.js'
 import { createHash } from 'crypto'
 
 const resend = new Resend(process.env.RESEND_API_KEY)

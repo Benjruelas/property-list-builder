@@ -1,4 +1,4 @@
-import { enforceIpRateLimit } from './lib/rateLimit.js'
+import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 /** @type {Record<string, { session: string, expiry: number }>} */
 const sessionCache = {}

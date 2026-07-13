@@ -1,7 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
-import { authenticate } from './lib/auth.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './lib/teams.js'
-import { canonicalFormPdfKey } from './lib/formPdfKey.js'
+import { authenticate } from './_lib/auth.js'
+import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { canonicalFormPdfKey } from './_lib/formPdfKey.js'
 
 /**
  * Vercel Serverless Function - form PDF upload/download via R2.

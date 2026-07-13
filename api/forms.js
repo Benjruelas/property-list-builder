@@ -1,10 +1,10 @@
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { isDevBypassToken } from './lib/devBypassUsers.js'
-import { authenticate } from './lib/auth.js'
-import { getAllFormTemplates, saveAllFormTemplates } from './lib/formTemplateStore.js'
+import { isDevBypassToken } from './_lib/devBypassUsers.js'
+import { authenticate } from './_lib/auth.js'
+import { getAllFormTemplates, saveAllFormTemplates } from './_lib/formTemplateStore.js'
 import {
   getAllTeams,
-} from './lib/teams.js'
+} from './_lib/teams.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -14,8 +14,8 @@ import {
   canChangeVisibility,
   applyResourceVisibilityPatch,
   isTeamAdmin,
-} from './lib/resourceContext.js'
-import { canonicalFormPdfKey, assertCanonicalFormPdfKey } from './lib/formPdfKey.js'
+} from './_lib/resourceContext.js'
+import { canonicalFormPdfKey, assertCanonicalFormPdfKey } from './_lib/formPdfKey.js'
 
 /**
  * Vercel Serverless Function - form templates. Firebase Bearer auth.

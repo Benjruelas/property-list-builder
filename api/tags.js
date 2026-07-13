@@ -1,6 +1,6 @@
-import { authenticate } from './lib/auth.js'
-import { mutateLeads } from './lib/leadStore.js'
-import { mutatePipelines } from './lib/pipelineStoreFull.js'
+import { authenticate } from './_lib/auth.js'
+import { mutateLeads } from './_lib/leadStore.js'
+import { mutatePipelines } from './_lib/pipelineStoreFull.js'
 import {
   TAG_TYPES,
   DEFAULT_TAG_COLORS,
@@ -10,7 +10,7 @@ import {
   loadTagRegistry,
   saveTagRegistry,
   stripTagFromEntity,
-} from './lib/tagHelpers.js'
+} from './_lib/tagHelpers.js'
 
 let kv = null
 let kvAvailable = false

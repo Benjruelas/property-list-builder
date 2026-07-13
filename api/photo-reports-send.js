@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import { requireAuth } from './lib/apiAuth.js'
+import { requireAuth } from './_lib/apiAuth.js'
 import {
   generateReportToken,
   REPORT_INVITE_EXPIRY_DAYS,
@@ -10,21 +10,21 @@ import {
   hasPriorReportInvite,
   findActiveReportInviteByToken,
   findActiveLinkOnlyReportInvite,
-} from './lib/reportInvites.js'
-import { buildReportPublicUrl } from './lib/publicLinks.js'
-import { getPhotoReportById, updatePhotoReportAtIndex } from './lib/reportStore.js'
-import { getLeadWithAccess } from './lib/leadAccess.js'
+} from './_lib/reportInvites.js'
+import { buildReportPublicUrl } from './_lib/publicLinks.js'
+import { getPhotoReportById, updatePhotoReportAtIndex } from './_lib/reportStore.js'
+import { getLeadWithAccess } from './_lib/leadAccess.js'
 import {
   resolveSenderBranding,
   buildBrandedEmailHtml,
   buildFromAddress,
   escapeHtml,
-} from './lib/senderBranding.js'
-import { leadDisplayName } from './lib/publicReportPayload.js'
-import { rateLimit } from './lib/rateLimit.js'
-import { sanitizeHeader } from './lib/emailSafety.js'
-import { ensureReportPdf } from './lib/ensureReportPdf.js'
-import { getAllLeads } from './lib/leadAccess.js'
+} from './_lib/senderBranding.js'
+import { leadDisplayName } from './_lib/publicReportPayload.js'
+import { rateLimit } from './_lib/rateLimit.js'
+import { sanitizeHeader } from './_lib/emailSafety.js'
+import { ensureReportPdf } from './_lib/ensureReportPdf.js'
+import { getAllLeads } from './_lib/leadAccess.js'
 
 async function canAccessReport(user, report) {
   if (report.ownerId === user.uid) return true

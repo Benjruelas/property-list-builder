@@ -1,11 +1,11 @@
-import { requireAuth } from './lib/apiAuth.js'
+import { requireAuth } from './_lib/apiAuth.js'
 import {
   getInbox,
   markNotificationsRead,
   getUnreadCount,
   isNotificationStoreAvailable,
   ensureNotificationStoreReady,
-} from './lib/notificationStore.js'
+} from './_lib/notificationStore.js'
 
 /**
  * In-app notification inbox API.

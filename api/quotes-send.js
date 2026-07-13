@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import { requireAuth } from './lib/apiAuth.js'
+import { requireAuth } from './_lib/apiAuth.js'
 import {
   generateToken,
   INVITE_EXPIRY_DAYS,
@@ -9,17 +9,17 @@ import {
   saveAllQuoteInvites,
   supersedePendingQuoteInvites,
   hasPriorQuoteInvite,
-} from './lib/quoteInvites.js'
-import { buildQuotePublicUrl } from './lib/publicLinks.js'
-import { getQuoteById, updateQuoteAtIndex } from './lib/quoteStore.js'
-import { logTeamActivity, actorLabel } from './lib/activityLog.js'
+} from './_lib/quoteInvites.js'
+import { buildQuotePublicUrl } from './_lib/publicLinks.js'
+import { getQuoteById, updateQuoteAtIndex } from './_lib/quoteStore.js'
+import { logTeamActivity, actorLabel } from './_lib/activityLog.js'
 import {
   resolveSenderBranding,
   buildBrandedEmailHtml,
   buildFromAddress,
-} from './lib/senderBranding.js'
-import { rateLimit } from './lib/rateLimit.js'
-import { sanitizeHeader } from './lib/emailSafety.js'
+} from './_lib/senderBranding.js'
+import { rateLimit } from './_lib/rateLimit.js'
+import { sanitizeHeader } from './_lib/emailSafety.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'

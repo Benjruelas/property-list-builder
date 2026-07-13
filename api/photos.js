@@ -3,16 +3,16 @@
  */
 
 import { S3Client, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
-import { authenticate } from './lib/auth.js'
+import { authenticate } from './_lib/auth.js'
 import {
   presignedPhotosEnabled,
   createPresignedPutUrl,
   createPresignedGetUrl,
-} from './lib/photoPresign.js'
+} from './_lib/photoPresign.js'
 import {
   entityStorageError,
   formatStorageBytes,
-} from './lib/uploadLimits.js'
+} from './_lib/uploadLimits.js'
 import {
   sanitizePhotoId,
   buildPhotoKey,
@@ -26,15 +26,15 @@ import {
   deletePhotoRecord,
   canAccessPhotoKey,
   photoKeyPrefix,
-} from './lib/photoEntity.js'
-import { photoLog, photoLogError } from './lib/photoDebug.js'
+} from './_lib/photoEntity.js'
+import { photoLog, photoLogError } from './_lib/photoDebug.js'
 import {
   writeLocalPhotoBlob,
   readLocalPhotoBlob,
   localPhotoBlobExists,
   deleteLocalPhotoBlob,
   localPhotoStorageEnabled,
-} from './lib/photoBlobStore.js'
+} from './_lib/photoBlobStore.js'
 
 let _s3
 function s3() {

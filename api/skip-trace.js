@@ -18,9 +18,9 @@
  * Docs: https://docs.trestleiq.com/api-reference/reverse-address-api
  */
 
-import { parseOwnerName, matchResident } from './lib/ownerNameMatch.js'
-import { requireAuth } from './lib/apiAuth.js'
-import { rateLimit } from './lib/rateLimit.js'
+import { parseOwnerName, matchResident } from './_lib/ownerNameMatch.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { rateLimit } from './_lib/rateLimit.js'
 
 const TRESTLE_BASE = process.env.TRESTLE_API_BASE || 'https://api.trestleiq.com/3.1'
 const TRESTLE_REAL_CONTACT_URL = process.env.TRESTLE_REAL_CONTACT_URL || 'https://api.trestleiq.com/1.1/real_contact'

@@ -3,9 +3,9 @@
  * Requires Authorization + MIGRATE_SECRET header matching env MIGRATE_SECRET.
  */
 
-import { authenticate } from './lib/auth.js'
-import { backfillLeadShards } from './lib/leadRepo.js'
-import { backfillPipelineShards } from './lib/pipelineRepo.js'
+import { authenticate } from './_lib/auth.js'
+import { backfillLeadShards } from './_lib/leadRepo.js'
+import { backfillPipelineShards } from './_lib/pipelineRepo.js'
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')

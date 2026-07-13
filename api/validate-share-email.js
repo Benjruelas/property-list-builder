@@ -1,6 +1,6 @@
-import { DEV_BYPASS_KNOWN_EMAILS } from './lib/devBypassUsers.js'
-import { authenticate } from './lib/auth.js'
-import { rateLimit } from './lib/rateLimit.js'
+import { DEV_BYPASS_KNOWN_EMAILS } from './_lib/devBypassUsers.js'
+import { authenticate } from './_lib/auth.js'
+import { rateLimit } from './_lib/rateLimit.js'
 
 /**
  * Validates that an email belongs to a known user (owner or shared-with in our lists).

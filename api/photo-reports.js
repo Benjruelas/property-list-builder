@@ -1,15 +1,15 @@
-import { requireAuth } from './lib/apiAuth.js'
+import { requireAuth } from './_lib/apiAuth.js'
 import {
   getAllPhotoReports,
   saveAllPhotoReports,
   getPhotoReportById,
   updatePhotoReportAtIndex,
   getAllReportTemplates,
-} from './lib/reportStore.js'
-import { getLeadWithAccess, getVisibleLeads } from './lib/leadAccess.js'
-import { paginateArray } from './lib/pagination.js'
-import { presignedPhotosEnabled, createPresignedGetUrl } from './lib/photoPresign.js'
-import { reportPdfContentChanged } from './lib/reportPdfMeta.js'
+} from './_lib/reportStore.js'
+import { getLeadWithAccess, getVisibleLeads } from './_lib/leadAccess.js'
+import { paginateArray } from './_lib/pagination.js'
+import { presignedPhotosEnabled, createPresignedGetUrl } from './_lib/photoPresign.js'
+import { reportPdfContentChanged } from './_lib/reportPdfMeta.js'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 
 function buildReportFromBody(body, user, existing = null) {

@@ -9,10 +9,10 @@
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
 
-import { getAllTeams } from './lib/teams.js'
-import { getAllPaths, saveAllPaths } from './lib/pathStore.js'
-import { kv, kvAvailable } from './lib/kvBootstrap.js'
-import { authenticate } from './lib/auth.js'
+import { getAllTeams } from './_lib/teams.js'
+import { getAllPaths, saveAllPaths } from './_lib/pathStore.js'
+import { kv, kvAvailable } from './_lib/kvBootstrap.js'
+import { authenticate } from './_lib/auth.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -22,8 +22,8 @@ import {
   canChangeVisibility,
   applyResourceVisibilityPatch,
   activityAudienceForResource,
-} from './lib/resourceContext.js'
-import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
+} from './_lib/resourceContext.js'
+import { loadTagRegistry, mergeEntityTags } from './_lib/tagHelpers.js'
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')

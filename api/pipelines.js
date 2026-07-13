@@ -1,6 +1,6 @@
-import { authenticate } from './lib/auth.js'
-import { isDevBypassToken, isDevBypassAllowed } from './lib/devBypassUsers.js'
-import { getAllTeams } from './lib/teams.js'
+import { authenticate } from './_lib/auth.js'
+import { isDevBypassToken, isDevBypassAllowed } from './_lib/devBypassUsers.js'
+import { getAllTeams } from './_lib/teams.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -10,19 +10,19 @@ import {
   canChangeVisibility,
   applyResourceVisibilityPatch,
   isTeamAdmin,
-} from './lib/resourceContext.js'
-import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './lib/tagHelpers.js'
-import { getAllPipelines, mutatePipelines } from './lib/pipelineStoreFull.js'
-import { isKvLockUnavailable, respondKvLockUnavailable } from './lib/kvLockErrors.js'
-import { getPipelinesForUser } from './lib/pipelineRepo.js'
-import { flags } from './lib/flags.js'
+} from './_lib/resourceContext.js'
+import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './_lib/tagHelpers.js'
+import { getAllPipelines, mutatePipelines } from './_lib/pipelineStoreFull.js'
+import { isKvLockUnavailable, respondKvLockUnavailable } from './_lib/kvLockErrors.js'
+import { getPipelinesForUser } from './_lib/pipelineRepo.js'
+import { flags } from './_lib/flags.js'
 import {
   DATAVER_PIPELINES,
   getUserDataVersion,
   parseIfNoneMatch,
-} from './lib/dataVersion.js'
-import { kv, kvAvailable } from './lib/kvBootstrap.js'
-import { paginateArray } from './lib/pagination.js'
+} from './_lib/dataVersion.js'
+import { kv, kvAvailable } from './_lib/kvBootstrap.js'
+import { paginateArray } from './_lib/pagination.js'
 
 /**
  * Vercel Serverless Function

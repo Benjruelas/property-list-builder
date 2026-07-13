@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Camera, PenLine, Trash2 } from 'lucide-react'
+import { Camera, Loader2, PenLine, Trash2 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { StorageUsageBar } from '../components/ui/StorageUsageBar'
 import { FilePreviewOverlay } from '../components/ui/FilePreviewOverlay'
@@ -17,7 +17,7 @@ import {
 } from './photosClient'
 import { entityRefFromLead, entityRefFromDeal, updatePhotoInList, savePhotoAnnotations } from './annotationSave'
 import { entityKey } from './entityRef'
-import { formatLeadAddress } from '@/utils/leads'
+import { formatLeadAddress, leadNeedsPhotoHydrate } from '@/utils/leads'
 import { stripClientPhotoFields, dedupePhotosById } from '@/utils/photoDisplay'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
 import { PhotoAnnotator } from '../components/photos/PhotoAnnotator'
@@ -25,6 +25,15 @@ import { DealPhotoAnnotator } from '../components/photos/DealPhotoAnnotator'
 import { getBlobs } from './photoStoreIdb'
 import { JOB_STATUS } from './PhotoUploadManager'
 
+function PhotoSkeletonTile() {
+  return (
+    <div className="relative aspect-square w-full overflow-hidden rounded-md bg-white/5 animate-pulse">
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-white/25" aria-hidden />
+      </div>
+    </div>
+  )
+}
 function SectionTitle({ children, action }) {
   return (
     <div className="flex items-center justify-between gap-2 mb-2.5">
@@ -137,6 +146,13 @@ export function PhotoGallery({
     (j) => j.status === JOB_STATUS.uploading || j.status === JOB_STATUS.queued,
   ).length
   const failedCount = activeJobs.filter((j) => j.status === JOB_STATUS.failed).length
+  const pendingUploadCount = activeJobs.length
+  const photosMetadataLoading = entityType === 'lead'
+    && leadNeedsPhotoHydrate(entity, { pendingUploadCount })
+  const expectedPhotoCount = typeof entity?.photoCount === 'number' ? entity.photoCount : 0
+  const skeletonCount = photosMetadataLoading
+    ? Math.min(Math.max(expectedPhotoCount, 1), expanded ? expectedPhotoCount || collapsedLimit : collapsedLimit)
+    : 0
 
   useEffect(() => {
     kickQueue()
@@ -295,7 +311,18 @@ export function PhotoGallery({
           className="mb-2"
           label="Photo storage"
         />
-        {displayItems.length === 0 ? (
+        {photosMetadataLoading ? (
+          <>
+            <p className="text-xs text-white/45 py-1 mb-2">Loading photos…</p>
+            <div className="lead-photo-grid" aria-busy="true" aria-label="Loading photos">
+              {Array.from({ length: skeletonCount }, (_, i) => (
+                <div key={`skeleton-${i}`} className="lead-photo-grid-item">
+                  <PhotoSkeletonTile />
+                </div>
+              ))}
+            </div>
+          </>
+        ) : displayItems.length === 0 ? (
           <p className="text-xs text-white/40 py-1">No photos yet</p>
         ) : (
           <div className="lead-photo-grid">

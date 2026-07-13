@@ -1,5 +1,5 @@
-import { requireAuth } from './lib/apiAuth.js'
-import { getAllTeams } from './lib/teams.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { getAllTeams } from './_lib/teams.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -8,8 +8,8 @@ import {
   canDelete,
   canChangeVisibility,
   applyResourceVisibilityPatch,
-} from './lib/resourceContext.js'
-import { getAllReportTemplates, saveAllReportTemplates } from './lib/reportStore.js'
+} from './_lib/resourceContext.js'
+import { getAllReportTemplates, saveAllReportTemplates } from './_lib/reportStore.js'
 
 /**
  * Report layout templates CRUD — mirrors api/quote-templates.js pattern.

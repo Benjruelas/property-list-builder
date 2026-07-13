@@ -1,5 +1,5 @@
-import { requireAuth } from './lib/apiAuth.js'
-import { getAllTeams } from './lib/teams.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { getAllTeams } from './_lib/teams.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -9,9 +9,9 @@ import {
   canChangeVisibility,
   applyResourceVisibilityPatch,
   isTeamAdmin,
-} from './lib/resourceContext.js'
-import { getAllQuoteTemplates, saveAllQuoteTemplates } from './lib/quoteStore.js'
-import { computeQuoteTotals, defaultValidUntil } from './lib/quoteMath.js'
+} from './_lib/resourceContext.js'
+import { getAllQuoteTemplates, saveAllQuoteTemplates } from './_lib/quoteStore.js'
+import { computeQuoteTotals, defaultValidUntil } from './_lib/quoteMath.js'
 
 /**
  * Quote templates CRUD — mirrors api/forms.js pattern.

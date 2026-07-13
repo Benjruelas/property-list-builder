@@ -1,7 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { requireAuth } from './lib/apiAuth.js'
-import { getLeadWithAccess, canEditLead } from './lib/leadAccess.js'
-import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './lib/photoPresign.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { getLeadWithAccess, canEditLead } from './_lib/leadAccess.js'
+import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './_lib/photoPresign.js'
 
 import {
   ENTITY_STORAGE_LIMITS,
@@ -9,7 +9,7 @@ import {
   entityStorageError,
   formatStorageBytes,
   sumDealFileBytes,
-} from './lib/uploadLimits.js'
+} from './_lib/uploadLimits.js'
 
 /**
  * Lead file upload/download via R2.

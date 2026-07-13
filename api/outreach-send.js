@@ -1,13 +1,13 @@
 import { Resend } from 'resend'
-import { requireAuth } from './lib/apiAuth.js'
+import { requireAuth } from './_lib/apiAuth.js'
 import {
   resolveSenderBranding,
   buildBrandedEmailHtml,
   buildFromAddress,
   escapeHtml,
-} from './lib/senderBranding.js'
-import { rateLimit } from './lib/rateLimit.js'
-import { sanitizeHeader } from './lib/emailSafety.js'
+} from './_lib/senderBranding.js'
+import { rateLimit } from './_lib/rateLimit.js'
+import { sanitizeHeader } from './_lib/emailSafety.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { viteApiDevPlugin } from './scripts/viteApiDevPlugin.js'
-import { resolveAuthDomainFromHost } from './api/lib/resolveAuthDomain.js'
+import { resolveAuthDomainFromHost } from './api/_lib/resolveAuthDomain.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const devHttps = process.env.VITE_DEV_HTTPS === '1' || process.env.VITE_DEV_HTTPS === 'true'
@@ -99,7 +99,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      react: path.resolve(__dirname, "node_modules/react"),
+      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
     },
+    dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
     // Capacitor packages are web-safe stubs but confuse Vite's dep optimizer after lockfile changes.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { getModalPortalContainer } from './utils/modalPortal'
 import MapGL, { Marker as MapMarker, Source, Layer } from 'react-map-gl/maplibre'
@@ -40,7 +40,7 @@ import { getUserLocation, setCurrentUserLocation, subscribeUserLocation, useUser
 import { getCurrentPositionWithFallback, getWatchPositionOptions } from './utils/geolocation'
 import { panelLazy, prefetchPanel } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
-import { useAccountSession } from './hooks/useAccountSession'
+import { clearAccountSessionCaches, syncAccountSessionUid } from './utils/accountSession'
 const FormsPanel = lazy(panelLazy.forms)
 const DealPipeline = lazy(panelLazy.dealPipeline)
 const SchedulePanel = lazy(panelLazy.schedule)
@@ -211,7 +211,10 @@ function LocationMarker() {
 
 function App() {
   const { currentUser, getToken, logout, loading: authLoading } = useAuth()
-  const { onLogout: clearAccountCaches } = useAccountSession(currentUser)
+
+  useLayoutEffect(() => {
+    if (currentUser?.uid) syncAccountSessionUid(currentUser.uid)
+  }, [currentUser?.uid])
 
   const nav = useNavigation()
   const pp = nav.panelProps
@@ -1249,7 +1252,7 @@ function App() {
     }
   }, [currentUser, getToken, refreshTags])
 
-  const hydrateSharedLeadPhotos = useCallback(async ({ leadsSnapshot, priorityLeadIds } = {}) => {
+  const hydrateSharedLeadPhotos = useCallback(async ({ leadsSnapshot, priorityLeadIds, limit } = {}) => {
     if (!currentUser) return
 
     const snapshot = leadsSnapshot || leadsRef.current
@@ -1261,6 +1264,7 @@ function App() {
     const leadIds = collectLeadsNeedingPhotoHydrate(snapshot, {
       priorityLeadIds: priority,
       pendingUploadsByLeadId,
+      limit: typeof limit === 'number' ? limit : 5,
     }).filter((leadId) => !deletedLeadIdsRef.current.has(leadId))
     if (!leadIds.length) return
 
@@ -1408,6 +1412,15 @@ function App() {
   }, [leads, leadsDetailLeadId, nav])
 
   useEffect(() => {
+    if (!leadsDetailLeadId || !currentUser) return
+    const lead = leads.find(
+      (l) => l.id === leadsDetailLeadId || l.parcelId === leadsDetailLeadId,
+    )
+    if (!lead?.id || !leadNeedsPhotoHydrate(lead)) return
+    hydrateSharedLeadPhotos({ priorityLeadIds: [lead.id], limit: 1 })
+  }, [leadsDetailLeadId, currentUser, leads, hydrateSharedLeadPhotos])
+
+  useEffect(() => {
     if (currentUser) {
       const cached = loadLocalLeads()
       if (cached.length > 0) {
@@ -1424,7 +1437,7 @@ function App() {
       refreshTags()
     } else {
       deletedLeadIdsRef.current.clear()
-      clearAccountCaches()
+      clearAccountSessionCaches()
       setPipelines([])
       setActivePipelineId(null)
       setLeads([])
@@ -3303,18 +3316,9 @@ function App() {
     if (!lead?.id) return
     guardFeature('leads', () => nav.openLeadDetails(lead.id))
     if (leadNeedsPhotoHydrate(lead)) {
-      fetchLeadById(getToken, lead.id)
-        .then((full) => {
-          if (!full?.id || deletedLeadIdsRef.current.has(full.id)) return
-          setLeads((prev) => {
-            const next = prev.map((l) => (l.id === full.id ? mergeLeadDetail(l, full) : l))
-            saveLocalLeads(next)
-            return next
-          })
-        })
-        .catch((err) => console.warn('Lead detail hydrate failed:', err?.message))
+      hydrateSharedLeadPhotos({ priorityLeadIds: [lead.id], limit: 1 })
     }
-  }, [nav, guardFeature, getToken])
+  }, [nav, guardFeature, hydrateSharedLeadPhotos])
 
   const openSettingsPanel = useCallback(() => nav.openSettings(), [nav])
   const openLogin = useCallback(() => nav.openLogin(), [nav])

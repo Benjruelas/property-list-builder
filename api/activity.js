@@ -1,15 +1,15 @@
-import { authenticate } from './lib/auth.js'
+import { authenticate } from './_lib/auth.js'
 import {
   getAllTeams,
   loadTeamsForUser,
-} from './lib/teams.js'
-import { getTeamMemberRole } from './lib/access.js'
+} from './_lib/teams.js'
+import { getTeamMemberRole } from './_lib/access.js'
 import {
   getTeamActivity,
   isActivityStoreAvailable,
   ensureActivityStoreReady,
-} from './lib/activityStore.js'
-import { mergeActivityFeeds } from './lib/activityLog.js'
+} from './_lib/activityStore.js'
+import { mergeActivityFeeds } from './_lib/activityLog.js'
 
 /**
  * Team activity feed API.

@@ -28,6 +28,15 @@ export function PhotoTile({
 
   const blurHash = photo?.blurHash || job?.blurHash
   const cacheVersion = photo?.updatedAt || photo?.createdAt || ''
+  const hasServerThumbKey = Boolean(
+    photo?.key || photo?.thumbnailKey || photo?.annotatedThumbnailKey,
+  )
+  const loadingThumb = !isJob
+    && !uploading
+    && !displayUrl
+    && !loadFailed
+    && !failed
+    && hasServerThumbKey
 
   useEffect(() => {
     let objectUrl = null
@@ -106,6 +115,11 @@ export function PhotoTile({
             onError={() => setLoadFailed(true)}
             draggable={false}
           />
+        )}
+        {loadingThumb && (
+          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/25">
+            <Loader2 className="h-5 w-5 animate-spin text-white/80" aria-hidden />
+          </div>
         )}
         {uploading && (
           <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/20">

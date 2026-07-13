@@ -1,8 +1,8 @@
-import { isDevBypassToken } from './lib/devBypassUsers.js'
-import { getAllTeams } from './lib/teams.js'
-import { getAllLists, saveAllLists } from './lib/listStore.js'
-import { kv, kvAvailable } from './lib/kvBootstrap.js'
-import { authenticate } from './lib/auth.js'
+import { isDevBypassToken } from './_lib/devBypassUsers.js'
+import { getAllTeams } from './_lib/teams.js'
+import { getAllLists, saveAllLists } from './_lib/listStore.js'
+import { kv, kvAvailable } from './_lib/kvBootstrap.js'
+import { authenticate } from './_lib/auth.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -12,9 +12,9 @@ import {
   canChangeVisibility,
   applyResourceVisibilityPatch,
   activityAudienceForResource,
-} from './lib/resourceContext.js'
-import { loadTagRegistry, mergeEntityTags } from './lib/tagHelpers.js'
-import { paginateArray } from './lib/pagination.js'
+} from './_lib/resourceContext.js'
+import { loadTagRegistry, mergeEntityTags } from './_lib/tagHelpers.js'
+import { paginateArray } from './_lib/pagination.js'
 
 /**
  * Vercel Serverless Function - property lists. Firebase Bearer auth.

@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import { markQuotePaidFromStripe } from './public-quote.js'
-import { claimStripeEvent } from './lib/idempotency.js'
+import { claimStripeEvent } from './_lib/idempotency.js'
 
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET

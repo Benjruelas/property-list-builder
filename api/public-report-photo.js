@@ -1,7 +1,7 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getLeadByIdIndexed } from './lib/leadLookup.js'
-import { allowedReportPhotoIds } from './lib/publicReportPayload.js'
-import { loadReportContext } from './lib/publicReportAccess.js'
+import { getLeadByIdIndexed } from './_lib/leadLookup.js'
+import { allowedReportPhotoIds } from './_lib/publicReportPayload.js'
+import { loadReportContext } from './_lib/publicReportAccess.js'
 
 let _s3
 function s3() {

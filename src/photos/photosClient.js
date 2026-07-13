@@ -42,6 +42,27 @@ export const leadPhotoUrl = photoUrl
 const blobMemoryCache = new Map()
 const blobInflight = new Map()
 const MAX_BLOB_CACHE = 96
+const MAX_CONCURRENT_BLOB_FETCHES = 6
+let activeBlobFetches = 0
+const blobFetchWaitQueue = []
+
+function acquireBlobFetchSlot() {
+  if (activeBlobFetches < MAX_CONCURRENT_BLOB_FETCHES) {
+    activeBlobFetches += 1
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => {
+    blobFetchWaitQueue.push(resolve)
+  }).then(() => {
+    activeBlobFetches += 1
+  })
+}
+
+function releaseBlobFetchSlot() {
+  activeBlobFetches = Math.max(0, activeBlobFetches - 1)
+  const next = blobFetchWaitQueue.shift()
+  if (next) next()
+}
 
 function blobCacheKey(key, cacheVersion = '') {
   return `${key}:${cacheVersion}`
@@ -91,25 +112,30 @@ export async function fetchPhotoBlob(getToken, key, cacheVersion = '') {
   if (pending) return pending
 
   const work = (async () => {
-    photoLog('client.fetch-blob', 'GET photo via API proxy', { key: key?.slice?.(0, 60) })
-    const token = await getToken()
-    if (!token) throw new Error('Sign in required')
-    const res = await fetch(photoBlobUrl(key, cacheVersion), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-  if (!res.ok) {
-    blobMemoryCache.delete(cacheKey)
-    photoLogError('client.fetch-blob', 'Photo fetch failed', null, { status: res.status, key })
-    throw new Error('Could not load photo')
-  }
-    const blob = await res.blob()
-    photoLog('client.fetch-blob', 'Photo blob OK', { key: key?.slice?.(0, 60), bytes: blob.size })
-    blobMemoryCache.set(cacheKey, blob)
-    if (blobMemoryCache.size > MAX_BLOB_CACHE) {
-      const oldest = blobMemoryCache.keys().next().value
-      if (oldest) blobMemoryCache.delete(oldest)
+    await acquireBlobFetchSlot()
+    try {
+      photoLog('client.fetch-blob', 'GET photo via API proxy', { key: key?.slice?.(0, 60) })
+      const token = await getToken()
+      if (!token) throw new Error('Sign in required')
+      const res = await fetch(photoBlobUrl(key, cacheVersion), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        blobMemoryCache.delete(cacheKey)
+        photoLogError('client.fetch-blob', 'Photo fetch failed', null, { status: res.status, key })
+        throw new Error('Could not load photo')
+      }
+      const blob = await res.blob()
+      photoLog('client.fetch-blob', 'Photo blob OK', { key: key?.slice?.(0, 60), bytes: blob.size })
+      blobMemoryCache.set(cacheKey, blob)
+      if (blobMemoryCache.size > MAX_BLOB_CACHE) {
+        const oldest = blobMemoryCache.keys().next().value
+        if (oldest) blobMemoryCache.delete(oldest)
+      }
+      return blob
+    } finally {
+      releaseBlobFetchSlot()
     }
-    return blob
   })()
 
   blobInflight.set(cacheKey, work)

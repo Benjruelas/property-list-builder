@@ -1,14 +1,14 @@
-import { requireAuth } from './lib/apiAuth.js'
-import { resolveSenderBranding } from './lib/senderBranding.js'
-import { getAllQuoteTemplates } from './lib/quoteStore.js'
-import { getAllQuotes, saveAllQuotes, getQuoteById } from './lib/quoteStore.js'
+import { requireAuth } from './_lib/apiAuth.js'
+import { resolveSenderBranding } from './_lib/senderBranding.js'
+import { getAllQuoteTemplates } from './_lib/quoteStore.js'
+import { getAllQuotes, saveAllQuotes, getQuoteById } from './_lib/quoteStore.js'
 import {
   computeQuoteTotals,
   computeQuoteProfitSummary,
   defaultValidUntil,
   normalizeQuoteStatus,
-} from './lib/quoteMath.js'
-import { paginateArray } from './lib/pagination.js'
+} from './_lib/quoteMath.js'
+import { paginateArray } from './_lib/pagination.js'
 
 /**
  * Quote instances CRUD — owner-only v1.
