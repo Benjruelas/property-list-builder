@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { CompassOrientation } from './components/CompassOrientation'
 // import { NorthIndicator } from './components/NorthIndicator'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
+import { StateBoundaryLayer } from './components/StateBoundaryLayer'
 import { MapControls } from './components/MapControls'
 import { MobileActionBar } from './components/MobileActionBar'
 import { QuickCreateFab } from './components/QuickCreateFab'
@@ -3715,6 +3716,7 @@ function App() {
             subscribeHeading={subscribeHeading}
           />
           {/* <NorthIndicator mapRef={mapInstanceRef} /> */}
+          <StateBoundaryLayer />
           <PMTilesParcelLayer 
             mapRef={mapInstanceRef}
             mapReady={mapReady}
