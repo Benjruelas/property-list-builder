@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './config/maplibreSetup.js'
 import App, { AppWithPublicFormRoute } from './App.jsx'
 import './styles/ui-theme.css'
 import './styles/ui-theme-light-readability.css'
