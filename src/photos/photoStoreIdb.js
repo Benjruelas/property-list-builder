@@ -6,6 +6,7 @@ const BLOBS = 'blobs'
 let dbPromise = null
 
 function logIdb(step, message, data = {}) {
+  if (!import.meta.env.DEV && import.meta.env.VITE_PHOTO_DEBUG !== '1') return
   if (typeof console !== 'undefined') {
     console.log(`[PhotoPipeline] idb.${step} — ${message}`, { step: `idb.${step}`, message, ...data })
   }
