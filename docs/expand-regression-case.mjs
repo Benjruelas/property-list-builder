@@ -279,6 +279,15 @@ function inferVerify(action, legacy, nextAction, isLast) {
   if (/^search /.test(a)) {
     return `The search field retains the entered query and the visible results refresh for that query.${next}`
   }
+  if (/^set devtools network throttling to offline/.test(a)) {
+    return `Devtools shows the Offline network profile selected and new application requests fail with an offline network status.${next}`
+  }
+  if (/^record the offline error/.test(a)) {
+    return `The offline error message and the unchanged unsaved value are both visible and captured in the test notes.${next}`
+  }
+  if (/^restore the network connection/.test(a)) {
+    return `Devtools no longer shows the Offline profile and a network request completes successfully.${next}`
+  }
   if (/^use responsive device tools/.test(a)) {
     return `The responsive viewport readout reaches each specified width and the application visibly reflows at each breakpoint.${next}`
   }
