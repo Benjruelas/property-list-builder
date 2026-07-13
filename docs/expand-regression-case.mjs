@@ -89,17 +89,20 @@ const FLOW_EXPANSIONS = {
   'Create deal action': [
     'Open Deals panel',
     'Tap create deal (+ or header action)',
-    'Complete create deal dialog',
+    'Enter valid values in every required deal field',
+    'Click Save in the create deal dialog',
   ],
   'Send quote dialog': [
     'Open quote detail for a ready quote',
     'Open Send quote dialog',
-    'Complete send flow',
+    'Enter a valid recipient and complete every required send field',
+    'Click Send quote',
   ],
   'Send report': [
     'Open report detail for a ready report',
     'Open Send report dialog',
-    'Complete send flow',
+    'Enter a valid recipient and complete every required send field',
+    'Click Send report',
   ],
   'Create team': [
     'Open Menu → Teams',
@@ -167,34 +170,143 @@ function splitLegacyStep(raw) {
 }
 
 function normalizeAction(raw) {
-  const a = raw.trim()
-  if (/^(tap|click|open|enter|select|toggle|switch|use|drag|move|enable|disable|verify|review|trigger|wait|load|perform|navigate|complete|fill|save|submit|delete|confirm|accept|decline|create|share|export|rename|add|remove|step|finish|pick|upload|search|type|menu|sign|forgot|close|back|view|compare|try|inspect|phone|bulk|refresh|simulate|edit|highlight|scrub|exit|start|stop|preview|send|change|grant|deny|invite|transfer|restart|enable|login|logout)/i.test(a)) {
+  let a = raw.trim()
+  if (/^⋮\s*→/.test(a)) a = `Open the row overflow menu, then select ${a.replace(/^⋮\s*→\s*/, '')}`
+  else if (/^\+\s*/.test(a)) a = `Click ${a}`
+  else if (/^(month|week|day) view$/i.test(a)) a = `Select ${a}`
+  else if (/^(email|text) templates tab$/i.test(a)) a = `Select the ${a}`
+  else if (/^templates tab actions$/i.test(a)) a = 'Open the Templates tab and inspect the available row actions'
+  else if (/^tag filter menu$/i.test(a)) a = 'Open the tag filter menu'
+  else if (/^go to map action$/i.test(a)) a = 'Click the Go to map action'
+  else if (/^schedule action$/i.test(a)) a = 'Click the Schedule action and choose a date'
+  else if (/^photos from parcel$/i.test(a)) a = 'Open the parcel photo actions and select Photo Mode'
+  else if (/^capture\/upload$/i.test(a)) a = 'Capture a photo or upload an image file'
+  else if (/^done$/i.test(a)) a = 'Tap Done'
+  else if (/^restore network and retry$/i.test(a)) a = 'Restore the network connection, then retry the failed action'
+  else if (/^other user opens pipes$/i.test(a)) a = 'Sign in as the invited user, then open Pipes'
+  else if (/^login as member$/i.test(a)) a = 'Sign out, then sign in with the team-member test account'
+  else if (/^activate\/open deal from task$/i.test(a)) a = 'Click the linked deal action on the task'
+  else if (/^resize viewport/i.test(a)) a = `Use responsive device tools to ${a.charAt(0).toLowerCase() + a.slice(1)}`
+  else if (/^check /i.test(a)) a = `Inspect ${a.slice(6)}`
+  else if (/^expand /i.test(a)) a = `Click to ${a.charAt(0).toLowerCase() + a.slice(1)}`
+  else if (/^mark /i.test(a)) a = `Click the control to ${a.charAt(0).toLowerCase() + a.slice(1)}`
+  else if (/^complete .+ form$/i.test(a)) a = `Enter valid test data in every required field of the ${a.replace(/^complete\s+/i, '')}`
+  else if (/^fill (?:the )?form$/i.test(a)) a = 'Enter valid test data in every required form field'
+  else if (/^fill required fields$/i.test(a)) a = 'Enter valid test data in every required field'
+
+  if (/^(tap|click|open|enter|select|choose|toggle|switch|use|drag|move|enable|disable|verify|review|trigger|wait|load|perform|navigate|complete|fill|save|submit|delete|confirm|accept|decline|create|share|export|rename|add|remove|clear|step|finish|pick|upload|search|type|menu|sign|forgot|close|back|view|compare|try|inspect|phone|bulk|refresh|simulate|edit|highlight|scrub|exit|start|stop|preview|send|change|grant|deny|invite|transfer|restart|enable|login|logout)/i.test(a)) {
     return a.charAt(0).toUpperCase() + a.slice(1)
   }
   return a
 }
 
-function inferVerify(action, legacy, index, total, isLast) {
+function actionObject(action) {
+  return action
+    .replace(/^(tap|click|open|enter|select|toggle|switch|use|drag|move|enable|disable|review|trigger|wait for|wait|load|perform|navigate to|navigate|complete|fill|save|submit|delete|confirm|accept|decline|create|share|export|rename|add|remove|step through|finish|pick|upload|search|type|close|back from|back|view|compare|try|inspect|refresh|simulate|edit|highlight|scrub|exit|start|stop|preview|send|change|grant|deny|invite|transfer|restart)\s+/i, '')
+    .replace(/[.]$/, '')
+}
+
+function visibleTarget(action) {
+  const object = actionObject(action)
+  const pathTarget = object.split(/\s*→\s*/).at(-1)
+  return pathTarget
+    .replace(/^to\s+/i, '')
+    .replace(/\s+(from|via|using|on)\s+.+$/i, '')
+    .replace(/^the\s+/i, '')
+}
+
+function nextStepControl(nextAction) {
+  if (!nextAction) return ''
+  return ` The control needed for the next step (“${nextAction}”) is visible and enabled.`
+}
+
+function makeObjective(check) {
+  const exactReplacements = new Map([
+    ['filtering works', 'only records for the selected filter remain visible and the displayed count matches them'],
+    ['inline rename works', 'the edited name appears in the row and remains after closing and reopening the panel'],
+    ['tag picker works', 'the tag picker opens, the selected tags appear on the row, and they remain after reopening it'],
+    ['send dialog works', 'the send dialog accepts its required fields and displays a success result after submission'],
+    ['parcel list view works', 'the parcel appears as an expandable row in the parcel list view'],
+    ['templates manage correctly', 'the created template appears, the edited values persist, and the deleted template disappears'],
+    ['list filters correctly', 'only lists belonging to the selected tab remain visible and the displayed count matches them'],
+    ['items filter correctly', 'only activity items belonging to the selected tab remain visible'],
+    ['grant/deny handled gracefully', 'both Grant and Deny leave the app interactive with no blank screen or uncaught-error message'],
+    ['preview works', 'the file preview opens and displays the selected file'],
+  ])
+  return exactReplacements.get(check.toLowerCase()) || check.charAt(0).toLowerCase() + check.slice(1)
+}
+
+function explicitFinalVerify(expected) {
+  const checks = expected
+    .split(/\s*;\s*/)
+    .map((part) => part.trim().replace(/[.]$/, ''))
+    .filter(Boolean)
+  return `Final-state checks: ${checks.map((check) => `verify ${makeObjective(check)}`).join('; ')}.`
+}
+
+function inferVerify(action, legacy, nextAction, isLast) {
   const a = action.toLowerCase()
-  if (/submit|save|confirm|accept|decline|delete|send|upload|create|finish|stop recording|logout|transfer|remove member|sync now/.test(a)) {
-    return isLast
-      ? legacy.expected
-      : 'Action completes without crash; UI updates or feedback appears before continuing.'
+  const object = actionObject(action)
+  const target = visibleTarget(action)
+  const next = nextStepControl(nextAction)
+
+  if (isLast) return explicitFinalVerify(legacy.expected)
+
+  if (/^(delete|remove)/.test(a) && /^confirm/i.test(nextAction)) {
+    return `A confirmation dialog identifies the ${target} target and shows explicit Confirm and Cancel controls.${next}`
   }
-  if (/enter|type|fill|edit|rename|add email|add phone|pick|select|toggle|switch|change|enable|disable|drag|move|scrub|expand|collapse/.test(a)) {
-    return 'Input/selection is reflected in the UI; no validation error blocks progress.'
+  if (/^confirm/.test(a)) {
+    return `The confirmation dialog closes and the affected record is visibly removed or updated in the current view.${next}`
   }
-  if (/open|tap|click|navigate|menu|sign in|sign up|view|load|trigger|start|enable|inspect|verify|review|compare|try|perform|refresh|simulate|accept invite|decline invite|use template|phone →|bulk|go to|view on schedule|restart tour|step through/.test(a)) {
-    return 'Target screen, panel, or dialog opens and is interactive.'
+  if (/^(save|submit|finish|stop recording|tap sync now)/.test(a) || /and save$/i.test(a)) {
+    return `A success indicator appears, the submitted values remain visible, and no unsaved or validation state remains.${next}`
   }
-  if (/wait|completion/.test(a)) {
-    return 'Loading/progress finishes; success or error feedback is shown.'
+  if (/^(create)/.test(a)) {
+    return `The create interface or newly created ${legacy.title.toLowerCase()} record is visible, with the entered values intact.${next}`
   }
-  if (/close|back|exit|cancel|dismiss/.test(a)) {
-    return 'Previous context closes; underlying panel or map is usable again.'
+  if (/^(accept|decline|send|upload|logout|transfer)/.test(a)) {
+    return `Visible feedback confirms “${action}”; the prior pending state is replaced by its completed state.${next}`
   }
-  if (isLast) return legacy.expected
-  return 'Step completes; ready for next action.'
+  if (/^(enter|type|fill|edit|rename|add email|add phone)/.test(a)) {
+    return `Every field named in “${object}” visibly retains its test value; no validation message blocks progress.${next}`
+  }
+  if (/^add /.test(a)) {
+    return `${target} appears in the current selection, list, or editor and is not marked invalid.${next}`
+  }
+  if (/^share /.test(a)) {
+    return `The sharing interface for ${target} is visible and shows the recipient or permission controls required to continue.${next}`
+  }
+  if (/^search /.test(a)) {
+    return `The search field retains the entered query and the visible results refresh for that query.${next}`
+  }
+  if (/^use responsive device tools/.test(a)) {
+    return `The responsive viewport readout reaches each specified width and the application visibly reflows at each breakpoint.${next}`
+  }
+  if (/^with .+tap /.test(a)) {
+    return `${target} opens the next picker or dialog and preserves the current selection.${next}`
+  }
+  if (/^(capture|complete)/.test(a)) {
+    return `The values or media produced by “${action}” appear in the current review state with no validation error.${next}`
+  }
+  if (/^(pick|select|choose|toggle|switch|change|enable|disable|clear|drag|move|scrub|expand|collapse)/.test(a)) {
+    return `The ${target} control visibly shows the selected option or changed state, and dependent content updates to match it.${next}`
+  }
+  if (/^(review|view|inspect|verify|compare)/.test(a)) {
+    return `${object} is visible and can be checked against this case’s required state: ${legacy.expected}.${next}`
+  }
+  if (/^refresh/.test(a)) {
+    return `The current page reloads and the application loading state or app shell becomes visible.${next}`
+  }
+  if (/^(open|tap|click|navigate|menu|sign in|sign up|load|trigger|start|try|perform|simulate|use template|phone →|bulk|go to|restart tour|step through)/.test(a)) {
+    return `${target} is visible and interactive, with no error banner, blank content area, or disabled required control.${next}`
+  }
+  if (/^(wait|check completion)/.test(a)) {
+    return `Any progress indicator for ${object} finishes and a visible success or error result replaces it.${next}`
+  }
+  if (/^(close|back|exit|cancel|dismiss)/.test(a)) {
+    return `${object} is no longer visible; the underlying ${legacy.title.toLowerCase()} context is visible and responds to input.${next}`
+  }
+  return `The current UI visibly reflects “${action}” and preserves the data needed by the next step; no error state is present.${next}`
 }
 
 function needsBootstrapStep(firstAction, preconditions, legacy) {
@@ -270,7 +382,7 @@ function bootstrapAction(legacy) {
 }
 
 function bootstrapVerify(legacy) {
-  return `Starting state matches preconditions (${legacy.preconditions}); no error dialog blocks the test.`
+  return `Before continuing, visibly confirm these starting conditions: ${legacy.preconditions}. The starting screen is loaded, responsive, and has no blocking error dialog.`
 }
 
 export function expandLegacyCase(legacy) {
@@ -285,22 +397,15 @@ export function expandLegacyCase(legacy) {
   rawSteps.forEach((raw, index) => {
     const action = normalizeAction(raw)
     const isLast = index === rawSteps.length - 1
+    const nextAction = isLast ? '' : normalizeAction(rawSteps[index + 1])
     steps.push(
       step(
         action,
-        inferVerify(action, legacy, index, rawSteps.length, isLast),
+        inferVerify(action, legacy, nextAction, isLast),
         inferUi(action, legacy),
       ),
     )
   })
-
-  steps.push(
-    step(
-      'Confirm final expected outcome for this test case.',
-      legacy.expected,
-      steps[steps.length - 1]?.ui || inferUi('', legacy),
-    ),
-  )
 
   return tc(
     legacy.id,
