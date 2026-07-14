@@ -3,8 +3,11 @@ import { useInsertionEffect, useRef } from 'react'
 const PRIMARY_SWAP_MS = 220
 
 /**
- * Marks primary↔primary panel navigation on <html> so CSS can avoid a transparent
- * gap over the map (incoming must not fade in from opacity 0).
+ * Marks primary panel navigation on <html> so CSS can avoid a transparent gap
+ * over the map (incoming must not fade in from opacity 0; outgoing/closing
+ * panels cut instead of fading through the map; chrome stays hidden).
+ *
+ * Covers primary↔primary swaps and primary→map closes (Back).
  *
  * Uses useInsertionEffect so the flag exists before child layout/Presence effects
  * and before paint. Does not use React state — setState mid-swap caused extra
@@ -27,7 +30,8 @@ export function usePrimaryPanelSwap(primaryRoot) {
     }
 
     const swapping = prev != null && next != null && prev !== next
-    if (swapping) {
+    const closingToMap = prev != null && next == null
+    if (swapping || closingToMap) {
       root.dataset.primaryPanelSwap = '1'
       swapTimerRef.current = window.setTimeout(() => {
         root.removeAttribute('data-primary-panel-swap')
