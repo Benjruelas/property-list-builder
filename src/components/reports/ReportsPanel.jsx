@@ -57,6 +57,8 @@ const MENU_WIDTH = 180
 export function ReportsPanel({
   isOpen,
   isReportsListOpen = false,
+  isReportsDetailStandalone = false,
+  reportDetailOverLead = false,
   panelDockSlot,
   onClose,
   onBack,
@@ -614,6 +616,8 @@ export function ReportsPanel({
         leads={leads}
         teams={teams}
         teamMembership={teamMembership}
+        panelDockSlot={reportDetailOverLead ? panelDockSlot : undefined}
+        primaryDetail={isReportsDetailStandalone}
         onClose={onCloseDetail}
         onBack={onCloseDetail}
         onSend={(report) => setSendReport(report)}
@@ -635,6 +639,8 @@ export function ReportsPanel({
         teams={teams}
         teamMembership={teamMembership}
         getToken={getToken}
+        panelDockSlot={reportDetailOverLead ? panelDockSlot : undefined}
+        primaryDetail={reportDetailOverLead}
         onClose={onCloseEditor}
         onBack={onCloseEditor}
         onLeadUpdate={onLeadUpdate}

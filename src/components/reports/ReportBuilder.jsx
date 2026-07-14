@@ -64,6 +64,8 @@ export function ReportBuilder({
   getToken,
   onSaved,
   onLeadUpdate,
+  panelDockSlot,
+  primaryDetail = false,
 }) {
   const isTemplate = mode === 'template'
   const [name, setName] = useState('')
@@ -504,8 +506,11 @@ export function ReportBuilder({
             !isTemplate && 'square-picker-panel',
           )}
           showCloseButton={false}
-          nestedOverlay
+          panelDockSlot={panelDockSlot}
+          nestedOverlay={!primaryDetail}
           topLayer
+          hideOverlay={primaryDetail}
+          suppressBackdrop={primaryDetail}
         >
           <DialogHeader className="px-5 pt-5 pb-4 border-b border-white/10 flex-shrink-0 text-left" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
             <DialogDescription className="sr-only">{headerTitle}</DialogDescription>

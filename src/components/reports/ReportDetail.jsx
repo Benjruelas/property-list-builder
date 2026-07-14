@@ -49,6 +49,8 @@ export function ReportDetail({
   leads = [],
   teams = [],
   teamMembership = null,
+  panelDockSlot,
+  primaryDetail = false,
 }) {
   const { getToken: authGetToken, currentUser } = useAuth()
   const resolveToken = getToken || authGetToken
@@ -172,8 +174,11 @@ export function ReportDetail({
         <DialogContent
           className="map-panel list-panel reports-panel report-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,36rem)] max-w-xl"
           showCloseButton={false}
-          nestedOverlay
+          panelDockSlot={panelDockSlot}
+          nestedOverlay={!primaryDetail}
           topLayer
+          hideOverlay={primaryDetail}
+          suppressBackdrop={primaryDetail}
         >
           <DialogHeader className="px-5 pt-5 pb-4 border-b border-white/10 flex-shrink-0 text-left" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))' }}>
             <DialogDescription className="sr-only">Report details</DialogDescription>

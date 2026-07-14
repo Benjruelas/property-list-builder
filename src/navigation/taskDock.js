@@ -120,6 +120,7 @@ export function isPromotedCrmDetailDockFrame(frame) {
   if (frame.type === 'leads.detail' && (frame.returnToLeadsList || frame.dockBesideTasks)) return true
   if (frame.type === 'deals.detail' && (frame.returnToDealsList || frame.returnToPipesList || frame.dockBesideTasks)) return true
   if (frame.type === 'deals.closed' && frame.returnToDealsList) return true
+  if ((frame.type === 'reports.detail' || frame.type === 'reports.editor') && frame.dockBesideTasks) return true
   return false
 }
 
@@ -272,10 +273,17 @@ export function findDockablePrimaryRoot(stack) {
   if (!stack?.length) return null
 
   const finalize = (root) => {
-    if (root !== 'deals') return root
     const hasLeadDetail = stack.some((f) => f.type === 'leads.detail')
     const hasDealDetail = stack.some((f) => f.type === 'deals.detail')
-    // Deal opened from lead detail: keep lead as dock anchor so back is instant (no swap/fade).
+    const hasReportFromLead = stack.some(
+      (f) =>
+        (f.type === 'reports.detail' || f.type === 'reports.editor') &&
+        f.returnToLead,
+    )
+    // Deal or report opened from lead detail: keep lead as dock anchor so back is instant (no swap/fade).
+    if (hasLeadDetail && hasDealDetail) return 'leads'
+    if (hasLeadDetail && hasReportFromLead) return 'leads'
+    if (root !== 'deals') return root
     return hasLeadDetail && hasDealDetail ? 'leads' : root
   }
 
