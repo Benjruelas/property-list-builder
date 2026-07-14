@@ -125,12 +125,6 @@ export function AppLoadingScreen({
             decoding="async"
           />
         </div>
-
-        <span className="app-loading-screen__tagline">{message}</span>
-
-        <div className="app-loading-screen__progress" aria-hidden>
-          <div className="app-loading-screen__progress-fill" />
-        </div>
       </div>
     </div>,
     loadingPortalTarget()
