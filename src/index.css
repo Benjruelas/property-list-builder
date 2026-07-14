@@ -219,6 +219,10 @@
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-controls-stack,
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-search-stack,
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .north-indicator,
+  /* Keep chrome hidden while a panel is still exiting (Presence data-state=closed) */
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="closed"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-controls-stack,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="closed"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-search-stack,
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="closed"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .north-indicator,
   html[data-primary-panel-swap="1"] .map-controls-stack,
   html[data-primary-panel-swap="1"] .map-search-stack,
   html[data-primary-panel-swap="1"] .north-indicator {
@@ -526,7 +530,7 @@
   z-index: 10001 !important;
 }
 
-/* Quotes + reports list stays visible beside detail on desktop */
+/* Quotes + reports list stays visible beside/under detail on desktop */
 @media (min-width: 768px) {
   .map-panel-dialog.quotes-panel.quotes-list-with-detail[data-state='open']:not(.quote-details-panel):not(.quote-editor-panel),
   .map-panel-dialog.reports-panel.reports-list-with-detail[data-state='open']:not(.report-details-panel):not(.report-editor-panel) {
@@ -548,10 +552,14 @@
   }
 }
 
+/*
+ * Mobile: keep list opaque under detail/editor so back doesn't crossfade
+ * through a fully transparent list + exiting detail (bare map flash).
+ */
 @media (max-width: 767px) {
   .map-panel-dialog.quotes-panel.quotes-list-with-detail[data-state='open']:not(.quote-details-panel),
   .map-panel-dialog.reports-panel.reports-list-with-detail[data-state='open']:not(.report-details-panel) {
-    opacity: 0 !important;
+    opacity: 1 !important;
     pointer-events: none !important;
   }
 }
@@ -1675,8 +1683,14 @@
 .map-panel-dialog.form-editor-panel[data-state='closed'],
 .map-panel-dialog.form-fill-panel[data-state='closed'],
 .map-panel-dialog.parcel-list-panel[data-state='closed'] {
-  animation: crm-detail-panel-exit var(--crm-panel-crossfade-duration, 280ms) cubic-bezier(0.4, 0, 0.2, 1) both !important;
+  /*
+   * Cut on close — fading detail to 0 while the list underneath was also
+   * transparent (or still mounting) exposed the bare map on Back.
+   */
+  animation: none !important;
+  opacity: 0 !important;
   pointer-events: none !important;
+  transition: none !important;
 }
 
 /* Desktop: smooth opacity fade on panel open/close (data-state driven — no re-trigger on Tasks dock layout) */
