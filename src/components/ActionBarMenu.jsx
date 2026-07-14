@@ -32,11 +32,10 @@ const MENU_PREFETCH_KEY = {
 
 /** Bar-primary items that only appear in the menu when they overflow off the action bar. */
 const BAR_OVERFLOW_ONLY = [
-  { id: 'pipes', label: 'Pipes', Icon: PipeIcon, tour: 'menu-pipes' },
+  { id: 'pipes', label: 'Deal Pipe', Icon: PipeIcon, tour: 'menu-pipes' },
   { id: 'tasks', label: 'Tasks', Icon: ListTodo, tour: 'menu-tasks' },
   { id: 'schedule', label: 'Schedule', Icon: Calendar, tour: 'menu-schedule' },
-  { id: 'leads', label: 'Leads', Icon: UserSearch, tour: 'menu-leads' },
-  { id: 'deals', label: 'Deals', Icon: Briefcase, tour: 'menu-deals' },
+  { id: 'leads', label: 'Lead Pipe', Icon: UserSearch, tour: 'menu-leads' },
   { id: 'quotes', label: 'Quotes', Icon: QuoteIcon, tour: 'menu-quotes' },
   { id: 'forms', label: 'Forms', Icon: ClipboardList, tour: 'menu-forms' },
   { id: 'reports', label: 'Reports', Icon: FileText, tour: 'menu-reports' },

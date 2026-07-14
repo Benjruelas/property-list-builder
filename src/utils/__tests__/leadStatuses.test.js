@@ -68,8 +68,8 @@ describe('getLeadStatus', () => {
     { id: 'lost', label: 'Lost', color: 'd' },
   ])
 
-  it('derives converted when lead has deals', () => {
-    expect(getLeadStatus({ status: 'new' }, 1, registry)).toBe('converted')
+  it('uses the persisted state even when a lead has deals', () => {
+    expect(getLeadStatus({ status: 'new' }, 1, registry)).toBe('new')
   })
 
   it('preserves lost even with deals', () => {

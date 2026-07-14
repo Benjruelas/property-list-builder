@@ -103,6 +103,7 @@ import { countPendingUploadsByLeadId, shouldEnableSharedAssetSync } from './util
 import { photoUploadManager } from './photos/PhotoUploadManager'
 import { getSettings, updateSettings } from './utils/settings'
 import { resolveLeadStatuses } from './utils/leadStatuses'
+import { resolveDealStatuses } from './utils/dealStatuses'
 import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
 import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
@@ -1007,6 +1008,10 @@ function App() {
 
   const leadStatuses = useMemo(
     () => resolveLeadStatuses({ settings, teams, teamMembership }),
+    [settings, teams, teamMembership]
+  )
+  const dealStatuses = useMemo(
+    () => resolveDealStatuses({ settings, teams, teamMembership }),
     [settings, teams, teamMembership]
   )
 
@@ -4103,6 +4108,7 @@ function App() {
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
         leadStatuses={leadStatuses}
+        dealStatuses={dealStatuses}
       />
       </Suspense>
       )}

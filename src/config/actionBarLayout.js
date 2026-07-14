@@ -4,7 +4,7 @@
  * Desktop (768+): every action on the bar — no Menu.
  */
 
-/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'paths' | 'outreach' | 'settings' | 'photoMode' | 'menu'} ActionBarItemId */
+/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'paths' | 'outreach' | 'settings' | 'photoMode' | 'menu'} ActionBarItemId */
 
 export const DESKTOP_MIN_WIDTH = 768
 
@@ -14,7 +14,6 @@ export const PRIMARY_BAR_ORDER = [
   'tasks',
   'schedule',
   'leads',
-  'deals',
   'quotes',
   'forms',
   'reports',

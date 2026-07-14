@@ -6,6 +6,7 @@
 import { authenticate } from './_lib/auth.js'
 import { backfillLeadShards } from './_lib/leadRepo.js'
 import { backfillPipelineShards } from './_lib/pipelineRepo.js'
+import { runCanonicalPipesMigration } from './_lib/canonicalPipesMigration.js'
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -48,6 +49,9 @@ export default async function handler(req, res) {
     }
     if (target === 'all' || target === 'pipelines') {
       result.pipelines = await backfillPipelineShards()
+    }
+    if (target === 'canonical-pipes') {
+      result.canonicalPipes = await runCanonicalPipesMigration({ force: req.body?.force === true })
     }
     return res.status(200).json({ ok: true, ...result })
   } catch (err) {
