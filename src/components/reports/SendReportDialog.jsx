@@ -147,7 +147,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     setTab('email')
     setRecipient(linkedLead?.email || '')
     setPhone(linkedLead?.phone || '')
-    setSenderUid(null)
+    setSenderUid(report.displaySenderUid || null)
     setCcEmails([])
     setSendMeCopy(false)
     setSentTo(null)
@@ -155,12 +155,21 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     const existingLink = report.publicToken ? buildReportPublicUrl(report.publicToken) : ''
     setLastLink(existingLink)
 
+    const initialSenderUid = report.displaySenderUid || null
+    let initialSenderName = getSenderDisplayName(currentUser)
+    if (initialSenderUid && initialSenderUid !== currentUser?.uid) {
+      const member = teamMembers.find((m) => m.uid === initialSenderUid)
+      if (member) initialSenderName = memberPrimaryLabel(member)
+    } else if (report.createdByName) {
+      initialSenderName = report.createdByName
+    }
+
     // Load templates once from current tag data (avoid effect churn from loadTemplates identity)
     const t = getReportSendTemplatesFromSettings()
     const data = {
       ClientName: linkedLead ? displayLeadName(linkedLead) : 'there',
       ReportTitle: report?.title || 'Photo Report',
-      SenderName: getSenderDisplayName(currentUser),
+      SenderName: initialSenderName,
       CompanyName: getCompanyNameForSends(teams, teamMembership),
       LeadAddress: linkedLead ? formatLeadAddress(linkedLead) : '',
       ReportLink: existingLink || REPORT_LINK_TAG,
@@ -178,6 +187,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
           reportId: report.id,
           generateOnly: true,
           token: report.publicToken || parseReportTokenFromPublicUrl(existingLink) || undefined,
+          senderUid: initialSenderUid || undefined,
         })
         if (cancelled) return
         const link = res.publicUrl || buildReportPublicUrl(res.token)

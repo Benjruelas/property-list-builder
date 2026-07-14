@@ -179,7 +179,7 @@ export async function resolvePublicDocumentBranding({
   document = null,
   createdByName = '',
 } = {}) {
-  const sentByUid = invite?.sentByUid || document?.lastSentByUid || ''
+  const sentByUid = invite?.sentByUid || document?.lastSentByUid || document?.displaySenderUid || ''
   const sentByEmail = invite?.sentByEmail || document?.lastSentByEmail || ''
   const sentByName = invite?.sentByName || document?.lastSentByName || createdByName || ''
 

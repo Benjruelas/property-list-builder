@@ -9,6 +9,7 @@ import {
 import { getLeadWithAccess, getVisibleLeads } from './_lib/leadAccess.js'
 import { paginateArray } from './_lib/pagination.js'
 import { presignedPhotosEnabled, createPresignedGetUrl } from './_lib/photoPresign.js'
+import { resolveSenderBranding } from './_lib/senderBranding.js'
 import { reportPdfContentChanged } from './_lib/reportPdfMeta.js'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 
@@ -38,6 +39,14 @@ function buildReportFromBody(body, user, existing = null) {
     publicToken: existing?.publicToken ?? null,
     ownerId: existing?.ownerId || user.uid,
     ownerEmail: existing?.ownerEmail || user.email,
+    createdByName: existing?.createdByName || body.createdByName || '',
+    createdByEmail: existing?.createdByEmail || body.createdByEmail || '',
+    displaySenderUid: body.displaySenderUid !== undefined
+      ? (String(body.displaySenderUid || '').trim() || null)
+      : (existing?.displaySenderUid ?? null),
+    lastSentByUid: existing?.lastSentByUid ?? null,
+    lastSentByName: existing?.lastSentByName ?? null,
+    lastSentByEmail: existing?.lastSentByEmail ?? null,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     sentAt: existing?.sentAt ?? null,
@@ -158,7 +167,12 @@ export default async function handler(req, res) {
 
       let report
       try {
-        report = buildReportFromBody(seed, user)
+        const branding = await resolveSenderBranding(user)
+        report = buildReportFromBody({
+          ...seed,
+          createdByName: branding.senderName,
+          createdByEmail: user.email || branding.senderEmail || '',
+        }, user)
       } catch (e) {
         return res.status(400).json({ error: e.message })
       }
