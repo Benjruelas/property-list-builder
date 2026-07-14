@@ -144,32 +144,32 @@ function stackHasReportsSurface(stack) {
   )
 }
 
+function stackHasLeadContext(stack) {
+  return stack.some((f) => f.type === 'leads.detail')
+}
+
+/** True when reports detail/editor should restore lead on back (opened from lead). */
+function reportsReturnToLead(stack) {
+  return (
+    stackHasLeadContext(stack) ||
+    stack.some(
+      (f) => (f.type === 'reports.detail' || f.type === 'reports.editor') && f.returnToLead,
+    )
+  )
+}
+
 /**
  * Open report detail in one stack replace.
  * Ensures the Reports list frame exists and swaps to reports as primary when needed,
  * so callers never flash a list-only (or empty) frame before detail.
  */
 export function recipePushReportsDetail(currentStack, reportId, opts = {}) {
+  const returnToLead = reportsReturnToLead(currentStack)
   const base = stackHasReportsSurface(currentStack)
     ? currentStack
-    : recipeOpenReports(currentStack, opts)
-  const { tasksFrames, coreStack } = splitTrailingTasks(base)
-  const withoutNested = coreStack.filter(
-    (f) => f.type !== 'reports.detail' && f.type !== 'reports.editor',
-  )
-  const withList = withoutNested.some((f) => f.type === 'reports')
-    ? withoutNested
-    : [...withoutNested, { type: 'reports' }]
-  return appendTrailingTasks([...withList, { type: 'reports.detail', reportId }], tasksFrames)
-}
-
-/**
- * Open report editor in one stack replace (same atomic open as detail).
- */
-export function recipePushReportsEditor(currentStack, editorFrame, opts = {}) {
-  const base = stackHasReportsSurface(currentStack)
-    ? currentStack
-    : recipeOpenReports(currentStack, opts)
+    : returnToLead
+      ? recipeClosePrimaryExcept(currentStack, { reports: true, leads: true }, [])
+      : recipeOpenReports(currentStack, opts)
   const { tasksFrames, coreStack } = splitTrailingTasks(base)
   const withoutNested = coreStack.filter(
     (f) => f.type !== 'reports.detail' && f.type !== 'reports.editor',
@@ -178,7 +178,36 @@ export function recipePushReportsEditor(currentStack, editorFrame, opts = {}) {
     ? withoutNested
     : [...withoutNested, { type: 'reports' }]
   return appendTrailingTasks(
-    [...withList, { type: 'reports.editor', ...editorFrame }],
+    [
+      ...withList,
+      { type: 'reports.detail', reportId, ...(returnToLead ? { returnToLead: true } : {}) },
+    ],
+    tasksFrames,
+  )
+}
+
+/**
+ * Open report editor in one stack replace (same atomic open as detail).
+ */
+export function recipePushReportsEditor(currentStack, editorFrame, opts = {}) {
+  const returnToLead = reportsReturnToLead(currentStack)
+  const base = stackHasReportsSurface(currentStack)
+    ? currentStack
+    : returnToLead
+      ? recipeClosePrimaryExcept(currentStack, { reports: true, leads: true }, [])
+      : recipeOpenReports(currentStack, opts)
+  const { tasksFrames, coreStack } = splitTrailingTasks(base)
+  const withoutNested = coreStack.filter(
+    (f) => f.type !== 'reports.detail' && f.type !== 'reports.editor',
+  )
+  const withList = withoutNested.some((f) => f.type === 'reports')
+    ? withoutNested
+    : [...withoutNested, { type: 'reports' }]
+  return appendTrailingTasks(
+    [
+      ...withList,
+      { type: 'reports.editor', ...editorFrame, ...(returnToLead ? { returnToLead: true } : {}) },
+    ],
     tasksFrames,
   )
 }
