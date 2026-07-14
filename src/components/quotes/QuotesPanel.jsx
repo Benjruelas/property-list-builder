@@ -52,7 +52,6 @@ const MENU_WIDTH = 180
 
 export function QuotesPanel({
   isOpen,
-  retainDuringSwap = false,
   panelDockSlot,
   onClose,
   onBack,
@@ -83,15 +82,10 @@ export function QuotesPanel({
   const headerMenuTriggerRef = useRef(null)
   const editorOpen = !!editorFrame
   const hasNestedQuoteView = editorOpen || !!detailQuoteId
+  const listDialogOpen = mapListDialogOpen(isOpen)
+  const listObscuredByEditor = listPanelObscuredByDetail(isOpen, editorOpen)
   const hasQuoteDetail = !!detailQuoteId
-  const listOpenOpts = {
-    showingDetail: hasNestedQuoteView,
-    retainOpen: retainDuringSwap,
-    swappingOut: retainDuringSwap,
-  }
-  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
-  const listObscuredByEditor = listPanelObscuredByDetail(isOpen, editorOpen, listOpenOpts)
-  const listBesideQuoteDetail = listPanelObscuredByDetail(isOpen, hasQuoteDetail, listOpenOpts)
+  const listBesideQuoteDetail = listPanelObscuredByDetail(isOpen, hasQuoteDetail)
   const [fetchedDetailQuote, setFetchedDetailQuote] = useState(null)
   const editorSeed = editorFrame?.prefill ?? editorFrame?.quote ?? null
   const editorTemplate = editorFrame?.template ?? null

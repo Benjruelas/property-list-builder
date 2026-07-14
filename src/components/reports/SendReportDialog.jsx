@@ -121,7 +121,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         reportId: report.id,
         generateOnly: true,
         token: parseReportTokenFromPublicUrl(lastLink) || report.publicToken || undefined,
-        senderUid,
+        senderUid: senderUid || undefined,
       })
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
@@ -135,6 +135,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   useEffect(() => {
     if (!open) {
       initSessionRef.current = null
+      setGeneratingLink(false)
       return undefined
     }
     if (!report) return undefined
@@ -153,7 +154,20 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
 
     const existingLink = report.publicToken ? buildReportPublicUrl(report.publicToken) : ''
     setLastLink(existingLink)
-    loadTemplates(existingLink)
+
+    // Load templates once from current tag data (avoid effect churn from loadTemplates identity)
+    const t = getReportSendTemplatesFromSettings()
+    const data = {
+      ClientName: linkedLead ? displayLeadName(linkedLead) : 'there',
+      ReportTitle: report?.title || 'Photo Report',
+      SenderName: getSenderDisplayName(currentUser),
+      CompanyName: getCompanyNameForSends(teams, teamMembership),
+      LeadAddress: linkedLead ? formatLeadAddress(linkedLead) : '',
+      ReportLink: existingLink || REPORT_LINK_TAG,
+    }
+    setSubject(replaceReportTags(t.emailSubject, data))
+    setBody(replaceReportTags(t.emailBody, data))
+    setTextBody(replaceReportTags(t.textBody, data))
 
     let cancelled = false
 
@@ -172,16 +186,22 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
       } catch (e) {
         if (!cancelled) showToast(e.message || 'Could not create report link', 'error')
       } finally {
-        if (!cancelled) setGeneratingLink(false)
+        // Always clear — if this run was cancelled, a newer open may also set it,
+        // but leaving it true permanently disables Send.
+        setGeneratingLink(false)
       }
     }
 
     bootstrapLink()
     return () => { cancelled = true }
-  }, [open, report?.id, linkedLead?.id, getToken, loadTemplates, applyLinkToMessages])
+  // Intentionally omit loadTemplates / baseTagData — their identity churn was cancelling
+  // bootstrap and leaving generatingLink stuck true.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, report?.id, linkedLead?.id, getToken, applyLinkToMessages, currentUser, teams, teamMembership])
 
   const resetAndClose = () => {
-    if (sending || generatingLink) return
+    if (sending) return
+    setGeneratingLink(false)
     setSentTo(null)
     onClose?.()
   }
@@ -209,6 +229,10 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
       showToast('Enter a valid recipient email', 'error')
       return
     }
+    if (!report?.id) {
+      showToast('Report is missing', 'error')
+      return
+    }
     setSending(true)
     try {
       const res = await sendPhotoReportEmail(getToken, {
@@ -219,7 +243,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         sendMeCopy,
         subject: replaceReportTags(subject, tagData),
         message: replaceReportTags(body, tagData),
-        senderUid,
+        senderUid: senderUid || undefined,
       })
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
@@ -266,7 +290,8 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     }
   }
 
-  const busy = sending || generatingLink
+  const busy = sending
+  const linkBusy = generatingLink
 
   if (!report) return null
 
@@ -295,8 +320,8 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
               {lastLink && (
                 <p className="text-xs opacity-60 break-all">{lastLink}</p>
               )}
-              <Button variant="outline" className="w-full min-h-[44px]" onClick={handleCopyLink} disabled={busy}>
-                {generatingLink ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+              <Button variant="outline" className="w-full min-h-[44px]" onClick={handleCopyLink} disabled={busy || linkBusy}>
+                {linkBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
                 Copy report link
               </Button>
             </div>
@@ -442,9 +467,9 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 variant="outline"
                 className="w-full min-h-[44px]"
                 onClick={handleCopyLink}
-                disabled={busy}
+                disabled={busy || linkBusy}
               >
-                {generatingLink ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                {linkBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
                 Copy report link
               </Button>
 
@@ -454,7 +479,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                   Send email
                 </Button>
               ) : (
-                <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendText} disabled={busy}>
+                <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendText} disabled={busy || linkBusy}>
                   {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
                   Open SMS
                 </Button>
