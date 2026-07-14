@@ -264,6 +264,7 @@ function App() {
     quotesDetailQuote,
     quotesDetailReturnToDeal,
     isReportsPanelOpen,
+    isReportsListOpen,
     reportsEditorFrame,
     reportsEditorReturnToLead,
     reportsDetailReportId,
@@ -3113,18 +3114,20 @@ function App() {
   }, [requireAuth, guardFeature, nav])
 
   const handleCloseReportsEditor = useCallback(() => {
+    const hadTransientReportsList = reportsEditorReturnToLead && isReportsListOpen
     nav.pop()
-    if (reportsEditorReturnToLead) {
+    if (hadTransientReportsList) {
       nav.pop()
     }
-  }, [nav, reportsEditorReturnToLead])
+  }, [nav, reportsEditorReturnToLead, isReportsListOpen])
 
   const handleCloseReportsDetail = useCallback(() => {
+    const hadTransientReportsList = reportsDetailReturnToLead && isReportsListOpen
     nav.pop()
-    if (reportsDetailReturnToLead) {
+    if (hadTransientReportsList) {
       nav.pop()
     }
-  }, [nav, reportsDetailReturnToLead])
+  }, [nav, reportsDetailReturnToLead, isReportsListOpen])
 
   const handleCreatePhotoReport = useCallback((leadId) => {
     if (!leadId) return
@@ -3850,7 +3853,7 @@ function App() {
           isDealPipelineOpen ? 'pipes'
           : isTasksPanelOpen ? 'tasks'
           : isSchedulePanelOpen ? 'schedule'
-          : isLeadsPanelOpen ? 'leads'
+          : isLeadsPanelOpen || (leadsDetailLeadId && (reportsDetailReturnToLead || reportsEditorReturnToLead)) ? 'leads'
           : isDealsPanelOpen ? 'deals'
           : isQuotesPanelOpen ? 'quotes'
           : isFormsPanelOpen ? 'forms'
@@ -4290,11 +4293,12 @@ function App() {
 
       {reportsPanelMounted && (
         <Suspense fallback={
-          <PanelListLoadingShell open={isReportsPanelOpen} title="Reports" onBack={handlePanelBack} className="reports-panel lists-panel" />
+          <PanelListLoadingShell open={isReportsListOpen} title="Reports" onBack={handlePanelBack} className="reports-panel lists-panel" />
         }>
           <ReportsPanel
-            isOpen={isReportsPanelOpen}
-            panelDockSlot={panelDockSlot('reports', isReportsPanelOpen || !!reportsDetailReportId)}
+            isOpen={isReportsListOpen || !!reportsDetailReportId || !!reportsEditorFrame}
+            isReportsListOpen={isReportsListOpen}
+            panelDockSlot={panelDockSlot('reports', isReportsListOpen || !!reportsDetailReportId || !!reportsEditorFrame)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             leads={leads}

@@ -174,9 +174,11 @@ export function recipePushReportsDetail(currentStack, reportId, opts = {}) {
   const withoutNested = coreStack.filter(
     (f) => f.type !== 'reports.detail' && f.type !== 'reports.editor',
   )
-  const withList = withoutNested.some((f) => f.type === 'reports')
-    ? withoutNested
-    : [...withoutNested, { type: 'reports' }]
+  const withList = returnToLead
+    ? withoutNested.filter((f) => f.type !== 'reports')
+    : withoutNested.some((f) => f.type === 'reports')
+      ? withoutNested
+      : [...withoutNested, { type: 'reports' }]
   return appendTrailingTasks(
     [
       ...withList,
@@ -200,9 +202,11 @@ export function recipePushReportsEditor(currentStack, editorFrame, opts = {}) {
   const withoutNested = coreStack.filter(
     (f) => f.type !== 'reports.detail' && f.type !== 'reports.editor',
   )
-  const withList = withoutNested.some((f) => f.type === 'reports')
-    ? withoutNested
-    : [...withoutNested, { type: 'reports' }]
+  const withList = returnToLead
+    ? withoutNested.filter((f) => f.type !== 'reports')
+    : withoutNested.some((f) => f.type === 'reports')
+      ? withoutNested
+      : [...withoutNested, { type: 'reports' }]
   return appendTrailingTasks(
     [
       ...withList,

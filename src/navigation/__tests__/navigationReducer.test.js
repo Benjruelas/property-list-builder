@@ -659,11 +659,28 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual([
       'leads',
       'leads.detail',
-      'reports',
       'reports.detail',
     ])
-    expect(stack[3].reportId).toBe('r1')
-    expect(stack[3].returnToLead).toBe(true)
+    expect(stack[2].reportId).toBe('r1')
+    expect(stack[2].returnToLead).toBe(true)
+  })
+
+  it('reports list open state is separate from report detail', () => {
+    const state = createInitialState()
+    state.navStack = [{ type: 'reports' }, { type: 'reports.detail', reportId: 'r1' }]
+    const props = selectPanelProps(state)
+    expect(props.isReportsPanelOpen).toBe(true)
+    expect(props.isReportsListOpen).toBe(true)
+    expect(props.reportsDetailReportId).toBe('r1')
+
+    state.navStack = [
+      { type: 'leads.detail', leadId: 'l1' },
+      { type: 'reports.detail', reportId: 'r1', returnToLead: true },
+    ]
+    const fromLead = selectPanelProps(state)
+    expect(fromLead.isReportsPanelOpen).toBe(true)
+    expect(fromLead.isReportsListOpen).toBe(false)
+    expect(fromLead.reportsDetailReturnToLead).toBe(true)
   })
 
   it('recipePushReportsDetail keeps tasks when docked', () => {
@@ -685,10 +702,10 @@ describe('recipes', () => {
       [{ type: 'leads.detail', leadId: 'l1' }],
       { mode: 'report', leadId: 'l1', awaitingTemplate: true },
     )
-    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'reports', 'reports.editor'])
-    expect(stack[2].leadId).toBe('l1')
-    expect(stack[2].awaitingTemplate).toBe(true)
-    expect(stack[2].returnToLead).toBe(true)
+    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'reports.editor'])
+    expect(stack[1].leadId).toBe('l1')
+    expect(stack[1].awaitingTemplate).toBe(true)
+    expect(stack[1].returnToLead).toBe(true)
   })
 
   it('reports editor and detail derive from stack', () => {
