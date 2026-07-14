@@ -225,8 +225,12 @@ export function LeadsPanel({
   }, [onCreateDealSubmit])
 
   const showingLeadDetail = !!(detailLeadId && selectedLead)
-  const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId && !reportsDetailOverLead
-  const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(isOpen, showingLeadDetail)
+  const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
+  const retainListUnderDetail = showingLeadDetail && !reportsDetailOverLead
+  const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(
+    isOpen && !reportsDetailOverLead,
+    retainListUnderDetail,
+  )
   const stickyDetailLeadRef = useRef(null)
   if (selectedLead) stickyDetailLeadRef.current = selectedLead
   const leadForDetail = selectedLead || stickyDetailLeadRef.current
@@ -427,6 +431,7 @@ export function LeadsPanel({
             nestedOverlay={false}
             topLayer={leadsDetailTopLayer}
             primaryDetail={isLeadsDetailStandalone}
+            obscuredByChild={reportsDetailOverLead}
             externalNestedOverlay={
               (!!editLeadId && editLeadId === leadForDetail?.id)
               || createDealOpen
