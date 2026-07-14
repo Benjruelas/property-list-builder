@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { entityKey, parseEntityKey, apiBodyFromRef, isDraftRef } from '@/photos/entityRef'
 import { updatePhotoInList } from '@/photos/annotationSave'
-import { JOB_STATUS } from '@/photos/PhotoUploadManager'
+import { JOB_STATUS, photoUploadManager } from '@/photos/PhotoUploadManager'
 
 describe('photo entityRef', () => {
   it('entityKey encodes lead and deal refs', () => {
@@ -49,5 +49,12 @@ describe('PhotoUploadManager job statuses', () => {
     expect(JOB_STATUS.uploading).toBe('uploading')
     expect(JOB_STATUS.done).toBe('done')
     expect(JOB_STATUS.failed).toBe('failed')
+  })
+
+  it('getJobsForEntity returns a stable snapshot until jobs change', () => {
+    const ref = { entityType: 'lead', leadId: 'shared_lead', entityId: 'shared_lead' }
+    const first = photoUploadManager.getJobsForEntity(ref)
+    const second = photoUploadManager.getJobsForEntity(ref)
+    expect(first).toBe(second)
   })
 })

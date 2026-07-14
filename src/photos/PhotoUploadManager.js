@@ -24,6 +24,9 @@ export const JOB_STATUS = {
   failed: 'failed',
 }
 
+/** Stable empty snapshot for useSyncExternalStore entity subscriptions. */
+const EMPTY_ENTITY_JOBS = Object.freeze([])
+
 function newJobId() {
   return `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 }
@@ -41,6 +44,8 @@ class PhotoUploadManager {
     this._drainPromise = null
     this.concurrency = 2
     this.entityListeners = new Map()
+    this.entityJobsCache = new Map()
+    this.jobsRevision = 0
     this._boundOnline = () => {
       photoLog('queue.online', 'Network online — resuming upload queue')
       this.start()
@@ -88,7 +93,13 @@ class PhotoUploadManager {
     for (const fn of set) fn()
   }
 
+  invalidateJobsCache() {
+    this.jobsRevision += 1
+    this.entityJobsCache.clear()
+  }
+
   emit() {
+    this.invalidateJobsCache()
     const snap = this.getSnapshot()
     for (const fn of this.listeners) fn(snap)
     const keys = new Set(snap.map((j) => j.entityKey))
@@ -101,7 +112,19 @@ class PhotoUploadManager {
 
   getJobsForEntity(ref) {
     const key = entityKey(ref)
-    return this.getSnapshot().filter((j) => j.entityKey === key && j.status !== JOB_STATUS.done)
+    if (!key || key === 'lead:' || key.startsWith('deal::')) return EMPTY_ENTITY_JOBS
+
+    const cached = this.entityJobsCache.get(key)
+    if (cached && cached.revision === this.jobsRevision) {
+      return cached.jobs
+    }
+
+    const jobs = this.getSnapshot().filter(
+      (j) => j.entityKey === key && j.status !== JOB_STATUS.done,
+    )
+    const snapshot = jobs.length === 0 ? EMPTY_ENTITY_JOBS : jobs
+    this.entityJobsCache.set(key, { revision: this.jobsRevision, jobs: snapshot })
+    return snapshot
   }
 
   async normalizeStaleJobs() {

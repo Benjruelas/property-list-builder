@@ -1,23 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
-
-vi.mock('../PhotoUploadProvider', async (importOriginal) => {
-  const actual = await importOriginal()
-  return {
-    ...actual,
-    useEntityUploadJobs: () => [],
-    usePhotoUpload: () => ({
-      enqueueCapture: vi.fn(),
-      reassignDraftJobs: vi.fn(),
-    }),
-  }
-})
-
 import { PhotoCaptureModal } from '@/photos/PhotoCaptureModal'
 import { PhotoUploadProvider } from '@/photos/PhotoUploadProvider'
 
@@ -46,7 +33,7 @@ function mountCaptureModal(entity, extraProps = {}) {
 }
 
 describe('PhotoCaptureModal', () => {
-  it('mounts for a shared lead opened by a collaborator', () => {
+  it('mounts for a shared lead opened by a collaborator without crashing', () => {
     const sharedLead = {
       id: 'lead_shared_1',
       ownerId: 'owner_uid',
@@ -57,9 +44,8 @@ describe('PhotoCaptureModal', () => {
       photoCount: 0,
     }
 
-    const { container } = mountCaptureModal(sharedLead)
-    const popover = document.querySelector('.photo-add-popover') || container.querySelector('.photo-add-popover')
-    expect(popover).not.toBeNull()
+    expect(() => mountCaptureModal(sharedLead)).not.toThrow()
+    expect(document.querySelector('.photo-add-popover')).not.toBeNull()
   })
 
   it('does not mount deal capture without a deal id', () => {
