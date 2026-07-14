@@ -9,6 +9,81 @@ export const CLIENT_PREVIEW_RESTORE_FLAG = 'clientPreviewRestorePending'
 import { getApiBase } from './apiBase'
 import { getPublicRouteFromWindow, parsePublicRoute } from './publicLinks'
 
+const PREVIEW_HANDOFF_KEYS = [
+  CLIENT_PREVIEW_RETURN_KEY,
+  CLIENT_PREVIEW_NAV_KEY,
+  CLIENT_PREVIEW_RESTORE_FLAG,
+]
+
+function getSessionStorage() {
+  if (typeof sessionStorage === 'undefined') return null
+  return sessionStorage
+}
+
+function getLocalStorage() {
+  if (typeof localStorage === 'undefined') return null
+  return localStorage
+}
+
+function getStorageTargets(storageWindow = null) {
+  const targets = []
+  const session = getSessionStorage()
+  const local = getLocalStorage()
+  if (session) targets.push(session)
+  if (local) targets.push(local)
+  if (storageWindow?.sessionStorage) targets.push(storageWindow.sessionStorage)
+  if (storageWindow?.localStorage) targets.push(storageWindow.localStorage)
+  return targets
+}
+
+/** Write preview handoff data to both session and local storage for cross-tab restore. */
+function writePreviewHandoff(key, value) {
+  for (const storage of getStorageTargets()) {
+    try {
+      storage.setItem(key, value)
+    } catch {
+      /* ignore quota / serialization errors */
+    }
+  }
+}
+
+/** Read preview handoff data from session storage, then local storage. */
+function readPreviewHandoff(key) {
+  const session = getSessionStorage()
+  if (session) {
+    const value = session.getItem(key)
+    if (value != null) return value
+  }
+  const local = getLocalStorage()
+  if (local) {
+    return local.getItem(key)
+  }
+  return null
+}
+
+function removePreviewHandoff(key) {
+  for (const storage of getStorageTargets()) {
+    try {
+      storage.removeItem(key)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Clear all preview handoff keys from the current tab and optionally another window. */
+export function clearClientPreviewHandoff(storageWindow = null) {
+  for (const key of PREVIEW_HANDOFF_KEYS) {
+    for (const storage of getStorageTargets(storageWindow)) {
+      try {
+        storage.removeItem(key)
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 async function parseJsonSafe(res) {
   try {
     return await res.json()
@@ -32,10 +107,9 @@ export function isPublicPreviewRoute() {
 
 /** Persist the navigation stack so it can be restored after a preview round trip. */
 export function persistNavStack(navStack) {
-  if (typeof sessionStorage === 'undefined') return
   if (isPublicPreviewRoute()) return
   try {
-    sessionStorage.setItem(CLIENT_PREVIEW_NAV_KEY, JSON.stringify(navStack ?? []))
+    writePreviewHandoff(CLIENT_PREVIEW_NAV_KEY, JSON.stringify(navStack ?? []))
   } catch {
     /* ignore quota / serialization errors */
   }
@@ -43,9 +117,8 @@ export function persistNavStack(navStack) {
 
 /** Read the persisted navigation stack, or null when unavailable. */
 export function readPersistedNavStack() {
-  if (typeof sessionStorage === 'undefined') return null
   try {
-    const raw = sessionStorage.getItem(CLIENT_PREVIEW_NAV_KEY)
+    const raw = readPreviewHandoff(CLIENT_PREVIEW_NAV_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : null
@@ -56,22 +129,20 @@ export function readPersistedNavStack() {
 
 /** Read-and-clear the restore flag; true only after a preview was opened. */
 export function consumeNavRestoreFlag() {
-  if (typeof sessionStorage === 'undefined') return false
-  const pending = sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG) === '1'
-  if (pending) sessionStorage.removeItem(CLIENT_PREVIEW_RESTORE_FLAG)
+  const pending = readPreviewHandoff(CLIENT_PREVIEW_RESTORE_FLAG) === '1'
+  if (pending) removePreviewHandoff(CLIENT_PREVIEW_RESTORE_FLAG)
   return pending
 }
 
 /** Remember where the user was before opening a client preview. */
 export function markClientPreviewOpened() {
-  if (typeof sessionStorage === 'undefined') return
   const path = typeof window !== 'undefined'
     ? `${window.location.pathname}${window.location.search}${window.location.hash}`
     : '/'
-  sessionStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, path)
+  writePreviewHandoff(CLIENT_PREVIEW_RETURN_KEY, path)
   // Durable signal that survives the reload triggered by returnToAppFromClientPreview;
   // intentionally not cleared there so the app can restore nav state on next load.
-  sessionStorage.setItem(CLIENT_PREVIEW_RESTORE_FLAG, '1')
+  writePreviewHandoff(CLIENT_PREVIEW_RESTORE_FLAG, '1')
 }
 
 /** True only for owner "View as client" previews — not real client share links. */
@@ -83,8 +154,21 @@ export function shouldShowOwnerPreviewBack({ preview = false } = {}) {
 export function returnToAppFromClientPreview() {
   if (typeof window === 'undefined') return
 
-  const stored = sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)
-  sessionStorage.removeItem(CLIENT_PREVIEW_RETURN_KEY)
+  // Prefer returning to the live app tab so React state, auth, and nav stack stay intact.
+  try {
+    const opener = window.opener
+    if (opener && !opener.closed) {
+      clearClientPreviewHandoff(opener)
+      opener.focus()
+      window.close()
+      return
+    }
+  } catch {
+    /* opener access blocked — fall through to stored return URL */
+  }
+
+  const stored = readPreviewHandoff(CLIENT_PREVIEW_RETURN_KEY)
+  removePreviewHandoff(CLIENT_PREVIEW_RETURN_KEY)
 
   if (stored) {
     try {
@@ -161,11 +245,6 @@ export function openClientPreviewUrl(publicUrl, previewWindow = null) {
   if (previewWindow && !previewWindow.closed) {
     try {
       previewWindow.location.href = publicUrl
-      try {
-        previewWindow.opener = null
-      } catch {
-        /* ignore */
-      }
       return true
     } catch {
       /* fall through to window.open */

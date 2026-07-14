@@ -8,25 +8,31 @@ export function reportEditorDraftKey(leadId) {
 }
 
 export function saveReportEditorDraft(draft) {
-  if (typeof sessionStorage === 'undefined') return
   const leadId = draft?.leadId
   const key = reportEditorDraftKey(leadId)
   if (!key) return
+  const payload = JSON.stringify({
+    ...draft,
+    updatedAt: Date.now(),
+  })
   try {
-    sessionStorage.setItem(key, JSON.stringify({
-      ...draft,
-      updatedAt: Date.now(),
-    }))
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(key, payload)
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, payload)
+    }
   } catch {
     /* ignore quota errors */
   }
 }
 
 export function loadReportEditorDraft(leadId) {
-  if (typeof sessionStorage === 'undefined' || !leadId) return null
+  if (!leadId) return null
   const key = reportEditorDraftKey(leadId)
   try {
-    const raw = sessionStorage.getItem(key)
+    const raw = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(key) : null)
+      ?? (typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null)
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (!parsed || parsed.leadId !== leadId) return null
@@ -37,9 +43,15 @@ export function loadReportEditorDraft(leadId) {
 }
 
 export function clearReportEditorDraft(leadId) {
-  if (typeof sessionStorage === 'undefined' || !leadId) return
+  if (!leadId) return
+  const key = reportEditorDraftKey(leadId)
   try {
-    sessionStorage.removeItem(reportEditorDraftKey(leadId))
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(key)
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(key)
+    }
   } catch {
     /* ignore */
   }
