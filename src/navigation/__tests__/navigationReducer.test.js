@@ -716,10 +716,10 @@ describe('recipes', () => {
       'r1',
       { keepTasks: true },
     )
-    expect(stack.map((f) => f.type)).toEqual(['leads', 'leads.detail', 'reports.detail', 'tasks'])
-    expect(stack[2].reportId).toBe('r1')
-    expect(stack[2].returnToLead).toBe(true)
-    expect(stack[2].dockBesideTasks).toBe(true)
+    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'reports.detail', 'tasks'])
+    expect(stack[1].reportId).toBe('r1')
+    expect(stack[1].returnToLead).toBe(true)
+    expect(stack[1].dockBesideTasks).toBe(true)
   })
 
   it('recipeOpenReportEditorFromLeadDetail opens editor without reports list', () => {
@@ -745,6 +745,8 @@ describe('recipes', () => {
       tasksSoloDetail: false,
       soloDetailRoot: null,
     })
+    expect(selectPanelProps(state).isLeadsPanelOpen).toBe(false)
+    expect(selectPanelProps(state).leadsDetailLeadId).toBe('l1')
   })
 
   it('pop reports.detail returns to lead detail', () => {

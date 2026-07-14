@@ -543,7 +543,7 @@ export function LeadDetails({
         className={cn(
           'map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0',
           stackedOverlay && 'lead-details-stacked-overlay',
-          obscuredByChild && 'crm-panel-obscured',
+          obscuredByChild && 'crm-panel-obscured invisible opacity-0 pointer-events-none',
         )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}

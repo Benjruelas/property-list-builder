@@ -225,9 +225,10 @@ export function recipeOpenReportFromLeadDetail(currentStack, reportId, opts = {}
     f.type !== 'reports.detail' &&
     f.type !== 'reports.editor' &&
     f.type !== 'reports'
+  const stripTransientList = (f) => f.type !== 'leads' && f.type !== 'reports'
 
   const build = (stack) => [
-    ...stack.filter(stripReportFrames),
+    ...stack.filter(stripReportFrames).filter(stripTransientList),
     { type: 'reports.detail', reportId, returnToLead: true, dockBesideTasks: true },
   ]
 
@@ -247,9 +248,10 @@ export function recipeOpenReportEditorFromLeadDetail(currentStack, editorFrame, 
     f.type !== 'reports.detail' &&
     f.type !== 'reports.editor' &&
     f.type !== 'reports'
+  const stripTransientList = (f) => f.type !== 'leads' && f.type !== 'reports'
 
   const build = (stack) => [
-    ...stack.filter(stripReportFrames),
+    ...stack.filter(stripReportFrames).filter(stripTransientList),
     { type: 'reports.editor', ...editorFrame, returnToLead: true, dockBesideTasks: true },
   ]
 
