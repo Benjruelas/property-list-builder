@@ -14,7 +14,7 @@ import { buildQuotePublicUrl } from './_lib/publicLinks.js'
 import { getQuoteById, updateQuoteAtIndex } from './_lib/quoteStore.js'
 import { logTeamActivity, actorLabel } from './_lib/activityLog.js'
 import {
-  resolveSenderBranding,
+  resolveSendAsSender,
   buildBrandedEmailHtml,
   buildFromAddress,
 } from './_lib/senderBranding.js'
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-    const { quoteId, recipientEmail, subject, message, recipientPhone, generateOnly } = body
+    const { quoteId, recipientEmail, subject, message, recipientPhone, generateOnly, senderUid } = body
     if (!quoteId) return res.status(400).json({ error: 'quoteId is required' })
     if (!isValidEmail(recipientEmail)) {
       return res.status(400).json({ error: 'Valid recipientEmail is required' })
@@ -63,6 +63,17 @@ export default async function handler(req, res) {
     const { quote, index, all } = await getQuoteById(quoteId)
     if (!quote || quote.ownerId !== user.uid) {
       return res.status(404).json({ error: 'Quote not found' })
+    }
+
+    const sendAs = await resolveSendAsSender({ actingUser: user, senderUid })
+    if (sendAs.error) {
+      return res.status(sendAs.status || 403).json({ error: sendAs.error })
+    }
+    const branding = sendAs.branding
+    const senderSnapshot = {
+      sentByUid: sendAs.uid,
+      sentByName: branding.senderName,
+      sentByEmail: sendAs.email || branding.senderEmail || '',
     }
 
     const token = generateToken()
@@ -91,6 +102,7 @@ export default async function handler(req, res) {
       status: 'pending',
       createdAt: now.toISOString(),
       expiresAt,
+      ...senderSnapshot,
     }
 
     const { invites: nextInvites } = supersedePendingQuoteInvites(allInvites, {
@@ -112,6 +124,9 @@ export default async function handler(req, res) {
         status: quote.status === 'draft' ? 'sent' : quote.status,
         sentAt: now.toISOString(),
         updatedAt: now.toISOString(),
+        lastSentByUid: senderSnapshot.sentByUid,
+        lastSentByName: senderSnapshot.sentByName,
+        lastSentByEmail: senderSnapshot.sentByEmail,
       }
       await updateQuoteAtIndex(all, index, updatedQuote)
       return res.status(200).json({
@@ -123,7 +138,6 @@ export default async function handler(req, res) {
       })
     }
 
-    const branding = await resolveSenderBranding(user)
     const senderLabel = branding.senderName
     const totalStr = quote.total != null ? `$${Number(quote.total).toFixed(2)}` : ''
     const innerHtml = `
@@ -135,7 +149,8 @@ export default async function handler(req, res) {
     `
     const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
-    const userEmail = typeof user.email === 'string' && isValidEmail(user.email) ? user.email.trim() : null
+    const replyEmail = sendAs.email || branding.senderEmail || user.email
+    const userEmail = typeof replyEmail === 'string' && isValidEmail(replyEmail) ? replyEmail.trim() : null
     const replyTo = (branding.companyEmail && isValidEmail(branding.companyEmail))
       ? branding.companyEmail.trim()
       : userEmail
@@ -160,6 +175,9 @@ export default async function handler(req, res) {
       status: quote.status === 'draft' ? 'sent' : quote.status,
       sentAt: now.toISOString(),
       updatedAt: now.toISOString(),
+      lastSentByUid: senderSnapshot.sentByUid,
+      lastSentByName: senderSnapshot.sentByName,
+      lastSentByEmail: senderSnapshot.sentByEmail,
     }
     await updateQuoteAtIndex(all, index, updatedQuote)
 

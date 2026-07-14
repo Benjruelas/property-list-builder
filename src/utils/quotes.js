@@ -156,11 +156,11 @@ export async function deleteQuote(getToken, quoteId) {
   }
 }
 
-export async function sendQuoteEmail(getToken, { quoteId, recipientEmail, subject, message, recipientPhone, generateOnly = false }) {
+export async function sendQuoteEmail(getToken, { quoteId, recipientEmail, subject, message, recipientPhone, generateOnly = false, senderUid = null }) {
   const res = await authFetch(getToken, '/quotes-send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ quoteId, recipientEmail, subject, message, recipientPhone, generateOnly }),
+    body: JSON.stringify({ quoteId, recipientEmail, subject, message, recipientPhone, generateOnly, senderUid }),
   })
   if (!res.ok) {
     const err = await parseJsonSafe(res)

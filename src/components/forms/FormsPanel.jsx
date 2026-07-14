@@ -70,6 +70,7 @@ async function getPdfPageCount(arrayBuffer) {
 
 export function FormsPanel({
   isOpen,
+  retainDuringSwap = false,
   panelDockSlot,
   onClose,
   onBack,
@@ -94,8 +95,9 @@ export function FormsPanel({
   const [openMenuId, setOpenMenuId] = useState(null)
   const menuTriggerRef = useRef(null)
   const hasNestedView = view !== 'list'
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, hasNestedView)
+  const listOpenOpts = { showingDetail: hasNestedView, retainOpen: retainDuringSwap, swappingOut: retainDuringSwap }
+  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, hasNestedView, listOpenOpts)
 
   const [shareTemplateId, setShareTemplateId] = useState(null)
   const [localShareState, setLocalShareState] = useState(null)

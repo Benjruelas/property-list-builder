@@ -42,11 +42,11 @@ export function QuoteDetails({
 
   const team = getTeamForMembership(teams, teamMembership)
   const teamBranding = getTeamEmailBranding(team)
-  const senderName = quote.createdByName
+  const senderName = quote.lastSentByName || quote.createdByName
     || (quote.ownerId === currentUser?.uid ? getSenderDisplayName(currentUser) : '')
     || (quote.ownerEmail || '').split('@')[0]
     || ''
-  const senderEmail = quote.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
+  const senderEmail = quote.lastSentByEmail || quote.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
 
   const vt = quote.viewTracking || {}
   const acceptedOptionalIds = quote.clientResponse?.selectedOptionalIds || []

@@ -47,6 +47,7 @@ function isFirstStage(deal, columns) {
 
 export function DealsPanel({
   isOpen,
+  retainDuringSwap = false,
   panelDockSlot,
   loading = false,
   instantDismiss = false,
@@ -342,8 +343,9 @@ export function DealsPanel({
   const showingClosedDeal = !!(dealsClosedRecordId && selectedClosed && !dealsDetailDealId)
   const showingLeadOverlay = !!leadOverlay
   const showingPrimaryDetail = showingActiveDeal || showingClosedDeal || showingLeadOverlay
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingPrimaryDetail)
+  const listOpenOpts = { showingDetail: showingPrimaryDetail, retainOpen: retainDuringSwap, swappingOut: retainDuringSwap }
+  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingPrimaryDetail, listOpenOpts)
   const hasNestedOverlay = showingPrimaryDetail || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, listObscuredByDetail)

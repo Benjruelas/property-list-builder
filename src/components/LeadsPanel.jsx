@@ -34,6 +34,7 @@ import { useWindowedList } from '@/hooks/useWindowedList'
 
 export function LeadsPanel({
   isOpen,
+  retainDuringSwap = false,
   panelDockSlot,
   loading = false,
   instantDismiss = false,
@@ -225,8 +226,9 @@ export function LeadsPanel({
 
   const showingLeadDetail = !!(detailLeadId && selectedLead)
   const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingLeadDetail)
+  const listOpenOpts = { showingDetail: showingLeadDetail, retainOpen: retainDuringSwap, swappingOut: retainDuringSwap }
+  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingLeadDetail, listOpenOpts)
   const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, listObscuredByDetail)

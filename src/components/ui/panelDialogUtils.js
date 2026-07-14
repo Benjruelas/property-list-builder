@@ -7,15 +7,32 @@ export function ignoreRadixMapPanelDismiss(open) {
 }
 
 /**
- * Keep the list dialog open while a nested detail is showing so list + detail can crossfade.
+ * Keep the list dialog open while a nested detail is showing, or while this panel
+ * is the outgoing panel in a primary↔primary swap (so exit can crossfade).
+ *
+ * @param {boolean} isPanelOpen
+ * @param {{ showingDetail?: boolean, retainOpen?: boolean }} [opts]
  */
-export function mapListDialogOpen(isPanelOpen) {
-  return isPanelOpen
+export function mapListDialogOpen(isPanelOpen, opts = {}) {
+  if (isPanelOpen) return true
+  if (opts.showingDetail) return true
+  if (opts.retainOpen) return true
+  return false
 }
 
-/** Visually recede the list panel while detail opens on top (same duration as detail enter). */
-export function listPanelObscuredByDetail(isPanelOpen, hasNestedDetail) {
-  return !!isPanelOpen && !!hasNestedDetail
+/**
+ * Visually recede the list panel while detail opens on top, or while this panel
+ * is fading out during a primary swap (same duration as detail/swap enter).
+ *
+ * @param {boolean} isPanelOpen
+ * @param {boolean} hasNestedDetail
+ * @param {{ showingDetail?: boolean, retainOpen?: boolean, swappingOut?: boolean }} [opts]
+ */
+export function listPanelObscuredByDetail(isPanelOpen, hasNestedDetail, opts = {}) {
+  const visuallyOpen = mapListDialogOpen(isPanelOpen, opts)
+  if (!visuallyOpen) return false
+  if (opts.swappingOut) return true
+  return !!hasNestedDetail
 }
 
 /**

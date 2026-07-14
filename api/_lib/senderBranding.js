@@ -106,6 +106,81 @@ export async function resolveSenderBranding(user) {
 }
 
 /**
+ * Resolve who should appear as the sender on a client-facing quote/report.
+ * When senderUid is provided and differs from the acting user, both must share a team.
+ *
+ * @param {{ actingUser: { uid: string, email?: string }, senderUid?: string | null }} params
+ * @returns {Promise<{ uid: string, email: string, branding: Awaited<ReturnType<typeof resolveSenderBranding>>, error?: string, status?: number }>}
+ */
+export async function resolveSendAsSender({ actingUser, senderUid = null }) {
+  const requested = String(senderUid || '').trim()
+  if (!requested || requested === actingUser.uid) {
+    const branding = await resolveSenderBranding(actingUser)
+    return {
+      uid: actingUser.uid,
+      email: actingUser.email || branding.senderEmail || '',
+      branding,
+    }
+  }
+
+  const allTeams = await getAllTeams()
+  const actorTeams = loadTeamsForUser(allTeams, actingUser.uid)
+  let memberEmail = ''
+  let shared = false
+  for (const team of actorTeams) {
+    const member = (team.members || []).find((m) => m.uid === requested)
+    if (member) {
+      shared = true
+      memberEmail = (member.email || '').trim()
+      break
+    }
+  }
+  if (!shared) {
+    return { uid: '', email: '', branding: null, error: 'Sender must be a teammate', status: 403 }
+  }
+
+  const branding = await resolveSenderBranding({ uid: requested, email: memberEmail })
+  return {
+    uid: requested,
+    email: memberEmail || branding.senderEmail || '',
+    branding,
+  }
+}
+
+/**
+ * Prefer invite/document sender snapshot, then fall back to owner branding.
+ */
+export async function resolvePublicDocumentBranding({
+  ownerId,
+  ownerEmail = '',
+  invite = null,
+  document = null,
+  createdByName = '',
+} = {}) {
+  const sentByUid = invite?.sentByUid || document?.lastSentByUid || ''
+  const sentByEmail = invite?.sentByEmail || document?.lastSentByEmail || ''
+  const sentByName = invite?.sentByName || document?.lastSentByName || createdByName || ''
+
+  const uid = sentByUid || ownerId
+  if (!uid) return null
+
+  try {
+    const branding = await resolveSenderBranding({
+      uid,
+      email: sentByEmail || ownerEmail || '',
+    })
+    return {
+      businessName: branding.businessName,
+      logoBase64: branding.logoBase64,
+      senderName: sentByName || branding.senderName,
+      senderEmail: sentByEmail || branding.senderEmail || ownerEmail || '',
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
  * @param {{ branding: object, bodyHtml: string }} params
  */
 export function buildBrandedEmailHtml({ branding, bodyHtml }) {

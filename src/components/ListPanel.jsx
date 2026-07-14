@@ -15,7 +15,7 @@ import { PanelFilterMenu } from './tags/PanelFilterMenu'
 import { EntityTagPills } from './tags/EntityTagPills'
 import { TagPicker } from './tags/TagPicker'
 import { CreateListDialog } from './CreateListDialog'
-import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
 
 const LIST_HIGHLIGHT_COLORS = [
   '#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626',
@@ -70,6 +70,7 @@ function sortListsNewestFirst(lists) {
 export function ListPanel({ 
   currentUser,
   isOpen,
+  retainDuringSwap = false,
   panelDockSlot,
   onClose,
   onBack,
@@ -381,11 +382,18 @@ export function ListPanel({
     onBack?.() ?? onClose?.()
   }
 
+  const listOpenOpts = { retainOpen: retainDuringSwap, swappingOut: retainDuringSwap }
+  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, false, listOpenOpts)
+
   return (
     <>
-    <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+    <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
       <DialogContent
-        className="map-panel list-panel lists-panel fullscreen-panel flex flex-col min-h-0 p-0"
+        className={cn(
+          'map-panel list-panel lists-panel fullscreen-panel flex flex-col min-h-0 p-0',
+          listObscuredByDetail && 'crm-list-under-detail',
+        )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
         hideOverlay

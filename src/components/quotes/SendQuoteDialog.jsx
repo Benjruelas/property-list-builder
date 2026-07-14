@@ -25,6 +25,9 @@ import { getSenderDisplayName, getCompanyNameForSends } from '../../utils/profil
 import { cn } from '@/lib/utils'
 import { AutoResizeTextarea } from '../ui/auto-resize-textarea'
 import { findLeadById } from '../../utils/leads'
+import { SendAsField } from '../shared/SendAsField'
+import { getAllTeamMembers } from '@/utils/teamTaskUtils'
+import { memberPrimaryLabel } from '@/components/pickers/entityPickerShared'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -33,6 +36,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
   const [tab, setTab] = useState('email')
   const [recipient, setRecipient] = useState('')
   const [phone, setPhone] = useState('')
+  const [senderUid, setSenderUid] = useState(null)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [textBody, setTextBody] = useState('')
@@ -45,6 +49,17 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
     () => findLeadById(leads, quote?.leadId),
     [quote?.leadId, leads]
   )
+
+  const selectedSender = useMemo(() => {
+    if (!senderUid || senderUid === currentUser?.uid) {
+      return { name: getSenderDisplayName(currentUser), email: currentUser?.email || '' }
+    }
+    const member = getAllTeamMembers(teams).find((m) => m.uid === senderUid)
+    return {
+      name: member ? memberPrimaryLabel(member) : getSenderDisplayName(currentUser),
+      email: member?.email || '',
+    }
+  }, [senderUid, currentUser, teams])
 
   const defaultRecipientEmail = useMemo(() => {
     const leadEmail = (linkedLead?.email || '').trim()
@@ -65,17 +80,18 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
     quoteTitle: quote?.title || 'Quote',
     quoteTotal: quote?.total,
     quoteLink: lastLink || '[link will appear after send]',
-    senderName: getSenderDisplayName(currentUser),
-    senderEmail: currentUser?.email,
+    senderName: selectedSender.name,
+    senderEmail: selectedSender.email,
     validUntil: quote?.validUntil?.slice(0, 10) || '',
     companyName: getCompanyNameForSends(teams, teamMembership),
-  }), [quote, linkedLead, recipient, lastLink, currentUser, teams, teamMembership])
+  }), [quote, linkedLead, recipient, lastLink, selectedSender, teams, teamMembership])
 
   useEffect(() => {
     if (!open || !quote?.id) return
     setTab('email')
     setRecipient('')
     setPhone('')
+    setSenderUid(null)
     setSentTo(null)
     setLastLink('')
     const templates = getQuoteSendTemplatesFromSettings(getSettings())
@@ -122,6 +138,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
         subject: replaceQuoteTags(subject, { ...tagData, clientName: quote.clientName || trimmed.split('@')[0] }),
         message: replaceQuoteTags(body, { ...tagData, quoteLink: '{{quoteLink}}' }),
         recipientPhone: phone.trim() || undefined,
+        senderUid,
       })
       setLastLink(res.quoteLink || '')
       setSentTo(trimmed)
@@ -154,6 +171,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
           recipientEmail: email,
           generateOnly: true,
           recipientPhone: tel,
+          senderUid,
         })
         link = res.quoteLink
         setLastLink(link)
@@ -261,6 +279,13 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
 
             {tab === 'email' ? (
               <div className="space-y-3">
+                <SendAsField
+                  currentUser={currentUser}
+                  teams={teams}
+                  senderUid={senderUid}
+                  onChangeSenderUid={setSenderUid}
+                  disabled={sending}
+                />
                 <Input placeholder="Recipient email" value={recipient} onChange={(e) => setRecipient(e.target.value)} />
                 <Input placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
                 <AutoResizeTextarea
@@ -273,6 +298,13 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
               </div>
             ) : (
               <div className="space-y-3">
+                <SendAsField
+                  currentUser={currentUser}
+                  teams={teams}
+                  senderUid={senderUid}
+                  onChangeSenderUid={setSenderUid}
+                  disabled={sending}
+                />
                 <Input placeholder="Client phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
                 <AutoResizeTextarea
                   className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 text-sm"

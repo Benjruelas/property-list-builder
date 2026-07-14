@@ -56,11 +56,11 @@ export function ReportDetail({
 
   const team = getTeamForMembership(teams, teamMembership)
   const teamBranding = getTeamEmailBranding(team)
-  const senderName = report.createdByName
+  const senderName = report.lastSentByName || report.createdByName
     || (report.ownerId === currentUser?.uid ? getSenderDisplayName(currentUser) : '')
     || (report.ownerEmail || '').split('@')[0]
     || ''
-  const senderEmail = report.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
+  const senderEmail = report.lastSentByEmail || report.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
   const statusLabel = String(report.status || 'draft').replace(/_/g, ' ')
 
   const handleViewAsClient = async () => {

@@ -1,4 +1,4 @@
-import { resolveSenderBranding } from './senderBranding.js'
+import { resolvePublicDocumentBranding } from './senderBranding.js'
 
 export function leadDisplayName(lead) {
   const parts = [lead?.firstName, lead?.lastName].filter(Boolean)
@@ -50,15 +50,16 @@ export function mapReportSections(report, lead, token) {
 
 export async function publicReportPayload(report, invite, lead, token) {
   let branding = null
-  if (report?.ownerId) {
-    try {
-      branding = await resolveSenderBranding({
-        uid: report.ownerId,
-        email: report.ownerEmail || '',
-      })
-    } catch {
-      branding = null
-    }
+  try {
+    branding = await resolvePublicDocumentBranding({
+      ownerId: report?.ownerId,
+      ownerEmail: report?.ownerEmail || '',
+      invite,
+      document: report,
+      createdByName: report?.createdByName || '',
+    })
+  } catch {
+    branding = null
   }
 
   return {
@@ -76,14 +77,7 @@ export async function publicReportPayload(report, invite, lead, token) {
       : { name: 'Property', address: '' },
     recipientEmail: invite?.recipientEmail || null,
     message: invite?.message || '',
-    branding: branding
-      ? {
-          businessName: branding.businessName,
-          logoBase64: branding.logoBase64,
-          senderName: branding.senderName,
-          senderEmail: branding.senderEmail || report.ownerEmail || '',
-        }
-      : null,
+    branding,
     pdfDownloadUrl: invite?.preview !== true
       ? `/api/public-report?token=${encodeURIComponent(token)}&download=1`
       : null,
