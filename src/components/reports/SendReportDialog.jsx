@@ -308,10 +308,11 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose() }}>
       <DialogContent
-        className="map-panel email-panel send-report-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl md:max-h-[90vh]"
+        className="map-panel list-panel share-list-dialog send-report-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl md:max-h-[90vh]"
         showCloseButton={false}
-        nestedOverlay
+        focusOverlay
         topLayer
+        confirmLayer
         data-send-report-dialog
       >
         {sentTo ? (

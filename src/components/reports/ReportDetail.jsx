@@ -4,8 +4,6 @@ import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/di
 import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
-import { logLeadReportEvent } from '@/utils/leadActivity'
-import { SendReportDialog } from './SendReportDialog'
 import { SendAsField } from '../shared/SendAsField'
 import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
@@ -43,6 +41,7 @@ export function ReportDetail({
   lead,
   onClose,
   onBack,
+  onSend,
   onEdit,
   onDelete,
   onReportUpdated,
@@ -53,7 +52,6 @@ export function ReportDetail({
 }) {
   const { getToken: authGetToken, currentUser } = useAuth()
   const resolveToken = getToken || authGetToken
-  const [sendOpen, setSendOpen] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [savingSender, setSavingSender] = useState(false)
   const teamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
@@ -168,7 +166,6 @@ export function ReportDetail({
         open={open}
         modal={false}
         onOpenChange={(o) => handleChildPanelDismiss(o, onClose, {
-          hasNestedOverlay: sendOpen,
           wasOpen: open,
         })}
       >
@@ -242,7 +239,7 @@ export function ReportDetail({
               <ReportActionTile
                 icon={Send}
                 label="Send"
-                onClick={() => setSendOpen(true)}
+                onClick={() => onSend?.(report)}
               />
               <ReportActionTile
                 icon={Eye}
@@ -265,22 +262,6 @@ export function ReportDetail({
           </div>
         </DialogContent>
       </Dialog>
-
-      <SendReportDialog
-        open={sendOpen}
-        report={report}
-        onClose={() => setSendOpen(false)}
-        leads={leads}
-        teams={teams}
-        teamMembership={teamMembership}
-        onSent={async (updated) => {
-          onReportUpdated?.(updated)
-          if (lead?.id) {
-            await logLeadReportEvent(resolveToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })
-          }
-          setSendOpen(false)
-        }}
-      />
     </>
   )
 }
