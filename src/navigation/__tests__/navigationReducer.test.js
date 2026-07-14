@@ -22,6 +22,8 @@ import {
   recipeOpenReports,
   recipePushReportsDetail,
   recipePushReportsEditor,
+  recipeOpenReportFromLeadDetail,
+  recipeOpenReportEditorFromLeadDetail,
   recipeOpenDealInPipes,
   recipePushPipesDeal,
   recipeClosePromotedPipesDealDetail,
@@ -706,6 +708,55 @@ describe('recipes', () => {
     expect(stack[1].leadId).toBe('l1')
     expect(stack[1].awaitingTemplate).toBe(true)
     expect(stack[1].returnToLead).toBe(true)
+  })
+
+  it('recipeOpenReportFromLeadDetail opens report detail without reports list', () => {
+    const stack = recipeOpenReportFromLeadDetail(
+      [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true }, { type: 'tasks' }],
+      'r1',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['leads', 'leads.detail', 'reports.detail', 'tasks'])
+    expect(stack[2].reportId).toBe('r1')
+    expect(stack[2].returnToLead).toBe(true)
+    expect(stack[2].dockBesideTasks).toBe(true)
+  })
+
+  it('recipeOpenReportEditorFromLeadDetail opens editor without reports list', () => {
+    const stack = recipeOpenReportEditorFromLeadDetail(
+      [{ type: 'leads.detail', leadId: 'l1', returnToLeadsList: true }],
+      { mode: 'report', leadId: 'l1', awaitingTemplate: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'reports.editor'])
+    expect(stack[1].returnToLead).toBe(true)
+    expect(stack[1].dockBesideTasks).toBe(true)
+  })
+
+  it('report opened from lead detail keeps lead as dock anchor beside tasks', () => {
+    const state = createInitialState()
+    state.navStack = [
+      { type: 'leads.detail', leadId: 'l1', dockBesideTasks: true },
+      { type: 'reports.detail', reportId: 'r1', returnToLead: true, dockBesideTasks: true },
+      { type: 'tasks' },
+    ]
+    expect(selectTasksDockLayout(state)).toEqual({
+      tasksDocked: true,
+      primaryRoot: 'leads',
+      tasksSoloDetail: false,
+      soloDetailRoot: null,
+    })
+  })
+
+  it('pop reports.detail returns to lead detail', () => {
+    const stack = [
+      { type: 'leads.detail', leadId: 'l1' },
+      { type: 'reports.detail', reportId: 'r1', returnToLead: true },
+      { type: 'tasks' },
+    ]
+    expect(popFrameIfTopOfCore(stack, 'reports.detail').map((f) => f.type)).toEqual([
+      'leads.detail',
+      'tasks',
+    ])
   })
 
   it('reports editor and detail derive from stack', () => {

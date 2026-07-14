@@ -265,6 +265,7 @@ function App() {
     quotesDetailReturnToDeal,
     isReportsPanelOpen,
     isReportsListOpen,
+    isReportsDetailStandalone,
     reportsEditorFrame,
     reportsEditorReturnToLead,
     reportsDetailReportId,
@@ -312,8 +313,14 @@ function App() {
   )
 
   const dealDetailOverLead = !!(dealsDetailDealId && (leadsDetailLeadId || dealsLeadOverlayId))
+  const reportDetailOverLead = !!(
+    leadsDetailLeadId &&
+    ((reportsDetailReportId && reportsDetailReturnToLead) ||
+      (reportsEditorFrame && reportsEditorReturnToLead))
+  )
   const panelDockSlot = (root, isOpen) => {
     if (dealDetailOverLead && (root === 'deals' || root === 'leads')) return 'primary'
+    if (reportDetailOverLead && (root === 'reports' || root === 'leads')) return 'primary'
     return resolvePanelDockSlot(root, isOpen, tasksDockLayout)
   }
   const leadOverlayPanelDockSlot =
@@ -337,6 +344,7 @@ function App() {
   )
   const reportsPanelMounted = useStickyPanelMount(
     isReportsPanelOpen,
+    isReportsDetailStandalone,
     reportsEditorFrame,
     reportsDetailReportId,
   )
@@ -3132,14 +3140,14 @@ function App() {
   const handleCreatePhotoReport = useCallback((leadId) => {
     if (!leadId) return
     guardFeature('reports', () => {
-      nav.pushReportsEditor({ mode: 'report', leadId, awaitingTemplate: true })
+      nav.openReportEditorFromLead({ mode: 'report', leadId, awaitingTemplate: true })
     })
   }, [guardFeature, nav])
 
   const handleOpenPhotoReport = useCallback((reportId) => {
     if (!reportId) return
     guardFeature('reports', () => {
-      nav.pushReportsDetail(reportId)
+      nav.openReportFromLead(reportId)
     })
   }, [guardFeature, nav])
 
@@ -4296,9 +4304,11 @@ function App() {
           <PanelListLoadingShell open={isReportsListOpen} title="Reports" onBack={handlePanelBack} className="reports-panel lists-panel" />
         }>
           <ReportsPanel
-            isOpen={isReportsListOpen || !!reportsDetailReportId || !!reportsEditorFrame}
+            isOpen={isReportsListOpen || isReportsDetailStandalone || !!reportsEditorFrame}
             isReportsListOpen={isReportsListOpen}
-            panelDockSlot={panelDockSlot('reports', isReportsListOpen || !!reportsDetailReportId || !!reportsEditorFrame)}
+            isReportsDetailStandalone={isReportsDetailStandalone}
+            reportDetailOverLead={reportDetailOverLead}
+            panelDockSlot={panelDockSlot('reports', isReportsListOpen || isReportsDetailStandalone || !!reportsEditorFrame)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             leads={leads}
@@ -4503,6 +4513,7 @@ function App() {
         detailLeadId={leadsDetailLeadId}
         dealsDetailDealId={dealsDetailDealId}
         dealsLeadOverlayId={dealsLeadOverlayId}
+        reportsDetailOverLead={reportDetailOverLead}
         onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
         onCloseLeadDetail={() => nav.popLeadsDetail()}
         currentUserId={currentUser?.uid}

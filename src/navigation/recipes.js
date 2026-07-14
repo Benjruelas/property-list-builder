@@ -216,6 +216,51 @@ export function recipePushReportsEditor(currentStack, editorFrame, opts = {}) {
   )
 }
 
+/**
+ * Open report detail from lead context — no Reports list panel.
+ * Keeps lead detail (and optional leads list) in the stack for back navigation.
+ */
+export function recipeOpenReportFromLeadDetail(currentStack, reportId, opts = {}) {
+  const stripReportFrames = (f) =>
+    f.type !== 'reports.detail' &&
+    f.type !== 'reports.editor' &&
+    f.type !== 'reports'
+
+  const build = (stack) => [
+    ...stack.filter(stripReportFrames),
+    { type: 'reports.detail', reportId, returnToLead: true, dockBesideTasks: true },
+  ]
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
+}
+
+/**
+ * Open report editor from lead context — no Reports list panel.
+ */
+export function recipeOpenReportEditorFromLeadDetail(currentStack, editorFrame, opts = {}) {
+  const stripReportFrames = (f) =>
+    f.type !== 'reports.detail' &&
+    f.type !== 'reports.editor' &&
+    f.type !== 'reports'
+
+  const build = (stack) => [
+    ...stack.filter(stripReportFrames),
+    { type: 'reports.editor', ...editorFrame, returnToLead: true, dockBesideTasks: true },
+  ]
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
+}
+
 /** Legacy: openTeamsPanel */
 export function recipeOpenTeams(currentStack, opts = {}) {
   return recipeOpenRootPanel(currentStack, 'teams', { type: 'teams' }, opts)

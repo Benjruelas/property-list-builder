@@ -213,6 +213,7 @@ export function selectPanelProps(state) {
     quotesDetailReturnToDeal: !!quotesDetail?.returnToDeal,
     isReportsPanelOpen: hasFrameRoot(state, 'reports'),
     isReportsListOpen: hasExactFrame(state, 'reports'),
+    isReportsDetailStandalone: !!(reportsDetail || reportsEditor) && !hasExactFrame(state, 'reports'),
     reportsEditorFrame: reportsEditor ?? null,
     reportsEditorReturnToLead: !!reportsEditor?.returnToLead,
     reportsDetailReportId: reportsDetail?.reportId ?? null,
