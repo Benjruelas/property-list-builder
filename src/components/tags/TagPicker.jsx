@@ -239,63 +239,36 @@ export function TagPicker({
     </div>
   )
 
-  const menuBody = (
-    <>
-      {definitions.length === 0 && (
-        <p className="px-3 py-1.5 text-xs text-white/50">Create your first tag below</p>
-      )}
-      {definitions.map((tag) => {
-        const checked = appliedIds.includes(tag.id)
-        return (
-          <button
-            key={tag.id}
-            type="button"
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 text-left"
-            onClick={(e) => {
+  const createTagSection = (
+    <div className="shrink-0 border-t border-white/10 pt-2 px-2 pb-2 bg-inherit">
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={createName}
+          onChange={(e) => setCreateName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
               e.stopPropagation()
-              toggleTag(tag.id)
-            }}
-            disabled={saving || disabled}
-          >
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: tag.color || '#2563eb' }}
-            />
-            <span className="flex-1 truncate">{tag.name}</span>
-            {checked && <Check className="h-4 w-4 shrink-0 opacity-70" />}
-          </button>
-        )
-      })}
-      <div className="border-t border-white/10 mt-1 pt-2 px-2">
-        <div className="flex items-center gap-1">
-          <input
-            type="text"
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                e.stopPropagation()
-                handleCreate(e)
-              }
-            }}
-            placeholder="Create tag…"
-            className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-xs text-white placeholder:text-white/40 outline-none focus:border-white/25"
-            disabled={saving || disabled}
-            maxLength={40}
-          />
-          <button
-            type="button"
-            className="shrink-0 p-1.5 rounded-md hover:bg-white/10 disabled:opacity-40"
-            disabled={!createName.trim() || saving || disabled}
-            title="Create tag"
-            onClick={handleCreate}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
+              handleCreate(e)
+            }
+          }}
+          placeholder="Create tag…"
+          className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-xs text-white placeholder:text-white/40 outline-none focus:border-white/25"
+          disabled={saving || disabled}
+          maxLength={40}
+        />
+        <button
+          type="button"
+          className="shrink-0 p-1.5 rounded-md hover:bg-white/10 disabled:opacity-40"
+          disabled={!createName.trim() || saving || disabled}
+          title="Create tag"
+          onClick={handleCreate}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
       </div>
-    </>
+    </div>
   )
 
   const menu = open && (
@@ -303,7 +276,7 @@ export function TagPicker({
       ref={menuRef}
       data-tag-picker-menu
       className={cn(
-        'rounded-lg border border-white/15 bg-[#1a1f2e] shadow-xl py-2 max-h-[240px] overflow-y-auto scrollbar-hide',
+        'rounded-lg border border-white/15 bg-[#1a1f2e] shadow-xl flex flex-col max-h-[240px] overflow-hidden',
         inline
           ? 'absolute z-50 top-full left-0 mt-1 w-full min-w-[200px] max-w-[280px]'
           : 'fixed z-[10060]'
@@ -318,7 +291,34 @@ export function TagPicker({
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      {menuBody}
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide py-2">
+        {definitions.length === 0 && (
+          <p className="px-3 py-1.5 text-xs text-white/50">Create your first tag below</p>
+        )}
+        {definitions.map((tag) => {
+          const checked = appliedIds.includes(tag.id)
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 text-left"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleTag(tag.id)
+              }}
+              disabled={saving || disabled}
+            >
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: tag.color || '#2563eb' }}
+              />
+              <span className="flex-1 truncate">{tag.name}</span>
+              {checked && <Check className="h-4 w-4 shrink-0 opacity-70" />}
+            </button>
+          )
+        })}
+      </div>
+      {createTagSection}
     </div>
   )
 
