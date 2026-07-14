@@ -15,6 +15,8 @@ export function SendAsField({
   senderUid = null,
   onChangeSenderUid,
   disabled = false,
+  label = 'Send as',
+  hint = null,
 }) {
   const [open, setOpen] = useState(false)
   const teamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
@@ -38,20 +40,21 @@ export function SendAsField({
   if (!canPick) {
     return (
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-white/75">Send as</label>
+        <label className="block text-sm font-medium text-white/75">{label}</label>
         <p className="text-sm text-white/70 px-1 py-2">
           {selected ? memberPrimaryLabel(selected) : getSenderDisplayName(currentUser)}
           {selected?.email ? (
             <span className="text-white/45"> · {selected.email}</span>
           ) : null}
         </p>
+        {hint ? <p className="text-xs text-white/45 px-1">{hint}</p> : null}
       </div>
     )
   }
 
   return (
     <div className="space-y-1 relative">
-      <label className="block text-sm font-medium text-white/75">Send as</label>
+      <label className="block text-sm font-medium text-white/75">{label}</label>
       <button
         type="button"
         disabled={disabled}
@@ -73,6 +76,7 @@ export function SendAsField({
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
       </button>
+      {hint ? <p className="text-xs text-white/45 px-1">{hint}</p> : null}
 
       {open && (
         <ul

@@ -44,9 +44,13 @@ export async function ensureReportPdf(report, index, all, lead, { message = '' }
   }
 
   const branding = await resolveSenderBranding({
-    uid: report.ownerId,
-    email: report.ownerEmail || '',
+    uid: report.lastSentByUid || report.displaySenderUid || report.ownerId,
+    email: report.lastSentByEmail || report.createdByEmail || report.ownerEmail || '',
   })
+  if (report.lastSentByName || report.createdByName) {
+    branding.senderName = report.lastSentByName || report.createdByName || branding.senderName
+    branding.senderEmail = report.lastSentByEmail || report.createdByEmail || branding.senderEmail
+  }
 
   const cacheKey = `${report.id}:${REPORT_PDF_VERSION}:${report.updatedAt || ''}`
   const pdfBuf = await enqueuePdfJob(cacheKey, () => buildReportPdfBuffer({

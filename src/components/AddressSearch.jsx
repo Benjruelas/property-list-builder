@@ -109,10 +109,11 @@ export function AddressSearch({ onLocationFound, mapInstanceRef, onCloseParcelPo
           <button
             type="button"
             onClick={handleToggle}
-            className="map-chrome-pill-close"
+            className="map-chrome-icon-slot map-search-pill-close flex-shrink-0"
             title="Close search"
+            aria-label="Close search"
           >
-            <X />
+            <X className="text-gray-700" />
           </button>
         </div>
       )}
