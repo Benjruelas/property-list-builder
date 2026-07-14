@@ -39,8 +39,9 @@ import { computeOwnerOccupied } from './utils/ownerOccupied'
 import PathTracker from './components/PathTracker'
 import { getUserLocation, setCurrentUserLocation, subscribeUserLocation, useUserLocation } from './utils/locationStore'
 import { getCurrentPositionWithFallback, getWatchPositionOptions } from './utils/geolocation'
-import { panelLazy, prefetchPanel } from './utils/panelChunks'
+import { panelLazy, prefetchPanel, prefetchAllPanels } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
+import { useLazyPanelReady } from './hooks/useLazyPanelReady'
 import { clearAccountSessionCaches, syncAccountSessionUid } from './utils/accountSession'
 const FormsPanel = lazy(panelLazy.forms)
 const DealPipeline = lazy(panelLazy.dealPipeline)
@@ -85,7 +86,6 @@ import { templateToCreateDealPrefill } from './utils/dealTemplates'
 import { AppLoadingScreen } from './components/AppLoadingScreen'
 import { getAppLoadingMessage } from './config/appLoadingMessages'
 import { getPublicRouteFromWindow } from './utils/publicLinks'
-import { PanelListLoadingShell } from './components/ui/PanelListLoadingShell'
 import { BasemapErrorBanner } from './components/BasemapErrorBanner'
 import { useBasemapStyle } from './hooks/useBasemapStyle'
 import { useTasksDockLayout } from './hooks/useTasksDockLayout'
@@ -355,6 +355,17 @@ function App() {
   const settingsPanelMounted = useStickyPanelMount(isSettingsPanelOpen)
   const emailComposerMounted = useStickyPanelMount(isEmailComposerOpen)
   const hailDataMounted = useStickyPanelMount(isHailDataOpen)
+
+  const dealPipelineReady = useLazyPanelReady('dealPipeline', dealPipelineMounted)
+  const schedulePanelReady = useLazyPanelReady('schedule', schedulePanelMounted)
+  const tasksPanelReady = useLazyPanelReady('tasks', tasksPanelMounted)
+  const formsPanelReady = useLazyPanelReady('forms', formsPanelMounted)
+  const quotesPanelReady = useLazyPanelReady('quotes', quotesPanelMounted)
+  const reportsPanelReady = useLazyPanelReady('reports', reportsPanelMounted)
+  const pathsPanelReady = useLazyPanelReady('paths', pathsPanelMounted)
+  const settingsPanelReady = useLazyPanelReady('settings', settingsPanelMounted)
+  const leadsPanelReady = useLazyPanelReady('leads', leadsPanelMounted)
+  const dealsPanelReady = useLazyPanelReady('deals', dealsPanelMounted)
   
   // Debug: Log current user state
   useEffect(() => {
@@ -1447,9 +1458,7 @@ function App() {
       } else {
         setLeadsLoading(true)
       }
-      prefetchPanel('leads')
-      prefetchPanel('deals')
-      prefetchPanel('dealPipeline')
+      prefetchAllPanels()
       runLeadsDealsFreshStartMigration()
       refreshPipelines()
       refreshLeads({ existingLeads: cached })
@@ -4017,10 +4026,8 @@ function App() {
         onOpenParcelDetails={handleOpenParcelDetails}
       />
 
-      {dealPipelineMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell open={isDealPipelineOpen} title="Pipes" onBack={handlePanelBack} className="deal-pipeline-panel" />
-      }>
+      {dealPipelineMounted && dealPipelineReady && (
+      <Suspense fallback={null}>
       <DealPipeline
         isOpen={isDealPipelineOpen}
         panelDockSlot={panelDockSlot('pipes', isDealPipelineOpen && !pipesPromotedDealId)}
@@ -4107,10 +4114,8 @@ function App() {
       </Suspense>
       )}
 
-      {schedulePanelMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell open={isSchedulePanelOpen} title="Schedule" onBack={handlePanelBack} className="schedule-panel deal-pipeline-panel" />
-      }>
+      {schedulePanelMounted && schedulePanelReady && (
+      <Suspense fallback={null}>
       <SchedulePanel
         isOpen={isSchedulePanelOpen}
         panelDockSlot={panelDockSlot('schedule', isSchedulePanelOpen)}
@@ -4148,16 +4153,8 @@ function App() {
       </Suspense>
       )}
 
-      {tasksPanelMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell
-          open={isTasksPanelOpen}
-          title="Tasks"
-          onBack={handleTasksPanelClose}
-          className="tasks-panel"
-          panelDockSlot={panelDockSlot('tasks', isTasksPanelOpen)}
-        />
-      }>
+      {tasksPanelMounted && tasksPanelReady && (
+      <Suspense fallback={null}>
       <TasksPanel
         isOpen={isTasksPanelOpen}
         topLayer={isTasksPanelTopLayer}
@@ -4249,10 +4246,8 @@ function App() {
       </Suspense>
       )}
 
-      {formsPanelMounted && (
-        <Suspense fallback={
-          <PanelListLoadingShell open={isFormsPanelOpen} title="Forms" onBack={handlePanelBack} className="forms-panel lists-panel" />
-        }>
+      {formsPanelMounted && formsPanelReady && (
+        <Suspense fallback={null}>
           <FormsPanel
             isOpen={isFormsPanelOpen}
             panelDockSlot={panelDockSlot('forms', isFormsPanelOpen)}
@@ -4272,10 +4267,8 @@ function App() {
         </Suspense>
       )}
 
-      {quotesPanelMounted && (
-        <Suspense fallback={
-          <PanelListLoadingShell open={isQuotesListOpen} title="Quotes" onBack={handlePanelBack} className="quotes-panel lists-panel" />
-        }>
+      {quotesPanelMounted && quotesPanelReady && (
+        <Suspense fallback={null}>
           <QuotesPanel
             isOpen={isQuotesListOpen || !!quotesDetailQuoteId}
             panelDockSlot={panelDockSlot('quotes', isQuotesListOpen || !!quotesDetailQuoteId)}
@@ -4299,10 +4292,8 @@ function App() {
         </Suspense>
       )}
 
-      {reportsPanelMounted && (
-        <Suspense fallback={
-          <PanelListLoadingShell open={isReportsListOpen} title="Reports" onBack={handlePanelBack} className="reports-panel lists-panel" />
-        }>
+      {reportsPanelMounted && reportsPanelReady && (
+        <Suspense fallback={null}>
           <ReportsPanel
             isOpen={isReportsListOpen || isReportsDetailStandalone || !!reportsEditorFrame}
             isReportsListOpen={isReportsListOpen}
@@ -4401,10 +4392,8 @@ function App() {
         onConfirm={handleQuickPhotoModeConfirm}
       />
 
-      {pathsPanelMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell open={isPathsPanelOpen} title="Paths" onBack={handlePanelBack} className="paths-panel lists-panel" />
-      }>
+      {pathsPanelMounted && pathsPanelReady && (
+      <Suspense fallback={null}>
       <PathsPanel
         isOpen={isPathsPanelOpen}
         panelDockSlot={panelDockSlot('paths', isPathsPanelOpen)}
@@ -4446,10 +4435,8 @@ function App() {
       </Suspense>
       )}
 
-      {settingsPanelMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell open={isSettingsPanelOpen} title="Settings" onBack={() => nav.pop()} className="settings-panel" />
-      }>
+      {settingsPanelMounted && settingsPanelReady && (
+      <Suspense fallback={null}>
       <SettingsPanel
         isOpen={isSettingsPanelOpen}
         topLayer={isSettingsPanelTopLayer}
@@ -4476,10 +4463,8 @@ function App() {
 
       {notificationInbox.panel}
 
-      {leadsPanelMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell open={isLeadsPanelOpen} title="Leads" onBack={handlePanelBack} className="leads-panel" />
-      }>
+      {leadsPanelMounted && leadsPanelReady && (
+      <Suspense fallback={null}>
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
         panelDockSlot={panelDockSlot('leads', isLeadsPanelOpen || isLeadsDetailStandalone)}
@@ -4535,10 +4520,8 @@ function App() {
       </Suspense>
       )}
 
-      {dealsPanelMounted && (
-      <Suspense fallback={
-        <PanelListLoadingShell open={isDealsPanelOpen} title="Deals" onBack={handlePanelBack} className="deals-panel" />
-      }>
+      {dealsPanelMounted && dealsPanelReady && (
+      <Suspense fallback={null}>
       <DealsPanel
         isOpen={isDealsPanelOpen}
         panelDockSlot={panelDockSlot('deals', isDealsPanelOpen || isDealsDetailStandalone)}

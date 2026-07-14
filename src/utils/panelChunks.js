@@ -2,6 +2,9 @@
  * Shared dynamic imports for map panels — used by React.lazy and background prefetch.
  */
 
+/** @type {Set<string>} */
+const loadedPanelKeys = new Set()
+
 export const panelLazy = {
   forms: () => import('../components/forms/FormsPanel').then((m) => ({ default: m.FormsPanel })),
   dealPipeline: () => import('../components/DealPipeline').then((m) => ({ default: m.DealPipeline })),
@@ -18,7 +21,30 @@ export const panelLazy = {
   hailData: () => import('../components/HailDataPanel').then((m) => ({ default: m.HailDataPanel })),
 }
 
+export function isPanelChunkLoaded(key) {
+  return loadedPanelKeys.has(key)
+}
+
+/** Load a panel chunk and mark it ready for Suspense-free mount. */
+export function loadPanelChunk(key) {
+  const loader = panelLazy[key]
+  if (!loader) return Promise.resolve()
+  if (loadedPanelKeys.has(key)) return Promise.resolve()
+  return loader()
+    .then(() => {
+      loadedPanelKeys.add(key)
+    })
+    .catch(() => {})
+}
+
 /** Prefetch a single panel (e.g. on action-bar hover). */
 export function prefetchPanel(key) {
-  panelLazy[key]?.().catch(() => {})
+  loadPanelChunk(key).catch(() => {})
+}
+
+/** Warm all lazy panel chunks after sign-in so first open does not flash. */
+export function prefetchAllPanels() {
+  Object.keys(panelLazy).forEach((key) => {
+    prefetchPanel(key)
+  })
 }
