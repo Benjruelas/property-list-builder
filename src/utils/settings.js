@@ -67,34 +67,69 @@ export const DEFAULT_SETTINGS = {
   leadStatuses: null,
 }
 
+const DEPRECATED_PARCEL_BOUNDARY_COLORS = new Set(['#ffffff', '#fff', 'white'])
+
+/** Map retired parcel outline colors to the current default. */
+export function normalizeParcelBoundaryColor(color) {
+  const fallback = DEFAULT_SETTINGS.parcelBoundaryColor
+  if (typeof color !== 'string') return fallback
+  const normalized = color.trim().toLowerCase()
+  if (DEPRECATED_PARCEL_BOUNDARY_COLORS.has(normalized)) return fallback
+  return color
+}
+
+let settingsMigrationPending = false
+
+/** True once after getSettings migrated stored settings (e.g. white parcel color). */
+export function consumeSettingsMigrationPending() {
+  const pending = settingsMigrationPending
+  settingsMigrationPending = false
+  return pending
+}
+
+function mergeSavedSettings(saved) {
+  const merged = { ...DEFAULT_SETTINGS, ...saved }
+  if (saved.notifications && typeof saved.notifications === 'object') {
+    merged.notifications = { ...DEFAULT_SETTINGS.notifications, ...saved.notifications }
+  }
+  if (saved.profile && typeof saved.profile === 'object') {
+    merged.profile = { ...DEFAULT_SETTINGS.profile, ...saved.profile }
+  }
+  if (saved.reportBranding && typeof saved.reportBranding === 'object') {
+    merged.reportBranding = { ...DEFAULT_SETTINGS.reportBranding, ...saved.reportBranding }
+  }
+  if (saved.quoteSendTemplates && typeof saved.quoteSendTemplates === 'object') {
+    merged.quoteSendTemplates = saved.quoteSendTemplates
+  }
+  if (saved.reportSendTemplates && typeof saved.reportSendTemplates === 'object') {
+    merged.reportSendTemplates = saved.reportSendTemplates
+  }
+  if (Array.isArray(saved.leadStatuses)) {
+    merged.leadStatuses = saved.leadStatuses
+  }
+  if (!Object.prototype.hasOwnProperty.call(saved, 'uiTheme')) {
+    merged.uiTheme = DEFAULT_UI_THEME
+  } else {
+    merged.uiTheme = normalizeUiTheme(merged.uiTheme)
+  }
+  const parcelBoundaryColor = normalizeParcelBoundaryColor(merged.parcelBoundaryColor)
+  if (parcelBoundaryColor !== merged.parcelBoundaryColor) {
+    merged.parcelBoundaryColor = parcelBoundaryColor
+    settingsMigrationPending = true
+  }
+  return merged
+}
+
 export function getSettings() {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (raw) {
       const saved = JSON.parse(raw)
-      const merged = { ...DEFAULT_SETTINGS, ...saved }
-      if (saved.notifications && typeof saved.notifications === 'object') {
-        merged.notifications = { ...DEFAULT_SETTINGS.notifications, ...saved.notifications }
-      }
-      if (saved.profile && typeof saved.profile === 'object') {
-        merged.profile = { ...DEFAULT_SETTINGS.profile, ...saved.profile }
-      }
-      if (saved.reportBranding && typeof saved.reportBranding === 'object') {
-        merged.reportBranding = { ...DEFAULT_SETTINGS.reportBranding, ...saved.reportBranding }
-      }
-      if (saved.quoteSendTemplates && typeof saved.quoteSendTemplates === 'object') {
-        merged.quoteSendTemplates = saved.quoteSendTemplates
-      }
-      if (saved.reportSendTemplates && typeof saved.reportSendTemplates === 'object') {
-        merged.reportSendTemplates = saved.reportSendTemplates
-      }
-      if (Array.isArray(saved.leadStatuses)) {
-        merged.leadStatuses = saved.leadStatuses
-      }
-      if (!Object.prototype.hasOwnProperty.call(saved, 'uiTheme')) {
-        merged.uiTheme = DEFAULT_UI_THEME
-      } else {
-        merged.uiTheme = normalizeUiTheme(merged.uiTheme)
+      const merged = mergeSavedSettings(saved)
+      if (settingsMigrationPending) {
+        try {
+          localStorage.setItem(LS_KEY, JSON.stringify(merged))
+        } catch { /* ignore */ }
       }
       return merged
     }
@@ -133,6 +168,7 @@ export function updateSettings(partial, getToken) {
     next = { ...next, leadStatuses: partial.leadStatuses }
   }
   next.uiTheme = normalizeUiTheme(next.uiTheme)
+  next.parcelBoundaryColor = normalizeParcelBoundaryColor(next.parcelBoundaryColor)
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(next))
   } catch { /* ignore */ }
