@@ -1,13 +1,14 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useInsertionEffect, useRef } from 'react'
 
-const PRIMARY_SWAP_MS = 280
+const PRIMARY_SWAP_MS = 220
 
 /**
- * Coordinates primary panel crossfades when switching between list panels
- * (Leads ↔ Deals ↔ Reports, etc.) without a sequential close-then-open flash.
+ * Marks primary↔primary panel navigation on <html> so CSS can avoid a transparent
+ * gap over the map (incoming must not fade in from opacity 0).
  *
- * Sets `html[data-primary-panel-swap="1"]` for the duration of the swap so CSS
- * can elevate the incoming panel and run a matched opacity crossfade.
+ * Uses useInsertionEffect so the flag exists before child layout/Presence effects
+ * and before paint. Does not use React state — setState mid-swap caused extra
+ * flashes in an earlier attempt.
  *
  * @param {string | null | undefined} primaryRoot
  */
@@ -15,7 +16,7 @@ export function usePrimaryPanelSwap(primaryRoot) {
   const prevPrimaryRef = useRef(primaryRoot ?? null)
   const swapTimerRef = useRef(null)
 
-  useLayoutEffect(() => {
+  useInsertionEffect(() => {
     const root = document.documentElement
     const next = primaryRoot ?? null
     const prev = prevPrimaryRef.current

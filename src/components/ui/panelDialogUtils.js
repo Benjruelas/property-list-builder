@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+
 /**
  * Map list panels close via explicit back only — Radix onOpenChange(false) is ignored
  * so sibling panels (e.g. docked Tasks) closing do not double-pop the stack.
@@ -7,15 +9,50 @@ export function ignoreRadixMapPanelDismiss(open) {
 }
 
 /**
- * Keep the list dialog open while a nested detail is showing so list + detail can crossfade.
+ * Keep the list dialog open while a nested detail/editor is showing so the list
+ * can sit under the detail (crm-list-under-detail) instead of unmounting and
+ * briefly exposing the map.
+ *
+ * @param {boolean} isPanelOpen
+ * @param {{ showingDetail?: boolean }} [opts]
  */
-export function mapListDialogOpen(isPanelOpen) {
-  return isPanelOpen
+export function mapListDialogOpen(isPanelOpen, opts = {}) {
+  if (isPanelOpen) return true
+  if (opts.showingDetail) return true
+  return false
 }
 
-/** Visually recede the list panel while detail opens on top (same duration as detail enter). */
-export function listPanelObscuredByDetail(isPanelOpen, hasNestedDetail) {
-  return !!isPanelOpen && !!hasNestedDetail
+/**
+ * Visually recede the list panel while detail opens on top (same duration as detail enter).
+ *
+ * @param {boolean} isPanelOpen
+ * @param {boolean} hasNestedDetail
+ * @param {{ showingDetail?: boolean }} [opts]
+ */
+export function listPanelObscuredByDetail(isPanelOpen, hasNestedDetail, opts = {}) {
+  const visuallyOpen = mapListDialogOpen(isPanelOpen, opts)
+  return !!visuallyOpen && !!hasNestedDetail
+}
+
+/**
+ * Retain a list dialog under a promoted detail only when the list was already open.
+ * Avoids mounting an empty list under map→standalone detail opens.
+ *
+ * @param {boolean} isPanelOpen
+ * @param {boolean} showingDetail
+ * @returns {{ listDialogOpen: boolean, listObscuredByDetail: boolean }}
+ */
+export function useListDialogUnderDetail(isPanelOpen, showingDetail) {
+  const hadListOpenRef = useRef(false)
+  if (isPanelOpen) hadListOpenRef.current = true
+  if (!isPanelOpen && !showingDetail) hadListOpenRef.current = false
+
+  const retainUnderDetail = !!showingDetail && hadListOpenRef.current
+  const opts = { showingDetail: retainUnderDetail }
+  return {
+    listDialogOpen: mapListDialogOpen(isPanelOpen, opts),
+    listObscuredByDetail: listPanelObscuredByDetail(isPanelOpen, showingDetail, opts),
+  }
 }
 
 /**

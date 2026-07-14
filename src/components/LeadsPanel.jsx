@@ -3,7 +3,7 @@ import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Search, UserSearch } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, useListDialogUnderDetail } from './ui/panelDialogUtils'
 import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
@@ -225,8 +225,7 @@ export function LeadsPanel({
 
   const showingLeadDetail = !!(detailLeadId && selectedLead)
   const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingLeadDetail)
+  const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(isOpen, showingLeadDetail)
   const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, listObscuredByDetail)
