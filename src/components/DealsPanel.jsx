@@ -4,7 +4,7 @@ import { Search, Briefcase, ChevronDown, ChevronRight, Archive, Plus } from 'luc
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, useListDialogUnderDetail } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { flattenDealsFromPipelines } from '@/utils/deals'
 import { aggregateDealFinancials, formatDealMoney } from '@/utils/dealFinances'
@@ -342,8 +342,7 @@ export function DealsPanel({
   const showingClosedDeal = !!(dealsClosedRecordId && selectedClosed && !dealsDetailDealId)
   const showingLeadOverlay = !!leadOverlay
   const showingPrimaryDetail = showingActiveDeal || showingClosedDeal || showingLeadOverlay
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, showingPrimaryDetail)
+  const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(isOpen, showingPrimaryDetail)
   const hasNestedOverlay = showingPrimaryDetail || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, listObscuredByDetail)

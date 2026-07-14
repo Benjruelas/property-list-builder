@@ -514,12 +514,16 @@
   pointer-events: none !important;
 }
 
-/* List/source panel crossfade — stay open under detail instead of snapping closed */
+/*
+ * List stays opaque under detail so the map never shows through while the
+ * detail fades in from opacity 0. Interaction is blocked; detail covers it.
+ */
 .map-panel-dialog.crm-list-under-detail[data-state='open'] {
-  opacity: 0 !important;
+  opacity: 1 !important;
   pointer-events: none !important;
-  transition: opacity var(--crm-panel-crossfade-duration, 280ms) cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: none !important;
   animation: none !important;
+  z-index: 10001 !important;
 }
 
 /* Quotes + reports list stays visible beside detail on desktop */
@@ -1217,16 +1221,11 @@
     pointer-events: none !important;
   }
 
-  /* Solo primary panel swaps (no Tasks dock): matched center crossfade */
-  @keyframes map-panel-primary-center-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  @keyframes map-panel-primary-center-fade-out {
-    from { opacity: 1; }
-    to { opacity: 0; }
-  }
-
+  /*
+   * Solo primary↔primary swaps: cut, don't crossfade.
+   * Fading both panels through opacity 0 exposes the bare map for a frame.
+   * Incoming must paint at opacity 1 immediately (including @starting-style).
+   */
   html[data-primary-panel-swap="1"] .map-panel-dialog.leads-panel[data-state="open"],
   html[data-primary-panel-swap="1"] .map-panel-dialog.deals-panel[data-state="open"],
   html[data-primary-panel-swap="1"] .map-panel-dialog.deal-pipeline-panel[data-state="open"],
@@ -1239,9 +1238,27 @@
   html[data-primary-panel-swap="1"] .map-panel-dialog.activity-panel[data-state="open"],
   html[data-primary-panel-swap="1"] .map-panel-dialog.schedule-panel[data-state="open"],
   html[data-primary-panel-swap="1"] .map-panel-dialog.outreach-panel[data-state="open"] {
-    animation: map-panel-primary-center-fade-in 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+    opacity: 1 !important;
+    animation: none !important;
     transition: none !important;
     z-index: 10002 !important;
+  }
+
+  @starting-style {
+    html[data-primary-panel-swap="1"] .map-panel-dialog.leads-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.deals-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.deal-pipeline-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.quotes-panel[data-state="open"]:not(.quote-details-panel):not(.quote-editor-panel),
+    html[data-primary-panel-swap="1"] .map-panel-dialog.reports-panel[data-state="open"]:not(.report-details-panel):not(.report-editor-panel),
+    html[data-primary-panel-swap="1"] .map-panel-dialog.forms-panel.list-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.paths-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.lists-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.teams-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.activity-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.schedule-panel[data-state="open"],
+    html[data-primary-panel-swap="1"] .map-panel-dialog.outreach-panel[data-state="open"] {
+      opacity: 1;
+    }
   }
 
   html[data-primary-panel-swap="1"] .map-panel-dialog.leads-panel[data-state="closed"],
@@ -1256,7 +1273,9 @@
   html[data-primary-panel-swap="1"] .map-panel-dialog.activity-panel[data-state="closed"],
   html[data-primary-panel-swap="1"] .map-panel-dialog.schedule-panel[data-state="closed"],
   html[data-primary-panel-swap="1"] .map-panel-dialog.outreach-panel[data-state="closed"] {
-    animation: map-panel-primary-center-fade-out 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    animation: none !important;
     transition: none !important;
     pointer-events: none !important;
     z-index: 10001 !important;
