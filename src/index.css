@@ -5774,6 +5774,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   max-width: min(96vw, 42rem) !important;
   max-height: min(90vh, 820px) !important;
 }
+.map-panel-dialog.send-report-dialog[data-state='open'],
+.map-panel-dialog.send-quote-dialog[data-state='open'] {
+  z-index: 10041 !important;
+}
 @media (max-width: 767px) {
   .map-panel.send-report-dialog.fullscreen-panel {
     width: 100% !important;

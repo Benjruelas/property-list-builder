@@ -44,9 +44,11 @@ import {
 } from '../../utils/reportSendTemplates'
 import { getSettings, updateSettings } from '../../utils/settings'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { logLeadReportEvent } from '@/utils/leadActivity'
 import { clearReportEditorDraft, clearReportEditorDraftForReport } from '../../utils/reportEditorDraft'
 import { ReportBuilder } from './ReportBuilder'
 import { ReportDetail } from './ReportDetail'
+import { SendReportDialog } from './SendReportDialog'
 import { ReportTemplatePickerDialog } from './ReportTemplatePickerDialog'
 import { LeadPickerDialog } from '../photos/LeadPickerDialog'
 
@@ -84,6 +86,7 @@ export function ReportsPanel({
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
   const [pendingReportLeadId, setPendingReportLeadId] = useState(null)
   const [pendingPreferredTemplate, setPendingPreferredTemplate] = useState(null)
+  const [sendReport, setSendReport] = useState(null)
   const lastQuickCreateKeyRef = useRef(0)
 
   const editorOpen = !!editorFrame
@@ -612,6 +615,7 @@ export function ReportsPanel({
         teamMembership={teamMembership}
         onClose={onCloseDetail}
         onBack={onCloseDetail}
+        onSend={(report) => setSendReport(report)}
         onEdit={(r) => onOpenEditor?.({ mode: 'report', report: r })}
         onDelete={performDeleteReport}
         onReportUpdated={(r) => {
@@ -653,6 +657,23 @@ export function ReportsPanel({
           } else {
             onCloseEditor?.()
           }
+        }}
+      />
+
+      <SendReportDialog
+        open={!!sendReport}
+        report={sendReport}
+        onClose={() => setSendReport(null)}
+        leads={leads}
+        teams={teams}
+        teamMembership={teamMembership}
+        onSent={async (updated) => {
+          setReports((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+          const lead = updated.leadId ? leads.find((l) => l.id === updated.leadId) : null
+          if (lead?.id) {
+            await logLeadReportEvent(getToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })
+          }
+          setSendReport(null)
         }}
       />
     </>
