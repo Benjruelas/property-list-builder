@@ -20,6 +20,14 @@ describe('normalizeLeadStatuses', () => {
     const result = normalizeLeadStatuses([{ id: 'new', label: 'Fresh' }])
     expect(result.find((s) => s.id === 'new')?.label).toBe('Fresh')
   })
+
+  it('does not restore removable defaults omitted by the user', () => {
+    const result = normalizeLeadStatuses([
+      { id: 'new', label: 'New' },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(result.map((status) => status.id)).toEqual(['new', 'converted'])
+  })
 })
 
 describe('resolveLeadStatuses', () => {

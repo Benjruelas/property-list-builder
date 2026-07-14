@@ -8,7 +8,9 @@ export const DEFAULT_LEAD_STATUSES = [
 
 export function normalizeLeadStatuses(input) {
   const source = Array.isArray(input) ? input : []
-  const byId = new Map(DEFAULT_LEAD_STATUSES.map((s) => [s.id, { ...s }]))
+  if (source.length === 0) return DEFAULT_LEAD_STATUSES.map((status) => ({ ...status }))
+  const defaultsById = new Map(DEFAULT_LEAD_STATUSES.map((status) => [status.id, status]))
+  const byId = new Map()
 
   for (const raw of source) {
     if (!raw || typeof raw !== 'object') continue
@@ -19,19 +21,13 @@ export function normalizeLeadStatuses(input) {
     byId.set(id, { id, label })
   }
 
-  const ordered = []
-  for (const def of DEFAULT_LEAD_STATUSES) {
-    if (byId.has(def.id)) ordered.push(byId.get(def.id))
-  }
-  for (const [id, row] of byId) {
-    if (!DEFAULT_LEAD_STATUSES.some((d) => d.id === id)) ordered.push(row)
-  }
+  const ordered = [...byId.values()]
 
   if (!ordered.some((s) => s.id === 'new')) {
-    ordered.unshift({ id: 'new', label: 'New' })
+    ordered.unshift({ ...defaultsById.get('new') })
   }
   if (!ordered.some((s) => s.id === 'converted')) {
-    ordered.push({ id: 'converted', label: 'Converted' })
+    ordered.push({ ...defaultsById.get('converted') })
   }
 
   return ordered

@@ -78,6 +78,7 @@ export async function runApiPipelinesFreshStartMigration(getToken, pipelines, up
 
   let cleared = 0
   for (const p of pipelines || []) {
+    if (p.canonicalType === 'deals') continue
     const hasLegacy = (p.leads?.length > 0) || (p.deals?.length > 0 && p.leads?.length > 0)
     const hasLeads = Array.isArray(p.leads) && p.leads.length > 0
     if (hasLeads || hasLegacy) {

@@ -322,6 +322,29 @@ export default async function handler(req, res) {
         team.updatedAt = new Date().toISOString()
         all[idx] = team
         await saveAllTeams(all)
+        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
+      }
+
+      if (action === 'update-settings') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can update team settings' })
+        if (body.allowExternalSharing !== undefined) {
+          team.allowExternalSharing = body.allowExternalSharing === true
+        }
+        if (body.membersCanSeeDealAmounts !== undefined) {
+          team.membersCanSeeDealAmounts = body.membersCanSeeDealAmounts === true
+        }
+        if (body.emailBranding !== undefined) {
+          team.emailBranding = normalizeEmailBranding(body.emailBranding)
+        }
+        if (body.leadStatuses !== undefined) {
+          team.leadStatuses = normalizeLeadStatuses(body.leadStatuses)
+        }
+        if (body.dealStatuses !== undefined) {
+          team.dealStatuses = normalizeDealStatuses(body.dealStatuses)
+        }
+        team.updatedAt = new Date().toISOString()
+        all[idx] = team
+        await saveAllTeams(all)
         const memberUids = new Set([team.ownerId, ...(team.members || []).map((member) => member.uid)])
         if (body.leadStatuses !== undefined) {
           const valid = new Set(team.leadStatuses.map((status) => status.id))
@@ -353,29 +376,6 @@ export default async function handler(req, res) {
             }
           }))
         }
-        return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
-      }
-
-      if (action === 'update-settings') {
-        if (!isAdmin) return res.status(403).json({ error: 'Only admins can update team settings' })
-        if (body.allowExternalSharing !== undefined) {
-          team.allowExternalSharing = body.allowExternalSharing === true
-        }
-        if (body.membersCanSeeDealAmounts !== undefined) {
-          team.membersCanSeeDealAmounts = body.membersCanSeeDealAmounts === true
-        }
-        if (body.emailBranding !== undefined) {
-          team.emailBranding = normalizeEmailBranding(body.emailBranding)
-        }
-        if (body.leadStatuses !== undefined) {
-          team.leadStatuses = normalizeLeadStatuses(body.leadStatuses)
-        }
-        if (body.dealStatuses !== undefined) {
-          team.dealStatuses = normalizeDealStatuses(body.dealStatuses)
-        }
-        team.updatedAt = new Date().toISOString()
-        all[idx] = team
-        await saveAllTeams(all)
         return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
       }
 

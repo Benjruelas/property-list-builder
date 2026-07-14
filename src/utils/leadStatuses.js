@@ -46,7 +46,9 @@ export function slugifyLeadStatusId(label, existingIds = new Set()) {
 
 export function normalizeLeadStatuses(input) {
   const source = Array.isArray(input) ? input : []
-  const byId = new Map(DEFAULT_LEAD_STATUSES.map((s) => [s.id, { ...s }]))
+  if (source.length === 0) return DEFAULT_LEAD_STATUSES.map((status) => ({ ...status }))
+  const defaultsById = new Map(DEFAULT_LEAD_STATUSES.map((s) => [s.id, s]))
+  const byId = new Map()
 
   for (const raw of source) {
     if (!raw || typeof raw !== 'object') continue
@@ -54,26 +56,20 @@ export function normalizeLeadStatuses(input) {
     const label = String(raw.label || '').trim()
     if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
     if (!label || label.length > 40) continue
-    const prev = byId.get(id) || {}
+    const prev = byId.get(id) || defaultsById.get(id) || {}
     const color = typeof raw.color === 'string' && raw.color.trim()
       ? raw.color.trim()
       : (prev.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length])
     byId.set(id, { id, label, color })
   }
 
-  const ordered = []
-  for (const def of DEFAULT_LEAD_STATUSES) {
-    if (byId.has(def.id)) ordered.push(byId.get(def.id))
-  }
-  for (const [id, row] of byId) {
-    if (!DEFAULT_LEAD_STATUSES.some((d) => d.id === id)) ordered.push(row)
-  }
+  const ordered = [...byId.values()]
 
   if (!ordered.some((s) => s.id === 'new')) {
-    ordered.unshift({ ...DEFAULT_LEAD_STATUSES[0] })
+    ordered.unshift({ ...defaultsById.get('new') })
   }
   if (!ordered.some((s) => s.id === 'converted')) {
-    const converted = DEFAULT_LEAD_STATUSES.find((s) => s.id === 'converted')
+    const converted = defaultsById.get('converted')
     if (converted) ordered.push({ ...converted })
   }
 

@@ -10,8 +10,10 @@ import {
 } from './pipelineRepo.js'
 import { DEFAULT_LEAD_STATUSES } from './leadStatuses.js'
 import { DEFAULT_DEAL_STATUSES } from './dealStatuses.js'
+import { withKvLock } from './kvLock.js'
 
 export const CANONICAL_PIPES_MIGRATION_KEY = 'migration:canonical-pipes:v1'
+const CANONICAL_PIPES_LOCK_KEY = 'lock:migration:canonical-pipes:v1'
 
 function safeId(value) {
   return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -109,6 +111,7 @@ export function buildCanonicalPipeData({ pipelines = [], leads = [], teams = [],
       sharedMemberUids: [],
       teamShares: scope.team ? [scope.team.id] : [],
       canonicalType: 'deals',
+      legacyPipelineIds: source.map((pipeline) => pipeline.id).filter(Boolean),
       createdAt: source.map((pipeline) => pipeline.createdAt).filter(Boolean).sort()[0] || now,
       updatedAt: now,
     }
@@ -130,7 +133,7 @@ export function buildCanonicalPipeData({ pipelines = [], leads = [], teams = [],
   return { pipelines: canonicalPipelines, leads: resetLeads, teams: resetTeams }
 }
 
-export async function runCanonicalPipesMigration({ force = false } = {}) {
+async function performCanonicalPipesMigration({ force = false } = {}) {
   if (kvAvailable && kv && !force) {
     const marker = await kv.get(CANONICAL_PIPES_MIGRATION_KEY)
     if (marker) return { alreadyApplied: true, marker }
@@ -169,5 +172,16 @@ export async function runCanonicalPipesMigration({ force = false } = {}) {
     teams: next.teams.length,
   }
   if (kvAvailable && kv) await kv.set(CANONICAL_PIPES_MIGRATION_KEY, result)
+  return result
+}
+
+export async function runCanonicalPipesMigration(options = {}) {
+  if (!kvAvailable || !kv) return performCanonicalPipesMigration(options)
+  const result = await withKvLock(
+    CANONICAL_PIPES_LOCK_KEY,
+    () => performCanonicalPipesMigration(options),
+    { ttlMs: 120000, maxWaitMs: 1000 },
+  )
+  if (result === null) throw new Error('Canonical pipes migration is already running')
   return result
 }
