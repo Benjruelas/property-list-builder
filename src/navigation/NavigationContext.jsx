@@ -1,15 +1,35 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import {
   createInitialState,
   navigationReducer,
   resetToMapFull,
 } from './navigationReducer.js'
 import {
+  CLIENT_PREVIEW_RESTORE_FLAG,
   consumeNavRestoreFlag,
   isPublicPreviewRoute,
   persistNavStack,
   readPersistedNavStack,
 } from '../utils/clientPreview.js'
+
+function peekNavRestoreFlag() {
+  if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG) === '1') {
+    return true
+  }
+  if (typeof localStorage !== 'undefined' && localStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG) === '1') {
+    return true
+  }
+  return false
+}
+
+function clearNavRestoreFlag() {
+  try {
+    sessionStorage?.removeItem(CLIENT_PREVIEW_RESTORE_FLAG)
+    localStorage?.removeItem(CLIENT_PREVIEW_RESTORE_FLAG)
+  } catch {
+    /* ignore */
+  }
+}
 import { NAV_ACTIONS } from './types.js'
 import { selectActionBarActiveId, selectPanelProps, selectTopFrame } from './selectors.js'
 import { feedDataToFrames } from './feedNavigation.js'
@@ -81,12 +101,50 @@ function initNavState() {
 
 export function NavigationProvider({ children }) {
   const [state, dispatch] = useReducer(navigationReducer, undefined, initNavState)
+  const navStackRef = useRef(state.navStack)
+  navStackRef.current = state.navStack
 
   // Keep a sessionStorage snapshot of the nav stack so it survives the reload that
   // returnToAppFromClientPreview triggers. No-ops on public preview routes.
   useEffect(() => {
     persistNavStack(state.navStack)
   }, [state.navStack])
+
+  // After returning from a client preview: restore nav if this tab cold-loaded with an
+  // empty stack, or clear the restore flag when the live session already has panels open.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    if (isPublicPreviewRoute()) return undefined
+
+    const restoreOrClearPreviewHandoff = () => {
+      if (!peekNavRestoreFlag()) return
+      const persisted = readPersistedNavStack()
+      const live = navStackRef.current
+      if ((!live || live.length === 0) && persisted?.length) {
+        dispatch({ type: NAV_ACTIONS.REPLACE_STACK, payload: persisted })
+      }
+      clearNavRestoreFlag()
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') restoreOrClearPreviewHandoff()
+    }
+    const onPageShow = (event) => {
+      // bfcache / discarded-tab restore
+      if (event.persisted || document.visibilityState === 'visible') {
+        restoreOrClearPreviewHandoff()
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('pageshow', onPageShow)
+    window.addEventListener('focus', restoreOrClearPreviewHandoff)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('pageshow', onPageShow)
+      window.removeEventListener('focus', restoreOrClearPreviewHandoff)
+    }
+  }, [])
 
   const panelProps = useMemo(() => selectPanelProps(state), [state])
   const topFrame = useMemo(() => selectTopFrame(state), [state])

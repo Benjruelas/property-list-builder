@@ -155,10 +155,12 @@ export function returnToAppFromClientPreview() {
   if (typeof window === 'undefined') return
 
   // Prefer returning to the live app tab so React state, auth, and nav stack stay intact.
+  // Keep opener handoff keys — if the background app tab was discarded and reloads on
+  // focus, NavigationProvider needs CLIENT_PREVIEW_RESTORE_FLAG + nav stack to reopen
+  // the report/quote the user was editing.
   try {
     const opener = window.opener
     if (opener && !opener.closed) {
-      clearClientPreviewHandoff(opener)
       opener.focus()
       window.close()
       return

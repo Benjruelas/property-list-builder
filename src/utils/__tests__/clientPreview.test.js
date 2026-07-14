@@ -171,6 +171,9 @@ describe('owner preview back helpers', () => {
 
   it('returnToAppFromClientPreview focuses opener and closes preview tab', () => {
     const openerSession = new Map()
+    openerSession.set(CLIENT_PREVIEW_RETURN_KEY, '/app')
+    openerSession.set(CLIENT_PREVIEW_RESTORE_FLAG, '1')
+    openerSession.set(CLIENT_PREVIEW_NAV_KEY, JSON.stringify([{ type: 'reports.editor' }]))
     const opener = {
       closed: false,
       focus: vi.fn(),
@@ -185,8 +188,6 @@ describe('owner preview back helpers', () => {
         removeItem: vi.fn(),
       },
     }
-    openerSession.set(CLIENT_PREVIEW_RETURN_KEY, '/app')
-    openerSession.set(CLIENT_PREVIEW_RESTORE_FLAG, '1')
     const close = vi.fn()
     vi.stubGlobal('window', {
       location: { href: 'https://app.test/r/token', origin: 'https://app.test' },
@@ -196,8 +197,10 @@ describe('owner preview back helpers', () => {
     returnToAppFromClientPreview()
     expect(opener.focus).toHaveBeenCalled()
     expect(close).toHaveBeenCalled()
-    expect(openerSession.get(CLIENT_PREVIEW_RETURN_KEY)).toBeUndefined()
-    expect(openerSession.get(CLIENT_PREVIEW_RESTORE_FLAG)).toBeUndefined()
+    // Keep opener handoff so a discarded/reloaded app tab can restore the report
+    expect(openerSession.get(CLIENT_PREVIEW_RETURN_KEY)).toBe('/app')
+    expect(openerSession.get(CLIENT_PREVIEW_RESTORE_FLAG)).toBe('1')
+    expect(openerSession.get(CLIENT_PREVIEW_NAV_KEY)).toBe(JSON.stringify([{ type: 'reports.editor' }]))
     vi.unstubAllGlobals()
   })
 
