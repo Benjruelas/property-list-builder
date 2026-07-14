@@ -198,7 +198,7 @@ function activityPrefix(currentStack) {
   return currentStack[0]?.type === 'activity' ? [currentStack[0]] : []
 }
 
-/** Open lead detail as the primary panel; restores Leads list on back when opened from it. */
+/** Open lead detail as the primary panel; keeps Leads list mounted underneath for Back. */
 export function recipeOpenLeadDetails(currentStack, leadId, opts = {}) {
   const build = (stack) => {
     const fromActivity = stack[0]?.type === 'activity'
@@ -206,12 +206,14 @@ export function recipeOpenLeadDetails(currentStack, leadId, opts = {}) {
     const keep = { ...(fromActivity ? { activity: true } : {}) }
     const withoutLeadFrames = stack.filter((f) => f.type !== 'leads' && f.type !== 'leads.detail')
     const base = recipeClosePrimaryExcept(withoutLeadFrames, keep, [])
+    const keepList = hadLeadsList && !fromActivity
     return [
       ...base,
+      ...(keepList ? [{ type: 'leads' }] : []),
       {
         type: 'leads.detail',
         leadId,
-        ...(hadLeadsList && !fromActivity ? { returnToLeadsList: true } : {}),
+        ...(keepList ? { returnToLeadsList: true } : {}),
       },
     ]
   }
@@ -230,7 +232,10 @@ export function recipeClosePromotedLeadDetail(currentStack) {
   const top = coreStack[coreStack.length - 1]
   if (top?.type !== 'leads.detail' || !top.returnToLeadsList) return null
   const withoutDetail = coreStack.slice(0, -1)
-  return appendTrailingTasks([...withoutDetail, { type: 'leads' }], tasksFrames)
+  const withList = withoutDetail.some((f) => f.type === 'leads')
+    ? withoutDetail
+    : [...withoutDetail, { type: 'leads' }]
+  return appendTrailingTasks(withList, tasksFrames)
 }
 
 /** Open lead detail only — no Leads list panel (e.g. from Tasks). */
@@ -302,7 +307,7 @@ export function recipeOpenScheduleAtDate(currentStack, initialDate) {
   return [...withoutSchedule, { type: 'schedule', initialDate: initialDate ?? undefined }]
 }
 
-/** Open deal detail as the primary panel; restores Deals list on back when opened from it. */
+/** Open deal detail as the primary panel; keeps Deals list mounted underneath for Back. */
 export function recipePushDealsDetail(currentStack, dealId, pipelineId, opts = {}) {
   const build = (stack) => {
     const fromActivity = stack[0]?.type === 'activity'
@@ -314,13 +319,15 @@ export function recipePushDealsDetail(currentStack, dealId, pipelineId, opts = {
         f.type !== 'deals.detail' &&
         f.type !== 'deals',
     )
+    const keepList = hadDealsList && !fromActivity
     return [
       ...filtered,
+      ...(keepList ? [{ type: 'deals' }] : []),
       {
         type: 'deals.detail',
         dealId,
         pipelineId,
-        ...(hadDealsList && !fromActivity ? { returnToDealsList: true } : {}),
+        ...(keepList ? { returnToDealsList: true } : {}),
       },
     ]
   }
@@ -339,7 +346,10 @@ export function recipeClosePromotedDealDetail(currentStack) {
   const top = coreStack[coreStack.length - 1]
   if (top?.type !== 'deals.detail' || !top.returnToDealsList) return null
   const withoutDetail = coreStack.slice(0, -1)
-  return appendTrailingTasks([...withoutDetail, { type: 'deals' }], tasksFrames)
+  const withList = withoutDetail.some((f) => f.type === 'deals')
+    ? withoutDetail
+    : [...withoutDetail, { type: 'deals' }]
+  return appendTrailingTasks(withList, tasksFrames)
 }
 
 /** Push closed deal view as primary panel — replaces competing deal/lead overlays. */
@@ -353,12 +363,14 @@ export function recipePushDealsClosed(currentStack, closedRecordId) {
       f.type !== 'deals.closed' &&
       f.type !== 'deals',
   )
+  const keepList = hadDealsList && !fromActivity
   return [
     ...filtered,
+    ...(keepList ? [{ type: 'deals' }] : []),
     {
       type: 'deals.closed',
       closedRecordId,
-      ...(hadDealsList && !fromActivity ? { returnToDealsList: true } : {}),
+      ...(keepList ? { returnToDealsList: true } : {}),
     },
   ]
 }
@@ -369,7 +381,10 @@ export function recipeClosePromotedClosedDeal(currentStack) {
   const top = coreStack[coreStack.length - 1]
   if (top?.type !== 'deals.closed' || !top.returnToDealsList) return null
   const withoutClosed = coreStack.slice(0, -1)
-  return appendTrailingTasks([...withoutClosed, { type: 'deals' }], tasksFrames)
+  const withList = withoutClosed.some((f) => f.type === 'deals')
+    ? withoutClosed
+    : [...withoutClosed, { type: 'deals' }]
+  return appendTrailingTasks(withList, tasksFrames)
 }
 
 /**
