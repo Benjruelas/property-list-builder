@@ -9,7 +9,14 @@ import { flags } from './flags.js'
 import { withKvLock } from './kvLock.js'
 import { KvLockUnavailableError } from './kvLockErrors.js'
 import { withTiming } from './timing.js'
-import { writeLeadToShards, removeLeadIndex, syncSharedIndexForLead } from './leadRepo.js'
+import {
+  writeLeadToShards,
+  removeLeadIndex,
+  syncSharedIndexForLead,
+  getLeadOwnerId,
+  getOwnerLeads,
+  saveOwnerLeads,
+} from './leadRepo.js'
 import { writeLeadEntities, deleteLeadEntity } from './entityLeadStore.js'
 import { bumpLeadsVersionsForResource } from './dataVersion.js'
 import { getAllTeams } from './teams.js'
@@ -120,13 +127,45 @@ export async function mutateLeads(mutatorFn, { changedResources = [] } = {}) {
   throw new KvLockUnavailableError(LOCK_KEY)
 }
 
+async function mutateSingleLeadInShard(leadId, mutatorFn, changedResources) {
+  const ownerId = await getLeadOwnerId(leadId)
+  if (!ownerId) return null
+
+  const ownerLeads = await getOwnerLeads(ownerId)
+  const idx = ownerLeads.findIndex((l) => l.id === leadId)
+  if (idx === -1) return null
+
+  const prevLead = ownerLeads[idx]
+  const updated = mutatorFn(prevLead, ownerLeads, idx)
+  if (!updated) return null
+
+  const nextOwnerLeads = [...ownerLeads]
+  nextOwnerLeads[idx] = updated
+
+  await saveOwnerLeads(ownerId, nextOwnerLeads)
+  await writeLeadEntities([updated])
+
+  if (!changedResources.length) {
+    changedResources.push({ resource: updated, prevResource: prevLead })
+  }
+
+  if (flags.LEADS_SHARDED() !== 'off') {
+    const allTeams = await getAllTeams()
+    await syncSharedIndexForLead(updated, prevLead, allTeams)
+  }
+  if (flags.VERSIONED_POLL()) {
+    await bumpLeadsVersionsForResource(updated, { prevResource: prevLead })
+  }
+
+  return updated
+}
+
 export async function mutateSingleLead(leadId, mutatorFn, { changedResources = [] } = {}) {
   let result = null
-  let prevLead = null
   await mutateLeads((all) => {
     const idx = all.findIndex((l) => l.id === leadId)
     if (idx === -1) return undefined
-    prevLead = all[idx]
+    const prevLead = all[idx]
     const updated = mutatorFn(prevLead, all, idx)
     if (!updated) return undefined
     const next = [...all]
@@ -137,7 +176,10 @@ export async function mutateSingleLead(leadId, mutatorFn, { changedResources = [
     }
     return next
   }, { changedResources })
-  return result
+
+  if (result) return result
+  if (flags.LEADS_SHARDED() === 'off') return null
+  return mutateSingleLeadInShard(leadId, mutatorFn, changedResources)
 }
 
 export async function deleteLeadFromStore(leadId) {

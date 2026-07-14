@@ -122,7 +122,7 @@ function nearestPresetLabel(zoomFactor) {
   return String(best)
 }
 
-export function PhotoCaptureModal({
+function PhotoCaptureModalInner({
   open,
   entityType = 'lead',
   entity,
@@ -223,16 +223,20 @@ export function PhotoCaptureModal({
 
   const entityRef = useMemo(() => {
     if (entityType === 'deal') {
-      return { entityType: 'deal', pipelineId, dealId: resolvedEntity.id, entityId: resolvedEntity.id }
+      const dealId = resolvedEntity?.id
+      if (!dealId) return null
+      return { entityType: 'deal', pipelineId, dealId, entityId: dealId }
     }
     if (isDraft) {
       if (!draftIdRef.current) draftIdRef.current = draftSessionId()
       return { entityType: 'lead', leadId: draftIdRef.current, entityId: draftIdRef.current }
     }
-    return { entityType: 'lead', leadId: resolvedEntity.id, entityId: resolvedEntity.id }
+    const leadId = resolvedEntity?.id
+    if (!leadId) return null
+    return { entityType: 'lead', leadId, entityId: leadId }
   }, [entityType, resolvedEntity?.id, pipelineId, isDraft])
 
-  const entityUploadJobs = useEntityUploadJobs(entityRef)
+  const entityUploadJobs = useEntityUploadJobs(entityRef || { entityType: 'lead', leadId: '', entityId: '' })
 
   const limitBytes = entityType === 'deal' ? DEAL_STORAGE_LIMIT_BYTES : LEAD_STORAGE_LIMIT_BYTES
   const photosUsed = sumPhotoBytes(resolvedEntity?.photos || [])
@@ -608,7 +612,7 @@ export function PhotoCaptureModal({
   }
   const lastThumb = sessionItems[0]?.previewUrl ?? null
 
-  if (!open || !entity) return null
+  if (!open || !entity || !entityRef) return null
 
   return createPortal(
     <>
@@ -802,4 +806,14 @@ export function PhotoCaptureModal({
     </>,
     getModalPortalContainer(),
   )
+}
+
+/** Guard invalid entity ids before running capture hooks (shared/list-view leads). */
+export function PhotoCaptureModal(props) {
+  const { open, entity, entityType = 'lead' } = props
+  if (!open || !entity) return null
+  const isDraftLead = entityType === 'lead' && !entity.id
+  const hasEntityId = !!entity.id
+  if (!hasEntityId && !isDraftLead) return null
+  return <PhotoCaptureModalInner {...props} />
 }

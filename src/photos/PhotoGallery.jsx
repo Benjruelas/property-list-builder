@@ -18,6 +18,7 @@ import {
 import { entityRefFromLead, entityRefFromDeal, updatePhotoInList, savePhotoAnnotations } from './annotationSave'
 import { entityKey } from './entityRef'
 import { formatLeadAddress, leadNeedsPhotoHydrate } from '@/utils/leads'
+import { showToast } from '../components/ui/toast'
 import { stripClientPhotoFields, dedupePhotosById } from '@/utils/photoDisplay'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
 import { PhotoAnnotator } from '../components/photos/PhotoAnnotator'
@@ -274,6 +275,8 @@ export function PhotoGallery({
 
   const Annotator = entityType === 'deal' ? DealPhotoAnnotator : PhotoAnnotator
 
+  const canAddPhotos = !readOnly && !!entity?.id && (entityType !== 'lead' || !photosMetadataLoading)
+
   return (
     <>
       <section className="lead-detail-section">
@@ -284,8 +287,14 @@ export function PhotoGallery({
                 size="sm"
                 variant="outline"
                 className="h-7 px-2 text-xs"
-                disabled={storageFull}
-                onClick={() => setCaptureOpen(true)}
+                disabled={storageFull || !canAddPhotos}
+                onClick={() => {
+                  if (!entity?.id) {
+                    showToast('Lead is still loading — try again in a moment', 'info')
+                    return
+                  }
+                  setCaptureOpen(true)
+                }}
               >
                 <Camera className="h-3.5 w-3.5 mr-1" />
                 Add photos
@@ -411,7 +420,7 @@ export function PhotoGallery({
         ) : undefined}
       />
 
-      {captureOpen && (
+      {captureOpen && entity?.id && (
         <PhotoCaptureModal
           open
           entityType={entityType}

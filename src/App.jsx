@@ -2994,6 +2994,7 @@ function App() {
   }, [])
 
   const handlePhotoEntityUpdated = useCallback((entityRef, entity) => {
+    if (!entity?.id) return
     if (entityRef.entityType === 'deal') {
       setPipelines((prev) => prev.map((p) => {
         if (p.id !== entityRef.pipelineId) return p
