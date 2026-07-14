@@ -3,6 +3,8 @@ import {
   applyPinchScale,
   clampPan,
   clampScale,
+  getGalleryDragAxis,
+  getGallerySwipeAction,
   isZoomed,
   MAX_SCALE,
   MIN_SCALE,
@@ -34,6 +36,68 @@ describe('shouldAllowGallerySwipe', () => {
   it('blocks swipe when zoomed or using multiple touches', () => {
     expect(shouldAllowGallerySwipe({ scale: 2, touchCount: 1 })).toBe(false)
     expect(shouldAllowGallerySwipe({ scale: 1, touchCount: 2 })).toBe(false)
+  })
+})
+
+describe('getGalleryDragAxis', () => {
+  it('waits for meaningful movement before locking an axis', () => {
+    expect(getGalleryDragAxis({ deltaX: 4, deltaY: 3 })).toBe(null)
+  })
+
+  it('distinguishes horizontal swipes from vertical scrolling', () => {
+    expect(getGalleryDragAxis({ deltaX: 24, deltaY: 5 })).toBe('horizontal')
+    expect(getGalleryDragAxis({ deltaX: 5, deltaY: 24 })).toBe('vertical')
+  })
+})
+
+describe('getGallerySwipeAction', () => {
+  it('navigates in the direction of a completed horizontal swipe', () => {
+    expect(getGallerySwipeAction({
+      deltaX: -60,
+      deltaY: 8,
+      elapsedMs: 300,
+      canGoPrev: true,
+      canGoNext: true,
+    })).toBe('next')
+    expect(getGallerySwipeAction({
+      deltaX: 60,
+      deltaY: 8,
+      elapsedMs: 300,
+      canGoPrev: true,
+      canGoNext: true,
+    })).toBe('prev')
+  })
+
+  it('accepts a short, deliberate flick', () => {
+    expect(getGallerySwipeAction({
+      deltaX: -24,
+      deltaY: 2,
+      elapsedMs: 40,
+      canGoPrev: true,
+      canGoNext: true,
+    })).toBe('next')
+  })
+
+  it('rejects vertical, incomplete, and unavailable navigation', () => {
+    const base = {
+      elapsedMs: 300,
+      canGoPrev: true,
+      canGoNext: true,
+    }
+    expect(getGallerySwipeAction({ ...base, deltaX: 60, deltaY: 80 })).toBe(null)
+    expect(getGallerySwipeAction({ ...base, deltaX: 20, deltaY: 2 })).toBe(null)
+    expect(getGallerySwipeAction({
+      ...base,
+      deltaX: 60,
+      deltaY: 2,
+      canGoPrev: false,
+    })).toBe(null)
+    expect(getGallerySwipeAction({
+      ...base,
+      deltaX: -60,
+      deltaY: 2,
+      canGoNext: false,
+    })).toBe(null)
   })
 })
 
