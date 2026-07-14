@@ -226,6 +226,10 @@ export function LeadsPanel({
   const showingLeadDetail = !!(detailLeadId && selectedLead)
   const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
   const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(isOpen, showingLeadDetail)
+  const stickyDetailLeadRef = useRef(null)
+  if (selectedLead) stickyDetailLeadRef.current = selectedLead
+  const leadForDetail = selectedLead || stickyDetailLeadRef.current
+  const leadDetailDialogOpen = !!showLeadDetailPanel && !!selectedLead
   const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, listObscuredByDetail)
@@ -414,24 +418,24 @@ export function LeadsPanel({
         canSeeDealAmounts={canSeeDealAmounts}
       />
 
-      {showLeadDetailPanel ? (
+      {leadForDetail ? (
           <LeadDetails
-            isOpen={!!selectedLead}
+            isOpen={leadDetailDialogOpen}
             instantDismiss={instantDismiss}
             panelDockSlot={panelDockSlot}
             nestedOverlay={false}
             topLayer={leadsDetailTopLayer}
             primaryDetail={isLeadsDetailStandalone}
             externalNestedOverlay={
-              (!!editLeadId && editLeadId === selectedLead?.id)
+              (!!editLeadId && editLeadId === leadForDetail?.id)
               || createDealOpen
               || dealPickerOpen
             }
             onClose={() => onCloseLeadDetail?.()}
-            lead={selectedLead}
+            lead={leadForDetail}
             pipelines={pipelines}
             getToken={getToken}
-            parcelData={leadToParcelData(selectedLead)}
+            parcelData={leadToParcelData(leadForDetail)}
             onOpenParcelDetails={onOpenParcelDetails}
             onEmailClick={onEmailClick}
             onPhoneClick={onPhoneClick}

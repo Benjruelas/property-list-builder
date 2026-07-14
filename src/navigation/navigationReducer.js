@@ -139,9 +139,15 @@ function popNavStack(state) {
   // 1. Nested child frames (leads.detail, pipes.deal, forms.edit, etc.)
   if (isNestedChildFrame(topType) && topType !== 'schedule') {
     if (top.returnToLeadsList) {
-      newCore = [...coreStack.slice(0, -1), { type: 'leads' }]
+      const without = coreStack.slice(0, -1)
+      newCore = without.some((f) => f.type === 'leads')
+        ? without
+        : [...without, { type: 'leads' }]
     } else if (top.returnToDealsList) {
-      newCore = [...coreStack.slice(0, -1), { type: 'deals' }]
+      const without = coreStack.slice(0, -1)
+      newCore = without.some((f) => f.type === 'deals')
+        ? without
+        : [...without, { type: 'deals' }]
     } else if (shouldReturnToActivityOnDetailPop(coreStack, topType)) {
       newCore = [{ type: 'activity' }]
     } else {

@@ -26,6 +26,7 @@ import {
   recipePushPipesDeal,
   recipeClosePromotedPipesDealDetail,
   recipeOpenLeadDetails,
+  recipeClosePromotedLeadDetail,
   recipeOpenStandaloneLeadDetail,
   recipeOpenLeadDetailFromSchedule,
   recipeOpenStandaloneDealDetail,
@@ -69,12 +70,21 @@ describe('navigationReducer', () => {
 
   it('pops promoted leads.detail back to leads list', () => {
     let state = replaceStack(createInitialState(), [
+      { type: 'leads' },
       { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true },
     ])
     state = pop(state)
     expect(state.navStack).toEqual([{ type: 'leads' }])
     state = pop(state)
     expect(state.navStack).toEqual([])
+  })
+
+  it('pops legacy promoted leads.detail without list frame back to leads', () => {
+    let state = replaceStack(createInitialState(), [
+      { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true },
+    ])
+    state = pop(state)
+    expect(state.navStack).toEqual([{ type: 'leads' }])
   })
 
   it('activity stack: back from pipes returns to activity', () => {
@@ -726,9 +736,20 @@ describe('recipes', () => {
     expect(next.map((f) => f.type)).toEqual(['pipes', 'tasks'])
   })
 
-  it('recipeOpenLeadDetails promotes leads list to primary detail', () => {
+  it('recipeOpenLeadDetails keeps leads list under detail for Back', () => {
     const stack = recipeOpenLeadDetails([{ type: 'leads' }], 'l1')
-    expect(stack).toEqual([{ type: 'leads.detail', leadId: 'l1', returnToLeadsList: true }])
+    expect(stack).toEqual([
+      { type: 'leads' },
+      { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true },
+    ])
+  })
+
+  it('recipeClosePromotedLeadDetail pops detail and keeps existing leads list', () => {
+    const next = recipeClosePromotedLeadDetail([
+      { type: 'leads' },
+      { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true },
+    ])
+    expect(next).toEqual([{ type: 'leads' }])
   })
 
   it('recipeOpenLeadDetails preserves activity prefix without return flag', () => {
@@ -746,8 +767,8 @@ describe('recipes', () => {
       [{ type: 'deals' }, { type: 'deals.detail', dealId: 'd1', pipelineId: 'p1' }],
       'c1',
     )
-    expect(stack.map((f) => f.type)).toEqual(['deals.closed'])
-    expect(stack[0].returnToDealsList).toBe(true)
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.closed'])
+    expect(stack[1].returnToDealsList).toBe(true)
   })
 
   it('recipePushDealsDetail replaces closed deal view', () => {
@@ -756,8 +777,8 @@ describe('recipes', () => {
       'd1',
       'p1',
     )
-    expect(stack.map((f) => f.type)).toEqual(['deals.detail'])
-    expect(stack[0].returnToDealsList).toBe(true)
+    expect(stack.map((f) => f.type)).toEqual(['deals', 'deals.detail'])
+    expect(stack[1].returnToDealsList).toBe(true)
   })
 
   it('recipePushDealsDetail from tasks-only stack opens detail and keeps tasks', () => {
@@ -930,12 +951,24 @@ describe('recipes', () => {
 describe('selectors', () => {
   it('derives panel open flags from promoted lead detail', () => {
     const state = createInitialState()
+    state.navStack = [
+      { type: 'leads' },
+      { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true },
+    ]
+    const props = selectPanelProps(state)
+    expect(props.isLeadsPanelOpen).toBe(true)
+    expect(props.leadsDetailLeadId).toBe('l1')
+    expect(props.isLeadsDetailStandalone).toBe(false)
+    expect(props.fromActivity).toBe(false)
+  })
+
+  it('legacy promoted lead detail without list still counts as standalone', () => {
+    const state = createInitialState()
     state.navStack = [{ type: 'leads.detail', leadId: 'l1', returnToLeadsList: true }]
     const props = selectPanelProps(state)
     expect(props.isLeadsPanelOpen).toBe(false)
     expect(props.leadsDetailLeadId).toBe('l1')
     expect(props.isLeadsDetailStandalone).toBe(true)
-    expect(props.fromActivity).toBe(false)
   })
 
   it('standalone lead detail without leads list', () => {
