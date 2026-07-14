@@ -265,7 +265,9 @@ function App() {
     quotesDetailReturnToDeal,
     isReportsPanelOpen,
     reportsEditorFrame,
+    reportsEditorReturnToLead,
     reportsDetailReportId,
+    reportsDetailReturnToLead,
     teamsDetailTeamId,
     isSettingsPanelOpen,
     isSkipTracedListPanelOpen,
@@ -3112,11 +3114,17 @@ function App() {
 
   const handleCloseReportsEditor = useCallback(() => {
     nav.pop()
-  }, [nav])
+    if (reportsEditorReturnToLead) {
+      nav.pop()
+    }
+  }, [nav, reportsEditorReturnToLead])
 
   const handleCloseReportsDetail = useCallback(() => {
     nav.pop()
-  }, [nav])
+    if (reportsDetailReturnToLead) {
+      nav.pop()
+    }
+  }, [nav, reportsDetailReturnToLead])
 
   const handleCreatePhotoReport = useCallback((leadId) => {
     if (!leadId) return

@@ -145,12 +145,14 @@
  * @property {'reports.editor'} type
  * @property {string} [leadId]
  * @property {object} [report]
+ * @property {boolean} [returnToLead] — back restores lead detail when opened from it
  */
 
 /**
  * @typedef {object} ReportsDetailFrame
  * @property {'reports.detail'} type
  * @property {string} reportId
+ * @property {boolean} [returnToLead] — back restores lead detail when opened from it
  */
 
 /**

@@ -651,13 +651,19 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['reports'])
   })
 
-  it('recipePushReportsDetail opens reports + detail atomically', () => {
+  it('recipePushReportsDetail from lead keeps lead context and sets returnToLead', () => {
     const stack = recipePushReportsDetail(
       [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true }],
       'r1',
     )
-    expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.detail'])
-    expect(stack[1].reportId).toBe('r1')
+    expect(stack.map((f) => f.type)).toEqual([
+      'leads',
+      'leads.detail',
+      'reports',
+      'reports.detail',
+    ])
+    expect(stack[3].reportId).toBe('r1')
+    expect(stack[3].returnToLead).toBe(true)
   })
 
   it('recipePushReportsDetail keeps tasks when docked', () => {
@@ -674,14 +680,15 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.detail'])
   })
 
-  it('recipePushReportsEditor opens reports + editor atomically', () => {
+  it('recipePushReportsEditor from lead keeps lead context and sets returnToLead', () => {
     const stack = recipePushReportsEditor(
       [{ type: 'leads.detail', leadId: 'l1' }],
       { mode: 'report', leadId: 'l1', awaitingTemplate: true },
     )
-    expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.editor'])
-    expect(stack[1].leadId).toBe('l1')
-    expect(stack[1].awaitingTemplate).toBe(true)
+    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'reports', 'reports.editor'])
+    expect(stack[2].leadId).toBe('l1')
+    expect(stack[2].awaitingTemplate).toBe(true)
+    expect(stack[2].returnToLead).toBe(true)
   })
 
   it('reports editor and detail derive from stack', () => {
