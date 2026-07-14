@@ -60,6 +60,8 @@ import {
   recipePushQuotesDetail,
   recipeOpenQuotes,
   recipeOpenReports,
+  recipePushReportsDetail,
+  recipePushReportsEditor,
   recipeOpenSchedule,
   recipeOpenScheduleAtDate,
   recipeOpenSettings,
@@ -476,8 +478,8 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack])
 
   const pushReportsEditor = useCallback((editorFrame) => {
-    push({ type: 'reports.editor', ...editorFrame })
-  }, [push])
+    replaceStack(recipePushReportsEditor(state.navStack, editorFrame, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const patchReportsEditor = useCallback((patch) => {
     const nextStack = state.navStack.map((f) =>
@@ -491,8 +493,8 @@ export function NavigationProvider({ children }) {
   }, [state.navStack])
 
   const pushReportsDetail = useCallback((reportId) => {
-    push({ type: 'reports.detail', reportId })
-  }, [push])
+    replaceStack(recipePushReportsDetail(state.navStack, reportId, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const pushTeamsDetail = useCallback((teamId) => {
     const withoutDetail = state.navStack.filter((f) => f.type !== 'teams.detail')

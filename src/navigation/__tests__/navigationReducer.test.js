@@ -20,6 +20,8 @@ import {
   recipeOpenQuoteEditorFromDeal,
   recipePushQuotesDetail,
   recipeOpenReports,
+  recipePushReportsDetail,
+  recipePushReportsEditor,
   recipeOpenDealInPipes,
   recipePushPipesDeal,
   recipeClosePromotedPipesDealDetail,
@@ -637,6 +639,39 @@ describe('recipes', () => {
   it('openReports replaces other panels', () => {
     const stack = recipeOpenReports([{ type: 'tasks' }])
     expect(stack.map((f) => f.type)).toEqual(['reports'])
+  })
+
+  it('recipePushReportsDetail opens reports + detail atomically', () => {
+    const stack = recipePushReportsDetail(
+      [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1', returnToLeadsList: true }],
+      'r1',
+    )
+    expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.detail'])
+    expect(stack[1].reportId).toBe('r1')
+  })
+
+  it('recipePushReportsDetail keeps tasks when docked', () => {
+    const stack = recipePushReportsDetail(
+      [{ type: 'leads' }, { type: 'tasks' }],
+      'r1',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.detail', 'tasks'])
+  })
+
+  it('recipePushReportsDetail on existing reports only adds detail', () => {
+    const stack = recipePushReportsDetail([{ type: 'reports' }], 'r2')
+    expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.detail'])
+  })
+
+  it('recipePushReportsEditor opens reports + editor atomically', () => {
+    const stack = recipePushReportsEditor(
+      [{ type: 'leads.detail', leadId: 'l1' }],
+      { mode: 'report', leadId: 'l1', awaitingTemplate: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.editor'])
+    expect(stack[1].leadId).toBe('l1')
+    expect(stack[1].awaitingTemplate).toBe(true)
   })
 
   it('reports editor and detail derive from stack', () => {
