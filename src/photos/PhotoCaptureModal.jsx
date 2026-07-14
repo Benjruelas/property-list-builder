@@ -142,7 +142,6 @@ export function PhotoCaptureModal({
   autoOpenCamera = false,
 }) {
   const { enqueueCapture, reassignDraftJobs } = usePhotoUpload()
-  const entityUploadJobs = useEntityUploadJobs(entityRef)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const libraryInputRef = useRef(null)
@@ -232,6 +231,8 @@ export function PhotoCaptureModal({
     }
     return { entityType: 'lead', leadId: resolvedEntity.id, entityId: resolvedEntity.id }
   }, [entityType, resolvedEntity?.id, pipelineId, isDraft])
+
+  const entityUploadJobs = useEntityUploadJobs(entityRef)
 
   const limitBytes = entityType === 'deal' ? DEAL_STORAGE_LIMIT_BYTES : LEAD_STORAGE_LIMIT_BYTES
   const photosUsed = sumPhotoBytes(resolvedEntity?.photos || [])
