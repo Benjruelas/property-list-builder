@@ -56,6 +56,7 @@ const MENU_WIDTH = 180
 
 export function ReportsPanel({
   isOpen,
+  isReportsListOpen = false,
   panelDockSlot,
   onClose,
   onBack,
@@ -112,9 +113,9 @@ export function ReportsPanel({
   const showReportTemplatePicker = templatePickerOpen || awaitingTemplatePick
   const reportBuilderOpen = editorOpen && !showReportTemplatePicker
 
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByEditor = listPanelObscuredByDetail(isOpen, reportBuilderOpen)
-  const listBesideReportDetail = listPanelObscuredByDetail(isOpen, hasReportDetail)
+  const listDialogOpen = mapListDialogOpen(isReportsListOpen)
+  const listObscuredByEditor = listPanelObscuredByDetail(isReportsListOpen, reportBuilderOpen)
+  const listBesideReportDetail = listPanelObscuredByDetail(isReportsListOpen, hasReportDetail)
 
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
