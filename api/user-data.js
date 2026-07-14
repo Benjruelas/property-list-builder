@@ -12,6 +12,12 @@
 import { authenticate } from './_lib/auth.js'
 import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 import { withKvLock } from './_lib/kvLock.js'
+import { getAllTeams } from './_lib/teams.js'
+import { userHasTeamMembership } from './_lib/access.js'
+import { normalizeLeadStatuses } from './_lib/leadStatuses.js'
+import { normalizeDealStatuses } from './_lib/dealStatuses.js'
+import { mutateLeads } from './_lib/leadStore.js'
+import { mutatePipelines } from './_lib/pipelineStoreFull.js'
 
 function kvKey(uid) {
   return `user_data_${uid}`
@@ -65,6 +71,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'PATCH') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+      const membership = userHasTeamMembership(await getAllTeams(), user.uid)
       const allowedKeys = [
         'dealPipelineColumns', 'dealPipelineLeads', 'dealPipelineTitle',
         'leadTasks', 'parcelNotes', 'skipTracedParcels', 'emailTemplates', 'textTemplates',
@@ -82,7 +89,23 @@ export default async function handler(req, res) {
         const merged = { ...existing }
         for (const key of allowedKeys) {
           if (key in body && body[key] !== undefined) {
-            merged[key] = body[key]
+            if (key === 'appSettings' && body.appSettings && typeof body.appSettings === 'object') {
+              const nextSettings = { ...(existing.appSettings || {}), ...body.appSettings }
+              if (membership) {
+                nextSettings.leadStatuses = existing.appSettings?.leadStatuses || null
+                nextSettings.dealStatuses = existing.appSettings?.dealStatuses || null
+              } else {
+                if (body.appSettings.leadStatuses !== undefined) {
+                  nextSettings.leadStatuses = normalizeLeadStatuses(body.appSettings.leadStatuses)
+                }
+                if (body.appSettings.dealStatuses !== undefined) {
+                  nextSettings.dealStatuses = normalizeDealStatuses(body.appSettings.dealStatuses)
+                }
+              }
+              merged[key] = nextSettings
+            } else {
+              merged[key] = body[key]
+            }
           }
         }
         merged.__version = currentVersion + 1
@@ -92,6 +115,36 @@ export default async function handler(req, res) {
 
       const locked = await withKvLock(lockKey(user.uid), applyMerge, { ttlMs: 5000, maxWaitMs: 3000 })
       const result = locked !== null ? locked : await applyMerge()
+
+      if (!membership && body.appSettings?.leadStatuses !== undefined) {
+        const statuses = normalizeLeadStatuses(result.data.appSettings?.leadStatuses)
+        const valid = new Set(statuses.map((status) => status.id))
+        const fallback = statuses[0]?.id || 'new'
+        await mutateLeads((rows) => rows.map((lead) =>
+          lead.ownerId === user.uid && !valid.has(lead.status)
+            ? { ...lead, status: fallback, statusUpdatedAt: new Date().toISOString() }
+            : lead
+        ))
+      }
+      if (!membership && body.appSettings?.dealStatuses !== undefined) {
+        const statuses = normalizeDealStatuses(result.data.appSettings?.dealStatuses)
+        const valid = new Set(statuses.map((status) => status.id))
+        const fallback = statuses[0]?.id || 'open'
+        const columns = statuses.map(({ id, label }) => ({ id, name: label }))
+        await mutatePipelines((rows) => rows.map((pipeline) => {
+          if (pipeline.ownerId !== user.uid || pipeline.teamId) return pipeline
+          return {
+            ...pipeline,
+            columns,
+            deals: (pipeline.deals || []).map((deal) =>
+              valid.has(deal.status)
+                ? deal
+                : { ...deal, status: fallback, statusEnteredAt: Date.now(), cumulativeTimeByStatus: {} }
+            ),
+            updatedAt: new Date().toISOString(),
+          }
+        }))
+      }
 
       return res.status(200).json({ data: result.data, version: result.currentVersion })
     }

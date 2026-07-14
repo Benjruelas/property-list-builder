@@ -1,0 +1,52 @@
+export const DEFAULT_DEAL_STATUSES = [
+  { id: 'open', label: 'Open' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'closed', label: 'Closed' },
+]
+
+export function normalizeDealStatuses(input) {
+  const source = Array.isArray(input) ? input : []
+  const defaultsById = new Map(DEFAULT_DEAL_STATUSES.map((status) => [status.id, status]))
+  const byId = new Map()
+
+  for (const raw of source) {
+    if (!raw || typeof raw !== 'object') continue
+    const id = String(raw.id || '').trim().toLowerCase()
+    const label = String(raw.label || '').trim()
+    if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
+    if (!label || label.length > 40) continue
+    byId.set(id, { id, label })
+  }
+
+  if (!byId.has('open')) byId.set('open', { ...defaultsById.get('open') })
+  if (!byId.has('closed')) byId.set('closed', { ...defaultsById.get('closed') })
+
+  const ordered = [...byId.values()].filter((status) => status.id !== 'open' && status.id !== 'closed')
+  ordered.unshift(byId.get('open'))
+  ordered.push(byId.get('closed'))
+  return ordered
+}
+
+export function resolveAllowedDealStatusIds(ctx, userAppSettings) {
+  if (ctx?.team) {
+    if (ctx.team.dealStatuses?.length) {
+      return new Set(normalizeDealStatuses(ctx.team.dealStatuses).map((status) => status.id))
+    }
+    return new Set(DEFAULT_DEAL_STATUSES.map((status) => status.id))
+  }
+  if (userAppSettings?.dealStatuses?.length) {
+    return new Set(normalizeDealStatuses(userAppSettings.dealStatuses).map((status) => status.id))
+  }
+  return new Set(DEFAULT_DEAL_STATUSES.map((status) => status.id))
+}
+
+export function normalizeDealStatusValue(value, existing, allowedIds) {
+  if (value === undefined || value === null || value === '') {
+    return existing?.status || 'open'
+  }
+  const status = String(value).trim()
+  if (!allowedIds.has(status)) {
+    throw new Error(`Invalid deal status: ${status}`)
+  }
+  return status
+}

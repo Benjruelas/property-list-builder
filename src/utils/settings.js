@@ -65,6 +65,9 @@ export const DEFAULT_SETTINGS = {
 
   /** Custom lead status labels/order (solo users without a team) */
   leadStatuses: null,
+
+  /** Custom deal status labels/order (solo users without a team) */
+  dealStatuses: null,
 }
 
 export function getSettings() {
@@ -90,6 +93,9 @@ export function getSettings() {
       }
       if (Array.isArray(saved.leadStatuses)) {
         merged.leadStatuses = saved.leadStatuses
+      }
+      if (Array.isArray(saved.dealStatuses)) {
+        merged.dealStatuses = saved.dealStatuses
       }
       if (!Object.prototype.hasOwnProperty.call(saved, 'uiTheme')) {
         merged.uiTheme = DEFAULT_UI_THEME
@@ -131,6 +137,9 @@ export function updateSettings(partial, getToken) {
   }
   if (partial.leadStatuses !== undefined) {
     next = { ...next, leadStatuses: partial.leadStatuses }
+  }
+  if (partial.dealStatuses !== undefined) {
+    next = { ...next, dealStatuses: partial.dealStatuses }
   }
   next.uiTheme = normalizeUiTheme(next.uiTheme)
   try {

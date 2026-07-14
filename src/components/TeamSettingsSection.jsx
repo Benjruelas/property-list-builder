@@ -10,6 +10,7 @@ import {
   declineTeamInvite,
 } from '@/utils/teams'
 import { LeadStatusesSettingsContent } from './settings/LeadStatusesSettingsSection'
+import { DealStatusesSettingsContent } from './settings/DealStatusesSettingsSection'
 
 const TEAM_LIST_ITEM_CLASS =
   'teams-panel-list-item map-panel-list-item w-full flex flex-col items-stretch p-3 rounded-lg transition-all cursor-pointer text-left border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98]'
@@ -75,6 +76,9 @@ export function TeamSettingsSection({
   leadStatuses = [],
   canEditLeadStatuses = false,
   onSaveUserStatuses,
+  dealStatuses = [],
+  canEditDealStatuses = false,
+  onSaveUserDealStatuses,
 }) {
   const isTeamAdmin = teamMembership?.role === 'admin'
   const [open, setOpen] = useState(defaultOpen)
@@ -247,6 +251,18 @@ export function TeamSettingsSection({
               teamMembership={teamMembership}
               getToken={getToken}
               onSaveUserStatuses={onSaveUserStatuses}
+              onTeamsChange={onTeamsChange}
+            />
+          </SettingsNestedSection>
+
+          <SettingsNestedSection icon={Tag} title="Deal statuses">
+            <DealStatusesSettingsContent
+              isOpen={settingsPanelOpen}
+              dealStatuses={dealStatuses}
+              canEdit={canEditDealStatuses}
+              teamMembership={teamMembership}
+              getToken={getToken}
+              onSaveUserStatuses={onSaveUserDealStatuses}
               onTeamsChange={onTeamsChange}
             />
           </SettingsNestedSection>
