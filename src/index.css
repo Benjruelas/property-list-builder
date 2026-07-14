@@ -218,7 +218,10 @@
   /* Hide map chrome when a primary panel is open — keep visible for solo Tasks only */
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-controls-stack,
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .map-search-stack,
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .north-indicator {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel)) .north-indicator,
+  html[data-primary-panel-swap="1"] .map-controls-stack,
+  html[data-primary-panel-swap="1"] .map-search-stack,
+  html[data-primary-panel-swap="1"] .north-indicator {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -1208,10 +1211,55 @@
   html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.team-details-panel[data-state="closed"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.form-editor-panel[data-state="closed"] {
-    animation: map-panel-primary-dock-fade-out 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+    animation: map-panel-primary-dock-fade-out 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
     transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
     transition: none !important;
     pointer-events: none !important;
+  }
+
+  /* Solo primary panel swaps (no Tasks dock): matched center crossfade */
+  @keyframes map-panel-primary-center-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes map-panel-primary-center-fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  html[data-primary-panel-swap="1"] .map-panel-dialog.leads-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.deals-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.deal-pipeline-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.quotes-panel[data-state="open"]:not(.quote-details-panel):not(.quote-editor-panel),
+  html[data-primary-panel-swap="1"] .map-panel-dialog.reports-panel[data-state="open"]:not(.report-details-panel):not(.report-editor-panel),
+  html[data-primary-panel-swap="1"] .map-panel-dialog.forms-panel.list-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.paths-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.lists-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.teams-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.activity-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.schedule-panel[data-state="open"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.outreach-panel[data-state="open"] {
+    animation: map-panel-primary-center-fade-in 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+    transition: none !important;
+    z-index: 10002 !important;
+  }
+
+  html[data-primary-panel-swap="1"] .map-panel-dialog.leads-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.deals-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.deal-pipeline-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.quotes-panel[data-state="closed"]:not(.quote-details-panel):not(.quote-editor-panel),
+  html[data-primary-panel-swap="1"] .map-panel-dialog.reports-panel[data-state="closed"]:not(.report-details-panel):not(.report-editor-panel),
+  html[data-primary-panel-swap="1"] .map-panel-dialog.forms-panel.list-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.paths-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.lists-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.teams-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.activity-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.schedule-panel[data-state="closed"],
+  html[data-primary-panel-swap="1"] .map-panel-dialog.outreach-panel[data-state="closed"] {
+    animation: map-panel-primary-center-fade-out 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+    transition: none !important;
+    pointer-events: none !important;
+    z-index: 10001 !important;
   }
 
   /* Undock: primary slides back to center, expands width into Tasks column */
@@ -1554,6 +1602,7 @@
 }
 .map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel)[data-state='open'] {
   animation: map-panel-center-in 160ms ease-out forwards;
+  z-index: 10002 !important;
 }
 @media (max-width: 767px) {
   .map-panel-dialog.tasks-panel[data-state='open'] {
@@ -1561,7 +1610,8 @@
   }
 }
 .map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel)[data-state='closed'] {
-  animation: map-panel-center-out 120ms ease-in forwards;
+  animation: map-panel-center-out 160ms ease-in forwards;
+  z-index: 10001 !important;
 }
 @media (max-width: 767px) {
   .map-panel-dialog.tasks-panel[data-state='closed']:not([data-tasks-panel-close-settled="1"]) {
@@ -1622,22 +1672,24 @@
     }
   }
 
+  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not([data-tasks-panel-close-settled="1"]) {
+    opacity: 0;
+    transition-duration: 220ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none !important;
+    animation: none !important;
+    z-index: 10001 !important;
+  }
+
   .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel) {
     opacity: 1;
     animation: none !important;
+    z-index: 10002 !important;
   }
 
   /* Desktop Tasks: steady state uses layout vars; enter/exit use keyframes above */
   html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="open"],
   html:not([data-tasks-panel-fade]) .map-panel-dialog.tasks-panel[data-state="closed"]:not([data-tasks-panel-close-settled="1"]) {
-    animation: none !important;
-  }
-
-  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not([data-tasks-panel-close-settled="1"]) {
-    opacity: 0;
-    transition-duration: 180ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    pointer-events: none !important;
     animation: none !important;
   }
 

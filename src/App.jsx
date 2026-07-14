@@ -89,6 +89,8 @@ import { PanelListLoadingShell } from './components/ui/PanelListLoadingShell'
 import { BasemapErrorBanner } from './components/BasemapErrorBanner'
 import { useBasemapStyle } from './hooks/useBasemapStyle'
 import { useTasksDockLayout } from './hooks/useTasksDockLayout'
+import { usePrimaryPanelSwap } from './hooks/usePrimaryPanelSwap'
+import { findDockablePrimaryRoot } from './navigation/taskDock'
 import { resolvePanelDockSlot } from './navigation/panelDockSlot'
 import { HailStormOverlay, HailStormDismissPill, HailStormMapMarkers } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
@@ -299,6 +301,11 @@ function App() {
   const { dockLeaving: tasksDockLeaving } = useTasksDockLayout(
     tasksDockLayout ?? { tasksDocked: false, primaryRoot: null },
     isTasksPanelOpen,
+  )
+  usePrimaryPanelSwap(
+    tasksDockLayout?.tasksDocked
+      ? null
+      : findDockablePrimaryRoot(nav.state.navStack),
   )
 
   const dealDetailOverLead = !!(dealsDetailDealId && (leadsDetailLeadId || dealsLeadOverlayId))

@@ -12,6 +12,16 @@ if (typeof globalThis.sessionStorage === 'undefined') {
   }
 }
 
+if (typeof globalThis.localStorage === 'undefined') {
+  const store = new Map()
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)) },
+    removeItem: (key) => { store.delete(key) },
+    clear: () => { store.clear() },
+  }
+}
+
 import {
   CLIENT_PREVIEW_RETURN_KEY,
   CLIENT_PREVIEW_NAV_KEY,
@@ -27,6 +37,7 @@ import {
   persistNavStack,
   readPersistedNavStack,
   consumeNavRestoreFlag,
+  clearClientPreviewHandoff,
 } from '../clientPreview'
 
 describe('fetchClientPreviewUrl', () => {
@@ -81,6 +92,7 @@ describe('fetchClientPreviewUrl', () => {
 describe('openClientPreviewUrl', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    localStorage.clear()
   })
 
   it('stores return url and opens a new tab when allowed', () => {
@@ -92,6 +104,7 @@ describe('openClientPreviewUrl', () => {
     markClientPreviewOpened()
     openClientPreviewUrl('https://app.test/r/abc')
     expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBe('/app?panel=quotes')
+    expect(localStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBe('/app?panel=quotes')
     expect(open).toHaveBeenCalledWith('https://app.test/r/abc', '_blank', 'noopener,noreferrer')
     vi.unstubAllGlobals()
   })
@@ -107,6 +120,7 @@ describe('openClientPreviewUrl', () => {
 describe('prepareClientPreviewTab', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    localStorage.clear()
   })
 
   it('opens a blank tab and stores return url', () => {
@@ -134,6 +148,7 @@ describe('prepareClientPreviewTab', () => {
 describe('owner preview back helpers', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    localStorage.clear()
   })
 
   it('shouldShowOwnerPreviewBack only when API preview flag is true', () => {
@@ -147,10 +162,55 @@ describe('owner preview back helpers', () => {
   it('returnToAppFromClientPreview restores stored url', () => {
     sessionStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, '/app?panel=reports')
     const location = { href: 'https://app.test/?report=token', origin: 'https://app.test' }
-    vi.stubGlobal('window', { location })
+    vi.stubGlobal('window', { location, opener: null, close: vi.fn() })
     returnToAppFromClientPreview()
     expect(location.href).toBe('/app?panel=reports')
     expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
+  it('returnToAppFromClientPreview focuses opener and closes preview tab', () => {
+    const openerSession = new Map()
+    openerSession.set(CLIENT_PREVIEW_RETURN_KEY, '/app')
+    openerSession.set(CLIENT_PREVIEW_RESTORE_FLAG, '1')
+    openerSession.set(CLIENT_PREVIEW_NAV_KEY, JSON.stringify([{ type: 'reports.editor' }]))
+    const opener = {
+      closed: false,
+      focus: vi.fn(),
+      sessionStorage: {
+        getItem: (key) => (openerSession.has(key) ? openerSession.get(key) : null),
+        setItem: (key, value) => { openerSession.set(key, String(value)) },
+        removeItem: (key) => { openerSession.delete(key) },
+      },
+      localStorage: {
+        getItem: () => null,
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+    }
+    const close = vi.fn()
+    vi.stubGlobal('window', {
+      location: { href: 'https://app.test/r/token', origin: 'https://app.test' },
+      opener,
+      close,
+    })
+    returnToAppFromClientPreview()
+    expect(opener.focus).toHaveBeenCalled()
+    expect(close).toHaveBeenCalled()
+    // Keep opener handoff so a discarded/reloaded app tab can restore the report
+    expect(openerSession.get(CLIENT_PREVIEW_RETURN_KEY)).toBe('/app')
+    expect(openerSession.get(CLIENT_PREVIEW_RESTORE_FLAG)).toBe('1')
+    expect(openerSession.get(CLIENT_PREVIEW_NAV_KEY)).toBe(JSON.stringify([{ type: 'reports.editor' }]))
+    vi.unstubAllGlobals()
+  })
+
+  it('returnToAppFromClientPreview reads return url from localStorage when sessionStorage is empty', () => {
+    localStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, '/app?panel=reports')
+    const location = { href: 'https://app.test/r/token', origin: 'https://app.test' }
+    vi.stubGlobal('window', { location, opener: null, close: vi.fn() })
+    returnToAppFromClientPreview()
+    expect(location.href).toBe('/app?panel=reports')
+    expect(localStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBeNull()
     vi.unstubAllGlobals()
   })
 })
@@ -158,6 +218,7 @@ describe('owner preview back helpers', () => {
 describe('nav stack persistence helpers', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    localStorage.clear()
   })
 
   afterEach(() => {
@@ -168,6 +229,7 @@ describe('nav stack persistence helpers', () => {
     vi.stubGlobal('window', { location: { pathname: '/', search: '', hash: '' } })
     markClientPreviewOpened()
     expect(sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG)).toBe('1')
+    expect(localStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG)).toBe('1')
   })
 
   it('isPublicPreviewRoute detects report/quote/form params and short paths', () => {
@@ -190,7 +252,26 @@ describe('nav stack persistence helpers', () => {
     const stack = [{ type: 'reports' }, { type: 'reports.editor', report: { id: 'r1' } }]
     persistNavStack(stack)
     expect(sessionStorage.getItem(CLIENT_PREVIEW_NAV_KEY)).toBe(JSON.stringify(stack))
+    expect(localStorage.getItem(CLIENT_PREVIEW_NAV_KEY)).toBe(JSON.stringify(stack))
     expect(readPersistedNavStack()).toEqual(stack)
+  })
+
+  it('readPersistedNavStack falls back to localStorage', () => {
+    const stack = [{ type: 'reports.detail', reportId: 'r1' }]
+    localStorage.setItem(CLIENT_PREVIEW_NAV_KEY, JSON.stringify(stack))
+    expect(readPersistedNavStack()).toEqual(stack)
+  })
+
+  it('clearClientPreviewHandoff removes keys from both storages', () => {
+    sessionStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, '/app')
+    localStorage.setItem(CLIENT_PREVIEW_RETURN_KEY, '/app')
+    sessionStorage.setItem(CLIENT_PREVIEW_RESTORE_FLAG, '1')
+    localStorage.setItem(CLIENT_PREVIEW_RESTORE_FLAG, '1')
+    clearClientPreviewHandoff()
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBeNull()
+    expect(localStorage.getItem(CLIENT_PREVIEW_RETURN_KEY)).toBeNull()
+    expect(sessionStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG)).toBeNull()
+    expect(localStorage.getItem(CLIENT_PREVIEW_RESTORE_FLAG)).toBeNull()
   })
 
   it('persistNavStack is a no-op on public preview routes', () => {
