@@ -15,7 +15,7 @@ import { buildReportPublicUrl } from './_lib/publicLinks.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './_lib/reportStore.js'
 import { getLeadWithAccess } from './_lib/leadAccess.js'
 import {
-  resolveSenderBranding,
+  resolveSendAsSender,
   buildBrandedEmailHtml,
   buildFromAddress,
   escapeHtml,
@@ -113,12 +113,24 @@ export default async function handler(req, res) {
       cc: ccRaw,
       sendMeCopy,
       token: preferToken,
+      senderUid,
     } = body
     if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
     const { report, index, all } = await getPhotoReportById(reportId)
     if (!report || !(await canAccessReport(user, report))) {
       return res.status(404).json({ error: 'Report not found' })
+    }
+
+    const sendAs = await resolveSendAsSender({ actingUser: user, senderUid })
+    if (sendAs.error) {
+      return res.status(sendAs.status || 403).json({ error: sendAs.error })
+    }
+    const branding = sendAs.branding
+    const senderSnapshot = {
+      sentByUid: sendAs.uid,
+      sentByName: branding.senderName,
+      sentByEmail: sendAs.email || branding.senderEmail || '',
     }
 
     const trimmedRecipient = String(recipientEmail || '').trim().toLowerCase()
@@ -190,6 +202,7 @@ export default async function handler(req, res) {
           recipientEmail: trimmedRecipient,
           message: safeMessage,
           updatedAt: now.toISOString(),
+          ...senderSnapshot,
         }
       : {
           id: `rinv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
@@ -201,6 +214,7 @@ export default async function handler(req, res) {
           status: 'pending',
           createdAt: now.toISOString(),
           expiresAt,
+          ...senderSnapshot,
         }
 
     const { invites: supersededInvites } = supersedePendingReportInvites(allInvites, {
@@ -223,6 +237,9 @@ export default async function handler(req, res) {
       status: linkOnly ? report.status : (report.status === 'draft' ? 'sent' : report.status),
       sentAt: linkOnly ? report.sentAt : now.toISOString(),
       updatedAt: now.toISOString(),
+      lastSentByUid: senderSnapshot.sentByUid,
+      lastSentByName: senderSnapshot.sentByName,
+      lastSentByEmail: senderSnapshot.sentByEmail,
     }
     await updatePhotoReportAtIndex(all, index, updated)
 
@@ -259,7 +276,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Email service not configured' })
     }
 
-    const branding = await resolveSenderBranding(user)
     const senderLabel = branding.senderName
     const { lead } = await getLeadWithAccess(user, report.leadId)
     const propertyLabel = lead ? leadDisplayName(lead) : 'your property'
@@ -274,7 +290,9 @@ export default async function handler(req, res) {
     `
     const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
-    const userEmail = isValidReportEmail(user.email) ? user.email.trim().toLowerCase() : null
+    const replyEmail = sendAs.email || branding.senderEmail || user.email
+    const userEmail = isValidReportEmail(replyEmail) ? String(replyEmail).trim().toLowerCase() : null
+    const actingEmail = isValidReportEmail(user.email) ? user.email.trim().toLowerCase() : null
     const replyTo =
       branding.companyEmail && isValidReportEmail(branding.companyEmail)
         ? branding.companyEmail.trim()
@@ -282,8 +300,8 @@ export default async function handler(req, res) {
 
     const cc = normalizeEmailList(ccRaw).filter((email) => email !== trimmedRecipient)
     const alreadyRecipient = new Set([trimmedRecipient, ...cc])
-    const bccList = (sendMeCopy && userEmail && !alreadyRecipient.has(userEmail))
-      ? [userEmail]
+    const bccList = (sendMeCopy && actingEmail && !alreadyRecipient.has(actingEmail))
+      ? [actingEmail]
       : null
 
     await resend.emails.send({

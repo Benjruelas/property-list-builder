@@ -3,7 +3,7 @@ import { Eye, EyeOff, Trash2, MoreVertical, Pencil, Route, Share2, Tag, Search }
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
-import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
 import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { LeadSharingIcon } from './ResourceSharePicker'
@@ -41,6 +41,7 @@ function filterPathsByTab(paths, tab, ownerId, visiblePathIds) {
 
 export function PathsPanel({
   isOpen,
+  retainDuringSwap = false,
   panelDockSlot,
   onClose,
   onBack,
@@ -304,11 +305,18 @@ export function PathsPanel({
     onBack?.() ?? onClose?.()
   }
 
+  const listOpenOpts = { retainOpen: retainDuringSwap, swappingOut: retainDuringSwap }
+  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, false, listOpenOpts)
+
   return (
     <>
-      <Dialog open={isOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
+      <Dialog open={listDialogOpen} modal={false} onOpenChange={ignoreRadixMapPanelDismiss}>
         <DialogContent
-          className="map-panel list-panel paths-panel fullscreen-panel flex flex-col min-h-0 p-0"
+          className={cn(
+            'map-panel list-panel paths-panel fullscreen-panel flex flex-col min-h-0 p-0',
+            listObscuredByDetail && 'crm-list-under-detail',
+          )}
           panelDockSlot={panelDockSlot}
           showCloseButton={false}
           hideOverlay

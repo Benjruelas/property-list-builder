@@ -27,6 +27,8 @@ import { updateSettings } from '../../utils/settings'
 import { normalizeEmailAddress } from '@/utils/outreachAttachments'
 import { getAllTeamMembers } from '@/utils/teamTaskUtils'
 import { OutreachCcField } from '../outreach/OutreachCcField'
+import { SendAsField } from '../shared/SendAsField'
+import { memberPrimaryLabel } from '@/components/pickers/entityPickerShared'
 import { cn } from '@/lib/utils'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -41,6 +43,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   const [tab, setTab] = useState('email')
   const [recipient, setRecipient] = useState('')
   const [phone, setPhone] = useState('')
+  const [senderUid, setSenderUid] = useState(null)
   const [ccEmails, setCcEmails] = useState([])
   const [sendMeCopy, setSendMeCopy] = useState(false)
   const [subject, setSubject] = useState('')
@@ -55,6 +58,17 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
 
   const teamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
 
+  const selectedSender = useMemo(() => {
+    if (!senderUid || senderUid === currentUser?.uid) {
+      return { name: getSenderDisplayName(currentUser), email: currentUser?.email || '' }
+    }
+    const member = teamMembers.find((m) => m.uid === senderUid)
+    return {
+      name: member ? memberPrimaryLabel(member) : getSenderDisplayName(currentUser),
+      email: member?.email || '',
+    }
+  }, [senderUid, currentUser, teamMembers])
+
   const linkedLead = useMemo(
     () => (report?.leadId ? leads.find((l) => l.id === report.leadId) : null),
     [report?.leadId, leads]
@@ -63,10 +77,10 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   const baseTagData = useMemo(() => ({
     ClientName: linkedLead ? displayLeadName(linkedLead) : 'there',
     ReportTitle: report?.title || 'Photo Report',
-    SenderName: getSenderDisplayName(currentUser),
+    SenderName: selectedSender.name,
     CompanyName: getCompanyNameForSends(teams, teamMembership),
     LeadAddress: linkedLead ? formatLeadAddress(linkedLead) : '',
-  }), [report, linkedLead, currentUser, teams, teamMembership])
+  }), [report, linkedLead, selectedSender, teams, teamMembership])
 
   const tagData = useMemo(() => ({
     ...baseTagData,
@@ -107,6 +121,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         reportId: report.id,
         generateOnly: true,
         token: parseReportTokenFromPublicUrl(lastLink) || report.publicToken || undefined,
+        senderUid,
       })
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
@@ -115,7 +130,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     } finally {
       setGeneratingLink(false)
     }
-  }, [getToken, report?.id, applyLinkToMessages])
+  }, [getToken, report?.id, applyLinkToMessages, lastLink, senderUid])
 
   useEffect(() => {
     if (!open) {
@@ -131,6 +146,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     setTab('email')
     setRecipient(linkedLead?.email || '')
     setPhone(linkedLead?.phone || '')
+    setSenderUid(null)
     setCcEmails([])
     setSendMeCopy(false)
     setSentTo(null)
@@ -203,6 +219,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         sendMeCopy,
         subject: replaceReportTags(subject, tagData),
         message: replaceReportTags(body, tagData),
+        senderUid,
       })
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
@@ -323,6 +340,14 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
 
               {tab === 'email' ? (
                 <>
+                  <SendAsField
+                    currentUser={currentUser}
+                    teams={teams}
+                    senderUid={senderUid}
+                    onChangeSenderUid={setSenderUid}
+                    disabled={busy}
+                  />
+
                   <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-to">To</label>
                     <Input
@@ -379,6 +404,14 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 </>
               ) : (
                 <>
+                  <SendAsField
+                    currentUser={currentUser}
+                    teams={teams}
+                    senderUid={senderUid}
+                    onChangeSenderUid={setSenderUid}
+                    disabled={busy}
+                  />
+
                   <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-phone">Phone</label>
                     <Input

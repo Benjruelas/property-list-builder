@@ -15,7 +15,7 @@ import {
   resolveAcceptedLineIds,
 } from './_lib/quoteMath.js'
 import { logTeamActivity, actorLabel } from './_lib/activityLog.js'
-import { resolveSenderBranding } from './_lib/senderBranding.js'
+import { resolvePublicDocumentBranding } from './_lib/senderBranding.js'
 import { buildQuotePdfBuffer, safeQuotePdfFilename } from './_lib/buildQuotePdf.js'
 import { buildQuotePublicPath } from './_lib/publicLinks.js'
 
@@ -41,15 +41,16 @@ async function publicQuotePayload(quote, invite, { selectedOptionalIds = [], tok
   })
 
   let branding = null
-  if (quote.ownerId) {
-    try {
-      branding = await resolveSenderBranding({
-        uid: quote.ownerId,
-        email: quote.ownerEmail || '',
-      })
-    } catch {
-      branding = null
-    }
+  try {
+    branding = await resolvePublicDocumentBranding({
+      ownerId: quote.ownerId,
+      ownerEmail: quote.ownerEmail || '',
+      invite,
+      document: quote,
+      createdByName: quote.createdByName || '',
+    })
+  } catch {
+    branding = null
   }
 
   return {
@@ -78,14 +79,7 @@ async function publicQuotePayload(quote, invite, { selectedOptionalIds = [], tok
     pdfDownloadUrl: invite.preview !== true && token
       ? `/api/public-quote?token=${encodeURIComponent(token)}&download=1`
       : null,
-    branding: branding
-      ? {
-          businessName: branding.businessName,
-          logoBase64: branding.logoBase64,
-          senderName: quote.createdByName || branding.senderName,
-          senderEmail: branding.senderEmail || quote.ownerEmail || '',
-        }
-      : null,
+    branding,
   }
 }
 

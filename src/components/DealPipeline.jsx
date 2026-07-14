@@ -70,6 +70,7 @@ function taskBelongsToLocalDeals(task, displayDeals) {
 import { leadToParcelData } from '@/utils/leads'
 export function DealPipeline({
   isOpen,
+  retainDuringSwap = false,
   panelDockSlot,
   instantDismiss = false,
   onClose,
@@ -811,8 +812,9 @@ export function DealPipeline({
   }
 
   const hasNestedDetail = !!(activeDealId || leadOverlayId)
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, hasNestedDetail)
+  const listOpenOpts = { showingDetail: hasNestedDetail, retainOpen: retainDuringSwap, swappingOut: retainDuringSwap }
+  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, hasNestedDetail, listOpenOpts)
   const pipelinePanelRef = useRef(null)
   useObscuredPanelRoot(pipelinePanelRef, listObscuredByDetail)
   const columnsScrollRef = useRef(null)

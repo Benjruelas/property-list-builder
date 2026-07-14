@@ -97,7 +97,7 @@ function NowIndicator({ viewMode, weekStart, dayViewDate, hourHeight = SCHEDULE_
   return null
 }
 
-export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasScheduleOpener = false, stacked = false, obscuredByLeadDetail = false, onOpenScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead, onCreateLead }) {
+export function SchedulePanel({ isOpen, retainDuringSwap = false, panelDockSlot, onClose, onBack, hasScheduleOpener = false, stacked = false, obscuredByLeadDetail = false, onOpenScheduleLead, onOpenParcelDetails, onEmailClick, onPhoneClick, onTextClick, onSkipTraceParcel, skipTracingInProgress, leads = [], pipelines = [], activePipelineId = null, onLeadsChange, initialDate = null, onInitialDateConsumed, onRequestMoveLead, onRequestRemoveLead, onGoToParcelOnMap, onOpenAddTask, getToken = null, currentUser = null, onPipelinesChange, teams = [], teamMembership = null, onEditLead, onCreateLead }) {
   const { scheduleSync } = useUserDataSync()
   const displayLeads = useMemo(() => leads, [leads])
   const [allTasks, setAllTasks] = useState([])
@@ -536,8 +536,9 @@ export function SchedulePanel({ isOpen, panelDockSlot, onClose, onBack, hasSched
     setViewMode(mode)
   }
 
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, obscuredByLeadDetail)
+  const listOpenOpts = { showingDetail: obscuredByLeadDetail, retainOpen: retainDuringSwap, swappingOut: retainDuringSwap }
+  const listDialogOpen = mapListDialogOpen(isOpen, listOpenOpts)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, obscuredByLeadDetail, listOpenOpts)
 
   return (
     <>
