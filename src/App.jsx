@@ -302,13 +302,10 @@ function App() {
     tasksDockLayout ?? { tasksDocked: false, primaryRoot: null },
     isTasksPanelOpen,
   )
-  const panelSwap = usePrimaryPanelSwap(
+  usePrimaryPanelSwap(
     tasksDockLayout?.tasksDocked
       ? null
       : findDockablePrimaryRoot(nav.state.navStack),
-  )
-  const retainPanelDuringSwap = (root) => (
-    panelSwap.active && panelSwap.outgoingRoot === root
   )
 
   const dealDetailOverLead = !!(dealsDetailDealId && (leadsDetailLeadId || dealsLeadOverlayId))
@@ -3905,7 +3902,6 @@ function App() {
       <ListPanel
         currentUser={currentUser}
         isOpen={isListPanelOpen && !isParcelListPanelOpen}
-        retainDuringSwap={retainPanelDuringSwap('lists')}
         panelDockSlot={panelDockSlot('lists', isListPanelOpen && !isParcelListPanelOpen)}
         onClose={handleListPanelBack}
         onBack={handleListPanelBack}
@@ -4014,7 +4010,6 @@ function App() {
       }>
       <DealPipeline
         isOpen={isDealPipelineOpen}
-        retainDuringSwap={retainPanelDuringSwap('pipes')}
         panelDockSlot={panelDockSlot('pipes', isDealPipelineOpen && !pipesPromotedDealId)}
         promotedDealPanelDockSlot={panelDockSlot('deals', !!pipesPromotedDealId)}
         onClose={handlePanelBack}
@@ -4105,7 +4100,6 @@ function App() {
       }>
       <SchedulePanel
         isOpen={isSchedulePanelOpen}
-        retainDuringSwap={retainPanelDuringSwap('schedule')}
         panelDockSlot={panelDockSlot('schedule', isSchedulePanelOpen)}
         stacked={scheduleStacked}
         onClose={closeSchedulePanel}
@@ -4248,7 +4242,6 @@ function App() {
         }>
           <FormsPanel
             isOpen={isFormsPanelOpen}
-            retainDuringSwap={retainPanelDuringSwap('forms')}
             panelDockSlot={panelDockSlot('forms', isFormsPanelOpen)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
@@ -4272,7 +4265,6 @@ function App() {
         }>
           <QuotesPanel
             isOpen={isQuotesListOpen || !!quotesDetailQuoteId}
-            retainDuringSwap={retainPanelDuringSwap('quotes')}
             panelDockSlot={panelDockSlot('quotes', isQuotesListOpen || !!quotesDetailQuoteId)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
@@ -4300,7 +4292,6 @@ function App() {
         }>
           <ReportsPanel
             isOpen={isReportsPanelOpen}
-            retainDuringSwap={retainPanelDuringSwap('reports')}
             panelDockSlot={panelDockSlot('reports', isReportsPanelOpen || !!reportsDetailReportId)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
@@ -4400,7 +4391,6 @@ function App() {
       }>
       <PathsPanel
         isOpen={isPathsPanelOpen}
-        retainDuringSwap={retainPanelDuringSwap('paths')}
         panelDockSlot={panelDockSlot('paths', isPathsPanelOpen)}
         onClose={handlePanelBack}
         onBack={handlePanelBack}
@@ -4476,7 +4466,6 @@ function App() {
       }>
       <LeadsPanel
         isOpen={isLeadsPanelOpen}
-        retainDuringSwap={retainPanelDuringSwap('leads')}
         panelDockSlot={panelDockSlot('leads', isLeadsPanelOpen || isLeadsDetailStandalone)}
         loading={leadsLoading}
         onClose={handlePanelBack}
@@ -4535,7 +4524,6 @@ function App() {
       }>
       <DealsPanel
         isOpen={isDealsPanelOpen}
-        retainDuringSwap={retainPanelDuringSwap('deals')}
         panelDockSlot={panelDockSlot('deals', isDealsPanelOpen || isDealsDetailStandalone)}
         loading={pipelinesLoading}
         onClose={handlePanelBack}

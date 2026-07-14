@@ -115,35 +115,57 @@ export async function resolveSenderBranding(user) {
 export async function resolveSendAsSender({ actingUser, senderUid = null }) {
   const requested = String(senderUid || '').trim()
   if (!requested || requested === actingUser.uid) {
-    const branding = await resolveSenderBranding(actingUser)
+    try {
+      const branding = await resolveSenderBranding(actingUser)
+      return {
+        uid: actingUser.uid,
+        email: actingUser.email || branding.senderEmail || '',
+        branding,
+      }
+    } catch (err) {
+      // Never block send on branding lookup failure — fall back to acting user.
+      const emailLocal = (actingUser.email || '').split('@')[0] || ''
+      return {
+        uid: actingUser.uid,
+        email: actingUser.email || '',
+        branding: {
+          senderName: emailLocal || 'Your representative',
+          senderEmail: actingUser.email || '',
+          businessName: 'KnockScout',
+          companyPhone: '',
+          companyWebsite: '',
+          companyEmail: '',
+          logoBase64: '',
+        },
+      }
+    }
+  }
+
+  try {
+    const allTeams = await getAllTeams()
+    const actorTeams = loadTeamsForUser(allTeams, actingUser.uid)
+    let memberEmail = ''
+    let shared = false
+    for (const team of actorTeams) {
+      const member = (team.members || []).find((m) => m.uid === requested)
+      if (member) {
+        shared = true
+        memberEmail = (member.email || '').trim()
+        break
+      }
+    }
+    if (!shared) {
+      return { uid: '', email: '', branding: null, error: 'Sender must be a teammate', status: 403 }
+    }
+
+    const branding = await resolveSenderBranding({ uid: requested, email: memberEmail })
     return {
-      uid: actingUser.uid,
-      email: actingUser.email || branding.senderEmail || '',
+      uid: requested,
+      email: memberEmail || branding.senderEmail || '',
       branding,
     }
-  }
-
-  const allTeams = await getAllTeams()
-  const actorTeams = loadTeamsForUser(allTeams, actingUser.uid)
-  let memberEmail = ''
-  let shared = false
-  for (const team of actorTeams) {
-    const member = (team.members || []).find((m) => m.uid === requested)
-    if (member) {
-      shared = true
-      memberEmail = (member.email || '').trim()
-      break
-    }
-  }
-  if (!shared) {
-    return { uid: '', email: '', branding: null, error: 'Sender must be a teammate', status: 403 }
-  }
-
-  const branding = await resolveSenderBranding({ uid: requested, email: memberEmail })
-  return {
-    uid: requested,
-    email: memberEmail || branding.senderEmail || '',
-    branding,
+  } catch {
+    return { uid: '', email: '', branding: null, error: 'Could not resolve sender', status: 500 }
   }
 }
 
