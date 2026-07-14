@@ -3121,22 +3121,16 @@ function App() {
   const handleCreatePhotoReport = useCallback((leadId) => {
     if (!leadId) return
     guardFeature('reports', () => {
-      if (!isReportsPanelOpen) {
-        nav.openReports()
-      }
       nav.pushReportsEditor({ mode: 'report', leadId, awaitingTemplate: true })
     })
-  }, [guardFeature, nav, isReportsPanelOpen])
+  }, [guardFeature, nav])
 
   const handleOpenPhotoReport = useCallback((reportId) => {
     if (!reportId) return
     guardFeature('reports', () => {
-      if (!isReportsPanelOpen && !reportsEditorFrame && !reportsDetailReportId) {
-        nav.openReports()
-      }
       nav.pushReportsDetail(reportId)
     })
-  }, [guardFeature, nav, isReportsPanelOpen, reportsEditorFrame, reportsDetailReportId])
+  }, [guardFeature, nav])
 
   const handleCloseQuoteEditor = useCallback((saved) => {
     const prefill = quotesEditorFrame?.prefill
