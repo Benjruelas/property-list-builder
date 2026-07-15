@@ -101,7 +101,7 @@ import { useNotificationInbox } from './components/NotificationInbox'
 import { useTeamDataSync } from './hooks/useTeamDataSync'
 import { countPendingUploadsByLeadId, shouldEnableSharedAssetSync } from './utils/sharedAssetSync'
 import { photoUploadManager } from './photos/PhotoUploadManager'
-import { getSettings, updateSettings } from './utils/settings'
+import { getSettings, updateSettings, consumeSettingsMigrationPending } from './utils/settings'
 import { resolveLeadStatuses } from './utils/leadStatuses'
 import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
@@ -922,6 +922,9 @@ function App() {
       setClosedDeals(loadClosedDeals())
       const fresh = getSettings()
       setSettings(fresh)
+      if (consumeSettingsMigrationPending()) {
+        updateSettings({}, getToken)
+      }
       if (serverLists.length > 0) setLists(serverLists)
       // Existing users who predate the tour: auto-skip so they aren't shown it
       if (serverLists.length > 0 && !fresh.tourCompleted) {

@@ -25,7 +25,6 @@ const MAP_STYLES = [
 
 const BOUNDARY_COLORS = [
   { value: '#2563eb', label: 'Blue' },
-  { value: '#ffffff', label: 'White' },
   { value: '#ef4444', label: 'Red' },
   { value: '#22c55e', label: 'Green' },
   { value: '#f97316', label: 'Orange' },
