@@ -11,7 +11,11 @@ import {
   FileText,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
-import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from '../ui/panelDialogUtils'
+import {
+  ignoreRadixMapPanelDismiss,
+  listPanelObscuredByDetail,
+  useListDialogUnderDetail,
+} from '../ui/panelDialogUtils'
 import {
   PanelHeader,
   PANEL_LIST_HEADER_CLASS,
@@ -65,6 +69,7 @@ export function ReportsPanel({
   leads = [],
   editorFrame = null,
   detailReportId = null,
+  detailReport: detailReportProp = null,
   onOpenEditor,
   onPatchEditor,
   onOpenDetail,
@@ -115,10 +120,20 @@ export function ReportsPanel({
   const showReportTemplatePicker = templatePickerOpen || awaitingTemplatePick
   const reportBuilderOpen = editorOpen && !showReportTemplatePicker
 
-  const listDialogOpen = mapListDialogOpen(isReportsListOpen)
-  const listObscuredByEditor = listPanelObscuredByDetail(isReportsListOpen, reportBuilderOpen)
-  const listBesideReportDetail = listPanelObscuredByDetail(isReportsListOpen, hasReportDetail)
+  // Retain list under detail/editor when the list was already open (never mount empty list under
+  // map→standalone opens). Keep list opaque so report child never flashes the map.
+  const { listDialogOpen } = useListDialogUnderDetail(
+    isReportsListOpen,
+    hasReportDetail || reportBuilderOpen,
+  )
+  const listObscuredByEditor = listPanelObscuredByDetail(isReportsListOpen, reportBuilderOpen, {
+    showingDetail: reportBuilderOpen && listDialogOpen,
+  })
+  const listBesideReportDetail = listPanelObscuredByDetail(isReportsListOpen, hasReportDetail, {
+    showingDetail: hasReportDetail && listDialogOpen,
+  })
 
+  const [fetchedDetailReport, setFetchedDetailReport] = useState(null)
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
   const [msgTextBody, setMsgTextBody] = useState('')
@@ -140,6 +155,15 @@ export function ReportsPanel({
     }
   }, [getToken])
 
+  const detailReport = useMemo(() => {
+    if (!detailReportId) return null
+    if (detailReportProp?.id === detailReportId) return detailReportProp
+    const fromList = reports.find((r) => r.id === detailReportId)
+    if (fromList) return fromList
+    if (fetchedDetailReport?.id === detailReportId) return fetchedDetailReport
+    return null
+  }, [detailReportId, detailReportProp, reports, fetchedDetailReport])
+
   useEffect(() => {
     if (!isOpen || !getToken) return
     refresh()
@@ -149,6 +173,33 @@ export function ReportsPanel({
     if (!isOpen || !getToken || (!detailReportId && !editorOpen)) return
     refresh({ silent: true })
   }, [detailReportId, editorOpen])
+
+  useEffect(() => {
+    if (!detailReportId || !getToken) {
+      setFetchedDetailReport(null)
+      return
+    }
+    if (detailReportProp?.id === detailReportId) {
+      setFetchedDetailReport(detailReportProp)
+      return
+    }
+    const fromList = reports.find((r) => r.id === detailReportId)
+    if (fromList) {
+      setFetchedDetailReport(fromList)
+      return
+    }
+    let cancelled = false
+    fetchPhotoReports(getToken, { reportId: detailReportId })
+      .then((r) => {
+        if (!cancelled) setFetchedDetailReport(r || null)
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedDetailReport(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [detailReportId, detailReportProp, reports, getToken])
 
   useEffect(() => {
     if (!isOpen) {
@@ -186,11 +237,6 @@ export function ReportsPanel({
     if (!s) return templates
     return templates.filter((t) => (t.name || t.title || '').toLowerCase().includes(s))
   }, [templates, search])
-
-  const detailReport = useMemo(
-    () => (detailReportId ? reports.find((r) => r.id === detailReportId) : null),
-    [reports, detailReportId]
-  )
 
   const detailLead = useMemo(
     () => (detailReport ? leads.find((l) => l.id === detailReport.leadId) : null),
@@ -447,11 +493,11 @@ export function ReportsPanel({
                     role="button"
                     tabIndex={0}
                     className="w-full text-left map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 cursor-pointer"
-                    onClick={() => onOpenDetail?.(report.id)}
+                    onClick={() => onOpenDetail?.(report.id, report)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        onOpenDetail?.(report.id)
+                        onOpenDetail?.(report.id, report)
                       }
                     }}
                   >
@@ -560,7 +606,7 @@ export function ReportsPanel({
           if (!report) return null
           return (
             <>
-              <OptionsMenuItem onClick={() => { onOpenDetail?.(report.id); setOpenMenuId(null) }}>
+              <OptionsMenuItem onClick={() => { onOpenDetail?.(report.id, report); setOpenMenuId(null) }}>
                 <Pencil className="h-4 w-4" /> View
               </OptionsMenuItem>
               <OptionsMenuItem onClick={() => { onOpenEditor?.({ mode: 'report', report }); setOpenMenuId(null) }}>
@@ -609,7 +655,7 @@ export function ReportsPanel({
       />
 
       <ReportDetail
-        open={!!detailReportId && !!detailReport && !editorOpen}
+        open={!!detailReportId && !editorOpen}
         report={detailReport}
         lead={detailLead}
         getToken={getToken}
@@ -625,6 +671,7 @@ export function ReportsPanel({
         onDelete={performDeleteReport}
         onReportUpdated={(r) => {
           setReports((prev) => prev.map((x) => (x.id === r.id ? r : x)))
+          setFetchedDetailReport((prev) => (prev?.id === r.id ? r : prev))
         }}
       />
 

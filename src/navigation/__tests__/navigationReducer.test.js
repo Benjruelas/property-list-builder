@@ -722,6 +722,32 @@ describe('recipes', () => {
     expect(stack[1].dockBesideTasks).toBe(true)
   })
 
+  it('recipeOpenReportFromLeadDetail seeds report object for instant detail paint', () => {
+    const report = { id: 'r1', title: 'Roof report' }
+    const stack = recipeOpenReportFromLeadDetail(
+      [{ type: 'leads.detail', leadId: 'l1' }],
+      'r1',
+      { report },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['leads.detail', 'reports.detail'])
+    expect(stack[1].report).toEqual(report)
+    const props = selectPanelProps({ ...createInitialState(), navStack: stack })
+    expect(props.reportsDetailReport).toEqual(report)
+    expect(props.isReportsListOpen).toBe(false)
+    expect(props.isReportsPanelOpen).toBe(true)
+  })
+
+  it('recipePushReportsDetail keeps reports list parent under detail', () => {
+    const stack = recipePushReportsDetail([{ type: 'reports' }], 'r2', {
+      report: { id: 'r2', title: 'Seeded' },
+    })
+    expect(stack.map((f) => f.type)).toEqual(['reports', 'reports.detail'])
+    expect(stack[1].report?.id).toBe('r2')
+    const props = selectPanelProps({ ...createInitialState(), navStack: stack })
+    expect(props.isReportsListOpen).toBe(true)
+    expect(props.reportsDetailReportId).toBe('r2')
+  })
+
   it('recipeOpenReportEditorFromLeadDetail opens editor without reports list', () => {
     const stack = recipeOpenReportEditorFromLeadDetail(
       [{ type: 'leads.detail', leadId: 'l1', returnToLeadsList: true }],

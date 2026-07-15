@@ -152,6 +152,7 @@
  * @typedef {object} ReportsDetailFrame
  * @property {'reports.detail'} type
  * @property {string} reportId
+ * @property {object} [report] — optional seed so detail can paint before list fetch
  * @property {boolean} [returnToLead] — back restores lead detail when opened from it
  */
 

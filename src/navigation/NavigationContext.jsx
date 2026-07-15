@@ -494,12 +494,18 @@ export function NavigationProvider({ children }) {
     })
   }, [state.navStack])
 
-  const pushReportsDetail = useCallback((reportId) => {
-    replaceStack(recipePushReportsDetail(state.navStack, reportId, taskDockOpts()))
+  const pushReportsDetail = useCallback((reportId, report = null) => {
+    replaceStack(recipePushReportsDetail(state.navStack, reportId, {
+      ...taskDockOpts(),
+      ...(report ? { report } : {}),
+    }))
   }, [state.navStack, replaceStack, taskDockOpts])
 
-  const openReportFromLead = useCallback((reportId) => {
-    replaceStack(recipeOpenReportFromLeadDetail(state.navStack, reportId, taskDockOpts()))
+  const openReportFromLead = useCallback((reportId, report = null) => {
+    replaceStack(recipeOpenReportFromLeadDetail(state.navStack, reportId, {
+      ...taskDockOpts(),
+      ...(report ? { report } : {}),
+    }))
   }, [state.navStack, replaceStack, taskDockOpts])
 
   const openReportEditorFromLead = useCallback((editorFrame) => {

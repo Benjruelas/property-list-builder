@@ -67,6 +67,7 @@ import { PhotoGallery } from '@/photos/PhotoGallery'
 import { invalidatePhotoBlobCache } from '@/photos/photosClient'
 import { deleteAllLeadTasks } from '@/utils/leadTasks'
 import { fetchPhotoReports } from '@/utils/photoReports'
+import { prefetchPanel } from '@/utils/panelChunks'
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
 import { getLeadPhones, getLeadEmails, getLeadPhoneDetails, getLeadEmailDetails } from '@/utils/leadContact'
@@ -265,6 +266,7 @@ export function LeadDetails({
       setLeadReportsLoading(false)
       return undefined
     }
+    prefetchPanel('reports')
     let cancelled = false
     setLeadReportsLoading(true)
     ;(async () => {
@@ -543,7 +545,7 @@ export function LeadDetails({
         className={cn(
           'map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0',
           stackedOverlay && 'lead-details-stacked-overlay',
-          obscuredByChild && 'crm-panel-obscured invisible opacity-0 pointer-events-none',
+          obscuredByChild && 'crm-panel-obscured crm-list-under-detail pointer-events-none',
         )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
@@ -936,7 +938,7 @@ export function LeadDetails({
                             <button
                               type="button"
                               disabled={!onOpenPhotoReport}
-                              onClick={() => onOpenPhotoReport?.(report.id)}
+                              onClick={() => onOpenPhotoReport?.(report)}
                               className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
                             >
                               <FileText className="h-4 w-4 shrink-0 opacity-50" />

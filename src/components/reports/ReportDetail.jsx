@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { Send, Pencil, Trash2, Eye } from 'lucide-react'
+import { Send, Pencil, Trash2, Eye, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
@@ -126,7 +126,38 @@ export function ReportDetail({
     }
   }, [report?.id, savingSender, currentUser, teamMembers, resolveToken, onReportUpdated])
 
-  if (!open || !report) return null
+  if (!open) return null
+
+  if (!report) {
+    return (
+      <Dialog
+        open={open}
+        modal={false}
+        onOpenChange={(o) => handleChildPanelDismiss(o, onClose, {
+          wasOpen: open,
+        })}
+      >
+        <DialogContent
+          className="map-panel list-panel reports-panel report-details-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none w-[min(96vw,36rem)] max-w-xl"
+          showCloseButton={false}
+          panelDockSlot={panelDockSlot}
+          nestedOverlay={!primaryDetail}
+          topLayer
+          hideOverlay={primaryDetail}
+          suppressBackdrop={primaryDetail}
+        >
+          <DialogHeader className="px-5 pt-5 pb-4 border-b border-white/10 flex-shrink-0 text-left">
+            <DialogDescription className="sr-only">Loading report</DialogDescription>
+            <PanelHeader onBack={onBack || onClose} title="Report" />
+          </DialogHeader>
+          <div className="flex-1 flex items-center justify-center min-h-0 py-16" role="status" aria-live="polite">
+            <Loader2 className="h-6 w-6 animate-spin opacity-60" aria-hidden />
+            <span className="sr-only">Loading report</span>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
 
   const statusLabel = String(report.status || 'draft').replace(/_/g, ' ')
 
