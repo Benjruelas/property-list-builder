@@ -10,6 +10,7 @@ import {
   deletePhoto,
   fetchPhotoBlob,
   fetchPhotoPreviewBlob,
+  getCachedPhotoPreviewBlob,
   invalidatePhotoBlobCache,
   sumPhotoBytes,
   LEAD_STORAGE_LIMIT_BYTES,
@@ -248,6 +249,13 @@ export function PhotoGallery({
       name: photoPreviewName(item.photo, index),
       contentType: 'image/jpeg',
       photo: item.photo,
+      getCachedBlob: () => {
+        if (item.kind === 'job' || item.photo._annotationSaving) return null
+        return getCachedPhotoPreviewBlob(
+          item.photo,
+          item.photo.updatedAt || item.photo.createdAt || '',
+        )
+      },
       loadBlob: async () => {
         if (item.kind === 'job') {
           const blobs = await getBlobs(item.job.jobId)
