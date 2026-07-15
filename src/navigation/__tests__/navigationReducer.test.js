@@ -17,6 +17,8 @@ import {
   recipeCloseTasks,
   recipeOpenScheduleAtDate,
   recipeNavigateFromActivity,
+  recipeOpenNewQuoteEditor,
+  recipeOpenNewReportEditor,
   recipeOpenQuoteEditorFromDeal,
   recipePushQuotesDetail,
   recipeOpenReports,
@@ -708,6 +710,45 @@ describe('recipes', () => {
     expect(stack[1].leadId).toBe('l1')
     expect(stack[1].awaitingTemplate).toBe(true)
     expect(stack[1].returnToLead).toBe(true)
+  })
+
+  it('opens a new quote editor directly without a Quotes list parent', () => {
+    const stack = recipeOpenNewQuoteEditor([])
+    expect(stack).toEqual([{ type: 'quotes.editor', mode: 'quote' }])
+
+    const props = selectPanelProps({ ...createInitialState(), navStack: stack })
+    expect(props.isQuotesListOpen).toBe(false)
+    expect(props.isQuotesEditorStandalone).toBe(true)
+    expect(props.quotesEditorFrame?.mode).toBe('quote')
+  })
+
+  it('opens a new report editor directly without a Reports list parent', () => {
+    const stack = recipeOpenNewReportEditor([])
+    expect(stack).toEqual([{ type: 'reports.editor', mode: 'report' }])
+
+    const props = selectPanelProps({ ...createInitialState(), navStack: stack })
+    expect(props.isReportsListOpen).toBe(false)
+    expect(props.isReportsDetailStandalone).toBe(true)
+    expect(props.reportsEditorFrame?.mode).toBe('report')
+  })
+
+  it('preserves the prior surface for Back when opening direct create editors', () => {
+    const current = [{ type: 'leads' }, { type: 'leads.detail', leadId: 'l1' }]
+    const quoteStack = recipeOpenNewQuoteEditor(current)
+    const reportStack = recipeOpenNewReportEditor(current)
+
+    expect(quoteStack.map((frame) => frame.type)).toEqual([
+      'leads',
+      'leads.detail',
+      'quotes.editor',
+    ])
+    expect(reportStack.map((frame) => frame.type)).toEqual([
+      'leads',
+      'leads.detail',
+      'reports.editor',
+    ])
+    expect(quoteStack.slice(0, -1)).toEqual(current)
+    expect(reportStack.slice(0, -1)).toEqual(current)
   })
 
   it('recipeOpenReportFromLeadDetail opens report detail without reports list', () => {

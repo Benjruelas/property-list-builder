@@ -78,6 +78,7 @@ import { fetchLandRecordsParcel } from './utils/fetchLandRecordsParcel'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
 import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
 import { CreateLeadDialog } from './components/CreateLeadDialog'
+import { CreateTaskPanel } from './components/CreateTaskPanel'
 import { CreateDealDialog } from './components/CreateDealDialog'
 import { DealTemplatePickerDialog } from './components/DealTemplatePickerDialog'
 import { DealTemplateEditorDialog } from './components/DealTemplateEditorDialog'
@@ -259,6 +260,7 @@ function App() {
     formsTemplateId,
     isQuotesPanelOpen,
     isQuotesListOpen,
+    isQuotesEditorStandalone,
     quotesEditorFrame,
     quotesDetailQuoteId,
     quotesDetailQuote,
@@ -293,6 +295,7 @@ function App() {
     isForgotPasswordOpen,
     createLeadOpen,
     createLeadPrefill,
+    createTaskOpen,
     createDealOpen,
     createDealPrefill,
     dealTemplatePickerOpen,
@@ -460,9 +463,6 @@ function App() {
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
-  const [quickCreateTaskKey, setQuickCreateTaskKey] = useState(0)
-  const [quickCreateQuoteKey, setQuickCreateQuoteKey] = useState(0)
-  const [quickCreateReportKey, setQuickCreateReportKey] = useState(0)
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
   const [paths, setPaths] = useState([])
   const pathColorMap = useMemo(() => buildPathColorMap(paths), [paths])
@@ -1760,10 +1760,7 @@ function App() {
 
   const openQuickCreateTask = useCallback(() => {
     if (!requireAuth()) return
-    guardFeature('tasks', () => {
-      nav.openTasks()
-      setQuickCreateTaskKey((k) => k + 1)
-    })
+    guardFeature('tasks', () => nav.pushModal({ type: 'createTask' }))
   }, [requireAuth, guardFeature, nav])
 
   const openQuickCreateLead = useCallback(() => {
@@ -1772,23 +1769,28 @@ function App() {
   }, [requireAuth, guardFeature, nav])
 
   const openQuickCreateDeal = useCallback(() => {
-    openCreateDealDialog()
-  }, [openCreateDealDialog])
+    if (!currentUser?.uid) {
+      nav.openLogin()
+      return
+    }
+    guardFeature('deals', () => {
+      const eligible = pipelines.filter((pipeline) => canAddDealsToPipeline(currentUser, pipeline, teams))
+      if (pipelines.length > 0 && eligible.length === 0) {
+        showToast('Create or open a pipeline first', 'warning')
+        return
+      }
+      nav.pushModal({ type: 'createDeal', prefill: null })
+    })
+  }, [currentUser, guardFeature, nav, pipelines, teams])
 
   const openQuickCreateQuote = useCallback(() => {
     if (!requireAuth()) return
-    guardFeature('quotes', () => {
-      nav.openQuotes()
-      setQuickCreateQuoteKey((k) => k + 1)
-    })
+    guardFeature('quotes', () => nav.openNewQuoteEditor())
   }, [requireAuth, guardFeature, nav])
 
   const openQuickCreateReport = useCallback(() => {
     if (!requireAuth()) return
-    guardFeature('reports', () => {
-      nav.openReports()
-      setQuickCreateReportKey((k) => k + 1)
-    })
+    guardFeature('reports', () => nav.openNewReportEditor())
   }, [requireAuth, guardFeature, nav])
 
   const handleDealTemplatePicked = useCallback((template) => {
@@ -4193,7 +4195,6 @@ function App() {
           guardFeature('leads', () => nav.openLeadDetailFromTasks(lead.id))
         }}
         onCreateLead={openCreateLeadForPicker}
-        quickCreateRequestKey={quickCreateTaskKey}
       />
       </Suspense>
       )}
@@ -4282,6 +4283,7 @@ function App() {
         <Suspense fallback={null}>
           <QuotesPanel
             isOpen={isQuotesListOpen || !!quotesDetailQuoteId}
+            isQuotesEditorStandalone={isQuotesEditorStandalone}
             panelDockSlot={panelDockSlot('quotes', isQuotesListOpen || !!quotesDetailQuoteId)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
@@ -4298,7 +4300,6 @@ function App() {
             canSeeDealAmounts={showDealAmounts}
             teams={teams}
             teamMembership={teamMembership}
-            quickCreateRequestKey={quickCreateQuoteKey}
           />
         </Suspense>
       )}
@@ -4324,7 +4325,6 @@ function App() {
             onCloseDetail={handleCloseReportsDetail}
             teams={teams}
             teamMembership={teamMembership}
-            quickCreateRequestKey={quickCreateReportKey}
             onLeadUpdate={(full) => {
               setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetail))
             }}
@@ -4620,6 +4620,22 @@ function App() {
         nestedOverlay={!!editLead || createLeadOpen}
         topLayer={createLeadOpen || !!editLead}
         confirmLayer={!!editLead}
+      />
+
+      <CreateTaskPanel
+        open={createTaskOpen}
+        onOpenChange={(open) => {
+          if (!open && createTaskOpen) nav.popModal()
+        }}
+        pipelines={pipelines}
+        leads={leads}
+        deals={activePipelineDeals}
+        getToken={getToken}
+        currentUser={currentUser}
+        teams={teams}
+        onPipelinesChange={refreshPipelines}
+        onCreated={scheduleUserDataSync}
+        onCreateLead={openCreateLeadForPicker}
       />
 
       <DealTemplatePickerDialog

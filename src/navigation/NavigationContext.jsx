@@ -55,6 +55,8 @@ import {
   recipeOpenDeals,
   recipeOpenForms,
   recipeOpenPipes,
+  recipeOpenNewQuoteEditor,
+  recipeOpenNewReportEditor,
   recipeOpenQuoteEditorFromDeal,
   recipeOpenQuoteDetailFromDeal,
   recipePushQuotesDetail,
@@ -475,6 +477,10 @@ export function NavigationProvider({ children }) {
     push({ type: 'quotes.editor', ...editorFrame })
   }, [push])
 
+  const openNewQuoteEditor = useCallback(() => {
+    replaceStack(recipeOpenNewQuoteEditor(state.navStack))
+  }, [state.navStack, replaceStack])
+
   const pushQuotesDetail = useCallback((quoteId) => {
     replaceStack(recipePushQuotesDetail(state.navStack, quoteId))
   }, [state.navStack, replaceStack])
@@ -482,6 +488,10 @@ export function NavigationProvider({ children }) {
   const pushReportsEditor = useCallback((editorFrame) => {
     replaceStack(recipePushReportsEditor(state.navStack, editorFrame, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
+
+  const openNewReportEditor = useCallback(() => {
+    replaceStack(recipeOpenNewReportEditor(state.navStack))
+  }, [state.navStack, replaceStack])
 
   const patchReportsEditor = useCallback((patch) => {
     const nextStack = state.navStack.map((f) =>
@@ -627,6 +637,8 @@ export function NavigationProvider({ children }) {
     openScheduleAtDate,
     openQuoteEditorFromDeal,
     openQuoteDetailFromDeal,
+    openNewQuoteEditor,
+    openNewReportEditor,
     viewListContents,
     openSkipTraced,
     openOutreach,
@@ -714,6 +726,8 @@ export function NavigationProvider({ children }) {
     openScheduleAtDate,
     openQuoteEditorFromDeal,
     openQuoteDetailFromDeal,
+    openNewQuoteEditor,
+    openNewReportEditor,
     viewListContents,
     openSkipTraced,
     openOutreach,

@@ -21,18 +21,17 @@ import {
   addPipelineTask,
   updatePipelineTask,
   removePipelineTask,
-  flattenPipelineTasks,
-  pipelinesContainingParcel
+  flattenPipelineTasks
 } from '@/utils/pipelineTasks'
-import { addTeamTask, updateTeamTask, removeTeamTask } from '@/utils/teamTasks'
+import { updateTeamTask, removeTeamTask } from '@/utils/teamTasks'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { buildVisibleTaskListFresh } from '@/utils/taskListSync'
-import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline, resolveTeamTaskLeadId, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline } from '@/utils/teamTaskUtils'
 import { getTaskRowDisplayFields } from '@/utils/taskRowDisplay'
 import { flattenDealsFromPipelines, findDealInPipelines } from '@/utils/deals'
 import { fetchTeamTasks, updateTeamTask as updateServerTeamTask, deleteTeamTask } from '@/utils/tasks'
-import { createServerAssignedTask, normalizeServerTask, resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
-import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
+import { normalizeServerTask, resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
+import { CreateTaskPanel } from './CreateTaskPanel'
 import { NewTaskDialog } from './NewTaskDialog'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
@@ -62,7 +61,6 @@ export function TasksPanel({
   onPipelinesChange,
   teams = [],
   onCreateLead,
-  quickCreateRequestKey = 0,
 }) {
   const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
@@ -70,7 +68,6 @@ export function TasksPanel({
   const tasksLoadedOnce = useRef(false)
   const [listReady, setListReady] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
-  const lastQuickCreateKeyRef = useRef(0)
 
   const [collapsedSections, setCollapsedSections] = useState({})
   const [showClosedTasks, setShowClosedTasks] = useState(false)
@@ -79,8 +76,6 @@ export function TasksPanel({
   const apiMode = pipelines.length > 0
 
   const displayLeads = useMemo(() => leads, [leads])
-
-  const [pipePickerState, setPipePickerState] = useState(null)
 
   const refreshTasks = useCallback(async () => {
     const isInitialLoad = !tasksLoadedOnce.current
@@ -112,12 +107,6 @@ export function TasksPanel({
     }
   }, [isOpen, refreshTasks])
 
-  useEffect(() => {
-    if (!isOpen || !quickCreateRequestKey || quickCreateRequestKey === lastQuickCreateKeyRef.current) return
-    lastQuickCreateKeyRef.current = quickCreateRequestKey
-    setShowAddTask(true)
-  }, [isOpen, quickCreateRequestKey])
-
   const allDeals = useMemo(() => {
     const fromPipelines = flattenDealsFromPipelines(pipelines)
     if (fromPipelines.length > 0) return fromPipelines
@@ -148,180 +137,6 @@ export function TasksPanel({
 
   const openAddTask = () => {
     setShowAddTask(true)
-  }
-
-  const finalizeTaskCreate = useCallback(
-    async ({ pipelineId, parcelId, dealId, title, scheduledAt, scheduledEndAt, assignedUids = [], leadId = null, deal = null, notes = null }) => {
-      if (assignedUids.length > 0 && getToken) {
-        try {
-          await createServerAssignedTask(getToken, {
-            title,
-            scheduledAt,
-            scheduledEndAt,
-            assignedUids,
-            leadId,
-            dealId,
-            deal,
-            leads: displayLeads,
-            pipelines,
-            pipelineId,
-            notes,
-          })
-          showToast('Task added', 'success')
-          setShowAddTask(false)
-          refreshTasks()
-          return
-        } catch (err) {
-          showToast(err.message || 'Could not add task', 'error')
-          return
-        }
-      }
-      if (pipelineId) {
-        const pipe = pipelines.find((p) => p.id === pipelineId)
-        const leadId = resolveTeamTaskLeadId(pipe, {
-          parcelId,
-          dealId,
-          deals: pipe?.deals || [],
-          displayLeads,
-        })
-        if (shouldStoreAsTeamTask(pipe, { assignedUids, leadId })) {
-          try {
-            await addTeamTask(getToken, pipelineId, leadId, {
-              title,
-              dueAt: scheduledAt,
-              assignedUids,
-              dealId: dealId || null,
-            })
-            await onPipelinesChange?.()
-            showToast('Task added', 'success')
-          } catch (err) {
-            showToast(err.message || 'Could not add task', 'error')
-            return
-          }
-          setShowAddTask(false)
-          refreshTasks()
-          return
-        }
-        if (assignedUids.length > 0 && !leadId) {
-          showToast('Could not resolve a lead for this pipe task', 'error')
-          return
-        }
-        try {
-          await addPipelineTask(getToken, pipelineId, {
-            title,
-            parcelId: parcelId || null,
-            dealId: dealId || null,
-            scheduledAt,
-            scheduledEndAt,
-            notes,
-          })
-          await onPipelinesChange?.()
-          showToast('Task added', 'success')
-        } catch (err) {
-          showToast(err.message || 'Could not add task', 'error')
-          return
-        }
-      } else {
-        addTask({
-          pipelineId: null,
-          parcelId: parcelId || null,
-          dealId: dealId || null,
-          leadId: leadId || null,
-          title,
-          scheduledAt,
-          scheduledEndAt,
-          notes,
-        })
-        refreshTasks()
-        scheduleSync()
-        showToast('Task added', 'success')
-      }
-      setShowAddTask(false)
-      refreshTasks()
-    },
-    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipelines, displayLeads, teams]
-  )
-
-  const handleCreateTask = ({
-    title,
-    scheduledAt,
-    scheduledEndAt,
-    assignedUids = [],
-    leadId: addTaskLeadId,
-    dealId: addTaskDealId,
-    notes = null,
-  }) => {
-    const trimmed = title.trim()
-    if (!trimmed) {
-      showToast('Enter a task title', 'error')
-      return
-    }
-    const newTaskUsesTeamStorage = assignedUids.length > 0
-    const endAt = scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
-    if (!newTaskUsesTeamStorage) {
-      if (endAt && scheduledAt && endAt <= scheduledAt) {
-        showToast('End time must be after start time', 'error')
-        return
-      }
-    }
-    const dealId = addTaskDealId || null
-    const deal = dealId ? allDeals.find((d) => d.id === dealId) : null
-    const ctx = resolveTaskContext({
-      leadId: addTaskLeadId,
-      dealId,
-      deal,
-      leads: displayLeads,
-      pipelines,
-    })
-    const payload = {
-      title: trimmed,
-      scheduledAt,
-      scheduledEndAt: endAt,
-      parcelId: ctx.parcelId,
-      dealId: ctx.dealId,
-      leadId: ctx.leadId,
-      deal,
-      assignedUids,
-      notes,
-    }
-
-    if (assignedUids.length > 0) {
-      if (!getToken) {
-        showToast('Sign in to assign tasks to teammates', 'error')
-        return
-      }
-      finalizeTaskCreate({ ...payload, pipelineId: ctx.pipelineId })
-      return
-    }
-
-    // Deal selection implies its pipe — check before parcel/lead routing (deal auto-fills lead).
-    if (ctx.dealId && apiMode && ctx.pipelineId) {
-      finalizeTaskCreate({ ...payload, pipelineId: ctx.pipelineId })
-      return
-    }
-
-    if (ctx.parcelId) {
-      const leadForParcel = displayLeads.find((l) => l.parcelId === ctx.parcelId)
-      if (leadForParcel?.__pipelineId) {
-        finalizeTaskCreate({ ...payload, pipelineId: leadForParcel.__pipelineId })
-        return
-      }
-      if (apiMode) {
-        const owning = pipelinesContainingParcel(pipelines, ctx.parcelId)
-        if (owning.length === 1) {
-          finalizeTaskCreate({ ...payload, pipelineId: owning[0].id })
-          return
-        }
-        if (owning.length > 1) {
-          setPipePickerState({ open: true, eligiblePipelines: owning, allowNoPipe: false, payload })
-          return
-        }
-      }
-      finalizeTaskCreate({ ...payload, pipelineId: null })
-      return
-    }
-
-    finalizeTaskCreate({ ...payload, pipelineId: null })
   }
 
   const { unlabeled, groups } = useMemo(
@@ -783,18 +598,18 @@ export function TasksPanel({
       </DialogContent>
     </Dialog>
 
-      <NewTaskDialog
+      <CreateTaskPanel
         open={showAddTask}
         onOpenChange={setShowAddTask}
+        pipelines={pipelines}
         leads={displayLeads}
         deals={allDeals}
-        showDealPicker={apiMode}
-        showTeamAssign={newTaskMemberList.length > 0}
-        teamMembers={newTaskMemberList}
-        onSubmit={handleCreateTask}
+        getToken={getToken}
+        currentUser={currentUser}
+        teams={teams}
+        onPipelinesChange={onPipelinesChange}
+        onCreated={refreshTasks}
         onCreateLead={onCreateLead}
-        nestedOverlay
-        topLayer
       />
 
       <NewTaskDialog
@@ -834,28 +649,6 @@ export function TasksPanel({
         topLayer
       />
 
-      <ConvertToLeadPipelineDialog
-        open={!!pipePickerState?.open}
-        onOpenChange={(o) => { if (!o) setPipePickerState(null) }}
-        pipelines={pipePickerState?.eligiblePipelines ?? []}
-        currentUser={currentUser}
-        topLayer
-        title="Pick a pipe for this task"
-        description="Everyone the pipe is shared with will see this task."
-        allowNoPipe={!!pipePickerState?.allowNoPipe}
-        noPipeLabel="No pipe"
-        noPipeDescription="Only you will see this task."
-        onSelect={(pipelineId) => {
-          const payload = pipePickerState?.payload
-          setPipePickerState(null)
-          if (payload) finalizeTaskCreate({ ...payload, pipelineId })
-        }}
-        onSelectNoPipe={() => {
-          const payload = pipePickerState?.payload
-          setPipePickerState(null)
-          if (payload) finalizeTaskCreate({ ...payload, pipelineId: null })
-        }}
-      />
     </>
   )
 }

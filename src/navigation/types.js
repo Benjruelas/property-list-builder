@@ -266,6 +266,11 @@
  */
 
 /**
+ * @typedef {object} CreateTaskModal
+ * @property {'createTask'} type
+ */
+
+/**
  * @typedef {object} CreateDealModal
  * @property {'createDeal'} type
  * @property {object} [prefill]
@@ -300,7 +305,7 @@
  * @property {object} [context]
  */
 
-/** @typedef {LoginModal | SignUpModal | ForgotPasswordModal | CreateLeadModal | CreateDealModal |
+/** @typedef {LoginModal | SignUpModal | ForgotPasswordModal | CreateLeadModal | CreateTaskModal | CreateDealModal |
  *   DealTemplatePickerModal | DealTemplateEditorModal | DealTemplatesManagerModal |
  *   MoveDealModal | ConvertToLeadPipelineModal} ModalFrame */
 
