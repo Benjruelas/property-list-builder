@@ -952,7 +952,7 @@ export function DealPipeline({
             </div>
             <div className="map-panel-header-actions" />
           </div>
-          <div className="mt-3 inline-flex self-start rounded-lg border border-white/15 bg-white/[0.04] p-1" role="tablist" aria-label="Pipe type">
+          <div className="mt-3 flex gap-4" role="tablist" aria-label="Pipe type">
             {[
               { id: 'leads', label: 'Leads' },
               { id: 'deals', label: 'Deals' },
@@ -964,10 +964,10 @@ export function DealPipeline({
                 aria-selected={pipeView === tab.id}
                 onClick={() => setPipeView(tab.id)}
                 className={cn(
-                  'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+                  'pb-1.5 text-sm font-medium border-b-2 transition-opacity',
                   pipeView === tab.id
-                    ? 'bg-white/15 text-white'
-                    : 'text-white/60 hover:bg-white/[0.08] hover:text-white/90',
+                    ? 'opacity-100 border-white/70'
+                    : 'opacity-50 border-transparent hover:opacity-80',
                 )}
               >
                 {tab.label}
