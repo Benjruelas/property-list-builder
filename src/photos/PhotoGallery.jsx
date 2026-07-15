@@ -394,6 +394,7 @@ export function PhotoGallery({
         onClose={() => setPreviewIndex(null)}
         items={previewItems}
         initialIndex={previewIndex ?? 0}
+        immersiveGallery={entityType === 'lead'}
         renderActions={!readOnly ? ({ item }) => (
           item.photo?.key ? (
             <>

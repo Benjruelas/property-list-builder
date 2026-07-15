@@ -28,6 +28,31 @@ export function shouldAllowGallerySwipe({ scale, touchCount }) {
   return touchCount === 1 && !isZoomed(scale)
 }
 
+export function getGalleryDragAxis({ deltaX, deltaY, intentThreshold = 8 }) {
+  if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < intentThreshold) return null
+  return Math.abs(deltaX) > Math.abs(deltaY) ? 'horizontal' : 'vertical'
+}
+
+export function getGallerySwipeAction({
+  deltaX,
+  deltaY,
+  elapsedMs,
+  canGoPrev,
+  canGoNext,
+  distanceThreshold = 48,
+  velocityThreshold = 0.45,
+}) {
+  if (Math.abs(deltaX) <= Math.abs(deltaY)) return null
+
+  const velocity = elapsedMs > 0 ? Math.abs(deltaX) / elapsedMs : 0
+  const hasEnoughIntent = Math.abs(deltaX) >= distanceThreshold
+    || (Math.abs(deltaX) >= 16 && velocity >= velocityThreshold)
+
+  if (!hasEnoughIntent) return null
+  if (deltaX > 0) return canGoPrev ? 'prev' : null
+  return canGoNext ? 'next' : null
+}
+
 export function clampPan({
   translateX,
   translateY,
