@@ -2224,41 +2224,51 @@
   {
     "id": "NAV-024",
     "section": "03",
-    "title": "Quick Create — create task and lead",
+    "title": "Quick Create opens direct new-item panels",
     "roles": [
       "solo",
       "team-admin"
     ],
     "viewport": "both",
-    "preconditions": "Logged in. Test on both mobile and desktop if time allows.",
+    "preconditions": "Logged in; repeat while each matching list panel is open. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Open Quick Create (+)",
+        "action": "Choose Task from Quick Create (+)",
+        "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
+        "ui": "Tasks / Schedule"
+      },
+      {
+        "action": "Choose Lead from Quick Create (+)",
         "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
         "ui": "Leads CRM"
       },
       {
-        "action": "Create a task and save",
+        "action": "Choose Deal from Quick Create (+)",
         "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
-        "ui": "Leads CRM"
+        "ui": "Deals / Pipes"
       },
       {
-        "action": "Open Quick Create again",
+        "action": "Choose Quote from Quick Create (+)",
         "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
-        "ui": "Leads CRM"
+        "ui": "Forms / Quotes / Reports"
       },
       {
-        "action": "Create a lead and save",
-        "verify": "Task appears in Tasks; lead appears in Leads; FAB closes cleanly after each create",
-        "ui": "Leads CRM"
+        "action": "Choose Report from Quick Create (+)",
+        "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
+        "ui": "Forms / Quotes / Reports"
+      },
+      {
+        "action": "Repeat each action while its matching list panel is open, then press Back",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Lists panel"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Task appears in Tasks; lead appears in Leads; FAB closes cleanly after each create",
-        "ui": "Leads CRM"
+        "verify": "Every action opens its canonical new-item panel immediately; no parent-list detour or prerequisite picker overlay; Back restores the prior surface",
+        "ui": "Lists panel"
       }
     ],
-    "expected": "Task appears in Tasks; lead appears in Leads; FAB closes cleanly after each create"
+    "expected": "Every action opens its canonical new-item panel immediately; no parent-list detour or prerequisite picker overlay; Back restores the prior surface"
   },
   {
     "id": "LST-001",
