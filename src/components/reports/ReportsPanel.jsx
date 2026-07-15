@@ -77,7 +77,6 @@ export function ReportsPanel({
   onCloseDetail,
   teams = [],
   teamMembership = null,
-  quickCreateRequestKey = 0,
   onLeadUpdate,
 }) {
   const { getToken } = useAuth()
@@ -95,7 +94,6 @@ export function ReportsPanel({
   const [pendingReportLeadId, setPendingReportLeadId] = useState(null)
   const [pendingPreferredTemplate, setPendingPreferredTemplate] = useState(null)
   const [sendReport, setSendReport] = useState(null)
-  const lastQuickCreateKeyRef = useRef(0)
 
   const editorOpen = !!editorFrame
   const hasReportDetail = !!detailReportId
@@ -244,18 +242,8 @@ export function ReportsPanel({
   )
 
   const openNewReport = () => {
-    setPendingPreferredTemplate(null)
-    setPendingReportLeadId(null)
-    setLeadPickerOpen(true)
+    onOpenEditor?.({ mode: 'report' })
   }
-
-  useEffect(() => {
-    if (!isOpen || !quickCreateRequestKey || quickCreateRequestKey === lastQuickCreateKeyRef.current) return
-    lastQuickCreateKeyRef.current = quickCreateRequestKey
-    setPendingPreferredTemplate(null)
-    setPendingReportLeadId(null)
-    setLeadPickerOpen(true)
-  }, [isOpen, quickCreateRequestKey])
 
   const resetReportCreateFlow = () => {
     setLeadPickerOpen(false)
@@ -625,7 +613,7 @@ export function ReportsPanel({
         onClose={resetReportCreateFlow}
         leads={leads}
         title="Select lead for report"
-        panelClassName="square-picker-panel"
+        panelClassName="compact-picker-panel"
         nestedOverlay
         onSelectLead={(lead) => {
           setLeadPickerOpen(false)
@@ -687,7 +675,7 @@ export function ReportsPanel({
         teamMembership={teamMembership}
         getToken={getToken}
         panelDockSlot={reportDetailOverLead ? panelDockSlot : undefined}
-        primaryDetail={reportDetailOverLead}
+        primaryDetail={reportDetailOverLead || isReportsDetailStandalone}
         onClose={onCloseEditor}
         onBack={onCloseEditor}
         onLeadUpdate={onLeadUpdate}

@@ -112,6 +112,7 @@ export function QuoteEditor({
   pipelines = [],
   onSaved,
   canSeeDealAmounts = true,
+  primaryDetail = false,
 }) {
   const isTemplate = mode === 'template'
   const [saving, setSaving] = useState(false)
@@ -289,8 +290,10 @@ export function QuoteEditor({
       <DialogContent
         className="map-panel list-panel quotes-panel quote-editor-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none"
         showCloseButton={false}
-        nestedOverlay
+        nestedOverlay={!primaryDetail}
         topLayer
+        hideOverlay={primaryDetail}
+        suppressBackdrop={primaryDetail}
       >
         <DialogHeader
           className="flex-shrink-0 pb-3 border-b border-white/20 text-left"

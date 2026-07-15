@@ -43,7 +43,7 @@ export function ReportTemplatePickerDialog({
       subtitle={subtitle}
       description="Choose a report template or continue without one."
       nestedOverlay={nestedOverlay}
-      panelClassName="square-picker-panel"
+      panelClassName="compact-picker-panel"
       footer={
         <div
           className="flex justify-end gap-2 px-5 py-3 flex-shrink-0 border-t border-white/10"

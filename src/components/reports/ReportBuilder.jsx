@@ -5,6 +5,7 @@ import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
 import { PanelActionButton } from '../ui/panel-action-button'
 import { Button } from '../ui/button'
+import { LeadPickerField } from '../pickers/LeadPickerField'
 import { showToast } from '../ui/toast'
 import { displayLeadName, formatLeadAddress, fetchLeadById, leadNeedsPhotoHydrate } from '@/utils/leads'
 import {
@@ -79,13 +80,14 @@ export function ReportBuilder({
   const [pickerSectionId, setPickerSectionId] = useState(null)
   const [thumbUrls, setThumbUrls] = useState({})
   const [savedReportId, setSavedReportId] = useState(initialReport?.id ?? null)
+  const [selectedLeadId, setSelectedLeadId] = useState(initialReport?.leadId || initialLeadId || null)
   const initKeyRef = useRef(null)
+  const effectiveLeadId = initialReport?.leadId || selectedLeadId
 
   const lead = useMemo(() => {
     if (isTemplate) return null
-    const id = initialReport?.leadId || initialLeadId
-    return leads.find((l) => l.id === id) || null
-  }, [leads, initialReport, initialLeadId, isTemplate])
+    return leads.find((item) => item.id === effectiveLeadId) || null
+  }, [leads, effectiveLeadId, isTemplate])
 
   const photos = useMemo(
     () => sortPhotosNewestFirst(Array.isArray(lead?.photos) ? lead.photos : []),
@@ -101,6 +103,11 @@ export function ReportBuilder({
   useEffect(() => {
     if (initialReport?.id) setSavedReportId(initialReport.id)
   }, [initialReport?.id])
+
+  useEffect(() => {
+    if (!open) return
+    setSelectedLeadId(initialReport?.leadId || initialLeadId || null)
+  }, [open, initialReport?.leadId, initialLeadId])
 
   useEffect(() => {
     if (!open) {
@@ -127,22 +134,27 @@ export function ReportBuilder({
       return
     }
 
-    const leadId = initialReport?.leadId || initialLeadId
+    const leadId = effectiveLeadId
     const draft = leadId ? loadReportEditorDraft(leadId) : null
     const key = initialReport?.id
       ?? (layoutTemplate?.id ? `new:${leadId}:${layoutTemplate.id}` : `new:${leadId}`)
     if (initKeyRef.current === key) return
     initKeyRef.current = key
 
-    const seed = resolveEditorSeed({ initialReport, layoutTemplate, initialLeadId, draft })
+    const seed = resolveEditorSeed({
+      initialReport,
+      layoutTemplate,
+      initialLeadId: effectiveLeadId,
+      draft,
+    })
     setTitle(seed.title)
     setSections(seed.sections)
     setSavedReportId(seed.reportId ?? null)
-  }, [open, initialReport, initialTemplate, layoutTemplate, isTemplate, initialLeadId])
+  }, [open, initialReport, initialTemplate, layoutTemplate, isTemplate, effectiveLeadId])
 
   useEffect(() => {
     if (!open || isTemplate) return undefined
-    const leadId = initialReport?.leadId || initialLeadId
+    const leadId = effectiveLeadId
     if (!leadId) return undefined
 
     const draft = {
@@ -154,7 +166,7 @@ export function ReportBuilder({
     }
     saveReportEditorDraft(draft)
     return undefined
-  }, [open, isTemplate, initialReport, initialLeadId, savedReportId, title, sections, layoutTemplate])
+  }, [open, isTemplate, initialReport, effectiveLeadId, savedReportId, title, sections, layoutTemplate])
 
   useEffect(() => {
     if (!open || isTemplate || !getToken) return undefined
@@ -163,7 +175,7 @@ export function ReportBuilder({
     const reportId = savedReportId || initialReport?.id
     if (!reportId) return undefined
 
-    const leadId = initialReport?.leadId || initialLeadId
+    const leadId = effectiveLeadId
     let cancelled = false
     fetchPhotoReports(getToken, { reportId })
       .then((report) => {
@@ -183,7 +195,7 @@ export function ReportBuilder({
     return () => {
       cancelled = true
     }
-  }, [open, isTemplate, getToken, savedReportId, initialReport?.id, initialLeadId, sections])
+  }, [open, isTemplate, getToken, savedReportId, initialReport?.id, effectiveLeadId, sections])
 
   useEffect(() => {
     if (!open || isTemplate || !lead?.id || !getToken || !onLeadUpdate) return undefined
@@ -503,7 +515,6 @@ export function ReportBuilder({
         <DialogContent
           className={cn(
             'map-panel list-panel reports-panel report-editor-panel fullscreen-panel relative flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full',
-            !isTemplate && 'square-picker-panel',
           )}
           showCloseButton={false}
           panelDockSlot={panelDockSlot}
@@ -518,7 +529,17 @@ export function ReportBuilder({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 space-y-4 min-h-0" style={{ paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>
-            {lead && (
+            {!isTemplate && !initialReport && (
+              <LeadPickerField
+                label="Lead"
+                required
+                leads={leads}
+                value={selectedLeadId}
+                onChange={(nextLead) => setSelectedLeadId(nextLead?.id || null)}
+              />
+            )}
+
+            {lead && initialReport && (
               <div className="text-sm opacity-80">
                 <div className="font-medium">{displayLeadName(lead)}</div>
                 <div className="text-xs opacity-60">{formatLeadAddress(lead)}</div>

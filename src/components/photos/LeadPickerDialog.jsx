@@ -32,7 +32,7 @@ export function LeadPickerDialog({
   onCreateLead,
   title = 'Select lead for photos',
   panelClassName,
-  nestedOverlay = false,
+  nestedOverlay = true,
 }) {
   const [search, setSearch] = useState('')
 
@@ -59,9 +59,8 @@ export function LeadPickerDialog({
           panelClassName,
         )}
         showCloseButton={false}
-        focusOverlay
-        topLayer
         nestedOverlay={nestedOverlay}
+        topLayer
         data-lead-picker-dialog
       >
         <div className={cn('flex flex-col min-h-0 flex-1', isSquarePanel ? 'px-0' : 'share-dialog-inner')}>

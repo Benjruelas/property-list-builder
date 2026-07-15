@@ -385,7 +385,13 @@ export function DealsPanel({
           <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">All deals across pipelines</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Deals">
-              <PanelCreateButton onClick={() => startCreateDeal()} title="Create deal" />
+              <PanelCreateButton
+                onClick={() => {
+                  if (onCreateDeal) onCreateDeal()
+                  else startCreateDeal()
+                }}
+                title="Create deal"
+              />
               <PanelOptionsButton
                 ref={dealsMenuTriggerRef}
                 title="Deals options"

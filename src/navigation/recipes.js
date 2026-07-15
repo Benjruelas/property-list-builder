@@ -138,6 +138,36 @@ export function recipeOpenReports(currentStack, opts = {}) {
   return recipeOpenRootPanel(currentStack, 'reports', { type: 'reports' }, opts)
 }
 
+/**
+ * Open a blank quote editor directly, preserving the current surface for Back
+ * without manufacturing a Quotes list parent.
+ */
+export function recipeOpenNewQuoteEditor(currentStack) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const withoutEditor = coreStack.filter(
+    (f) => f.type !== 'quotes.editor' && f.type !== 'quotes.detail',
+  )
+  return appendTrailingTasks(
+    [...withoutEditor, { type: 'quotes.editor', mode: 'quote' }],
+    tasksFrames,
+  )
+}
+
+/**
+ * Open a blank report editor directly, preserving the current surface for Back
+ * without manufacturing a Reports list parent.
+ */
+export function recipeOpenNewReportEditor(currentStack) {
+  const { tasksFrames, coreStack } = splitTrailingTasks(currentStack)
+  const withoutEditor = coreStack.filter(
+    (f) => f.type !== 'reports.editor' && f.type !== 'reports.detail',
+  )
+  return appendTrailingTasks(
+    [...withoutEditor, { type: 'reports.editor', mode: 'report' }],
+    tasksFrames,
+  )
+}
+
 function stackHasReportsSurface(stack) {
   return stack.some(
     (f) => f.type === 'reports' || f.type === 'reports.detail' || f.type === 'reports.editor',

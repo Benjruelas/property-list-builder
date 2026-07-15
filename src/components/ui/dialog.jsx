@@ -117,9 +117,13 @@ const AppDialogBackdrop = React.forwardRef(({ className, ...props }, ref) => (
 AppDialogBackdrop.displayName = 'AppDialogBackdrop'
 
 const DialogContent = React.forwardRef(({ className, children, showCloseButton = true, hideOverlay = false, suppressBackdrop = false, focusOverlay = false, blurOverlay = false, detailFocusOverlay = false, nestedOverlay = false, topLayer = false, confirmLayer = false, panelMode, panelDockSlot, instantDismiss = false, onPointerDownOutside, onInteractOutside, onFocusOutside, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
-  const useStackedDetailLayer = topLayer && nestedOverlay && !blurOverlay && !detailFocusOverlay
-  const effectiveNestedOverlay = nestedOverlay && !useStackedDetailLayer && !blurOverlay && !detailFocusOverlay
-  const effectiveHideOverlay = hideOverlay || useStackedDetailLayer
+  /*
+   * nestedOverlay + topLayer must keep backdrop and content as one elevated
+   * pair. The old "stacked detail" path rendered only a hideOverlay scrim and
+   * left content at CSS z-index 10002, so the scrim covered the create panel.
+   */
+  const effectiveNestedOverlay = nestedOverlay && !blurOverlay && !detailFocusOverlay
+  const effectiveHideOverlay = hideOverlay && !effectiveNestedOverlay
   const isPanel = (panelMode ?? isMapPanelClassName(className)) && !confirmLayer
   const contentMotion = cn(
     isPanel ? PANEL_CONTENT_MOTION : DEFAULT_CONTENT_MOTION,
@@ -212,7 +216,27 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
     ) : effectiveHideOverlay && !suppressBackdrop ? (
       <AppDialogBackdrop className={cn("fixed inset-0 bg-black/60 pointer-events-auto", overlayMotion, zHideOverlay)} />
     ) : focusOverlay ? (
-      <AppDialogBackdrop className={cn("fixed inset-0 bg-black/95 pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]')} />
+      <>
+        <AppDialogBackdrop className={cn("fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]')} />
+        <DialogPrimitive.Content
+          ref={mergeRefs}
+          className={cn(contentPosition, contentMotion, zContent, className)}
+          onPointerDownOutside={(e) => preventCloseWhenNestedOverlay(e, onPointerDownOutside)}
+          onInteractOutside={(e) => preventCloseWhenNestedOverlay(e, onInteractOutside)}
+          onFocusOutside={(e) => preventCloseWhenNestedOverlay(e, onFocusOutside)}
+          {...props}
+          {...panelFocusHandlers}
+          {...panelContentProps}
+        >
+          {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Content>
+      </>
     ) : detailFocusOverlay ? (
       <>
         <AppDialogBackdrop
@@ -263,7 +287,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
     ) : suppressBackdrop ? null : (
       <DialogOverlay className={confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : undefined} />
     )}
-    {!blurOverlay && !detailFocusOverlay && !effectiveNestedOverlay && (
+    {!blurOverlay && !detailFocusOverlay && !effectiveNestedOverlay && !focusOverlay && (
       <DialogPrimitive.Content
         ref={mergeRefs}
         className={cn(contentPosition, contentMotion, zDefaultContent, className)}

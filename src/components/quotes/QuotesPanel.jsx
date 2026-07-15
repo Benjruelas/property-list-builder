@@ -52,6 +52,7 @@ const MENU_WIDTH = 180
 
 export function QuotesPanel({
   isOpen,
+  isQuotesEditorStandalone = false,
   panelDockSlot,
   onClose,
   onBack,
@@ -68,7 +69,6 @@ export function QuotesPanel({
   canSeeDealAmounts = true,
   teams = [],
   teamMembership = null,
-  quickCreateRequestKey = 0,
 }) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('quotes')
@@ -98,7 +98,6 @@ export function QuotesPanel({
         : editorTemplate
   const [sendQuote, setSendQuote] = useState(null)
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
-  const lastQuickCreateKeyRef = useRef(0)
   const [msgEmailSubject, setMsgEmailSubject] = useState('')
   const [msgEmailBody, setMsgEmailBody] = useState('')
   const [msgTextBody, setMsgTextBody] = useState('')
@@ -200,14 +199,8 @@ export function QuotesPanel({
   })
 
   const openNewQuote = () => {
-    setTemplatePickerOpen(true)
+    onOpenEditor?.({ mode: 'quote' })
   }
-
-  useEffect(() => {
-    if (!isOpen || !quickCreateRequestKey || quickCreateRequestKey === lastQuickCreateKeyRef.current) return
-    lastQuickCreateKeyRef.current = quickCreateRequestKey
-    setTemplatePickerOpen(true)
-  }, [isOpen, quickCreateRequestKey])
 
   const handleTemplatePicked = (template) => {
     onOpenEditor?.({
@@ -531,6 +524,7 @@ export function QuotesPanel({
           onCloseEditor?.(saved)
         }}
         canSeeDealAmounts={canSeeDealAmounts}
+        primaryDetail={isQuotesEditorStandalone}
       />
 
       <QuoteDetails
@@ -558,6 +552,7 @@ export function QuotesPanel({
         onOpenChange={setTemplatePickerOpen}
         templates={templates}
         onSelect={handleTemplatePicked}
+        nestedOverlay
       />
 
       <SendQuoteDialog
