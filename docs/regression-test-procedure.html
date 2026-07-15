@@ -4133,10 +4133,11 @@
   {
     "id": "DPL-013",
     "section": "06",
-    "title": "Deal detail — move deal",
+    "title": "Deal detail — change state",
     "roles": [
       "solo",
-      "team-admin"
+      "team-admin",
+      "team-member"
     ],
     "viewport": "both",
     "preconditions": "Deal detail open. Test on both mobile and desktop if time allows.",
@@ -4147,22 +4148,17 @@
         "ui": "Deals / Pipes"
       },
       {
-        "action": "⋮ → Move deal",
-        "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
-        "ui": "Deals / Pipes"
-      },
-      {
-        "action": "Pick pipeline",
+        "action": "Change deal state",
         "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
         "ui": "Deals / Pipes"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Deal moves to target pipe",
+        "verify": "Deal moves to the matching Deal pipe column",
         "ui": "Deals / Pipes"
       }
     ],
-    "expected": "Deal moves to target pipe"
+    "expected": "Deal moves to the matching Deal pipe column"
   },
   {
     "id": "DPL-014",
@@ -4255,177 +4251,169 @@
   {
     "id": "DPL-017",
     "section": "06",
-    "title": "Open Pipes kanban",
+    "title": "Open Deal pipe",
     "roles": [
       "solo",
       "team-admin",
       "team-member"
     ],
     "viewport": "both",
-    "preconditions": "Pipeline exists. Test on both mobile and desktop if time allows.",
+    "preconditions": "Migrated account. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Open Deals from the action bar.",
-        "verify": "Starting state matches preconditions (Pipeline exists); no error dialog blocks the test.",
-        "ui": "Action bar / menu"
-      },
-      {
-        "action": "Action bar → Pipes",
-        "verify": "Columns and deal cards visible",
+        "action": "Action bar → Deal Pipe",
+        "verify": "Settings-derived columns and deal cards visible",
         "ui": "Action bar / menu"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Columns and deal cards visible",
+        "verify": "Settings-derived columns and deal cards visible",
         "ui": "Action bar / menu"
       }
     ],
-    "expected": "Columns and deal cards visible"
+    "expected": "Settings-derived columns and deal cards visible"
   },
   {
     "id": "DPL-018",
     "section": "06",
-    "title": "Switch pipeline dropdown",
+    "title": "Open Lead pipe",
     "roles": [
       "solo",
-      "team-admin"
+      "team-admin",
+      "team-member"
     ],
     "viewport": "both",
-    "preconditions": "Multiple pipelines. Test on both mobile and desktop if time allows.",
+    "preconditions": "Account with leads. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Set up preconditions: Multiple pipelines. Navigate to the starting screen for this test.",
-        "verify": "Starting state matches preconditions (Multiple pipelines); no error dialog blocks the test.",
-        "ui": "Deals / Pipes"
-      },
-      {
-        "action": "Select different pipeline",
-        "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
-        "ui": "Deals / Pipes"
+        "action": "Action bar → Lead Pipe",
+        "verify": "Settings-derived columns and lead cards visible",
+        "ui": "Action bar / menu"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Deals/columns update",
-        "ui": "Deals / Pipes"
+        "verify": "Settings-derived columns and lead cards visible",
+        "ui": "Action bar / menu"
       }
     ],
-    "expected": "Deals/columns update"
+    "expected": "Settings-derived columns and lead cards visible"
   },
   {
     "id": "DPL-019",
     "section": "06",
-    "title": "Create new pipeline",
+    "title": "Canonical Deal pipe",
     "roles": [
       "solo",
-      "team-admin"
+      "team-admin",
+      "team-member"
     ],
     "viewport": "both",
-    "preconditions": "Owner/admin. Test on both mobile and desktop if time allows.",
+    "preconditions": "Migrated account. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Open Pipes from the action bar",
+        "action": "Open Deal Pipe",
         "verify": "Target screen, panel, or dialog opens and is interactive.",
-        "ui": "Action bar / menu"
-      },
-      {
-        "action": "Open create pipeline dialog",
-        "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
         "ui": "Deals / Pipes"
       },
       {
-        "action": "Enter pipeline name and save",
-        "verify": "New pipeline appears",
+        "action": "Inspect header controls",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
         "ui": "Deals / Pipes"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "New pipeline appears",
+        "verify": "Exactly one pipe; no create, switch, share, delete, or column-edit controls",
         "ui": "Deals / Pipes"
       }
     ],
-    "expected": "New pipeline appears"
+    "expected": "Exactly one pipe; no create, switch, share, delete, or column-edit controls"
   },
   {
     "id": "DPL-020",
     "section": "06",
-    "title": "Share pipeline",
+    "title": "Lead pipe uses lead states",
     "roles": [
       "solo",
-      "team-admin"
+      "team-admin",
+      "team-member"
     ],
     "viewport": "both",
-    "preconditions": "Own pipeline. Test on both mobile and desktop if time allows.",
+    "preconditions": "Account with leads. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Share pipeline",
-        "verify": "Step completes; ready for next action.",
-        "ui": "Deals / Pipes"
+        "action": "Open Lead Pipe",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Leads CRM"
       },
       {
-        "action": "Add email/team",
+        "action": "Drag lead to another column",
         "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
-        "ui": "Deals / Pipes"
+        "ui": "Leads CRM"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Sharing updated",
-        "ui": "Deals / Pipes"
+        "verify": "Lead state persists after refresh",
+        "ui": "Leads CRM"
       }
     ],
-    "expected": "Sharing updated"
+    "expected": "Lead state persists after refresh"
   },
   {
     "id": "DPL-021",
     "section": "06",
-    "title": "Edit mode — rename column",
+    "title": "Rename deal state in Settings",
     "roles": [
       "solo",
       "team-admin"
     ],
     "viewport": "both",
-    "preconditions": "Pipeline owner. Test on both mobile and desktop if time allows.",
+    "preconditions": "Settings → Team → Deal statuses. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Edit mode → rename column",
-        "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
-        "ui": "Deals / Pipes"
+        "action": "Rename state and save",
+        "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
+        "ui": "Action bar / menu"
+      },
+      {
+        "action": "Open Deal Pipe",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Action bar / menu"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Column name updates",
-        "ui": "Deals / Pipes"
+        "verify": "Column uses the new state label",
+        "ui": "Action bar / menu"
       }
     ],
-    "expected": "Column name updates"
+    "expected": "Column uses the new state label"
   },
   {
     "id": "DPL-022",
     "section": "06",
-    "title": "Edit mode — add/delete column",
+    "title": "State editing permissions",
     "roles": [
-      "solo",
-      "team-admin"
+      "team-member"
     ],
     "viewport": "both",
-    "preconditions": "Edit mode. Test on both mobile and desktop if time allows.",
+    "preconditions": "Signed in as a non-admin team member. Test on both mobile and desktop if time allows. Signed in as: team-member.",
     "steps": [
       {
-        "action": "Add column",
-        "verify": "Step completes; ready for next action.",
-        "ui": "Deals / Pipes"
+        "action": "Open Lead and Deal statuses",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Auth / menu"
       },
       {
-        "action": "Delete empty column",
-        "verify": "Columns update",
-        "ui": "Deals / Pipes"
+        "action": "Open both pipes",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Auth / menu"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Columns update",
-        "ui": "Deals / Pipes"
+        "verify": "State registries are read-only and pipes have no edit controls",
+        "ui": "Auth / menu"
       }
     ],
-    "expected": "Columns update"
+    "expected": "State registries are read-only and pipes have no edit controls"
   },
   {
     "id": "DPL-023",

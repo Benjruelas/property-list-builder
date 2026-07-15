@@ -23,6 +23,11 @@ import {
 } from './_lib/dataVersion.js'
 import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 import { paginateArray } from './_lib/pagination.js'
+import {
+  DEFAULT_DEAL_STATUSES,
+  normalizeDealStatuses,
+  resolveAllowedDealStatusIds,
+} from './_lib/dealStatuses.js'
 
 /**
  * Vercel Serverless Function
@@ -35,11 +40,26 @@ import { paginateArray } from './_lib/pagination.js'
  * Uses Vercel KV. Set FIREBASE_API_KEY (Firebase Web API key) for token verification.
  */
 
-const DEFAULT_COLUMNS = ['Open', 'Pending', 'Closed']
+const DEFAULT_COLUMNS = DEFAULT_DEAL_STATUSES.map((status) => status.label)
+
+function statusesToColumns(statuses) {
+  return normalizeDealStatuses(statuses).map(({ id, label }) => ({ id, name: label }))
+}
+
+async function loadUserAppSettings(uid) {
+  if (!kvAvailable || !kv || !uid) return null
+  try {
+    const data = await kv.get(`user_data_${uid}`)
+    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
+    return parsed?.appSettings || null
+  } catch {
+    return null
+  }
+}
 
 function normalizeColumns(cols) {
   if (!Array.isArray(cols) || cols.length === 0) {
-    return DEFAULT_COLUMNS.map((name, i) => ({ id: `col-${i}`, name }))
+    return statusesToColumns(DEFAULT_DEAL_STATUSES)
   }
   return cols.map((c, i) => ({
     id: (c && c.id) || `col-${i}`,
@@ -218,9 +238,21 @@ export default async function handler(req, res) {
         }
       }
 
-      const [allTeams] = await Promise.all([getAllTeams()])
+      const [allTeams, userAppSettings] = await Promise.all([
+        getAllTeams(),
+        loadUserAppSettings(user.uid),
+      ])
       const ctx = buildAccessContext(allTeams, user)
-      const pipelines = (await getPipelinesForUser(user, ctx)).map(normalizePipelineDeals)
+      const effectiveStatuses = ctx.team?.dealStatuses?.length
+        ? ctx.team.dealStatuses
+        : (ctx.team ? DEFAULT_DEAL_STATUSES : userAppSettings?.dealStatuses)
+      const effectiveColumns = statusesToColumns(effectiveStatuses || DEFAULT_DEAL_STATUSES)
+      const pipelines = (await getPipelinesForUser(user, ctx)).map((raw) => ({
+        ...normalizePipelineDeals(raw),
+        columns: effectiveColumns,
+        title: 'Deals',
+        canonicalType: 'deals',
+      }))
       if (kvAvailable && kv) {
         const dealTagMeta = pipelines.flatMap((p) => collectDealTagMetaFromPipeline(p))
         const byId = new Map()
@@ -242,25 +274,42 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
-      const { title = 'Deal Pipeline', columns, deals } = body
-      const cols = normalizeColumns(columns)
+      const { deals } = body
       const dealsArr = Array.isArray(deals) ? deals : []
-      const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
+      const [all, allTeams, userAppSettings] = await Promise.all([
+        getAllPipelines(),
+        getAllTeams(),
+        loadUserAppSettings(user.uid),
+      ])
       const ctx = buildAccessContext(allTeams, user)
+      const existingCanonical = all.find((pipeline) =>
+        pipeline.canonicalType === 'deals' &&
+        (ctx.team ? pipeline.teamId === ctx.team.id : pipeline.ownerId === user.uid && !pipeline.teamId),
+      )
+      if (existingCanonical) return res.status(200).json({ pipeline: existingCanonical })
+      const effectiveStatuses = ctx.team?.dealStatuses || userAppSettings?.dealStatuses || DEFAULT_DEAL_STATUSES
+      const cols = statusesToColumns(effectiveStatuses)
+      const allowedStatusIds = new Set(cols.map((column) => column.id))
+      if (dealsArr.some((deal) => !allowedStatusIds.has(deal?.status || cols[0]?.id))) {
+        return res.status(400).json({ error: 'Invalid deal status' })
+      }
 
       let newPipeline = {
-        id: `pipe_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-        title: (title || 'Deal Pipeline').trim() || 'Deal Pipeline',
+        id: ctx.team
+          ? `pipe_team_${String(ctx.team.id).replace(/^team_/, '').replace(/[^a-zA-Z0-9_-]/g, '_')}`
+          : `pipe_user_${String(user.uid).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+        title: 'Deals',
         columns: cols,
-        deals: dealsArr,
-        ownerId: user.uid,
-        ownerEmail: user.email,
+        deals: dealsArr.map((deal) => ({ ...deal, status: deal.status || cols[0].id })),
+        ownerId: ctx.team?.ownerId || user.uid,
+        ownerEmail: ctx.team?.ownerEmail || user.email,
         sharedWith: [],
-        teamShares: [],
-        teamId: null,
-        visibility: 'private',
+        teamShares: ctx.team ? [ctx.team.id] : [],
+        teamId: ctx.team?.id || null,
+        visibility: ctx.team ? 'team' : 'private',
         sharedMemberUids: [],
-        isTeamPipe: false,
+        isTeamPipe: Boolean(ctx.team),
+        canonicalType: 'deals',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -328,7 +377,11 @@ export default async function handler(req, res) {
       const { pipelineId, title, columns, deals, sharedWith, teamShares } = body
       if (!pipelineId) return res.status(400).json({ error: 'pipelineId is required' })
 
-      const [all, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
+      const [all, allTeams, userAppSettings] = await Promise.all([
+        getAllPipelines(),
+        getAllTeams(),
+        loadUserAppSettings(user.uid),
+      ])
       const idx = all.findIndex((p) => p.id === pipelineId)
       if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
 
@@ -348,12 +401,18 @@ export default async function handler(req, res) {
       const access = getResourceAccess(pipeline, user, ctx)
       const pipeIsTeam = pipeline.isTeamPipe === true
       const canManageMeta = pipeIsTeam ? isTeamAdmin(ctx.team, user.uid) : canChangeVisibility(access)
+      const allowedDealStatusIds = resolveAllowedDealStatusIds(ctx, userAppSettings)
 
       if (!canEdit(access) && access !== 'admin_view') {
         return res.status(403).json({ error: 'Only the pipeline owner or collaborators can update this pipeline' })
       }
       if (access === 'admin_view') {
         return res.status(403).json({ error: 'Admins can view but not edit private pipelines' })
+      }
+      if (pipeline.canonicalType === 'deals' &&
+          (title !== undefined || columns !== undefined || sharedWith !== undefined ||
+           teamShares !== undefined || body.visibility !== undefined || body.sharedMemberUids !== undefined)) {
+        return res.status(403).json({ error: 'Deal pipe structure is managed in Settings' })
       }
 
       if (!canManageMeta) {
@@ -372,6 +431,10 @@ export default async function handler(req, res) {
         pipeline.columns = normalizeColumns(columns)
       }
       if (deals !== undefined && Array.isArray(deals)) {
+        const invalidDeal = deals.find((deal) => !allowedDealStatusIds.has(String(deal?.status || '')))
+        if (invalidDeal) {
+          return res.status(400).json({ error: `Invalid deal status: ${invalidDeal.status || ''}` })
+        }
         const tagRegistry = await loadTagRegistry(kv, user.uid)
         try {
           pipeline.deals = deals.map((incoming) => {
@@ -519,7 +582,16 @@ export default async function handler(req, res) {
         columns: pipeline.columns || [],
       })
 
-      return res.status(200).json({ pipeline })
+      const effectiveStatuses = ctx.team?.dealStatuses?.length
+        ? ctx.team.dealStatuses
+        : (ctx.team ? DEFAULT_DEAL_STATUSES : userAppSettings?.dealStatuses)
+      return res.status(200).json({
+        pipeline: {
+          ...pipeline,
+          columns: statusesToColumns(effectiveStatuses || DEFAULT_DEAL_STATUSES),
+          title: pipeline.canonicalType === 'deals' ? 'Deals' : pipeline.title,
+        },
+      })
     }
 
     if (method === 'DELETE') {
@@ -530,6 +602,9 @@ export default async function handler(req, res) {
       const ctx = buildAccessContext(allTeams, user)
       const idx = all.findIndex((p) => p.id === pipelineId)
       if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
+      if (all[idx].canonicalType === 'deals') {
+        return res.status(403).json({ error: 'The canonical Deal pipe cannot be deleted' })
+      }
       if (all[idx].isTeamPipe) {
         return res.status(403).json({ error: 'Team Pipe cannot be deleted' })
       }

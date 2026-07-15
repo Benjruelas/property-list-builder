@@ -34,9 +34,9 @@ describe('lead CRM helpers', () => {
   beforeEach(() => {
     mockLocalStorage()
   })
-  it('getLeadStatus derives converted when lead has deals', () => {
+  it('getLeadStatus uses the persisted state when lead has deals', () => {
     const lead = { id: 'l1', status: 'qualified' }
-    expect(getLeadStatus(lead, 1)).toBe('converted')
+    expect(getLeadStatus(lead, 1)).toBe('qualified')
   })
 
   it('getLeadStatus preserves lost even with deals', () => {

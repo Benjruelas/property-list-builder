@@ -35,6 +35,7 @@ import {
   isTeamAdminMember,
 } from './_lib/teamFeatures.js'
 import { normalizeLeadStatuses } from './_lib/leadStatuses.js'
+import { DEFAULT_DEAL_STATUSES, normalizeDealStatuses } from './_lib/dealStatuses.js'
 
 let kv = null
 let kvAvailable = false
@@ -148,6 +149,7 @@ function normalizeTeamForWire(team, viewerUid) {
     membersCanSeeDealAmounts: team.membersCanSeeDealAmounts !== false,
     emailBranding: normalizeEmailBranding(team.emailBranding || {}),
     leadStatuses: team.leadStatuses?.length ? normalizeLeadStatuses(team.leadStatuses) : null,
+    dealStatuses: team.dealStatuses?.length ? normalizeDealStatuses(team.dealStatuses) : null,
     teamPipelineId: team.teamPipelineId || null,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
@@ -197,6 +199,9 @@ export default async function handler(req, res) {
               leadStatuses: membership.leadStatuses?.length
                 ? normalizeLeadStatuses(membership.leadStatuses)
                 : null,
+              dealStatuses: membership.dealStatuses?.length
+                ? normalizeDealStatuses(membership.dealStatuses)
+                : null,
               features: resolveMemberFeatures(memberRecord, membership, user.uid),
             }
           : null,
@@ -234,6 +239,8 @@ export default async function handler(req, res) {
         seatLimit: DEFAULT_SEAT_LIMIT,
         allowExternalSharing: false,
         membersCanSeeDealAmounts: true,
+        leadStatuses: normalizeLeadStatuses(),
+        dealStatuses: normalizeDealStatuses(DEFAULT_DEAL_STATUSES),
         teamPipelineId: null,
         createdAt: now,
         updatedAt: now,
@@ -332,9 +339,43 @@ export default async function handler(req, res) {
         if (body.leadStatuses !== undefined) {
           team.leadStatuses = normalizeLeadStatuses(body.leadStatuses)
         }
+        if (body.dealStatuses !== undefined) {
+          team.dealStatuses = normalizeDealStatuses(body.dealStatuses)
+        }
         team.updatedAt = new Date().toISOString()
         all[idx] = team
         await saveAllTeams(all)
+        const memberUids = new Set([team.ownerId, ...(team.members || []).map((member) => member.uid)])
+        if (body.leadStatuses !== undefined) {
+          const valid = new Set(team.leadStatuses.map((status) => status.id))
+          const fallback = team.leadStatuses[0]?.id || 'new'
+          await mutateLeads((rows) => rows.map((lead) =>
+            (lead.teamId === team.id || memberUids.has(lead.ownerId)) && !valid.has(lead.status)
+              ? { ...lead, status: fallback, statusUpdatedAt: new Date().toISOString() }
+              : lead
+          ))
+        }
+        if (body.dealStatuses !== undefined) {
+          const valid = new Set(team.dealStatuses.map((status) => status.id))
+          const fallback = team.dealStatuses[0]?.id || 'open'
+          const columns = team.dealStatuses.map(({ id, label }) => ({ id, name: label }))
+          await mutatePipelines((rows) => rows.map((pipeline) => {
+            if (pipeline.teamId !== team.id &&
+                !(pipeline.canonicalType === 'deals' && memberUids.has(pipeline.ownerId))) {
+              return pipeline
+            }
+            return {
+              ...pipeline,
+              columns,
+              deals: (pipeline.deals || []).map((deal) =>
+                valid.has(deal.status)
+                  ? deal
+                  : { ...deal, status: fallback, statusEnteredAt: Date.now(), cumulativeTimeByStatus: {} }
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          }))
+        }
         return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
       }
 

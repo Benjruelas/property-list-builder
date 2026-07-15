@@ -16,6 +16,7 @@ import { getSkipTracedList, subscribeSkipTracedList } from '../utils/skipTracedL
 import { useAuth } from '@/contexts/AuthContext'
 import { TeamSettingsSection } from './TeamSettingsSection'
 import { resolveLeadStatuses, canEditLeadStatuses } from '../utils/leadStatuses'
+import { resolveDealStatuses, canEditDealStatuses } from '../utils/dealStatuses'
 
 const MAP_STYLES = [
   { value: 'satellite', label: 'Satellite' },
@@ -445,6 +446,9 @@ export function SettingsPanel({
               leadStatuses={resolveLeadStatuses({ settings: s, teams, teamMembership })}
               canEditLeadStatuses={canEditLeadStatuses(teamMembership)}
               onSaveUserStatuses={(normalized) => update({ leadStatuses: normalized })}
+              dealStatuses={resolveDealStatuses({ settings: s, teams, teamMembership })}
+              canEditDealStatuses={canEditDealStatuses(teamMembership)}
+              onSaveUserDealStatuses={(normalized) => update({ dealStatuses: normalized })}
             />
           )}
 

@@ -127,6 +127,7 @@ export function DealPipeline({
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   leadStatuses = [],
+  dealStatuses = [],
   editLeadId = null,
   onCreateLead,
 }) {
@@ -152,7 +153,7 @@ export function DealPipeline({
   const [draggedDealId, setDraggedDealId] = useState(null)
   const [dragOverColId, setDragOverColId] = useState(null)
   const [isEditMode, setIsEditMode] = useState(false)
-  const [pipelineTitle, setPipelineTitle] = useState('Pipes')
+  const [pipelineTitle, setPipelineTitle] = useState('Deals')
   const leadOverlayId = pipesLeadOverlayId
   const activeDealId = promotedDealId ?? focusDealId
   const selectedDeal = useMemo(() => {
@@ -390,8 +391,12 @@ export function DealPipeline({
   useEffect(() => {
     if (isOpen) {
       if (apiMode && activePipeline) {
-        setColumns(activePipeline.columns || [])
-        setPipelineTitle(activePipeline.title || 'Pipes')
+        setColumns(
+          dealStatuses.length
+            ? dealStatuses.map((status) => ({ id: status.id, name: status.label }))
+            : (activePipeline.columns || [])
+        )
+        setPipelineTitle('Deals')
       } else {
         setColumns(loadColumns())
         setPipelineTitle(loadTitle())
@@ -413,7 +418,7 @@ export function DealPipeline({
       }
       refreshAllTasks()
     }
-  }, [isOpen, onDealsChange, scheduleSync, refreshAllTasks, apiMode, activePipeline])
+  }, [isOpen, onDealsChange, scheduleSync, refreshAllTasks, apiMode, activePipeline, dealStatuses])
 
   const persistColumns = useCallback((cols) => {
     setColumns(cols)
@@ -893,62 +898,11 @@ export function DealPipeline({
               />
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5">
-              {isEditMode ? (
-                <Input
-                  value={pipelineTitle}
-                  onChange={(e) => setPipelineTitle(e.target.value)}
-                  onBlur={handleTitleBlur}
-                  onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-                  className="h-9 min-w-0 flex-1 border-gray-300 text-xl font-semibold"
-                  placeholder="Pipeline title"
-                />
-              ) : (
-                <DialogTitle className="min-w-0 truncate text-xl font-semibold">{pipelineTitle}</DialogTitle>
-              )}
-              {apiMode && switcherPipelines.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 shrink-0 pipeline-icon-btn ${pipelineSwitcherOpen ? 'opacity-90' : ''}`}
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect()
-                    setPipelineSwitcherAnchor(anchorMenuLeftAligned(rect, PIPELINE_SWITCHER_MENU_W))
-                    setPipelineSwitcherOpen((o) => !o)
-                    setPipelineDropdownOpen(false)
-                  }}
-                  title="Switch pipeline"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              )}
+              <DialogTitle className="min-w-0 truncate text-xl font-semibold">{pipelineTitle}</DialogTitle>
                 </div>
               </div>
             </div>
-            <div className="map-panel-header-actions">
-              {apiMode && onSharePipeline && isPipelineOwnedByUser(activePipeline) ? (
-                <PanelOptionsButton
-                  className="pipeline-icon-btn"
-                  title="Pipeline options"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect()
-                    setPipelineDropdownAnchor(anchorMenuLeftAligned(rect, PIPELINE_OPTIONS_MENU_W))
-                    setPipelineDropdownOpen(true)
-                    setPipelineSwitcherOpen(false)
-                  }}
-                />
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 shrink-0 pipeline-icon-btn deal-pipeline-settings-btn ${isEditMode ? 'deal-pipeline-edit-active' : ''} ${apiMode && !isPipelineOwnedByUser(activePipeline) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  onClick={() => !apiMode || isPipelineOwnedByUser(activePipeline) ? toggleEditMode() : null}
-                  title={apiMode && !isPipelineOwnedByUser(activePipeline) ? 'Edit mode disabled for shared pipelines' : (isEditMode ? 'Exit edit mode' : 'Edit pipeline')}
-                  disabled={apiMode && !isPipelineOwnedByUser(activePipeline)}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+            <div className="map-panel-header-actions" />
           </div>
         </DialogHeader>
         <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden deal-pipeline-content">
@@ -963,33 +917,7 @@ export function DealPipeline({
                 className="deal-pipeline-column flex-none w-full md:min-w-[9.25rem] md:flex-1 md:basis-0 rounded-lg border border-white/15 bg-white/[0.12] flex flex-col min-h-[100px] md:min-h-[200px]"
               >
                 <div className="px-2 py-2 border-b border-white/15 flex items-center gap-1 flex-shrink-0">
-                  {editingColumnId === col.id ? (
-                    <div className="flex-1 flex gap-1">
-                      <Input
-                        value={editingColumnName}
-                        onChange={(e) => setEditingColumnName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleRenameColumn(col.id)}
-                        className="h-8 text-sm"
-                        autoFocus
-                      />
-                      <Button size="sm" onClick={() => handleRenameColumn(col.id)}>Save</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingColumnId(null)}>Cancel</Button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-sm flex-1 truncate">{col.name}</span>
-                      {isEditMode && (
-                        <>
-                          <button type="button" className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 text-inherit" onClick={() => { setEditingColumnId(col.id); setEditingColumnName(col.name) }} title="Rename">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button type="button" className="pipeline-icon-btn p-0.5 -m-0.5 rounded opacity-70 hover:opacity-100 text-red-400 hover:text-red-300" onClick={() => handleDeleteColumn(col.id)} title="Delete column">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </>
-                  )}
+                  <span className="font-semibold text-sm flex-1 truncate">{col.name}</span>
                 </div>
                 <div
                   className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
@@ -1021,34 +949,6 @@ export function DealPipeline({
                 </div>
               </div>
             ))}
-            {isEditMode && columns.length < MAX_COLUMNS && (
-              <div className="flex-shrink-0 w-full md:w-[70px] min-h-[70px] md:min-h-0 flex items-center">
-                {showAddColumn ? (
-                  <div className="h-full rounded-lg border-2 border-dashed border-gray-300 p-2 flex flex-col gap-2">
-                    <Input
-                      placeholder="Column name"
-                      value={newColumnName}
-                      onChange={(e) => setNewColumnName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={handleAddColumn} disabled={!newColumnName.trim()}>Add</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setShowAddColumn(false); setNewColumnName('') }}>Cancel</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full flex justify-center">
-                    <button
-                      onClick={() => setShowAddColumn(true)}
-                      className="w-8 h-8 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50/50 dark:hover:bg-white/5 flex items-center justify-center text-gray-500"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           </div>
 

@@ -20,6 +20,14 @@ describe('normalizeLeadStatuses', () => {
     const result = normalizeLeadStatuses([{ id: 'new', label: 'Fresh' }])
     expect(result.find((s) => s.id === 'new')?.label).toBe('Fresh')
   })
+
+  it('does not restore removable defaults omitted by the user', () => {
+    const result = normalizeLeadStatuses([
+      { id: 'new', label: 'New' },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(result.map((status) => status.id)).toEqual(['new', 'converted'])
+  })
 })
 
 describe('resolveLeadStatuses', () => {
@@ -68,8 +76,8 @@ describe('getLeadStatus', () => {
     { id: 'lost', label: 'Lost', color: 'd' },
   ])
 
-  it('derives converted when lead has deals', () => {
-    expect(getLeadStatus({ status: 'new' }, 1, registry)).toBe('converted')
+  it('uses the persisted state even when a lead has deals', () => {
+    expect(getLeadStatus({ status: 'new' }, 1, registry)).toBe('new')
   })
 
   it('preserves lost even with deals', () => {

@@ -280,7 +280,14 @@ export const migrateLeadTasksToPipelines = async (pipelines, addPipelineTaskFn) 
   if (!Array.isArray(pipelines) || pipelines.length === 0) return stats
   if (typeof addPipelineTaskFn !== 'function') return stats
 
-  const pipeIds = new Set(pipelines.map((p) => p.id))
+  const pipelineIdMap = new Map()
+  for (const pipeline of pipelines) {
+    pipelineIdMap.set(pipeline.id, pipeline.id)
+    for (const legacyId of pipeline.legacyPipelineIds || []) {
+      if (legacyId) pipelineIdMap.set(legacyId, pipeline.id)
+    }
+  }
+  const pipeIds = new Set(pipelineIdMap.keys())
   const { tasks } = loadStore()
   const candidates = tasks.filter((t) => {
     if (t.pipelineId == null) return false
@@ -290,7 +297,8 @@ export const migrateLeadTasksToPipelines = async (pipelines, addPipelineTaskFn) 
 
   for (const t of candidates) {
     try {
-      await addPipelineTaskFn(t.pipelineId, {
+      const targetPipelineId = pipelineIdMap.get(t.pipelineId)
+      await addPipelineTaskFn(targetPipelineId, {
         id: t.id,
         title: t.title,
         completed: !!t.completed,
@@ -308,7 +316,7 @@ export const migrateLeadTasksToPipelines = async (pipelines, addPipelineTaskFn) 
       // parcelId validation failures: strip parcelId and retry as pipe-standalone
       if (/parcelId/i.test(msg)) {
         try {
-          await addPipelineTaskFn(t.pipelineId, {
+          await addPipelineTaskFn(targetPipelineId, {
             id: t.id,
             title: t.title,
             completed: !!t.completed,

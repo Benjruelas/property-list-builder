@@ -91,6 +91,7 @@ export function LeadsPanel({
   const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
   const [createDealOpen, setCreateDealOpen] = useState(false)
   const [createDealPrefill, setCreateDealPrefill] = useState(null)
+  const [draggedLeadId, setDraggedLeadId] = useState(null)
 
   const selectedLead = useMemo(
     () => (detailLeadId ? leads.find((l) => l.id === detailLeadId || l.parcelId === detailLeadId) : null),
@@ -194,6 +195,23 @@ export function LeadsPanel({
     }
   }, [getToken, onLeadsChange])
 
+  const moveLeadToStatus = useCallback(async (leadId, status) => {
+    const lead = leads.find((row) => row.id === leadId)
+    if (!lead || lead.status === status) return
+    const previous = lead.status
+    const updated = { ...lead, status, statusUpdatedAt: new Date().toISOString() }
+    onLeadsChange?.((rows) => rows.map((row) => row.id === leadId ? updated : row))
+    try {
+      const saved = await updateLead(getToken, leadId, { status })
+      onLeadsChange?.((rows) => rows.map((row) => row.id === leadId ? { ...row, ...saved } : row))
+    } catch (error) {
+      onLeadsChange?.((rows) => rows.map((row) =>
+        row.id === leadId ? { ...row, status: previous } : row
+      ))
+      showToast(error.message || 'Could not move lead', 'error')
+    }
+  }, [getToken, leads, onLeadsChange])
+
   const handleCreated = (lead) => {
     onRefreshLeads?.()
     onLeadsChange?.([...leads, lead])
@@ -266,7 +284,7 @@ export function LeadsPanel({
         >
           <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your leads</DialogDescription>
-            <PanelHeader onBack={handlePanelBack} title="Leads">
+            <PanelHeader onBack={handlePanelBack} title="Lead Pipe">
               <PanelCreateButton onClick={() => setCreateOpen(true)} title="Create lead" />
             </PanelHeader>
           </DialogHeader>
@@ -355,32 +373,56 @@ export function LeadsPanel({
                 <p className="text-sm opacity-60">No leads match your filters.</p>
               </div>
             ) : (
-              <div className="crm-list-rows">
-                <div className="crm-column-headers crm-lead-headers" aria-hidden>
-                  <span>Lead</span>
-                  <span>Tags</span>
-                  <span>Status</span>
-                  <span>Property</span>
-                  <span>Phone</span>
-                  <span>Email</span>
-                  <span>Activity</span>
-                </div>
-                {visibleLeads.map((lead) => (
-                  <LeadRow
-                    key={lead.id}
-                    lead={lead}
-                    dealCount={dealCountByLead.get(lead.id) || 0}
-                    tagRegistry={tagRegistry}
-                    leadStatuses={leadStatuses}
-                    currentUser={currentUser}
-                    currentUserId={currentUserId}
-                    onClick={(l) => {
-                    document.activeElement?.blur?.()
-                    onOpenLeadDetail?.(l.id)
-                  }}
-                  />
-                ))}
-                {leadsSentinel}
+              <div className="deal-pipeline-columns-row flex flex-col md:flex-row md:flex-nowrap gap-2 min-w-0 md:min-w-full md:min-h-full overflow-x-auto">
+                {leadStatuses.map((status) => {
+                  const statusLeads = filteredLeads.filter((lead) =>
+                    getLeadStatus(lead, dealCountByLead.get(lead.id) || 0, leadStatuses) === status.id
+                  )
+                  return (
+                    <section
+                      key={status.id}
+                      className="deal-pipeline-column flex-none w-full md:min-w-[12rem] md:flex-1 md:basis-0 rounded-lg border border-white/15 bg-white/[0.12] flex flex-col min-h-[100px] md:min-h-[240px]"
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        const leadId = event.dataTransfer.getData('text/plain') || draggedLeadId
+                        if (leadId) void moveLeadToStatus(leadId, status.id)
+                        setDraggedLeadId(null)
+                      }}
+                    >
+                      <header className="px-3 py-2 border-b border-white/15 flex items-center gap-2">
+                        <span className="font-semibold text-sm flex-1 truncate">{status.label}</span>
+                        <span className="text-xs opacity-50">{statusLeads.length}</span>
+                      </header>
+                      <div className="deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px]">
+                        {statusLeads.map((lead) => (
+                          <button
+                            key={lead.id}
+                            type="button"
+                            draggable
+                            onDragStart={(event) => {
+                              setDraggedLeadId(lead.id)
+                              event.dataTransfer.effectAllowed = 'move'
+                              event.dataTransfer.setData('text/plain', lead.id)
+                            }}
+                            onDragEnd={() => setDraggedLeadId(null)}
+                            onClick={() => onOpenLeadDetail?.(lead.id)}
+                            className={cn(
+                              'w-full rounded-lg border border-white/10 bg-white/[0.06] p-2.5 text-left hover:bg-white/10 transition-colors',
+                              draggedLeadId === lead.id && 'opacity-50',
+                            )}
+                          >
+                            <div className="font-medium text-sm truncate">{displayLeadName(lead)}</div>
+                            <div className="text-xs opacity-55 truncate mt-0.5">{formatLeadAddress(lead) || 'No address'}</div>
+                            <div className="text-[10px] opacity-45 mt-1">
+                              {(getLeadPhones(lead).length || 0) + (getLeadEmails(lead).length || 0)} contact method(s)
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })}
               </div>
             )}
           </div>

@@ -3,12 +3,13 @@
  */
 
 import { mutatePipelines } from './pipelineStoreFull.js'
+import { DEFAULT_DEAL_STATUSES } from './dealStatuses.js'
 
-const DEFAULT_COLUMNS = ['Open', 'Pending', 'Closed']
+const DEFAULT_COLUMNS = DEFAULT_DEAL_STATUSES.map((status) => status.label)
 
 function normalizeColumns(cols) {
   if (!Array.isArray(cols) || cols.length === 0) {
-    return DEFAULT_COLUMNS.map((name, i) => ({ id: `col-${i}`, name }))
+    return DEFAULT_DEAL_STATUSES.map(({ id, label }) => ({ id, name: label }))
   }
   return cols.map((c, i) => ({
     id: (c && c.id) || `col-${i}`,
@@ -22,7 +23,7 @@ export async function createTeamPipeline(_kv, team, ownerUser) {
     const now = new Date().toISOString()
     const pipeline = {
       id: `pipe_team_${team.id.replace(/^team_/, '')}`,
-      title: `${team.name} Pipe`,
+      title: 'Deals',
       columns: normalizeColumns(),
       deals: [],
       tasks: [],
@@ -30,6 +31,7 @@ export async function createTeamPipeline(_kv, team, ownerUser) {
       ownerEmail: ownerUser.email,
       teamId: team.id,
       isTeamPipe: true,
+      canonicalType: 'deals',
       visibility: 'team',
       sharedWith: [],
       teamShares: [team.id],
