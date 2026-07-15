@@ -4326,17 +4326,22 @@
         "ui": "Action bar / menu"
       },
       {
-        "action": "Inspect header controls",
+        "action": "Verify stage header colors match Deal statuses",
         "verify": "Target screen, panel, or dialog opens and is interactive.",
         "ui": "Deals / Pipes"
       },
       {
+        "action": "Collapse and expand a stage",
+        "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
+        "ui": "Deals / Pipes"
+      },
+      {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls",
+        "verify": "Exactly one deal pipe; configured colors appear and each stage collapses without changing its deals",
         "ui": "Deals / Pipes"
       }
     ],
-    "expected": "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls"
+    "expected": "Exactly one deal pipe; configured colors appear and each stage collapses without changing its deals"
   },
   {
     "id": "DPL-020",
@@ -4356,17 +4361,27 @@
         "ui": "Action bar / menu"
       },
       {
+        "action": "Verify stage header colors match Lead statuses",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Leads CRM"
+      },
+      {
+        "action": "Collapse and expand a stage",
+        "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
+        "ui": "Leads CRM"
+      },
+      {
         "action": "Drag lead to another column",
         "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
         "ui": "Leads CRM"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Lead state persists after refresh",
+        "verify": "Configured colors appear, each stage collapses, and lead state persists after refresh",
         "ui": "Leads CRM"
       }
     ],
-    "expected": "Lead state persists after refresh"
+    "expected": "Configured colors appear, each stage collapses, and lead state persists after refresh"
   },
   {
     "id": "DPL-021",

@@ -1208,19 +1208,22 @@ export const TEST_CASES = [
     "Migrated account. Test on both mobile and desktop if time allows.",
     [
       step("Open Pipes → Deals", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
-      step("Inspect header controls", "Target screen, panel, or dialog opens and is interactive.", "Deals / Pipes"),
-      step("Confirm final expected outcome for this test case.", "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls", "Deals / Pipes"),
+      step("Verify stage header colors match Deal statuses", "Target screen, panel, or dialog opens and is interactive.", "Deals / Pipes"),
+      step("Collapse and expand a stage", "Input/selection is reflected in the UI; no validation error blocks progress.", "Deals / Pipes"),
+      step("Confirm final expected outcome for this test case.", "Exactly one deal pipe; configured colors appear and each stage collapses without changing its deals", "Deals / Pipes"),
     ],
-    "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls"),
+    "Exactly one deal pipe; configured colors appear and each stage collapses without changing its deals"),
 
   tc("DPL-020", "06", "Lead pipe uses lead states", ["solo","team-admin","team-member"], "both",
     "Account with leads. Test on both mobile and desktop if time allows.",
     [
       step("Open Pipes → Leads", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
+      step("Verify stage header colors match Lead statuses", "Target screen, panel, or dialog opens and is interactive.", "Leads CRM"),
+      step("Collapse and expand a stage", "Input/selection is reflected in the UI; no validation error blocks progress.", "Leads CRM"),
       step("Drag lead to another column", "Input/selection is reflected in the UI; no validation error blocks progress.", "Leads CRM"),
-      step("Confirm final expected outcome for this test case.", "Lead state persists after refresh", "Leads CRM"),
+      step("Confirm final expected outcome for this test case.", "Configured colors appear, each stage collapses, and lead state persists after refresh", "Leads CRM"),
     ],
-    "Lead state persists after refresh"),
+    "Configured colors appear, each stage collapses, and lead state persists after refresh"),
 
   tc("DPL-021", "06", "Rename deal state in Settings", ["solo","team-admin"], "both",
     "Settings → Team → Deal statuses. Test on both mobile and desktop if time allows.",
