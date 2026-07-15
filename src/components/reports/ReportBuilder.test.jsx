@@ -77,7 +77,7 @@ describe('ReportBuilder new report lead selection', () => {
       />,
     )
 
-    expect(screen.getByText('New report')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'New report' })).toBeTruthy()
     expect(screen.getByLabelText('Search leads')).toBeTruthy()
     expect(document.querySelector('.report-editor-panel.square-picker-panel')).toBeNull()
 
