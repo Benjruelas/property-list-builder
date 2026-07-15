@@ -1122,7 +1122,7 @@ export function DealPipeline({
           {/* Tasks - collapsible; mobile: pinned bottom, expands upward; desktop: right sidebar */}
           <div
             className={cn(
-              'w-full flex flex-col border-t md:border-t-0 md:border-l border-white/20 transition-[width] duration-200 deal-pipeline-tasks',
+              'hidden w-full flex-col border-t md:border-t-0 md:border-l border-white/20 transition-[width] duration-200 deal-pipeline-tasks',
               'max-lg:mt-auto max-lg:flex-shrink-0 max-lg:flex-col-reverse',
               tasksCollapsed ? 'md:w-16' : 'md:w-80 md:self-start h-auto',
             )}

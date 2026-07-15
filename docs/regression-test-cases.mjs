@@ -1209,12 +1209,13 @@ export const TEST_CASES = [
     [
       step("Open Pipes → Deals", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
       step("Compare panel header and tabs with Reports", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
+      step("Verify no Tasks section is present", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
       step("Verify full stage containers match Deal status colors", "Target screen, panel, or dialog opens and is interactive.", "Deals / Pipes"),
       step("Confirm individual deal cards are visually distinct", "Action completes without crash; UI updates or feedback appears before continuing.", "Deals / Pipes"),
       step("Collapse and expand a stage", "Input/selection is reflected in the UI; no validation error blocks progress.", "Deals / Pipes"),
-      step("Confirm final expected outcome for this test case.", "Pipes uses the standard panel shell; configured colors cover each stage; individual cards remain distinct; stages collapse without changing deals", "Deals / Pipes"),
+      step("Confirm final expected outcome for this test case.", "Pipes uses the standard panel shell without a Tasks section; configured colors cover each stage; individual cards remain distinct; stages collapse without changing deals", "Deals / Pipes"),
     ],
-    "Pipes uses the standard panel shell; configured colors cover each stage; individual cards remain distinct; stages collapse without changing deals"),
+    "Pipes uses the standard panel shell without a Tasks section; configured colors cover each stage; individual cards remain distinct; stages collapse without changing deals"),
 
   tc("DPL-020", "06", "Lead pipe uses lead states", ["solo","team-admin","team-member"], "both",
     "Account with leads. Test on both mobile and desktop if time allows.",
