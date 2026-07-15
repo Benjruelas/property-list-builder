@@ -63,10 +63,10 @@ const BAR_PREFETCH_KEY = {
  */
 
 const ITEM_DEFS = {
-  pipes: { label: 'Deal Pipe', Icon: PipeIcon },
+  pipes: { label: 'Pipes', Icon: PipeIcon },
   tasks: { label: 'Tasks', Icon: ListTodo },
   schedule: { label: 'Schedule', Icon: Calendar },
-  leads: { label: 'Lead Pipe', Icon: UserSearch },
+  leads: { label: 'Leads', Icon: UserSearch },
   deals: { label: 'Deals', Icon: Briefcase },
   quotes: { label: 'Quotes', Icon: QuoteIcon },
   forms: { label: 'Forms', Icon: ClipboardList },

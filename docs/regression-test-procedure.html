@@ -4261,8 +4261,13 @@
     "preconditions": "Migrated account. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Action bar → Deal Pipe",
-        "verify": "Settings-derived columns and deal cards visible",
+        "action": "Action bar → Pipes",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Action bar / menu"
+      },
+      {
+        "action": "Select Deals tab",
+        "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
         "ui": "Action bar / menu"
       },
       {
@@ -4286,8 +4291,13 @@
     "preconditions": "Account with leads. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Action bar → Lead Pipe",
-        "verify": "Settings-derived columns and lead cards visible",
+        "action": "Action bar → Pipes",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Action bar / menu"
+      },
+      {
+        "action": "Select Leads tab",
+        "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
         "ui": "Action bar / menu"
       },
       {
@@ -4311,9 +4321,9 @@
     "preconditions": "Migrated account. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Open Deal Pipe",
+        "action": "Open Pipes → Deals",
         "verify": "Target screen, panel, or dialog opens and is interactive.",
-        "ui": "Deals / Pipes"
+        "ui": "Action bar / menu"
       },
       {
         "action": "Inspect header controls",
@@ -4322,11 +4332,11 @@
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Exactly one pipe; no create, switch, share, delete, or column-edit controls",
+        "verify": "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls",
         "ui": "Deals / Pipes"
       }
     ],
-    "expected": "Exactly one pipe; no create, switch, share, delete, or column-edit controls"
+    "expected": "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls"
   },
   {
     "id": "DPL-020",
@@ -4341,9 +4351,9 @@
     "preconditions": "Account with leads. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Open Lead Pipe",
+        "action": "Open Pipes → Leads",
         "verify": "Target screen, panel, or dialog opens and is interactive.",
-        "ui": "Leads CRM"
+        "ui": "Action bar / menu"
       },
       {
         "action": "Drag lead to another column",

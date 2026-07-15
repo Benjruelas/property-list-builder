@@ -24,7 +24,7 @@ import { DealDetails } from './DealDetails'
 import { LeadDetails } from './LeadDetails'
 import { canCollaborateOnPipeline, pipelinesUserCanWorkIn } from '@/utils/pipelines'
 import { CreatePipelineDialog } from './CreatePipelineDialog'
-import { displayLeadName, updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch, mergeLeadDetail, mergeLeadDetailFromPhotoApi, upsertLeadInLocalStore } from '@/utils/leads'
+import { displayLeadName, formatLeadAddress, updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch, mergeLeadDetail, mergeLeadDetailFromPhotoApi, upsertLeadInLocalStore } from '@/utils/leads'
 import { LeadSharingIcon, TeamSharedIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
 import { PipelineDealCard } from './DealRow'
@@ -151,9 +151,11 @@ export function DealPipeline({
   const [showAddColumn, setShowAddColumn] = useState(false)
   const [newColumnName, setNewColumnName] = useState('')
   const [draggedDealId, setDraggedDealId] = useState(null)
+  const [draggedLeadId, setDraggedLeadId] = useState(null)
   const [dragOverColId, setDragOverColId] = useState(null)
+  const [pipeView, setPipeView] = useState('deals')
   const [isEditMode, setIsEditMode] = useState(false)
-  const [pipelineTitle, setPipelineTitle] = useState('Deals')
+  const [pipelineTitle, setPipelineTitle] = useState('Pipes')
   const leadOverlayId = pipesLeadOverlayId
   const activeDealId = promotedDealId ?? focusDealId
   const selectedDeal = useMemo(() => {
@@ -396,7 +398,7 @@ export function DealPipeline({
             ? dealStatuses.map((status) => ({ id: status.id, name: status.label }))
             : (activePipeline.columns || [])
         )
-        setPipelineTitle('Deals')
+        setPipelineTitle('Pipes')
       } else {
         setColumns(loadColumns())
         setPipelineTitle(loadTitle())
@@ -585,6 +587,36 @@ export function DealPipeline({
   }
 
   const getDealsForColumn = (colId) => displayDeals.filter(d => d.status === colId)
+
+  const leadStatusIds = useMemo(
+    () => new Set((leadStatuses || []).map((status) => status.id)),
+    [leadStatuses],
+  )
+  const leadStatusFor = useCallback((lead) => {
+    const raw = lead?.status || leadStatuses[0]?.id || 'new'
+    return leadStatusIds.has(raw) ? raw : (leadStatuses[0]?.id || 'new')
+  }, [leadStatusIds, leadStatuses])
+  const getLeadsForColumn = useCallback(
+    (statusId) => (leads || []).filter((lead) => leadStatusFor(lead) === statusId),
+    [leads, leadStatusFor],
+  )
+
+  const handleMoveLead = useCallback(async (leadId, status) => {
+    const lead = (leads || []).find((row) => row.id === leadId)
+    if (!lead || leadStatusFor(lead) === status) return
+    const previousStatus = lead.status
+    const optimistic = { ...lead, status, statusUpdatedAt: new Date().toISOString() }
+    onLeadsChange?.((rows) => rows.map((row) => row.id === leadId ? optimistic : row))
+    try {
+      const saved = await updateLead(getToken, leadId, { status })
+      onLeadsChange?.((rows) => rows.map((row) => row.id === leadId ? { ...row, ...saved } : row))
+    } catch (error) {
+      onLeadsChange?.((rows) => rows.map((row) =>
+        row.id === leadId ? { ...row, status: previousStatus } : row
+      ))
+      showToast(error.message || 'Could not move lead', 'error')
+    }
+  }, [getToken, leadStatusFor, leads, onLeadsChange])
 
   const openDealFromTask = (task) => {
     if (task.dealId) {
@@ -889,7 +921,7 @@ export function DealPipeline({
         }}
       >
         <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-3')} style={PANEL_LIST_HEADER_STYLE}>
-          <DialogDescription className="sr-only">Manage deals in your pipe</DialogDescription>
+          <DialogDescription className="sr-only">Manage leads and deals in Pipes</DialogDescription>
           <div className="map-panel-header-toolbar">
             <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
               <PanelBackButton
@@ -904,6 +936,28 @@ export function DealPipeline({
             </div>
             <div className="map-panel-header-actions" />
           </div>
+          <div className="mt-3 inline-flex self-start rounded-lg border border-white/15 bg-white/[0.04] p-1" role="tablist" aria-label="Pipe type">
+            {[
+              { id: 'leads', label: 'Leads' },
+              { id: 'deals', label: 'Deals' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={pipeView === tab.id}
+                onClick={() => setPipeView(tab.id)}
+                className={cn(
+                  'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+                  pipeView === tab.id
+                    ? 'bg-white/15 text-white'
+                    : 'text-white/60 hover:bg-white/[0.08] hover:text-white/90',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </DialogHeader>
         <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden deal-pipeline-content">
           <div
@@ -911,44 +965,105 @@ export function DealPipeline({
             className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-6 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns"
           >
           <div className="deal-pipeline-columns-row flex flex-col md:flex-row md:flex-nowrap gap-2 h-full min-w-0 md:min-w-full md:min-h-full">
-            {columns.map((col) => (
-              <div
-                key={col.id}
-                className="deal-pipeline-column flex-none w-full md:min-w-[9.25rem] md:flex-1 md:basis-0 rounded-lg border border-white/15 bg-white/[0.12] flex flex-col min-h-[100px] md:min-h-[200px]"
-              >
-                <div className="px-2 py-2 border-b border-white/15 flex items-center gap-1 flex-shrink-0">
-                  <span className="font-semibold text-sm flex-1 truncate">{col.name}</span>
-                </div>
+            {pipeView === 'deals'
+              ? columns.map((col) => (
                 <div
-                  className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
-                  onDragOver={canCollaboratePipeline ? (e) => handleDragOver(e, col.id) : undefined}
-                  onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
-                  onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
+                  key={col.id}
+                  className="deal-pipeline-column flex-none w-full md:min-w-[9.25rem] md:flex-1 md:basis-0 rounded-lg border border-white/15 bg-white/[0.12] flex flex-col min-h-[100px] md:min-h-[200px]"
                 >
-                  <WindowedItems items={getDealsForColumn(col.id)} batch={40}>
-                    {(deal) => (
-                      <PipelineDealCard
-                        key={deal.id}
-                        deal={deal}
-                        leads={leads}
-                        tagRegistry={tagRegistry}
-                        canSeeDealAmounts={canSeeDealAmounts}
-                        isDragging={draggedDealId === deal.id}
-                        isEditMode={isEditMode}
-                        canCollaborate={canCollaboratePipeline}
-                        canMoveNext={columns.findIndex((c) => c.id === deal.status) < columns.length - 1}
-                        draggable={canCollaboratePipeline}
-                        onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, deal.id) : undefined}
-                        onDragEnd={canCollaboratePipeline ? handleDragEnd : undefined}
-                        onClick={() => handleDealClick(deal)}
-                        onMoveNext={() => handleMoveToNext(deal.id)}
-                        onDelete={() => handleDeleteDeal(deal.id)}
-                      />
-                    )}
-                  </WindowedItems>
+                  <div className="px-2 py-2 border-b border-white/15 flex items-center gap-1 flex-shrink-0">
+                    <span className="font-semibold text-sm flex-1 truncate">{col.name}</span>
+                    <span className="text-xs text-white/45">{getDealsForColumn(col.id).length}</span>
+                  </div>
+                  <div
+                    className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
+                    onDragOver={canCollaboratePipeline ? (e) => handleDragOver(e, col.id) : undefined}
+                    onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
+                    onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
+                  >
+                    <WindowedItems items={getDealsForColumn(col.id)} batch={40}>
+                      {(deal) => (
+                        <PipelineDealCard
+                          key={deal.id}
+                          deal={deal}
+                          leads={leads}
+                          tagRegistry={tagRegistry}
+                          canSeeDealAmounts={canSeeDealAmounts}
+                          isDragging={draggedDealId === deal.id}
+                          isEditMode={isEditMode}
+                          canCollaborate={canCollaboratePipeline}
+                          canMoveNext={columns.findIndex((c) => c.id === deal.status) < columns.length - 1}
+                          draggable={canCollaboratePipeline}
+                          onDragStart={canCollaboratePipeline ? (e) => handleDragStart(e, deal.id) : undefined}
+                          onDragEnd={canCollaboratePipeline ? handleDragEnd : undefined}
+                          onClick={() => handleDealClick(deal)}
+                          onMoveNext={() => handleMoveToNext(deal.id)}
+                          onDelete={() => handleDeleteDeal(deal.id)}
+                        />
+                      )}
+                    </WindowedItems>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+              : leadStatuses.map((status) => {
+                const statusLeads = getLeadsForColumn(status.id)
+                return (
+                  <div
+                    key={status.id}
+                    className="deal-pipeline-column flex-none w-full md:min-w-[9.25rem] md:flex-1 md:basis-0 rounded-lg border border-white/15 bg-white/[0.12] flex flex-col min-h-[100px] md:min-h-[200px]"
+                  >
+                    <div className="px-2 py-2 border-b border-white/15 flex items-center gap-1 flex-shrink-0">
+                      <span className="font-semibold text-sm flex-1 truncate">{status.label}</span>
+                      <span className="text-xs text-white/45">{statusLeads.length}</span>
+                    </div>
+                    <div
+                      className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === status.id ? 'bg-blue-500/10' : ''}`}
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = 'move'
+                        setDragOverColId(status.id)
+                      }}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        const leadId = event.dataTransfer.getData('text/plain') || draggedLeadId
+                        if (leadId) void handleMoveLead(leadId, status.id)
+                        setDraggedLeadId(null)
+                        setDragOverColId(null)
+                      }}
+                    >
+                      <WindowedItems items={statusLeads} batch={40}>
+                        {(lead) => (
+                          <button
+                            key={lead.id}
+                            type="button"
+                            draggable
+                            onDragStart={(event) => {
+                              setDraggedLeadId(lead.id)
+                              event.dataTransfer.effectAllowed = 'move'
+                              event.dataTransfer.setData('text/plain', lead.id)
+                            }}
+                            onDragEnd={() => {
+                              setDraggedLeadId(null)
+                              setDragOverColId(null)
+                            }}
+                            onClick={() => onOpenLeadOverlay?.(lead.id)}
+                            className={cn(
+                              'w-full rounded-lg border border-white/10 bg-white/[0.07] p-2.5 text-left transition-colors hover:bg-white/[0.12]',
+                              draggedLeadId === lead.id && 'opacity-50',
+                            )}
+                          >
+                            <div className="truncate text-sm font-semibold">{displayLeadName(lead)}</div>
+                            <div className="mt-0.5 truncate text-xs text-white/50">
+                              {formatLeadAddress(lead) || 'No address'}
+                            </div>
+                          </button>
+                        )}
+                      </WindowedItems>
+                    </div>
+                  </div>
+                )
+              })}
           </div>
           </div>
 

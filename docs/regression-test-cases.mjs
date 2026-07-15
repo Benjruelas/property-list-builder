@@ -1189,7 +1189,8 @@ export const TEST_CASES = [
   tc("DPL-017", "06", "Open Deal pipe", ["solo","team-admin","team-member"], "both",
     "Migrated account. Test on both mobile and desktop if time allows.",
     [
-      step("Action bar → Deal Pipe", "Settings-derived columns and deal cards visible", "Action bar / menu"),
+      step("Action bar → Pipes", "Step completes; ready for next action.", "Action bar / menu"),
+      step("Select Deals tab", "Input/selection is reflected in the UI; no validation error blocks progress.", "Action bar / menu"),
       step("Confirm final expected outcome for this test case.", "Settings-derived columns and deal cards visible", "Action bar / menu"),
     ],
     "Settings-derived columns and deal cards visible"),
@@ -1197,7 +1198,8 @@ export const TEST_CASES = [
   tc("DPL-018", "06", "Open Lead pipe", ["solo","team-admin","team-member"], "both",
     "Account with leads. Test on both mobile and desktop if time allows.",
     [
-      step("Action bar → Lead Pipe", "Settings-derived columns and lead cards visible", "Action bar / menu"),
+      step("Action bar → Pipes", "Step completes; ready for next action.", "Action bar / menu"),
+      step("Select Leads tab", "Input/selection is reflected in the UI; no validation error blocks progress.", "Action bar / menu"),
       step("Confirm final expected outcome for this test case.", "Settings-derived columns and lead cards visible", "Action bar / menu"),
     ],
     "Settings-derived columns and lead cards visible"),
@@ -1205,16 +1207,16 @@ export const TEST_CASES = [
   tc("DPL-019", "06", "Canonical Deal pipe", ["solo","team-admin","team-member"], "both",
     "Migrated account. Test on both mobile and desktop if time allows.",
     [
-      step("Open Deal Pipe", "Target screen, panel, or dialog opens and is interactive.", "Deals / Pipes"),
+      step("Open Pipes → Deals", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
       step("Inspect header controls", "Target screen, panel, or dialog opens and is interactive.", "Deals / Pipes"),
-      step("Confirm final expected outcome for this test case.", "Exactly one pipe; no create, switch, share, delete, or column-edit controls", "Deals / Pipes"),
+      step("Confirm final expected outcome for this test case.", "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls", "Deals / Pipes"),
     ],
-    "Exactly one pipe; no create, switch, share, delete, or column-edit controls"),
+    "Exactly one deal pipe; no create, switch, share, delete, or column-edit controls"),
 
   tc("DPL-020", "06", "Lead pipe uses lead states", ["solo","team-admin","team-member"], "both",
     "Account with leads. Test on both mobile and desktop if time allows.",
     [
-      step("Open Lead Pipe", "Target screen, panel, or dialog opens and is interactive.", "Leads CRM"),
+      step("Open Pipes → Leads", "Target screen, panel, or dialog opens and is interactive.", "Action bar / menu"),
       step("Drag lead to another column", "Input/selection is reflected in the UI; no validation error blocks progress.", "Leads CRM"),
       step("Confirm final expected outcome for this test case.", "Lead state persists after refresh", "Leads CRM"),
     ],

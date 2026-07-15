@@ -12,7 +12,7 @@ describe('actionBarLayout', () => {
   it('shows full desktop bar at 768px+ with no menu', () => {
     const { barIds, overflowPrimaryIds, isDesktop } = resolveActionBarLayout(1600)
     expect(barIds).toEqual([
-      'pipes', 'tasks', 'schedule', 'leads', 'quotes', 'forms', 'reports', 'lists', 'activity',
+      'pipes', 'tasks', 'schedule', 'leads', 'deals', 'quotes', 'forms', 'reports', 'lists', 'activity',
       'photoMode', 'paths', 'outreach', 'settings',
     ])
     expect(overflowPrimaryIds).toEqual([])

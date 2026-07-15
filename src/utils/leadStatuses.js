@@ -115,10 +115,12 @@ export function getLeadStatusIdSet(registry = DEFAULT_LEAD_STATUSES) {
   return new Set((registry?.length ? registry : DEFAULT_LEAD_STATUSES).map((s) => s.id))
 }
 
-/** Effective status. Deal creation explicitly writes `converted`; the board never derives state. */
+/** Effective status — derives converted when lead has deals unless explicitly lost. */
 export function getLeadStatus(lead, dealCount = 0, registry = DEFAULT_LEAD_STATUSES) {
   const ids = getLeadStatusIdSet(registry)
   if (!lead) return 'new'
+  if (lead.status === 'lost' && ids.has('lost')) return 'lost'
+  if (dealCount > 0 && ids.has('converted')) return 'converted'
   const raw = lead.status || 'new'
   return ids.has(raw) ? raw : (registry[0]?.id || 'new')
 }
