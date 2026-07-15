@@ -217,6 +217,7 @@ export function selectPanelProps(state) {
     reportsEditorFrame: reportsEditor ?? null,
     reportsEditorReturnToLead: !!reportsEditor?.returnToLead,
     reportsDetailReportId: reportsDetail?.reportId ?? null,
+    reportsDetailReport: reportsDetail?.report ?? null,
     reportsDetailReturnToLead: !!reportsDetail?.returnToLead,
     isTeamsPanelOpen: hasFrameRoot(state, 'teams'),
     teamsDetailTeamId: teamsDetail?.teamId ?? null,

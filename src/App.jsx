@@ -269,6 +269,7 @@ function App() {
     reportsEditorFrame,
     reportsEditorReturnToLead,
     reportsDetailReportId,
+    reportsDetailReport,
     reportsDetailReturnToLead,
     teamsDetailTeamId,
     isSettingsPanelOpen,
@@ -3156,10 +3157,17 @@ function App() {
     })
   }, [guardFeature, nav])
 
-  const handleOpenPhotoReport = useCallback((reportId) => {
+  const handleOpenPhotoReport = useCallback((reportIdOrReport, maybeReport) => {
+    const report =
+      reportIdOrReport && typeof reportIdOrReport === 'object'
+        ? reportIdOrReport
+        : maybeReport && typeof maybeReport === 'object'
+          ? maybeReport
+          : null
+    const reportId = report?.id || (typeof reportIdOrReport === 'string' ? reportIdOrReport : null)
     if (!reportId) return
     guardFeature('reports', () => {
-      nav.openReportFromLead(reportId)
+      nav.openReportFromLead(reportId, report)
     })
   }, [guardFeature, nav])
 
@@ -4308,9 +4316,10 @@ function App() {
             leads={leads}
             editorFrame={reportsEditorFrame}
             detailReportId={reportsDetailReportId}
+            detailReport={reportsDetailReport}
             onOpenEditor={(frame) => nav.pushReportsEditor(frame)}
             onPatchEditor={(patch) => nav.patchReportsEditor(patch)}
-            onOpenDetail={(reportId) => nav.pushReportsDetail(reportId)}
+            onOpenDetail={(reportId, report) => nav.pushReportsDetail(reportId, report)}
             onCloseEditor={handleCloseReportsEditor}
             onCloseDetail={handleCloseReportsDetail}
             teams={teams}

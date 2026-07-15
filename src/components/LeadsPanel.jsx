@@ -226,10 +226,12 @@ export function LeadsPanel({
 
   const showingLeadDetail = !!(detailLeadId && selectedLead)
   const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
-  const retainListUnderDetail = showingLeadDetail && !reportsDetailOverLead
+  // Keep lead list/detail as an opaque underlay while a report child opens so the map
+  // never flashes through (report detail may still be loading).
+  const retainListUnderDetail = showingLeadDetail
   const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(
-    isOpen && !reportsDetailOverLead,
-    retainListUnderDetail,
+    isOpen,
+    retainListUnderDetail || reportsDetailOverLead,
   )
   const stickyDetailLeadRef = useRef(null)
   if (selectedLead) stickyDetailLeadRef.current = selectedLead

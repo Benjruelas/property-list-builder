@@ -165,6 +165,7 @@ function reportsReturnToLead(stack) {
  */
 export function recipePushReportsDetail(currentStack, reportId, opts = {}) {
   const returnToLead = reportsReturnToLead(currentStack)
+  const report = opts.report || null
   const base = stackHasReportsSurface(currentStack)
     ? currentStack
     : returnToLead
@@ -182,7 +183,12 @@ export function recipePushReportsDetail(currentStack, reportId, opts = {}) {
   return appendTrailingTasks(
     [
       ...withList,
-      { type: 'reports.detail', reportId, ...(returnToLead ? { returnToLead: true } : {}) },
+      {
+        type: 'reports.detail',
+        reportId,
+        ...(report ? { report } : {}),
+        ...(returnToLead ? { returnToLead: true } : {}),
+      },
     ],
     tasksFrames,
   )
@@ -221,6 +227,7 @@ export function recipePushReportsEditor(currentStack, editorFrame, opts = {}) {
  * Keeps lead detail (and optional leads list) in the stack for back navigation.
  */
 export function recipeOpenReportFromLeadDetail(currentStack, reportId, opts = {}) {
+  const report = opts.report || null
   const stripReportFrames = (f) =>
     f.type !== 'reports.detail' &&
     f.type !== 'reports.editor' &&
@@ -229,7 +236,13 @@ export function recipeOpenReportFromLeadDetail(currentStack, reportId, opts = {}
 
   const build = (stack) => [
     ...stack.filter(stripReportFrames).filter(stripTransientList),
-    { type: 'reports.detail', reportId, returnToLead: true, dockBesideTasks: true },
+    {
+      type: 'reports.detail',
+      reportId,
+      ...(report ? { report } : {}),
+      returnToLead: true,
+      dockBesideTasks: true,
+    },
   ]
 
   if (opts.keepTasks && stackHasTasks(currentStack)) {
