@@ -242,9 +242,7 @@ export function ReportsPanel({
   )
 
   const openNewReport = () => {
-    setPendingPreferredTemplate(null)
-    setPendingReportLeadId(null)
-    setLeadPickerOpen(true)
+    onOpenEditor?.({ mode: 'report' })
   }
 
   const resetReportCreateFlow = () => {
@@ -615,7 +613,7 @@ export function ReportsPanel({
         onClose={resetReportCreateFlow}
         leads={leads}
         title="Select lead for report"
-        panelClassName="square-picker-panel"
+        panelClassName="compact-picker-panel"
         nestedOverlay
         onSelectLead={(lead) => {
           setLeadPickerOpen(false)

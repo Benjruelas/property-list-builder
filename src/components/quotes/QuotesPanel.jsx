@@ -199,7 +199,7 @@ export function QuotesPanel({
   })
 
   const openNewQuote = () => {
-    setTemplatePickerOpen(true)
+    onOpenEditor?.({ mode: 'quote' })
   }
 
   const handleTemplatePicked = (template) => {
@@ -552,6 +552,7 @@ export function QuotesPanel({
         onOpenChange={setTemplatePickerOpen}
         templates={templates}
         onSelect={handleTemplatePicked}
+        nestedOverlay
       />
 
       <SendQuoteDialog

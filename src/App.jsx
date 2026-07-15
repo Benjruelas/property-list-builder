@@ -1739,7 +1739,7 @@ function App() {
         showToast('Create or open a pipeline first', 'warning')
         return
       }
-      nav.pushModal({ type: 'dealTemplatePicker', prefill })
+      nav.pushModal({ type: 'createDeal', prefill })
     })
   }, [currentUser, pipelines, teams, nav, guardFeature])
 
@@ -1769,19 +1769,8 @@ function App() {
   }, [requireAuth, guardFeature, nav])
 
   const openQuickCreateDeal = useCallback(() => {
-    if (!currentUser?.uid) {
-      nav.openLogin()
-      return
-    }
-    guardFeature('deals', () => {
-      const eligible = pipelines.filter((pipeline) => canAddDealsToPipeline(currentUser, pipeline, teams))
-      if (pipelines.length > 0 && eligible.length === 0) {
-        showToast('Create or open a pipeline first', 'warning')
-        return
-      }
-      nav.pushModal({ type: 'createDeal', prefill: null })
-    })
-  }, [currentUser, guardFeature, nav, pipelines, teams])
+    openCreateDealDialog()
+  }, [openCreateDealDialog])
 
   const openQuickCreateQuote = useCallback(() => {
     if (!requireAuth()) return
@@ -4617,7 +4606,7 @@ function App() {
         teams={teams}
         teamMembership={teamMembership}
         currentUser={currentUser}
-        nestedOverlay={!!editLead || createLeadOpen}
+        nestedOverlay
         topLayer={createLeadOpen || !!editLead}
         confirmLayer={!!editLead}
       />
@@ -4677,7 +4666,7 @@ function App() {
         teams={teams}
         saving={createDealSaving}
         onSubmit={handleCreateDealSubmit}
-        nestedOverlay={dealTemplateNestedOverlay || dealTemplatePickerOpen}
+        nestedOverlay
         canSeeDealAmounts={showDealAmounts}
       />
 

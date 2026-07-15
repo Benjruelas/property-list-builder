@@ -2263,12 +2263,22 @@
         "ui": "Lists panel"
       },
       {
+        "action": "From Tasks/Leads/Deals/Quotes/Reports headers",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Action bar / menu"
+      },
+      {
+        "action": "Tap + and confirm the create panel is visible above any scrim",
+        "verify": "Every FAB and list + action opens its canonical new-item panel immediately above a correctly layered scrim; no parent-list detour, template/lead picker detour, or scrim covering the panel",
+        "ui": "Dialog / feedback"
+      },
+      {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Every action opens its canonical new-item panel immediately; no parent-list detour or prerequisite picker overlay; Back restores the prior surface",
-        "ui": "Lists panel"
+        "verify": "Every FAB and list + action opens its canonical new-item panel immediately above a correctly layered scrim; no parent-list detour, template/lead picker detour, or scrim covering the panel",
+        "ui": "Dialog / feedback"
       }
     ],
-    "expected": "Every action opens its canonical new-item panel immediately; no parent-list detour or prerequisite picker overlay; Back restores the prior surface"
+    "expected": "Every FAB and list + action opens its canonical new-item panel immediately above a correctly layered scrim; no parent-list detour, template/lead picker detour, or scrim covering the panel"
   },
   {
     "id": "LST-001",

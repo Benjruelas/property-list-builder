@@ -1622,7 +1622,12 @@
 .map-panel-dialog:focus-visible {
   outline: none !important;
 }
-.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel)[data-state='open'] {
+/*
+ * List/root panels stay at the base dialog layer. Create/edit overlays and
+ * pickers are excluded so topLayer/nestedOverlay z-index (10020/10021) can
+ * keep their panels above their own scrims.
+ */
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel)[data-state='open'] {
   animation: map-panel-center-in 160ms ease-out forwards;
   z-index: 10002 !important;
 }
@@ -1650,7 +1655,7 @@
     }
   }
 }
-.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel)[data-state='closed'] {
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel)[data-state='closed'] {
   animation: map-panel-center-out 160ms ease-in forwards;
   z-index: 10001 !important;
 }
@@ -1714,12 +1719,12 @@
   }
 
   @starting-style {
-    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel) {
+    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel) {
       opacity: 0;
     }
   }
 
-  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not([data-tasks-panel-close-settled="1"]) {
+  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not([data-tasks-panel-close-settled="1"]) {
     opacity: 0;
     transition-duration: 220ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -1728,7 +1733,7 @@
     z-index: 10001 !important;
   }
 
-  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel) {
+  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel) {
     opacity: 1;
     animation: none !important;
     z-index: 10002 !important;

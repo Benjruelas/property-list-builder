@@ -595,9 +595,11 @@ export const TEST_CASES = [
       step("Choose Quote from Quick Create (+)", "Action completes without crash; UI updates or feedback appears before continuing.", "Forms / Quotes / Reports"),
       step("Choose Report from Quick Create (+)", "Action completes without crash; UI updates or feedback appears before continuing.", "Forms / Quotes / Reports"),
       step("Repeat each action while its matching list panel is open, then press Back", "Target screen, panel, or dialog opens and is interactive.", "Lists panel"),
-      step("Confirm final expected outcome for this test case.", "Every action opens its canonical new-item panel immediately; no parent-list detour or prerequisite picker overlay; Back restores the prior surface", "Lists panel"),
+      step("From Tasks/Leads/Deals/Quotes/Reports headers", "Step completes; ready for next action.", "Action bar / menu"),
+      step("Tap + and confirm the create panel is visible above any scrim", "Every FAB and list + action opens its canonical new-item panel immediately above a correctly layered scrim; no parent-list detour, template/lead picker detour, or scrim covering the panel", "Dialog / feedback"),
+      step("Confirm final expected outcome for this test case.", "Every FAB and list + action opens its canonical new-item panel immediately above a correctly layered scrim; no parent-list detour, template/lead picker detour, or scrim covering the panel", "Dialog / feedback"),
     ],
-    "Every action opens its canonical new-item panel immediately; no parent-list detour or prerequisite picker overlay; Back restores the prior surface"),
+    "Every FAB and list + action opens its canonical new-item panel immediately above a correctly layered scrim; no parent-list detour, template/lead picker detour, or scrim covering the panel"),
 
   tc("LST-001", "04", "Lists tabs All/Mine/Shared/On map", ["solo","team-admin","team-member"], "both",
     "Lists panel open. Test on both mobile and desktop if time allows.",
