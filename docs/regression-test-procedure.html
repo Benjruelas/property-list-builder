@@ -4326,8 +4326,18 @@
         "ui": "Action bar / menu"
       },
       {
-        "action": "Verify stage header colors match Deal statuses",
+        "action": "Compare panel header and tabs with Reports",
         "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Action bar / menu"
+      },
+      {
+        "action": "Verify full stage containers match Deal status colors",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Deals / Pipes"
+      },
+      {
+        "action": "Confirm individual deal cards are visually distinct",
+        "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
         "ui": "Deals / Pipes"
       },
       {
@@ -4337,11 +4347,11 @@
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Exactly one deal pipe; configured colors appear and each stage collapses without changing its deals",
+        "verify": "Pipes uses the standard panel shell; configured colors cover each stage; individual cards remain distinct; stages collapse without changing deals",
         "ui": "Deals / Pipes"
       }
     ],
-    "expected": "Exactly one deal pipe; configured colors appear and each stage collapses without changing its deals"
+    "expected": "Pipes uses the standard panel shell; configured colors cover each stage; individual cards remain distinct; stages collapse without changing deals"
   },
   {
     "id": "DPL-020",
@@ -4361,8 +4371,13 @@
         "ui": "Action bar / menu"
       },
       {
-        "action": "Verify stage header colors match Lead statuses",
+        "action": "Verify full stage containers match Lead status colors",
         "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Leads CRM"
+      },
+      {
+        "action": "Confirm individual lead cards are visually distinct",
+        "verify": "Action completes without crash; UI updates or feedback appears before continuing.",
         "ui": "Leads CRM"
       },
       {
@@ -4377,11 +4392,11 @@
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Configured colors appear, each stage collapses, and lead state persists after refresh",
+        "verify": "Configured colors cover each stage, individual cards remain distinct, stages collapse, and lead state persists after refresh",
         "ui": "Leads CRM"
       }
     ],
-    "expected": "Configured colors appear, each stage collapses, and lead state persists after refresh"
+    "expected": "Configured colors cover each stage, individual cards remain distinct, stages collapse, and lead state persists after refresh"
   },
   {
     "id": "DPL-021",

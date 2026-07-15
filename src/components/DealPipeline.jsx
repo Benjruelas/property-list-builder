@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { WindowedItems } from '@/hooks/useWindowedList'
 import { Plus, Trash2, Pencil, X, ArrowRight, Settings, ListTodo, CheckSquare, Square, ChevronDown, ChevronUp, Calendar, Eye, EyeOff, MoreVertical, Share2, Check, Users } from 'lucide-react'
 import { Button } from './ui/button'
-import { PanelBackButton, PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelOptionsButton } from './ui/panel-header'
+import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { ignoreRadixMapPanelDismiss, mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
 import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
 import { Input } from './ui/input'
@@ -936,23 +936,12 @@ export function DealPipeline({
           if (e.target?.closest?.('[data-pipeline-dropdown]') || e.target?.closest?.('[data-pipeline-switcher]') || e.target?.closest?.('[data-share-pipeline-dialog]') || e.target?.closest?.('[data-create-pipeline-dialog]')) e.preventDefault()
         }}
       >
-        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'flex-shrink-0 pb-3')} style={PANEL_LIST_HEADER_STYLE}>
+        <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">Manage leads and deals in Pipes</DialogDescription>
-          <div className="map-panel-header-toolbar">
-            <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
-              <PanelBackButton
-                onClick={handlePipelineBack}
-                className="pipeline-icon-btn"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5">
-              <DialogTitle className="min-w-0 truncate text-xl font-semibold">{pipelineTitle}</DialogTitle>
-                </div>
-              </div>
-            </div>
-            <div className="map-panel-header-actions" />
-          </div>
-          <div className="mt-3 flex gap-4" role="tablist" aria-label="Pipe type">
+          <PanelHeader onBack={handlePipelineBack} title={pipelineTitle} />
+        </DialogHeader>
+        <div className="flex-shrink-0 px-6 pt-3 pb-3">
+          <div className="flex gap-4" role="tablist" aria-label="Pipe type">
             {[
               { id: 'leads', label: 'Leads' },
               { id: 'deals', label: 'Deals' },
@@ -974,7 +963,7 @@ export function DealPipeline({
               </button>
             ))}
           </div>
-        </DialogHeader>
+        </div>
         <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden deal-pipeline-content">
           <div
             ref={columnsScrollRef}
@@ -992,7 +981,9 @@ export function DealPipeline({
                     onDragLeave={collapsed && canCollaboratePipeline ? handleDragLeave : undefined}
                     onDrop={collapsed && canCollaboratePipeline ? (event) => handleDrop(event, col.id) : undefined}
                     className={cn(
-                      'deal-pipeline-column flex-none w-full rounded-lg border border-white/15 bg-white/[0.12] flex flex-col transition-[width,min-width] duration-200',
+                      'deal-pipeline-column flex-none w-full rounded-xl border flex flex-col overflow-hidden transition-[width,min-width] duration-200',
+                      col.color || 'border-white/15 bg-white/[0.12] text-white',
+                      collapsed && 'deal-pipeline-column--collapsed',
                       collapsed && dragOverColId === col.id && 'ring-2 ring-blue-400/60',
                       collapsed
                         ? 'min-h-0 md:w-12 md:min-w-12'
@@ -1008,7 +999,7 @@ export function DealPipeline({
                     />
                     {!collapsed && (
                       <div
-                        className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === col.id ? 'bg-blue-500/10' : ''}`}
+                        className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-2 space-y-2.5 min-h-[60px] transition-colors ${dragOverColId === col.id ? 'bg-blue-500/15' : ''}`}
                         onDragOver={canCollaboratePipeline ? (e) => handleDragOver(e, col.id) : undefined}
                         onDragLeave={canCollaboratePipeline ? handleDragLeave : undefined}
                         onDrop={canCollaboratePipeline ? (e) => handleDrop(e, col.id) : undefined}
@@ -1059,7 +1050,9 @@ export function DealPipeline({
                       setDragOverColId(null)
                     } : undefined}
                     className={cn(
-                      'deal-pipeline-column flex-none w-full rounded-lg border border-white/15 bg-white/[0.12] flex flex-col transition-[width,min-width] duration-200',
+                      'deal-pipeline-column flex-none w-full rounded-xl border flex flex-col overflow-hidden transition-[width,min-width] duration-200',
+                      status.color || 'border-white/15 bg-white/[0.12] text-white',
+                      collapsed && 'deal-pipeline-column--collapsed',
                       collapsed && dragOverColId === status.id && 'ring-2 ring-blue-400/60',
                       collapsed
                         ? 'min-h-0 md:w-12 md:min-w-12'
@@ -1075,7 +1068,7 @@ export function DealPipeline({
                     />
                     {!collapsed && (
                       <div
-                        className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-1.5 space-y-2 min-h-[60px] transition-colors rounded-b-lg ${dragOverColId === status.id ? 'bg-blue-500/10' : ''}`}
+                        className={`deal-pipeline-column-body flex-1 overflow-y-auto scrollbar-hide p-2 space-y-2.5 min-h-[60px] transition-colors ${dragOverColId === status.id ? 'bg-blue-500/15' : ''}`}
                         onDragOver={(event) => {
                           event.preventDefault()
                           event.dataTransfer.dropEffect = 'move'
@@ -1107,12 +1100,12 @@ export function DealPipeline({
                               }}
                               onClick={() => onOpenLeadOverlay?.(lead.id)}
                               className={cn(
-                                'w-full rounded-lg border border-white/10 bg-white/[0.07] p-2.5 text-left transition-colors hover:bg-white/[0.12]',
+                                'pipe-item-card w-full rounded-xl border p-3 text-left transition-all hover:-translate-y-px',
                                 draggedLeadId === lead.id && 'opacity-50',
                               )}
                             >
                               <div className="truncate text-sm font-semibold">{displayLeadName(lead)}</div>
-                              <div className="mt-0.5 truncate text-xs text-white/50">
+                              <div className="mt-0.5 truncate text-xs opacity-55">
                                 {formatLeadAddress(lead) || 'No address'}
                               </div>
                             </button>

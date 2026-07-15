@@ -379,16 +379,19 @@
   border-color: rgba(0, 0, 0, 0.1) !important;
 }
 
-/* Pipeline deal cards — white cards on tinted column wells in light mode */
+/* Pipeline item cards — white cards on tinted stage wells in light mode */
+[data-ui-theme='light'] .deal-pipeline-panel .pipe-item-card,
 [data-ui-theme='light'] .deal-pipeline-panel .deal-pipeline-lead-card.lead-detail-deal-card {
   background: #ffffff !important;
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  color: #111827 !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1) !important;
 }
+[data-ui-theme='light'] .deal-pipeline-panel .pipe-item-card:hover,
 [data-ui-theme='light'] .deal-pipeline-panel .deal-pipeline-lead-card.lead-detail-deal-card:hover {
   background: #ffffff !important;
-  border-color: rgba(0, 0, 0, 0.14) !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.22) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14) !important;
 }
 [data-ui-theme='light'] .deal-pipeline-lead-card select {
   background: var(--map-panel-input-bg) !important;

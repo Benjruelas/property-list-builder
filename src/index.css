@@ -894,6 +894,12 @@
     width: auto !important;
   }
 
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-column.deal-pipeline-column--collapsed {
+    flex: 0 0 3rem !important;
+    min-width: 3rem !important;
+    width: 3rem !important;
+  }
+
   /* Desktop: Photo mode — centered panel, same footprint as Quotes/Reports */
   .photo-mode-overlay.photos-panel.fullscreen-panel {
     inset: auto !important;
@@ -4222,16 +4228,21 @@
   color: rgba(255, 255, 255, 0.95) !important;
 }
 
-/* Pipeline deal cards — elevated surface distinct from column wells (bg-white/12) */
+/* Pipeline item cards — elevated, discrete surfaces over status-colored stage wells. */
+.deal-pipeline-panel .pipe-item-card,
 .deal-pipeline-panel .deal-pipeline-lead-card.lead-detail-deal-card {
   align-items: flex-start !important;
-  background: rgba(0, 0, 0, 0.42) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(5, 10, 20, 0.68) !important;
+  border-color: rgba(255, 255, 255, 0.26) !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.24) !important;
 }
 
+.deal-pipeline-panel .pipe-item-card:hover,
 .deal-pipeline-panel .deal-pipeline-lead-card.lead-detail-deal-card:hover {
-  background: rgba(0, 0, 0, 0.54) !important;
-  border-color: rgba(255, 255, 255, 0.28) !important;
+  background: rgba(5, 10, 20, 0.82) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.3) !important;
 }
 
 .deal-pipeline-lead-card select {

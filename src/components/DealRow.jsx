@@ -12,7 +12,7 @@ export const DEAL_LIST_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item crm-deal-row flex flex-col px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
 
 export const PIPELINE_DEAL_CARD_CLASS =
-  'deal-pipeline-lead-card lead-detail-deal-card map-panel-list-item items-start gap-3 py-3.5 transition-all group'
+  'pipe-item-card deal-pipeline-lead-card lead-detail-deal-card map-panel-list-item items-start gap-3 rounded-xl border px-3 py-3.5 transition-all hover:-translate-y-px group'
 
 function resolveDealLead(deal, leads) {
   const lead = deal.leadId && leads?.length ? leads.find((l) => l.id === deal.leadId) : null
@@ -220,23 +220,23 @@ export function PipelineDealCard({
           {title}
         </div>
         {leadName ? (
-          <div className="panel-item-body text-white/70 truncate mt-0.5" title={leadName}>
+          <div className="panel-item-body opacity-70 truncate mt-0.5" title={leadName}>
             {leadName}
           </div>
         ) : null}
         {leadAddress ? (
-          <div className="panel-item-body text-white/55 truncate" title={leadAddress}>
+          <div className="panel-item-body opacity-55 truncate" title={leadAddress}>
             {leadAddress}
           </div>
         ) : null}
         {!hasLead && (
-          <div className="panel-item-body text-white/35 mt-0.5">No lead linked</div>
+          <div className="panel-item-body opacity-35 mt-0.5">No lead linked</div>
         )}
 
         <EntityTagPills entity={deal} tagRegistry={tagRegistry} type="deals" className="mt-1.5" />
 
         {(timeStr || hasProfit) && (
-          <div className="flex items-center justify-between gap-2 panel-item-meta text-white/42 pt-1.5 mt-1.5 border-t border-white/[0.08]">
+          <div className="flex items-center justify-between gap-2 panel-item-meta text-[color:var(--map-panel-text-secondary)] pt-1.5 mt-1.5 border-t border-white/[0.08]">
             <span className="inline-flex items-center gap-1 truncate min-w-0">
               {timeStr ? (
                 <>
