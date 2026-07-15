@@ -68,6 +68,16 @@ function blobCacheKey(key, cacheVersion = '') {
   return `${key}:${cacheVersion}`
 }
 
+export function getCachedPhotoBlob(key, cacheVersion = '') {
+  if (!key) return null
+  return blobMemoryCache.get(blobCacheKey(key, cacheVersion)) || null
+}
+
+export function getCachedPhotoPreviewBlob(photo, cacheVersion = '') {
+  const [preferredKey] = getPhotoPreviewFetchKeys(photo)
+  return getCachedPhotoBlob(preferredKey, cacheVersion)
+}
+
 export function invalidatePhotoBlobCache(photo) {
   if (!photo) return
   const keys = [

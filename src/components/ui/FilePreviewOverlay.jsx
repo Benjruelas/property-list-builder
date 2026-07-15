@@ -55,6 +55,15 @@ export function FilePreviewOverlay({
   const loadCurrent = useCallback(async () => {
     if (!open || !item?.loadBlob) return
     cleanup()
+    const cached = item.getCachedBlob?.()
+    if (cached instanceof Blob) {
+      const { url, revoke } = createPreviewSource(cached)
+      revokeRef.current = revoke
+      setBlob(cached)
+      setPreviewUrl(url)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const result = await item.loadBlob()
