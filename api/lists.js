@@ -330,8 +330,8 @@ export default async function handler(req, res) {
             teamIds,
             actor: user,
             type: 'list.parcel_added',
-            summary: `${label} added ${newParcels.length} parcel${newParcels.length === 1 ? '' : 's'} to "${list.name}"`,
-            entity: { kind: 'list', listId: list.id },
+            summary: `${label} added parcels to "${list.name}"`,
+            entity: { kind: 'list', listId: list.id, count: newParcels.length },
             nav: { type: 'list', listId: list.id },
           })
         }
@@ -340,8 +340,8 @@ export default async function handler(req, res) {
             teamIds,
             actor: user,
             type: 'list.parcel_removed',
-            summary: `${label} removed ${removeParcels.length} parcel${removeParcels.length === 1 ? '' : 's'} from "${list.name}"`,
-            entity: { kind: 'list', listId: list.id },
+            summary: `${label} removed parcels from "${list.name}"`,
+            entity: { kind: 'list', listId: list.id, count: removeParcels.length },
             nav: { type: 'list', listId: list.id },
           })
         }

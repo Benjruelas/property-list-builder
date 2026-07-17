@@ -68,6 +68,27 @@ export function collectUnseenKeys(items) {
   return keys
 }
 
+/** Include collapsed sibling activity ids when marking feed rows seen. */
+export function expandFeedItemsForMarkSeen(items = []) {
+  const expanded = []
+  for (const item of items) {
+    if (!item?.id) continue
+    expanded.push(item)
+    if (item.source === 'activity' && Array.isArray(item.collapsedIds)) {
+      for (const id of item.collapsedIds) {
+        if (id) expanded.push({ source: 'activity', id })
+      }
+    }
+  }
+  return expanded
+}
+
+function collectActivityIdsFromFeedItems(items = []) {
+  return expandFeedItemsForMarkSeen(items)
+    .filter((item) => item.source === 'activity' && item.id)
+    .map((item) => item.id)
+}
+
 /** @typedef {'all' | 'leads' | 'deals' | 'tasks' | 'other'} FeedTabId */
 
 export const FEED_TABS = [
@@ -269,7 +290,7 @@ export async function markFeedSeen(getToken, { items = null, markAllRead = false
   if (!token) return { items: [], unreadCount: 0, teams: [] }
 
   if (items?.length && uid) {
-    const activityIds = items.filter((i) => i.source === 'activity' && i.id).map((i) => i.id)
+    const activityIds = collectActivityIdsFromFeedItems(items)
     if (activityIds.length) addLocalSeenActivityIds(uid, activityIds)
   }
   if (markAllRead && uid) {
@@ -282,14 +303,14 @@ export async function markFeedSeen(getToken, { items = null, markAllRead = false
     body: JSON.stringify(
       markAllRead
         ? { markAllRead: true, teamId }
-        : { items: items || [], teamId }
+        : { items: expandFeedItemsForMarkSeen(items || []), teamId }
     ),
   })
   if (!res.ok) throw new Error('Failed to update feed')
 
   const data = await parseJsonSafe(res)
   if (markAllRead && uid) {
-    const activityIds = (data.items || []).filter((i) => i.source === 'activity').map((i) => i.id)
+    const activityIds = collectActivityIdsFromFeedItems(data.items || [])
     addLocalSeenActivityIds(uid, activityIds)
   }
 

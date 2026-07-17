@@ -56,6 +56,44 @@ function inboxKey(uid) {
   return `notifications:${uid}`
 }
 
+function notificationEntityKey(item) {
+  const type = String(item?.type || 'general')
+  const data = item?.data && typeof item.data === 'object' ? item.data : {}
+  if (data.listId) return `${type}|list|${data.listId}`
+  if (data.pipelineId && data.dealId) return `${type}|deal|${data.pipelineId}|${data.dealId}`
+  if (data.pipelineId && data.leadId) return `${type}|lead|${data.pipelineId}|${data.leadId}`
+  if (data.pipelineId) return `${type}|pipeline|${data.pipelineId}`
+  if (data.quoteId) return `${type}|quote|${data.quoteId}`
+  if (data.taskId) return `${type}|task|${data.taskId}`
+  if (data.pathId) return `${type}|path|${data.pathId}`
+  if (data.templateId) return `${type}|form|${data.templateId}`
+  if (data.teamId) return `${type}|team|${data.teamId}`
+  return `${type}|general|${String(item?.title || '').slice(0, 80)}`
+}
+
+/**
+ * Merge a new unread notification into an inbox when it matches the newest unread row.
+ * @returns {{ inbox: object[], record: object }}
+ */
+export function coalesceInboxNotification(inbox, record) {
+  const nextInbox = Array.isArray(inbox) ? [...inbox] : []
+  const entityKey = notificationEntityKey(record)
+  const existingIdx = nextInbox.findIndex((n) => !n.read && notificationEntityKey(n) === entityKey)
+  if (existingIdx === -1) {
+    nextInbox.unshift(record)
+    return { inbox: nextInbox, record }
+  }
+
+  const existing = { ...nextInbox[existingIdx] }
+  existing.title = record.title
+  existing.body = record.body
+  existing.data = record.data
+  existing.createdAt = record.createdAt
+  nextInbox.splice(existingIdx, 1)
+  nextInbox.unshift(existing)
+  return { inbox: nextInbox, record: existing }
+}
+
 export async function getInbox(uid) {
   await initKv()
   if (!uid || !kvAvailable || !kv) return []
@@ -95,10 +133,10 @@ export async function appendInAppNotification(uid, item) {
     createdAt: now,
   }
   const inbox = await getInbox(uid)
-  inbox.unshift(record)
-  if (inbox.length > MAX_INBOX) inbox.length = MAX_INBOX
-  await saveInbox(uid, inbox)
-  return record
+  const { inbox: nextInbox, record: storedRecord } = coalesceInboxNotification(inbox, record)
+  if (nextInbox.length > MAX_INBOX) nextInbox.length = MAX_INBOX
+  await saveInbox(uid, nextInbox)
+  return storedRecord
 }
 
 export async function markNotificationsRead(uid, ids = null) {

@@ -396,9 +396,10 @@ export default async function handler(req, res) {
 
       const label = actorLabel(user)
       const name = leadDisplayName(lead)
+      const statusChanged = body.status !== undefined && lead.status !== existing.status
       if (visibilityChanged) {
         await logLeadActivity('lead.shared', lead, user, `${label} updated sharing on lead ${name}`)
-      } else {
+      } else if (statusChanged) {
         await logLeadActivity('lead.updated', lead, user, `${label} updated lead ${name}`)
       }
 

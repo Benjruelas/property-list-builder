@@ -18,7 +18,7 @@ import {
   isActivityStoreAvailable,
   ensureActivityStoreReady,
 } from './_lib/activityStore.js'
-import { mergeActivityFeeds } from './_lib/activityLog.js'
+import { mergeActivityFeeds, collapseFeedActivityItems, expandActivityIdsForMarkSeen, collectActivityIdsFromFeedItems } from './_lib/activityLog.js'
 
 /**
  * Unified notifications + team activity feed.
@@ -51,6 +51,7 @@ function buildFeedItems(notifications, activities, seenActivityIds) {
       createdAt: a.createdAt,
       type: a.type,
       summary: a.summary,
+      actorUid: a.actorUid || null,
       actorEmail: a.actorEmail,
       audience: a.audience,
       teamId: a.teamId,
@@ -60,7 +61,7 @@ function buildFeedItems(notifications, activities, seenActivityIds) {
   }
 
   items.sort((x, y) => new Date(y.createdAt || 0).getTime() - new Date(x.createdAt || 0).getTime())
-  return items
+  return collapseFeedActivityItems(items)
 }
 
 async function loadActivitiesForUser(user, teamIdFilter, limit) {
@@ -135,7 +136,11 @@ export default async function handler(req, res) {
           ? await markNotificationsRead(user.uid, null)
           : []
         const { activities } = await loadActivitiesForUser(user, teamIdFilter, limit)
-        const activityIds = activities.map((a) => a.id).filter(Boolean)
+        const seenBefore = isNotificationStoreAvailable() && (await ensureNotificationStoreReady())
+          ? await getSeenActivityIds(user.uid)
+          : new Set()
+        const collapsedItems = buildFeedItems(notifications, activities, seenBefore).slice(0, limit)
+        const activityIds = collectActivityIdsFromFeedItems(collapsedItems)
         const seenActivityIds = isNotificationStoreAvailable() && (await ensureNotificationStoreReady())
           ? await markAllActivitiesSeen(user.uid, activityIds)
           : new Set(activityIds)
@@ -146,7 +151,7 @@ export default async function handler(req, res) {
 
       const rawItems = Array.isArray(body.items) ? body.items : []
       const notificationIds = rawItems.filter((i) => i?.source === 'notification' && i.id).map((i) => i.id)
-      const activityIds = rawItems.filter((i) => i?.source === 'activity' && i.id).map((i) => i.id)
+      const activityIds = expandActivityIdsForMarkSeen(rawItems)
 
       let notifications = isNotificationStoreAvailable() && (await ensureNotificationStoreReady())
         ? await getInbox(user.uid)

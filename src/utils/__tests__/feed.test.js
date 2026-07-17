@@ -4,6 +4,7 @@ import {
   feedItemCategoryLabel,
   feedItemBadgeClassName,
   FEED_BADGE_STYLES,
+  expandFeedItemsForMarkSeen,
 } from '../feed'
 
 describe('feed badge styling', () => {
@@ -26,5 +27,13 @@ describe('feed badge styling', () => {
     const sharedNote = { type: 'listShared', source: 'notification' }
     expect(feedItemCategoryLabel(sharedNote)).toBe('Shared')
     expect(feedItemBadgeClassName(sharedNote)).toBe(FEED_BADGE_STYLES.shared)
+  })
+
+  it('expands collapsed activity ids for mark-seen payloads', () => {
+    const expanded = expandFeedItemsForMarkSeen([
+      { source: 'activity', id: 'act_3', collapsedIds: ['act_2', 'act_1'] },
+      { source: 'notification', id: 'ntf_1' },
+    ])
+    expect(expanded.map((item) => item.id)).toEqual(['act_3', 'act_2', 'act_1', 'ntf_1'])
   })
 })
