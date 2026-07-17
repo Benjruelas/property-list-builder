@@ -883,15 +883,26 @@
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-columns-row {
     flex-direction: row !important;
     flex-wrap: nowrap !important;
-    min-width: 100% !important;
+    min-width: max-content !important;
     width: max-content !important;
   }
 
+  /* Size each stage to its widest card (not equal flex fill) */
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-column {
-    flex: 1 1 0 !important;
+    flex: 0 0 auto !important;
+    width: max-content !important;
     min-width: 9.25rem !important;
     max-width: none !important;
-    width: auto !important;
+  }
+
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-lead-card.lead-detail-deal-card {
+    width: 100% !important;
+  }
+
+  /* Title / lead / address set column width; tags can still wrap */
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-lead-card .panel-item-title,
+  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-lead-card .panel-item-body {
+    min-width: max-content;
   }
 
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-column.deal-pipeline-column--collapsed {
