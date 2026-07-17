@@ -969,7 +969,7 @@ export function DealPipeline({
             ref={columnsScrollRef}
             className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-6 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns"
           >
-          <div className="deal-pipeline-columns-row flex flex-col md:flex-row md:flex-nowrap gap-2 h-full min-w-0 md:min-w-full md:min-h-full">
+          <div className="deal-pipeline-columns-row flex flex-col md:flex-row md:flex-nowrap gap-2 h-full min-w-0 md:w-max md:min-h-full">
             {pipeView === 'deals'
               ? columns.map((col) => {
                 const collapsed = isStageCollapsed(col.id)
@@ -987,7 +987,7 @@ export function DealPipeline({
                       collapsed && dragOverColId === col.id && 'ring-2 ring-blue-400/60',
                       collapsed
                         ? 'min-h-0 md:w-12 md:min-w-12'
-                        : 'md:min-w-[9.25rem] md:flex-1 md:basis-0 min-h-[100px] md:min-h-[200px]',
+                        : 'md:w-max md:min-w-[9.25rem] min-h-[100px] md:min-h-[200px]',
                     )}
                   >
                     <PipeStageHeader
@@ -1056,7 +1056,7 @@ export function DealPipeline({
                       collapsed && dragOverColId === status.id && 'ring-2 ring-blue-400/60',
                       collapsed
                         ? 'min-h-0 md:w-12 md:min-w-12'
-                        : 'md:min-w-[9.25rem] md:flex-1 md:basis-0 min-h-[100px] md:min-h-[200px]',
+                        : 'md:w-max md:min-w-[9.25rem] min-h-[100px] md:min-h-[200px]',
                     )}
                   >
                     <PipeStageHeader
