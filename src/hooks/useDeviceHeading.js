@@ -7,7 +7,7 @@ const needsIOSPermission =
 /**
  * Smoothed compass heading (0-360, 0 = North).
  *
- * Returns { getHeading, subscribeHeading, requestOrientation, needsGesture }.
+ * Returns heading accessors plus gesture request and grant synchronization.
  * Heading updates are delivered through the subscription (and readable via
  * `getHeading()`) instead of React state so multi-Hz orientation events never
  * re-render the component tree — consumers apply them imperatively.
@@ -120,16 +120,6 @@ export function useDeviceHeading(enabled = false) {
     }
   }, [enabled, eventName, handleOrientation, startListening])
 
-  // iOS: try the immediate (no-gesture) requestPermission on mount.
-  useEffect(() => {
-    if (!enabled || !needsIOSPermission || grantedRef.current) return
-    DeviceOrientationEvent.requestPermission()
-      .then((state) => {
-        if (state === 'granted') markGranted()
-      })
-      .catch(() => {})
-  }, [enabled, markGranted])
-
   /**
    * Call from a React onClick handler to satisfy iOS gesture requirement.
    * Returns a Promise<boolean> indicating whether permission was freshly granted.
@@ -156,5 +146,11 @@ export function useDeviceHeading(enabled = false) {
     }
   }, [eventName, handleOrientation])
 
-  return { getHeading, subscribeHeading, requestOrientation, needsGesture }
+  return {
+    getHeading,
+    subscribeHeading,
+    requestOrientation,
+    confirmOrientationGranted: markGranted,
+    needsGesture,
+  }
 }

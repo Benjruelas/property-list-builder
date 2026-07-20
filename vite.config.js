@@ -110,6 +110,7 @@ export default defineConfig({
       '@capacitor/core',
       '@capacitor/app',
       '@capacitor/filesystem',
+      '@capacitor/geolocation',
       '@capacitor-community/media',
     ],
   },

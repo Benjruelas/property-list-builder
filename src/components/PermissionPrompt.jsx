@@ -1,25 +1,30 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MapPin, Compass } from 'lucide-react'
-import { getCurrentPositionWithFallback } from '../utils/geolocation'
+import { requestLocationAccess } from '../utils/geolocation'
 
-const LS_KEY = 'permissions_granted'
+const ONBOARDING_KEY = 'location_permission_onboarding_complete'
+const LEGACY_KEY = 'permissions_granted'
 
-export function hasGrantedPermissions() {
+export function hasCompletedPermissionOnboarding() {
   try {
-    return localStorage.getItem(LS_KEY) === '1'
+    return localStorage.getItem(ONBOARDING_KEY) === '1' ||
+      localStorage.getItem(LEGACY_KEY) === '1'
   } catch {
     return false
   }
 }
+
+// Kept for compatibility with callers outside the main bundle.
+export const hasGrantedPermissions = hasCompletedPermissionOnboarding
 
 /**
  * Full-screen overlay requesting Location + Device Orientation.
  * iOS requires DeviceOrientationEvent.requestPermission() synchronously
  * from a user gesture — must be called FIRST before any other async work.
  *
- * @param onComplete(orientationGranted: boolean) — called when done;
- *   `orientationGranted` tells App whether the device orientation API is available.
+ * @param onComplete({ orientationGranted, locationState, position }) — called
+ * when onboarding is done. Completion is independent from either permission.
  */
 export function PermissionPrompt({ onComplete }) {
   const [requesting, setRequesting] = useState(false)
@@ -44,15 +49,16 @@ export function PermissionPrompt({ onComplete }) {
       orientationGranted = typeof window !== 'undefined' && 'DeviceOrientationEvent' in window
     }
 
-    // Location — coarse fix first (reliable on desktop / installed PWA), then high accuracy inside helper
-    try {
-      await getCurrentPositionWithFallback()
-    } catch {
-      // denied or timeout
-    }
+    // Location is requested only from this explicit gesture. The first fix is
+    // returned to App so startup does not immediately ask for it again.
+    const location = await requestLocationAccess()
 
-    try { localStorage.setItem(LS_KEY, '1') } catch { /* ignore */ }
-    onComplete(orientationGranted)
+    try { localStorage.setItem(ONBOARDING_KEY, '1') } catch { /* ignore */ }
+    onComplete({
+      orientationGranted,
+      locationState: location.state,
+      position: location.position,
+    })
   }
 
   const ui = (

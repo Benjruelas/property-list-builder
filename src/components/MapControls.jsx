@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils'
 import { MAP_CHROME_BTN, MAP_CHROME_BTN_OFFSET, MAP_CHROME_STACK_RIGHT } from '@/lib/mapChrome'
 
 export function MapControls({ 
-  onRecenter, 
+  onRecenter,
+  locationPermission,
   onToggleCompass,
   isCompassActive,
   onToggleMultiSelect, 
@@ -22,6 +23,7 @@ export function MapControls({
   onQuickPhotoMode,
 }) {
   const multiSelectAddToListMode = isMultiSelectActive && multiSelectParcelCount > 0
+  const locationUnavailable = locationPermission != null && locationPermission !== 'granted'
   // Run any map-control action through this so the parcel popup auto-closes.
   const runAction = (fn) => (...args) => {
     onCloseParcelPopup?.()
@@ -34,9 +36,13 @@ export function MapControls({
         data-tour="recenter"
         onClick={runAction(onRecenter)}
         size="icon"
-        variant="glass"
-        className={MAP_CHROME_BTN}
-        title="Recenter map"
+        variant={locationUnavailable ? "glass-outline" : "glass"}
+        className={cn(
+          MAP_CHROME_BTN,
+          locationUnavailable && "border-amber-400/70 text-amber-700 dark:text-amber-300"
+        )}
+        title={locationUnavailable ? "Enable location" : "Recenter map"}
+        aria-label={locationUnavailable ? "Enable location" : "Recenter map"}
       >
         <Navigation />
       </Button>

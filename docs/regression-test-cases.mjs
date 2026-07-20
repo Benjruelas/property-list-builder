@@ -77,12 +77,15 @@ export const TEST_CASES = [
     "Login modal opens instead of panel"),
 
   tc("AUTH-008", "01", "Location/orientation permission prompt", ["solo","team-admin","team-member"], "both",
-    "Fresh session or reset permissions. Test on both mobile and desktop if time allows.",
+    "Fresh install/site data; test persistent, temporary, denied, and revoked access on native and PWA targets. Test on both mobile and desktop if time allows.",
     [
-      step("Load app first time or after clearing site data", "Target screen, panel, or dialog opens and is interactive.", "Auth / menu"),
-      step("Confirm final expected outcome for this test case.", "Permission prompt appears; grant/deny handled gracefully", "Auth / menu"),
+      step("Load with fresh site data and tap Continue", "Target screen, panel, or dialog opens and is interactive.", "Auth / menu"),
+      step("Relaunch after a persistent grant", "Step completes; ready for next action.", "Auth / menu"),
+      step("Relaunch after temporary access expires, denial, or revocation", "Step completes; ready for next action.", "Auth / menu"),
+      step("Deny orientation and continue startup", "Target screen, panel, or dialog opens and is interactive.", "Auth / menu"),
+      step("Confirm final expected outcome for this test case.", "Onboarding is one-time; permission is checked without an automatic prompt; denied or expired access has explicit recovery", "Auth / menu"),
     ],
-    "Permission prompt appears; grant/deny handled gracefully"),
+    "Onboarding is one-time; permission is checked without an automatic prompt; denied or expired access has explicit recovery"),
 
   tc("AUTH-009", "01", "Notification permission prompt", ["solo","team-admin","team-member"], "both",
     "Logged in, notifications not granted. Test on both mobile and desktop if time allows.",
@@ -152,12 +155,17 @@ export const TEST_CASES = [
     "Map zoom level changes"),
 
   tc("MAP-004", "02", "Recenter to user location", ["solo","team-admin","team-member"], "both",
-    "Location permission granted. Test on both mobile and desktop if time allows.",
+    "Test with location granted, prompt, and denied. Test on both mobile and desktop if time allows.",
     [
-      step("Tap recenter/locate control", "Input/selection is reflected in the UI; no validation error blocks progress.", "Map chrome"),
-      step("Confirm final expected outcome for this test case.", "Map centers on user position", "Map chrome"),
+      step("With access granted", "Step completes; ready for next action.", "Map chrome"),
+      step("Tap recenter/locate", "Input/selection is reflected in the UI; no validation error blocks progress.", "Map chrome"),
+      step("With permission in prompt state", "Step completes; ready for next action.", "Auth / menu"),
+      step("Tap the location control", "Target screen, panel, or dialog opens and is interactive.", "Map chrome"),
+      step("With permission denied or revoked", "Step completes; ready for next action.", "Auth / menu"),
+      step("Tap the location control", "Target screen, panel, or dialog opens and is interactive.", "Map chrome"),
+      step("Confirm final expected outcome for this test case.", "Granted access recenters; unavailable access has non-blocking explicit recovery", "Map chrome"),
     ],
-    "Map centers on user position"),
+    "Granted access recenters; unavailable access has non-blocking explicit recovery"),
 
   tc("MAP-005", "02", "Compass orient map", ["solo","team-admin","team-member"], "both",
     "Orientation permission granted. Test on both mobile and desktop if time allows.",
