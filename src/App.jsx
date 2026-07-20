@@ -423,7 +423,13 @@ function App() {
     return true
   })
   const [isFollowing, setIsFollowing] = useState(() => getSettings().autoFollow)
-  const { getHeading, subscribeHeading, requestOrientation, needsGesture } = useDeviceHeading(permissionsReady)
+  const {
+    getHeading,
+    subscribeHeading,
+    requestOrientation,
+    confirmOrientationGranted,
+    needsGesture,
+  } = useDeviceHeading(permissionsReady)
 
   // When orientation becomes available (needsGesture flips to false),
   // auto-enable compass if user's setting wants it.
@@ -842,13 +848,30 @@ function App() {
 
   // Returning visits inspect permission without invoking browser/OS UI.
   useEffect(() => {
-    if (!permissionsReady || locationPermission !== null) return
+    if (!permissionsReady) return
     let cancelled = false
-    checkLocationPermission().then((state) => {
-      if (!cancelled) setLocationPermission(state)
-    })
-    return () => { cancelled = true }
-  }, [permissionsReady, locationPermission])
+    const refreshPermission = () => {
+      checkLocationPermission().then((state) => {
+        if (!cancelled) setLocationPermission(state)
+      })
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshPermission()
+    }
+
+    // PermissionPrompt already supplies the state on a fresh visit.
+    if (locationPermission === null) refreshPermission()
+    window.addEventListener('focus', refreshPermission)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', refreshPermission)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+    // locationPermission is intentionally sampled only when onboarding becomes
+    // ready; later updates come from focus/visibility events.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissionsReady])
 
   // Track user's current location only after a non-prompting check or explicit
   // gesture confirms access. Fixes stay in the external store so GPS updates
@@ -2642,15 +2665,23 @@ function App() {
   // Recenter when available; otherwise this explicit gesture is the only
   // recovery path allowed to invoke location permission UI.
   const handleRecenter = useCallback(async () => {
-    if (locationPermission === LOCATION_PERMISSION.UNSUPPORTED) {
+    let effectivePermission = locationPermission
+    if (effectivePermission === LOCATION_PERMISSION.DENIED ||
+        effectivePermission === LOCATION_PERMISSION.UNSUPPORTED ||
+        effectivePermission === null) {
+      effectivePermission = await checkLocationPermission()
+      setLocationPermission(effectivePermission)
+    }
+
+    if (effectivePermission === LOCATION_PERMISSION.UNSUPPORTED) {
       showToast('Location is not supported on this device or browser.', 'warning')
       return
     }
-    if (locationPermission === LOCATION_PERMISSION.DENIED) {
+    if (effectivePermission === LOCATION_PERMISSION.DENIED) {
       showToast('Location is blocked. Enable it in this app’s or browser’s settings, then try again.', 'warning')
       return
     }
-    if (locationPermission !== LOCATION_PERMISSION.GRANTED) {
+    if (effectivePermission !== LOCATION_PERMISSION.GRANTED) {
       const result = await requestLocationAccess()
       setLocationPermission(result.state)
       if (result.position) {
@@ -2668,6 +2699,20 @@ function App() {
         } else {
           showToast('Could not get your location. The map is still available.', 'warning')
         }
+        return
+      }
+    } else if (locationPermission !== LOCATION_PERMISSION.GRANTED) {
+      // Access changed in Settings while the app was backgrounded. Refresh the
+      // stale fallback position before recentering.
+      try {
+        const position = await getCurrentPositionWithFallback()
+        setCurrentUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        })
+      } catch {
+        showToast('Could not get your current location yet. Try again in a moment.', 'warning')
         return
       }
     }
@@ -3754,6 +3799,7 @@ function App() {
             })
           }
           setLocationPermission(locationState)
+          if (orientationGranted) confirmOrientationGranted()
           setPermissionsReady(true)
           if (orientationGranted && getSettings().compassDefault) {
             setIsCompassActive(true)

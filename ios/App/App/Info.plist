@@ -51,5 +51,7 @@
 	<string>KnockScout saves property photos to your library when you tap Save.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>KnockScout uses your location while the app is open to show your position on the map and support nearby property workflows.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>KnockScout uses your location while the app is open to show your position on the map and support nearby property workflows.</string>
 </dict>
 </plist>
