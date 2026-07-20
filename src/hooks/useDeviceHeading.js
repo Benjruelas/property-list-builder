@@ -120,16 +120,6 @@ export function useDeviceHeading(enabled = false) {
     }
   }, [enabled, eventName, handleOrientation, startListening])
 
-  // iOS: try the immediate (no-gesture) requestPermission on mount.
-  useEffect(() => {
-    if (!enabled || !needsIOSPermission || grantedRef.current) return
-    DeviceOrientationEvent.requestPermission()
-      .then((state) => {
-        if (state === 'granted') markGranted()
-      })
-      .catch(() => {})
-  }, [enabled, markGranted])
-
   /**
    * Call from a React onClick handler to satisfy iOS gesture requirement.
    * Returns a Promise<boolean> indicating whether permission was freshly granted.

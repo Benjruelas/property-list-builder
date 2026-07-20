@@ -38,7 +38,14 @@ import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skip
 import { computeOwnerOccupied } from './utils/ownerOccupied'
 import PathTracker from './components/PathTracker'
 import { getUserLocation, setCurrentUserLocation, subscribeUserLocation, useUserLocation } from './utils/locationStore'
-import { getCurrentPositionWithFallback, getWatchPositionOptions } from './utils/geolocation'
+import {
+  LOCATION_PERMISSION,
+  checkLocationPermission,
+  getCurrentPositionWithFallback,
+  isLocationPermissionDenied,
+  requestLocationAccess,
+  watchLocation,
+} from './utils/geolocation'
 import { panelLazy, prefetchPanel, prefetchAllPanels } from './utils/panelChunks'
 import { useStickyPanelMount } from './hooks/useStickyPanelMount'
 import { useLazyPanelReady } from './hooks/useLazyPanelReady'
@@ -96,7 +103,7 @@ import { resolvePanelDockSlot } from './navigation/panelDockSlot'
 import { HailStormOverlay, HailStormDismissPill, HailStormMapMarkers } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
 // import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
-import { PermissionPrompt, hasGrantedPermissions } from './components/PermissionPrompt'
+import { PermissionPrompt, hasCompletedPermissionOnboarding } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
 import { useTeamDataSync } from './hooks/useTeamDataSync'
@@ -394,7 +401,8 @@ function App() {
       console.error('Logout error:', error)
     }
   }, [logout, nav])
-  const [permissionsReady, setPermissionsReady] = useState(() => hasGrantedPermissions())
+  const [permissionsReady, setPermissionsReady] = useState(() => hasCompletedPermissionOnboarding())
+  const [locationPermission, setLocationPermission] = useState(null)
 
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
   const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
@@ -407,7 +415,7 @@ function App() {
     const wantCompass = getSettings().compassDefault
     if (!wantCompass) return false
     // If we're returning (prompt already dismissed) and iOS needs permission, start off
-    if (hasGrantedPermissions() &&
+    if (hasCompletedPermissionOnboarding() &&
         typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       return false
@@ -832,16 +840,31 @@ function App() {
     return () => clearInterval(id)
   }, [permissionsReady])
 
-  // Track user's current location in real-time (only after permissions granted).
-  // Fixes go to the external location store, not React state, so 1 Hz GPS
-  // updates never re-render the App tree.
+  // Returning visits inspect permission without invoking browser/OS UI.
   useEffect(() => {
-    if (!permissionsReady) return
-    let watchId = null
+    if (!permissionsReady || locationPermission !== null) return
     let cancelled = false
+    checkLocationPermission().then((state) => {
+      if (!cancelled) setLocationPermission(state)
+    })
+    return () => { cancelled = true }
+  }, [permissionsReady, locationPermission])
+
+  // Track user's current location only after a non-prompting check or explicit
+  // gesture confirms access. Fixes stay in the external store so GPS updates
+  // do not re-render the full App tree.
+  useEffect(() => {
+    if (!permissionsReady || locationPermission === null) return
+    const defaultLocation = { lat: 32.7767, lng: -96.7970, accuracy: null }
+    if (locationPermission !== LOCATION_PERMISSION.GRANTED) {
+      setCurrentUserLocation(defaultLocation)
+      return
+    }
+
+    let cancelled = false
+    let stopWatching = null
     let lastUpdateTime = 0
     const UPDATE_THROTTLE_MS = 1000
-    const defaultLocation = { lat: 32.7767, lng: -96.7970, accuracy: null }
 
     const applyPosition = (position) => {
       setCurrentUserLocation({
@@ -852,23 +875,28 @@ function App() {
       lastUpdateTime = Date.now()
     }
 
-    if (!navigator.geolocation) {
-      setCurrentUserLocation(defaultLocation)
-      return undefined
-    }
+    const start = async () => {
+      // PermissionPrompt and recovery clicks seed the store with their first
+      // fix, so only returning visits need this initial lookup.
+      if (!getUserLocation()) {
+        try {
+          const position = await getCurrentPositionWithFallback()
+          if (!cancelled) applyPosition(position)
+        } catch (error) {
+          if (cancelled) return
+          if (isLocationPermissionDenied(error)) {
+            setLocationPermission(LOCATION_PERMISSION.DENIED)
+            return
+          }
+          console.warn('Initial location unavailable; using default map center.', error?.code ?? error)
+          setCurrentUserLocation(defaultLocation)
+        }
+      }
+      if (cancelled) return
 
-    getCurrentPositionWithFallback()
-      .then((position) => {
-        if (!cancelled) applyPosition(position)
-      })
-      .catch((error) => {
-        if (cancelled) return
-        console.warn('Initial location unavailable; using default map center.', error?.code ?? error)
-        setCurrentUserLocation(defaultLocation)
-      })
-
-    watchId = navigator.geolocation.watchPosition(
-      (position) => {
+      try {
+        stopWatching = await watchLocation((position) => {
+          if (cancelled) return
         const now = Date.now()
         if (now - lastUpdateTime < UPDATE_THROTTLE_MS) return
 
@@ -896,22 +924,30 @@ function App() {
           lastUpdateTime = now
           setCurrentUserLocation(location)
         }
-      },
-      (error) => {
-        // code 2 (POSITION_UNAVAILABLE) is common on desktop Mac when Core Location has no fix.
-        if (error?.code === 2) return
-        console.warn('Error watching location:', error)
-      },
-      getWatchPositionOptions()
-    )
+        }, (error) => {
+          if (isLocationPermissionDenied(error)) {
+            setLocationPermission(LOCATION_PERMISSION.DENIED)
+            return
+          }
+          // POSITION_UNAVAILABLE is common on desktops without a current fix.
+          if (error?.code !== 2) console.warn('Error watching location:', error)
+        })
+        if (cancelled) stopWatching()
+      } catch (error) {
+        if (isLocationPermissionDenied(error)) {
+          setLocationPermission(LOCATION_PERMISSION.DENIED)
+        } else {
+          console.warn('Unable to watch location:', error)
+        }
+      }
+    }
+    void start()
 
     return () => {
       cancelled = true
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId)
-      }
+      stopWatching?.()
     }
-  }, [permissionsReady])
+  }, [permissionsReady, locationPermission])
 
   // Load user data (deal pipeline, leads, tasks, notes, skip traced, etc.) when signed in
   useEffect(() => {
@@ -2603,13 +2639,44 @@ function App() {
     }
   }, [parcelPendingForList, clickedParcelData, lists, getToken, refreshLists, nav, clearListAddMode])
 
-  // Recenter map on user location and resume follow-mode
-  const handleRecenter = useCallback(() => {
+  // Recenter when available; otherwise this explicit gesture is the only
+  // recovery path allowed to invoke location permission UI.
+  const handleRecenter = useCallback(async () => {
+    if (locationPermission === LOCATION_PERMISSION.UNSUPPORTED) {
+      showToast('Location is not supported on this device or browser.', 'warning')
+      return
+    }
+    if (locationPermission === LOCATION_PERMISSION.DENIED) {
+      showToast('Location is blocked. Enable it in this app’s or browser’s settings, then try again.', 'warning')
+      return
+    }
+    if (locationPermission !== LOCATION_PERMISSION.GRANTED) {
+      const result = await requestLocationAccess()
+      setLocationPermission(result.state)
+      if (result.position) {
+        setCurrentUserLocation({
+          lat: result.position.coords.latitude,
+          lng: result.position.coords.longitude,
+          accuracy: result.position.coords.accuracy,
+        })
+      }
+      if (result.state !== LOCATION_PERMISSION.GRANTED) {
+        if (result.state === LOCATION_PERMISSION.DENIED) {
+          showToast('Location was not enabled. You can allow it later in app or browser settings.', 'warning')
+        } else if (result.state === LOCATION_PERMISSION.UNSUPPORTED) {
+          showToast('Location is not supported on this device or browser.', 'warning')
+        } else {
+          showToast('Could not get your location. The map is still available.', 'warning')
+        }
+        return
+      }
+    }
+
     setIsFollowing(true)
     if (recenterMapRef.current) {
       recenterMapRef.current()
     }
-  }, [])
+  }, [locationPermission])
 
   const handleToggleCompass = useCallback(async () => {
     if (needsGesture) {
@@ -3678,7 +3745,15 @@ function App() {
     />
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
-        <PermissionPrompt onComplete={(orientationGranted) => {
+        <PermissionPrompt onComplete={({ orientationGranted, locationState, position }) => {
+          if (position) {
+            setCurrentUserLocation({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            })
+          }
+          setLocationPermission(locationState)
           setPermissionsReady(true)
           if (orientationGranted && getSettings().compassDefault) {
             setIsCompassActive(true)
@@ -3846,6 +3921,7 @@ function App() {
 
       <MapControls
         onRecenter={handleRecenter}
+        locationPermission={locationPermission}
         onToggleCompass={handleToggleCompass}
         isCompassActive={isCompassActive}
         onToggleMultiSelect={handleToggleMultiSelect}
