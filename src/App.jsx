@@ -897,33 +897,33 @@ function App() {
       try {
         stopWatching = await watchLocation((position) => {
           if (cancelled) return
-        const now = Date.now()
-        if (now - lastUpdateTime < UPDATE_THROTTLE_MS) return
+          const now = Date.now()
+          if (now - lastUpdateTime < UPDATE_THROTTLE_MS) return
 
-        const location = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        }
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+          }
 
-        const prevLocation = getUserLocation()
-        if (!prevLocation) {
-          lastUpdateTime = now
-          setCurrentUserLocation(location)
-          return
-        }
+          const prevLocation = getUserLocation()
+          if (!prevLocation) {
+            lastUpdateTime = now
+            setCurrentUserLocation(location)
+            return
+          }
 
-        const latDiff = Math.abs(location.lat - prevLocation.lat)
-        const lngDiff = Math.abs(location.lng - prevLocation.lng)
-        const distanceMeters = Math.sqrt(
-          Math.pow(latDiff * 111000, 2) +
-          Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
-        )
+          const latDiff = Math.abs(location.lat - prevLocation.lat)
+          const lngDiff = Math.abs(location.lng - prevLocation.lng)
+          const distanceMeters = Math.sqrt(
+            Math.pow(latDiff * 111000, 2) +
+            Math.pow(lngDiff * 111000 * Math.cos(location.lat * Math.PI / 180), 2)
+          )
 
-        if (distanceMeters >= 2) {
-          lastUpdateTime = now
-          setCurrentUserLocation(location)
-        }
+          if (distanceMeters >= 2) {
+            lastUpdateTime = now
+            setCurrentUserLocation(location)
+          }
         }, (error) => {
           if (isLocationPermissionDenied(error)) {
             setLocationPermission(LOCATION_PERMISSION.DENIED)

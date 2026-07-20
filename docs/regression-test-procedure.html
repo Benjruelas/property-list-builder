@@ -553,20 +553,35 @@
       "team-member"
     ],
     "viewport": "both",
-    "preconditions": "Fresh session or reset permissions. Test on both mobile and desktop if time allows.",
+    "preconditions": "Fresh install/site data; test persistent, temporary, denied, and revoked access on native and PWA targets. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Load app first time or after clearing site data",
+        "action": "Load with fresh site data and tap Continue",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Auth / menu"
+      },
+      {
+        "action": "Relaunch after a persistent grant",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Auth / menu"
+      },
+      {
+        "action": "Relaunch after temporary access expires, denial, or revocation",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Auth / menu"
+      },
+      {
+        "action": "Deny orientation and continue startup",
         "verify": "Target screen, panel, or dialog opens and is interactive.",
         "ui": "Auth / menu"
       },
       {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Permission prompt appears; grant/deny handled gracefully",
+        "verify": "Onboarding is one-time; permission is checked without an automatic prompt; denied or expired access has explicit recovery",
         "ui": "Auth / menu"
       }
     ],
-    "expected": "Permission prompt appears; grant/deny handled gracefully"
+    "expected": "Onboarding is one-time; permission is checked without an automatic prompt; denied or expired access has explicit recovery"
   },
   {
     "id": "AUTH-009",
@@ -791,20 +806,45 @@
       "team-member"
     ],
     "viewport": "both",
-    "preconditions": "Location permission granted. Test on both mobile and desktop if time allows.",
+    "preconditions": "Test with location granted, prompt, and denied. Test on both mobile and desktop if time allows.",
     "steps": [
       {
-        "action": "Tap recenter/locate control",
+        "action": "With access granted",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Map chrome"
+      },
+      {
+        "action": "Tap recenter/locate",
         "verify": "Input/selection is reflected in the UI; no validation error blocks progress.",
         "ui": "Map chrome"
       },
       {
+        "action": "With permission in prompt state",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Auth / menu"
+      },
+      {
+        "action": "Tap the location control",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Map chrome"
+      },
+      {
+        "action": "With permission denied or revoked",
+        "verify": "Step completes; ready for next action.",
+        "ui": "Auth / menu"
+      },
+      {
+        "action": "Tap the location control",
+        "verify": "Target screen, panel, or dialog opens and is interactive.",
+        "ui": "Map chrome"
+      },
+      {
         "action": "Confirm final expected outcome for this test case.",
-        "verify": "Map centers on user position",
+        "verify": "Granted access recenters; unavailable access has non-blocking explicit recovery",
         "ui": "Map chrome"
       }
     ],
-    "expected": "Map centers on user position"
+    "expected": "Granted access recenters; unavailable access has non-blocking explicit recovery"
   },
   {
     "id": "MAP-005",
