@@ -878,9 +878,10 @@ function App() {
   // do not re-render the full App tree.
   useEffect(() => {
     if (!permissionsReady || locationPermission === null) return
-    const defaultLocation = { lat: 32.7767, lng: -96.7970, accuracy: null }
     if (locationPermission !== LOCATION_PERMISSION.GRANTED) {
-      setCurrentUserLocation(defaultLocation)
+      // The map already has a Dallas default viewport. Keep the GPS store empty
+      // so fallback coordinates are never mistaken for a real user fix.
+      setCurrentUserLocation(null)
       return
     }
 
@@ -912,7 +913,7 @@ function App() {
             return
           }
           console.warn('Initial location unavailable; using default map center.', error?.code ?? error)
-          setCurrentUserLocation(defaultLocation)
+          setCurrentUserLocation(null)
         }
       }
       if (cancelled) return
