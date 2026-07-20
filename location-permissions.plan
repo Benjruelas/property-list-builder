@@ -1,0 +1,158 @@
+# One-Time Location Permission Experience
+
+## Goal
+
+Make location access feel like a one-time setup across native iOS, native Android, and supported browsers. Users who grant persistent access should not see another prompt on later launches. The app must remain usable when access is temporary, denied, revoked, or unsupported.
+
+The app cannot override browser or operating-system choices such as iOS “Allow Once.” In those cases, it should avoid prompting automatically on every launch and instead offer an explicit, non-blocking way to enable location.
+
+## Current behavior and causes
+
+- `PermissionPrompt.jsx` remembers that its onboarding overlay completed with `permissions_granted` in `localStorage`, but that flag does not represent the real browser or OS permission state.
+- The prompt calls `getCurrentPositionWithFallback()`, after which `App.jsx` calls it again and immediately starts `watchPosition()`.
+- On every later launch, `App.jsx` starts geolocation whenever the local flag exists. If an “Allow Once” grant expired, this triggers another system prompt.
+- `getCurrentPositionWithFallback()` retries every error, including `PERMISSION_DENIED`, potentially issuing unnecessary follow-up requests.
+- Native iOS and Android projects do not declare foreground location access.
+- Device orientation and location are combined in one onboarding flow even though their permission lifecycles differ.
+
+## Implementation
+
+### 1. Add native geolocation support
+
+- Add the latest `@capacitor/geolocation` version compatible with the repository’s Capacitor major version.
+- Run Capacitor sync so both native projects register the plugin.
+- Add `NSLocationWhenInUseUsageDescription` to `ios/App/App/Info.plist`.
+- Add `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` to `android/app/src/main/AndroidManifest.xml`.
+- Do not add background location permissions.
+
+### 2. Introduce a platform location adapter
+
+Create a location module that exposes a consistent API:
+
+- `getLocationPermissionState()`
+- `requestLocationPermission()`
+- `getCurrentLocation()`
+- `watchLocation(callback, onError)`
+- `clearLocationWatch(watchId)`
+
+Behavior:
+
+- On native Capacitor platforms, use `@capacitor/geolocation` for permission checks, permission requests, fixes, and watches.
+- On web/PWA, use the Permissions API when available and `navigator.geolocation` for fixes and watches.
+- Normalize states to `granted`, `prompt`, `denied`, and `unsupported`.
+- Normalize native and browser position/error objects for existing consumers.
+- Treat the local onboarding flag only as presentation state, never as proof of permission.
+
+### 3. Make startup permission-aware
+
+Replace the boolean-only `permissionsReady` initialization with an asynchronous permission bootstrap:
+
+1. Check the real platform permission without triggering a system prompt.
+2. If granted, skip onboarding and start location tracking.
+3. If not granted and onboarding has never been completed, show the blocking explanation screen.
+4. If not granted and onboarding was previously completed, load the map without location and show a non-blocking Enable Location action.
+5. Never request location automatically from a fresh launch when the real state is `prompt` or `denied`.
+
+Keep a short loading state while the permission check completes so the onboarding prompt does not flash for already-authorized users.
+
+### 4. Request once from an explicit gesture
+
+Update `PermissionPrompt` so Continue:
+
+- Requests iOS device orientation synchronously from the gesture when required.
+- Requests location through the platform adapter.
+- Records that onboarding was completed whether location was granted or declined.
+- Returns the normalized permission result and any initial web position to `App`.
+- Dismisses without blocking the app indefinitely on denial, timeout, or unavailable hardware.
+
+For web browsers that cannot request permission directly, a single `getCurrentPosition()` call is the permission request. Reuse its returned position rather than requesting another initial fix.
+
+### 5. Consolidate location tracking
+
+- Move `App.jsx` from direct `navigator.geolocation` calls to the adapter.
+- Start a location watch only when permission is confirmed as granted.
+- Seed the location store with the position returned by the permission flow when available.
+- Otherwise obtain one initial fix, then start the watch.
+- Ensure watch cleanup works for both synchronous browser IDs and asynchronous Capacitor watch IDs.
+- Preserve the current default map center when location is unavailable.
+
+### 6. Stop invalid retries
+
+Update fallback behavior:
+
+- Return immediately for permission denial.
+- Retry only timeout or position-unavailable failures.
+- Preserve the coarse-first/high-accuracy-second behavior on web where useful.
+- Avoid retrying unsupported or policy-blocked access.
+
+### 7. Add recovery UI
+
+When location is unavailable after onboarding:
+
+- Keep the map and the rest of the app accessible.
+- Show an Enable Location action near the existing location/recenter control.
+- For `prompt`, request access only after the user taps that action.
+- For native `denied`, explain how to enable location in system settings and provide an app-settings link where supported.
+- For browser `denied`, explain that site permissions must be changed in browser settings.
+- If permission is later granted, start tracking without requiring an app restart.
+
+### 8. Decouple orientation
+
+- Do not use location permission state to infer orientation permission.
+- Retain the first-run orientation request because iOS requires a user gesture.
+- On later launches, request orientation only from an explicit compass interaction if iOS requires another gesture.
+- A denied orientation request must not prevent location tracking or app startup.
+
+## Files expected to change
+
+- `package.json`
+- `package-lock.json`
+- `capacitor.config.json` only if plugin configuration is required
+- `ios/App/App/Info.plist`
+- `android/app/src/main/AndroidManifest.xml`
+- `src/utils/geolocation.js` or a new platform location adapter
+- `src/components/PermissionPrompt.jsx`
+- `src/App.jsx`
+- Location permission and prompt tests under existing test directories
+
+## Test coverage
+
+### Automated
+
+- Native permission mappings for granted, prompt, and denied states.
+- Browser Permissions API mappings and unsupported fallback.
+- A persisted onboarding flag does not count as a location grant.
+- Already-granted startup does not display onboarding or request permission.
+- Prompt/denied startup does not invoke geolocation automatically.
+- Continue makes one permission request and reuses its initial position.
+- Permission denial is not retried.
+- Timeout and position-unavailable errors can use the intended fallback.
+- Watches start only when granted and are cleaned up on unmount.
+- Orientation denial does not block location completion.
+
+### Native/build checks
+
+- Run the JavaScript test suite and production build.
+- Run Capacitor sync.
+- Build the Android debug target.
+- Validate the iOS project configuration and build when an Xcode environment is available.
+
+### Manual device matrix
+
+- iOS native: Allow While Using, Allow Once, Deny, revoke in Settings, relaunch.
+- Android native: Allow precise, allow approximate, deny, revoke in Settings, relaunch.
+- Installed iOS PWA/Safari: persistent grant where supported, Allow Once, denial.
+- Android Chrome/PWA: grant, denial, site permission reset.
+- Desktop Safari, Chrome, Firefox, and Edge: grant, denial, unsupported Permissions API.
+
+For every persistent-grant case, confirm that relaunching causes no custom or system permission prompt. For temporary or expired grants, confirm that relaunch loads the app without an automatic system prompt and offers the explicit Enable Location action.
+
+## Acceptance criteria
+
+- Users who choose persistent foreground access are prompted only once unless they later revoke or reset access.
+- Startup checks do not themselves trigger a system permission dialog.
+- Expired “Allow Once” access does not produce an automatic dialog at every launch.
+- The initial approval flow makes no duplicate location request.
+- Denial never traps users behind the onboarding overlay.
+- The app remains functional without location and clearly exposes recovery.
+- No background-location permission is requested.
