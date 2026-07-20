@@ -44,6 +44,8 @@ import {
   getCurrentPositionWithFallback,
   isLocationPermissionDenied,
   requestLocationAccess,
+  shouldProbeLocationOnStartup,
+  syncLocationAccessAttained,
   watchLocation,
 } from './utils/geolocation'
 import { panelLazy, prefetchPanel, prefetchAllPanels } from './utils/panelChunks'
@@ -403,6 +405,8 @@ function App() {
   }, [logout, nav])
   const [permissionsReady, setPermissionsReady] = useState(() => hasCompletedPermissionOnboarding())
   const [locationPermission, setLocationPermission] = useState(null)
+  const locationPermissionRef = useRef(locationPermission)
+  locationPermissionRef.current = locationPermission
 
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
   const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
@@ -609,6 +613,8 @@ function App() {
       setMapReady(false)
       mapInstanceRef.current = null
       mapRef.current = null
+      // Allow a remounted map to jumpTo the user again on first fix / onLoad.
+      initialSetDoneRef.current = false
     }
   }, [basemapStatus])
 
@@ -847,12 +853,60 @@ function App() {
   }, [permissionsReady])
 
   // Returning visits inspect permission without invoking browser/OS UI.
+  // When the check reports "prompt" but access was previously attained (common
+  // on Safari without the Permissions API), silently probe for a fix so the
+  // map can auto-center without a Recenter tap.
   useEffect(() => {
     if (!permissionsReady) return
     let cancelled = false
+
+    const applyCheckedState = async (state) => {
+      if (cancelled) return
+      if (state === LOCATION_PERMISSION.GRANTED) {
+        syncLocationAccessAttained(LOCATION_PERMISSION.GRANTED)
+        setLocationPermission(LOCATION_PERMISSION.GRANTED)
+        return
+      }
+      if (state === LOCATION_PERMISSION.DENIED) {
+        syncLocationAccessAttained(LOCATION_PERMISSION.DENIED)
+        setLocationPermission(LOCATION_PERMISSION.DENIED)
+        return
+      }
+      // Already tracking — uncertain re-checks (Safari) must not downgrade.
+      if (locationPermissionRef.current === LOCATION_PERMISSION.GRANTED &&
+          state === LOCATION_PERMISSION.PROMPT) {
+        return
+      }
+      if (shouldProbeLocationOnStartup(state)) {
+        try {
+          const position = await getCurrentPositionWithFallback()
+          if (cancelled) return
+          setCurrentUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+          })
+          syncLocationAccessAttained(LOCATION_PERMISSION.GRANTED)
+          setLocationPermission(LOCATION_PERMISSION.GRANTED)
+          return
+        } catch (error) {
+          if (cancelled) return
+          if (isLocationPermissionDenied(error)) {
+            syncLocationAccessAttained(LOCATION_PERMISSION.DENIED)
+            setLocationPermission(LOCATION_PERMISSION.DENIED)
+            return
+          }
+          // Recoverable failure — leave as prompt; Recenter remains recovery.
+          setLocationPermission(LOCATION_PERMISSION.PROMPT)
+          return
+        }
+      }
+      setLocationPermission(state)
+    }
+
     const refreshPermission = () => {
       checkLocationPermission().then((state) => {
-        if (!cancelled) setLocationPermission(state)
+        void applyCheckedState(state)
       })
     }
     const handleVisibility = () => {
@@ -2671,6 +2725,7 @@ function App() {
         effectivePermission === LOCATION_PERMISSION.UNSUPPORTED ||
         effectivePermission === null) {
       effectivePermission = await checkLocationPermission()
+      syncLocationAccessAttained(effectivePermission)
       setLocationPermission(effectivePermission)
     }
 
@@ -2702,9 +2757,9 @@ function App() {
         }
         return
       }
-    } else if (locationPermission !== LOCATION_PERMISSION.GRANTED) {
-      // Access changed in Settings while the app was backgrounded. Refresh the
-      // stale fallback position before recentering.
+    } else if (locationPermission !== LOCATION_PERMISSION.GRANTED || !getUserLocation()) {
+      // Access changed in Settings, or granted state has no fix yet — seed the
+      // store before recentering.
       try {
         const position = await getCurrentPositionWithFallback()
         setCurrentUserLocation({
@@ -2712,6 +2767,7 @@ function App() {
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy,
         })
+        syncLocationAccessAttained(LOCATION_PERMISSION.GRANTED)
       } catch {
         showToast('Could not get your current location yet. Try again in a moment.', 'warning')
         return
@@ -3799,6 +3855,7 @@ function App() {
               accuracy: position.coords.accuracy,
             })
           }
+          syncLocationAccessAttained(locationState)
           setLocationPermission(locationState)
           if (orientationGranted) confirmOrientationGranted()
           setPermissionsReady(true)

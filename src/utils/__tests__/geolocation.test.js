@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Node test environment has no Web Storage; provide a minimal localStorage.
+if (typeof globalThis.localStorage === 'undefined') {
+  const store = new Map()
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(String(key), String(value)) },
+    removeItem: (key) => { store.delete(key) },
+    clear: () => { store.clear() },
+  }
+}
+
 const native = vi.hoisted(() => ({ value: false }))
 const geolocationPlugin = vi.hoisted(() => ({
   checkPermissions: vi.fn(),
@@ -18,11 +29,16 @@ vi.mock('@capacitor/geolocation', () => ({
 }))
 
 import {
+  LOCATION_ACCESS_ATTAINED_KEY,
   LOCATION_PERMISSION,
   checkLocationPermission,
   getCurrentPositionWithFallback,
+  hasAttainedLocationAccess,
   normalizeNativeLocationPermission,
   requestLocationAccess,
+  setLocationAccessAttained,
+  shouldProbeLocationOnStartup,
+  syncLocationAccessAttained,
   watchLocation,
 } from '../geolocation'
 
@@ -49,6 +65,34 @@ describe('location permission adapter', () => {
     native.value = false
     vi.clearAllMocks()
     vi.unstubAllGlobals()
+    localStorage.clear()
+  })
+
+  it('persists and clears the location-access attained flag', () => {
+    expect(hasAttainedLocationAccess()).toBe(false)
+    setLocationAccessAttained(true)
+    expect(localStorage.getItem(LOCATION_ACCESS_ATTAINED_KEY)).toBe('1')
+    expect(hasAttainedLocationAccess()).toBe(true)
+    setLocationAccessAttained(false)
+    expect(hasAttainedLocationAccess()).toBe(false)
+  })
+
+  it('syncs attained flag from granted and denied states only', () => {
+    syncLocationAccessAttained(LOCATION_PERMISSION.GRANTED)
+    expect(hasAttainedLocationAccess()).toBe(true)
+    syncLocationAccessAttained(LOCATION_PERMISSION.PROMPT)
+    expect(hasAttainedLocationAccess()).toBe(true)
+    syncLocationAccessAttained(LOCATION_PERMISSION.DENIED)
+    expect(hasAttainedLocationAccess()).toBe(false)
+  })
+
+  it('allows a startup probe only when check is prompt and access was attained', () => {
+    expect(shouldProbeLocationOnStartup(LOCATION_PERMISSION.PROMPT, true)).toBe(true)
+    expect(shouldProbeLocationOnStartup(LOCATION_PERMISSION.PROMPT, false)).toBe(false)
+    expect(shouldProbeLocationOnStartup(LOCATION_PERMISSION.GRANTED, true)).toBe(false)
+    expect(shouldProbeLocationOnStartup(LOCATION_PERMISSION.DENIED, true)).toBe(false)
+    setLocationAccessAttained(true)
+    expect(shouldProbeLocationOnStartup(LOCATION_PERMISSION.PROMPT)).toBe(true)
   })
 
   it('normalizes native precise and approximate grants', () => {
@@ -113,6 +157,22 @@ describe('location permission adapter', () => {
       position,
     })
     expect(nav.geolocation.getCurrentPosition).toHaveBeenCalledTimes(1)
+    expect(hasAttainedLocationAccess()).toBe(true)
+  })
+
+  it('clears attained flag when an explicit access request is denied', async () => {
+    setLocationAccessAttained(true)
+    const nav = browserNavigator()
+    nav.geolocation.getCurrentPosition.mockImplementation((_success, failure) => {
+      failure({ code: 1, message: 'Permission denied' })
+    })
+    vi.stubGlobal('navigator', nav)
+
+    await expect(requestLocationAccess()).resolves.toMatchObject({
+      state: LOCATION_PERMISSION.DENIED,
+      position: null,
+    })
+    expect(hasAttainedLocationAccess()).toBe(false)
   })
 
   it('requests and watches native foreground location with cleanup', async () => {
@@ -125,6 +185,7 @@ describe('location permission adapter', () => {
       state: LOCATION_PERMISSION.GRANTED,
       position,
     })
+    expect(hasAttainedLocationAccess()).toBe(true)
     const stop = await watchLocation(vi.fn(), vi.fn())
     stop()
     stop()

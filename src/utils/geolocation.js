@@ -8,10 +8,45 @@ export const LOCATION_PERMISSION = Object.freeze({
   UNSUPPORTED: 'unsupported',
 })
 
+/** Persists that the user previously attained a successful location grant. */
+export const LOCATION_ACCESS_ATTAINED_KEY = 'location_access_attained'
+
 const POSITION_ATTEMPTS = [
   { enableHighAccuracy: false, timeout: 28000, maximumAge: 300000 },
   { enableHighAccuracy: true, timeout: 35000, maximumAge: 0 },
 ]
+
+export function hasAttainedLocationAccess() {
+  try {
+    return localStorage.getItem(LOCATION_ACCESS_ATTAINED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function setLocationAccessAttained(attained = true) {
+  try {
+    if (attained) localStorage.setItem(LOCATION_ACCESS_ATTAINED_KEY, '1')
+    else localStorage.removeItem(LOCATION_ACCESS_ATTAINED_KEY)
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/** Persist or clear the attained flag from a resolved permission state. */
+export function syncLocationAccessAttained(state) {
+  if (state === LOCATION_PERMISSION.GRANTED) setLocationAccessAttained(true)
+  else if (state === LOCATION_PERMISSION.DENIED) setLocationAccessAttained(false)
+}
+
+/**
+ * Whether a returning visit may silently probe getCurrentPosition when the
+ * non-prompting permission check reports "prompt" (e.g. Safari without the
+ * Permissions API). Never probes when access was never attained.
+ */
+export function shouldProbeLocationOnStartup(checkedState, attained = hasAttainedLocationAccess()) {
+  return checkedState === LOCATION_PERMISSION.PROMPT && attained === true
+}
 
 export function normalizeNativeLocationPermission(result = {}) {
   const values = [result.location, result.coarseLocation].filter(Boolean)
@@ -70,16 +105,19 @@ export async function requestLocationAccess() {
       const state = normalizeNativeLocationPermission(
         await Geolocation.requestPermissions({ permissions: ['location', 'coarseLocation'] })
       )
-      if (state !== LOCATION_PERMISSION.GRANTED) return { state, position: null }
-      return { state, position: await getCurrentPositionWithFallback() }
-    } catch (error) {
-      return {
-        state: isLocationPermissionDenied(error)
-          ? LOCATION_PERMISSION.DENIED
-          : await checkLocationPermission(),
-        position: null,
-        error,
+      if (state !== LOCATION_PERMISSION.GRANTED) {
+        syncLocationAccessAttained(state)
+        return { state, position: null }
       }
+      const position = await getCurrentPositionWithFallback()
+      syncLocationAccessAttained(LOCATION_PERMISSION.GRANTED)
+      return { state: LOCATION_PERMISSION.GRANTED, position }
+    } catch (error) {
+      const state = isLocationPermissionDenied(error)
+        ? LOCATION_PERMISSION.DENIED
+        : await checkLocationPermission()
+      syncLocationAccessAttained(state)
+      return { state, position: null, error }
     }
   }
 
@@ -89,15 +127,14 @@ export async function requestLocationAccess() {
 
   try {
     const position = await getCurrentPositionWithFallback()
+    syncLocationAccessAttained(LOCATION_PERMISSION.GRANTED)
     return { state: LOCATION_PERMISSION.GRANTED, position }
   } catch (error) {
-    return {
-      state: isLocationPermissionDenied(error)
-        ? LOCATION_PERMISSION.DENIED
-        : await checkLocationPermission(),
-      position: null,
-      error,
-    }
+    const state = isLocationPermissionDenied(error)
+      ? LOCATION_PERMISSION.DENIED
+      : await checkLocationPermission()
+    syncLocationAccessAttained(state)
+    return { state, position: null, error }
   }
 }
 
