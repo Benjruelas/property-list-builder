@@ -55,8 +55,21 @@
     --map-chrome-btn-gap: calc(0.5rem * var(--ui-mobile-chrome-scale));
     --map-chrome-icon-size: calc(1.5rem * var(--ui-mobile-chrome-scale));
     --map-controls-stack-height: calc(5 * var(--map-chrome-btn-size) + 4 * var(--map-chrome-btn-gap));
-    --quick-create-fab-size: calc(var(--map-chrome-btn-size) * 1.5);
-    --quick-create-fab-icon-size: calc(var(--map-chrome-icon-size) * 1.5);
+    --quick-create-fab-size: var(--map-chrome-btn-size);
+    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
+    --quick-create-fab-gap: 4px;
+    --quick-create-fab-anchor-slots: 4;
+    --quick-create-fab-anchor-right: calc(
+      (100vw - var(--action-bar-width)) / 2
+      + var(--action-bar-width) / (2 * var(--quick-create-fab-anchor-slots))
+      - var(--quick-create-fab-size) / 2
+    );
+    --quick-create-fab-bottom: calc(
+      env(safe-area-inset-bottom, 0px)
+      + 12px
+      + var(--ui-action-bar-block)
+      + var(--quick-create-fab-gap)
+    );
     --tasks-panel-fade-duration: 380ms;
     --tasks-panel-fade-ease: cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -95,8 +108,16 @@
     --map-chrome-btn-size: var(--ui-action-bar-btn-height);
     --map-chrome-btn-gap: 0.5rem;
     --map-chrome-icon-size: calc(1.5rem * var(--ui-touch-scale));
-    --quick-create-fab-size: calc(var(--map-chrome-btn-size) * 1.5);
-    --quick-create-fab-icon-size: calc(var(--map-chrome-icon-size) * 1.5);
+    --quick-create-fab-size: var(--map-chrome-btn-size);
+    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
+    --quick-create-fab-gap: 4px;
+    --quick-create-fab-anchor-slots: 13;
+    --quick-create-fab-anchor-right: calc(
+      (100vw - var(--action-bar-width)) / 2
+      + var(--action-bar-width) / (2 * var(--quick-create-fab-anchor-slots))
+      - var(--quick-create-fab-size) / 2
+    );
+    --quick-create-fab-bottom: calc(var(--ui-action-bar-block) + var(--quick-create-fab-gap));
     --map-controls-stack-height: calc(4 * var(--map-chrome-btn-size) + 3 * var(--map-chrome-btn-gap));
     --map-controls-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
     --tasks-panel-motion-duration: 380ms;
@@ -6857,8 +6878,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   --quick-create-fab-shimmer-hover-min: 0.78;
   --quick-create-fab-shimmer-hover-max: 1;
   position: fixed !important;
-  right: 12px !important;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 8px) !important;
+  right: var(--quick-create-fab-anchor-right, 12px) !important;
+  bottom: var(--quick-create-fab-bottom, calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 4px)) !important;
   z-index: 10004 !important;
   pointer-events: auto !important;
   -webkit-tap-highlight-color: transparent;
@@ -6926,8 +6947,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 @media (min-width: 768px) {
   #modal-root button.quick-create-fab-btn {
-    right: calc((100vw - var(--action-bar-width)) / 2 - var(--map-chrome-btn-gap) - var(--map-chrome-btn-size)) !important;
-    bottom: calc(var(--ui-action-bar-block) + var(--ui-action-bar-inner-v-pad) + var(--map-chrome-btn-gap)) !important;
+    right: var(--quick-create-fab-anchor-right) !important;
+    bottom: var(--quick-create-fab-bottom) !important;
   }
 }
 
@@ -6988,8 +7009,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
 .quick-create-fab-menu {
   position: fixed;
-  right: calc((100vw - var(--action-bar-width)) / 2);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 8px + var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) + 8px);
+  right: var(--quick-create-fab-anchor-right, calc((100vw - var(--action-bar-width)) / 2));
+  bottom: calc(var(--quick-create-fab-bottom, calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 4px)) + var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) + var(--quick-create-fab-gap, 4px));
   min-width: 200px;
   max-width: min(280px, calc(100vw - 24px));
   z-index: 10058;
@@ -7020,11 +7041,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 
   .quick-create-fab-menu {
     bottom: calc(
-      var(--ui-action-bar-block)
-      + var(--ui-action-bar-inner-v-pad)
-      + var(--map-chrome-btn-gap)
+      var(--quick-create-fab-bottom)
       + var(--quick-create-fab-size, var(--map-chrome-btn-size))
-      + var(--map-chrome-btn-gap)
+      + var(--quick-create-fab-gap, 4px)
     );
   }
 }
