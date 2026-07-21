@@ -55,8 +55,8 @@
     --map-chrome-btn-gap: calc(0.5rem * var(--ui-mobile-chrome-scale));
     --map-chrome-icon-size: calc(1.5rem * var(--ui-mobile-chrome-scale));
     --map-controls-stack-height: calc(5 * var(--map-chrome-btn-size) + 4 * var(--map-chrome-btn-gap));
-    --quick-create-fab-size: var(--map-chrome-btn-size);
-    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
+    --quick-create-fab-size: calc(var(--map-chrome-btn-size) * 1.5);
+    --quick-create-fab-icon-size: calc(var(--map-chrome-icon-size) * 1.5);
     --tasks-panel-fade-duration: 380ms;
     --tasks-panel-fade-ease: cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -95,8 +95,8 @@
     --map-chrome-btn-size: var(--ui-action-bar-btn-height);
     --map-chrome-btn-gap: 0.5rem;
     --map-chrome-icon-size: calc(1.5rem * var(--ui-touch-scale));
-    --quick-create-fab-size: var(--map-chrome-btn-size);
-    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
+    --quick-create-fab-size: calc(var(--map-chrome-btn-size) * 1.5);
+    --quick-create-fab-icon-size: calc(var(--map-chrome-icon-size) * 1.5);
     --map-controls-stack-height: calc(4 * var(--map-chrome-btn-size) + 3 * var(--map-chrome-btn-gap));
     --map-controls-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
     --tasks-panel-motion-duration: 380ms;
