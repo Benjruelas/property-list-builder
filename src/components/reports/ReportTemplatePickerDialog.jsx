@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils'
 import {
   DealTemplatePanelShell,
   DealTemplatePanelScroll,
-  DealTemplateEmptyState,
   DEAL_TEMPLATE_LIST_ROW,
 } from '../dealTemplates/dealTemplatePanelShared'
 
@@ -18,7 +17,6 @@ export function ReportTemplatePickerDialog({
   onOpenChange,
   templates = [],
   preferredTemplateId = null,
-  leadLabel = '',
   onSelect,
   nestedOverlay = true,
 }) {
@@ -30,17 +28,12 @@ export function ReportTemplatePickerDialog({
     onSelect?.(template)
   }
 
-  const subtitle = leadLabel
-    ? `Choose a layout for ${leadLabel}.`
-    : 'Choose a report layout or start from scratch.'
-
   return (
     <DealTemplatePanelShell
       open={open}
       onOpenChange={onOpenChange}
       title="Choose a template"
       icon={FileText}
-      subtitle={subtitle}
       description="Choose a report template or continue without one."
       nestedOverlay={nestedOverlay}
       panelClassName="compact-picker-panel"
@@ -85,13 +78,6 @@ export function ReportTemplatePickerDialog({
           </button>
         ))}
 
-        {templates.length === 0 && (
-          <DealTemplateEmptyState
-            icon={FileText}
-            title="No saved templates yet."
-            hint="Use “No template” above, or save a report layout as a template from the Templates tab."
-          />
-        )}
       </DealTemplatePanelScroll>
     </DealTemplatePanelShell>
   )

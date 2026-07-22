@@ -38,13 +38,20 @@ import {
 import { AnnotationHandleLayer } from './AnnotationHandleLayer'
 import { AnnotationTextEditor } from './AnnotationTextEditor'
 import { arrowHeadSize, scaledStrokeWidth } from './annotationKonvaRender'
+import {
+  ANNOTATOR_COLORS,
+  DEFAULT_ANNOTATOR_COLOR,
+  DEFAULT_STROKE_WIDTH,
+  STROKE_SIZE_OPTIONS,
+  loadPhotoAnnotatorPrefs,
+  savePhotoAnnotatorPrefs,
+  strokeSizeLabel,
+} from './photoAnnotatorPrefs'
 
-const COLORS = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#ffffff']
-const DEFAULT_COLOR = '#ef4444'
-const DEFAULT_STROKE = 3
-const MIN_STROKE = 1
-const MAX_STROKE = 15
-const STROKE_OPTIONS = Array.from({ length: MAX_STROKE - MIN_STROKE + 1 }, (_, i) => MIN_STROKE + i)
+const COLORS = ANNOTATOR_COLORS
+const DEFAULT_COLOR = DEFAULT_ANNOTATOR_COLOR
+const DEFAULT_STROKE = DEFAULT_STROKE_WIDTH
+const STROKE_OPTIONS = STROKE_SIZE_OPTIONS
 const COPY_OFFSET = 16
 const DEFAULT_SHAPE = 'circle'
 
@@ -141,8 +148,8 @@ export function PhotoAnnotatorEditor({
   const [historyIdx, setHistoryIdx] = useState(0)
   const [mode, setMode] = useState('idle')
   const [shapeKind, setShapeKind] = useState(DEFAULT_SHAPE)
-  const [color, setColor] = useState(DEFAULT_COLOR)
-  const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE)
+  const [color, setColor] = useState(() => loadPhotoAnnotatorPrefs()?.color ?? DEFAULT_COLOR)
+  const [strokeWidth, setStrokeWidth] = useState(() => loadPhotoAnnotatorPrefs()?.strokeWidth ?? DEFAULT_STROKE)
   const [selectedId, setSelectedId] = useState(null)
   const [moveHeld, setMoveHeld] = useState(false)
   const [editingTextId, setEditingTextId] = useState(null)
@@ -183,6 +190,10 @@ export function PhotoAnnotatorEditor({
     objectsRef.current = next
     setObjects(next)
   }, [])
+
+  useEffect(() => {
+    savePhotoAnnotatorPrefs({ color, strokeWidth })
+  }, [color, strokeWidth])
 
   useEffect(() => {
     if (!open) return
@@ -961,12 +972,13 @@ export function PhotoAnnotatorEditor({
                     key={c}
                     type="button"
                     className={cn('photo-annotator-swatch', color === c && 'is-active')}
-                    style={{ backgroundColor: c }}
+                    style={{ '--annotator-swatch-color': c }}
                     onClick={() => {
                       setColor(c)
                       setColorMenuOpen(false)
                     }}
                     title={c}
+                    aria-label={`Color ${c}`}
                   />
                 ))}
               </div>
@@ -983,39 +995,36 @@ export function PhotoAnnotatorEditor({
                 setStrokeMenuOpen((v) => !v)
               }}
               title="Line thickness"
-              aria-label={`Line thickness: ${strokeWidth}px`}
+              aria-label={`Line thickness: ${strokeSizeLabel(strokeWidth)}`}
             >
-              <span
-                className="photo-annotator-stroke-preview"
-                style={{ height: Math.max(2, strokeWidth), backgroundColor: color }}
-              />
+              <span className="photo-annotator-stroke-size-label">{strokeSizeLabel(strokeWidth)}</span>
               <ChevronDown className="h-4 w-4 opacity-60" />
             </button>
             {strokeMenuOpen && (
               <div className="photo-annotator-popover photo-annotator-popover--stroke">
                 <div className="photo-annotator-stroke-list" role="listbox" aria-label="Line thickness">
-                  {STROKE_OPTIONS.map((w) => (
+                  {STROKE_OPTIONS.map(({ id, value }) => (
                     <button
-                      key={w}
+                      key={id}
                       type="button"
                       role="option"
-                      aria-selected={strokeWidth === w}
+                      aria-selected={strokeWidth === value}
                       className={cn(
                         'photo-annotator-stroke-option',
-                        strokeWidth === w && 'is-active',
+                        strokeWidth === value && 'is-active',
                       )}
                       onClick={() => {
-                        setStrokeWidth(w)
+                        setStrokeWidth(value)
                         setStrokeMenuOpen(false)
                       }}
-                      title={`${w}px`}
-                      aria-label={`${w}px line thickness`}
+                      title={`${id} (${value}px)`}
+                      aria-label={`${id} line thickness, ${value} pixels`}
                     >
                       <span
                         className="photo-annotator-stroke-preview"
-                        style={{ height: Math.max(2, w), backgroundColor: color }}
+                        style={{ height: Math.max(2, value), backgroundColor: color }}
                       />
-                      <span className="photo-annotator-stroke-option-label">{w}px</span>
+                      <span className="photo-annotator-stroke-option-label">{id}</span>
                     </button>
                   ))}
                 </div>

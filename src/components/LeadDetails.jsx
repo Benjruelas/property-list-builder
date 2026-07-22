@@ -17,6 +17,7 @@ import {
   Navigation,
   Camera,
   FileText,
+  ClipboardList,
   Upload,
   Download,
   Loader2,
@@ -25,8 +26,8 @@ import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { PanelBackButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { handleChildPanelDismiss } from './ui/panelDialogUtils'
-import { DirectionsPicker } from './DirectionsPicker'
+import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
+import { DirectionsProviderDialog } from './DirectionsProviderDialog'
 import { cn } from '@/lib/utils'
 import {
   resolveResourceAccess,
@@ -40,7 +41,6 @@ import {
 } from '@/utils/access'
 import {
   displayLeadName,
-  formatLeadAddress,
   deleteLead,
   updateLead,
   getLeadStatus,
@@ -48,7 +48,6 @@ import {
 } from '@/utils/leads'
 import {
   setLeadStatus,
-  logLeadNote,
   sortActivitiesNewestFirst,
 } from '@/utils/leadActivity'
 import { VisibilityBadge } from './ResourceSharePicker'
@@ -66,12 +65,28 @@ import { collectTagMetaFromEntities } from '@/utils/tags'
 import { PhotoGallery } from '@/photos/PhotoGallery'
 import { invalidatePhotoBlobCache } from '@/photos/photosClient'
 import { deleteAllLeadTasks } from '@/utils/leadTasks'
-import { fetchPhotoReports } from '@/utils/photoReports'
+import { fetchLeadPhotoReports, getReportListDate, invalidateCachedLeadReports, isLeadReportsFetchInflight, peekCachedLeadReports } from '@/utils/photoReports'
+import {
+  fetchLeadForms,
+  invalidateCachedLeadForms,
+  isLeadFormsFetchInflight,
+  leadFormStatusLabel,
+  peekCachedLeadForms,
+} from '@/utils/leadForms'
 import { prefetchPanel } from '@/utils/panelChunks'
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
 import { getLeadPhones, getLeadEmails, getLeadPhoneDetails, getLeadEmailDetails } from '@/utils/leadContact'
+import {
+  getLeadAddressDetails,
+  addressDetailHasMap,
+  addressDetailHasCoords,
+  addressDetailCoords,
+  addressDetailToParcelData,
+  formatAddressDetailDisplay,
+} from '@/utils/leadAddresses'
 import { LeadContactActionTile } from './leads/LeadContactActionTile'
+import { LeadAddressActionTile } from './leads/LeadAddressActionTile'
 import { LeadContactSourceIcon } from './leads/LeadContactSourceIcon'
 import {
   uploadLeadFile,
@@ -100,6 +115,7 @@ const ACTIVITY_ICONS = {
   deal: Handshake,
   photo: Camera,
   report: FileText,
+  form: ClipboardList,
 }
 
 const ACTIVITY_FEED_LIMIT = 10
@@ -110,21 +126,6 @@ function LeadDetailSectionTitle({ children, action }) {
       <h3 className="lead-detail-section-title">{children}</h3>
       {action}
     </div>
-  )
-}
-
-function LeadActionTile({ icon: Icon, label, value, onClick, disabled }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={value || label}
-      className="lead-detail-action-tile disabled:opacity-40"
-    >
-      <Icon className="lead-detail-action-icon shrink-0 opacity-80" aria-hidden />
-      <span className="lead-detail-action-label">{label}</span>
-    </button>
   )
 }
 
@@ -180,6 +181,7 @@ export function LeadDetails({
   panelDockSlot,
   instantDismiss = false,
   obscuredByChild = false,
+  obscuredByContactAction = false,
   onClose,
   lead,
   pipelines = [],
@@ -214,6 +216,10 @@ export function LeadDetails({
   canAccessReports = true,
   onCreatePhotoReport,
   onOpenPhotoReport,
+  canAccessForms = true,
+  onCreateLeadForm,
+  onOpenLeadForm,
+  leadFormsRefreshEpoch = 0,
   canSeeDealAmounts = true,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
@@ -224,23 +230,79 @@ export function LeadDetails({
   const [menuOpen, setMenuOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [localShareState, setLocalShareState] = useState(null)
-  const [activityNote, setActivityNote] = useState('')
-  const [savingNote, setSavingNote] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
-  const [leadReports, setLeadReports] = useState([])
-  const [leadReportsLoading, setLeadReportsLoading] = useState(false)
+  const [leadReports, setLeadReports] = useState(() => peekCachedLeadReports(lead?.id) ?? [])
+  const [leadReportsLoading, setLeadReportsLoading] = useState(() => {
+    if (!lead?.id || !canAccessReports) return false
+    return peekCachedLeadReports(lead.id) === undefined
+  })
+  const [leadForms, setLeadForms] = useState(() => peekCachedLeadForms(lead?.id) ?? [])
+  const [leadFormsLoading, setLeadFormsLoading] = useState(() => {
+    if (!lead?.id || !canAccessForms) return false
+    return peekCachedLeadForms(lead.id) === undefined
+  })
   const [contactPickerOpen, setContactPickerOpen] = useState(false)
+  const [directionsTarget, setDirectionsTarget] = useState(null)
   const contactPickerDepthRef = useRef(0)
+  const [contactActionOpening, setContactActionOpening] = useState(false)
   const handleContactPickerOpenChange = useCallback((open) => {
     contactPickerDepthRef.current = Math.max(0, contactPickerDepthRef.current + (open ? 1 : -1))
     setContactPickerOpen(contactPickerDepthRef.current > 0)
   }, [])
+
+  useEffect(() => {
+    if (!obscuredByContactAction) setContactActionOpening(false)
+  }, [obscuredByContactAction])
+
+  const runContactAction = useCallback((action, ...args) => {
+    setContactActionOpening(true)
+    action?.(...args)
+  }, [])
+
+  const handlePhoneSelect = useCallback(
+    (phone) => runContactAction(onPhoneClick, phone, parcelData, lead?.id),
+    [runContactAction, onPhoneClick, parcelData, lead?.id],
+  )
+  const handleTextSelect = useCallback(
+    (phone) => runContactAction(onTextClick, phone, parcelData, lead?.id),
+    [runContactAction, onTextClick, parcelData, lead?.id],
+  )
+  const handleEmailSelect = useCallback(
+    (email) => runContactAction(onEmailClick, email, parcelData, lead?.id),
+    [runContactAction, onEmailClick, parcelData, lead?.id],
+  )
+
+  const handleMapAddressSelect = useCallback((detail) => {
+    onClose?.()
+    onGoToParcelOnMap?.(addressDetailToParcelData(detail, lead))
+  }, [onClose, onGoToParcelOnMap, lead])
+
+  const handleDirectionsAddressSelect = useCallback((detail) => {
+    const { lat, lng } = addressDetailCoords(detail)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      showToast('No coordinates for this address', 'warning')
+      return
+    }
+    handleContactPickerOpenChange(true)
+    setDirectionsTarget({ lat, lng })
+  }, [handleContactPickerOpenChange])
+
+  const handleDirectionsProviderOpenChange = useCallback((open) => {
+    handleContactPickerOpenChange(open)
+    if (!open) setDirectionsTarget(null)
+  }, [handleContactPickerOpenChange])
+
+  const contactActionObscured = obscuredByContactAction || contactActionOpening
+
   const [tasksNestedOverlay, setTasksNestedOverlay] = useState(false)
   const [photosNestedOverlay, setPhotosNestedOverlay] = useState(false)
+  const obscuredByNestedChild = obscuredByChild || tasksNestedOverlay || photosNestedOverlay
   const [uploading, setUploading] = useState(false)
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
   const fileInputRef = useRef(null)
   const menuTriggerRef = useRef(null)
+  const onOpenPhotoReportRef = useRef(onOpenPhotoReport)
+  onOpenPhotoReportRef.current = onOpenPhotoReport
 
   const extraTagDefinitions = useMemo(
     () => collectTagMetaFromEntities(leads),
@@ -261,26 +323,97 @@ export function LeadDetails({
   }, [lead?.id, isOpen])
 
   useEffect(() => {
-    if (!lead?.id || !getToken || !canAccessReports || !onOpenPhotoReport) {
+    if (!canAccessReports || !onOpenPhotoReportRef.current) {
       setLeadReports([])
       setLeadReportsLoading(false)
       return undefined
     }
-    prefetchPanel('reports')
+    if (!lead?.id || !getToken) {
+      setLeadReports([])
+      setLeadReportsLoading(false)
+      return undefined
+    }
+
+    const cached = peekCachedLeadReports(lead.id)
+    if (cached !== undefined) {
+      setLeadReports(cached)
+      setLeadReportsLoading(false)
+      return undefined
+    }
+
     let cancelled = false
-    setLeadReportsLoading(true)
-    ;(async () => {
-      try {
-        const list = await fetchPhotoReports(getToken, { leadId: lead.id })
-        if (!cancelled) setLeadReports(Array.isArray(list) ? list : [])
-      } catch {
-        if (!cancelled) setLeadReports([])
-      } finally {
-        if (!cancelled) setLeadReportsLoading(false)
-      }
-    })()
+    if (!isLeadReportsFetchInflight(lead.id)) {
+      setLeadReportsLoading(true)
+      prefetchPanel('reports')
+    }
+
+    fetchLeadPhotoReports(getToken, lead.id)
+      .then((list) => {
+        if (!cancelled) setLeadReports(list)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLeadReports([])
+          invalidateCachedLeadReports(lead.id)
+        }
+      })
+      .finally(() => {
+        if (cancelled) {
+          if (!isLeadReportsFetchInflight(lead.id)) {
+            setLeadReportsLoading(false)
+          }
+          return
+        }
+        setLeadReportsLoading(false)
+      })
     return () => { cancelled = true }
-  }, [lead?.id, getToken, canAccessReports, onOpenPhotoReport])
+  }, [lead?.id, getToken, canAccessReports])
+
+  useEffect(() => {
+    if (!canAccessForms || !onOpenLeadForm) {
+      setLeadForms([])
+      setLeadFormsLoading(false)
+      return undefined
+    }
+    if (!lead?.id || !getToken) {
+      setLeadForms([])
+      setLeadFormsLoading(false)
+      return undefined
+    }
+
+    const cached = peekCachedLeadForms(lead.id)
+    if (cached !== undefined) {
+      setLeadForms(cached)
+      setLeadFormsLoading(false)
+      return undefined
+    }
+
+    let cancelled = false
+    if (!isLeadFormsFetchInflight(lead.id)) {
+      setLeadFormsLoading(true)
+    }
+
+    fetchLeadForms(getToken, lead.id)
+      .then((list) => {
+        if (!cancelled) setLeadForms(list)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLeadForms([])
+          invalidateCachedLeadForms(lead.id)
+        }
+      })
+      .finally(() => {
+        if (cancelled) {
+          if (!isLeadFormsFetchInflight(lead.id)) {
+            setLeadFormsLoading(false)
+          }
+          return
+        }
+        setLeadFormsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [lead?.id, getToken, canAccessForms, onOpenLeadForm, leadFormsRefreshEpoch])
 
   const linkedDeals = useMemo(() => {
     if (!lead?.id) return []
@@ -350,6 +483,7 @@ export function LeadDetails({
   }, [lead, uid, currentUser?.email, activeTeam, teams])
   const canShareLead = canChangeVisibility(leadAccess)
   const canDeleteLead = canDelete(leadAccess)
+  const showLeadOptionsMenu = canShareLead || canDeleteLead
 
   useEffect(() => {
     if (!shareOpen) {
@@ -438,16 +572,18 @@ export function LeadDetails({
   if (!isOpen || !lead) return null
 
   const name = displayLeadName(lead)
-  const address = formatLeadAddress(lead)
-  const parcelLat = Number(lead.lat ?? parcelData?.lat ?? parcelData?.properties?.LATITUDE ?? parcelData?.properties?.latitude)
-  const parcelLng = Number(lead.lng ?? parcelData?.lng ?? parcelData?.properties?.LONGITUDE ?? parcelData?.properties?.longitude)
-  const hasCoords = Number.isFinite(parcelLat) && Number.isFinite(parcelLng)
-  const canViewOnMap = !!(lead.parcelId || hasCoords)
+  const addressDetails = getLeadAddressDetails(lead)
+  const mappableAddresses = addressDetails.filter(addressDetailHasMap)
+  const directionsAddresses = addressDetails.filter(addressDetailHasCoords)
   const phones = getLeadPhones(lead)
   const emails = getLeadEmails(lead)
   const phoneDetails = getLeadPhoneDetails(lead)
   const emailDetails = getLeadEmailDetails(lead)
-  const hasContactInfo = !!(address || phones.length || emails.length)
+  const hasContactInfo = !!(
+    addressDetails.some((d) => d.value?.trim())
+    || phones.length
+    || emails.length
+  )
 
   const saveNotes = () => {
     if (!notesDirty) return
@@ -459,7 +595,7 @@ export function LeadDetails({
     const ok = await showConfirm({
       title: 'Delete lead?',
       message: linkedDeals.length > 0
-        ? `This lead has ${linkedDeals.length} deal(s) in pipes. This cannot be undone.`
+        ? `This lead has ${linkedDeals.length} deal${linkedDeals.length === 1 ? '' : 's'}. This cannot be undone.`
         : 'This cannot be undone.',
       confirmLabel: 'Delete',
       destructive: true,
@@ -507,45 +643,24 @@ export function LeadDetails({
     }
   }
 
-  const handleAddActivityNote = async () => {
-    const trimmed = activityNote.trim()
-    if (!trimmed || !lead?.id) return
-    setSavingNote(true)
-    try {
-      const saved = await logLeadNote(getToken, lead.id, trimmed)
-      onLeadUpdate?.(saved)
-      setActivityNote('')
-      showToast('Note added', 'success')
-    } catch (e) {
-      showToast(e.message || 'Could not add note', 'error')
-    } finally {
-      setSavingNote(false)
-    }
-  }
-
   const standaloneDocked = !!panelDockSlot || (topLayer && !nestedOverlay)
-  const effectiveTopLayer = obscuredByChild ? false : (topLayer || nestedOverlay)
+  const effectiveTopLayer = obscuredByNestedChild ? false : (topLayer || nestedOverlay)
   const effectiveHideOverlay = hideOverlay || standaloneDocked
   const effectiveSuppressBackdrop = suppressBackdrop || standaloneDocked
-  const suppressClickOutDismiss = primaryDetail || panelDockSlot === 'primary'
-  const hasNestedOverlay = menuOpen || shareOpen || tasksNestedOverlay || photosNestedOverlay || externalNestedOverlay || previewFileIndex != null || contactPickerOpen
 
   return (
     <>
     <Dialog
       open={isOpen}
       modal={false}
-      onOpenChange={(open) => handleChildPanelDismiss(open, onClose, {
-        suppress: suppressClickOutDismiss,
-        hasNestedOverlay,
-        wasOpen: isOpen,
-      })}
+      onOpenChange={ignoreRadixMapPanelDismiss}
     >
       <DialogContent
         className={cn(
           'map-panel list-panel lead-details-panel fullscreen-panel flex flex-col min-h-0 p-0 gap-0',
           stackedOverlay && 'lead-details-stacked-overlay',
-          obscuredByChild && 'crm-panel-obscured crm-list-under-detail pointer-events-none',
+          obscuredByNestedChild && 'crm-panel-obscured crm-list-under-detail pointer-events-none',
+          contactActionObscured && 'crm-panel-obscured pointer-events-none',
         )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
@@ -592,15 +707,17 @@ export function LeadDetails({
               </div>
             </div>
             <div className="map-panel-header-actions gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(menuOpen && 'opacity-90')}
-                onClick={openMenu}
-                title="Options"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
+              {showLeadOptionsMenu && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(menuOpen && 'opacity-90')}
+                  onClick={openMenu}
+                  title="Options"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         </DialogHeader>
@@ -618,7 +735,7 @@ export function LeadDetails({
                 contactDetails={phoneDetails}
                 contactKind="phone"
                 formatValue={formatPhoneDisplay}
-                onSelect={(phone) => onPhoneClick?.(phone, parcelData, lead.id)}
+                onSelect={handlePhoneSelect}
                 onPickerOpenChange={handleContactPickerOpenChange}
               />
               <LeadContactActionTile
@@ -629,8 +746,7 @@ export function LeadDetails({
                 contactKind="phone"
                 formatValue={formatPhoneDisplay}
                 pickerTitle="Choose a number"
-                pickerSubtitle="This lead has multiple phone numbers. Pick one to text."
-                onSelect={(phone) => onTextClick?.(phone, parcelData, lead.id)}
+                onSelect={handleTextSelect}
                 onPickerOpenChange={handleContactPickerOpenChange}
               />
               <LeadContactActionTile
@@ -639,27 +755,27 @@ export function LeadDetails({
                 values={emails}
                 contactDetails={emailDetails}
                 contactKind="email"
-                onSelect={(email) => onEmailClick?.(email, parcelData, lead.id)}
+                onSelect={handleEmailSelect}
                 onPickerOpenChange={handleContactPickerOpenChange}
               />
-              {canViewOnMap ? (
-                <LeadActionTile
-                  icon={MapPin}
-                  label="Map"
-                  value={lead.parcelId ? 'View property' : 'View on map'}
-                  onClick={() => {
-                    onClose?.()
-                    onGoToParcelOnMap?.(parcelData || lead)
-                  }}
-                />
-              ) : (
-                <LeadActionTile icon={MapPin} label="Map" value="No location" disabled />
-              )}
-              {hasCoords ? (
-                <DirectionsPicker lat={parcelLat} lng={parcelLng} variant="tile" />
-              ) : (
-                <LeadActionTile icon={Navigation} label="Directions" value="No location" disabled />
-              )}
+              <LeadAddressActionTile
+                icon={MapPin}
+                label="Map"
+                addressDetails={mappableAddresses}
+                filterDetail={addressDetailHasMap}
+                onSelect={handleMapAddressSelect}
+                onPickerOpenChange={handleContactPickerOpenChange}
+                disabledLabel="No location"
+              />
+              <LeadAddressActionTile
+                icon={Navigation}
+                label="Directions"
+                addressDetails={directionsAddresses}
+                filterDetail={addressDetailHasCoords}
+                onSelect={handleDirectionsAddressSelect}
+                onPickerOpenChange={handleContactPickerOpenChange}
+                disabledLabel="No location"
+              />
             </div>
           </div>
 
@@ -688,18 +804,19 @@ export function LeadDetails({
                   </p>
                 ) : (
                   <div className="space-y-1.5">
-                    {address && (
+                    {addressDetails.filter((d) => d.value?.trim()).map((detail, index, visible) => (
                       <LeadContactRow
+                        key={`address-${detail.value}-${index}`}
                         icon={MapPin}
-                        label="Address"
-                        value={address}
+                        label={visible.length > 1 ? `Address ${index + 1}` : 'Address'}
+                        value={formatAddressDetailDisplay(detail)}
                         multiline
-                        onClick={canViewOnMap ? () => {
+                        onClick={addressDetailHasMap(detail) ? () => {
                           onClose?.()
-                          onGoToParcelOnMap?.(parcelData || lead)
+                          onGoToParcelOnMap?.(addressDetailToParcelData(detail, lead))
                         } : undefined}
                       />
-                    )}
+                    ))}
                     {phoneDetails.map((detail, index) => (
                       <LeadContactRow
                         key={`phone-${detail.value}-${index}`}
@@ -707,7 +824,7 @@ export function LeadDetails({
                         label={phoneDetails.length > 1 ? `Phone ${index + 1}` : 'Phone'}
                         value={formatPhoneDisplay(detail.value)}
                         detail={detail}
-                        onClick={() => onPhoneClick?.(detail.value, parcelData, lead.id)}
+                        onClick={() => handlePhoneSelect(detail.value)}
                       />
                     ))}
                     {emailDetails.map((detail, index) => (
@@ -717,7 +834,7 @@ export function LeadDetails({
                         label={emailDetails.length > 1 ? `Email ${index + 1}` : 'Email'}
                         value={detail.value}
                         detail={detail}
-                        onClick={() => onEmailClick?.(detail.value, parcelData, lead.id)}
+                        onClick={() => handleEmailSelect(detail.value)}
                       />
                     ))}
                   </div>
@@ -736,8 +853,9 @@ export function LeadDetails({
                         disabled={statusBusy}
                         onClick={() => handleStatusChange(s.id)}
                         className={cn(
-                          'panel-filter-option lead-detail-status-btn',
-                          active && cn(s.color, 'panel-filter-option--status-active')
+                          'lead-detail-status-btn crm-row-status-badge inline-flex items-center justify-center rounded-md border uppercase tracking-wide font-medium',
+                          s.color,
+                          active ? 'lead-detail-status-btn--active' : 'lead-detail-status-btn--inactive',
                         )}
                         aria-pressed={active}
                       >
@@ -762,7 +880,7 @@ export function LeadDetails({
                   showAddTrigger={!!onLeadUpdate}
                   inline
                   onTagsChange={({ tagIds, tagMeta }) => {
-                    onLeadUpdate?.({ id: lead.id, tagIds, tagMeta })
+                    onLeadUpdate?.({ ...lead, tagIds, tagMeta, updatedAt: new Date().toISOString() })
                   }}
                 />
               </section>
@@ -875,9 +993,23 @@ export function LeadDetails({
               />
 
               <section className="lead-detail-section">
-                <LeadDetailSectionTitle>Deals</LeadDetailSectionTitle>
+                <LeadDetailSectionTitle
+                  action={onCreateDeal ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => onCreateDeal(lead)}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Create
+                    </Button>
+                  ) : null}
+                >
+                  Deals
+                </LeadDetailSectionTitle>
                 {linkedDeals.length === 0 ? (
-                  <p className="text-xs text-white/40">No deals yet. Add this lead to a pipe to start tracking.</p>
+                  <p className="text-xs text-white/40">No deals yet</p>
                 ) : (
                   <ul className="space-y-1.5">
                     {linkedDeals.map((d) => (
@@ -891,7 +1023,6 @@ export function LeadDetails({
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium truncate">{d.title || d.leadAddress}</div>
                             <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
-                              <span>{d.__pipelineTitle}</span>
                               <span>{getColumnName(d.status, d.__columns)}</span>
                               {formatTimeInState(d) && <span>{formatTimeInState(d)}</span>}
                               <DealProfitBadge deal={d} className="text-[11px]" canSeeDealAmounts={canSeeDealAmounts} />
@@ -913,7 +1044,10 @@ export function LeadDetails({
                         size="sm"
                         variant="outline"
                         className="h-7 px-2 text-xs"
-                        onClick={() => onCreatePhotoReport(lead.id)}
+                        onClick={() => {
+                          invalidateCachedLeadReports(lead.id)
+                          onCreatePhotoReport(lead.id)
+                        }}
                       >
                         <Plus className="h-3.5 w-3.5 mr-1" />
                         Create
@@ -933,6 +1067,7 @@ export function LeadDetails({
                     <ul className="space-y-1.5">
                       {leadReports.map((report) => {
                         const sectionCount = (report.sections || []).length
+                        const listDate = getReportListDate(report)
                         return (
                           <li key={report.id}>
                             <button
@@ -947,8 +1082,8 @@ export function LeadDetails({
                                 <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
                                   <QuoteStatusBadge status={report.status || 'draft'} />
                                   <span>{sectionCount} section{sectionCount === 1 ? '' : 's'}</span>
-                                  {report.updatedAt && (
-                                    <span>{new Date(report.updatedAt).toLocaleDateString()}</span>
+                                  {listDate && (
+                                    <span>{new Date(listDate).toLocaleDateString()}</span>
                                   )}
                                 </div>
                               </div>
@@ -957,6 +1092,62 @@ export function LeadDetails({
                           </li>
                         )
                       })}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {canAccessForms && onCreateLeadForm && (
+                <section className="lead-detail-section">
+                  <LeadDetailSectionTitle
+                    action={(
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          invalidateCachedLeadForms(lead.id)
+                          onCreateLeadForm(lead)
+                        }}
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Create
+                      </Button>
+                    )}
+                  >
+                    Forms
+                  </LeadDetailSectionTitle>
+                  {leadFormsLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-xs opacity-50">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                      Loading forms…
+                    </div>
+                  ) : leadForms.length === 0 ? (
+                    <p className="text-xs text-white/40">No forms yet</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {leadForms.map((item) => (
+                        <li key={`${item.kind}-${item.id}`}>
+                          <button
+                            type="button"
+                            disabled={!onOpenLeadForm}
+                            onClick={() => onOpenLeadForm?.(item, lead)}
+                            className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
+                          >
+                            <ClipboardList className="h-4 w-4 shrink-0 opacity-50" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{item.templateName || 'Form'}</div>
+                              <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
+                                <span>{leadFormStatusLabel(item.status)}</span>
+                                {item.at && (
+                                  <span>{new Date(item.at).toLocaleDateString()}</span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
+                          </button>
+                        </li>
+                      ))}
                     </ul>
                   )}
                 </section>
@@ -976,22 +1167,8 @@ export function LeadDetails({
 
               <section className="lead-detail-section">
                 <LeadDetailSectionTitle>Activity</LeadDetailSectionTitle>
-                <div className="flex gap-2 mb-3">
-                  <input
-                    type="text"
-                    value={activityNote}
-                    onChange={(e) => setActivityNote(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddActivityNote() }}
-                    placeholder="Add a note…"
-                    className="lead-detail-field flex-1 text-sm px-3 py-2"
-                    disabled={savingNote}
-                  />
-                  <Button size="sm" className="panel-action-btn shrink-0" onClick={handleAddActivityNote} disabled={savingNote || !activityNote.trim()}>
-                    {savingNote ? '…' : 'Add'}
-                  </Button>
-                </div>
                 {activities.length === 0 ? (
-                  <p className="text-xs text-white/40">No activity yet. Calls, texts, emails, and notes will appear here.</p>
+                  <p className="text-xs text-white/40">No activity yet. Calls, texts, and emails will appear here.</p>
                 ) : (
                   <div
                     ref={activityFeedRef}
@@ -1031,6 +1208,7 @@ export function LeadDetails({
         initialIndex={previewFileIndex ?? 0}
       />
 
+      {showLeadOptionsMenu && (
       <OptionsMenuDropdown
         open={menuOpen}
         onClose={closeMenu}
@@ -1038,10 +1216,12 @@ export function LeadDetails({
         menuWidth={MENU_WIDTH}
         dataAttr="data-lead-details-menu"
       >
-        <OptionsMenuItem onClick={() => { closeMenu(); onCreateDeal?.(lead) }}>
-          <Plus className="h-4 w-4 shrink-0" />
-          Create deal
-        </OptionsMenuItem>
+        {onCreateDeal && (
+          <OptionsMenuItem onClick={() => { closeMenu(); onCreateDeal(lead) }}>
+            <Plus className="h-4 w-4 shrink-0" />
+            Create deal
+          </OptionsMenuItem>
+        )}
         {canShareLead && (
           <OptionsMenuItem onClick={() => { closeMenu(); setShareOpen(true) }}>
             <Share2 className="h-4 w-4 shrink-0" />
@@ -1059,6 +1239,7 @@ export function LeadDetails({
           </OptionsMenuItem>
         )}
       </OptionsMenuDropdown>
+      )}
 
     </Dialog>
 
@@ -1072,6 +1253,14 @@ export function LeadDetails({
         onShareStateChange={handleShareChange}
         allowExternalSharing={teamMembership?.allowExternalSharing === true}
         topLayer
+        nestedOverlay
+      />
+
+      <DirectionsProviderDialog
+        open={!!directionsTarget}
+        onOpenChange={handleDirectionsProviderOpenChange}
+        lat={directionsTarget?.lat}
+        lng={directionsTarget?.lng}
         nestedOverlay
       />
     </>

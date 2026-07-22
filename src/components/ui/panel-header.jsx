@@ -81,6 +81,7 @@ export function PanelBackButton({ onClick, title = 'Back', className }) {
  */
 export function PanelHeader({
   onBack,
+  showBack = true,
   backTitle = 'Back',
   title,
   subtitle,
@@ -89,27 +90,42 @@ export function PanelHeader({
   titleClassName,
   toolbarClassName,
   backButtonClassName,
+  titleCentered = false,
   children,
 }) {
   const titleContent =
     typeof title === 'string' ? (
-      Icon ? (
+      Icon && !titleCentered ? (
         <DialogTitle className={cn('text-xl font-semibold flex items-center gap-2 min-w-0 truncate', titleClassName)}>
           <Icon className="h-5 w-5 shrink-0" />
-          <span className="truncate">{title}</span>
+          <span className="truncate" title={title}>{title}</span>
         </DialogTitle>
       ) : (
-        <DialogTitle className={cn('text-xl font-semibold truncate', titleClassName)}>{title}</DialogTitle>
+        <DialogTitle
+          className={cn(
+            'text-xl font-semibold min-w-0',
+            titleCentered ? 'text-center w-full truncate' : 'truncate',
+            titleClassName,
+          )}
+        >
+          <span className="truncate" title={title}>{title}</span>
+        </DialogTitle>
       )
     ) : (
       title
     )
 
   return (
-    <div className={cn('map-panel-header-toolbar', toolbarClassName)}>
-      <div className="map-panel-header-title-wrap flex min-w-0 items-center gap-3">
-        <PanelBackButton onClick={onBack} title={backTitle} className={backButtonClassName} />
-        <div className="min-w-0 flex-1">
+    <div className={cn('map-panel-header-toolbar', titleCentered && 'w-full justify-center', toolbarClassName)}>
+      <div
+        className={cn(
+          'map-panel-header-title-wrap flex min-w-0 items-center gap-3',
+          titleCentered && 'justify-center w-full',
+          !showBack && !titleCentered && 'gap-0',
+        )}
+      >
+        {showBack ? <PanelBackButton onClick={onBack} title={backTitle} className={backButtonClassName} /> : null}
+        <div className={cn('min-w-0', showBack ? 'flex-1' : titleCentered ? 'w-full' : 'flex-1')}>
           {titleContent}
           {subtitle ? <p className={cn('text-xs opacity-50 truncate mt-0.5', subtitleClassName)}>{subtitle}</p> : null}
         </div>

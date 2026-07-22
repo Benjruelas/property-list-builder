@@ -50,14 +50,34 @@ export default async function handler(req, res) {
   if (!user) return
 
   try {
-    if (!process.env.RESEND_API_KEY) {
-      return res.status(500).json({ error: 'Email service not configured. Please set RESEND_API_KEY.' })
+    const {
+      templateId,
+      recipientEmail,
+      recipientPhone,
+      subject,
+      message,
+      prefillValues,
+      leadId,
+      leadName,
+      skipEmail,
+    } = req.body || {}
+    if (!templateId) return res.status(400).json({ error: 'templateId is required' })
+
+    const trimmedEmail = recipientEmail ? String(recipientEmail).trim().toLowerCase() : ''
+    const trimmedPhone = recipientPhone ? String(recipientPhone).replace(/\D/g, '').slice(-10) : ''
+    const hasEmail = isValidEmail(trimmedEmail)
+    const hasPhone = trimmedPhone.length >= 10
+
+    if (!hasEmail && !hasPhone) {
+      return res.status(400).json({ error: 'Valid recipientEmail or recipientPhone is required' })
+    }
+    if (skipEmail !== true && !hasEmail) {
+      return res.status(400).json({ error: 'recipientEmail is required to send by email' })
     }
 
-    const { templateId, recipientEmail, subject, message, prefillValues } = req.body || {}
-    if (!templateId) return res.status(400).json({ error: 'templateId is required' })
-    if (!isValidEmail(recipientEmail)) {
-      return res.status(400).json({ error: 'Valid recipientEmail is required' })
+    const shouldSendEmail = hasEmail && skipEmail !== true
+    if (shouldSendEmail && !process.env.RESEND_API_KEY) {
+      return res.status(500).json({ error: 'Email service not configured. Please set RESEND_API_KEY.' })
     }
 
     const [templates, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
@@ -76,12 +96,14 @@ export default async function handler(req, res) {
     const token = generateToken()
     const now = new Date()
     const expiresAt = new Date(now.getTime() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const trimmedRecipient = recipientEmail.trim().toLowerCase()
+    const trimmedRecipient = hasEmail ? trimmedEmail : ''
     const safeMessage = String(message || '').slice(0, 4000)
     const templateName = String(template.name || 'Form').slice(0, 200)
+    const safeLeadId = leadId ? String(leadId).trim().slice(0, 80) : null
+    const safeLeadName = leadName ? String(leadName).trim().slice(0, 200) : null
 
     const allInvites = await getAllInvites()
-    const isResend = hasPriorInviteForRecipient(allInvites, {
+    const isResend = hasEmail && hasPriorInviteForRecipient(allInvites, {
       templateId: template.id,
       recipientEmail: trimmedRecipient,
     })
@@ -98,7 +120,10 @@ export default async function handler(req, res) {
       templateId: template.id,
       ownerId: template.ownerId,
       ownerEmail: (template.ownerEmail || user.email || '').toLowerCase(),
-      recipientEmail: trimmedRecipient,
+      recipientEmail: trimmedRecipient || null,
+      recipientPhone: hasPhone ? trimmedPhone : null,
+      leadId: safeLeadId,
+      leadName: safeLeadName,
       message: safeMessage,
       prefillValues: safePrefillValues,
       status: 'pending',
@@ -107,20 +132,24 @@ export default async function handler(req, res) {
       submittedAt: null
     }
 
-    const { invites: nextInvites } = supersedePendingInvites(allInvites, {
-      templateId: template.id,
-      recipientEmail: trimmedRecipient,
-      keepToken: token,
-    })
+    const { invites: nextInvites } = hasEmail
+      ? supersedePendingInvites(allInvites, {
+        templateId: template.id,
+        recipientEmail: trimmedRecipient,
+        keepToken: token,
+      })
+      : { invites: allInvites }
     nextInvites.push(invite)
     await saveAllInvites(nextInvites)
 
     const appOrigin = resolveOrigin(req)
     const formLink = `${appOrigin}/?form=${encodeURIComponent(token)}`
 
-    const branding = await resolveSenderBranding(user)
-    const senderLabel = branding.senderName
-    const innerHtml = `
+    const shouldSendEmail = hasEmail && skipEmail !== true
+    if (shouldSendEmail) {
+      const branding = await resolveSenderBranding(user)
+      const senderLabel = branding.senderName
+      const innerHtml = `
       <p>${escapeHtml(senderLabel)} has asked you to complete a form: <strong>${escapeHtml(templateName)}</strong>.</p>
       ${isResend ? '<p><strong>This is a new link.</strong> Any previous link sent to this address for this form is no longer valid.</p>' : ''}
       ${prefillCount > 0 ? `<p>Some fields have already been filled in. Please complete the remaining fields.</p>` : ''}
@@ -128,38 +157,41 @@ export default async function handler(req, res) {
       <p><a href="${escapeHtml(formLink)}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Open form</a></p>
       <p style="color:#666;font-size:13px;">This link is for ${escapeHtml(trimmedRecipient)} and expires in ${INVITE_EXPIRY_DAYS} days. It can only be used once.</p>
     `
-    const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
+      const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
-    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const userEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
-      ? user.email.trim()
-      : null
-    const replyTo = (branding.companyEmail && EMAIL_RE.test(branding.companyEmail.trim()))
-      ? branding.companyEmail.trim()
-      : userEmail
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const userEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
+        ? user.email.trim()
+        : null
+      const replyTo = (branding.companyEmail && EMAIL_RE.test(branding.companyEmail.trim()))
+        ? branding.companyEmail.trim()
+        : userEmail
 
-    const { error } = await resend.emails.send({
-      from: buildFromAddress(FROM_ADDRESS, branding.businessName),
-      to: [trimmedRecipient],
-      ...(replyTo ? { replyTo } : {}),
-      subject: safeSubject,
-      html: htmlBody,
-      headers: {
-        'X-Entity-Ref-ID': invite.id,
-      },
-    })
+      const { error } = await resend.emails.send({
+        from: buildFromAddress(FROM_ADDRESS, branding.businessName),
+        to: [trimmedRecipient],
+        ...(replyTo ? { replyTo } : {}),
+        subject: safeSubject,
+        html: htmlBody,
+        headers: {
+          'X-Entity-Ref-ID': invite.id,
+        },
+      })
 
-    if (error) {
-      console.error('Resend invite error:', error)
-      return res.status(500).json({ error: 'Failed to send invite email', message: error.message })
+      if (error) {
+        console.error('Resend invite error:', error)
+        return res.status(500).json({ error: 'Failed to send invite email', message: error.message })
+      }
     }
 
     return res.status(200).json({
       inviteId: invite.id,
       expiresAt: invite.expiresAt,
-      recipientEmail: trimmedRecipient,
+      recipientEmail: trimmedRecipient || null,
+      recipientPhone: hasPhone ? trimmedPhone : null,
       formLink,
       isResend,
+      emailSent: shouldSendEmail,
     })
   } catch (err) {
     console.error('forms-invite error', err)

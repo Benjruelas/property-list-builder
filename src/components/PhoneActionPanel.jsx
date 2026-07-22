@@ -1,19 +1,71 @@
 import { useState, useEffect } from 'react'
-import { X, Phone, MessageSquare } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
-import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Phone } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { getTextTemplates } from '@/utils/textTemplates'
 import { replaceTemplateTags } from '@/utils/emailTemplates'
 import { normalizePhoneForTel } from '@/utils/phoneFormat'
+import {
+  DealTemplatePanelShell,
+  DealTemplatePanelScroll,
+  DEAL_TEMPLATE_LIST_ROW,
+  CONTACT_ACTION_PANEL_CLASS,
+  ContactActionPanelFooter,
+  DEAL_TEMPLATE_SAFE_BODY_STYLE,
+} from './dealTemplates/dealTemplatePanelShared'
 
-export function PhoneActionPanel({ isOpen, onClose, phone, parcelData, leadId = null, onOutreach, initialStep = 1 }) {
-  const [step, setStep] = useState(1) // 1: Text/Call, 2: Template selection (only for Text)
+const STEP_MENU = 1
+const STEP_TEXT_TEMPLATES = 2
+const STEP_CALL_CONFIRM = 3
+
+function CallConfirmActions({ onNo, onYes }) {
+  return (
+    <div
+      className="flex gap-2 px-4 py-3 flex-shrink-0"
+      style={DEAL_TEMPLATE_SAFE_BODY_STYLE}
+    >
+      <button
+        type="button"
+        onClick={onNo}
+        className={cn(
+          DEAL_TEMPLATE_LIST_ROW,
+          'flex-1 flex flex-row items-center justify-center cursor-pointer py-6 text-lg font-semibold min-h-[4.5rem]',
+        )}
+      >
+        No
+      </button>
+      <button
+        type="button"
+        onClick={onYes}
+        className={cn(
+          DEAL_TEMPLATE_LIST_ROW,
+          'flex-1 flex flex-row items-center justify-center cursor-pointer py-6 text-lg font-semibold min-h-[4.5rem] border-white/20 bg-white/[0.06]',
+        )}
+      >
+        Yes
+      </button>
+    </div>
+  )
+}
+
+export function PhoneActionPanel({
+  isOpen,
+  onClose,
+  phone,
+  parcelData,
+  leadId = null,
+  onOutreach,
+  initialStep = 1,
+  nestedOverlay = true,
+}) {
+  const [step, setStep] = useState(STEP_MENU)
   const [templates, setTemplates] = useState([])
+  const openedDirectToCallConfirm = initialStep === STEP_CALL_CONFIRM
 
   useEffect(() => {
     if (isOpen) {
-      setStep(initialStep === 2 ? 2 : 1)
+      if (initialStep === STEP_TEXT_TEMPLATES) setStep(STEP_TEXT_TEMPLATES)
+      else if (initialStep === STEP_CALL_CONFIRM) setStep(STEP_CALL_CONFIRM)
+      else setStep(STEP_MENU)
       setTemplates(getTextTemplates())
     }
   }, [isOpen, initialStep])
@@ -47,78 +99,101 @@ export function PhoneActionPanel({ isOpen, onClose, phone, parcelData, leadId = 
     handleText('')
   }
 
+  const exitCallConfirm = () => {
+    if (openedDirectToCallConfirm) {
+      onClose()
+      return
+    }
+    setStep(STEP_MENU)
+  }
+
+  const handleBack = () => {
+    if (step === STEP_TEXT_TEMPLATES && initialStep !== STEP_TEXT_TEMPLATES) {
+      setStep(STEP_MENU)
+      return
+    }
+    if (step === STEP_CALL_CONFIRM) {
+      exitCallConfirm()
+      return
+    }
+    onClose()
+  }
+
   if (!phone) return null
 
-  return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="map-panel phone-action-panel w-full max-w-[320px] rounded-2xl p-0 overflow-hidden" showCloseButton={false} blurOverlay topLayer>
-        <DialogHeader className="px-4 pt-4 pb-3 border-b">
-          <PanelHeader onBack={onClose} title={phone} icon={Phone} titleClassName="text-lg font-semibold" />
-          <DialogDescription className="sr-only">
-            Choose to text or call this number
-          </DialogDescription>
-        </DialogHeader>
+  const callConfirmTitle = `Call ${phone}?`
+  const isCallConfirm = step === STEP_CALL_CONFIRM
 
-        <div className="px-4 py-4 space-y-3">
-          {step === 1 ? (
+  const panelDescription = isCallConfirm
+    ? callConfirmTitle
+    : step === STEP_MENU
+      ? 'Choose to text or call this number'
+      : 'Choose a text template or start with a blank message'
+
+  const panelTitle = isCallConfirm ? callConfirmTitle : phone
+
+  const panelFooter = isCallConfirm ? null : <ContactActionPanelFooter onCancel={onClose} />
+
+  return (
+    <DealTemplatePanelShell
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      onBack={handleBack}
+      showBack={!isCallConfirm}
+      titleCentered={isCallConfirm}
+      title={panelTitle}
+      icon={isCallConfirm ? undefined : Phone}
+      description={panelDescription}
+      nestedOverlay={nestedOverlay}
+      panelClassName={cn(CONTACT_ACTION_PANEL_CLASS, isCallConfirm && 'call-confirm-panel')}
+      footer={panelFooter}
+    >
+      {isCallConfirm ? (
+        <CallConfirmActions onNo={exitCallConfirm} onYes={handleCall} />
+      ) : (
+        <DealTemplatePanelScroll className="compact-picker-scroll space-y-1.5">
+          {step === STEP_MENU ? (
             <>
-              <p className="text-sm text-gray-600">What would you like to do?</p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => {
-                    setStep(2)
-                  }}
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Text
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleCall}
-                >
-                  <Phone className="h-4 w-4 mr-2" />
-                  Call
-                </Button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setStep(STEP_TEXT_TEMPLATES)}
+                className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer')}
+              >
+                <div className="text-sm font-medium">Text</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(STEP_CALL_CONFIRM)}
+                className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer')}
+              >
+                <div className="text-sm font-medium">Call</div>
+              </button>
             </>
           ) : (
             <>
-              <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleNoTemplate}
+                className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer border-white/20 bg-white/[0.06]')}
+              >
+                <div className="text-sm font-medium">No template</div>
+              </button>
+              {templates.map((t) => (
                 <button
+                  key={t.id}
                   type="button"
-                  onClick={() => setStep(1)}
-                  className="phone-action-nav-btn text-sm text-gray-500 hover:text-gray-700"
+                  onClick={() => handleSelectTemplate(t)}
+                  className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer')}
                 >
-                  ← Back
+                  <div className="text-sm font-medium truncate">{t.name}</div>
                 </button>
-              </div>
-              <p className="text-sm text-gray-600">Use a template or start with a blank message?</p>
-              <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden scrollbar-hide min-h-0">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left min-w-0"
-                  onClick={handleNoTemplate}
-                >
-                  No template
-                </Button>
-                {templates.map((t) => (
-                  <Button
-                    key={t.id}
-                    variant="outline"
-                    className="w-full justify-start text-left min-w-0 h-auto py-2 whitespace-normal break-words"
-                    onClick={() => handleSelectTemplate(t)}
-                  >
-                    {t.name}
-                  </Button>
-                ))}
-              </div>
+              ))}
             </>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DealTemplatePanelScroll>
+      )}
+    </DealTemplatePanelShell>
   )
 }

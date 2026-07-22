@@ -117,12 +117,6 @@ export async function logLeadDealCreated(getToken, leadId, dealTitle, dealId) {
   )
 }
 
-export async function logLeadNote(getToken, leadId, noteText) {
-  const trimmed = String(noteText || '').trim()
-  if (!trimmed) return null
-  return appendLeadActivity(getToken, leadId, buildActivityEntry('note', trimmed))
-}
-
 export async function logLeadPhotosAdded(getToken, leadId, count = 1) {
   const n = Math.max(1, Number(count) || 1)
   const summary = n === 1 ? 'Photo added' : `${n} photos added`
@@ -131,6 +125,10 @@ export async function logLeadPhotosAdded(getToken, leadId, count = 1) {
 
 export async function logLeadReportEvent(getToken, leadId, summary, meta = {}) {
   return appendLeadActivity(getToken, leadId, buildActivityEntry('report', summary, meta))
+}
+
+export async function logLeadFormSent(getToken, leadId, summary, meta = {}) {
+  return appendLeadActivity(getToken, leadId, buildActivityEntry('form', summary, meta))
 }
 
 export function sortActivitiesNewestFirst(lead) {

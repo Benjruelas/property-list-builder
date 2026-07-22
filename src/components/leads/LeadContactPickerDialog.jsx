@@ -6,6 +6,12 @@ import {
 } from '../dealTemplates/dealTemplatePanelShared'
 import { LeadContactSourceIcon } from './LeadContactSourceIcon'
 
+function PickerItemIcon({ icon: Icon }) {
+  if (!Icon) return null
+  if (typeof Icon === 'function') return <Icon />
+  return Icon
+}
+
 export function LeadContactPickerDialog({
   open,
   onOpenChange,
@@ -29,7 +35,7 @@ export function LeadContactPickerDialog({
       title={title}
       icon={Icon}
       subtitle={subtitle}
-      description={description || subtitle}
+      description={description}
       nestedOverlay={nestedOverlay}
       panelClassName="compact-picker-panel"
       footer={
@@ -58,7 +64,12 @@ export function LeadContactPickerDialog({
             onClick={() => handlePick(item)}
             className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer')}
           >
-            <div className="flex items-start gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {item.icon ? (
+                <span className="shrink-0 opacity-90">
+                  <PickerItemIcon icon={item.icon} />
+                </span>
+              ) : null}
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate">{item.title}</div>
                 {item.subtitle ? (
@@ -66,7 +77,7 @@ export function LeadContactPickerDialog({
                 ) : null}
               </div>
               {item.detail ? (
-                <LeadContactSourceIcon detail={item.detail} className="h-3.5 w-3.5 mt-0.5 opacity-70" />
+                <LeadContactSourceIcon detail={item.detail} className="h-3.5 w-3.5 shrink-0 opacity-70" />
               ) : null}
             </div>
           </button>

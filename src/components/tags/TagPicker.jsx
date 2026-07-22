@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { DismissableLayerBranch } from '@radix-ui/react-dismissable-layer'
 import { cn } from '@/lib/utils'
 import { TagChip } from './TagChip'
-import { createTag, resolveTagMeta, buildTagMetaFromIds, mergeTagDefinitionLists } from '@/utils/tags'
+import { createTag, buildTagMetaFromIds, mergeTagDefinitionLists } from '@/utils/tags'
 import { showToast } from '../ui/toast'
 
 function menuPositionFromAnchor(anchorEl, menuEl, fallbackPosition) {
@@ -77,22 +77,29 @@ export function TagPicker({
   }, [entity?.id])
 
   useEffect(() => {
-    if (tagSyncInFlightRef.current > 0) return
     const ids = entity?.tagIds || []
+    const pending = appliedIdsRef.current
     const same =
-      ids.length === appliedIdsRef.current.length &&
-      ids.every((id, i) => id === appliedIdsRef.current[i])
+      ids.length === pending.length &&
+      ids.every((id, i) => id === pending[i])
+
+    if (tagSyncInFlightRef.current > 0) {
+      if (same) {
+        tagSyncInFlightRef.current = Math.max(0, tagSyncInFlightRef.current - 1)
+      }
+      return
+    }
+
     if (!same) {
       appliedIdsRef.current = ids
       setAppliedIds(ids)
     }
   }, [entity?.tagIds, entity?.id])
 
-  const appliedMeta = useMemo(() => {
-    const fromIds = buildTagMetaFromIds(appliedIds, { [type]: definitions }, type)
-    if (fromIds.length > 0) return fromIds
-    return resolveTagMeta(entity, { [type]: definitions }, type)
-  }, [appliedIds, entity, definitions, type])
+  const appliedMeta = useMemo(
+    () => buildTagMetaFromIds(appliedIds, { [type]: definitions }, type),
+    [appliedIds, definitions, type],
+  )
   const hasPills = appliedMeta.length > 0
 
   const position = useMemo(() => {
@@ -132,20 +139,26 @@ export function TagPicker({
 
   const applyTagIds = (nextIds) => {
     if (!entity || saving) return
+    appliedIdsRef.current = nextIds
+    setAppliedIds(nextIds)
     const tagMeta = buildTagMetaFromIds(nextIds, { [type]: definitions }, type)
     tagSyncInFlightRef.current += 1
-    const result = onTagsChange?.({ tagIds: nextIds, tagMeta })
-    if (result?.then) {
-      result
-        .catch((e) => {
-          revertAppliedIds()
-          showToast(e.message || 'Could not update tags', 'error')
-        })
-        .finally(() => {
-          tagSyncInFlightRef.current = Math.max(0, tagSyncInFlightRef.current - 1)
-        })
-    } else {
+    try {
+      const result = onTagsChange?.({ tagIds: nextIds, tagMeta })
+      if (result?.then) {
+        result
+          .catch((e) => {
+            revertAppliedIds()
+            showToast(e.message || 'Could not update tags', 'error')
+          })
+          .finally(() => {
+            tagSyncInFlightRef.current = Math.max(0, tagSyncInFlightRef.current - 1)
+          })
+      }
+    } catch (e) {
       tagSyncInFlightRef.current = Math.max(0, tagSyncInFlightRef.current - 1)
+      revertAppliedIds()
+      showToast(e.message || 'Could not update tags', 'error')
     }
   }
 
@@ -154,8 +167,6 @@ export function TagPicker({
     const next = base.includes(tagId)
       ? base.filter((id) => id !== tagId)
       : [...base, tagId]
-    appliedIdsRef.current = next
-    setAppliedIds(next)
     ignoreOutsideUntilRef.current = Date.now() + 250
     applyTagIds(next)
   }

@@ -17,7 +17,7 @@ function activity(overrides = {}) {
     actorUid: 'user_a',
     actorEmail: 'a@test.com',
     summary: 'Ben added 1 parcel to "Prospects"',
-    entity: { kind: 'list', listId: 'list_1' },
+    entity: { kind: 'list', listId: 'list_1', listName: 'Prospects' },
     nav: { type: 'list', listId: 'list_1' },
     ...overrides,
   }
@@ -25,33 +25,24 @@ function activity(overrides = {}) {
 
 describe('activityCoalesceKey', () => {
   it('returns null for non-collapsible types', () => {
-    expect(activityCoalesceKey(activity({ type: 'lead.created' }))).toBeNull()
+    expect(activityCoalesceKey(activity({ type: 'lead.shared' }))).toBeNull()
   })
 
   it('keys list parcel events by actor and list', () => {
-    expect(activityCoalesceKey(activity())).toBe('list.parcel_added|user_a|list|list_1')
+    expect(activityCoalesceKey(activity())).toBe('list.parcel_added:user_a:list:list_1')
   })
 
-  it('keys deal events by pipeline', () => {
+  it('keys lead.created as a batch key', () => {
     expect(activityCoalesceKey(activity({
-      type: 'deal.moved',
-      entity: { kind: 'deal', dealId: 'd1', pipelineId: 'pipe_1' },
-      summary: 'Ben moved "Deal" from New to Won',
-    }))).toBe('deal.moved|user_a|pipeline|pipe_1')
+      type: 'lead.created',
+      entity: { kind: 'lead', leadId: 'lead_1' },
+    }))).toBe('lead.created:user_a:lead:_batch')
   })
 })
 
 describe('generalizeActivitySummary', () => {
-  it('generalizes list parcel summaries and adds update count', () => {
-    expect(generalizeActivitySummary(activity(), 3)).toBe('Ben added parcels to "Prospects" (3 updates)')
-  })
-
-  it('generalizes lead updates', () => {
-    expect(generalizeActivitySummary(activity({
-      type: 'lead.updated',
-      summary: 'Ben updated lead John Smith',
-      entity: { kind: 'lead', leadId: 'lead_1' },
-    }), 2)).toBe('Ben updated lead John Smith (2 updates)')
+  it('generalizes list parcel summaries with counts', () => {
+    expect(generalizeActivitySummary(activity(), 3)).toBe('Ben added 3 parcels to "Prospects"')
   })
 })
 
@@ -65,35 +56,14 @@ describe('collapseFeedActivityItems', () => {
     const collapsed = collapseFeedActivityItems(items)
     expect(collapsed).toHaveLength(1)
     expect(collapsed[0].id).toBe('act_3')
-    expect(collapsed[0].collapseCount).toBe(3)
+    expect(collapsed[0].count).toBe(3)
     expect(collapsed[0].collapsedIds).toEqual(['act_2', 'act_1'])
-    expect(collapsed[0].summary).toBe('Ben added parcels to "Prospects" (3 updates)')
   })
 
   it('does not merge across seen boundaries', () => {
     const items = [
       activity({ id: 'act_2', unseen: true }),
       activity({ id: 'act_1', unseen: false }),
-    ]
-    const collapsed = collapseFeedActivityItems(items)
-    expect(collapsed).toHaveLength(2)
-    expect(collapsed[0].collapseCount).toBeUndefined()
-  })
-
-  it('does not merge across notifications', () => {
-    const items = [
-      activity({ id: 'act_2' }),
-      { id: 'ntf_1', source: 'notification', unseen: true, createdAt: '2026-07-16T12:01:30.000Z', type: 'listShared', title: 'Shared', summary: 'Shared' },
-      activity({ id: 'act_1', createdAt: '2026-07-16T12:01:00.000Z' }),
-    ]
-    const collapsed = collapseFeedActivityItems(items)
-    expect(collapsed).toHaveLength(3)
-  })
-
-  it('keeps distinct coalesce keys separate', () => {
-    const items = [
-      activity({ id: 'act_2', entity: { kind: 'list', listId: 'list_2' } }),
-      activity({ id: 'act_1', entity: { kind: 'list', listId: 'list_1' } }),
     ]
     expect(collapseFeedActivityItems(items)).toHaveLength(2)
   })
@@ -103,7 +73,6 @@ describe('mark seen expansion', () => {
   it('expands collapsed ids from PATCH payloads', () => {
     expect(expandActivityIdsForMarkSeen([
       { source: 'activity', id: 'act_3', collapsedIds: ['act_2', 'act_1'] },
-      { source: 'notification', id: 'ntf_1' },
     ])).toEqual(['act_3', 'act_2', 'act_1'])
   })
 

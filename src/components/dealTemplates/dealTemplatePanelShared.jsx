@@ -13,6 +13,26 @@ export const DEAL_TEMPLATE_PANEL_CLASS =
 export const DEAL_TEMPLATE_LIST_ROW =
   'map-panel-list-item leads-panel-list-item flex flex-col gap-1 px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all'
 
+/** Email / phone / text contact action pickers — wider compact panel. */
+export const CONTACT_ACTION_PANEL_CLASS = 'compact-picker-panel contact-action-panel'
+
+export function ContactActionPanelFooter({ onCancel }) {
+  return (
+    <div
+      className="flex justify-end gap-2 px-5 py-3 flex-shrink-0 border-t border-white/10"
+      style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+    >
+      <button
+        type="button"
+        className="px-4 py-2 text-sm rounded-md opacity-70 hover:opacity-100 hover:bg-white/10"
+        onClick={onCancel}
+      >
+        Cancel
+      </button>
+    </div>
+  )
+}
+
 export const DEAL_TEMPLATE_SAFE_HEADER_STYLE = PANEL_LIST_HEADER_STYLE
 
 export const DEAL_TEMPLATE_SAFE_BODY_STYLE = {
@@ -123,6 +143,9 @@ export function DealTemplateRowMenu({ openId, menuAnchor, onClose, onEdit, onDel
 export function DealTemplatePanelShell({
   open,
   onOpenChange,
+  onBack,
+  showBack = true,
+  titleCentered = false,
   title,
   icon,
   subtitle,
@@ -135,8 +158,10 @@ export function DealTemplatePanelShell({
   children,
   footer,
 }) {
+  const handleBack = onBack ?? (() => onOpenChange(false))
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} modal={false} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(DEAL_TEMPLATE_PANEL_CLASS, panelClassName)}
         showCloseButton={false}
@@ -149,16 +174,19 @@ export function DealTemplatePanelShell({
         <DialogHeader
           className={cn(
             PANEL_LIST_HEADER_CLASS,
-            'flex-shrink-0 !text-left items-start w-full space-y-0',
+            'flex-shrink-0 w-full space-y-0',
+            titleCentered ? '!text-center items-center' : '!text-left items-start',
             listMode ? 'pb-0 border-b-0' : 'pb-3'
           )}
           style={PANEL_LIST_HEADER_STYLE}
         >
           <PanelHeader
-            onBack={() => onOpenChange(false)}
+            onBack={handleBack}
+            showBack={showBack}
             title={title}
             icon={icon}
             subtitle={subtitle}
+            titleCentered={titleCentered}
             subtitleClassName={subtitle ? 'text-sm opacity-60 whitespace-normal' : undefined}
             titleClassName={subtitle ? 'text-left justify-start' : undefined}
             toolbarClassName={subtitle || headerActions ? 'w-full' : undefined}

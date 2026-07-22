@@ -14,6 +14,9 @@ export const DEAL_LIST_ROW_CLASS =
 export const PIPELINE_DEAL_CARD_CLASS =
   'pipe-item-card deal-pipeline-lead-card lead-detail-deal-card map-panel-list-item items-start gap-3 rounded-xl border px-3 py-3.5 transition-all hover:-translate-y-px group'
 
+export const PIPELINE_LEAD_CARD_CLASS =
+  'pipe-item-card deal-pipeline-lead-card lead-detail-deal-card map-panel-list-item items-start rounded-xl border px-3 py-3.5 text-left transition-all hover:-translate-y-px'
+
 function resolveDealLead(deal, leads) {
   const lead = deal.leadId && leads?.length ? leads.find((l) => l.id === deal.leadId) : null
   const leadName = lead ? displayLeadName(lead) : (deal.leadName || '')
@@ -283,6 +286,44 @@ export function PipelineDealCard({
         )}
       </div>
     </div>
+  )
+}
+
+export function PipelineLeadCard({
+  lead,
+  isDragging = false,
+  onClick,
+  onDragStart,
+  onDragEnd,
+  draggable = false,
+  className,
+}) {
+  const name = displayLeadName(lead)
+  const address = formatLeadAddress(lead) || 'No address'
+
+  return (
+    <button
+      type="button"
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onClick={onClick}
+      className={cn(
+        PIPELINE_LEAD_CARD_CLASS,
+        draggable && 'cursor-grab active:cursor-grabbing',
+        isDragging && 'opacity-50',
+        className,
+      )}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="panel-item-title truncate leading-snug" title={name}>
+          {name}
+        </div>
+        <div className="panel-item-body opacity-55 truncate mt-0.5" title={address}>
+          {address}
+        </div>
+      </div>
+    </button>
   )
 }
 

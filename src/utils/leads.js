@@ -13,6 +13,7 @@ import {
   leadContactMatchesQuery,
   skipTraceContactDetails,
 } from './leadContact'
+import { addressDetailToParcelData, hasLeadAddressInput, normalizeLeadAddressesForStorage } from './leadAddresses'
 import { mergePhotoRecord, dedupePhotosById, getPhotoThumbnailKey } from './photoDisplay'
 export {
   getLeadPhones,
@@ -160,9 +161,13 @@ export function mergeLeadDetailFromPhotoApi(prev, incoming) {
   const photos = incomingPhotos
     ? incomingPhotos.map((p) => mergePhotoRecord(prevById.get(p.id), p))
     : mergeLeadPhotos(prev.photos, incoming.photos)
+  const photoCount = incomingPhotos
+    ? incomingPhotos.length
+    : (typeof incoming.photoCount === 'number' ? incoming.photoCount : prev.photoCount)
   return {
     ...incoming,
     photos,
+    photoCount,
     files: incoming.files ?? prev.files,
     activity: incoming.activity ?? prev.activity,
   }
@@ -186,11 +191,31 @@ export function mergeLeadDetail(prev, incoming) {
   if (!incoming) return prev
   if (!prev) return incoming
   return {
+    ...prev,
     ...incoming,
     photos: mergeLeadPhotos(prev.photos, incoming.photos),
     files: incoming.files ?? prev.files,
     activity: incoming.activity ?? prev.activity,
   }
+}
+
+/**
+ * Like mergeLeadDetail, but keeps newer local photo state when an in-flight fetch
+ * returns stale data (e.g. photo delete still persisting on the server).
+ */
+export function mergeLeadDetailRespectingFreshness(prev, incoming) {
+  if (!incoming) return prev
+  if (!prev) return incoming
+  const prevAt = Date.parse(prev.updatedAt || '') || 0
+  const incAt = Date.parse(incoming.updatedAt || '') || 0
+  if (prevAt > incAt) {
+    return mergeLeadDetail(prev, {
+      ...incoming,
+      photos: prev.photos,
+      photoCount: prev.photoCount ?? incoming.photoCount,
+    })
+  }
+  return mergeLeadDetail(prev, incoming)
 }
 
 /** Merge one lead into the cached list and persist — used after /api/photos mutations. */
@@ -332,8 +357,19 @@ function withNormalizedLeadContact(data) {
   return { ...data, ...contact }
 }
 
+function withNormalizedLeadAddresses(data) {
+  if (!data || typeof data !== 'object') return data
+  if (!hasLeadAddressInput(data)) return data
+  const addressFields = normalizeLeadAddressesForStorage(data)
+  return { ...data, ...addressFields }
+}
+
+function withNormalizedLeadData(data) {
+  return withNormalizedLeadAddresses(withNormalizedLeadContact(data))
+}
+
 export async function createLead(getToken, leadData) {
-  const normalizedData = withNormalizedLeadContact(leadData)
+  const normalizedData = withNormalizedLeadData(leadData)
   const token = await getToken()
   if (!token) {
     const leads = loadLocalLeads()
@@ -388,7 +424,7 @@ export function toLeadPatchBody(updates, { includeSharing = false } = {}) {
 /** Photos are persisted via /api/photos; no leads PATCH needed for photo-only sync. */
 export function isLeadPhotosOnlyPatch(payload) {
   const keys = Object.keys(payload)
-  return keys.length > 0 && keys.every((k) => k === 'photos' || k === 'updatedAt')
+  return keys.length > 0 && keys.every((k) => k === 'photos' || k === 'updatedAt' || k === 'photoCount')
 }
 
 /** Status is persisted via setLeadStatus; skip redundant full-lead PATCH. */
@@ -398,7 +434,7 @@ export function isLeadStatusOnlyPatch(payload) {
 }
 
 export async function updateLead(getToken, leadId, updates) {
-  const normalizedUpdates = withNormalizedLeadContact(updates)
+  const normalizedUpdates = withNormalizedLeadData(updates)
   const token = await getToken()
   if (!token) {
     const leads = loadLocalLeads()
@@ -622,7 +658,11 @@ export function formatAddressProperCase(address) {
 
 export function formatLeadAddress(leadOrAddress) {
   const lead = typeof leadOrAddress === 'object' && leadOrAddress !== null ? leadOrAddress : null
-  const addr = lead?.address ?? (typeof leadOrAddress === 'string' ? leadOrAddress : '')
+  let addr = lead?.address ?? (typeof leadOrAddress === 'string' ? leadOrAddress : '')
+  if (!addr?.trim() && lead && Array.isArray(lead.addressDetails) && lead.addressDetails.length > 0) {
+    const primary = lead.addressDetails.find((d) => d.primary) || lead.addressDetails[0]
+    addr = primary?.value || ''
+  }
   if (!addr?.trim()) return ''
 
   const p = lead?.properties
@@ -674,6 +714,10 @@ export function formatLeadAddress(leadOrAddress) {
 /** Map lead record to parcel-shaped data for map navigation (no synthetic owner from contact name). */
 export function leadToParcelData(lead) {
   if (!lead) return null
+  if (Array.isArray(lead.addressDetails) && lead.addressDetails.length > 0) {
+    const primary = lead.addressDetails.find((d) => d.primary) || lead.addressDetails[0]
+    return addressDetailToParcelData(primary, lead)
+  }
   return {
     id: lead.parcelId,
     parcelId: lead.parcelId,
@@ -694,13 +738,26 @@ export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {
   const rawOwner = parcelData?.properties?.OWNER_NAME || null
   const { firstName, lastName } = splitOwnerName(rawOwner)
   const contact = skipTrace ? skipTraceContactDetails(skipTrace) : normalizeLeadContactsForStorage({})
+  const address = getFullAddress(parcelData)
+  const parcelId = resolveParcelId(parcelData) || parcelData?.id || null
+  const lat = parcelData?.lat ?? (parcelData?.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null)
+  const lng = parcelData?.lng ?? (parcelData?.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null)
+  const properties = parcelData?.properties || null
   return {
     firstName,
     lastName,
-    address: getFullAddress(parcelData),
-    parcelId: resolveParcelId(parcelData) || parcelData?.id || null,
-    lat: parcelData?.lat ?? (parcelData?.properties?.LATITUDE ? parseFloat(parcelData.properties.LATITUDE) : null),
-    lng: parcelData?.lng ?? (parcelData?.properties?.LONGITUDE ? parseFloat(parcelData.properties.LONGITUDE) : null),
+    address,
+    parcelId,
+    lat,
+    lng,
+    addressDetails: [{
+      value: address,
+      parcelId,
+      lat,
+      lng,
+      properties,
+      primary: true,
+    }],
     phone: contact.phone ? formatPhoneDisplay(contact.phone) : '',
     email: contact.email || '',
     phoneDetails: contact.phoneDetails.map((d) => ({
@@ -709,7 +766,7 @@ export function buildLeadPrefillFromParcel(parcelData, skipTrace = null) {
     })),
     emailDetails: contact.emailDetails,
     notes: '',
-    properties: parcelData?.properties || null,
+    properties,
   }
 }
 
@@ -721,7 +778,7 @@ export function buildAutoLeadPayloadFromParcel(parcelData, skipTrace = null) {
   let firstName = (prefill.firstName || '').trim()
   let lastName = (prefill.lastName || '').trim()
   if (!firstName && !lastName) lastName = 'Property'
-  return withNormalizedLeadContact({
+  return withNormalizedLeadData({
     firstName,
     lastName,
     address,

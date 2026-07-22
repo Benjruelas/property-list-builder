@@ -69,6 +69,8 @@ export function SendFormLinkDialog({ open, template, prefillValues, onClose }) {
       <DialogContent
         className="map-panel list-panel share-list-dialog forms-send-dialog w-[min(92vw,22rem)] max-w-sm max-h-[min(88vh,640px)] overflow-y-auto rounded-xl p-6 gap-4"
         focusOverlay
+        topLayer
+        confirmLayer
       >
         {sentTo ? (
           <>

@@ -50,8 +50,9 @@ export function NewTaskDialog({
   onSubmit,
   onCreateLead,
   nestedOverlay = true,
-  topLayer = false,
+  topLayer: topLayerProp,
 }) {
+  const topLayer = topLayerProp ?? nestedOverlay
   const [title, setTitle] = useState('')
   const [leadId, setLeadId] = useState(null)
   const [dealId, setDealId] = useState(null)

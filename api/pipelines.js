@@ -151,7 +151,7 @@ async function runPipelineActivityLog({
       actorLabel,
       teamIdsFromResource,
       diffDealChanges,
-      dealActivityLabel,
+      batchPipelineDealActivities,
     } = await import('./_lib/activityLog.js')
 
     const teamIds = teamIdsFromResource(pipeline)
@@ -174,38 +174,20 @@ async function runPipelineActivityLog({
     }
 
     const dealChanges = diffDealChanges(prevDealsSnapshot, pipeline.deals)
-    for (const change of dealChanges) {
-      const dealLabel = dealActivityLabel(change.deal)
-      if (change.type === 'deal.created') {
-        await logTeamActivity({
-          teamIds,
-          actor: user,
-          type: 'deal.created',
-          summary: `${label} added deal "${dealLabel}" to ${pipeTitle}`,
-          entity: { kind: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
-          nav: { type: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
-        })
-      } else if (change.type === 'deal.moved') {
-        const from = columnName(columns, change.oldStatus)
-        const to = columnName(columns, change.newStatus)
-        await logTeamActivity({
-          teamIds,
-          actor: user,
-          type: 'deal.moved',
-          summary: `${label} moved "${dealLabel}" from ${from} to ${to}`,
-          entity: { kind: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
-          nav: { type: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
-        })
-      } else if (change.type === 'deal.removed') {
-        await logTeamActivity({
-          teamIds,
-          actor: user,
-          type: 'deal.removed',
-          summary: `${label} removed deal "${dealLabel}" from ${pipeTitle}`,
-          entity: { kind: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
-          nav: { type: 'deal', dealId: change.deal.id, pipelineId: pipeline.id },
-        })
-      }
+    for (const batch of batchPipelineDealActivities(dealChanges, {
+      label,
+      pipeTitle,
+      pipelineId: pipeline.id,
+    })) {
+      await logTeamActivity({
+        teamIds,
+        actor: user,
+        type: batch.type,
+        delta: batch.delta,
+        summaryContext: batch.summaryContext,
+        entity: batch.entity,
+        nav: batch.nav,
+      })
     }
   } catch (e) {
     console.warn('pipeline activity log', e.message)

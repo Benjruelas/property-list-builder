@@ -489,13 +489,14 @@ export function LeadTasksSection({
             )}
             <Button
               type="button"
-              size="icon"
+              size="sm"
               variant="outline"
-              className="h-7 w-7"
+              className="h-7 px-2 text-xs"
               onClick={openAddTask}
               title="New task"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Create
             </Button>
           </div>
         </div>
@@ -577,6 +578,7 @@ export function LeadTasksSection({
           setPipePickerState(null)
           if (payload) finalizeTaskCreate({ ...payload, pipelineId: null })
         }}
+        topLayer
       />
     </>
   )

@@ -17,7 +17,7 @@ import {
 } from './photosClient'
 import { entityRefFromLead, entityRefFromDeal, updatePhotoInList, savePhotoAnnotations } from './annotationSave'
 import { entityKey } from './entityRef'
-import { formatLeadAddress, leadNeedsPhotoHydrate } from '@/utils/leads'
+import { displayLeadName, formatLeadAddress, leadNeedsPhotoHydrate } from '@/utils/leads'
 import { showToast } from '../components/ui/toast'
 import { stripClientPhotoFields, dedupePhotosById } from '@/utils/photoDisplay'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
@@ -44,14 +44,14 @@ function SectionTitle({ children, action }) {
   )
 }
 
-function photoPreviewName(photo, index) {
-  if (photo.addressLabel) return photo.addressLabel
+function photoPreviewCaption(photo, photoNumber) {
   if (photo.capturedAt) {
     try {
-      return `Photo ${new Date(photo.capturedAt).toLocaleString()}`
+      return new Date(photo.capturedAt).toLocaleString()
     } catch { /* ignore */ }
   }
-  return `Photo ${index + 1}`
+  if (photoNumber) return `Photo ${photoNumber}`
+  return ''
 }
 
 export function PhotoGallery({
@@ -75,6 +75,7 @@ export function PhotoGallery({
     () => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 480px)').matches,
   )
   const annotatingPhotoIdRef = useRef(null)
+  const returnToPreviewPhotoIdRef = useRef(null)
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined
@@ -184,9 +185,13 @@ export function PhotoGallery({
     invalidatePhotoBlobCache(photo)
 
     const prevEntity = entity
+    const prevPhotoCount = typeof entity.photoCount === 'number'
+      ? entity.photoCount
+      : (entity.photos || []).length
     const optimistic = {
       ...entity,
       photos: (entity.photos || []).filter((p) => p.id !== photo.id),
+      photoCount: Math.max(0, prevPhotoCount - 1),
       updatedAt: new Date().toISOString(),
     }
     onEntityUpdate?.(optimistic)
@@ -207,6 +212,19 @@ export function PhotoGallery({
     }
   }, [getToken, entityRef, entityType, entity, onEntityUpdate])
 
+  const findDisplayIndexForPhotoId = useCallback((photoId, photos) => {
+    const all = dedupePhotosById(Array.isArray(photos) ? photos : [])
+    const reversed = [...all].reverse()
+    const visiblePhotos = reversed.filter((p) => !hiddenIds.has(p.id))
+    const serverPhotoIds = new Set(visiblePhotos.map((p) => p.id))
+    const pendingJobs = activeJobs.filter((j) => !j.photoId || !serverPhotoIds.has(j.photoId))
+    const items = [
+      ...pendingJobs.map((job) => ({ id: job.jobId })),
+      ...visiblePhotos.map((photo) => ({ id: photo.id })),
+    ]
+    return items.findIndex((item) => item.id === photoId)
+  }, [activeJobs, hiddenIds])
+
   const handleAnnotatorSave = useCallback((updatedEntity, { complete = true } = {}) => {
     const payload = complete
       ? {
@@ -216,9 +234,15 @@ export function PhotoGallery({
       : updatedEntity
     onEntityUpdate?.(payload)
     if (!complete) return
+    const returnPhotoId = returnToPreviewPhotoIdRef.current
     setAnnotating(null)
     annotatingPhotoIdRef.current = null
-  }, [onEntityUpdate])
+    returnToPreviewPhotoIdRef.current = null
+    if (returnPhotoId) {
+      const idx = findDisplayIndexForPhotoId(returnPhotoId, payload.photos)
+      if (idx >= 0) setPreviewIndex(idx)
+    }
+  }, [onEntityUpdate, findDisplayIndexForPhotoId])
 
   const retryAnnotation = useCallback(async (photo) => {
     if (!photo._annotationRetryPayload) return
@@ -242,10 +266,16 @@ export function PhotoGallery({
     } catch { /* inline retry stays */ }
   }, [getToken, entityRef, entity, onEntityUpdate])
 
+  const galleryPreviewTitle = useMemo(() => {
+    if (entityType === 'deal') return displayLeadName(lead)
+    return displayLeadName(entity)
+  }, [entityType, entity, lead])
+
   const previewItems = useMemo(
-    () => displayItems.map((item, index) => ({
+    () => displayItems.map((item) => ({
       id: item.id,
-      name: photoPreviewName(item.photo, index),
+      name: galleryPreviewTitle,
+      caption: photoPreviewCaption(item.photo, item.number),
       contentType: 'image/jpeg',
       photo: item.photo,
       loadBlob: async () => {
@@ -264,13 +294,15 @@ export function PhotoGallery({
         )
       },
     })),
-    [displayItems, getToken],
+    [displayItems, galleryPreviewTitle, getToken],
   )
 
-  const openAnnotate = (photo) => {
+  const openAnnotate = (photo, { fromPreview = false } = {}) => {
     if (!photo.key || photo._annotationSaving) return
+    returnToPreviewPhotoIdRef.current = fromPreview ? photo.id : null
     setPreviewIndex(null)
-    setAnnotating(photo)
+    const latest = (entity?.photos || []).find((p) => p.id === photo.id) || photo
+    setAnnotating(latest)
   }
 
   const Annotator = entityType === 'deal' ? DealPhotoAnnotator : PhotoAnnotator
@@ -400,7 +432,7 @@ export function PhotoGallery({
               <button
                 type="button"
                 className="file-preview-icon-btn"
-                onClick={() => openAnnotate(item.photo)}
+                onClick={() => openAnnotate(item.photo, { fromPreview: true })}
                 aria-label="Annotate photo"
                 title="Annotate"
               >
@@ -441,6 +473,7 @@ export function PhotoGallery({
 
       {annotating && entityType === 'lead' && (
         <PhotoAnnotator
+          key={annotating.id}
           open
           lead={entity}
           photo={annotating}
@@ -452,6 +485,7 @@ export function PhotoGallery({
 
       {annotating && entityType === 'deal' && (
         <DealPhotoAnnotator
+          key={annotating.id}
           open
           deal={entity}
           pipelineId={pipelineId}

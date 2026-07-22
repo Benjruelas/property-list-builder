@@ -5,6 +5,19 @@ import {
 } from '../leads'
 
 describe('leadNeedsPhotoHydrate', () => {
+  it('does not hydrate after optimistic delete keeps photoCount in sync', () => {
+    const lead = {
+      id: 'lead_1',
+      _listView: true,
+      photoCount: 2,
+      photos: [
+        { id: 'p1', thumbnailKey: 'lead-photos/u1/l1/p1/thumb.jpg' },
+        { id: 'p3', thumbnailKey: 'lead-photos/u1/l1/p3/thumb.jpg' },
+      ],
+    }
+    expect(leadNeedsPhotoHydrate(lead)).toBe(false)
+  })
+
   it('requires hydration when server photoCount exceeds cached photos', () => {
     const lead = {
       id: 'lead_1',

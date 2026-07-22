@@ -8,6 +8,7 @@ import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
+import { FormTemplatePickerDialog } from './forms/FormTemplatePickerDialog'
 import {
   displayLeadName,
   formatLeadAddress,
@@ -60,14 +61,22 @@ export function LeadsPanel({
   dealsDetailDealId = null,
   dealsLeadOverlayId = null,
   reportsDetailOverLead = false,
+  formsFillOverLead = false,
   onOpenLeadDetail,
   onCloseLeadDetail,
+  onOpenFormFillFromLead,
+  onOpenFormEditFromLead,
+  onLeadFormSent,
   currentUserId = null,
   currentUser = null,
   canAccessPhotos = true,
   canAccessReports = true,
+  canAccessForms = true,
   onCreatePhotoReport,
   onOpenPhotoReport,
+  onCreateLeadForm,
+  onOpenLeadForm,
+  leadFormsRefreshEpoch = 0,
   createDealPipelines = [],
   createDealSaving = false,
   onCreateDealSubmit,
@@ -81,6 +90,7 @@ export function LeadsPanel({
   leadsDetailTopLayer = false,
   isLeadsDetailStandalone = false,
   editLeadId = null,
+  leadContactActionOpen = false,
 }) {
   const [search, setSearch] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState([])
@@ -91,6 +101,8 @@ export function LeadsPanel({
   const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
   const [createDealOpen, setCreateDealOpen] = useState(false)
   const [createDealPrefill, setCreateDealPrefill] = useState(null)
+  const [leadFormPickerOpen, setLeadFormPickerOpen] = useState(false)
+  const [leadFormPickerLeadId, setLeadFormPickerLeadId] = useState(null)
 
   const selectedLead = useMemo(
     () => (detailLeadId ? leads.find((l) => l.id === detailLeadId || l.parcelId === detailLeadId) : null),
@@ -224,20 +236,39 @@ export function LeadsPanel({
     setCreateDealPrefill(null)
   }, [onCreateDealSubmit])
 
+  const startCreateLeadForm = useCallback((lead) => {
+    if (!canAccessForms) {
+      showToast('Forms are not available on your plan', 'warning')
+      return
+    }
+    if (!lead?.id) return
+    setLeadFormPickerLeadId(lead.id)
+    setLeadFormPickerOpen(true)
+  }, [canAccessForms])
+
+  const handleFormTemplatePicked = useCallback((template, meta) => {
+    if (!template?.id || !leadFormPickerLeadId) return
+    if (meta?.isNew) {
+      onOpenFormEditFromLead?.(template.id, leadFormPickerLeadId, { returnToFormPicker: true })
+      return
+    }
+    setLeadFormPickerOpen(false)
+    onOpenFormFillFromLead?.(template.id, leadFormPickerLeadId)
+  }, [leadFormPickerLeadId, onOpenFormEditFromLead, onOpenFormFillFromLead])
+
   const showingLeadDetail = !!(detailLeadId && selectedLead)
   const showLeadDetailPanel = showingLeadDetail && !dealsDetailDealId && !dealsLeadOverlayId
-  // Keep lead list/detail as an opaque underlay while a report child opens so the map
-  // never flashes through (report detail may still be loading).
-  const retainListUnderDetail = showingLeadDetail
-  const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(
-    isOpen,
-    retainListUnderDetail || reportsDetailOverLead,
-  )
   const stickyDetailLeadRef = useRef(null)
   if (selectedLead) stickyDetailLeadRef.current = selectedLead
   const leadForDetail = selectedLead || stickyDetailLeadRef.current
-  const leadDetailDialogOpen = !!showLeadDetailPanel && !!selectedLead
-  const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen
+  // Report-from-lead navigation drops the leads list frame; keep lead detail open (obscured)
+  // under the report — do not retain the list dialog or it becomes the visible panel.
+  const { listDialogOpen, listObscuredByDetail } = useListDialogUnderDetail(
+    isOpen && !reportsDetailOverLead && !formsFillOverLead,
+    showingLeadDetail && !reportsDetailOverLead && !formsFillOverLead,
+  )
+  const leadDetailDialogOpen = !!leadForDetail && (showLeadDetailPanel || reportsDetailOverLead || formsFillOverLead)
+  const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen || leadFormPickerOpen
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, listObscuredByDetail)
 
@@ -409,6 +440,17 @@ export function LeadsPanel({
         nestedOverlay
       />
 
+      <FormTemplatePickerDialog
+        open={leadFormPickerOpen}
+        onOpenChange={(v) => {
+          setLeadFormPickerOpen(v)
+          if (!v) setLeadFormPickerLeadId(null)
+        }}
+        getToken={getToken}
+        onSelect={handleFormTemplatePicked}
+        nestedOverlay
+      />
+
       <CreateDealDialog
         open={createDealOpen}
         onOpenChange={(v) => {
@@ -433,12 +475,16 @@ export function LeadsPanel({
             nestedOverlay={false}
             topLayer={leadsDetailTopLayer}
             primaryDetail={isLeadsDetailStandalone}
-            obscuredByChild={reportsDetailOverLead}
+            obscuredByChild={reportsDetailOverLead || formsFillOverLead}
+            obscuredByContactAction={leadContactActionOpen}
             externalNestedOverlay={
               (!!editLeadId && editLeadId === leadForDetail?.id)
               || createDealOpen
               || dealPickerOpen
+              || leadFormPickerOpen
               || reportsDetailOverLead
+              || formsFillOverLead
+              || leadContactActionOpen
             }
             onClose={() => onCloseLeadDetail?.()}
             lead={leadForDetail}
@@ -467,6 +513,10 @@ export function LeadsPanel({
             canAccessReports={canAccessReports}
             onCreatePhotoReport={onCreatePhotoReport}
             onOpenPhotoReport={onOpenPhotoReport}
+            canAccessForms={canAccessForms}
+            onCreateLeadForm={onCreateLeadForm ?? startCreateLeadForm}
+            onOpenLeadForm={onOpenLeadForm}
+            leadFormsRefreshEpoch={leadFormsRefreshEpoch}
             tagRegistry={tagRegistry}
             onRefreshTags={onRefreshTags}
             leadStatuses={leadStatuses}

@@ -440,7 +440,7 @@
 
 /* Full-screen panel override — mobile: edge-to-edge but anchored at viewport center for fade-in */
 @media (max-width: 767px) {
-  .fullscreen-panel {
+  .fullscreen-panel:not(.call-confirm-panel) {
     width: 100% !important;
     max-width: none !important;
     height: 100% !important;
@@ -457,6 +457,41 @@
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
+  }
+
+  /* Call confirm — small centered card (not fullscreen) */
+  .call-confirm-panel.fullscreen-panel {
+    width: min(calc(100vw - 2rem), 20rem) !important;
+    min-width: 0 !important;
+    max-width: min(calc(100vw - 2rem), 20rem) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border-radius: 1rem !important;
+    border: 1px solid var(--map-panel-surface-border, rgba(255, 255, 255, 0.2)) !important;
+    box-shadow: var(--map-panel-shadow, 0 10px 24px rgba(0, 0, 0, 0.25)) !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate3d(-50%, -50%, 0) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .call-confirm-panel.fullscreen-panel > .flex.flex-col.flex-1.min-h-0 {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .map-panel-dialog.call-confirm-panel[data-state='open'] {
+    animation: map-panel-center-in 160ms ease-out forwards !important;
+    opacity: 1;
+  }
+
+  .map-panel-dialog.call-confirm-panel[data-state='closed'] {
+    animation: map-panel-center-out 160ms ease-in forwards !important;
   }
 
   .quotes-panel.fullscreen-panel {
@@ -482,7 +517,7 @@
 @media (max-width: 767px) {
   /* Fullscreen form panels: fixed header + scrollable body + pinned footer */
   .create-lead-panel.fullscreen-panel,
-  .create-deal-panel.fullscreen-panel,
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel),
   .create-list-panel.fullscreen-panel,
   .create-pipeline-panel.fullscreen-panel,
   .new-task-panel.fullscreen-panel,
@@ -493,11 +528,11 @@
   }
 
   .create-lead-panel .create-lead-form,
-  .create-deal-panel.fullscreen-panel > form,
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel) > form,
   .create-list-panel.fullscreen-panel > form,
   .create-pipeline-panel.fullscreen-panel > form,
   .outreach-template-panel .outreach-template-form,
-  .create-deal-panel.fullscreen-panel > .flex.flex-col.flex-1.min-h-0 {
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel) > .flex.flex-col.flex-1.min-h-0 {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
@@ -507,11 +542,11 @@
 
   .create-lead-panel .create-lead-form-body,
   .new-task-panel .new-task-form-body,
-  .create-deal-panel.fullscreen-panel > form > .overflow-y-auto,
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel) > form > .overflow-y-auto,
   .create-list-panel.fullscreen-panel > form > .overflow-y-auto,
   .create-pipeline-panel.fullscreen-panel > form > .overflow-y-auto,
   .outreach-template-panel .outreach-template-form-body,
-  .create-deal-panel.fullscreen-panel > .flex.flex-col.flex-1.min-h-0 > .overflow-y-auto {
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel) > .flex.flex-col.flex-1.min-h-0 > .overflow-y-auto {
     flex: 1 1 auto;
     min-height: 0;
     overflow-x: hidden;
@@ -523,6 +558,21 @@
   .new-task-panel .new-task-form-footer,
   .outreach-template-panel .outreach-template-form-footer {
     flex-shrink: 0;
+  }
+
+  /* Beat create-deal-panel fullscreen height rules above */
+  .map-panel-dialog.call-confirm-panel.create-deal-panel.fullscreen-panel,
+  .call-confirm-panel.create-deal-panel.fullscreen-panel {
+    width: min(calc(100vw - 2rem), 20rem) !important;
+    min-width: 0 !important;
+    max-width: min(calc(100vw - 2rem), 20rem) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border-radius: 1rem !important;
+    border: 1px solid var(--map-panel-surface-border, rgba(255, 255, 255, 0.2)) !important;
+    box-shadow: var(--map-panel-shadow, 0 10px 24px rgba(0, 0, 0, 0.25)) !important;
+    transform: translate3d(-50%, -50%, 0) !important;
   }
 }
 
@@ -894,7 +944,7 @@
     display: none !important;
   }
 
-  /* Pipes: horizontal kanban scroll on desktop */
+  /* Pipes: equal-width kanban columns fill the panel on desktop */
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-columns {
     overflow-x: auto !important;
     overflow-y: auto !important;
@@ -904,26 +954,19 @@
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-columns-row {
     flex-direction: row !important;
     flex-wrap: nowrap !important;
-    min-width: max-content !important;
-    width: max-content !important;
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
-  /* Size each stage to its widest card (not equal flex fill) */
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-column {
-    flex: 0 0 auto !important;
-    width: max-content !important;
+    flex: 1 1 0 !important;
+    width: auto !important;
     min-width: 9.25rem !important;
     max-width: none !important;
   }
 
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-lead-card.lead-detail-deal-card {
     width: 100% !important;
-  }
-
-  /* Title / lead / address set column width; tags can still wrap */
-  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-lead-card .panel-item-title,
-  .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-lead-card .panel-item-body {
-    min-width: max-content;
   }
 
   .deal-pipeline-panel:not(.schedule-panel) .deal-pipeline-column.deal-pipeline-column--collapsed {
@@ -1424,6 +1467,19 @@
     display: none;
   }
 
+  /* Contact action panels (email, text, call) — wider so titles fit on one line */
+  .contact-action-panel.compact-picker-panel.fullscreen-panel {
+    width: min(32rem, calc(100vw - 2rem)) !important;
+    max-width: min(32rem, calc(100vw - 2rem)) !important;
+  }
+
+  .call-confirm-panel.contact-action-panel.compact-picker-panel.fullscreen-panel {
+    width: min(20rem, calc(100vw - 2rem)) !important;
+    max-width: min(20rem, calc(100vw - 2rem)) !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
   /* Desktop: square picker panels — quote/report template + lead pickers + report builder */
   .square-picker-panel.fullscreen-panel {
     --square-picker-size: min(
@@ -1662,10 +1718,10 @@
 }
 /*
  * List/root panels stay at the base dialog layer. Create/edit overlays and
- * pickers are excluded so topLayer/nestedOverlay z-index (10020/10021) can
- * keep their panels above their own scrims.
+ * pickers and contact action sheets are excluded so topLayer/nestedOverlay
+ * z-index (10020/10021+) can keep their panels above CRM detail layers.
  */
-.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel)[data-state='open'] {
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel)[data-state='open'] {
   animation: map-panel-center-in 160ms ease-out forwards;
   z-index: 10002 !important;
 }
@@ -1679,7 +1735,7 @@
    * Keyframe animations restart whenever animation:* changes (e.g. removing
    * crm-list-under-detail on Back), which flashed the bare map.
    */
-  .map-panel-dialog.list-panel[data-state='open']:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog),
+  .map-panel-dialog.list-panel[data-state='open']:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.call-confirm-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog),
   .map-panel-dialog.deal-pipeline-panel[data-state='open']:not(.lead-details-panel):not(.deal-details-panel) {
     animation: none !important;
     opacity: 1;
@@ -1687,13 +1743,13 @@
   }
 
   @starting-style {
-    .map-panel-dialog.list-panel[data-state='open']:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog),
+    .map-panel-dialog.list-panel[data-state='open']:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.call-confirm-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog),
     .map-panel-dialog.deal-pipeline-panel[data-state='open']:not(.lead-details-panel):not(.deal-details-panel) {
       opacity: 0;
     }
   }
 }
-.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel)[data-state='closed'] {
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel)[data-state='closed'] {
   animation: map-panel-center-out 160ms ease-in forwards;
   z-index: 10001 !important;
 }
@@ -1757,12 +1813,12 @@
   }
 
   @starting-style {
-    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel) {
+    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel) {
       opacity: 0;
     }
   }
 
-  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not([data-tasks-panel-close-settled="1"]) {
+  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel):not([data-tasks-panel-close-settled="1"]) {
     opacity: 0;
     transition-duration: 220ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -1771,7 +1827,7 @@
     z-index: 10001 !important;
   }
 
-  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel) {
+  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel) {
     opacity: 1;
     animation: none !important;
     z-index: 10002 !important;
@@ -1817,6 +1873,12 @@
   width: min(calc(100vw - 2rem), 22rem) !important;
   height: auto !important;
   max-height: min(90vh, 24rem) !important;
+}
+
+.call-confirm-panel.map-panel-dialog {
+  width: min(calc(100vw - 2rem), 20rem) !important;
+  height: auto !important;
+  max-height: none !important;
 }
 
 .confirm-dialog .confirm-dialog-actions {
@@ -1876,7 +1938,7 @@
 
 /* Mobile fullscreen: strip glass border/inset shadow (.map-panel rules above win otherwise) */
 @media (max-width: 767px) {
-  .map-panel.fullscreen-panel,
+  .map-panel.fullscreen-panel:not(.call-confirm-panel),
   .parcel-details-dialog.fullscreen-panel {
     border: none !important;
     outline: none !important;
@@ -2406,10 +2468,8 @@
   background: rgba(255, 255, 255, 0.08) !important;
 }
 
-.map-panel.lead-details-panel .lead-detail-status-btn,
-.map-panel.lead-details-panel .lead-detail-section .panel-filter-option,
-.map-panel.deal-details-panel .lead-detail-status-btn,
-.map-panel.deal-details-panel .lead-detail-section .panel-filter-option {
+.map-panel.lead-details-panel .lead-detail-section .panel-filter-option:not(.panel-filter-option--status-active),
+.map-panel.deal-details-panel .lead-detail-section .panel-filter-option:not(.panel-filter-option--status-active) {
   border: 1px solid #ffffff !important;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
@@ -3354,16 +3414,16 @@
 
 /* Map panel buttons - liquid glass, no solid white fill (except list delete) */
 /* Exclude .hamburger-menu, .list-panel, .parcel-list-panel, .deal-pipeline-panel, .lead-details-panel, .deal-details-panel, .deal-pipeline-lead-card, parcel-details-close-btn, add-note-btn, parcel-details-edit-btn, parcel-details-link-btn, parcel-details-other-props-toggle, form-fill buttons - those use transparent/no fill */
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):not(.quick-create-fab-btn),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):not(.quick-create-fab-btn):not(.photo-annotator-swatch),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):not(.photo-annotator-swatch) {
   background: var(--map-panel-btn-bg) !important;
   border-color: var(--map-panel-btn-border) !important;
   color: var(--map-panel-text) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled),
-.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):hover:not(:disabled) {
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) button:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.parcel-details-close-btn):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.parcel-details-action-tile):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):not(.quick-create-fab-btn):not(.photo-annotator-swatch):hover:not(:disabled),
+.map-panel:not(.hamburger-menu):not(.list-panel):not(.parcel-list-panel):not(.deal-pipeline-panel):not(.lead-details-panel):not(.deal-details-panel):not(.confirm-dialog) [role="button"]:not(.list-panel-delete-btn):not(.deal-pipeline-lead-card):not(.add-note-btn):not(.parcel-details-edit-btn):not(.parcel-details-link-btn):not(.parcel-details-other-props-toggle):not(.pipeline-icon-btn):not(.form-fill-icon-btn):not(.form-fill-toolbar-btn):not(.form-fill-footer-btn):not(.form-fill-submit-btn):not(.form-fill-action-bar-btn):not(.fill-tour-stepbar-arrow):not(.fill-tour-stepbar-action):not(.photo-annotator-swatch):hover:not(:disabled) {
   background: var(--map-panel-btn-hover-bg) !important;
   border-color: var(--map-panel-btn-border) !important;
 }
@@ -4165,6 +4225,33 @@
 .text-templates-panel button:hover:not(:disabled),
 .text-templates-panel [role="button"]:hover:not(:disabled) {
   background: none !important;
+}
+
+/*
+ * Contact action stack (bottom → top):
+ *   lead/deal detail 10019 · scrim 10020 · phone/picker panel 10022
+ * Detail stays above the list (10001) but below the action scrim.
+ */
+html:has(.map-panel-dialog.phone-action-panel[data-state='open']) .map-panel-dialog.lead-details-panel[data-state='open'],
+html:has(.map-panel-dialog.phone-action-panel[data-state='open']) .map-panel-dialog.deal-details-panel[data-state='open'],
+html:has(.map-panel-dialog.compact-picker-panel[data-state='open']) .map-panel-dialog.lead-details-panel[data-state='open'],
+html:has(.map-panel-dialog.compact-picker-panel[data-state='open']) .map-panel-dialog.deal-details-panel[data-state='open'] {
+  z-index: 10019 !important;
+  pointer-events: none !important;
+}
+
+html:has(.map-panel-dialog.phone-action-panel[data-state='open']) [data-contact-action-scrim],
+html:has(.map-panel-dialog.compact-picker-panel[data-state='open']) [data-contact-action-scrim] {
+  z-index: 10020 !important;
+}
+
+.map-panel-dialog.phone-action-panel[data-state='open'] {
+  z-index: 10022 !important;
+}
+
+html:has(.map-panel-dialog.lead-details-panel[data-state='open']) .map-panel-dialog.compact-picker-panel[data-state='open'],
+html:has(.map-panel-dialog.deal-details-panel[data-state='open']) .map-panel-dialog.compact-picker-panel[data-state='open'] {
+  z-index: 10022 !important;
 }
 
 /* Phone action panel - no fill on X and Back buttons */
@@ -5792,6 +5879,14 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .map-panel.forms-send-dialog {
   border-radius: 0.75rem !important;
 }
+.forms-send-lead-actions-row--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+.forms-send-lead-actions-row--one {
+  grid-template-columns: minmax(0, 1fr) !important;
+  max-width: 8rem;
+  margin-inline: auto;
+}
 .forms-send-dialog input,
 .forms-send-dialog textarea,
 .share-list-dialog input,
@@ -6228,6 +6323,30 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 .panel-filter-option--status-active {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.lead-detail-status-btn {
+  min-height: 30px;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+
+.lead-detail-status-btn--inactive {
+  opacity: 0.52;
+}
+
+.lead-detail-status-btn--inactive:hover:not(:disabled) {
+  opacity: 0.78;
+}
+
+.lead-detail-status-btn--active {
+  opacity: 1;
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent),
     0 1px 2px rgba(0, 0, 0, 0.15);
@@ -9520,7 +9639,18 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background-color: var(--annotator-swatch-color) !important;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.photo-annotator-stroke-size-label {
+  min-width: 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 
 .photo-annotator-swatch.is-active {

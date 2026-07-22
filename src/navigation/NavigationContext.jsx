@@ -64,6 +64,8 @@ import {
   recipeOpenReports,
   recipeOpenReportFromLeadDetail,
   recipeOpenReportEditorFromLeadDetail,
+  recipeOpenFormFillFromLeadDetail,
+  recipeOpenFormEditFromLeadDetail,
   recipePushReportsDetail,
   recipePushReportsEditor,
   recipeOpenSchedule,
@@ -522,6 +524,21 @@ export function NavigationProvider({ children }) {
     replaceStack(recipeOpenReportEditorFromLeadDetail(state.navStack, editorFrame, taskDockOpts()))
   }, [state.navStack, replaceStack, taskDockOpts])
 
+  const openFormFillFromLead = useCallback((templateId, leadId) => {
+    replaceStack(recipeOpenFormFillFromLeadDetail(state.navStack, templateId, {
+      ...taskDockOpts(),
+      leadId,
+    }))
+  }, [state.navStack, replaceStack, taskDockOpts])
+
+  const openFormEditFromLead = useCallback((templateId, leadId, { returnToFormPicker = true } = {}) => {
+    replaceStack(recipeOpenFormEditFromLeadDetail(state.navStack, templateId, {
+      ...taskDockOpts(),
+      leadId,
+      returnToFormPicker,
+    }))
+  }, [state.navStack, replaceStack, taskDockOpts])
+
   const pushTeamsDetail = useCallback((teamId) => {
     const withoutDetail = state.navStack.filter((f) => f.type !== 'teams.detail')
     const hasSettings = withoutDetail.some((f) => f.type === 'settings')
@@ -669,6 +686,8 @@ export function NavigationProvider({ children }) {
     pushReportsDetail,
     openReportFromLead,
     openReportEditorFromLead,
+    openFormFillFromLead,
+    openFormEditFromLead,
     pushTeamsDetail,
     openTaskInPipes,
     showParcelPopup,
@@ -758,6 +777,8 @@ export function NavigationProvider({ children }) {
     pushReportsDetail,
     openReportFromLead,
     openReportEditorFromLead,
+    openFormFillFromLead,
+    openFormEditFromLead,
     pushTeamsDetail,
     openTaskInPipes,
     showParcelPopup,

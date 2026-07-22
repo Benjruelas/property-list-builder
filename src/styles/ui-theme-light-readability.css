@@ -270,13 +270,20 @@
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-field:focus {
   border-color: rgba(0, 0, 0, 0.28) !important;
 }
-[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option),
-[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-status-btn,
-[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section .panel-filter-option,
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section button:not(.lead-detail-deal-card):not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-status-btn),
+[data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section .panel-filter-option:not(.panel-filter-option--status-active),
 [data-ui-theme='light'] :is(.map-panel.lead-details-panel, .map-panel.deal-details-panel) .lead-detail-section .inline-flex.rounded-full.border-dashed {
   border-color: var(--map-panel-stroke-strong) !important;
   background: var(--map-panel-surface-muted) !important;
   color: var(--map-panel-text) !important;
+}
+
+[data-ui-theme='light'] .lead-detail-status-btn--inactive {
+  opacity: 0.58;
+}
+
+[data-ui-theme='light'] .lead-detail-status-btn--inactive:hover:not(:disabled) {
+  opacity: 0.82;
 }
 
 /* Filter / tag pills */

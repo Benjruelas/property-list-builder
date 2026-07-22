@@ -3,6 +3,12 @@
  * Key: notifications:{uid} — array of notification objects (newest first).
  */
 
+import {
+  buildNotificationCoalesceKey,
+  buildNotificationContent,
+  COLLAPSIBLE_NOTIFICATION_TYPES,
+} from './feedCoalesce.js'
+
 let kv = null
 let kvAvailable = false
 let kvInitPromise = null
@@ -56,7 +62,7 @@ function inboxKey(uid) {
   return `notifications:${uid}`
 }
 
-function notificationEntityKey(item) {
+function legacyNotificationEntityKey(item) {
   const type = String(item?.type || 'general')
   const data = item?.data && typeof item.data === 'object' ? item.data : {}
   if (data.listId) return `${type}|list|${data.listId}`
@@ -71,27 +77,63 @@ function notificationEntityKey(item) {
   return `${type}|general|${String(item?.title || '').slice(0, 80)}`
 }
 
+function notificationEntityKey(item) {
+  return buildNotificationCoalesceKey({
+    type: item?.type,
+    data: item?.data,
+    coalesceKey: item?.coalesceKey,
+  }) || legacyNotificationEntityKey(item)
+}
+
 /**
- * Merge a new unread notification into an inbox when it matches the newest unread row.
- * @returns {{ inbox: object[], record: object }}
+ * Merge a new unread notification into an inbox when it matches an unread row.
+ * @returns {{ inbox: object[], record: object, coalesced: boolean }}
  */
 export function coalesceInboxNotification(inbox, record) {
   const nextInbox = Array.isArray(inbox) ? [...inbox] : []
-  const entityKey = notificationEntityKey(record)
-  const existingIdx = nextInbox.findIndex((n) => !n.read && notificationEntityKey(n) === entityKey)
+  const coalesceKey = record.coalesceKey || buildNotificationCoalesceKey({
+    type: record.type,
+    data: record.data,
+  })
+  const entityKey = coalesceKey || legacyNotificationEntityKey(record)
+  const existingIdx = nextInbox.findIndex((n) => !n.read && (
+    (coalesceKey && n.coalesceKey === coalesceKey)
+    || notificationEntityKey(n) === entityKey
+  ))
+
   if (existingIdx === -1) {
-    nextInbox.unshift(record)
-    return { inbox: nextInbox, record }
+    const stored = {
+      ...record,
+      ...(coalesceKey ? { coalesceKey } : {}),
+      count: record.count ?? record.delta ?? 1,
+    }
+    nextInbox.unshift(stored)
+    return { inbox: nextInbox, record: stored, coalesced: false }
   }
 
   const existing = { ...nextInbox[existingIdx] }
-  existing.title = record.title
-  existing.body = record.body
+  const collapsible = COLLAPSIBLE_NOTIFICATION_TYPES.has(String(record.type || ''))
+  if (collapsible) {
+    const delta = record.delta ?? 1
+    existing.count = (existing.count || 1) + delta
+    const content = buildNotificationContent(record.type, {
+      count: existing.count,
+      pipelineTitle: record.data?.pipelineTitle,
+      body: record.body,
+      title: record.title,
+    })
+    existing.title = content.title
+    existing.body = content.body
+  } else {
+    existing.title = record.title
+    existing.body = record.body
+  }
   existing.data = record.data
   existing.createdAt = record.createdAt
+  if (coalesceKey) existing.coalesceKey = coalesceKey
   nextInbox.splice(existingIdx, 1)
   nextInbox.unshift(existing)
-  return { inbox: nextInbox, record: existing }
+  return { inbox: nextInbox, record: existing, coalesced: true }
 }
 
 export async function getInbox(uid) {
@@ -118,11 +160,16 @@ export async function saveInbox(uid, items) {
 
 /**
  * @param {string} uid
- * @param {{ type: string, title: string, body: string, data?: object }} item
+ * @param {{ type: string, title: string, body: string, data?: object, coalesceKey?: string|null, delta?: number, count?: number }} item
+ * @returns {Promise<{ record: object|null, coalesced: boolean }>}
  */
 export async function appendInAppNotification(uid, item) {
-  if (!uid || !item?.title) return null
+  if (!uid || !item?.title) return { record: null, coalesced: false }
   const now = new Date().toISOString()
+  const coalesceKey = item.coalesceKey || buildNotificationCoalesceKey({
+    type: item.type,
+    data: item.data,
+  })
   const record = {
     id: `ntf_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     type: String(item.type || 'general'),
@@ -131,12 +178,15 @@ export async function appendInAppNotification(uid, item) {
     data: item.data && typeof item.data === 'object' ? item.data : {},
     read: false,
     createdAt: now,
+    ...(coalesceKey ? { coalesceKey } : {}),
+    count: item.count ?? item.delta ?? 1,
+    delta: item.delta ?? 1,
   }
   const inbox = await getInbox(uid)
-  const { inbox: nextInbox, record: storedRecord } = coalesceInboxNotification(inbox, record)
+  const { inbox: nextInbox, record: storedRecord, coalesced } = coalesceInboxNotification(inbox, record)
   if (nextInbox.length > MAX_INBOX) nextInbox.length = MAX_INBOX
   await saveInbox(uid, nextInbox)
-  return storedRecord
+  return { record: storedRecord, coalesced }
 }
 
 export async function markNotificationsRead(uid, ids = null) {

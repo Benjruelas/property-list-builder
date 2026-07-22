@@ -84,6 +84,19 @@ export async function appendSubmission(record) {
   }
 }
 
+export async function getAllSubmissions() {
+  if (!kvAvailable || !kv) return fallbackSubmissions
+  try {
+    const data = await kv.get(SUBMISSIONS_KV_KEY)
+    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
+    const result = Array.isArray(parsed) ? parsed : []
+    fallbackSubmissions = result
+    return result
+  } catch {
+    return fallbackSubmissions
+  }
+}
+
 export function generateToken() {
   const bytes = new Uint8Array(32)
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {

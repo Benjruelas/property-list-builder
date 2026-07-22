@@ -106,12 +106,17 @@
  * @typedef {object} FormsEditFrame
  * @property {'forms.edit'} type
  * @property {string} templateId
+ * @property {string} [leadId]
+ * @property {boolean} [returnToLead]
+ * @property {boolean} [returnToFormPicker]
  */
 
 /**
  * @typedef {object} FormsFillFrame
  * @property {'forms.fill'} type
  * @property {string} templateId
+ * @property {string} [leadId]
+ * @property {boolean} [returnToLead]
  */
 
 /**
@@ -231,7 +236,7 @@
  * @property {string} phone
  * @property {object} [parcelData]
  * @property {string} [leadId]
- * @property {number} [initialStep]
+ * @property {number} [initialStep] 1 = text/call menu, 2 = text templates, 3 = call confirm
  */
 
 /**

@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, UserPlus, X } from 'lucide-react'
+import { Loader2, UserPlus } from 'lucide-react'
 import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
-import { AddressAutocompleteField } from './AddressAutocompleteField'
 import { ResourceSharePicker } from './ResourceSharePicker'
 import { VISIBILITY, normalizeResourceVisibility, resolveResourceAccess, canChangeVisibility } from '@/utils/access'
 import { createLead, updateLead } from '@/utils/leads'
@@ -11,40 +10,42 @@ import { mergeLeadFormWithParcel, ensureLeadParcelLink } from '@/utils/resolveLe
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from './ui/toast'
 import { LeadContactFieldList } from './leads/LeadContactFieldList'
+import { LeadAddressFieldList } from './leads/LeadAddressFieldList'
 import {
   contactDetailsFromForm,
   phoneDetailsForLeadForm,
   emailDetailsForLeadForm,
   CONTACT_SOURCE_USER,
 } from '@/utils/leadContact'
+import { addressDetailsForLeadForm, addressDetailsFromForm } from '@/utils/leadAddresses'
 
 const emptyContactEntry = { value: '', source: CONTACT_SOURCE_USER, callerId: '', primary: false }
-
-const emptyForm = {
-  firstName: '',
-  lastName: '',
-  address: '',
-  phoneDetails: [emptyContactEntry],
-  emailDetails: [emptyContactEntry],
-  notes: '',
+const emptyAddressEntry = {
+  value: '',
   parcelId: null,
   lat: null,
   lng: null,
   properties: null,
+  primary: false,
+}
+
+const emptyForm = {
+  firstName: '',
+  lastName: '',
+  addressDetails: [{ ...emptyAddressEntry }],
+  phoneDetails: [emptyContactEntry],
+  emailDetails: [emptyContactEntry],
+  notes: '',
 }
 
 function normalizeLeadForm(data = {}) {
   return {
     firstName: data.firstName ?? '',
     lastName: data.lastName ?? '',
-    address: data.address ?? '',
+    addressDetails: addressDetailsForLeadForm(data),
     phoneDetails: phoneDetailsForLeadForm(data),
     emailDetails: emailDetailsForLeadForm(data),
     notes: data.notes ?? '',
-    parcelId: data.parcelId ?? null,
-    lat: data.lat ?? null,
-    lng: data.lng ?? null,
-    properties: data.properties ?? null,
   }
 }
 
@@ -62,9 +63,10 @@ export function CreateLeadDialog({
   teamMembership = null,
   currentUser = null,
   nestedOverlay = false,
-  topLayer = false,
+  topLayer: topLayerProp,
   confirmLayer = false,
 }) {
+  const topLayer = topLayerProp ?? nestedOverlay
   const isEdit = !!editLead?.id
   const fromParcel = Boolean(prefill?.parcelId) && !isEdit
   const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
@@ -78,7 +80,7 @@ export function CreateLeadDialog({
   const [form, setForm] = useState(emptyForm)
   const [shareState, setShareState] = useState({ visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] })
   const [saving, setSaving] = useState(false)
-  const [resolvingParcel, setResolvingParcel] = useState(false)
+  const [resolvingParcelIndex, setResolvingParcelIndex] = useState(null)
 
   useEffect(() => {
     if (!open) {
@@ -111,25 +113,35 @@ export function CreateLeadDialog({
     })
   }
 
-  const resolveParcelAt = useCallback(async (lat, lng) => {
+  const resolveParcelAt = useCallback(async (lat, lng, addressIndex = 0) => {
     if (!onResolveParcel || lat == null || lng == null) return null
-    setResolvingParcel(true)
+    setResolvingParcelIndex(addressIndex)
     try {
       const parcel = await onResolveParcel(lat, lng)
       if (parcel?.id || parcel?.parcelId) {
-        setForm((f) => mergeLeadFormWithParcel(f, parcel))
+        setForm((f) => mergeLeadFormWithParcel(f, parcel, { addressIndex }))
       }
       return parcel
     } finally {
-      setResolvingParcel(false)
+      setResolvingParcelIndex(null)
     }
   }, [onResolveParcel])
 
-  const handleAddressSelect = useCallback(async ({ address, latParsed, lngParsed }) => {
-    setField('address', address ?? '')
+  const handleAddressSelect = useCallback(async (index, { address, latParsed, lngParsed }) => {
+    setForm((f) => {
+      const addressDetails = [...(f.addressDetails || [])]
+      addressDetails[index] = {
+        ...addressDetails[index],
+        value: address ?? '',
+        lat: latParsed ?? null,
+        lng: lngParsed ?? null,
+        parcelId: null,
+        properties: null,
+      }
+      return { ...f, addressDetails }
+    })
     if (latParsed != null && lngParsed != null) {
-      setForm((f) => ({ ...f, lat: latParsed, lng: lngParsed }))
-      await resolveParcelAt(latParsed, lngParsed)
+      await resolveParcelAt(latParsed, lngParsed, index)
     }
   }, [resolveParcelAt])
 
@@ -137,38 +149,63 @@ export function CreateLeadDialog({
     e.preventDefault()
     const firstName = (form.firstName ?? '').trim()
     const lastName = (form.lastName ?? '').trim()
-    const address = (form.address ?? '').trim()
     if (!firstName && !lastName) {
       showToast('Enter a first or last name', 'error')
       return
     }
     setSaving(true)
     try {
-      const linked = await ensureLeadParcelLink(
-        { ...form, firstName, lastName, address },
-        onResolveParcel
-      )
-      if (!linked.parcelId && linked.lat != null && linked.lng != null) {
-        showToast('Could not link to a county parcel — lead saved with map coordinates only', 'warning')
+      const linkedDetails = []
+      for (const entry of form.addressDetails || []) {
+        const trimmed = (entry.value ?? '').trim()
+        if (!trimmed) continue
+        const linked = await ensureLeadParcelLink(
+          {
+            address: trimmed,
+            parcelId: entry.parcelId,
+            lat: entry.lat,
+            lng: entry.lng,
+            properties: entry.properties,
+          },
+          onResolveParcel,
+        )
+        linkedDetails.push({
+          ...entry,
+          value: linked.address || trimmed,
+          parcelId: linked.parcelId,
+          lat: linked.lat,
+          lng: linked.lng,
+          properties: linked.properties,
+        })
       }
+
+      const parcelIds = linkedDetails.map((d) => d.parcelId).filter(Boolean)
+      const duplicateParcelId = parcelIds.find(
+        (pid, idx) => parcelIds.indexOf(pid) !== idx
+          || existingLeads.some((l) => l.parcelId === pid && l.id !== editLead?.id),
+      )
+      if (duplicateParcelId) {
+        showToast('A lead already exists for one of these parcels', 'warning')
+        return
+      }
+
+      const anyCoordsOnly = linkedDetails.some(
+        (d) => !d.parcelId && d.lat != null && d.lng != null,
+      )
+      if (anyCoordsOnly) {
+        showToast('Could not link one or more addresses to a county parcel — saved with map coordinates only', 'warning')
+      }
+
       const payload = {
         firstName,
         lastName,
-        address: linked.address || address,
+        ...addressDetailsFromForm({ addressDetails: linkedDetails }),
         ...contactDetailsFromForm(form),
         notes: (form.notes ?? '').trim(),
-        parcelId: linked.parcelId,
-        lat: linked.lat,
-        lng: linked.lng,
-        properties: linked.properties,
         visibility: shareState.visibility,
         sharedMemberUids: shareState.sharedMemberUids,
         teamId: activeTeam?.id || null,
         teamShares: shareState.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
-      }
-      if (linked.parcelId && existingLeads.some((l) => l.parcelId === linked.parcelId && l.id !== editLead?.id)) {
-        showToast('A lead already exists for this parcel', 'warning')
-        return
       }
       if (isEdit) {
         const lead = await updateLead(getToken, editLead.id, payload)
@@ -235,31 +272,13 @@ export function CreateLeadDialog({
             </div>
           </div>
 
-          <div>
-            <label className="text-xs opacity-60 mb-1 block">Property Address</label>
-            <AddressAutocompleteField
-              value={form.address ?? ''}
-              onChange={(v) => {
-                setForm((f) => ({
-                  ...f,
-                  address: v ?? '',
-                  parcelId: null,
-                  lat: null,
-                  lng: null,
-                  properties: null,
-                }))
-              }}
-              onSelectResult={handleAddressSelect}
-            />
-            {resolvingParcel && (
-              <p className="text-[11px] opacity-50 mt-1 flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" /> Linking parcel…
-              </p>
-            )}
-            {form.parcelId && !resolvingParcel && (
-              <p className="text-[11px] text-emerald-400/80 mt-1">Linked to parcel on map</p>
-            )}
-          </div>
+          <LeadAddressFieldList
+            entries={form.addressDetails}
+            onChange={(addressDetails) => setForm((f) => ({ ...f, addressDetails }))}
+            disabled={saving}
+            resolvingIndex={resolvingParcelIndex}
+            onSelectResult={handleAddressSelect}
+          />
 
           <LeadContactFieldList
             kind="phone"

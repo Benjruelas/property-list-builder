@@ -1,17 +1,22 @@
 import { useState, useEffect } from 'react'
 import { Mail } from 'lucide-react'
-import { PanelHeader } from './ui/panel-header'
-import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { cn } from '@/lib/utils'
 import { getEmailTemplates } from '@/utils/emailTemplates'
+import {
+  DealTemplatePanelShell,
+  DealTemplatePanelScroll,
+  DEAL_TEMPLATE_LIST_ROW,
+  CONTACT_ACTION_PANEL_CLASS,
+  ContactActionPanelFooter,
+} from './dealTemplates/dealTemplatePanelShared'
 
 export function EmailActionPanel({
   isOpen,
   onClose,
   email,
-  parcelData,
   onSelectTemplate,
   onNoTemplate,
+  nestedOverlay = true,
 }) {
   const [templates, setTemplates] = useState([])
 
@@ -23,39 +28,47 @@ export function EmailActionPanel({
 
   if (!email) return null
 
-  return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="map-panel phone-action-panel w-full max-w-[320px] rounded-2xl p-0 overflow-hidden" showCloseButton={false} blurOverlay topLayer>
-        <DialogHeader className="px-4 pt-4 pb-3 border-b">
-          <PanelHeader onBack={onClose} title={email} icon={Mail} titleClassName="text-lg font-semibold" />
-          <DialogDescription className="sr-only">
-            Choose an email template or start with a blank message
-          </DialogDescription>
-        </DialogHeader>
+  const handleNoTemplate = () => {
+    onNoTemplate?.()
+  }
 
-        <div className="px-4 py-4 space-y-3">
-          <p className="text-sm text-gray-600">Use a template or start with a blank message?</p>
-          <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden scrollbar-hide min-h-0">
-            <Button
-              variant="outline"
-              className="w-full justify-start text-left min-w-0"
-              onClick={() => onNoTemplate?.()}
-            >
-              No template
-            </Button>
-            {templates.map((t) => (
-              <Button
-                key={t.id}
-                variant="outline"
-                className="w-full justify-start text-left min-w-0 h-auto py-2 whitespace-normal break-words"
-                onClick={() => onSelectTemplate?.(t)}
-              >
-                {t.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+  const handlePick = (template) => {
+    onSelectTemplate?.(template)
+  }
+
+  return (
+    <DealTemplatePanelShell
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose?.()
+      }}
+      title={email}
+      icon={Mail}
+      description="Choose an email template or start with a blank message"
+      nestedOverlay={nestedOverlay}
+      panelClassName={CONTACT_ACTION_PANEL_CLASS}
+      footer={<ContactActionPanelFooter onCancel={onClose} />}
+    >
+      <DealTemplatePanelScroll className="compact-picker-scroll space-y-1.5">
+        <button
+          type="button"
+          onClick={handleNoTemplate}
+          className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer border-white/20 bg-white/[0.06]')}
+        >
+          <div className="text-sm font-medium">No template</div>
+        </button>
+
+        {templates.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => handlePick(t)}
+            className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer')}
+          >
+            <div className="text-sm font-medium truncate">{t.name}</div>
+          </button>
+        ))}
+      </DealTemplatePanelScroll>
+    </DealTemplatePanelShell>
   )
 }

@@ -163,13 +163,33 @@ export async function sendForm(getToken, payload) {
   return parseJsonSafe(res)
 }
 
-export async function createFormInvite(getToken, { templateId, recipientEmail, subject, message, prefillValues }) {
+export async function createFormInvite(getToken, {
+  templateId,
+  recipientEmail,
+  recipientPhone,
+  subject,
+  message,
+  prefillValues,
+  leadId,
+  leadName,
+  skipEmail,
+}) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to send form links')
   const res = await fetch(`${getApiBase()}/forms-invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ templateId, recipientEmail, subject, message, prefillValues })
+    body: JSON.stringify({
+      templateId,
+      recipientEmail,
+      recipientPhone,
+      subject,
+      message,
+      prefillValues,
+      leadId,
+      leadName,
+      skipEmail,
+    }),
   })
   if (!res.ok) {
     const err = await parseJsonSafe(res)

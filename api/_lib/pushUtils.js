@@ -4,6 +4,7 @@
  */
 import webpush from 'web-push'
 import { appendInAppNotification } from './notificationStore.js'
+import { buildNotificationCoalesceKey, buildNotificationContent } from './feedCoalesce.js'
 import { fullTeamsIndex } from './teams.js'
 
 let kv = null
@@ -157,8 +158,9 @@ function prefAllows(kind, prefs) {
  * @param {{ title: string, body: string, tag?: string, data?: object }} payload
  * @param {string} kind
  * @param {{ uid?: string, email?: string }} actor
+ * @param {{ coalesceKey?: string|null, delta?: number }} [options]
  */
-export async function sendWebPushToEmail(recipientEmail, payload, kind, actor = {}) {
+export async function sendWebPushToEmail(recipientEmail, payload, kind, actor = {}, options = {}) {
   ensureVapid()
   if (!vapidConfigured) return
   const e = (recipientEmail || '').toLowerCase().trim()
@@ -172,12 +174,22 @@ export async function sendWebPushToEmail(recipientEmail, payload, kind, actor = 
   const prefs = await getNotificationPrefs(uid)
   if (!prefAllows(kind, prefs)) return
 
-  await appendInAppNotification(uid, {
+  const coalesceKey = options.coalesceKey || buildNotificationCoalesceKey({
+    type: kind,
+    data: payload.data,
+  }) || payload.tag || null
+  const delta = options.delta ?? 1
+
+  const { coalesced } = await appendInAppNotification(uid, {
     type: kind,
     title: payload.title,
     body: payload.body,
     data: payload.data || {},
+    coalesceKey,
+    delta,
   })
+
+  if (coalesced) return
 
   const subs = await getPushSubscriptions(uid)
   if (!subs.length) return
@@ -185,7 +197,7 @@ export async function sendWebPushToEmail(recipientEmail, payload, kind, actor = 
   const body = JSON.stringify({
     title: payload.title,
     body: payload.body,
-    tag: payload.tag || 'property-map',
+    tag: coalesceKey || payload.tag || 'property-map',
     data: { type: kind, ...(payload.data || {}) },
   })
 
@@ -457,6 +469,7 @@ export async function notifyPipelineDealStatusChanges(
   changes,
   { pipelineTitle, pipelineId, columns, ownerEmail, sharedWith, actorEmail }
 ) {
+  if (!changes?.length) return
   const recipients = new Set()
   const o = (ownerEmail || '').toLowerCase().trim()
   if (o) recipients.add(o)
@@ -467,23 +480,43 @@ export async function notifyPipelineDealStatusChanges(
   const actor = (actorEmail || '').toLowerCase().trim()
   recipients.delete(actor)
 
-  for (const { deal, newStatus } of changes) {
-    const to = columnName(columns, newStatus)
-    const label = dealLabel(deal)
-    const body = label ? `${label} \u2192 ${to}` : to
-    for (const email of recipients) {
-      await sendWebPushToEmail(
-        email,
-        {
-          title: 'Deal moved',
-          body,
-          tag: `deal-${deal.id}-${newStatus}`,
-          data: { type: 'pipelineDealStage', pipelineId, dealId: deal.id, newStatus },
+  const count = changes.length
+  const coalesceKey = buildNotificationCoalesceKey({
+    type: 'pipelineDealStage',
+    data: { pipelineId },
+  })
+  const sample = changes[0]
+  const sampleBody = (() => {
+    const to = columnName(columns, sample.newStatus)
+    const label = dealLabel(sample.deal)
+    return label ? `${label} \u2192 ${to}` : to
+  })()
+  const content = buildNotificationContent('pipelineDealStage', {
+    count,
+    pipelineTitle,
+    body: sampleBody,
+  })
+
+  for (const email of recipients) {
+    await sendWebPushToEmail(
+      email,
+      {
+        title: content.title,
+        body: content.body,
+        tag: coalesceKey || `pipeline-deals-${pipelineId}`,
+        data: {
+          type: 'pipelineDealStage',
+          pipelineId,
+          pipelineTitle,
+          count,
+          newStatus: count === 1 ? sample.newStatus : undefined,
+          dealId: count === 1 ? sample.deal?.id : undefined,
         },
-        'pipelineDealStage',
-        { email: actorEmail }
-      )
-    }
+      },
+      'pipelineDealStage',
+      { email: actorEmail },
+      { coalesceKey, delta: count }
+    )
   }
 }
 

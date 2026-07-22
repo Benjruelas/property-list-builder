@@ -14,6 +14,7 @@ import {
 } from '../ui/dialog'
 import { useAuth } from '../../contexts/AuthContext'
 import { downloadFormPdf, sendForm, bytesToBase64, updateTemplate, downloadPublicFormPdf, submitPublicForm } from '../../utils/forms'
+import { SendFormDialog } from './SendFormDialog'
 import { buildSendPayload } from '../../lib/forms/emailPayload'
 import { SignaturePadModal } from './SignaturePadModal'
 import { resolveFormUiLayout } from './formFillLayout'
@@ -42,6 +43,8 @@ export function FormFillView({
   onRequestCompletion,
   initialValues,
   lockedFieldIds,
+  lead = null,
+  onFormSent,
 }) {
   const isPublic = mode === 'public'
   const { getToken } = useAuth()
@@ -69,6 +72,7 @@ export function FormFillView({
   const [subject, setSubject] = useState(`Completed form: ${template?.name || 'Form'}`)
   const [message, setMessage] = useState('')
   const [sendMeCopy, setSendMeCopy] = useState(false)
+  const [leadSendState, setLeadSendState] = useState(null)
   /** Public forms start in fill mode; authenticated forms open in view mode first. */
   const [fillMode, setFillMode] = useState(isPublic)
 
@@ -822,7 +826,27 @@ export function FormFillView({
       return
     }
     if (missing.length > 0) {
+      if (lead) {
+        setLeadSendState({ mode: 'invite', prefillValues: getFilledValuesForInvite() })
+        return
+      }
       onRequestCompletion?.(getFilledValuesForInvite())
+      return
+    }
+    if (lead) {
+      setSending(true)
+      flattenPdf()
+        .then((flattened) => {
+          setLeadSendState({
+            mode: 'completed',
+            pdfBase64: bytesToBase64(flattened),
+            values: stripValuesForSubmit(),
+          })
+        })
+        .catch((e) => {
+          showToast(e.message || 'Failed to prepare form', 'error')
+        })
+        .finally(() => setSending(false))
       return
     }
     setSendOpen(true)
@@ -834,6 +858,8 @@ export function FormFillView({
     handlePublicSubmit,
     isFieldFilled,
     isPublic,
+    lead,
+    flattenPdf,
     onRequestCompletion,
     validateRequired,
     values,
@@ -1124,11 +1150,13 @@ export function FormFillView({
         initialDataUrl={sigFieldId ? values[sigFieldId] : null}
       />
 
-      {!isPublic && (
+      {!isPublic && !lead && (
       <Dialog open={sendOpen} onOpenChange={(open) => { if (!open && !sending) setSendOpen(false) }}>
         <DialogContent
           className="map-panel list-panel share-list-dialog forms-send-dialog w-[min(92vw,22rem)] max-w-sm max-h-[min(88vh,640px)] overflow-y-auto rounded-2xl p-6 gap-4"
           focusOverlay
+          topLayer
+          confirmLayer
         >
           <DialogHeader>
             <DialogTitle>Send completed form</DialogTitle>
@@ -1196,6 +1224,24 @@ export function FormFillView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
+
+      {!isPublic && lead && leadSendState && (
+        <SendFormDialog
+          open
+          template={template}
+          prefillValues={leadSendState.prefillValues}
+          pdfBase64={leadSendState.pdfBase64}
+          values={leadSendState.values}
+          mode={leadSendState.mode === 'invite' ? 'invite' : 'completed'}
+          lead={lead}
+          onClose={() => setLeadSendState(null)}
+          onSent={() => {
+            setLeadSendState(null)
+            onFormSent?.()
+            onBack?.()
+          }}
+        />
       )}
     </div>
   )

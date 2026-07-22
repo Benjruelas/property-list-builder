@@ -24,10 +24,10 @@ import { DealDetails } from './DealDetails'
 import { LeadDetails } from './LeadDetails'
 import { canCollaborateOnPipeline, pipelinesUserCanWorkIn } from '@/utils/pipelines'
 import { CreatePipelineDialog } from './CreatePipelineDialog'
-import { displayLeadName, formatLeadAddress, updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch, mergeLeadDetail, mergeLeadDetailFromPhotoApi, upsertLeadInLocalStore } from '@/utils/leads'
+import { updateLead, toLeadPatchBody, isLeadPhotosOnlyPatch, mergeLeadDetail, mergeLeadDetailFromPhotoApi, upsertLeadInLocalStore } from '@/utils/leads'
 import { LeadSharingIcon, TeamSharedIcon } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
-import { PipelineDealCard } from './DealRow'
+import { PipelineDealCard, PipelineLeadCard } from './DealRow'
 import { PipeStageHeader } from './PipeStageHeader'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
 
@@ -131,6 +131,7 @@ export function DealPipeline({
   dealStatuses = [],
   editLeadId = null,
   onCreateLead,
+  leadContactActionOpen = false,
 }) {
   const { scheduleSync } = useUserDataSync()
   const apiMode = pipelines.length > 0
@@ -969,7 +970,7 @@ export function DealPipeline({
             ref={columnsScrollRef}
             className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide px-6 pt-0 pb-3 min-w-0 min-h-0 deal-pipeline-columns"
           >
-          <div className="deal-pipeline-columns-row flex flex-col md:flex-row md:flex-nowrap gap-2 h-full min-w-0 md:w-max md:min-h-full">
+          <div className="deal-pipeline-columns-row flex flex-col md:flex-row md:flex-nowrap gap-2 h-full min-w-0 md:w-full md:min-h-full">
             {pipeView === 'deals'
               ? columns.map((col) => {
                 const collapsed = isStageCollapsed(col.id)
@@ -987,7 +988,7 @@ export function DealPipeline({
                       collapsed && dragOverColId === col.id && 'ring-2 ring-blue-400/60',
                       collapsed
                         ? 'min-h-0 md:w-12 md:min-w-12'
-                        : 'md:w-max md:min-w-[9.25rem] min-h-[100px] md:min-h-[200px]',
+                        : 'md:flex-1 md:min-w-0 md:w-auto min-h-[100px] md:min-h-[200px]',
                     )}
                   >
                     <PipeStageHeader
@@ -1056,7 +1057,7 @@ export function DealPipeline({
                       collapsed && dragOverColId === status.id && 'ring-2 ring-blue-400/60',
                       collapsed
                         ? 'min-h-0 md:w-12 md:min-w-12'
-                        : 'md:w-max md:min-w-[9.25rem] min-h-[100px] md:min-h-[200px]',
+                        : 'md:flex-1 md:min-w-0 md:w-auto min-h-[100px] md:min-h-[200px]',
                     )}
                   >
                     <PipeStageHeader
@@ -1085,10 +1086,11 @@ export function DealPipeline({
                       >
                         <WindowedItems items={statusLeads} batch={40}>
                           {(lead) => (
-                            <button
+                            <PipelineLeadCard
                               key={lead.id}
-                              type="button"
+                              lead={lead}
                               draggable
+                              isDragging={draggedLeadId === lead.id}
                               onDragStart={(event) => {
                                 setDraggedLeadId(lead.id)
                                 event.dataTransfer.effectAllowed = 'move'
@@ -1099,16 +1101,7 @@ export function DealPipeline({
                                 setDragOverColId(null)
                               }}
                               onClick={() => onOpenLeadOverlay?.(lead.id)}
-                              className={cn(
-                                'pipe-item-card w-full rounded-xl border p-3 text-left transition-all hover:-translate-y-px',
-                                draggedLeadId === lead.id && 'opacity-50',
-                              )}
-                            >
-                              <div className="truncate text-sm font-semibold">{displayLeadName(lead)}</div>
-                              <div className="mt-0.5 truncate text-xs opacity-55">
-                                {formatLeadAddress(lead) || 'No address'}
-                              </div>
-                            </button>
+                            />
                           )}
                         </WindowedItems>
                       </div>
@@ -1397,7 +1390,8 @@ export function DealPipeline({
           canSeeDealAmounts={canSeeDealAmounts}
           nestedOverlay
           topLayer
-          externalNestedOverlay={!!editLeadId && editLeadId === leadOverlay?.id}
+          obscuredByContactAction={leadContactActionOpen}
+          externalNestedOverlay={(!!editLeadId && editLeadId === leadOverlay?.id) || leadContactActionOpen}
           onEditLead={onEditLead}
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}

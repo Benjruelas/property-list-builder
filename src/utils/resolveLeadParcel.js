@@ -31,12 +31,28 @@ export async function resolveLeadParcelAtLocation(lat, lng, { lrid, signal } = {
 }
 
 /** Merge resolved parcel fields into a lead form while preserving contact fields. */
-export function mergeLeadFormWithParcel(form, parcelData) {
+export function mergeLeadFormWithParcel(form, parcelData, { addressIndex = 0 } = {}) {
   if (!parcelData) return form
   const prefill = buildLeadPrefillFromParcel(parcelData)
   if (!prefill.parcelId) return form
+
+  const addressDetails = Array.isArray(form.addressDetails) && form.addressDetails.length
+    ? form.addressDetails.map((entry, index) => {
+      if (index !== addressIndex) return entry
+      return {
+        ...entry,
+        value: prefill.address || entry.value,
+        parcelId: prefill.parcelId,
+        lat: prefill.lat ?? entry.lat,
+        lng: prefill.lng ?? entry.lng,
+        properties: prefill.properties ?? entry.properties,
+      }
+    })
+    : prefill.addressDetails
+
   return {
     ...form,
+    addressDetails,
     parcelId: prefill.parcelId,
     lat: prefill.lat ?? form.lat,
     lng: prefill.lng ?? form.lng,

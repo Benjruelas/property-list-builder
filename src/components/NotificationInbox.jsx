@@ -90,6 +90,7 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
   const isActivity = item.source === 'activity'
   const primary = isActivity ? item.summary : item.title
   const secondary = !isActivity && item.body ? item.body : null
+  const groupedMeta = item.collapseCount > 1 ? `${item.collapseCount} grouped updates` : null
   const category = feedItemCategoryLabel(item)
   const iconKind = feedItemIconKind(item)
   const RowIcon = FEED_ICON_MAP[iconKind] || Activity
@@ -135,6 +136,9 @@ function FeedItemRow({ item, isSessionNew, isAdmin, onOpen }) {
           </div>
           {secondary ? (
             <p className="panel-item-body opacity-70 truncate">{secondary}</p>
+          ) : null}
+          {groupedMeta ? (
+            <p className="panel-item-meta opacity-50 truncate">{groupedMeta}</p>
           ) : null}
           {when ? (
             <p className="panel-item-meta opacity-50 truncate">{when}</p>

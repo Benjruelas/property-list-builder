@@ -13,7 +13,9 @@ import {
   isLeadPhotosOnlyPatch,
   isLeadStatusOnlyPatch,
   mergeLeadPhotos,
+  mergeLeadDetail,
   mergeLeadDetailFromPhotoApi,
+  mergeLeadDetailRespectingFreshness,
   isPhotosOnlyEntityChange,
   updateLead,
   saveLocalLeads,
@@ -166,6 +168,7 @@ describe('lead CRM helpers', () => {
 
   it('isLeadPhotosOnlyPatch detects photo gallery sync payloads', () => {
     expect(isLeadPhotosOnlyPatch({ photos: [], updatedAt: '2026-01-01' })).toBe(true)
+    expect(isLeadPhotosOnlyPatch({ photos: [], photoCount: 0, updatedAt: '2026-01-01' })).toBe(true)
     expect(isLeadPhotosOnlyPatch({ photos: [], firstName: 'Jane' })).toBe(false)
   })
 
@@ -224,6 +227,21 @@ describe('lead CRM helpers', () => {
     ])
   })
 
+  it('mergeLeadDetail preserves existing fields on partial tag updates', () => {
+    const prev = {
+      id: 'l1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      address: '123 Main St',
+      tagIds: ['t1'],
+    }
+    const merged = mergeLeadDetail(prev, { id: 'l1', tagIds: ['t1', 't2'], tagMeta: [{ id: 't2', name: 'Hot' }] })
+    expect(merged.firstName).toBe('Jane')
+    expect(merged.lastName).toBe('Doe')
+    expect(merged.address).toBe('123 Main St')
+    expect(merged.tagIds).toEqual(['t1', 't2'])
+  })
+
   it('mergeLeadPhotos drops deleted photos when server snapshot adds new uploads', () => {
     const prev = [
       { id: 'p1', size: 100 },
@@ -240,6 +258,7 @@ describe('lead CRM helpers', () => {
     const prev = {
       id: 'l1',
       photos: [{ id: 'p1', key: 'old' }],
+      photoCount: 2,
     }
     const incoming = {
       id: 'l1',
@@ -251,6 +270,40 @@ describe('lead CRM helpers', () => {
     const merged = mergeLeadDetailFromPhotoApi(prev, incoming)
     expect(merged.photos.map((p) => p.id)).toEqual(['p1', 'p2'])
     expect(merged.photos[0].annotatedKey).toBe('ann1')
+    expect(merged.photoCount).toBe(2)
+  })
+
+  it('mergeLeadDetailFromPhotoApi syncs photoCount after delete snapshot', () => {
+    const prev = {
+      id: 'l1',
+      photoCount: 3,
+      photos: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }],
+    }
+    const incoming = {
+      id: 'l1',
+      photos: [{ id: 'p1' }, { id: 'p3' }],
+    }
+    const merged = mergeLeadDetailFromPhotoApi(prev, incoming)
+    expect(merged.photos.map((p) => p.id)).toEqual(['p1', 'p3'])
+    expect(merged.photoCount).toBe(2)
+  })
+
+  it('mergeLeadDetailRespectingFreshness keeps newer local photos during stale hydrate', () => {
+    const prev = {
+      id: 'l1',
+      updatedAt: '2026-01-02T12:00:00.000Z',
+      photoCount: 1,
+      photos: [{ id: 'p1', thumbnailKey: 'k1' }],
+    }
+    const incoming = {
+      id: 'l1',
+      updatedAt: '2026-01-02T11:00:00.000Z',
+      photoCount: 2,
+      photos: [{ id: 'p1', thumbnailKey: 'k1' }, { id: 'p2', thumbnailKey: 'k2' }],
+    }
+    const merged = mergeLeadDetailRespectingFreshness(prev, incoming)
+    expect(merged.photos.map((p) => p.id)).toEqual(['p1'])
+    expect(merged.photoCount).toBe(1)
   })
 
   it('isPhotosOnlyEntityChange detects photo-only deal/lead updates', () => {

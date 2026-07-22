@@ -119,12 +119,14 @@ import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrat
 import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
+import { invalidateCachedLeadForms } from './utils/leadForms'
 import {
   fetchLeads,
   fetchLeadById,
   mergeListViewLeads,
   mergeLeadDetail,
   mergeLeadDetailFromPhotoApi,
+  mergeLeadDetailRespectingFreshness,
   isPhotosOnlyEntityChange,
   loadLocalLeads,
   saveLocalLeads,
@@ -266,8 +268,14 @@ function App() {
     hasScheduleOpener,
     isPathsPanelOpen,
     isFormsPanelOpen,
+    isFormsListOpen,
+    isFormsDetailStandalone,
     formsView,
     formsTemplateId,
+    formsFillReturnToLead,
+    formsEditReturnToLead,
+    formsFillLeadId,
+    formsEditReturnToFormPicker,
     isQuotesPanelOpen,
     isQuotesListOpen,
     isQuotesEditorStandalone,
@@ -295,6 +303,7 @@ function App() {
     hailDataParcel,
     phoneActionPanel,
     emailActionPanel,
+    isLeadContactActionOpen,
     popupData,
     clickedParcelId,
     clickedParcelData,
@@ -332,9 +341,14 @@ function App() {
     ((reportsDetailReportId && reportsDetailReturnToLead) ||
       (reportsEditorFrame && reportsEditorReturnToLead))
   )
+  const formsFillOverLead = !!(
+    leadsDetailLeadId &&
+    ((formsView !== 'list' && formsFillReturnToLead) || formsEditReturnToLead)
+  )
   const panelDockSlot = (root, isOpen) => {
     if (dealDetailOverLead && (root === 'deals' || root === 'leads')) return 'primary'
     if (reportDetailOverLead && (root === 'reports' || root === 'leads')) return 'primary'
+    if (formsFillOverLead && (root === 'forms' || root === 'leads')) return 'primary'
     return resolvePanelDockSlot(root, isOpen, tasksDockLayout)
   }
   const leadOverlayPanelDockSlot =
@@ -363,7 +377,7 @@ function App() {
     reportsDetailReportId,
   )
   const teamDetailMounted = useStickyPanelMount(!!teamsDetailTeamId)
-  const formsPanelMounted = useStickyPanelMount(isFormsPanelOpen)
+  const formsPanelMounted = useStickyPanelMount(isFormsPanelOpen || isFormsDetailStandalone)
   const pathsPanelMounted = useStickyPanelMount(isPathsPanelOpen)
   const outreachPanelMounted = useStickyPanelMount(isOutreachPanelOpen)
   const settingsPanelMounted = useStickyPanelMount(isSettingsPanelOpen)
@@ -465,6 +479,7 @@ function App() {
   const [createDealSaving, setCreateDealSaving] = useState(false)
   const [dealTemplatesRefreshKey, setDealTemplatesRefreshKey] = useState(0)
   const [quotesRefreshEpoch, setQuotesRefreshEpoch] = useState(0)
+  const [leadFormsRefreshEpoch, setLeadFormsRefreshEpoch] = useState(0)
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false)
   const [photoPickerParcelId, setPhotoPickerParcelId] = useState(null)
   const [photoPickerAddress, setPhotoPickerAddress] = useState('')
@@ -1428,9 +1443,9 @@ function App() {
       try {
         const full = await fetchLeadById(getToken, leadId)
         if (!full?.id || deletedLeadIdsRef.current.has(leadId)) return
-        setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetail))
+        setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetailRespectingFreshness))
         setPhotoModeLead((prev) => (
-          prev?.id === full.id ? mergeLeadDetail(prev, full) : prev
+          prev?.id === full.id ? mergeLeadDetailRespectingFreshness(prev, full) : prev
         ))
       } catch (error) {
         console.warn('Lead photo hydrate failed:', leadId, error?.message)
@@ -3039,7 +3054,13 @@ function App() {
   }, [requireAuth, guardFeature, nav])
 
   const handlePhoneClick = useCallback((phone, parcelData, leadId = null) => {
-    nav.showPhoneOverlay({ type: 'phone', phone, parcelData: parcelData || null, leadId: leadId || null, initialStep: 1 })
+    nav.showPhoneOverlay({
+      type: 'phone',
+      phone,
+      parcelData: parcelData || null,
+      leadId: leadId || null,
+      initialStep: leadId ? 3 : 1,
+    })
   }, [nav])
 
   const handleTextClick = useCallback((phone, parcelData, leadId = null) => {
@@ -3335,6 +3356,48 @@ function App() {
       nav.openReportFromLead(reportId, report)
     })
   }, [guardFeature, nav])
+
+  const handleOpenFormFillFromLead = useCallback((templateId, leadId) => {
+    if (!templateId || !leadId) return
+    guardFeature('forms', () => {
+      nav.openFormFillFromLead(templateId, leadId)
+    })
+  }, [guardFeature, nav])
+
+  const handleOpenFormEditFromLead = useCallback((templateId, leadId, opts) => {
+    if (!templateId || !leadId) return
+    guardFeature('forms', () => {
+      nav.openFormEditFromLead(templateId, leadId, opts)
+    })
+  }, [guardFeature, nav])
+
+  const handleOpenLeadForm = useCallback((item, lead) => {
+    const templateId = item?.templateId
+    const leadId = lead?.id
+    if (!templateId || !leadId) return
+    guardFeature('forms', () => {
+      nav.openFormFillFromLead(templateId, leadId)
+    })
+  }, [guardFeature, nav])
+
+  const handleCloseFormsSubView = useCallback(() => {
+    nav.popFormsSubView()
+  }, [nav])
+
+  const handleCloseFormsSubViewFromLead = useCallback(() => {
+    const editFrame = nav.state.navStack.find((f) => f.type === 'forms.edit')
+    if (editFrame?.returnToFormPicker && editFrame?.templateId && editFrame?.leadId) {
+      nav.pop()
+      nav.openFormFillFromLead(editFrame.templateId, editFrame.leadId)
+      return
+    }
+    nav.popFormsSubView()
+  }, [nav])
+
+  const handleLeadFormSent = useCallback((leadId) => {
+    if (leadId) invalidateCachedLeadForms(leadId)
+    setLeadFormsRefreshEpoch((n) => n + 1)
+  }, [])
 
   const handleCloseQuoteEditor = useCallback((saved) => {
     const prefill = quotesEditorFrame?.prefill
@@ -4294,6 +4357,7 @@ function App() {
         onLeadDeleted={handleLeadDeleted}
         editLeadId={editLead?.id ?? null}
         onCreateLead={openCreateLeadForPicker}
+        leadContactActionOpen={isLeadContactActionOpen}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
         leadStatuses={leadStatuses}
@@ -4436,15 +4500,24 @@ function App() {
       {formsPanelMounted && formsPanelReady && (
         <Suspense fallback={null}>
           <FormsPanel
-            isOpen={isFormsPanelOpen}
-            panelDockSlot={panelDockSlot('forms', isFormsPanelOpen)}
+            isOpen={isFormsPanelOpen || isFormsDetailStandalone}
+            isFormsListOpen={isFormsListOpen}
+            isFormsDetailStandalone={isFormsDetailStandalone}
+            formsFillOverLead={formsFillOverLead}
+            panelDockSlot={panelDockSlot('forms', isFormsPanelOpen || isFormsDetailStandalone)}
             onClose={handlePanelBack}
             onBack={handlePanelBack}
             formsView={formsView}
             formsTemplateId={formsTemplateId}
+            formsFillLeadId={formsFillLeadId}
+            formsFillReturnToLead={formsFillReturnToLead}
+            formsEditReturnToFormPicker={formsEditReturnToFormPicker}
+            lead={formsFillLeadId ? leads.find((l) => l.id === formsFillLeadId) : null}
             onOpenEdit={(templateId) => nav.pushFormsEdit(templateId)}
             onOpenFill={(templateId) => nav.pushFormsFill(templateId)}
-            onCloseSubView={() => nav.popFormsSubView()}
+            onCloseSubView={handleCloseFormsSubView}
+            onCloseSubViewFromLead={handleCloseFormsSubViewFromLead}
+            onFormSent={() => handleLeadFormSent(formsFillLeadId)}
             teams={teams}
             teamMembership={teamMembership}
             onShareForm={handleShareForm}
@@ -4686,6 +4759,12 @@ function App() {
         dealsDetailDealId={dealsDetailDealId}
         dealsLeadOverlayId={dealsLeadOverlayId}
         reportsDetailOverLead={reportDetailOverLead}
+        formsFillOverLead={formsFillOverLead}
+        onOpenFormFillFromLead={handleOpenFormFillFromLead}
+        onOpenFormEditFromLead={handleOpenFormEditFromLead}
+        onOpenLeadForm={handleOpenLeadForm}
+        onLeadFormSent={handleLeadFormSent}
+        leadFormsRefreshEpoch={leadFormsRefreshEpoch}
         onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
         onCloseLeadDetail={() => nav.popLeadsDetail()}
         currentUserId={currentUser?.uid}
@@ -4693,6 +4772,7 @@ function App() {
         canSeeDealAmounts={showDealAmounts}
         canAccessPhotos={canAccessFeature('photos')}
         canAccessReports={canAccessFeature('reports')}
+        canAccessForms={canAccessFeature('forms')}
         onEditLead={handleEditLead}
         onLeadDeleted={handleLeadDeleted}
         onCreatePhotoReport={handleCreatePhotoReport}
@@ -4703,6 +4783,7 @@ function App() {
         leadsDetailTopLayer={isLeadsDetailTopLayer}
         isLeadsDetailStandalone={isLeadsDetailStandalone}
         editLeadId={editLead?.id ?? null}
+        leadContactActionOpen={isLeadContactActionOpen}
       />
       </Suspense>
       )}
@@ -4769,6 +4850,7 @@ function App() {
         leadStatuses={leadStatuses}
         isDealsDetailStandalone={isDealsDetailStandalone}
         editLeadId={editLead?.id ?? null}
+        leadContactActionOpen={isLeadContactActionOpen}
       />
       </Suspense>
       )}

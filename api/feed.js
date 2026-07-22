@@ -18,7 +18,7 @@ import {
   isActivityStoreAvailable,
   ensureActivityStoreReady,
 } from './_lib/activityStore.js'
-import { mergeActivityFeeds, collapseFeedActivityItems, expandActivityIdsForMarkSeen, collectActivityIdsFromFeedItems } from './_lib/activityLog.js'
+import { mergeActivityFeeds, collapseFeedItems, expandActivityIdsForMarkSeen, collectActivityIdsFromFeedItems } from './_lib/feedCoalesce.js'
 
 /**
  * Unified notifications + team activity feed.
@@ -39,6 +39,9 @@ function buildFeedItems(notifications, activities, seenActivityIds) {
       title: n.title,
       body: n.body || '',
       summary: n.title,
+      count: n.count || 1,
+      coalesceKey: n.coalesceKey || null,
+      data: n.data && typeof n.data === 'object' ? n.data : {},
       nav: n.data && typeof n.data === 'object' ? n.data : { type: n.type },
     })
   }
@@ -55,13 +58,15 @@ function buildFeedItems(notifications, activities, seenActivityIds) {
       actorEmail: a.actorEmail,
       audience: a.audience,
       teamId: a.teamId,
+      count: a.count || 1,
+      coalesceKey: a.coalesceKey || null,
       entity: a.entity && typeof a.entity === 'object' ? a.entity : {},
       nav: a.nav && typeof a.nav === 'object' ? a.nav : {},
     })
   }
 
   items.sort((x, y) => new Date(y.createdAt || 0).getTime() - new Date(x.createdAt || 0).getTime())
-  return collapseFeedActivityItems(items)
+  return collapseFeedItems(items)
 }
 
 async function loadActivitiesForUser(user, teamIdFilter, limit) {

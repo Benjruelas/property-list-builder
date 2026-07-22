@@ -60,10 +60,11 @@ export function LeadContactActionTile({
   pickerSubtitle,
   nestedOverlay = true,
   onPickerOpenChange,
+  disabled: disabledProp = false,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const list = values.filter(Boolean)
-  const disabled = list.length === 0
+  const disabled = disabledProp || list.length === 0
   const primary = list[0]
   const display = primary ? formatValue(primary) : ''
   const title = list.length > 1 ? `${display} (+${list.length - 1} more)` : (display || label)
@@ -78,6 +79,7 @@ export function LeadContactActionTile({
   }, [pickerOpen, onPickerOpenChange])
 
   const handlePickerOpenChange = (open) => {
+    onPickerOpenChange?.(open)
     setPickerOpen(open)
   }
 
@@ -93,24 +95,23 @@ export function LeadContactActionTile({
     )
   }
 
-  const defaultSubtitle = contactKind === 'email'
-    ? 'This lead has multiple emails. Pick one to continue.'
-    : 'This lead has multiple phone numbers. Pick one to continue.'
-
   return (
     <>
       <LeadActionTile
         icon={Icon}
         label={label}
         value={title}
-        onClick={() => setPickerOpen(true)}
+        onClick={() => {
+          onPickerOpenChange?.(true)
+          setPickerOpen(true)
+        }}
       />
       <LeadContactPickerDialog
         open={pickerOpen}
         onOpenChange={handlePickerOpenChange}
         title={pickerTitle || `Choose a ${contactKind === 'email' ? 'email' : 'number'}`}
         icon={Icon}
-        subtitle={pickerSubtitle || defaultSubtitle}
+        subtitle={pickerSubtitle}
         items={pickerItems}
         onSelect={onSelect}
         nestedOverlay={nestedOverlay}

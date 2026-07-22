@@ -87,6 +87,14 @@ async function listPush(key, value) {
   await kv.ltrim(key, 0, MAX_ACTIVITY - 1)
 }
 
+async function listSet(key, index, value) {
+  if (isNativeRedis(kv)) {
+    await kv.lSet(key, index, value)
+    return
+  }
+  await kv.lset(key, index, value)
+}
+
 /** Read a legacy string-key JSON-array feed, if present. Returns null when key is a list. */
 async function readLegacyArray(key) {
   try {
@@ -124,8 +132,17 @@ export async function getTeamActivity(teamId) {
   const key = activityKey(teamId)
   try {
     const items = await listRange(key)
-    if (Array.isArray(items)) return items.map(parseItem).filter(Boolean)
-    return []
+    if (!Array.isArray(items)) return []
+    const seenIds = new Set()
+    return items
+      .map(parseItem)
+      .filter(Boolean)
+      .filter((item) => {
+        if (item.replacedBy) return false
+        if (seenIds.has(item.id)) return false
+        seenIds.add(item.id)
+        return true
+      })
   } catch {
     // WRONGTYPE: legacy string key still holding a JSON array.
     const legacy = await readLegacyArray(key)
@@ -155,6 +172,86 @@ export async function appendTeamActivity(teamId, record) {
     }
   }
   return record
+}
+
+/**
+ * Coalesce a team activity into a recent matching row when possible.
+ * @param {string} teamId
+ * @param {object} record
+ * @param {{ coalesceKey?: string|null, delta?: number, type?: string, summaryContext?: object|null, windowMs?: number, scanLimit?: number }} options
+ */
+export async function upsertTeamActivity(teamId, record, options = {}) {
+  const {
+    coalesceKey = record?.coalesceKey || null,
+    delta = record?.delta || record?.count || 1,
+    type = record?.type,
+    summaryContext = null,
+    windowMs,
+    scanLimit,
+  } = options
+
+  if (!coalesceKey) return appendTeamActivity(teamId, record)
+
+  const { buildActivitySummary, isWithinActivityCoalesceWindow, ACTIVITY_COALESCE_WINDOW_MS, ACTIVITY_COALESCE_SCAN_LIMIT } = await import('./feedCoalesce.js')
+  const effectiveWindow = windowMs ?? ACTIVITY_COALESCE_WINDOW_MS
+  const effectiveScan = scanLimit ?? ACTIVITY_COALESCE_SCAN_LIMIT
+
+  await initKv()
+  if (!kvAvailable || !kv) return appendTeamActivity(teamId, record)
+
+  const key = activityKey(teamId)
+  let parsed = []
+  try {
+    const items = await listRange(key)
+    parsed = (Array.isArray(items) ? items : []).map(parseItem).filter(Boolean).slice(0, effectiveScan)
+  } catch {
+    parsed = []
+  }
+
+  const now = Date.now()
+  const matchIdx = parsed.findIndex((item) =>
+    item.coalesceKey === coalesceKey
+    && item.actorUid === record.actorUid
+    && !item.replacedBy
+    && isWithinActivityCoalesceWindow(item.createdAt, now, effectiveWindow)
+  )
+
+  if (matchIdx === -1) {
+    return appendTeamActivity(teamId, {
+      ...record,
+      coalesceKey,
+      count: delta,
+      delta,
+    })
+  }
+
+  const existing = parsed[matchIdx]
+  const newCount = (existing.count || 1) + delta
+  const updated = {
+    ...existing,
+    ...record,
+    id: existing.id,
+    coalesceKey,
+    count: newCount,
+    delta,
+    summary: summaryContext
+      ? buildActivitySummary(type, { ...summaryContext, count: newCount })
+      : record.summary,
+  }
+
+  try {
+    if (matchIdx === 0) {
+      await listSet(key, 0, JSON.stringify(updated))
+      return updated
+    }
+
+    await listSet(key, matchIdx, JSON.stringify({ ...existing, replacedBy: existing.id }))
+    await listPush(key, JSON.stringify(updated))
+    return updated
+  } catch (e) {
+    console.warn('activity store upsert failed', e.message)
+    return appendTeamActivity(teamId, record)
+  }
 }
 
 export function isActivityStoreAvailable() {

@@ -5,6 +5,28 @@
 import { getApiBase } from './apiBase'
 import { buildReportPublicUrl as buildReportPublicUrlFromToken } from './publicLinks'
 
+/** Date shown on lead-detail report rows, based on status. */
+export function getReportListDate(report) {
+  if (!report) return null
+  const status = report.status || 'draft'
+  if (status === 'viewed') {
+    return report.viewTracking?.lastViewedAt
+      || report.sentAt
+      || report.createdAt
+      || report.updatedAt
+      || null
+  }
+  if (status === 'sent') {
+    return report.sentAt
+      || report.createdAt
+      || report.updatedAt
+      || null
+  }
+  return report.createdAt
+    || report.updatedAt
+    || null
+}
+
 export async function fetchPhotoReports(getToken, { leadId, reportId } = {}) {
   const token = await getToken?.()
   if (!token) return []
@@ -22,6 +44,53 @@ export async function fetchPhotoReports(getToken, { leadId, reportId } = {}) {
   const data = await res.json()
   if (reportId) return data.report
   return data.reports || []
+}
+
+/** @type {Map<string, object[]>} */
+const leadReportsListCache = new Map()
+
+/** @type {Map<string, Promise<object[]>>} */
+const leadReportsInflight = new Map()
+
+export function peekCachedLeadReports(leadId) {
+  if (!leadId) return undefined
+  if (!leadReportsListCache.has(leadId)) return undefined
+  return leadReportsListCache.get(leadId)
+}
+
+export function invalidateCachedLeadReports(leadId) {
+  if (!leadId) return
+  leadReportsListCache.delete(leadId)
+  leadReportsInflight.delete(leadId)
+}
+
+export function isLeadReportsFetchInflight(leadId) {
+  return !!leadId && leadReportsInflight.has(leadId)
+}
+
+/** Fetch reports for a lead once; reuse in-memory cache across LeadDetails remounts. */
+export async function fetchLeadPhotoReports(getToken, leadId) {
+  if (!leadId) return []
+  const cached = peekCachedLeadReports(leadId)
+  if (cached !== undefined) return cached
+
+  const pending = leadReportsInflight.get(leadId)
+  if (pending) return pending
+
+  const request = fetchPhotoReports(getToken, { leadId })
+    .then((list) => {
+      const normalized = Array.isArray(list) ? list : []
+      leadReportsListCache.set(leadId, normalized)
+      leadReportsInflight.delete(leadId)
+      return normalized
+    })
+    .catch((err) => {
+      leadReportsInflight.delete(leadId)
+      throw err
+    })
+
+  leadReportsInflight.set(leadId, request)
+  return request
 }
 
 export async function createPhotoReport(getToken, body) {

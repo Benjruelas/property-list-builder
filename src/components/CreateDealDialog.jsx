@@ -29,6 +29,7 @@ export function CreateDealDialog({
   const [tasks, setTasks] = useState([])
 
   const apiMode = pipelines.length > 0
+  const showPipelinePicker = pipelines.length > 1
   const selectedLead = selectedLeadId ? leads.find((l) => l.id === selectedLeadId) : null
   const selectedPipeline = pipelineId ? pipelines.find((p) => p.id === pipelineId) : null
 
@@ -100,13 +101,17 @@ export function CreateDealDialog({
             onBack={() => onOpenChange(false)}
             title="Create Deal"
             icon={Briefcase}
-            subtitle="Add deal details, link a lead, and choose a pipe."
+            subtitle={showPipelinePicker
+              ? 'Add deal details, link a lead, and choose a pipe.'
+              : 'Add deal details and link a lead.'}
             subtitleClassName="text-sm opacity-60 whitespace-normal"
             titleClassName="text-left justify-start"
             toolbarClassName="w-full"
           />
           <DialogDescription className="sr-only">
-            Create a deal with title, notes, lead, and pipeline.
+            {showPipelinePicker
+              ? 'Create a deal with title, notes, lead, and pipeline.'
+              : 'Create a deal with title, notes, and lead.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -143,7 +148,7 @@ export function CreateDealDialog({
               />
             </div>
 
-            {apiMode && (
+            {apiMode && showPipelinePicker && (
               <div>
                 <label className="text-xs font-medium block mb-1 opacity-90">
                   Pipeline{' '}

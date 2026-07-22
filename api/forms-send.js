@@ -106,12 +106,15 @@ export default async function handler(req, res) {
     const {
       pdfBase64,
       recipientEmail,
+      recipientPhone,
       subject,
       message,
       templateId,
       templateName,
       values,
-      sendMeCopy
+      sendMeCopy,
+      leadId,
+      leadName,
     } = req.body || {}
 
     if (!pdfBase64 || typeof pdfBase64 !== 'string') {
@@ -192,6 +195,9 @@ export default async function handler(req, res) {
       ownerId: user.uid,
       submittedAt: new Date().toISOString(),
       recipientEmail: recipientEmail.trim().toLowerCase(),
+      recipientPhone: recipientPhone ? String(recipientPhone).replace(/\D/g, '').slice(-10) : null,
+      leadId: leadId ? String(leadId).trim().slice(0, 80) : null,
+      leadName: leadName ? String(leadName).trim().slice(0, 200) : null,
       sentCopyToSender: !!bccList,
       values: values && typeof values === 'object' ? values : {}
     }

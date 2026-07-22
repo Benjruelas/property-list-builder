@@ -106,6 +106,7 @@ export function DealsPanel({
   leadStatuses = [],
   isDealsDetailStandalone = false,
   editLeadId = null,
+  leadContactActionOpen = false,
 }) {
   const [search, setSearch] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState([])
@@ -690,7 +691,8 @@ export function DealsPanel({
           nestedOverlay
           topLayer
           stackedOverlay
-          externalNestedOverlay={!!editLeadId && editLeadId === leadOverlay?.id}
+          obscuredByContactAction={leadContactActionOpen}
+          externalNestedOverlay={(!!editLeadId && editLeadId === leadOverlay?.id) || leadContactActionOpen}
           onClose={() => onCloseLeadOverlay?.()}
           lead={leadOverlay}
           pipelines={pipelines}

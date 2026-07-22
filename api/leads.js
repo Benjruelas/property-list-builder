@@ -17,6 +17,7 @@ import {
 import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './_lib/tagHelpers.js'
 import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './_lib/leadStatuses.js'
 import { normalizeLeadContactsForStorage } from './_lib/leadContact.js'
+import { normalizeLeadAddressesForStorage } from './_lib/leadAddresses.js'
 import { getAllLeads, mutateLeads, deleteLeadFromStore } from './_lib/leadStore.js'
 import { isKvLockUnavailable, respondKvLockUnavailable } from './_lib/kvLockErrors.js'
 import { getLeadsForUser } from './_lib/leadRepo.js'
@@ -51,7 +52,7 @@ async function loadUserAppSettings(uid) {
   }
 }
 
-const ACTIVITY_TYPES = new Set(['call', 'text', 'email', 'note', 'status', 'deal', 'photo', 'report'])
+const ACTIVITY_TYPES = new Set(['call', 'text', 'email', 'note', 'status', 'deal', 'photo', 'report', 'form'])
 const MAX_LEAD_ACTIVITY = 200
 
 function leadDisplayName(lead) {
@@ -88,19 +89,20 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
   const now = new Date().toISOString()
   const firstName = String(body.firstName ?? existing?.firstName ?? '').trim()
   const lastName = String(body.lastName ?? existing?.lastName ?? '').trim()
-  const address = String(body.address ?? existing?.address ?? '').trim()
   if (!firstName && !lastName) throw new Error('First or last name is required')
 
   const contact = normalizeLeadContactsForStorage(body, existing)
+  const addressFields = normalizeLeadAddressesForStorage(body, existing)
 
   const base = {
     id: existing?.id || `lead_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
     firstName,
     lastName,
-    address,
-    parcelId: body.parcelId !== undefined ? (body.parcelId || null) : (existing?.parcelId ?? null),
-    lat: body.lat !== undefined ? body.lat : (existing?.lat ?? null),
-    lng: body.lng !== undefined ? body.lng : (existing?.lng ?? null),
+    address: addressFields.address,
+    parcelId: addressFields.parcelId,
+    lat: addressFields.lat,
+    lng: addressFields.lng,
+    addressDetails: addressFields.addressDetails,
     phone: contact.phone,
     email: contact.email,
     phones: contact.phones,
@@ -108,7 +110,7 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
     phoneDetails: contact.phoneDetails,
     emailDetails: contact.emailDetails,
     notes: body.notes !== undefined ? String(body.notes || '') : (existing?.notes ?? ''),
-    properties: body.properties !== undefined ? body.properties : (existing?.properties ?? null),
+    properties: addressFields.properties,
     ownerId: existing?.ownerId || user.uid,
     ownerEmail: existing?.ownerEmail || user.email,
     sharedWith: existing?.sharedWith || [],
@@ -168,17 +170,27 @@ function leadSharingPatchChanges(existing, body) {
   return false
 }
 
-async function logLeadActivity(type, lead, user, summary, { audience } = {}) {
+function leadDisplayFieldsChanged(existing, lead) {
+  return existing.firstName !== lead.firstName
+    || existing.lastName !== lead.lastName
+    || existing.address !== lead.address
+}
+
+async function logLeadActivity(type, lead, user, summary, { audience, delta = 1, summaryContext = null } = {}) {
   const teamIds = teamIdsFromResource(lead)
   if (teamIds.length === 0) return
+  const label = actorLabel(user)
+  const leadName = leadDisplayName(lead)
   await logTeamActivity({
     teamIds,
     actor: user,
     type,
     summary,
-    entity: { kind: 'lead', leadId: lead.id },
+    entity: { kind: 'lead', leadId: lead.id, leadName },
     nav: { type: 'lead', leadId: lead.id },
     audience: audience || activityAudienceForResource(lead),
+    delta,
+    summaryContext: summaryContext || { label, leadName, count: delta },
   })
 }
 
@@ -284,7 +296,9 @@ export default async function handler(req, res) {
 
       const label = actorLabel(user)
       const name = leadDisplayName(lead)
-      await logLeadActivity('lead.created', lead, user, `${label} created lead ${name}`)
+      await logLeadActivity('lead.created', lead, user, `${label} created lead ${name}`, {
+        summaryContext: { label, leadName: name, count: 1 },
+      })
 
       return res.status(201).json({ lead })
     }
@@ -397,10 +411,13 @@ export default async function handler(req, res) {
       const label = actorLabel(user)
       const name = leadDisplayName(lead)
       const statusChanged = body.status !== undefined && lead.status !== existing.status
+      const displayFieldsChanged = leadDisplayFieldsChanged(existing, lead)
       if (visibilityChanged) {
         await logLeadActivity('lead.shared', lead, user, `${label} updated sharing on lead ${name}`)
-      } else if (statusChanged) {
-        await logLeadActivity('lead.updated', lead, user, `${label} updated lead ${name}`)
+      } else if (statusChanged || displayFieldsChanged) {
+        await logLeadActivity('lead.updated', lead, user, `${label} updated lead ${name}`, {
+          summaryContext: { label, leadName: name, count: 1 },
+        })
       }
 
       return res.status(200).json({ lead })

@@ -36,6 +36,10 @@ function isMapPanelClassName(className) {
   return typeof className === 'string' && /\bmap-panel\b/.test(className)
 }
 
+function isContactActionPanelClassName(className) {
+  return typeof className === 'string' && /\b(phone-action-panel|compact-picker-panel)\b/.test(className)
+}
+
 function interactionTarget(e) {
   const target = e?.target
   if (target?.closest) return target
@@ -71,6 +75,8 @@ const NESTED_DISMISS_GUARD_SELECTORS = [
   '[data-create-pipeline-dialog]',
   '[data-panel-filter-menu]',
   '[data-directions-picker-menu]',
+  '.compact-picker-panel',
+  '.phone-action-panel',
   '[data-toast-container]',
   '[data-toast-item]',
   '[data-team-member-features-dialog]',
@@ -125,6 +131,7 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
   const effectiveNestedOverlay = nestedOverlay && !blurOverlay && !detailFocusOverlay
   const effectiveHideOverlay = hideOverlay && !effectiveNestedOverlay
   const isPanel = (panelMode ?? isMapPanelClassName(className)) && !confirmLayer
+  const isContactActionPanel = isContactActionPanelClassName(className)
   const contentMotion = cn(
     isPanel ? PANEL_CONTENT_MOTION : DEFAULT_CONTENT_MOTION,
     instantDismiss && INSTANT_PANEL_MOTION
@@ -133,9 +140,9 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
     isPanel ? PANEL_OVERLAY_MOTION : 'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
     instantDismiss && INSTANT_PANEL_MOTION
   )
-  const zOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[10000]'
+  const zOverlay = confirmLayer ? 'z-[10040]' : isContactActionPanel && topLayer ? 'z-[10020]' : topLayer ? 'z-[10020]' : 'z-[10000]'
   const aboveDetailScrim = topLayer || detailFocusOverlay
-  const zContent = confirmLayer ? 'z-[10041]' : aboveDetailScrim ? 'z-[10021]' : 'z-[10001]'
+  const zContent = confirmLayer ? 'z-[10041]' : isContactActionPanel && topLayer ? 'z-[10022]' : aboveDetailScrim ? 'z-[10021]' : 'z-[10001]'
   const zHideOverlay = confirmLayer ? 'z-[10040]' : topLayer ? 'z-[10020]' : 'z-[9998]'
   const zDefaultContent = confirmLayer ? 'z-[10041]' : aboveDetailScrim ? 'z-[10021]' : 'z-[9999]'
   const contentPosition = cn(
@@ -193,7 +200,14 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
   <DialogPortal container={typeof document !== 'undefined' ? document.getElementById('modal-root') || document.body : undefined}>
     {effectiveNestedOverlay ? (
       <>
-        <AppDialogBackdrop className={cn("fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto", overlayMotion, zOverlay)} />
+        <AppDialogBackdrop
+          className={cn(
+            'fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto',
+            overlayMotion,
+            zOverlay,
+          )}
+          {...(isContactActionPanel ? { 'data-contact-action-scrim': true } : {})}
+        />
         <DialogPrimitive.Content
           ref={mergeRefs}
           className={cn(contentPosition, contentMotion, zContent, className)}
@@ -264,7 +278,10 @@ const DialogContent = React.forwardRef(({ className, children, showCloseButton =
       </>
     ) : blurOverlay ? (
       <>
-        <AppDialogBackdrop className={cn("fixed inset-0 bg-black/50 backdrop-blur-lg pointer-events-auto", overlayMotion, zOverlay)} />
+        <AppDialogBackdrop
+          className={cn('fixed inset-0 bg-black/50 backdrop-blur-lg pointer-events-auto', overlayMotion, zOverlay)}
+          {...(isContactActionPanel ? { 'data-contact-action-scrim': true } : {})}
+        />
         <DialogPrimitive.Content
           ref={mergeRefs}
           className={cn(contentPosition, contentMotion, zContent, className)}

@@ -150,7 +150,7 @@ export function EmailComposer({
   if (!isOpen || !parcelData) return null
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
+    <Dialog open={isOpen} modal={false} onOpenChange={(open) => {
       if (!open) {
         onClose()
       }

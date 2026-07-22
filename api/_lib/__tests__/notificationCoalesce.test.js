@@ -24,24 +24,50 @@ describe('coalesceInboxNotification', () => {
       createdAt: '2026-07-16T12:05:00.000Z',
     })
 
-    const { inbox, record } = coalesceInboxNotification([existing], incoming)
+    const { inbox, record, coalesced } = coalesceInboxNotification([existing], incoming)
 
+    expect(coalesced).toBe(true)
     expect(inbox).toHaveLength(1)
     expect(record.id).toBe('ntf_old')
     expect(record.title).toBe('List shared again')
     expect(record.body).toBe('Updated body')
-    expect(record.createdAt).toBe('2026-07-16T12:05:00.000Z')
+  })
+
+  it('bumps counts for pipeline deal notifications', () => {
+    const existing = notification({
+      id: 'ntf_old',
+      type: 'pipelineDealStage',
+      coalesceKey: 'pipelineDealStage:pipe_1',
+      title: 'Deal moved',
+      body: 'One deal moved',
+      data: { type: 'pipelineDealStage', pipelineId: 'pipe_1', pipelineTitle: 'Roofing' },
+      count: 1,
+    })
+    const incoming = notification({
+      id: 'ntf_new',
+      type: 'pipelineDealStage',
+      coalesceKey: 'pipelineDealStage:pipe_1',
+      title: 'Deals moved',
+      body: 'Another deal moved',
+      data: { type: 'pipelineDealStage', pipelineId: 'pipe_1', pipelineTitle: 'Roofing' },
+      delta: 2,
+    })
+
+    const { record, coalesced } = coalesceInboxNotification([existing], incoming)
+
+    expect(coalesced).toBe(true)
+    expect(record.count).toBe(3)
+    expect(record.body).toBe('3 deals moved in Roofing')
   })
 
   it('creates a fresh unread row after the prior match was read', () => {
     const read = notification({ id: 'ntf_read', read: true })
     const incoming = notification({ id: 'ntf_new', title: 'Fresh share' })
 
-    const { inbox, record } = coalesceInboxNotification([read], incoming)
+    const { inbox, record, coalesced } = coalesceInboxNotification([read], incoming)
 
+    expect(coalesced).toBe(false)
     expect(inbox).toHaveLength(2)
     expect(record.id).toBe('ntf_new')
-    expect(inbox[0].id).toBe('ntf_new')
-    expect(inbox[1].id).toBe('ntf_read')
   })
 })

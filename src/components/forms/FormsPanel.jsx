@@ -70,19 +70,28 @@ async function getPdfPageCount(arrayBuffer) {
 
 export function FormsPanel({
   isOpen,
+  isFormsListOpen = true,
+  isFormsDetailStandalone = false,
+  formsFillOverLead = false,
   panelDockSlot,
   onClose,
   onBack,
   formsView = 'list',
   formsTemplateId = null,
+  formsFillLeadId = null,
+  formsFillReturnToLead = false,
+  formsEditReturnToFormPicker = false,
+  lead = null,
   onOpenEdit,
   onOpenFill,
   onCloseSubView,
+  onCloseSubViewFromLead,
   teams = [],
   teamMembership = null,
   onShareForm,
   onShareFormWithTeams,
   onValidateShareEmail,
+  onFormSent,
 }) {
   const { getToken, currentUser } = useAuth()
   const view = formsView
@@ -94,8 +103,9 @@ export function FormsPanel({
   const [openMenuId, setOpenMenuId] = useState(null)
   const menuTriggerRef = useRef(null)
   const hasNestedView = view !== 'list'
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByDetail = listPanelObscuredByDetail(isOpen, hasNestedView)
+  const formsSubViewPrimaryDetail = isFormsDetailStandalone && !formsFillOverLead
+  const listDialogOpen = mapListDialogOpen(isOpen && isFormsListOpen)
+  const listObscuredByDetail = listPanelObscuredByDetail(isOpen && isFormsListOpen, hasNestedView)
 
   const [shareTemplateId, setShareTemplateId] = useState(null)
   const [localShareState, setLocalShareState] = useState(null)
@@ -395,6 +405,10 @@ export function FormsPanel({
   }
 
   const handleSubViewBack = () => {
+    if (formsEditReturnToFormPicker && view === 'edit') {
+      onCloseSubViewFromLead?.()
+      return
+    }
     onCloseSubView?.()
   }
 
@@ -560,8 +574,11 @@ export function FormsPanel({
         <DialogContent
           className={cn(FORM_SUB_PANEL_CLASS, 'form-editor-panel')}
           showCloseButton={false}
-          nestedOverlay
+          nestedOverlay={!formsSubViewPrimaryDetail}
           topLayer
+          hideOverlay={formsSubViewPrimaryDetail}
+          suppressBackdrop={formsSubViewPrimaryDetail}
+          panelDockSlot={formsFillOverLead ? panelDockSlot : undefined}
         >
           <DialogHeader className="sr-only">
             <DialogTitle>Edit form</DialogTitle>
@@ -591,8 +608,11 @@ export function FormsPanel({
         <DialogContent
           className={cn(FORM_SUB_PANEL_CLASS, 'form-fill-panel')}
           showCloseButton={false}
-          nestedOverlay
+          nestedOverlay={!formsSubViewPrimaryDetail}
           topLayer
+          hideOverlay={formsSubViewPrimaryDetail}
+          suppressBackdrop={formsSubViewPrimaryDetail}
+          panelDockSlot={formsFillOverLead ? panelDockSlot : undefined}
         >
           <DialogHeader className="sr-only">
             <DialogTitle>Fill form</DialogTitle>
@@ -604,7 +624,10 @@ export function FormsPanel({
                 template={activeTemplate}
                 onBack={handleSubViewBack}
                 onTemplateUpdated={handleTemplateUpdated}
+                lead={lead}
+                onFormSent={onFormSent}
                 onRequestCompletion={(prefillValues) => {
+                  if (lead) return
                   setLinkTemplateId(activeTemplate.id)
                   setLinkPrefillValues(prefillValues || null)
                 }}

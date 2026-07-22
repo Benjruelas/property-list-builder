@@ -306,6 +306,67 @@ export function recipeOpenReportEditorFromLeadDetail(currentStack, editorFrame, 
   return build(currentStack)
 }
 
+/**
+ * Open form fill from lead context — no Forms list panel.
+ */
+export function recipeOpenFormFillFromLeadDetail(currentStack, templateId, opts = {}) {
+  const leadId = opts.leadId || null
+  const stripFormFrames = (f) =>
+    f.type !== 'forms.fill' &&
+    f.type !== 'forms.edit' &&
+    f.type !== 'forms'
+  const stripTransientList = (f) => f.type !== 'leads' && f.type !== 'forms'
+
+  const build = (stack) => [
+    ...stack.filter(stripFormFrames).filter(stripTransientList),
+    {
+      type: 'forms.fill',
+      templateId,
+      ...(leadId ? { leadId } : {}),
+      returnToLead: true,
+      dockBesideTasks: true,
+    },
+  ]
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
+}
+
+/**
+ * Open form editor from lead context — no Forms list panel.
+ */
+export function recipeOpenFormEditFromLeadDetail(currentStack, templateId, opts = {}) {
+  const leadId = opts.leadId || null
+  const stripFormFrames = (f) =>
+    f.type !== 'forms.fill' &&
+    f.type !== 'forms.edit' &&
+    f.type !== 'forms'
+  const stripTransientList = (f) => f.type !== 'leads' && f.type !== 'forms'
+
+  const build = (stack) => [
+    ...stack.filter(stripFormFrames).filter(stripTransientList),
+    {
+      type: 'forms.edit',
+      templateId,
+      ...(leadId ? { leadId } : {}),
+      returnToLead: true,
+      returnToFormPicker: opts.returnToFormPicker === true,
+      dockBesideTasks: true,
+    },
+  ]
+
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    const tasksFrames = currentStack.filter((f) => frameRoot(f.type) === 'tasks')
+    const withoutTasks = currentStack.filter((f) => frameRoot(f.type) !== 'tasks')
+    return appendTrailingTasks(build(withoutTasks), tasksFrames)
+  }
+  return build(currentStack)
+}
+
 /** Legacy: openTeamsPanel */
 export function recipeOpenTeams(currentStack, opts = {}) {
   return recipeOpenRootPanel(currentStack, 'teams', { type: 'teams' }, opts)

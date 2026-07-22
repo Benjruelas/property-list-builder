@@ -14,39 +14,54 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!open || !photo) return undefined
-    setLoading(true)
+    if (!open || !photo?.id) return undefined
+
+    let cancelled = false
+    let objectUrl = null
+    const annotationObjects = photo.annotations?.objects
     const key = getPhotoAnnotationBaseKey(photo)
+
+    setImage(null)
+    setInitialObjects([])
+    setLoading(true)
+
     if (!key) {
       showToast('Could not load photo', 'error')
       setLoading(false)
       return undefined
     }
-    let objectUrl = null
+
     fetchPhotoBlob(getToken, key)
       .then((blob) => {
+        if (cancelled) return
         objectUrl = URL.createObjectURL(blob)
         const img = new window.Image()
         img.onload = () => {
+          if (cancelled) return
           setImage(img)
-          setInitialObjects(normalizeAnnotationObjects(photo.annotations?.objects))
+          setInitialObjects(normalizeAnnotationObjects(annotationObjects))
           setLoading(false)
         }
         img.onerror = () => {
+          if (cancelled) return
           showToast('Could not load photo', 'error')
           setLoading(false)
         }
         img.src = objectUrl
       })
       .catch(() => {
+        if (cancelled) return
         showToast('Could not load photo', 'error')
         setLoading(false)
       })
+
     return () => {
+      cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
       setImage(null)
+      setInitialObjects([])
     }
-  }, [open, photo, getToken])
+  }, [open, photo?.id, photo?.key, photo?.updatedAt, getToken])
 
   const handleSave = async (objects) => {
     if (!image || !photo || !deal?.id || !pipelineId || saving) return
@@ -84,6 +99,7 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
 
   return (
     <PhotoAnnotatorEditor
+      key={photo.id}
       open={open}
       image={image}
       loading={loading}
