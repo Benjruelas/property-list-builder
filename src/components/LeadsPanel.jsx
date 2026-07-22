@@ -24,6 +24,7 @@ import {
 } from '@/utils/leads'
 import { filterByTags, buildFilterableTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
+import { PanelSearchInput } from './ui/PanelSearchInput'
 import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
 import { getLeadPhones, getLeadEmails, leadContactMatchesQuery } from '@/utils/leadContact'
@@ -344,17 +345,12 @@ export function LeadsPanel({
               </div>
             )}
             <div className="flex gap-2 mb-2">
-              <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search leads by name, address, phone, or email…"
-                  className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
-                  aria-label="Search leads"
-                />
-              </div>
+              <PanelSearchInput
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search leads by name, address, phone, or email…"
+                aria-label="Search leads"
+              />
               <PanelFilterMenu
                 tags={filterTags}
                 selectedTagIds={selectedTagIds}

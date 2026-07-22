@@ -19,6 +19,7 @@ import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { loadClosedDeals } from '@/utils/closedDeals'
 import { filterByTags, buildFilterableTags } from '@/utils/tags'
 import { PanelFilterMenu } from './tags/PanelFilterMenu'
+import { PanelSearchInput } from './ui/PanelSearchInput'
 import { showToast } from './ui/toast'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 import { useWindowedList } from '@/hooks/useWindowedList'
@@ -488,17 +489,12 @@ export function DealsPanel({
               </div>
 
               <div className="flex gap-2">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
-                  <input
-                    type="search"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search deals by title, lead, or pipe…"
-                    className="w-full text-sm rounded-lg pl-9 pr-3 py-2"
-                    aria-label="Search deals"
-                  />
-                </div>
+                <PanelSearchInput
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search deals by title, lead, or pipe…"
+                  aria-label="Search deals"
+                />
                 <PanelFilterMenu
                   tags={filterTags}
                   selectedTagIds={selectedTagIds}
