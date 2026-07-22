@@ -220,11 +220,11 @@ export function HailDataPanel({ isOpen, onClose, parcelData, onSelectEvent }) {
   }, [hailData])
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+    <Dialog open={isOpen} modal={false} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
         className="map-panel hail-data-panel list-panel fullscreen-panel flex flex-col min-h-0"
         showCloseButton={false}
-        hideOverlay
+        nestedOverlay
         topLayer
         onInteractOutside={(e) => e.preventDefault()}
       >
