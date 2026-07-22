@@ -19,7 +19,7 @@ function colorLayerKey(hex) {
   return String(hex || '').replace('#', '').toLowerCase()
 }
 
-/** White user silhouette for symbol layer (status color comes from the glow/core). */
+/** White person silhouette for symbol layer (status color comes from the glow/core). */
 function createLeadIconImageData(size = 64) {
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -28,33 +28,23 @@ function createLeadIconImageData(size = 64) {
   if (!ctx) return null
   ctx.clearRect(0, 0, size, size)
   ctx.fillStyle = '#ffffff'
-  ctx.strokeStyle = '#ffffff'
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
+
+  const cx = size * 0.5
+  const headR = size * 0.14
 
   // Head
   ctx.beginPath()
-  ctx.arc(size * 0.42, size * 0.30, size * 0.12, 0, Math.PI * 2)
+  ctx.arc(cx, size * 0.32, headR, 0, Math.PI * 2)
   ctx.fill()
 
   // Shoulders / torso
   ctx.beginPath()
-  ctx.moveTo(size * 0.22, size * 0.62)
-  ctx.quadraticCurveTo(size * 0.42, size * 0.48, size * 0.62, size * 0.62)
-  ctx.lineTo(size * 0.62, size * 0.72)
-  ctx.quadraticCurveTo(size * 0.42, size * 0.68, size * 0.22, size * 0.72)
+  ctx.moveTo(size * 0.18, size * 0.78)
+  ctx.quadraticCurveTo(cx, size * 0.52, size * 0.82, size * 0.78)
+  ctx.lineTo(size * 0.82, size * 0.88)
+  ctx.quadraticCurveTo(cx, size * 0.82, size * 0.18, size * 0.88)
   ctx.closePath()
   ctx.fill()
-
-  // Magnifier (UserSearch cue)
-  ctx.lineWidth = Math.max(3, size * 0.06)
-  ctx.beginPath()
-  ctx.arc(size * 0.68, size * 0.62, size * 0.12, 0, Math.PI * 2)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(size * 0.76, size * 0.70)
-  ctx.lineTo(size * 0.88, size * 0.84)
-  ctx.stroke()
 
   return ctx.getImageData(0, 0, size, size)
 }
