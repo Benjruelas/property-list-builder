@@ -6131,6 +6131,23 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   color: rgba(255, 255, 255, 0.92);
 }
 
+button.leads-analytics-stat-value-toggle {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 0.25rem;
+}
+
+button.leads-analytics-stat-value-toggle:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.45);
+  outline-offset: 2px;
+}
+
 .leads-analytics-stat-label {
   font-size: 0.625rem;
   font-weight: 600;

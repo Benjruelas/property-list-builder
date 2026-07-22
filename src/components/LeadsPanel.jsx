@@ -29,6 +29,12 @@ import { templateToCreateDealPrefill } from '@/utils/dealTemplates'
 import { cn } from '@/lib/utils'
 import { getLeadPhones, getLeadEmails, leadContactMatchesQuery } from '@/utils/leadContact'
 import { buildDealCountByLeadId } from '@/utils/deals'
+import {
+  DEFAULT_NEW_LEAD_WINDOW,
+  isCreatedWithinDays,
+  newLeadWindowLabel,
+  nextNewLeadWindow,
+} from '@/utils/leadTimeWindows'
 import { showToast } from './ui/toast'
 import { LeadRow } from './LeadRow'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
@@ -104,6 +110,7 @@ export function LeadsPanel({
   const [createDealPrefill, setCreateDealPrefill] = useState(null)
   const [leadFormPickerOpen, setLeadFormPickerOpen] = useState(false)
   const [leadFormPickerLeadId, setLeadFormPickerLeadId] = useState(null)
+  const [newLeadWindowDays, setNewLeadWindowDays] = useState(DEFAULT_NEW_LEAD_WINDOW)
 
   const selectedLead = useMemo(
     () => (detailLeadId ? leads.find((l) => l.id === detailLeadId || l.parcelId === detailLeadId) : null),
@@ -120,6 +127,8 @@ export function LeadsPanel({
     for (const s of leadStatuses) counts[s.id] = 0
     let inPipeline = 0
     let needsFollowUp = 0
+    let newInWindow = 0
+    const now = new Date()
 
     for (const l of leads) {
       const dealCount = dealCountByLead.get(l.id) || 0
@@ -130,10 +139,11 @@ export function LeadsPanel({
         inPipeline++
         if (!lastContactedAt(l)) needsFollowUp++
       }
+      if (isCreatedWithinDays(l.createdAt, newLeadWindowDays, now)) newInWindow++
     }
 
-    return { counts, inPipeline, needsFollowUp }
-  }, [leads, dealCountByLead, leadStatuses])
+    return { counts, inPipeline, needsFollowUp, newInWindow }
+  }, [leads, dealCountByLead, leadStatuses, newLeadWindowDays])
 
   const statusCounts = leadAnalytics.counts
 
@@ -323,8 +333,15 @@ export function LeadsPanel({
                     <div className="leads-analytics-stat-label">Active</div>
                   </div>
                   <div className="leads-analytics-stat" role="listitem">
-                    <div className="leads-analytics-stat-value">{leadAnalytics.counts.new}</div>
-                    <div className="leads-analytics-stat-label">New</div>
+                    <button
+                      type="button"
+                      className="leads-analytics-stat-value leads-analytics-stat-value-toggle"
+                      onClick={() => setNewLeadWindowDays((days) => nextNewLeadWindow(days))}
+                      aria-label={`New leads in last ${newLeadWindowDays} days, tap to change period`}
+                    >
+                      {leadAnalytics.newInWindow}
+                    </button>
+                    <div className="leads-analytics-stat-label">{newLeadWindowLabel(newLeadWindowDays)}</div>
                   </div>
                   <div className="leads-analytics-stat" role="listitem">
                     <div className="leads-analytics-stat-value">{leadAnalytics.counts.converted}</div>
