@@ -9,7 +9,6 @@ import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { StateBoundaryLayer } from './components/StateBoundaryLayer'
 import { MapControls } from './components/MapControls'
 import { MobileActionBar } from './components/MobileActionBar'
-import { QuickCreateFab } from './components/QuickCreateFab'
 import { AddressSearch } from './components/AddressSearch'
 import { ListPanel } from './components/ListPanel'
 import { SkipTracedListPanel } from './components/SkipTracedListPanel'
@@ -496,7 +495,6 @@ function App() {
   /** When set, user is choosing a target pipeline to move a deal into. */
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
-  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
   const [paths, setPaths] = useState([])
   const pathColorMap = useMemo(() => buildPathColorMap(paths), [paths])
@@ -602,11 +600,6 @@ function App() {
     onTileUrlRefresh: refreshBasemapTiles,
   })
   const showAppLoading = authLoading || basemapStatus === 'loading'
-  /** FAB lives in #modal-root — keep it unmounted through boot splash + permission gate. */
-  const showQuickCreateFab = permissionsReady && !showAppLoading && !bootSplashVisible
-  useEffect(() => {
-    if (!showQuickCreateFab && quickCreateOpen) setQuickCreateOpen(false)
-  }, [showQuickCreateFab, quickCreateOpen])
   const appLoadingMessage = useMemo(
     () => getAppLoadingMessage({
       authLoading,
@@ -1877,44 +1870,10 @@ function App() {
     })
   }, [currentUser, pipelines, teams, nav, guardFeature])
 
-  const handleQuickCreateOpenChange = useCallback((open) => {
-    setQuickCreateOpen(open)
-    if (open) nav.setShowMenu(false)
-  }, [nav])
-
-  useEffect(() => {
-    if (selectedHailEvent) setQuickCreateOpen(false)
-  }, [selectedHailEvent])
-
   const handleActionBarMenuChange = useCallback((valueOrFn) => {
     const next = typeof valueOrFn === 'function' ? valueOrFn(showMenu) : valueOrFn
-    if (next) setQuickCreateOpen(false)
     nav.setShowMenu(next)
   }, [nav, showMenu])
-
-  const openQuickCreateTask = useCallback(() => {
-    if (!requireAuth()) return
-    guardFeature('tasks', () => nav.pushModal({ type: 'createTask' }))
-  }, [requireAuth, guardFeature, nav])
-
-  const openQuickCreateLead = useCallback(() => {
-    if (!requireAuth()) return
-    guardFeature('leads', () => nav.pushModal({ type: 'createLead', prefill: null }))
-  }, [requireAuth, guardFeature, nav])
-
-  const openQuickCreateDeal = useCallback(() => {
-    openCreateDealDialog()
-  }, [openCreateDealDialog])
-
-  const openQuickCreateQuote = useCallback(() => {
-    if (!requireAuth()) return
-    guardFeature('quotes', () => nav.openNewQuoteEditor())
-  }, [requireAuth, guardFeature, nav])
-
-  const openQuickCreateReport = useCallback(() => {
-    if (!requireAuth()) return
-    guardFeature('reports', () => nav.openNewReportEditor())
-  }, [requireAuth, guardFeature, nav])
 
   const handleDealTemplatePicked = useCallback((template) => {
     const pending = pendingCreateDealPrefill || {}
@@ -4154,22 +4113,6 @@ function App() {
         currentUser={currentUser}
         onLogin={openLogin}
       />
-
-      {showQuickCreateFab ? (
-        <QuickCreateFab
-          open={quickCreateOpen}
-          onOpenChange={handleQuickCreateOpenChange}
-          onCreateTask={openQuickCreateTask}
-          onCreateLead={openQuickCreateLead}
-          onCreateDeal={openQuickCreateDeal}
-          onCreateQuote={openQuickCreateQuote}
-          onCreateReport={openQuickCreateReport}
-          canAccessFeature={canAccessFeature}
-          accentColor={settings.parcelBoundaryColor || '#2563eb'}
-          actionBarMenuOpen={showMenu}
-          stormViewActive={!!selectedHailEvent}
-        />
-      ) : null}
 
       <ListPanel
         currentUser={currentUser}

@@ -6,7 +6,7 @@ import { getModalPortalContainer } from '@/utils/modalPortal'
 
 const MOBILE_MAX = 767
 
-/** Map chrome → parcel demo → quick create → action bar / menu, top-to-bottom and left-to-right. */
+/** Map chrome → parcel demo → action bar / menu, top-to-bottom and left-to-right. */
 const DESKTOP_TOUR_ORDER = [
   'address-search',
   'zoom',
@@ -19,7 +19,6 @@ const DESKTOP_TOUR_ORDER = [
   'parcel-action-list',
   'parcel-action-lead',
   'parcel-action-photos',
-  'quick-create',
   'pipes',
   'tasks',
   'schedule',
@@ -50,7 +49,6 @@ const MOBILE_TOUR_ORDER = [
   'parcel-action-list',
   'parcel-action-lead',
   'parcel-action-photos',
-  'quick-create',
   'pipes',
   'tasks',
   'schedule',
@@ -162,13 +160,6 @@ const TOUR_STEPS_BY_ID = {
     parcelDemo: 'show',
     tooltipPrefer: 'above',
     featureId: 'photos',
-  },
-  'quick-create': {
-    id: 'quick-create',
-    title: 'Quick Create',
-    desc: 'Spin up a task, lead, deal, quote, or report without leaving the map.',
-    target: '[data-tour="quick-create-fab"]',
-    tooltipPrefer: 'above',
   },
   pipes: {
     id: 'pipes',
@@ -609,8 +600,7 @@ export default function WelcomeTour({
     const preferAbove =
       current?.tooltipPrefer === 'above' ||
       selector?.includes('action-bar') ||
-      selector?.includes('menu-') ||
-      selector?.includes('quick-create-fab')
+      selector?.includes('menu-')
     const preferRight = current?.tooltipPrefer === 'right'
     const preferLeft = current?.tooltipPrefer === 'left'
 

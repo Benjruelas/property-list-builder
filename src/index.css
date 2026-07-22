@@ -55,21 +55,6 @@
     --map-chrome-btn-gap: calc(0.5rem * var(--ui-mobile-chrome-scale));
     --map-chrome-icon-size: calc(1.5rem * var(--ui-mobile-chrome-scale));
     --map-controls-stack-height: calc(5 * var(--map-chrome-btn-size) + 4 * var(--map-chrome-btn-gap));
-    --quick-create-fab-size: var(--map-chrome-btn-size);
-    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
-    --quick-create-fab-gap: 4px;
-    --quick-create-fab-anchor-slots: 4;
-    --quick-create-fab-anchor-right: calc(
-      (100vw - var(--action-bar-width)) / 2
-      + var(--action-bar-width) / (2 * var(--quick-create-fab-anchor-slots))
-      - var(--quick-create-fab-size) / 2
-    );
-    --quick-create-fab-bottom: calc(
-      env(safe-area-inset-bottom, 0px)
-      + 12px
-      + var(--ui-action-bar-block)
-      + var(--quick-create-fab-gap)
-    );
     --tasks-panel-fade-duration: 380ms;
     --tasks-panel-fade-ease: cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -108,16 +93,6 @@
     --map-chrome-btn-size: var(--ui-action-bar-btn-height);
     --map-chrome-btn-gap: 0.5rem;
     --map-chrome-icon-size: calc(1.5rem * var(--ui-touch-scale));
-    --quick-create-fab-size: var(--map-chrome-btn-size);
-    --quick-create-fab-icon-size: var(--map-chrome-icon-size);
-    --quick-create-fab-gap: 4px;
-    --quick-create-fab-anchor-slots: 13;
-    --quick-create-fab-anchor-right: calc(
-      (100vw - var(--action-bar-width)) / 2
-      + var(--action-bar-width) / (2 * var(--quick-create-fab-anchor-slots))
-      - var(--quick-create-fab-size) / 2
-    );
-    --quick-create-fab-bottom: calc(var(--ui-action-bar-block) + var(--quick-create-fab-gap));
     --map-controls-stack-height: calc(4 * var(--map-chrome-btn-size) + 3 * var(--map-chrome-btn-gap));
     --map-controls-right-inset: calc(var(--ui-chrome-inset) + env(safe-area-inset-right, 0px));
     --tasks-panel-motion-duration: 380ms;
@@ -6748,12 +6723,11 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 }
 
 @media (max-width: 767px) {
-  .quick-create-fab-menu {
+  .mobile-action-bar-menu {
     min-width: 220px;
     max-width: min(320px, calc(100vw - 24px));
   }
 
-  .quick-create-fab-menu .hamburger-menu-btn,
   .mobile-action-bar-menu .hamburger-menu-btn {
     font-size: var(--ui-menu-item-font-size);
     line-height: var(--ui-menu-item-line-height, 1.5);
@@ -6761,8 +6735,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     gap: var(--ui-menu-item-gap);
   }
 
-  .quick-create-fab-menu .hamburger-menu-btn svg,
-  .quick-create-fab-menu .hamburger-menu-btn .quote-icon,
   .mobile-action-bar-menu .hamburger-menu-btn svg,
   .mobile-action-bar-menu .hamburger-menu-btn .quote-icon {
     width: var(--ui-menu-item-icon-size);
@@ -6821,9 +6793,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
     border-radius: calc(14px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
   }
   .mobile-action-bar-label {
-    font-size: calc(11px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
-  }
-  .quick-create-fab-menu .hamburger-menu-btn {
     font-size: calc(11px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
   }
 }
@@ -6966,211 +6935,6 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 @keyframes mobile-action-bar-menu-pop {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes quick-create-fab-shadow-shimmer {
-  0%, 100% {
-    opacity: var(--quick-create-fab-shimmer-min, 0.55);
-    background-position: 0% 50%, center;
-  }
-  50% {
-    opacity: var(--quick-create-fab-shimmer-max, 0.95);
-    background-position: 100% 50%, center;
-  }
-}
-
-@keyframes quick-create-fab-shadow-shimmer-hover {
-  0%, 100% {
-    opacity: var(--quick-create-fab-shimmer-hover-min, 0.78);
-    background-position: 0% 50%, center;
-  }
-  50% {
-    opacity: var(--quick-create-fab-shimmer-hover-max, 1);
-    background-position: 100% 50%, center;
-  }
-}
-
-/* ---- Quick Create FAB (above action bar, right) ---- */
-#modal-root button.quick-create-fab-btn {
-  --quick-create-fab-shimmer-min: 0.55;
-  --quick-create-fab-shimmer-max: 0.95;
-  --quick-create-fab-shimmer-hover-min: 0.78;
-  --quick-create-fab-shimmer-hover-max: 1;
-  position: fixed !important;
-  right: var(--quick-create-fab-anchor-right, 12px) !important;
-  bottom: var(--quick-create-fab-bottom, calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 4px)) !important;
-  z-index: 10004 !important;
-  pointer-events: auto !important;
-  -webkit-tap-highlight-color: transparent;
-  appearance: none !important;
-  cursor: pointer !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) !important;
-  height: var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) !important;
-  min-width: var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) !important;
-  min-height: var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) !important;
-  max-width: var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) !important;
-  max-height: var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border-radius: 50% !important;
-  border: 2.5px solid rgba(255, 255, 255, 0.35) !important;
-  background: var(--quick-create-fab-accent, #2563eb) !important;
-  background-color: var(--quick-create-fab-accent, #2563eb) !important;
-  color: #ffffff !important;
-  overflow: hidden !important;
-  isolation: isolate;
-  box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.32),
-    0 2px 6px rgba(0, 0, 0, 0.2) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  transition:
-    transform 140ms ease,
-    filter 140ms ease,
-    opacity 160ms ease,
-    visibility 160ms ease,
-    right 220ms ease,
-    bottom 220ms ease,
-    box-shadow 0.3s ease;
-}
-
-#modal-root button.quick-create-fab-btn::before {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      transparent 32%,
-      var(--lead-detail-list-card-shimmer-sweep) 50%,
-      transparent 68%,
-      transparent 100%
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      var(--lead-detail-list-card-shadow-glow) 0%,
-      color-mix(in srgb, var(--lead-detail-list-card-shadow-glow) 35%, transparent) 55%,
-      transparent 85%
-    );
-  background-size: 240% 100%, 100% 100%;
-  mix-blend-mode: soft-light;
-  animation: quick-create-fab-shadow-shimmer 7s ease-in-out infinite;
-}
-
-@media (min-width: 768px) {
-  #modal-root button.quick-create-fab-btn {
-    right: var(--quick-create-fab-anchor-right) !important;
-    bottom: var(--quick-create-fab-bottom) !important;
-  }
-}
-
-#modal-root button.quick-create-fab-btn.quick-create-fab-btn--hidden {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-#modal-root button.quick-create-fab-btn:hover {
-  filter: brightness(1.05);
-  box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.32),
-    0 2px 6px rgba(0, 0, 0, 0.2) !important;
-}
-
-#modal-root button.quick-create-fab-btn:hover::before {
-  animation-name: quick-create-fab-shadow-shimmer-hover;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #modal-root button.quick-create-fab-btn::before {
-    animation: none;
-    opacity: var(--quick-create-fab-shimmer-min, 0.55);
-  }
-
-  #modal-root button.quick-create-fab-btn:hover::before {
-    opacity: var(--quick-create-fab-shimmer-hover-min, 0.78);
-  }
-}
-
-#modal-root button.quick-create-fab-btn:active {
-  transform: scale(0.96);
-}
-
-#modal-root button.quick-create-fab-btn.is-open {
-  transform: rotate(45deg);
-}
-
-#modal-root button.quick-create-fab-btn.is-open:active {
-  transform: rotate(45deg) scale(0.96);
-}
-
-#modal-root button.quick-create-fab-btn .quick-create-fab-icon {
-  width: var(--quick-create-fab-icon-size, calc(1.5rem * var(--ui-touch-scale, 1))) !important;
-  height: var(--quick-create-fab-icon-size, calc(1.5rem * var(--ui-touch-scale, 1))) !important;
-  color: #ffffff !important;
-  stroke: #ffffff !important;
-  position: relative;
-  z-index: 1;
-}
-
-.quick-create-fab-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 10057;
-}
-
-.quick-create-fab-menu {
-  position: fixed;
-  right: var(--quick-create-fab-anchor-right, calc((100vw - var(--action-bar-width)) / 2));
-  bottom: calc(var(--quick-create-fab-bottom, calc(env(safe-area-inset-bottom, 0px) + 12px + var(--ui-action-bar-block, 5rem) + 4px)) + var(--quick-create-fab-size, var(--map-chrome-btn-size, 3rem)) + var(--quick-create-fab-gap, 4px));
-  min-width: 200px;
-  max-width: min(280px, calc(100vw - 24px));
-  z-index: 10058;
-  padding: 8px 0;
-  border-radius: 14px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-  transform-origin: bottom right;
-  animation: mobile-action-bar-menu-pop 140ms ease-out;
-  pointer-events: auto;
-}
-
-@media (min-width: 768px) {
-  .quick-create-fab-menu .hamburger-menu-btn {
-    font-size: calc(9px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
-    line-height: 1.1;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    gap: calc(6px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
-    padding: calc(8px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale))
-      calc(12px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
-  }
-
-  .quick-create-fab-menu .hamburger-menu-btn svg,
-  .quick-create-fab-menu .hamburger-menu-btn .quote-icon {
-    width: calc(1.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale)) !important;
-    height: calc(1.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale)) !important;
-  }
-
-  .quick-create-fab-menu {
-    bottom: calc(
-      var(--quick-create-fab-bottom)
-      + var(--quick-create-fab-size, var(--map-chrome-btn-size))
-      + var(--quick-create-fab-gap, 4px)
-    );
-  }
-}
-
-
-#modal-root .quick-create-fab-menu,
-#modal-root .quick-create-fab-menu-backdrop {
-  pointer-events: auto !important;
 }
 
 /* Legacy: map-controls hamburger removed; keep rule harmless if class lingers */
