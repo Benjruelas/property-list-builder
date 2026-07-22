@@ -132,10 +132,12 @@ export function LeadMapLayer({
     const register = () => ensureLeadIcon(map)
     register()
     map.on?.('style.load', register)
+    map.on?.('load', register)
     return () => {
       map.off?.('style.load', register)
+      map.off?.('load', register)
     }
-  }, [mapRef, mapReady])
+  }, [mapRef, mapReady, geojson.features.length])
 
   useEffect(() => {
     if (!mapReady) return undefined
