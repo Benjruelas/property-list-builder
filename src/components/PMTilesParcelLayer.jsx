@@ -133,6 +133,8 @@ function queryFeatureStateIdForParcelId(map, parcelId) {
 // feature-state so it survives tile reloads after recenter animations.
 const FS_SELECTED = ['boolean', ['feature-state', 'selected'], false]
 const FS_CLICKED = ['boolean', ['feature-state', 'clicked'], false]
+const FS_HAS_LEAD = ['boolean', ['feature-state', 'hasLead'], false]
+const FS_LEAD_COLOR = ['to-color', ['feature-state', 'leadColor']]
 
 function buildColorExpression(clickedParcelId, parcelIdToColorIndex, baseColor = '#2563eb') {
   const cases = []
@@ -144,6 +146,7 @@ function buildColorExpression(clickedParcelId, parcelIdToColorIndex, baseColor =
   for (const [pid, idx] of parcelIdToColorIndex) {
     cases.push(pidMatch(pid), LIST_HIGHLIGHT_COLORS[idx] || LIST_HIGHLIGHT_COLORS[0])
   }
+  cases.push(FS_HAS_LEAD, FS_LEAD_COLOR)
   return ['case', ...cases, baseColor]
 }
 
@@ -158,6 +161,7 @@ function buildFillColorExpression(clickedParcelId, parcelIdToColorIndex, baseCol
     const c = LIST_HIGHLIGHT_COLORS[idx] || LIST_HIGHLIGHT_COLORS[0]
     cases.push(pidMatch(pid), c)
   }
+  cases.push(FS_HAS_LEAD, FS_LEAD_COLOR)
   return ['case', ...cases, 'transparent']
 }
 
@@ -167,6 +171,7 @@ function buildWidthExpression(clickedParcelId, parcelIdToColorIndex) {
   cases.push(FS_CLICKED, 3)
   if (clickedParcelId) cases.push(pidMatch(clickedParcelId), 3)
   for (const [pid] of parcelIdToColorIndex) cases.push(pidMatch(pid), 3)
+  cases.push(FS_HAS_LEAD, 2.5)
   return ['case', ...cases, 2]
 }
 
@@ -176,6 +181,7 @@ function buildFillOpacityExpression(clickedParcelId, parcelIdToColorIndex) {
   cases.push(FS_CLICKED, 0.5)
   if (clickedParcelId) cases.push(pidMatch(clickedParcelId), 0.5)
   for (const [pid] of parcelIdToColorIndex) cases.push(pidMatch(pid), 0.5)
+  cases.push(FS_HAS_LEAD, 0.4)
   return ['case', ...cases, 0.3]
 }
 
@@ -189,6 +195,8 @@ export function PMTilesParcelLayer({
   isMultiSelectActive = false,
   selectedListIds = [],
   lists = [],
+  /** Map or record of parcelId → status hex for lead-connected parcels. */
+  leadParcelColors = null,
   boundaryColor = '#2563eb',
   boundaryOpacity = 80,
   onLayerReady,
@@ -211,10 +219,18 @@ export function PMTilesParcelLayer({
   const parcelIdToFeatureStateIdRef = useRef(new Map())
   /** promoteId target (lrid) for clicked feature-state — survives tile reloads */
   const clickedFeatureIdRef = useRef(null)
+  /** promoteId → status hex currently applied via feature-state */
+  const leadFeatureStateRef = useRef(new Map())
+  const leadParcelColorsRef = useRef(null)
 
   colorRef.current = boundaryColor || '#2563eb'
   opacityRef.current = boundaryOpacity ?? 80
   selectedRef.current = selectedParcels
+  leadParcelColorsRef.current = leadParcelColors instanceof Map
+    ? leadParcelColors
+    : (leadParcelColors && typeof leadParcelColors === 'object'
+      ? new Map(Object.entries(leadParcelColors))
+      : null)
 
   const setClickedFeatureState = useCallback((map, featureId, clicked) => {
     if (!map || !featureId) return
@@ -349,6 +365,76 @@ export function PMTilesParcelLayer({
   const reapplySelectedFeatureStatesRef = useRef(reapplySelectedFeatureStates)
   reapplySelectedFeatureStatesRef.current = reapplySelectedFeatureStates
 
+  const syncLeadFeatureStates = useCallback(() => {
+    const map = mapRef?.current
+    if (!map || !layersAddedRef.current) return
+    try {
+      if (!map.getLayer(FILL_LAYER)) return
+    } catch {
+      return
+    }
+
+    const leadColors = leadParcelColorsRef.current
+    const prev = leadFeatureStateRef.current
+    const next = new Map()
+
+    if (leadColors?.size) {
+      let features = []
+      try {
+        features = map.queryRenderedFeatures({ layers: [FILL_LAYER] }) || []
+      } catch {
+        features = []
+      }
+      for (const feature of features) {
+        const raw = feature.properties || {}
+        const candidates = [raw.parcelid, raw.lrid, raw.parcelid2]
+          .filter((id) => id != null && id !== '')
+          .map((id) => String(id))
+        let color = null
+        for (const id of candidates) {
+          if (leadColors.has(id)) {
+            color = leadColors.get(id)
+            break
+          }
+        }
+        if (!color) continue
+        const featureStateId = featureStateIdFromRaw(raw, candidates[0])
+        if (!featureStateId) continue
+        next.set(featureStateId, color)
+      }
+    }
+
+    for (const [featureStateId] of prev) {
+      if (next.has(featureStateId)) continue
+      try {
+        map.setFeatureState(
+          { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureStateId },
+          { hasLead: false, leadColor: undefined },
+        )
+      } catch { /* feature may have unloaded */ }
+    }
+
+    for (const [featureStateId, color] of next) {
+      if (prev.get(featureStateId) === color) continue
+      try {
+        map.setFeatureState(
+          { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureStateId },
+          { hasLead: true, leadColor: color },
+        )
+      } catch { /* feature may have unloaded */ }
+    }
+
+    leadFeatureStateRef.current = next
+  }, [mapRef])
+
+  const syncLeadFeatureStatesRef = useRef(syncLeadFeatureStates)
+  syncLeadFeatureStatesRef.current = syncLeadFeatureStates
+
+  // Re-sync lead parcel fills when the color map changes.
+  useEffect(() => {
+    syncLeadFeatureStates()
+  }, [leadParcelColors, syncLeadFeatureStates, mapReady])
+
   // Reconcile feature-state with selectedParcels prop. This handles external
   // selection changes (list operations, etc.) and keeps the optimistic
   // click-handler updates aligned with the authoritative React state.
@@ -434,10 +520,12 @@ export function PMTilesParcelLayer({
       refreshLabels()
       reapplyClickedHighlightRef.current?.()
       reapplySelectedFeatureStatesRef.current?.()
+      syncLeadFeatureStatesRef.current?.()
       if (idleLabelHandler) return
       idleLabelHandler = () => {
         idleLabelHandler = null
         refreshLabels()
+        syncLeadFeatureStatesRef.current?.()
       }
       map.once('idle', idleLabelHandler)
     }
@@ -516,6 +604,7 @@ export function PMTilesParcelLayer({
         layersAddedRef.current = true
         repaint()
         refreshLabels()
+        syncLeadFeatureStatesRef.current?.()
       } catch {
         layersAddedRef.current = false
         map.once('idle', ensureLayers)
@@ -542,6 +631,13 @@ export function PMTilesParcelLayer({
     map.on('zoomend', scheduleLabelRefreshAfterMove)
 
     const onClick = (e) => {
+      // Lead markers sit above parcels; prefer lead click over parcel popup.
+      try {
+        const leadHits = map.queryRenderedFeatures(e.point, {
+          layers: ['leads-map-glow', 'leads-map-core', 'leads-map-icon'],
+        })
+        if (leadHits?.length) return
+      } catch { /* lead layers may not exist */ }
       const features = e.features?.length ? e.features : (() => {
         try { return map.queryRenderedFeatures(e.point, { layers: [FILL_LAYER] }) } catch { return [] }
       })()

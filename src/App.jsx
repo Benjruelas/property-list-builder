@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { CompassOrientation } from './components/CompassOrientation'
 // import { NorthIndicator } from './components/NorthIndicator'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
+import { LeadMapLayer } from './components/LeadMapLayer'
 import { StateBoundaryLayer } from './components/StateBoundaryLayer'
 import { MapControls } from './components/MapControls'
 import { MobileActionBar } from './components/MobileActionBar'
@@ -146,7 +147,8 @@ import {
   logLeadDealCreated,
 } from './utils/leadActivity'
 import { fetchTagRegistry, upsertTagInRegistry } from './utils/tags'
-import { buildDealFromLead, resolvePipelineId, findDealsForLead } from './utils/deals'
+import { buildDealFromLead, resolvePipelineId, findDealsForLead, buildDealCountByLeadId } from './utils/deals'
+import { buildLeadParcelColors } from './utils/leadMapFeatures'
 import { createTasksForDeal } from './utils/dealTasks'
 import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
@@ -1146,6 +1148,14 @@ function App() {
   const leadStatuses = useMemo(
     () => resolveLeadStatuses({ settings, teams, teamMembership }),
     [settings, teams, teamMembership]
+  )
+  const dealCountByLead = useMemo(
+    () => buildDealCountByLeadId(pipelines),
+    [pipelines],
+  )
+  const leadParcelColors = useMemo(
+    () => buildLeadParcelColors(leads, { dealCountByLead, leadStatuses }),
+    [leads, dealCountByLead, leadStatuses],
   )
   const dealStatuses = useMemo(
     () => resolveDealStatuses({ settings, teams, teamMembership }),
@@ -3549,6 +3559,12 @@ function App() {
     }
   }, [nav, guardFeature, hydrateSharedLeadPhotos])
 
+  const openLeadDetailsFromMap = useCallback((leadId) => {
+    const lead = leads.find((l) => l.id === leadId)
+    if (!lead) return
+    openLeadDetails(lead)
+  }, [leads, openLeadDetails])
+
   const openSettingsPanel = useCallback(() => nav.openSettings(), [nav])
   const openLogin = useCallback(() => nav.openLogin(), [nav])
 
@@ -3968,11 +3984,20 @@ function App() {
             isMultiSelectActive={isMultiSelectActive}
             selectedListIds={selectedListIds}
             lists={lists}
+            leadParcelColors={leadParcelColors}
             boundaryColor={settings.parcelBoundaryColor}
             boundaryOpacity={settings.parcelBoundaryOpacity}
             onLayerReady={(layerFunctions) => {
               parcelLayerRef.current = layerFunctions
             }}
+          />
+          <LeadMapLayer
+            mapRef={mapInstanceRef}
+            mapReady={mapReady}
+            leads={leads}
+            leadStatuses={leadStatuses}
+            dealCountByLead={dealCountByLead}
+            onLeadClick={openLeadDetailsFromMap}
           />
           <PathTracker
             ref={pathTrackerRef}
