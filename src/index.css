@@ -1696,7 +1696,7 @@
  * pickers and contact action sheets are excluded so topLayer/nestedOverlay
  * z-index (10020/10021+) can keep their panels above CRM detail layers.
  */
-.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel)[data-state='open'] {
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel):not(.hail-data-panel)[data-state='open'] {
   animation: map-panel-center-in 160ms ease-out forwards;
   z-index: 10002 !important;
 }
@@ -1724,7 +1724,7 @@
     }
   }
 }
-.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel)[data-state='closed'] {
+.map-panel-dialog:not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel):not(.hail-data-panel)[data-state='closed'] {
   animation: map-panel-center-out 160ms ease-in forwards;
   z-index: 10001 !important;
 }
