@@ -84,6 +84,7 @@ export function LeadsPanel({
   onCreateLeadForm,
   onOpenLeadForm,
   leadFormsRefreshEpoch = 0,
+  leadReportsRefreshEpoch = 0,
   createDealPipelines = [],
   createDealSaving = false,
   onCreateDealSubmit,
@@ -530,6 +531,7 @@ export function LeadsPanel({
             onCreateLeadForm={onCreateLeadForm ?? startCreateLeadForm}
             onOpenLeadForm={onOpenLeadForm}
             leadFormsRefreshEpoch={leadFormsRefreshEpoch}
+            leadReportsRefreshEpoch={leadReportsRefreshEpoch}
             tagRegistry={tagRegistry}
             onRefreshTags={onRefreshTags}
             leadStatuses={leadStatuses}

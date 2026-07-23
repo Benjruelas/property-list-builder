@@ -54,7 +54,7 @@ export async function getVisibleLeads(user) {
 }
 
 export function canEditLead(access) {
-  return canEdit(access) && access !== 'admin_view'
+  return canEdit(access)
 }
 
 /** Whether the user may add, edit, or delete photos on a lead. */

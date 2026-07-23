@@ -14,7 +14,8 @@
  *     actions: 'add' | 'update' | 'remove' | 'toggle-complete'
  */
 
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { getAllTeams } from './_lib/teams.js'
+import { buildAccessContext, getResourceAccess, canEdit } from './_lib/resourceContext.js'
 import { getAllPipelines, mutatePipelines } from './_lib/pipelineStoreFull.js'
 import { authenticate } from './_lib/auth.js'
 
@@ -80,9 +81,9 @@ export default async function handler(req, res) {
     const idx = all.findIndex((p) => p.id === pipelineId)
     if (idx === -1) return res.status(404).json({ error: 'Pipeline not found' })
     const pipeline = all[idx]
-    const teamsIndex = fullTeamsIndex(allTeams)
-    const access = resolveAccess(pipeline, user, teamsIndex)
-    if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
+    const ctx = buildAccessContext(allTeams, user)
+    const access = getResourceAccess(pipeline, user, ctx)
+    if (!canEdit(access)) return res.status(403).json({ error: 'No access to this pipeline' })
 
     pipeline.tasks = Array.isArray(pipeline.tasks) ? pipeline.tasks : []
     const { actorLabel } = await import('./_lib/activityLog.js')

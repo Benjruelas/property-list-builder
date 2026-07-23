@@ -8,7 +8,8 @@ import {
   canMutateLeadPhotos,
   withRepairedLeadOwnership,
 } from './leadAccess.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './teams.js'
+import { getAllTeams } from './teams.js'
+import { buildAccessContext, getResourceAccess, canEdit, canView } from './resourceContext.js'
 import { getAllPipelines, mutatePipelines } from './pipelineStoreFull.js'
 import {
   ENTITY_STORAGE_LIMITS,
@@ -84,9 +85,9 @@ async function resolveDealContext(user, pipelineId, dealId) {
   const { findPipelineById } = await import('./pipelineRepo.js')
   const [pipeline, allTeams] = await Promise.all([findPipelineById(pipelineId), getAllTeams()])
   if (!pipeline) return { error: { status: 404, message: 'Pipeline not found' } }
-  const teamsIndex = fullTeamsIndex(allTeams)
-  const access = resolveAccess(pipeline, user, teamsIndex)
-  if (!access) return { error: { status: 403, message: 'Forbidden' } }
+  const ctx = buildAccessContext(allTeams, user)
+  const access = getResourceAccess(pipeline, user, ctx)
+  if (!canEdit(access)) return { error: { status: 403, message: 'Forbidden' } }
   const deals = Array.isArray(pipeline.deals) ? pipeline.deals : []
   const dealIndex = deals.findIndex((d) => d.id === dealId)
   if (dealIndex === -1) return { error: { status: 404, message: 'Deal not found' } }
@@ -236,17 +237,17 @@ export async function canAccessPhotoKey(user, key) {
     if (ownerUid === user.uid) return true
     const { findPipelineById } = await import('./pipelineRepo.js')
     const allTeams = await getAllTeams()
-    const teamsIndex = fullTeamsIndex(allTeams)
+    const ctx = buildAccessContext(allTeams, user)
     const pipelineIdHint = parts.length > 3 ? parts[3] : null
     if (pipelineIdHint) {
       const pipeline = await findPipelineById(pipelineIdHint)
-      if (pipeline && (pipeline.deals || []).some((d) => d.id === dealId) && resolveAccess(pipeline, user, teamsIndex)) {
+      if (pipeline && (pipeline.deals || []).some((d) => d.id === dealId) && canView(getResourceAccess(pipeline, user, ctx))) {
         return true
       }
     }
     const pipelines = await getAllPipelines()
     for (const pipeline of pipelines) {
-      if ((pipeline.deals || []).some((d) => d.id === dealId) && resolveAccess(pipeline, user, teamsIndex)) {
+      if ((pipeline.deals || []).some((d) => d.id === dealId) && canView(getResourceAccess(pipeline, user, ctx))) {
         return true
       }
     }

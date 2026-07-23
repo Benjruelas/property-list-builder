@@ -154,6 +154,7 @@ export default async function handler(req, res) {
           : `photo_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 
         if (action === 'presign-annotation') {
+          const presignStarted = Date.now()
           const existingPhotoId = sanitizePhotoId(body.photoId)
           if (!existingPhotoId) return res.status(400).json({ error: 'photoId is required' })
           const annotatedKey = buildPhotoKey(entityType, ownerUid, entityId, existingPhotoId, 'annotated')
@@ -166,6 +167,11 @@ export default async function handler(req, res) {
               createPresignedPutUrl(annotatedThumbnailKey, 'image/jpeg'),
             ])
           }
+          photoLog('presign-annotation', 'Presigned annotation keys', {
+            photoId: existingPhotoId,
+            ms: Date.now() - presignStarted,
+            entityType,
+          })
           return res.status(200).json({
             photoId: existingPhotoId,
             annotatedKey,
@@ -196,6 +202,7 @@ export default async function handler(req, res) {
       }
 
       if (action === 'upload-bytes') {
+        const uploadStarted = Date.now()
         if (!presignedPhotosEnabled() && !localPhotoStorageEnabled()) {
           return res.status(503).json({ error: 'Photo storage is not configured' })
         }
@@ -219,7 +226,11 @@ export default async function handler(req, res) {
         if (!buf.length) return res.status(400).json({ error: 'Empty upload' })
 
         await writePhotoBytes(key, buf, body.contentType || 'image/jpeg')
-        photoLog('upload-bytes', 'Stored via API proxy', { key: key.slice(0, 80), bytes: buf.length })
+        photoLog('upload-bytes', 'Stored via API proxy', {
+          key: key.slice(0, 80),
+          bytes: buf.length,
+          ms: Date.now() - uploadStarted,
+        })
         return res.status(200).json({ ok: true, key, size: buf.length })
       }
 
@@ -270,6 +281,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
+      const patchStarted = Date.now()
       const body = req.body || {}
       const ctx = await resolvePhotoContext(user, body)
       if (ctx.error) return res.status(ctx.error.status).json({ error: ctx.error.message })
@@ -299,15 +311,22 @@ export default async function handler(req, res) {
         if (withoutAnnotated + newAnnotatedBytes > limit) {
           return res.status(413).json({ error: entityStorageError(entityType === 'deal' ? 'dealPhotos' : 'lead', limit) })
         }
-        const exists = await objectExists(body.annotatedKey)
-        if (!exists) return res.status(400).json({ error: 'Annotated upload not found in storage' })
-        annotatedKey = String(body.annotatedKey)
-        annotatedSize = Number(body.annotatedSize) || 0
         if (body.annotatedThumbnailKey) {
-          const thumbOk = await objectExists(body.annotatedThumbnailKey)
+          const [exists, thumbOk] = await Promise.all([
+            objectExists(body.annotatedKey),
+            objectExists(body.annotatedThumbnailKey),
+          ])
+          if (!exists) return res.status(400).json({ error: 'Annotated upload not found in storage' })
           if (!thumbOk) return res.status(400).json({ error: 'Annotated thumbnail upload not found in storage' })
+          annotatedKey = String(body.annotatedKey)
+          annotatedSize = Number(body.annotatedSize) || 0
           annotatedThumbnailKey = String(body.annotatedThumbnailKey)
           annotatedThumbnailSize = Number(body.annotatedThumbnailSize) || 0
+        } else {
+          const exists = await objectExists(body.annotatedKey)
+          if (!exists) return res.status(400).json({ error: 'Annotated upload not found in storage' })
+          annotatedKey = String(body.annotatedKey)
+          annotatedSize = Number(body.annotatedSize) || 0
         }
       } else if (body.clearAnnotated) {
         annotatedKey = null
@@ -336,6 +355,7 @@ export default async function handler(req, res) {
         photoId,
         annotatedKey: updatedPhoto.annotatedKey?.slice?.(-48),
         entityType: ctx.entityType,
+        ms: Date.now() - patchStarted,
       })
       return res.status(200).json({ photo: result.photo, ...entityResponse(ctx, result.entity) })
     }

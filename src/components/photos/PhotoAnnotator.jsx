@@ -67,14 +67,14 @@ export function PhotoAnnotator({ open, lead, photo, getToken, onClose, onSaved }
   const handleSave = async (objects) => {
     if (!image || !photo || saving) return
     const annotations = { version: 1, objects }
-    const snapshotLead = lead
     setSaving(true)
 
     try {
       const { file, thumbnail } = await renderFlatImageBlobs(image, objects, image.width, image.height)
       const entityRef = entityRefFromLead(lead)
+      setSaving(false)
 
-      const result = await savePhotoAnnotations(getToken, entityRef, {
+      void savePhotoAnnotations(getToken, entityRef, {
         photo,
         annotations,
         annotatedBlob: file,
@@ -88,11 +88,15 @@ export function PhotoAnnotator({ open, lead, photo, getToken, onClose, onSaved }
           }, { complete: false })
         },
       })
-      onSaved?.(result.entity, { complete: true })
+        .then((result) => {
+          onSaved?.(result.entity, { complete: true })
+        })
+        .catch(() => {
+          /* failure reflected via onOptimistic retry payload */
+        })
     } catch {
-      onSaved?.(snapshotLead, { complete: true })
-    } finally {
       setSaving(false)
+      showToast('Could not save annotations', 'error')
     }
   }
 

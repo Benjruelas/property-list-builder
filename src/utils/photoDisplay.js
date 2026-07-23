@@ -16,6 +16,7 @@ export function getPhotoThumbnailFetchKeys(photo) {
 
 const CLIENT_PHOTO_FIELDS = [
   '_annotatedPreviewUrl',
+  '_annotatedThumbPreviewUrl',
   '_annotationSaving',
   '_annotationSaveFailed',
   '_annotationSaveError',
@@ -91,6 +92,7 @@ export function shouldUseLocalPhotoPreview(photo) {
     || photo?.key
     || photo?.annotatedKey
     || photo?._annotatedPreviewUrl
+    || photo?._annotatedThumbPreviewUrl
   ) {
     return false
   }

@@ -7,6 +7,7 @@ import {
   invalidatePhotoBlobCache,
 } from './photosClient'
 import { apiBodyFromRef } from './entityRef'
+import { photoLog } from './photoDebug'
 
 export function updatePhotoInList(photos, photoId, next) {
   const list = Array.isArray(photos) ? photos : []
@@ -26,20 +27,31 @@ export async function savePhotoAnnotations(getToken, entityRef, {
   onOptimistic,
 }) {
   const entityType = entityRef.entityType || (entityRef.dealId ? 'deal' : 'lead')
-  const previewUrl = annotatedThumbnailBlob
+  const previewUrl = annotatedBlob ? URL.createObjectURL(annotatedBlob) : null
+  const thumbPreviewUrl = annotatedThumbnailBlob
     ? URL.createObjectURL(annotatedThumbnailBlob)
     : null
+
+  const retryPayload = {
+    annotations,
+    file: annotatedBlob,
+    thumbnail: annotatedThumbnailBlob,
+  }
 
   const optimisticPhoto = {
     ...photo,
     annotations,
     _annotatedPreviewUrl: previewUrl,
+    _annotatedThumbPreviewUrl: thumbPreviewUrl,
     _annotationSaving: true,
     _annotationSaveFailed: false,
+    _annotationRetryPayload: retryPayload,
     updatedAt: new Date().toISOString(),
   }
 
   onOptimistic?.(optimisticPhoto)
+
+  const startedAt = performance.now()
 
   try {
     assertPhotoStorage(
@@ -49,8 +61,14 @@ export async function savePhotoAnnotations(getToken, entityRef, {
         - ((Number(photo.annotatedSize) || 0) + (Number(photo.annotatedThumbnailSize) || 0)),
     )
 
+    const presignStarted = performance.now()
     const presign = await presignAnnotationUpload(getToken, entityRef, photo.id)
+    photoLog('client.annotation.presign', 'Presign OK', {
+      photoId: photo.id,
+      ms: Math.round(performance.now() - presignStarted),
+    })
 
+    const uploadStarted = performance.now()
     const uploadAnnotated = async () => {
       if (
         PHOTO_DIRECT_R2_UPLOAD
@@ -73,14 +91,22 @@ export async function savePhotoAnnotations(getToken, entityRef, {
         ])
         if (origRes.ok && thumbRes.ok) return
       }
-      await uploadBytesViaApi(getToken, entityRef, presign.annotatedKey, annotatedBlob)
-      if (annotatedThumbnailBlob && presign.annotatedThumbnailKey) {
-        await uploadBytesViaApi(getToken, entityRef, presign.annotatedThumbnailKey, annotatedThumbnailBlob)
-      }
+      await Promise.all([
+        uploadBytesViaApi(getToken, entityRef, presign.annotatedKey, annotatedBlob),
+        annotatedThumbnailBlob && presign.annotatedThumbnailKey
+          ? uploadBytesViaApi(getToken, entityRef, presign.annotatedThumbnailKey, annotatedThumbnailBlob)
+          : Promise.resolve(),
+      ])
     }
 
     await uploadAnnotated()
+    photoLog('client.annotation.upload', 'Upload OK', {
+      photoId: photo.id,
+      ms: Math.round(performance.now() - uploadStarted),
+      directR2: PHOTO_DIRECT_R2_UPLOAD,
+    })
 
+    const patchStarted = performance.now()
     const result = await saveAnnotations(getToken, entityRef, {
       photoId: photo.id,
       annotations,
@@ -89,8 +115,12 @@ export async function savePhotoAnnotations(getToken, entityRef, {
       annotatedThumbnailKey: annotatedThumbnailBlob ? presign.annotatedThumbnailKey : undefined,
       annotatedThumbnailSize: annotatedThumbnailBlob?.size || 0,
     })
+    photoLog('client.annotation.patch', 'PATCH OK', {
+      photoId: photo.id,
+      ms: Math.round(performance.now() - patchStarted),
+      totalMs: Math.round(performance.now() - startedAt),
+    })
 
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
     invalidatePhotoBlobCache(photo)
     invalidatePhotoBlobCache(result.photo)
     const entity = result.lead || result.deal
@@ -101,8 +131,14 @@ export async function savePhotoAnnotations(getToken, entityRef, {
       _annotationSaving: false,
       _annotationSaveFailed: true,
       _annotationSaveError: e.message || 'Save failed',
+      _annotationRetryPayload: retryPayload,
     }
     onOptimistic?.(failedPhoto)
+    photoLog('client.annotation.error', 'Save failed', {
+      photoId: photo.id,
+      ms: Math.round(performance.now() - startedAt),
+      error: e.message,
+    })
     throw e
   }
 }

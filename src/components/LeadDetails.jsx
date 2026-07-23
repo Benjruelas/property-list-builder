@@ -220,6 +220,7 @@ export function LeadDetails({
   onCreateLeadForm,
   onOpenLeadForm,
   leadFormsRefreshEpoch = 0,
+  leadReportsRefreshEpoch = 0,
   canSeeDealAmounts = true,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
@@ -367,7 +368,7 @@ export function LeadDetails({
         setLeadReportsLoading(false)
       })
     return () => { cancelled = true }
-  }, [lead?.id, getToken, canAccessReports])
+  }, [lead?.id, getToken, canAccessReports, leadReportsRefreshEpoch])
 
   useEffect(() => {
     if (!canAccessForms || !onOpenLeadForm) {
@@ -471,7 +472,7 @@ export function LeadDetails({
     const user = { uid, email: currentUser?.email || '' }
     const team = userActiveTeam(teams, uid)
     const access = resolveResourceAccess(lead, user, team, teams)
-    return !canEdit(access) || access === 'admin_view'
+    return !canEdit(access)
   }, [lead, currentUser, currentUserId, teams, onLeadUpdate])
 
   const uid = currentUser?.uid || currentUserId

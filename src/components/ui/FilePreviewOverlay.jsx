@@ -16,6 +16,34 @@ import { ZoomableImage } from '@/components/ui/ZoomableImage'
 import { shouldAllowGallerySwipe } from '@/utils/zoomableImage'
 
 const SWIPE_THRESHOLD_PX = 48
+const PREFETCH_RADIUS = 2
+
+function itemCacheKey(item, index) {
+  const base = item?.id != null && item.id !== '' ? String(item.id) : `idx:${index}`
+  const version = item?.photo?.updatedAt || item?.cacheVersion || ''
+  return version ? `${base}:${version}` : base
+}
+
+async function processLoadResult(result, item) {
+  if (typeof result === 'string' && result.startsWith('data:')) {
+    return { blob: null, dataUrl: result, textContent: '' }
+  }
+  if (result instanceof Blob) {
+    const itemKind = resolvePreviewKind({ contentType: item.contentType || result.type, fileName: item.name })
+    if (itemKind === 'text') {
+      const text = await readTextFromBlob(result)
+      return { blob: result, textContent: text }
+    }
+    return { blob: result, textContent: '' }
+  }
+  throw new Error('Invalid file data')
+}
+
+function previewSourceFromEntry(entry) {
+  if (entry.dataUrl) return { url: entry.dataUrl, revoke: () => {} }
+  if (entry.blob) return createPreviewSource(entry.blob)
+  return { url: null, revoke: () => {} }
+}
 
 export function FilePreviewOverlay({
   open,
@@ -31,6 +59,7 @@ export function FilePreviewOverlay({
   const [previewUrl, setPreviewUrl] = useState(null)
   const [textContent, setTextContent] = useState('')
   const revokeRef = useRef(null)
+  const itemCacheRef = useRef(new Map())
   const swipeRef = useRef({ x: 0, y: 0, active: false })
   const zoomRef = useRef(null)
   const [downloading, setDownloading] = useState(false)
@@ -52,41 +81,75 @@ export function FilePreviewOverlay({
     setError(null)
   }, [])
 
+  const clearItemCache = useCallback(() => {
+    itemCacheRef.current.clear()
+  }, [])
+
+  const applyCachedEntry = useCallback((entry) => {
+    if (revokeRef.current) {
+      revokeRef.current()
+      revokeRef.current = null
+    }
+    const { url, revoke } = previewSourceFromEntry(entry)
+    setBlob(entry.blob)
+    setPreviewUrl(url)
+    setTextContent(entry.textContent || '')
+    revokeRef.current = revoke
+  }, [])
+
+  const loadItemIntoCache = useCallback(async (targetItem, targetIndex) => {
+    if (!targetItem?.loadBlob) return null
+    const key = itemCacheKey(targetItem, targetIndex)
+    const hit = itemCacheRef.current.get(key)
+    if (hit) return hit
+    const result = await targetItem.loadBlob()
+    const entry = await processLoadResult(result, targetItem)
+    itemCacheRef.current.set(key, entry)
+    return entry
+  }, [])
+
+  const prefetchAdjacent = useCallback((centerIndex) => {
+    if (!open || items.length <= 1) return
+    for (let offset = 1; offset <= PREFETCH_RADIUS; offset += 1) {
+      for (const i of [centerIndex - offset, centerIndex + offset]) {
+        if (i < 0 || i >= items.length) continue
+        const adj = items[i]
+        const key = itemCacheKey(adj, i)
+        if (itemCacheRef.current.has(key)) continue
+        void loadItemIntoCache(adj, i).catch(() => {})
+      }
+    }
+  }, [open, items, loadItemIntoCache])
+
   const loadCurrent = useCallback(async () => {
     if (!open || !item?.loadBlob) return
+    const key = itemCacheKey(item, index)
+    const cached = itemCacheRef.current.get(key)
+    if (cached) {
+      try {
+        applyCachedEntry(cached)
+        setError(null)
+        setLoading(false)
+        prefetchAdjacent(index)
+        return
+      } catch {
+        itemCacheRef.current.delete(key)
+      }
+    }
+
     cleanup()
     setLoading(true)
     try {
-      const result = await item.loadBlob()
-      setBlob(result instanceof Blob ? result : null)
-
-      if (typeof result === 'string' && result.startsWith('data:')) {
-        const { url, revoke } = createPreviewSource(result)
-        revokeRef.current = revoke
-        setPreviewUrl(url)
-        setTextContent('')
-      } else if (result instanceof Blob) {
-        const itemKind = resolvePreviewKind({ contentType: item.contentType || result.type, fileName: item.name })
-        if (itemKind === 'text') {
-          const text = await readTextFromBlob(result)
-          setTextContent(text)
-          setPreviewUrl(null)
-        } else {
-          const { url, revoke } = createPreviewSource(result)
-          revokeRef.current = revoke
-          setPreviewUrl(url)
-          setTextContent('')
-        }
-      } else {
-        throw new Error('Invalid file data')
-      }
+      const entry = await loadItemIntoCache(item, index)
+      applyCachedEntry(entry)
       setError(null)
     } catch (e) {
       setError(e.message || 'Could not load preview')
     } finally {
       setLoading(false)
+      prefetchAdjacent(index)
     }
-  }, [open, item, cleanup])
+  }, [open, item, index, cleanup, applyCachedEntry, loadItemIntoCache, prefetchAdjacent])
 
   useEffect(() => {
     if (open) setIndex(Math.min(Math.max(0, initialIndex), Math.max(0, items.length - 1)))
@@ -95,11 +158,12 @@ export function FilePreviewOverlay({
   useEffect(() => {
     if (!open) {
       cleanup()
+      clearItemCache()
       return undefined
     }
     loadCurrent()
     return cleanup
-  }, [open, index, loadCurrent, cleanup])
+  }, [open, index, loadCurrent, cleanup, clearItemCache])
 
   const goPrev = useCallback(() => {
     if (index > 0) setIndex(index - 1)
@@ -238,7 +302,7 @@ export function FilePreviewOverlay({
             type="button"
             className="file-preview-nav file-preview-nav--prev"
             onClick={goPrev}
-            disabled={index === 0 || loading}
+            disabled={index === 0}
             aria-label="Previous file"
           >
             <ChevronLeft className="h-7 w-7" />
@@ -308,7 +372,7 @@ export function FilePreviewOverlay({
             type="button"
             className="file-preview-nav file-preview-nav--next"
             onClick={goNext}
-            disabled={index === items.length - 1 || loading}
+            disabled={index === items.length - 1}
             aria-label="Next file"
           >
             <ChevronRight className="h-7 w-7" />

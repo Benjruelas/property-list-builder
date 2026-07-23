@@ -313,11 +313,8 @@ export default async function handler(req, res) {
 
       const existing = all[idx]
       const access = getResourceAccess(existing, user, ctx)
-      if (!canEdit(access) && access !== 'admin_view') {
+      if (!canEdit(access)) {
         return res.status(403).json({ error: 'No access to edit this lead' })
-      }
-      if (access === 'admin_view') {
-        return res.status(403).json({ error: 'Admins can view but not edit private leads' })
       }
 
       if (action === 'append-activity') {

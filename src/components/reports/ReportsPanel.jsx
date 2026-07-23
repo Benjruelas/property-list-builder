@@ -78,6 +78,7 @@ export function ReportsPanel({
   teams = [],
   teamMembership = null,
   onLeadUpdate,
+  onLeadReportSaved,
 }) {
   const { getToken } = useAuth()
   const [tab, setTab] = useState('reports')
@@ -694,6 +695,7 @@ export function ReportsPanel({
             }
             return [saved, ...prev]
           })
+          if (saved?.leadId) onLeadReportSaved?.(saved.leadId, saved)
           if (options.keepOpen) {
             onPatchEditor?.({ report: saved, leadId: saved.leadId, awaitingTemplate: false })
           } else {
@@ -711,6 +713,7 @@ export function ReportsPanel({
         teamMembership={teamMembership}
         onSent={async (updated) => {
           setReports((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+          if (updated?.leadId) onLeadReportSaved?.(updated.leadId, updated)
           const lead = updated.leadId ? leads.find((l) => l.id === updated.leadId) : null
           if (lead?.id) {
             await logLeadReportEvent(getToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })

@@ -155,11 +155,8 @@ export default async function handler(req, res) {
       const path = all[idx]
       const ctx = buildAccessContext(allTeams, user)
       const access = getResourceAccess(path, user, ctx)
-      if (!canEdit(access) && access !== 'admin_view') {
+      if (!canEdit(access)) {
         return res.status(403).json({ error: 'No access to this path' })
-      }
-      if (access === 'admin_view') {
-        return res.status(403).json({ error: 'Admins can view but not edit private paths' })
       }
 
       const canShare = canChangeVisibility(access)

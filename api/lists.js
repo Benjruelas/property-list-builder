@@ -173,11 +173,8 @@ export default async function handler(req, res) {
       const list = all[idx]
       const ctx = buildAccessContext(allTeams, user)
       const access = getResourceAccess(list, user, ctx)
-      if (!canEdit(access) && access !== 'admin_view') {
+      if (!canEdit(access)) {
         return res.status(403).json({ error: 'You do not have access to this list' })
-      }
-      if (access === 'admin_view') {
-        return res.status(403).json({ error: 'Admins can view but not edit private lists' })
       }
       const isOwner = canChangeVisibility(access)
 

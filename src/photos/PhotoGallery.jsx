@@ -233,15 +233,19 @@ export function PhotoGallery({
         }
       : updatedEntity
     onEntityUpdate?.(payload)
-    if (!complete) return
-    const returnPhotoId = returnToPreviewPhotoIdRef.current
-    setAnnotating(null)
-    annotatingPhotoIdRef.current = null
-    returnToPreviewPhotoIdRef.current = null
-    if (returnPhotoId) {
-      const idx = findDisplayIndexForPhotoId(returnPhotoId, payload.photos)
-      if (idx >= 0) setPreviewIndex(idx)
+
+    if (!complete) {
+      const returnPhotoId = returnToPreviewPhotoIdRef.current
+      setAnnotating(null)
+      annotatingPhotoIdRef.current = null
+      if (returnPhotoId) {
+        const idx = findDisplayIndexForPhotoId(returnPhotoId, payload.photos)
+        if (idx >= 0) setPreviewIndex(idx)
+      }
+      return
     }
+
+    returnToPreviewPhotoIdRef.current = null
   }, [onEntityUpdate, findDisplayIndexForPhotoId])
 
   const retryAnnotation = useCallback(async (photo) => {
@@ -258,11 +262,14 @@ export function PhotoGallery({
           onEntityUpdate?.({
             ...entity,
             photos: updatePhotoInList(entity.photos || [], photo.id, optimisticPhoto),
+            updatedAt: optimisticPhoto.updatedAt,
           })
         },
       })
-      const updated = result.entity
-      onEntityUpdate?.(updated)
+      onEntityUpdate?.({
+        ...result.entity,
+        photos: (result.entity.photos || []).map((p) => stripClientPhotoFields(p)),
+      })
     } catch { /* inline retry stays */ }
   }, [getToken, entityRef, entity, onEntityUpdate])
 
@@ -284,8 +291,12 @@ export function PhotoGallery({
           if (blobs?.full) return blobs.full
         }
         if (item.photo._annotationSaving && item.photo._annotatedPreviewUrl?.startsWith('blob:')) {
-          const res = await fetch(item.photo._annotatedPreviewUrl)
-          if (res.ok) return res.blob()
+          try {
+            const res = await fetch(item.photo._annotatedPreviewUrl)
+            if (res.ok) return res.blob()
+          } catch {
+            /* blob URL may have been released — fall through to server fetch */
+          }
         }
         return fetchPhotoPreviewBlob(
           getToken,

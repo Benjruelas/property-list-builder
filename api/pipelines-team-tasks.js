@@ -14,7 +14,8 @@
  */
 
 import { authenticate } from './_lib/auth.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { getAllTeams } from './_lib/teams.js'
+import { buildAccessContext, getResourceAccess, canEdit } from './_lib/resourceContext.js'
 import { getAllPipelines, mutatePipelines } from './_lib/pipelineStoreFull.js'
 
 function num(v) {
@@ -111,9 +112,9 @@ export default async function handler(req, res) {
     const [initial, allTeams] = await Promise.all([getAllPipelines(), getAllTeams()])
     const pipelineForAccess = initial.find((p) => p.id === pipelineId)
     if (!pipelineForAccess) return res.status(404).json({ error: 'Pipeline not found' })
-    const teamsIndex = fullTeamsIndex(allTeams)
-    const access = resolveAccess(pipelineForAccess, user, teamsIndex)
-    if (!access) return res.status(403).json({ error: 'No access to this pipeline' })
+    const ctx = buildAccessContext(allTeams, user)
+    const access = getResourceAccess(pipelineForAccess, user, ctx)
+    if (!canEdit(access)) return res.status(403).json({ error: 'No access to this pipeline' })
 
     const allowedMemberUids = collectAllowedMemberUids(pipelineForAccess, allTeams, user)
     const { actorLabel } = await import('./_lib/activityLog.js')
@@ -226,7 +227,7 @@ export default async function handler(req, res) {
       try {
         const { notifyTaskAssigned } = await import('./_lib/pushUtils.js')
         for (const [uids, payload] of deferred.notify) {
-          await notifyTaskAssigned(uids, payload, teamsIndex)
+          await notifyTaskAssigned(uids, payload, ctx.teamsIndex)
         }
       } catch {
         /* ignore */

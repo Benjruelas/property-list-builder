@@ -3,6 +3,7 @@
  */
 
 import { fullTeamsIndex } from './teams.js'
+import { normalizeResourceVisibility, VISIBILITY } from './access.js'
 import { kvSAdd, kvSRem, kvAvailable } from './kvOps.js'
 
 export function collectAffectedUidsForResource(resource, allTeams = []) {
@@ -13,7 +14,12 @@ export function collectAffectedUidsForResource(resource, allTeams = []) {
     if (uid) uids.add(uid)
   }
   const teamsIndex = fullTeamsIndex(allTeams)
-  for (const tid of resource.teamShares || []) {
+  const teamIds = new Set(resource.teamShares || [])
+  const normalized = normalizeResourceVisibility(resource)
+  if (normalized.visibility === VISIBILITY.TEAM && normalized.teamId) {
+    teamIds.add(normalized.teamId)
+  }
+  for (const tid of teamIds) {
     const team = teamsIndex[tid]
     if (!team) continue
     if (team.ownerId) uids.add(team.ownerId)

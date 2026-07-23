@@ -120,6 +120,7 @@ import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
 import { invalidateCachedLeadForms } from './utils/leadForms'
+import { invalidateCachedLeadReports, upsertCachedLeadReport } from './utils/photoReports'
 import {
   fetchLeads,
   fetchLeadById,
@@ -481,6 +482,7 @@ function App() {
   const [dealTemplatesRefreshKey, setDealTemplatesRefreshKey] = useState(0)
   const [quotesRefreshEpoch, setQuotesRefreshEpoch] = useState(0)
   const [leadFormsRefreshEpoch, setLeadFormsRefreshEpoch] = useState(0)
+  const [leadReportsRefreshEpoch, setLeadReportsRefreshEpoch] = useState(0)
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false)
   const [photoPickerParcelId, setPhotoPickerParcelId] = useState(null)
   const [photoPickerAddress, setPhotoPickerAddress] = useState('')
@@ -3368,6 +3370,16 @@ function App() {
     setLeadFormsRefreshEpoch((n) => n + 1)
   }, [])
 
+  const handleLeadReportSaved = useCallback((leadId, report) => {
+    if (!leadId) return
+    if (report && upsertCachedLeadReport(leadId, report)) {
+      setLeadReportsRefreshEpoch((n) => n + 1)
+      return
+    }
+    invalidateCachedLeadReports(leadId)
+    setLeadReportsRefreshEpoch((n) => n + 1)
+  }, [])
+
   const handleCloseQuoteEditor = useCallback((saved) => {
     const prefill = quotesEditorFrame?.prefill
     nav.pop()
@@ -4544,6 +4556,7 @@ function App() {
             onLeadUpdate={(full) => {
               setLeads((prev) => upsertLeadInLocalStore(prev, full, mergeLeadDetail))
             }}
+            onLeadReportSaved={handleLeadReportSaved}
           />
         </Suspense>
       )}
@@ -4733,6 +4746,7 @@ function App() {
         onOpenLeadForm={handleOpenLeadForm}
         onLeadFormSent={handleLeadFormSent}
         leadFormsRefreshEpoch={leadFormsRefreshEpoch}
+        leadReportsRefreshEpoch={leadReportsRefreshEpoch}
         onOpenLeadDetail={(leadId) => guardFeature('leads', () => nav.pushLeadsDetail(leadId))}
         onCloseLeadDetail={() => nav.popLeadsDetail()}
         currentUserId={currentUser?.uid}

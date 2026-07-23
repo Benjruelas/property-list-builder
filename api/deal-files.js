@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { requireAuth } from './_lib/apiAuth.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { getAllTeams } from './_lib/teams.js'
+import { buildAccessContext, getResourceAccess, canEdit, canView } from './_lib/resourceContext.js'
 import { presignedPhotosEnabled, createPresignedPutUrl, createPresignedGetUrl } from './_lib/photoPresign.js'
 
 import {
@@ -75,13 +76,14 @@ function sanitizeFileName(v) {
   return String(v || 'file').replace(/[^a-zA-Z0-9._\- ]/g, '_').slice(0, 120)
 }
 
-async function canAccessPipeline(user, pipelineId) {
+async function canAccessPipeline(user, pipelineId, { requireEdit = true } = {}) {
   const [pipelines, allTeams] = await Promise.all([loadPipelinesSnapshot(), getAllTeams()])
   const pipeline = pipelines.find((p) => p.id === pipelineId)
   if (!pipeline) return { allowed: false, pipeline: null }
-  const teamsIndex = fullTeamsIndex(allTeams)
-  const access = resolveAccess(pipeline, user, teamsIndex)
-  return { allowed: !!access, pipeline }
+  const ctx = buildAccessContext(allTeams, user)
+  const access = getResourceAccess(pipeline, user, ctx)
+  const allowed = requireEdit ? canEdit(access) : canView(access)
+  return { allowed, pipeline }
 }
 
 export const config = {
@@ -234,9 +236,9 @@ export default async function handler(req, res) {
       let allowed = ownerUid === user.uid
       if (!allowed) {
         const pipelines = await loadPipelinesSnapshot()
-        const teamsIndex = fullTeamsIndex(await getAllTeams())
+        const ctx = buildAccessContext(await getAllTeams(), user)
         for (const p of pipelines) {
-          if ((p.deals || []).some((d) => d.id === dealId) && resolveAccess(p, user, teamsIndex)) {
+          if ((p.deals || []).some((d) => d.id === dealId) && canView(getResourceAccess(p, user, ctx))) {
             allowed = true
             break
           }

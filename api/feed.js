@@ -18,7 +18,8 @@ import {
   isActivityStoreAvailable,
   ensureActivityStoreReady,
 } from './_lib/activityStore.js'
-import { mergeActivityFeeds, collapseFeedItems, expandActivityIdsForMarkSeen, collectActivityIdsFromFeedItems } from './_lib/feedCoalesce.js'
+import { mergeActivityFeeds } from './_lib/activityLog.js'
+import { collapseFeedItems, expandActivityIdsForMarkSeen, collectActivityIdsFromFeedItems } from './_lib/feedCoalesce.js'
 
 /**
  * Unified notifications + team activity feed.

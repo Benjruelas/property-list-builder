@@ -66,14 +66,14 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
   const handleSave = async (objects) => {
     if (!image || !photo || !deal?.id || !pipelineId || saving) return
     const annotations = { version: 1, objects }
-    const snapshotDeal = deal
     setSaving(true)
 
     try {
       const { file, thumbnail } = await renderFlatImageBlobs(image, objects, image.width, image.height)
       const entityRef = entityRefFromDeal(deal, pipelineId)
+      setSaving(false)
 
-      const result = await savePhotoAnnotations(getToken, entityRef, {
+      void savePhotoAnnotations(getToken, entityRef, {
         photo,
         annotations,
         annotatedBlob: file,
@@ -87,11 +87,15 @@ export function DealPhotoAnnotator({ open, deal, pipelineId, photo, getToken, on
           }, { complete: false })
         },
       })
-      onSaved?.(result.entity, { complete: true })
+        .then((result) => {
+          onSaved?.(result.entity, { complete: true })
+        })
+        .catch(() => {
+          /* failure reflected via onOptimistic retry payload */
+        })
     } catch {
-      onSaved?.(snapshotDeal, { complete: true })
-    } finally {
       setSaving(false)
+      showToast('Could not save annotations', 'error')
     }
   }
 

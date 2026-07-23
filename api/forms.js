@@ -167,11 +167,8 @@ export default async function handler(req, res) {
       const ctx = buildAccessContext(allTeams, user)
       const teamsIndex = ctx.teamsIndex
       const access = getResourceAccess(t, user, ctx)
-      if (!canEdit(access) && access !== 'admin_view' && lastUsedAt === undefined) {
+      if (!canEdit(access) && lastUsedAt === undefined) {
         return res.status(403).json({ error: 'You do not have access to this template' })
-      }
-      if (access === 'admin_view' && lastUsedAt === undefined) {
-        return res.status(403).json({ error: 'Admins can view but not edit private forms' })
       }
       const isOwner = canChangeVisibility(access)
 

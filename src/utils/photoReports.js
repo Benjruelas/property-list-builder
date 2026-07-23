@@ -64,6 +64,20 @@ export function invalidateCachedLeadReports(leadId) {
   leadReportsInflight.delete(leadId)
 }
 
+/** Merge a saved report into the lead cache when present; returns whether cache was updated. */
+export function upsertCachedLeadReport(leadId, report) {
+  if (!leadId || !report?.id) return false
+  if (!leadReportsListCache.has(leadId)) return false
+  const prev = leadReportsListCache.get(leadId)
+  const list = Array.isArray(prev) ? prev : []
+  const idx = list.findIndex((r) => r.id === report.id)
+  const next = idx >= 0
+    ? list.map((r, i) => (i === idx ? report : r))
+    : [report, ...list]
+  leadReportsListCache.set(leadId, next)
+  return true
+}
+
 export function isLeadReportsFetchInflight(leadId) {
   return !!leadId && leadReportsInflight.has(leadId)
 }

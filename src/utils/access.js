@@ -146,7 +146,7 @@ export function canView(access) {
 }
 
 export function canEdit(access) {
-  return access === 'owner' || access === 'admin' || access === 'collaborator'
+  return access === 'owner' || access === 'admin' || access === 'admin_view' || access === 'collaborator'
 }
 
 /** Mirror of api/lib/leadAccess.js canMutateLeadPhotos for UI gating. */

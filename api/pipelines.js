@@ -385,11 +385,8 @@ export default async function handler(req, res) {
       const canManageMeta = pipeIsTeam ? isTeamAdmin(ctx.team, user.uid) : canChangeVisibility(access)
       const allowedDealStatusIds = resolveAllowedDealStatusIds(ctx, userAppSettings)
 
-      if (!canEdit(access) && access !== 'admin_view') {
+      if (!canEdit(access)) {
         return res.status(403).json({ error: 'Only the pipeline owner or collaborators can update this pipeline' })
-      }
-      if (access === 'admin_view') {
-        return res.status(403).json({ error: 'Admins can view but not edit private pipelines' })
       }
       if (pipeline.canonicalType === 'deals' &&
           (title !== undefined || columns !== undefined || sharedWith !== undefined ||

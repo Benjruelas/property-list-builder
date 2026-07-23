@@ -61,8 +61,9 @@ export function PhotoTile({
           return
         }
         if (photo?._annotationSaving) {
-          if (photo?._annotatedPreviewUrl?.startsWith('blob:') || photo?._annotatedPreviewUrl?.startsWith('data:')) {
-            setDisplayUrl(photo._annotatedPreviewUrl)
+          const thumbUrl = photo?._annotatedThumbPreviewUrl || photo?._annotatedPreviewUrl
+          if (thumbUrl?.startsWith('blob:') || thumbUrl?.startsWith('data:')) {
+            setDisplayUrl(thumbUrl)
             return
           }
         }
@@ -85,7 +86,7 @@ export function PhotoTile({
       cancelled = true
       if (objectUrl?.startsWith?.('blob:')) URL.revokeObjectURL(objectUrl)
     }
-  }, [job?.jobId, isJob, getToken, cacheVersion, photo?.id, photo?.key, photo?.annotatedKey, photo?.annotatedThumbnailKey, photo?._annotationSaving, photo?._localThumbUrl, photo?._annotatedPreviewUrl])
+  }, [job?.jobId, isJob, getToken, cacheVersion, photo?.id, photo?.key, photo?.annotatedKey, photo?.annotatedThumbnailKey, photo?._annotationSaving, photo?._localThumbUrl, photo?._annotatedPreviewUrl, photo?._annotatedThumbPreviewUrl])
 
   return (
     <div

@@ -238,20 +238,25 @@ export function PhotoAnnotatorEditor({
     return () => window.removeEventListener('resize', resize)
   }, [open, image])
 
-  const positionActionPill = useCallback(() => {
+  const positionActionPillForId = useCallback((idOverride) => {
     const pill = actionPillRef.current
-    if (!pill) return
+    if (!pill) return false
 
-    if (!selectedId || !stageRef.current || !containerRef.current || drawing) {
+    const activeId = idOverride ?? selectedId
+    if (!activeId || !stageRef.current || !containerRef.current) {
       pill.style.display = 'none'
-      return
+      return false
+    }
+    if (drawing && idOverride == null) {
+      pill.style.display = 'none'
+      return false
     }
 
     const stage = stageRef.current
-    const node = stage.findOne(`#${selectedId}`)
+    const node = stage.findOne(`#${activeId}`)
     if (!node) {
       pill.style.display = 'none'
-      return
+      return false
     }
 
     const nodeRect = node.getClientRect()
@@ -261,11 +266,32 @@ export function PhotoAnnotatorEditor({
     pill.style.display = 'flex'
     pill.style.left = `${stageRect.left - wrapRect.left + nodeRect.x + nodeRect.width / 2}px`
     pill.style.top = `${stageRect.top - wrapRect.top + nodeRect.y - 8}px`
+    return true
   }, [selectedId, drawing])
 
+  const positionActionPill = useCallback(() => {
+    positionActionPillForId()
+  }, [positionActionPillForId])
+
+  const scheduleActionPill = useCallback((idOverride) => {
+    let attempts = 0
+    const tryPosition = () => {
+      if (positionActionPillForId(idOverride)) return
+      if (attempts < 8) {
+        attempts += 1
+        requestAnimationFrame(tryPosition)
+      }
+    }
+    requestAnimationFrame(tryPosition)
+  }, [positionActionPillForId])
+
   useLayoutEffect(() => {
-    positionActionPill()
-  }, [positionActionPill, objects, stageSize, moveHeld])
+    if (selectedId && !drawing && !editingTextId) {
+      scheduleActionPill(selectedId)
+    } else {
+      positionActionPill()
+    }
+  }, [scheduleActionPill, positionActionPill, objects, stageSize, moveHeld, selectedId, drawing, editingTextId])
 
   useEffect(() => {
     if (!shapesMenuOpen && !colorMenuOpen && !strokeMenuOpen) return undefined
@@ -332,8 +358,8 @@ export function PhotoAnnotatorEditor({
     setEditingTextId(null)
     setEditDraft('')
     preEditSnapshotRef.current = null
-    requestAnimationFrame(positionActionPill)
-  }, [editDraft, editingTextId, image, updateObjects, positionActionPill])
+    scheduleActionPill(editingTextId)
+  }, [editDraft, editingTextId, image, updateObjects, scheduleActionPill])
 
   const cancelTextEdit = useCallback(() => {
     const snapshot = preEditSnapshotRef.current
@@ -382,7 +408,7 @@ export function PhotoAnnotatorEditor({
     const next = [...objectsRef.current, copy]
     updateObjects(next)
     setSelectedId(copy.id)
-    requestAnimationFrame(positionActionPill)
+    scheduleActionPill(copy.id)
   }
 
   const handleDeleteSelected = () => {
@@ -438,7 +464,7 @@ export function PhotoAnnotatorEditor({
       window.removeEventListener('touchmove', onTouchMove)
       window.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('touchcancel', onTouchEnd)
-      requestAnimationFrame(positionActionPill)
+      requestAnimationFrame(() => scheduleActionPill(session.objId))
     }
 
     const onMouseMove = (ev) => applyAtClient(ev.clientX, ev.clientY)
@@ -454,7 +480,7 @@ export function PhotoAnnotatorEditor({
     window.addEventListener('touchmove', onTouchMove, { passive: false })
     window.addEventListener('touchend', onTouchEnd)
     window.addEventListener('touchcancel', onTouchEnd)
-  }, [updateObjects, positionActionPill, setObjectsLive])
+  }, [updateObjects, scheduleActionPill, setObjectsLive])
 
   const handleMovePointerDown = useCallback((e) => {
     e.preventDefault()
@@ -494,13 +520,13 @@ export function PhotoAnnotatorEditor({
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerEnd)
       window.removeEventListener('pointercancel', onPointerEnd)
-      requestAnimationFrame(positionActionPill)
+      requestAnimationFrame(() => scheduleActionPill(session.objId))
     }
 
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerEnd)
     window.addEventListener('pointercancel', onPointerEnd)
-  }, [selectedId, updateObjects, positionActionPill, setObjectsLive])
+  }, [selectedId, updateObjects, scheduleActionPill, setObjectsLive])
 
   const handleStageMouseDown = (e) => {
     if (e.target !== e.target.getStage()) {
@@ -568,7 +594,7 @@ export function PhotoAnnotatorEditor({
     }
     updateObjects([...objectsRef.current, obj])
     setSelectedId(obj.id)
-    requestAnimationFrame(positionActionPill)
+    scheduleActionPill(obj.id)
   }
 
   const handleSave = () => {
@@ -580,6 +606,7 @@ export function PhotoAnnotatorEditor({
     setSelectedId(objId)
     setMode('idle')
     setEditingTextId(null)
+    scheduleActionPill(objId)
   }
 
   const selectedObject = objects.find((o) => o.id === selectedId)

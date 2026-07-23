@@ -157,7 +157,7 @@ export function canView(access) {
 }
 
 export function canEdit(access) {
-  return access === 'owner' || access === 'admin' || access === 'collaborator'
+  return access === 'owner' || access === 'admin' || access === 'admin_view' || access === 'collaborator'
 }
 
 export function canDelete(access) {
@@ -186,10 +186,14 @@ export function applyVisibilityPatch(existing, body, teamId) {
     next.visibility = v
     if (v === VISIBILITY.PRIVATE) {
       next.sharedMemberUids = []
+      next.teamShares = []
     }
     if (v === VISIBILITY.TEAM) {
       next.sharedMemberUids = []
-      if (teamId) next.teamId = teamId
+      if (teamId) {
+        next.teamId = teamId
+        next.teamShares = [teamId]
+      }
     }
   }
 

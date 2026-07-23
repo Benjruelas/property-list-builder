@@ -88,9 +88,9 @@ describe('canMutateLeadPhotos', () => {
     expect(canMutateLeadPhotos(owner, privateLead, 'owner')).toBe(true)
   })
 
-  it('blocks team admins from deleting photos on another member private lead', () => {
+  it('allows team admins to mutate photos on another member private lead', () => {
     const memberLead = { ...privateLead, ownerId: 'other-member' }
-    expect(canMutateLeadPhotos(admin, memberLead, 'admin_view')).toBe(false)
+    expect(canMutateLeadPhotos(admin, memberLead, 'admin_view')).toBe(true)
   })
 
   it('allows the user who captured a photo to delete it', () => {
@@ -111,14 +111,14 @@ describe('canMutateLeadPhotos', () => {
     expect(canMutateLeadPhotos(owner, misowned, 'admin_view')).toBe(true)
   })
 
-  it('blocks team admin from deleting another member photos on a private lead', () => {
+  it('allows team admin to delete another member photos on a private lead', () => {
     const memberLead = {
       ownerId: 'other-member',
       visibility: 'private',
       teamId: 'team_a',
       photos: [{ id: 'p1', capturedByUid: 'other-member' }],
     }
-    expect(canMutateLeadPhotos(admin, memberLead, 'admin_view')).toBe(false)
-    expect(canMutateLeadPhotos(admin, memberLead, 'admin_view', memberLead.photos[0])).toBe(false)
+    expect(canMutateLeadPhotos(admin, memberLead, 'admin_view')).toBe(true)
+    expect(canMutateLeadPhotos(admin, memberLead, 'admin_view', memberLead.photos[0])).toBe(true)
   })
 })
