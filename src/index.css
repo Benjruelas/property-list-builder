@@ -6137,8 +6137,6 @@ button.leads-analytics-stat-value-toggle {
   padding: 0;
   border: none;
   background: transparent;
-  font: inherit;
-  color: inherit;
   cursor: pointer;
   border-radius: 0.25rem;
 }
@@ -6153,6 +6151,8 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  line-height: 1.2;
+  white-space: nowrap;
   color: rgba(255, 255, 255, 0.4);
 }
 

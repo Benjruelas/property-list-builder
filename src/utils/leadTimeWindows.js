@@ -25,7 +25,7 @@ export function nextNewLeadWindow(days) {
  * @returns {string}
  */
 export function newLeadWindowLabel(days) {
-  return `Last ${days} days`
+  return `New in ${days} days`
 }
 
 function startOfDay(date) {

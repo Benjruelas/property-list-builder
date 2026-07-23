@@ -339,6 +339,7 @@ export function LeadsPanel({
                       className="leads-analytics-stat-value leads-analytics-stat-value-toggle"
                       onClick={() => setNewLeadWindowDays((days) => nextNewLeadWindow(days))}
                       aria-label={`New leads in last ${newLeadWindowDays} days, tap to change period`}
+                      title={`Last ${newLeadWindowDays} days — tap to change`}
                     >
                       {leadAnalytics.newInWindow}
                     </button>

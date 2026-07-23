@@ -24,9 +24,9 @@ describe('leadTimeWindows', () => {
   })
 
   it('formats window labels', () => {
-    expect(newLeadWindowLabel(7)).toBe('Last 7 days')
-    expect(newLeadWindowLabel(30)).toBe('Last 30 days')
-    expect(newLeadWindowLabel(90)).toBe('Last 90 days')
+    expect(newLeadWindowLabel(7)).toBe('New in 7 days')
+    expect(newLeadWindowLabel(30)).toBe('New in 30 days')
+    expect(newLeadWindowLabel(90)).toBe('New in 90 days')
   })
 
   it('includes createdAt at the start of the local window and excludes older', () => {
