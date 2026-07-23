@@ -2928,6 +2928,10 @@ function App() {
 
     const parcelId = raw.parcelId || raw.id || resolveParcelId(raw) || ''
 
+    // Stop follow-mode so the next GPS tick does not pull the camera back
+    // to the user after we fly to the lead property.
+    setIsFollowing(false)
+
     cancelParcelPopupWork()
     closeAllPanelsForMap()
     nav.clearMapOverlays()
