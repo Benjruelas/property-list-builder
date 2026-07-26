@@ -31,6 +31,9 @@ const LOGO_SCALE = 1.875
 /** Cover this fraction of the drawn video height at top + bottom (hides edge black lines). */
 const EDGE_COVER_RATIO = 0.035
 const EDGE_COVER_MIN_PX = 3
+/** Extra top band — hides hairline above the logo plate. */
+const EDGE_COVER_TOP_RATIO = 0.12
+const EDGE_COVER_TOP_MIN_PX = 14
 
 /**
  * Full-bleed canvas: fill plate blue, draw logo contained & centered at LOGO_SCALE.
@@ -106,10 +109,11 @@ function startCanvasMirror(video, canvas) {
     ctx.drawImage(video, dx, dy, dw, dh)
 
     // Plate-colored bands over the top/bottom video edges (hide black scan lines).
-    const cover = Math.max(EDGE_COVER_MIN_PX * dpr, Math.round(dh * EDGE_COVER_RATIO))
+    const coverBottom = Math.max(EDGE_COVER_MIN_PX * dpr, Math.round(dh * EDGE_COVER_RATIO))
+    const coverTop = Math.max(EDGE_COVER_TOP_MIN_PX * dpr, Math.round(dh * EDGE_COVER_TOP_RATIO))
     ctx.fillStyle = plateFill
-    ctx.fillRect(dx, dy, dw, cover)
-    ctx.fillRect(dx, dy + dh - cover, dw, cover)
+    ctx.fillRect(dx, dy, dw, coverTop)
+    ctx.fillRect(dx, dy + dh - coverBottom, dw, coverBottom)
   }
 
   syncSize()

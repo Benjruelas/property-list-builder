@@ -189,6 +189,8 @@
         var LOGO_SCALE = 1.875;
         var EDGE_COVER_RATIO = 0.035;
         var EDGE_COVER_MIN_PX = 3;
+        var EDGE_COVER_TOP_RATIO = 0.12;
+        var EDGE_COVER_TOP_MIN_PX = 14;
         var plateFill = '#1251f0';
         var probe = document.createElement('canvas');
         probe.width = 48;
@@ -236,10 +238,11 @@
           var dx = (canvas.width - dw) / 2;
           var dy = (canvas.height - dh) / 2;
           ctx.drawImage(video, dx, dy, dw, dh);
-          var cover = Math.max(EDGE_COVER_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_RATIO));
+          var coverBottom = Math.max(EDGE_COVER_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_RATIO));
+          var coverTop = Math.max(EDGE_COVER_TOP_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_TOP_RATIO));
           ctx.fillStyle = plateFill;
-          ctx.fillRect(dx, dy, dw, cover);
-          ctx.fillRect(dx, dy + dh - cover, dw, cover);
+          ctx.fillRect(dx, dy, dw, coverTop);
+          ctx.fillRect(dx, dy + dh - coverBottom, dw, coverBottom);
         };
         syncSize();
         fillPlate();
