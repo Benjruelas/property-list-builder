@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
+import {
+  configureLogoVideoElement,
+  ensureLogoVideoPlaying,
+} from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
 const FADE_OUT_MS = 700
@@ -20,71 +24,6 @@ function loadingPortalTarget() {
 function prefersReducedMotion() {
   return typeof window !== 'undefined'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
-
-/**
- * Prefer unmuted playback; if the browser blocks it, play muted so the
- * animation still runs, then unmute on the first user gesture.
- * @param {HTMLVideoElement} video
- */
-async function ensureVideoPlaying(video) {
-  video.playsInline = true
-  video.setAttribute('playsinline', '')
-  video.setAttribute('webkit-playsinline', '')
-  video.controls = false
-  video.loop = false
-  video.preload = 'auto'
-  video.volume = 1
-
-  const unmute = () => {
-    video.muted = false
-    video.defaultMuted = false
-    video.removeAttribute('muted')
-    video.volume = 1
-  }
-
-  const unmuteOnGesture = () => {
-    const unlock = () => {
-      unmute()
-      if (video.paused) void video.play().catch(() => {})
-    }
-    window.addEventListener('pointerdown', unlock, { once: true, capture: true })
-    window.addEventListener('keydown', unlock, { once: true, capture: true })
-  }
-
-  // Already running from the HTML boot loader — just try to enable sound.
-  if (!video.paused && !video.ended) {
-    try {
-      unmute()
-    } catch {
-      unmuteOnGesture()
-    }
-    return
-  }
-
-  // Muted autoplay is reliably allowed; unmute after play for device volume.
-  video.muted = true
-  video.defaultMuted = true
-  video.setAttribute('muted', '')
-
-  try {
-    await video.play()
-  } catch {
-    unmuteOnGesture()
-    return
-  }
-
-  try {
-    unmute()
-    if (video.paused) {
-      video.muted = true
-      await video.play()
-      unmuteOnGesture()
-    }
-  } catch {
-    video.muted = true
-    unmuteOnGesture()
-  }
 }
 
 /** Logo size vs viewport-fitted contain (1 = fit). */
@@ -253,10 +192,7 @@ export function AppLoadingScreen({
 
     // Keep the media element off-screen; paint via canvas for sRGB-matched blues.
     video.className = 'app-loading-screen__video-source'
-    video.controls = false
-    video.playsInline = true
-    video.setAttribute('playsinline', '')
-    video.setAttribute('webkit-playsinline', '')
+    configureLogoVideoElement(video)
     videoRef.current = video
 
     const canvas = document.createElement('canvas')
@@ -270,12 +206,13 @@ export function AppLoadingScreen({
     const stopMirror = startCanvasMirror(video, canvas)
 
     const markCompleted = () => {
+      if (playCompletedRef.current) return
       playCompletedRef.current = true
       setPlayCompleted(true)
-      if (activeRef.current) {
-        video.currentTime = 0
-        void ensureVideoPlaying(video)
-        return
+      try {
+        video.pause()
+      } catch {
+        /* ignore */
       }
       tryExit()
     }
@@ -292,7 +229,7 @@ export function AppLoadingScreen({
       try { video.currentTime = 0 } catch { /* ignore */ }
     }
 
-    void ensureVideoPlaying(video)
+    void ensureLogoVideoPlaying(video, { resyncAudio: wasPlaying })
 
     return () => {
       window.clearTimeout(fallbackTimer)

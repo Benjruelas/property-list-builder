@@ -58,7 +58,7 @@ const BAR_PREFETCH_KEY = {
 
 /**
  * FloatingActionBar — responsive bottom dock (phone → desktop).
- * Mobile: Pipes, Tasks, Schedule, and Menu overflow.
+ * Mobile: Leads, Tasks, Schedule, and Menu overflow.
  * Desktop (768+): every action on the bar — no Menu.
  */
 

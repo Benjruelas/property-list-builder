@@ -143,8 +143,6 @@
           canvas.remove();
           return;
         }
-        // Draw to canvas so the blue plate matches CSS sRGB (#1251f0).
-        // Direct <video> painting is often brighter on wide-gamut displays.
         var ctx = null;
         try {
           ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
@@ -187,7 +185,6 @@
           var size = syncSize();
           fillPlate();
           if (!(video.readyState >= 2 && video.videoWidth > 0) || !probeCtx) return;
-          // Offscreen sample — never paint black lead frames onto the splash.
           probeCtx.drawImage(video, 0, 0, probe.width, probe.height);
           var r = 0, g = 0, b = 0;
           try {
@@ -205,7 +202,6 @@
           var dx = (canvas.width - dw) / 2;
           var dy = (canvas.height - dh) / 2;
           ctx.drawImage(video, dx, dy, dw, dh);
-          // Plate bands over top/bottom video edges (hide black scan lines).
           var cover = Math.max(EDGE_COVER_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_RATIO));
           ctx.fillStyle = plateFill;
           ctx.fillRect(dx, dy, dw, cover);
@@ -224,18 +220,12 @@
           window.removeEventListener('resize', paint);
         };
 
-        // Muted autoplay is reliably allowed; unmute after play for device volume.
         video.muted = true;
         video.defaultMuted = true;
         video.volume = 1;
         var tryPlay = function() {
           var p = video.play();
-          if (!p || typeof p.then !== 'function') return;
-          p.then(function() {
-            video.muted = false;
-            video.defaultMuted = false;
-            video.removeAttribute('muted');
-          }).catch(function() {});
+          if (p && typeof p.catch === 'function') p.catch(function() {});
         };
         tryPlay();
         video.addEventListener('loadeddata', tryPlay, { once: true });

@@ -5,14 +5,14 @@ describe('actionBarLayout', () => {
   it('shows 3 primary items on phone', () => {
     expect(getPrimaryBarCount(390)).toBe(3)
     const { barIds, isDesktop } = resolveActionBarLayout(390)
-    expect(barIds).toEqual(['pipes', 'tasks', 'schedule', 'menu'])
+    expect(barIds).toEqual(['leads', 'tasks', 'schedule', 'menu'])
     expect(isDesktop).toBe(false)
   })
 
   it('shows full desktop bar at 768px+ with no menu', () => {
     const { barIds, overflowPrimaryIds, isDesktop } = resolveActionBarLayout(1600)
     expect(barIds).toEqual([
-      'pipes', 'tasks', 'schedule', 'leads', 'deals', 'quotes', 'forms', 'reports', 'lists', 'activity',
+      'leads', 'tasks', 'schedule', 'pipes', 'deals', 'quotes', 'forms', 'reports', 'lists', 'activity',
       'photoMode', 'paths', 'outreach', 'settings',
     ])
     expect(overflowPrimaryIds).toEqual([])
@@ -21,7 +21,7 @@ describe('actionBarLayout', () => {
   })
 
   it('keeps three primaries plus menu on phone', () => {
-    expect(resolveActionBarLayout(700).barIds).toEqual(['pipes', 'tasks', 'schedule', 'menu'])
+    expect(resolveActionBarLayout(700).barIds).toEqual(['leads', 'tasks', 'schedule', 'menu'])
     expect(resolveActionBarLayout(700).isDesktop).toBe(false)
   })
 

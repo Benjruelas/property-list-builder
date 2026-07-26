@@ -65,14 +65,14 @@ describe('welcome tour order', () => {
 
   it('walks the action bar left-to-right on desktop', () => {
     const bar = DESKTOP_TOUR_ORDER.slice(
-      DESKTOP_TOUR_ORDER.indexOf('pipes'),
+      DESKTOP_TOUR_ORDER.indexOf('leads'),
       DESKTOP_TOUR_ORDER.indexOf('settings-menu') + 1
     )
     expect(bar).toEqual([
-      'pipes',
+      'leads',
       'tasks',
       'schedule',
-      'leads',
+      'pipes',
       'deals',
       'quotes',
       'forms',
@@ -93,7 +93,7 @@ describe('welcome tour order', () => {
     )
     expect(menu).toEqual([
       'activity',
-      'leads',
+      'pipes',
       'deals',
       'quotes',
       'forms',

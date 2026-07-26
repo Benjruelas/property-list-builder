@@ -10,10 +10,10 @@ export const DESKTOP_MIN_WIDTH = 768
 
 /** Primary items in priority order (menu is appended last on mobile only). */
 export const PRIMARY_BAR_ORDER = [
-  'pipes',
+  'leads',
   'tasks',
   'schedule',
-  'leads',
+  'pipes',
   'deals',
   'quotes',
   'forms',
@@ -33,7 +33,7 @@ export const DESKTOP_BAR_ORDER = [...PRIMARY_BAR_ORDER, ...DESKTOP_EXTRA_BAR_ORD
 
 /**
  * How many primary items (excluding Menu) to show at a given viewport width.
- * Smallest (phone): 3 → Pipes, Tasks, Schedule, Menu.
+ * Smallest (phone): 3 → Leads, Tasks, Schedule, Menu (Pipes in overflow).
  * @param {number} width
  */
 export function getPrimaryBarCount(width) {
