@@ -7,9 +7,9 @@ import {
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
-const FADE_OUT_MS = 700
+const FADE_OUT_MS = 320
 /** Fallback if `ended` never fires (decode error). */
-const PLAY_FALLBACK_MS = 5500
+const PLAY_FALLBACK_MS = 4500
 const LOGO_VIDEO_SRC = '/brand/knockscout-LogoMark.mp4'
 const LOGO_POSTER_SRC = '/brand/knockscout-LogoMark-poster.png'
 const BOOT_VIDEO_ID = 'boot-logo-video'
@@ -140,9 +140,10 @@ function startCanvasMirror(video, canvas) {
 }
 
 /**
- * Full-screen KnockScout boot splash (auth + basemap + first map paint).
- * Plays the brand logo MP4. Stays until the app is ready AND at least one
- * full playthrough has finished.
+ * Full-screen KnockScout boot splash.
+ * Plays the brand logo MP4 once, then opens the app immediately — does not
+ * keep waiting on auth/basemap after playback ends. Reduced-motion still
+ * holds until `active` clears (no video end event).
  *
  * @param {{ active: boolean, message?: string, onVisibleChange?: (visible: boolean) => void }} props
  */
@@ -154,6 +155,7 @@ export function AppLoadingScreen({
   const [mounted, setMounted] = useState(active)
   const [exiting, setExiting] = useState(false)
   const [playCompleted, setPlayCompleted] = useState(() => prefersReducedMotion())
+  const reduceMotion = prefersReducedMotion()
   const screenRef = useRef(null)
   const stageRef = useRef(null)
   const videoRef = useRef(null)
@@ -168,8 +170,9 @@ export function AppLoadingScreen({
 
   const tryExit = () => {
     if (exitingRef.current) return
-    if (activeRef.current) return
     if (!playCompletedRef.current) return
+    // No MP4 end signal — keep covering until the caller marks inactive.
+    if (reduceMotion && activeRef.current) return
     exitingRef.current = true
     setExiting(true)
   }
@@ -241,7 +244,9 @@ export function AppLoadingScreen({
   }, [mounted])
 
   useEffect(() => {
-    if (active) {
+    // After the logo has played, never remount just because auth/basemap are
+    // still loading — open as soon as the MP4 ends.
+    if (active && (!playCompleted || reduceMotion)) {
       exitingRef.current = false
       setExiting(false)
       setMounted(true)
@@ -250,7 +255,7 @@ export function AppLoadingScreen({
     if (!mounted || exiting) return undefined
     tryExit()
     return undefined
-  }, [active, mounted, exiting, playCompleted])
+  }, [active, mounted, exiting, playCompleted, reduceMotion])
 
   // Double rAF ensures the browser paints opacity:1 before the exit animation starts.
   useLayoutEffect(() => {

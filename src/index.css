@@ -4812,7 +4812,7 @@ body:has(.app-loading-screen--video) {
   opacity: 1;
 }
 .app-loading-screen.is-exiting {
-  animation: app-loader-fade-out 0.7s ease forwards;
+  animation: app-loader-fade-out 0.32s ease forwards;
   pointer-events: none;
 }
 .app-loading-screen__bg,
