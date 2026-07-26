@@ -4772,6 +4772,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   --ks-blue: #1151ef;
   --ks-blue-soft: rgba(17, 81, 239, 0.55);
   --ks-ink: #060912;
+  --ks-logo-blue: #1251f0;
   position: fixed;
   inset: 0;
   z-index: 10045;
@@ -4783,6 +4784,12 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   pointer-events: auto;
   opacity: 1;
+}
+/* Logo splash must match the MP4 plate color (not the dark ink boot chrome). */
+#initial-loader,
+.app-loading-screen--video {
+  background: var(--ks-logo-blue);
+  padding: 0; /* safe-area padding can create a false “seam” band */
 }
 /* Cover FAB / action bar / menus that also portal into #modal-root */
 #modal-root .app-loading-screen {
@@ -4903,6 +4910,40 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   object-fit: contain;
   filter: drop-shadow(0 12px 28px rgba(17, 81, 239, 0.28));
   animation: app-loader-emblem 3.2s ease-in-out infinite;
+}
+
+.app-loading-screen--video .app-loading-screen__bg {
+  display: none;
+}
+.app-loading-screen__content--video {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  animation: none;
+}
+.app-loading-screen__video-slot {
+  position: absolute;
+  inset: 0;
+  background: var(--ks-logo-blue, #1251f0);
+}
+/* Hidden media element — frames are painted to canvas for sRGB-matched color. */
+.app-loading-screen__video-source {
+  position: fixed !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  left: -9999px !important;
+}
+/* Full-bleed canvas — logo is drawn centered inside (no scaled box edge / hairline). */
+.app-loading-screen__video,
+#initial-loader #boot-logo-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: var(--ks-logo-blue, #1251f0);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -39,137 +39,40 @@
     <link rel="preconnect" href="https://tile.googleapis.com" crossorigin />
     <link rel="dns-prefetch" href="https://tile.googleapis.com" />
     <link rel="preconnect" href="https://firebase.googleapis.com" crossorigin />
+    <link rel="preload" href="/brand/knockscout-LogoMark.mp4" as="video" type="video/mp4" />
     <style>
-      /* Critical boot loader — mirrors AppLoadingScreen until React takes over */
-      @keyframes boot-aurora-a {
-        0%, 100% { transform: translate3d(-8%, -4%, 0) scale(1) rotate(0deg); }
-        50% { transform: translate3d(10%, 8%, 0) scale(1.12) rotate(8deg); }
-      }
-      @keyframes boot-aurora-b {
-        0%, 100% { transform: translate3d(6%, 4%, 0) scale(1.05) rotate(0deg); }
-        50% { transform: translate3d(-12%, -6%, 0) scale(1.18) rotate(-10deg); }
-      }
-      @keyframes boot-aurora-c {
-        0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.45; }
-        50% { transform: translate3d(-4%, 10%, 0) scale(1.2); opacity: 0.7; }
-      }
-      @keyframes boot-sheen {
-        0% { transform: translateX(-40%) rotate(12deg); opacity: 0; }
-        30% { opacity: 0.35; }
-        55% { opacity: 0.2; }
-        100% { transform: translateX(60%) rotate(12deg); opacity: 0; }
-      }
-      @keyframes boot-bloom {
-        0%, 100% { transform: scale(0.92); opacity: 0.45; }
-        50% { transform: scale(1.08); opacity: 0.75; }
-      }
-      @keyframes boot-lockup {
-        0%, 100% { transform: translateY(0) scale(1); }
-        50% { transform: translateY(-5px) scale(1.025); }
-      }
+      /* Critical boot loader — logo MP4 until React AppLoadingScreen takes over */
       #initial-loader {
-        --ks-blue: #1151ef;
-        --ks-ink: #060912;
         position: fixed;
         inset: 0;
         z-index: 10045;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--ks-ink);
+        background: #1251f0 !important;
         overflow: hidden;
         margin: 0;
-        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+        padding: 0;
       }
-      #initial-loader .boot-bg { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-      #initial-loader .boot-wash {
+      #initial-loader #boot-logo-video {
+        position: fixed;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+        left: -9999px;
+      }
+      #initial-loader #boot-logo-canvas {
         position: absolute;
-        inset: -20%;
-        background:
-          radial-gradient(ellipse 70% 55% at 50% 38%, rgba(17, 81, 239, 0.28) 0%, transparent 58%),
-          radial-gradient(ellipse 55% 45% at 78% 78%, rgba(17, 81, 239, 0.16) 0%, transparent 60%),
-          radial-gradient(ellipse 50% 40% at 18% 72%, rgba(56, 120, 255, 0.12) 0%, transparent 55%),
-          linear-gradient(180deg, #0a1224 0%, var(--ks-ink) 48%, #04060d 100%);
-      }
-      #initial-loader .boot-aurora {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(56px);
-        will-change: transform;
-      }
-      #initial-loader .boot-aurora--a {
-        width: min(88vw, 420px);
-        height: min(88vw, 420px);
-        top: -8%;
-        left: 18%;
-        background: radial-gradient(circle, rgba(17, 81, 239, 0.55) 0%, rgba(17, 81, 239, 0.08) 48%, transparent 70%);
-        animation: boot-aurora-a 11s ease-in-out infinite;
-      }
-      #initial-loader .boot-aurora--b {
-        width: min(75vw, 360px);
-        height: min(75vw, 360px);
-        right: -12%;
-        bottom: 8%;
-        background: radial-gradient(circle, rgba(56, 120, 255, 0.4) 0%, transparent 68%);
-        animation: boot-aurora-b 14s ease-in-out infinite;
-      }
-      #initial-loader .boot-aurora--c {
-        width: min(60vw, 280px);
-        height: min(60vw, 280px);
-        left: -8%;
-        bottom: 18%;
-        background: radial-gradient(circle, rgba(96, 156, 255, 0.28) 0%, transparent 70%);
-        animation: boot-aurora-c 9s ease-in-out infinite;
-      }
-      #initial-loader .boot-sheen {
-        position: absolute;
-        top: -30%;
-        left: 0;
-        width: 42%;
-        height: 160%;
-        background: linear-gradient(100deg, transparent 0%, rgba(255,255,255,0.03) 42%, rgba(147,197,253,0.1) 50%, rgba(255,255,255,0.03) 58%, transparent 100%);
-        animation: boot-sheen 7.5s ease-in-out infinite;
-      }
-      #initial-loader .boot-content {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 2rem;
-      }
-      #initial-loader .boot-mark {
-        position: relative;
-        width: min(20rem, 84vw);
-        min-height: 5.5rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 1.25rem 0.5rem;
-      }
-      #initial-loader .boot-bloom {
-        position: absolute;
-        inset: 0% 2%;
-        border-radius: 40%;
-        background: radial-gradient(circle, rgba(17, 81, 239, 0.5) 0%, rgba(17, 81, 239, 0.12) 42%, transparent 70%);
-        filter: blur(22px);
-        animation: boot-bloom 3.4s ease-in-out infinite;
-      }
-      #initial-loader .boot-lockup {
-        position: relative;
-        z-index: 1;
-        width: min(20rem, 84vw);
-        height: auto;
-        aspect-ratio: 3006 / 917;
-        object-fit: contain;
-        filter: drop-shadow(0 12px 28px rgba(17, 81, 239, 0.28));
-        animation: boot-lockup 3.2s ease-in-out infinite;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: #1251f0;
       }
       @media (prefers-reduced-motion: reduce) {
-        #initial-loader .boot-aurora,
-        #initial-loader .boot-sheen,
-        #initial-loader .boot-bloom,
-        #initial-loader .boot-lockup { animation: none !important; }
+        #initial-loader #boot-logo-video,
+        #initial-loader #boot-logo-canvas { display: none !important; }
       }
       /* Firebase OAuth relay iframes — keep off-screen if layout glitches */
       iframe[src*="/__/auth/"],
@@ -207,26 +110,137 @@
     </script>
     <div id="root">
       <div id="initial-loader" aria-label="Loading KnockScout" role="status">
-        <div class="boot-bg" aria-hidden="true">
-          <div class="boot-wash"></div>
-          <div class="boot-aurora boot-aurora--a"></div>
-          <div class="boot-aurora boot-aurora--b"></div>
-          <div class="boot-aurora boot-aurora--c"></div>
-          <div class="boot-sheen"></div>
-        </div>
-        <div class="boot-content">
-          <div class="boot-mark">
-            <div class="boot-bloom"></div>
-            <img src="/brand/lockup-variant-2.svg" alt="KnockScout" class="boot-lockup" width="320" height="98" />
-          </div>
-        </div>
+        <video
+          id="boot-logo-video"
+          class="boot-logo-video"
+          src="/brand/knockscout-LogoMark.mp4"
+          poster="/brand/knockscout-LogoMark-poster.png"
+          autoplay
+          muted
+          playsinline
+          webkit-playsinline
+          preload="auto"
+          aria-hidden="true"
+        ></video>
+        <canvas id="boot-logo-canvas" aria-hidden="true"></canvas>
       </div>
     </div>
     <script>
       window.__removeInitialLoader = function() {
+        if (typeof window.__stopBootLogoMirror === 'function') {
+          window.__stopBootLogoMirror();
+          window.__stopBootLogoMirror = null;
+        }
         var el = document.getElementById('initial-loader');
         if (el) el.remove();
       };
+      (function() {
+        var video = document.getElementById('boot-logo-video');
+        var canvas = document.getElementById('boot-logo-canvas');
+        if (!video || !canvas) return;
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          video.remove();
+          canvas.remove();
+          return;
+        }
+        // Draw to canvas so the blue plate matches CSS sRGB (#1251f0).
+        // Direct <video> painting is often brighter on wide-gamut displays.
+        var ctx = null;
+        try {
+          ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+        } catch (e) {
+          ctx = canvas.getContext('2d', { alpha: false });
+        }
+        if (!ctx) return;
+        var raf = 0;
+        var LOGO_SCALE = 1.875;
+        var EDGE_COVER_RATIO = 0.035;
+        var EDGE_COVER_MIN_PX = 3;
+        var plateFill = '#1251f0';
+        var probe = document.createElement('canvas');
+        probe.width = 48;
+        probe.height = 48;
+        var probeCtx = null;
+        try {
+          probeCtx = probe.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+        } catch (e) {
+          probeCtx = probe.getContext('2d', { alpha: false });
+        }
+        var fillPlate = function() {
+          ctx.fillStyle = plateFill;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        };
+        var syncSize = function() {
+          var dpr = Math.min(window.devicePixelRatio || 1, 2);
+          var cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
+          var cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
+          var w = Math.round(cssW * dpr);
+          var h = Math.round(cssH * dpr);
+          if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+            fillPlate();
+          }
+          return { cssW: cssW, cssH: cssH, dpr: dpr };
+        };
+        var paint = function() {
+          var size = syncSize();
+          fillPlate();
+          if (!(video.readyState >= 2 && video.videoWidth > 0) || !probeCtx) return;
+          // Offscreen sample — never paint black lead frames onto the splash.
+          probeCtx.drawImage(video, 0, 0, probe.width, probe.height);
+          var r = 0, g = 0, b = 0;
+          try {
+            var pix = probeCtx.getImageData(4, 4, 1, 1).data;
+            r = pix[0]; g = pix[1]; b = pix[2];
+          } catch (e) { return; }
+          if (r + g + b < 80) return;
+          plateFill = 'rgb(' + r + ',' + g + ',' + b + ')';
+          fillPlate();
+          var vw = video.videoWidth;
+          var vh = video.videoHeight;
+          var fit = Math.min(size.cssW / vw, size.cssH / vh) * LOGO_SCALE;
+          var dw = vw * fit * size.dpr;
+          var dh = vh * fit * size.dpr;
+          var dx = (canvas.width - dw) / 2;
+          var dy = (canvas.height - dh) / 2;
+          ctx.drawImage(video, dx, dy, dw, dh);
+          // Plate bands over top/bottom video edges (hide black scan lines).
+          var cover = Math.max(EDGE_COVER_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_RATIO));
+          ctx.fillStyle = plateFill;
+          ctx.fillRect(dx, dy, dw, cover);
+          ctx.fillRect(dx, dy + dh - cover, dw, cover);
+        };
+        syncSize();
+        fillPlate();
+        var draw = function() {
+          paint();
+          raf = requestAnimationFrame(draw);
+        };
+        draw();
+        window.addEventListener('resize', paint);
+        window.__stopBootLogoMirror = function() {
+          cancelAnimationFrame(raf);
+          window.removeEventListener('resize', paint);
+        };
+
+        // Muted autoplay is reliably allowed; unmute after play for device volume.
+        video.muted = true;
+        video.defaultMuted = true;
+        video.volume = 1;
+        var tryPlay = function() {
+          var p = video.play();
+          if (!p || typeof p.then !== 'function') return;
+          p.then(function() {
+            video.muted = false;
+            video.defaultMuted = false;
+            video.removeAttribute('muted');
+          }).catch(function() {});
+        };
+        tryPlay();
+        video.addEventListener('loadeddata', tryPlay, { once: true });
+        video.addEventListener('canplay', tryPlay, { once: true });
+      })();
     </script>
     <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate;"></div>
     <script type="module" src="/src/main.jsx"></script>
