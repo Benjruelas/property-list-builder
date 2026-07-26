@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 import {
   configureLogoVideoElement,
-  ensureLogoVideoPlaying,
+  beginLogoSplashPlayback,
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
@@ -83,7 +83,6 @@ function startCanvasMirror(video, canvas) {
 
     if (!(video.readyState >= 2 && video.videoWidth > 0) || !probeCtx) return
 
-    // Sample offscreen — never paint decoder black lead frames onto the splash.
     probeCtx.drawImage(video, 0, 0, probe.width, probe.height)
     let r = 0
     let g = 0
@@ -93,7 +92,6 @@ function startCanvasMirror(video, canvas) {
     } catch {
       return
     }
-    if (r + g + b < 80) return
 
     plateFill = `rgb(${r},${g},${b})`
     fillPlate()
@@ -224,12 +222,7 @@ export function AppLoadingScreen({
       if (!playCompletedRef.current) markCompleted()
     }, PLAY_FALLBACK_MS)
 
-    const wasPlaying = !video.paused && !video.ended
-    if (!wasPlaying) {
-      try { video.currentTime = 0 } catch { /* ignore */ }
-    }
-
-    void ensureLogoVideoPlaying(video, { resyncAudio: wasPlaying })
+    void beginLogoSplashPlayback(video)
 
     return () => {
       window.clearTimeout(fallbackTimer)

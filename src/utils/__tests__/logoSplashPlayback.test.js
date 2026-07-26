@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import {
-  SOUND_SYNC_RESTART_SEC,
-  syncLogoVideoAudio,
-} from '../logoSplashPlayback'
+import { beginLogoSplashPlayback } from '../logoSplashPlayback'
 
 describe('logoSplashPlayback', () => {
   /** @type {HTMLVideoElement} */
@@ -13,9 +10,10 @@ describe('logoSplashPlayback', () => {
       muted: true,
       defaultMuted: true,
       volume: 1,
-      paused: false,
+      paused: true,
       ended: false,
       currentTime: 0.5,
+      pause: vi.fn(),
       play: vi.fn().mockResolvedValue(undefined),
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
@@ -26,16 +24,11 @@ describe('logoSplashPlayback', () => {
     vi.restoreAllMocks()
   })
 
-  it('restarts from 0 when unmuting after muted playback advanced', async () => {
-    await syncLogoVideoAudio(video)
-    expect(video.muted).toBe(false)
+  it('always starts from 0 on one timeline', async () => {
+    await beginLogoSplashPlayback(video)
+    expect(video.pause).toHaveBeenCalled()
     expect(video.currentTime).toBe(0)
     expect(video.play).toHaveBeenCalled()
-  })
-
-  it('does not restart when still at the start of the clip', async () => {
-    video.currentTime = SOUND_SYNC_RESTART_SEC / 2
-    await syncLogoVideoAudio(video)
-    expect(video.currentTime).toBe(SOUND_SYNC_RESTART_SEC / 2)
+    expect(video.muted).toBe(false)
   })
 })

@@ -115,7 +115,6 @@
           class="boot-logo-video"
           src="/brand/knockscout-LogoMark.mp4"
           poster="/brand/knockscout-LogoMark-poster.png"
-          autoplay
           muted
           playsinline
           webkit-playsinline
@@ -191,7 +190,6 @@
             var pix = probeCtx.getImageData(4, 4, 1, 1).data;
             r = pix[0]; g = pix[1]; b = pix[2];
           } catch (e) { return; }
-          if (r + g + b < 80) return;
           plateFill = 'rgb(' + r + ',' + g + ',' + b + ')';
           fillPlate();
           var vw = video.videoWidth;
@@ -220,16 +218,22 @@
           window.removeEventListener('resize', paint);
         };
 
+        // Preload only — React starts the single synced play from t=0 (no boot timeline drift).
         video.muted = true;
         video.defaultMuted = true;
         video.volume = 1;
-        var tryPlay = function() {
-          var p = video.play();
-          if (p && typeof p.catch === 'function') p.catch(function() {});
+        video.preload = 'auto';
+        var primeFrame = function() {
+          try {
+            video.currentTime = 0;
+          } catch (e) { /* ignore */ }
+          try {
+            video.pause();
+          } catch (e) { /* ignore */ }
+          paint();
         };
-        tryPlay();
-        video.addEventListener('loadeddata', tryPlay, { once: true });
-        video.addEventListener('canplay', tryPlay, { once: true });
+        video.addEventListener('loadeddata', primeFrame, { once: true });
+        if (video.readyState >= 2) primeFrame();
       })();
     </script>
     <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate;"></div>

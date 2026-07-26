@@ -1,6 +1,3 @@
-/** If playback advanced this far while muted, restart with sound so A/V match the logo intro. */
-export const SOUND_SYNC_RESTART_SEC = 0.12
-
 /** @type {Promise<void> | null} */
 let playSetupInFlight = null
 
@@ -33,53 +30,48 @@ export function setVideoMuted(video, muted) {
 }
 
 /**
- * Muted play first, then unmute — required for autoplay policies on most browsers.
+ * One timeline: pause, seek 0, muted play, then unmute without seeking again.
  *
  * @param {HTMLVideoElement} video
  */
-async function playMutedThenUnmute(video) {
+export async function beginLogoSplashPlayback(video) {
+  configureLogoVideoElement(video)
+  installLogoGestureAudioUnlock(video)
+
+  try {
+    video.pause()
+  } catch {
+    /* ignore */
+  }
+
   setVideoMuted(video, true)
+  try {
+    video.currentTime = 0
+  } catch {
+    /* ignore */
+  }
+
   try {
     await video.play()
   } catch {
-    return false
+    return
   }
 
   setVideoMuted(video, false)
   video.volume = 1
-  try {
-    await video.play()
-    return true
-  } catch {
-    setVideoMuted(video, true)
+
+  if (video.paused) {
     try {
       await video.play()
     } catch {
-      /* gesture unlock */
-    }
-    return false
-  }
-}
-
-/**
- * @param {HTMLVideoElement} video
- * @param {{ forceFromStart?: boolean }} [options]
- */
-export async function syncLogoVideoAudio(video, { forceFromStart = false } = {}) {
-  const restart =
-    forceFromStart
-    || video.ended
-    || (!video.paused && video.currentTime > SOUND_SYNC_RESTART_SEC)
-
-  if (restart) {
-    try {
-      video.currentTime = 0
-    } catch {
-      /* ignore */
+      setVideoMuted(video, true)
+      try {
+        await video.play()
+      } catch {
+        /* gesture unlock */
+      }
     }
   }
-
-  await playMutedThenUnmute(video)
 }
 
 /**
@@ -87,12 +79,12 @@ export async function syncLogoVideoAudio(video, { forceFromStart = false } = {})
  */
 export function installLogoGestureAudioUnlock(video) {
   gestureUnlockVideo = video
-  if (gestureUnlockInstalled) return
+  if (gestureUnlockInstalled || typeof window === 'undefined') return
   gestureUnlockInstalled = true
 
   const unlock = () => {
     const el = gestureUnlockVideo
-    if (el) void syncLogoVideoAudio(el, { forceFromStart: true })
+    if (el) void beginLogoSplashPlayback(el)
   }
 
   window.addEventListener('pointerdown', unlock, { once: true, capture: true })
@@ -100,47 +92,21 @@ export function installLogoGestureAudioUnlock(video) {
   window.addEventListener('touchstart', unlock, { once: true, capture: true })
 }
 
-/**
- * @param {HTMLVideoElement} video
- * @param {{ resyncAudio?: boolean }} [options]
- */
-export async function ensureLogoVideoPlaying(video, { resyncAudio = false } = {}) {
+/** @deprecated alias — always starts the single synced timeline from 0. */
+export async function ensureLogoVideoPlaying(video) {
   if (playSetupInFlight) {
     await playSetupInFlight
     return
   }
-
-  playSetupInFlight = (async () => {
-    configureLogoVideoElement(video)
-    installLogoGestureAudioUnlock(video)
-
-    if (resyncAudio) {
-      await syncLogoVideoAudio(video)
-      return
-    }
-
-    if (video.paused || video.ended) {
-      setVideoMuted(video, true)
-      if (video.ended) {
-        try {
-          video.currentTime = 0
-        } catch {
-          /* ignore */
-        }
-      }
-      try {
-        await video.play()
-      } catch {
-        return
-      }
-    }
-
-    await playMutedThenUnmute(video)
-  })()
-
+  playSetupInFlight = beginLogoSplashPlayback(video)
   try {
     await playSetupInFlight
   } finally {
     playSetupInFlight = null
   }
+}
+
+/** @deprecated */
+export async function syncLogoVideoAudio(video) {
+  await beginLogoSplashPlayback(video)
 }
