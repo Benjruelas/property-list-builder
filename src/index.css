@@ -4790,6 +4790,19 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 .app-loading-screen--video {
   background: var(--ks-logo-blue);
   padding: 0; /* safe-area padding can create a false “seam” band */
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  min-height: var(--vw-height, 100dvh);
+}
+
+html:has(#initial-loader),
+html:has(.app-loading-screen--video),
+body:has(#initial-loader),
+body:has(.app-loading-screen--video) {
+  background: var(--ks-logo-blue, #1251f0) !important;
 }
 /* Cover FAB / action bar / menus that also portal into #modal-root */
 #modal-root .app-loading-screen {
@@ -4916,15 +4929,21 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   display: none;
 }
 .app-loading-screen__content--video {
-  position: absolute;
+  position: fixed;
   inset: 0;
   padding: 0;
   animation: none;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  min-height: var(--vw-height, 100dvh);
 }
 .app-loading-screen__video-slot {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: var(--ks-logo-blue, #1251f0);
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  min-height: var(--vw-height, 100dvh);
 }
 /* Hidden media element — frames are painted to canvas for sRGB-matched color. */
 .app-loading-screen__video-source {
@@ -4938,10 +4957,13 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 /* Full-bleed canvas — logo is drawn centered inside (no scaled box edge / hairline). */
 .app-loading-screen__video,
 #initial-loader #boot-logo-canvas {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  min-height: var(--vw-height, 100dvh);
   display: block;
   background: var(--ks-logo-blue, #1251f0);
 }
