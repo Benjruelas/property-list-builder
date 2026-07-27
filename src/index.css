@@ -290,6 +290,7 @@
     height: 100%;
     min-height: 100vh;
     min-height: var(--vw-height, 100vh);
+    background: #111;
     z-index: 0;
   }
 }
@@ -4801,7 +4802,9 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 html:has(#initial-loader),
 html:has(.app-loading-screen--video),
 body:has(#initial-loader),
-body:has(.app-loading-screen--video) {
+body:has(.app-loading-screen--video),
+html:has(#initial-loader) #root,
+html:has(.app-loading-screen--video) #root {
   background: var(--ks-logo-blue, #1251f0) !important;
 }
 /* Cover FAB / action bar / menus that also portal into #modal-root */
