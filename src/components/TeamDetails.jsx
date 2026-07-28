@@ -23,8 +23,19 @@ import {
 } from '@/utils/teams'
 import { TeamMemberFeaturesDialog } from './TeamMemberFeaturesDialog'
 import { TeamEmailBrandingSection } from './TeamEmailBrandingSection'
+import { LeadStatusesSettingsContent } from './settings/LeadStatusesSettingsSection'
+import { DealStatusesSettingsContent } from './settings/DealStatusesSettingsSection'
 
 const MEMBER_MENU_WIDTH = 200
+
+function TeamNestedSection({ title, children }) {
+  return (
+    <div className="rounded-lg border border-white/10 overflow-hidden bg-white/[0.02] mb-5">
+      <p className="px-3 py-2.5 text-sm font-medium border-b border-white/10">{title}</p>
+      <div className="px-3 py-3">{children}</div>
+    </div>
+  )
+}
 
 function getMemberMeta(m, team, currentUser) {
   const isSelf = m.uid === currentUser?.uid
@@ -42,7 +53,21 @@ function memberHasMenuActions(m, team, currentUser, { isAdmin, isCreator }) {
   return false
 }
 
-export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChange, pendingInvites = [] }) {
+export function TeamDetails({
+  team,
+  currentUser,
+  getToken,
+  onClose,
+  onTeamsChange,
+  pendingInvites = [],
+  teamMembership = null,
+  leadStatuses = [],
+  canEditLeadStatuses = false,
+  onSaveUserLeadStatuses,
+  dealStatuses = [],
+  canEditDealStatuses = false,
+  onSaveUserDealStatuses,
+}) {
   const [addEmail, setAddEmail] = useState('')
   const [adding, setAdding] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -324,6 +349,33 @@ export function TeamDetails({ team, currentUser, getToken, onClose, onTeamsChang
               onSaved={refresh}
               disabled={busy}
             />
+          )}
+
+          {teamMembership?.teamId === team.id && (
+            <>
+              <TeamNestedSection title="Lead statuses">
+                <LeadStatusesSettingsContent
+                  isOpen
+                  leadStatuses={leadStatuses}
+                  canEdit={canEditLeadStatuses}
+                  teamMembership={teamMembership}
+                  getToken={getToken}
+                  onSaveUserStatuses={onSaveUserLeadStatuses}
+                  onTeamsChange={onTeamsChange}
+                />
+              </TeamNestedSection>
+              <TeamNestedSection title="Deal statuses">
+                <DealStatusesSettingsContent
+                  isOpen
+                  dealStatuses={dealStatuses}
+                  canEdit={canEditDealStatuses}
+                  teamMembership={teamMembership}
+                  getToken={getToken}
+                  onSaveUserStatuses={onSaveUserDealStatuses}
+                  onTeamsChange={onTeamsChange}
+                />
+              </TeamNestedSection>
+            </>
           )}
 
           {isAdmin && (

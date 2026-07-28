@@ -515,7 +515,7 @@ All endpoints require `Authorization: Bearer <Firebase ID token>` unless noted. 
 | GET/POST/PATCH/DELETE | `/api/leads` | Leads CRUD + sharing (paginated) |
 | GET/POST/PATCH/DELETE | `/api/paths` | GPS paths CRUD + sharing |
 | GET/POST/PATCH/DELETE | `/api/pipelines` | Deal pipelines CRUD + collaboration (paginated) |
-| GET/POST/PATCH/DELETE | `/api/pipelines-tasks`, `/api/pipelines-team-tasks` | Deal/team task operations |
+| GET/POST/PATCH/DELETE | `/api/tasks` | Team task CRUD (assignments, lead/deal links) |
 | GET/POST/PATCH/DELETE | `/api/tasks` | Standalone tasks (paginated) |
 | GET/PATCH | `/api/user-data` | Per-user synced blob — versioned (`__version`/`__baseVersion`), delta PATCH |
 | GET/POST/PATCH/DELETE | `/api/quotes`, `/api/quote-templates` | Quotes + templates |

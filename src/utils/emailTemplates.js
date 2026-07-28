@@ -1,25 +1,24 @@
 /**
- * Utility functions for managing email templates
- * Templates are stored in localStorage
+ * Utility functions for managing email templates (parcel tag merge + legacy helpers).
+ * Saved outreach templates live on the server — see outreachTemplates.js.
  */
 
 import { splitOwnerName, composeFullName } from './ownerName'
+import { getCachedOutreachTemplates } from './outreachTemplates'
 
 const STORAGE_KEY = 'email_templates'
 
+try {
+  localStorage.removeItem(STORAGE_KEY)
+} catch {
+  /* legacy local templates dropped — use /api/outreach-templates when signed in */
+}
+
 /**
- * Get all email templates
+ * Get all email templates (server cache when signed in; empty until fetched).
  * @returns {Array} Array of template objects
  */
-export const getEmailTemplates = () => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch (error) {
-    console.error('Error getting email templates:', error)
-    return []
-  }
-}
+export const getEmailTemplates = () => getCachedOutreachTemplates('email')
 
 /**
  * Save templates array to localStorage

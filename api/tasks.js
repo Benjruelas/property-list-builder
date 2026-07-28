@@ -7,9 +7,39 @@ import { authenticate } from './_lib/auth.js'
 import { getAllTasks, saveAllTasks } from './_lib/taskStore.js'
 import { getAllTeams, fullTeamsIndex } from './_lib/teams.js'
 import { userHasTeamMembership } from './_lib/access.js'
-import { logTeamActivity, actorLabel } from './_lib/activityLog.js'
-import { taskVisibleToUser, canManageTask, sharedViewerMayPatch } from './_lib/taskAccess.js'
+import { logTeamActivity, actorLabel, dealActivityLabel } from './_lib/activityLog.js'
+import { taskVisibleToUser, canManageTask, canDeleteTask, sharedViewerMayPatch } from './_lib/taskAccess.js'
 import { paginateArray } from './_lib/pagination.js'
+import { getAllLeads } from './_lib/leadStore.js'
+import { getAllPipelines } from './_lib/pipelineStoreFull.js'
+
+function leadDisplayName(lead) {
+  if (!lead) return null
+  const parts = [lead.firstName, lead.lastName].filter(Boolean)
+  if (parts.length) return parts.join(' ')
+  const addr = (lead.address || lead.leadAddress || lead.properties?.SITUS_ADDR || '').trim()
+  return addr || null
+}
+
+/** Lead or deal label for assignment notifications (deal wins when linked). */
+async function taskAssignmentEntityLabel(task) {
+  if (!task) return null
+  if (task.dealId) {
+    const pipelines = await getAllPipelines()
+    for (const pipeline of pipelines) {
+      const deal = (pipeline.deals || []).find((d) => d.id === task.dealId)
+      if (deal) return dealActivityLabel(deal)
+    }
+  }
+  const leads = await getAllLeads()
+  let lead = null
+  if (task.leadId) lead = leads.find((l) => l.id === task.leadId)
+  if (!lead && task.parcelId) {
+    const key = String(task.parcelId)
+    lead = leads.find((l) => String(l.parcelId) === key || String(l.id) === key)
+  }
+  return leadDisplayName(lead)
+}
 
 function normalizeAssignedUids(body, existing, membership) {
   const raw = body.assignedUids !== undefined ? body.assignedUids : (existing?.assignedUids || [])
@@ -44,10 +74,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ tasks, teamId: membership?.id || null })
     }
 
-    if (!membership) {
-      return res.status(400).json({ error: 'Team membership required for server tasks' })
-    }
-
     if (method === 'POST') {
       const title = String(body.title || '').trim()
       if (!title) return res.status(400).json({ error: 'title is required' })
@@ -58,19 +84,21 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: e.message })
       }
       const now = new Date().toISOString()
+      const teamId = membership?.id || body.teamId || null
+      const visibility = body.visibility || (teamId ? 'team' : 'private')
       const task = {
-        id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        id: body.id && String(body.id).trim() ? String(body.id).trim() : `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         title,
         ownerId: user.uid,
         ownerEmail: user.email,
-        teamId: membership.id,
-        visibility: body.visibility || 'team',
+        teamId,
+        visibility,
         sharedMemberUids: [],
         assignedUids,
         scheduledAt: body.scheduledAt || null,
         scheduledEndAt: body.scheduledEndAt || null,
-        completed: false,
-        completedAt: null,
+        completed: body.completed === true,
+        completedAt: body.completed === true ? now : null,
         leadId: body.leadId || null,
         dealId: body.dealId || null,
         pipelineId: body.pipelineId || null,
@@ -82,26 +110,30 @@ export default async function handler(req, res) {
       all.push(task)
       await saveAllTasks(all)
 
-      const label = actorLabel(user)
-      await logTeamActivity({
-        teamIds: [membership.id],
-        actor: user,
-        type: 'task.created',
-        summary: `${label} created task "${title}"`,
-        entity: { kind: 'task', taskId: task.id },
-        nav: { type: 'task', taskId: task.id },
-        audience: 'resource_viewers',
-      })
+      if (membership) {
+        const label = actorLabel(user)
+        await logTeamActivity({
+          teamIds: [membership.id],
+          actor: user,
+          type: 'task.created',
+          summary: `${label} created task "${title}"`,
+          entity: { kind: 'task', taskId: task.id },
+          nav: { type: 'task', taskId: task.id },
+          audience: 'resource_viewers',
+        })
 
-      try {
-        const { notifyTaskAssigned } = await import('./_lib/pushUtils.js')
-        await notifyTaskAssigned(assignedUids.filter((uid) => uid !== user.uid), {
-          taskTitle: title,
-          taskId: task.id,
-          actorEmail: user.email,
-        }, teamsIndex)
-      } catch {
-        /* ignore */
+        try {
+          const { notifyTaskAssigned } = await import('./_lib/pushUtils.js')
+          const entityLabel = await taskAssignmentEntityLabel(task)
+          await notifyTaskAssigned(assignedUids.filter((uid) => uid !== user.uid), {
+            taskTitle: title,
+            taskId: task.id,
+            actorEmail: user.email,
+            entityLabel,
+          }, teamsIndex)
+        } catch {
+          /* ignore */
+        }
       }
 
       return res.status(201).json({ task })
@@ -138,10 +170,12 @@ export default async function handler(req, res) {
           if (newlyAssigned.length) {
             try {
               const { notifyTaskAssigned } = await import('./_lib/pushUtils.js')
+              const entityLabel = await taskAssignmentEntityLabel(task)
               await notifyTaskAssigned(newlyAssigned, {
                 taskTitle: task.title,
                 taskId: task.id,
                 actorEmail: user.email,
+                entityLabel,
               }, teamsIndex)
             } catch {
               /* ignore */
@@ -177,8 +211,12 @@ export default async function handler(req, res) {
       if (!taskId) return res.status(400).json({ error: 'taskId is required' })
       const idx = all.findIndex((t) => t.id === taskId)
       if (idx === -1) return res.status(404).json({ error: 'Task not found' })
-      if (all[idx].ownerId !== user.uid) {
-        return res.status(403).json({ error: 'Only the task creator can delete it' })
+      const task = all[idx]
+      if (!taskVisibleToUser(task, user, membership)) {
+        return res.status(403).json({ error: 'No access to this task' })
+      }
+      if (!canDeleteTask(task, user, membership)) {
+        return res.status(403).json({ error: 'You do not have permission to delete this task' })
       }
       all.splice(idx, 1)
       await saveAllTasks(all)

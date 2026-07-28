@@ -24,7 +24,7 @@ export function EntityTagPills({ entity, tagRegistry, type, className, onClick }
       } : undefined}
     >
       {tags.map((tag) => (
-        <TagChip key={tag.id} tag={tag} size="sm" />
+        <TagChip key={tag.id} tag={tag} variant="crmRow" />
       ))}
     </div>
   )

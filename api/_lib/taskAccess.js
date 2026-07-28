@@ -23,6 +23,11 @@ export function canManageTask(task, user, membership = null) {
   return false
 }
 
+/** Same as canManageTask — assignees and shared viewers may delete server tasks. */
+export function canDeleteTask(task, user, membership = null) {
+  return canManageTask(task, user, membership)
+}
+
 const MANAGER_ONLY_PATCH_KEYS = [
   'title',
   'scheduledAt',

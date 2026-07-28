@@ -30,17 +30,30 @@ const MENU_PREFETCH_KEY = {
   outreach: 'outreach',
 }
 
-/** Bar-primary items that only appear in the menu when they overflow off the action bar. */
-const BAR_OVERFLOW_ONLY = [
+function MenuSectionLabel({ children }) {
+  return (
+    <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+      {children}
+    </p>
+  )
+}
+
+const CRM_MENU = [
   { id: 'pipes', label: 'Pipes', Icon: PipeIcon, tour: 'menu-pipes' },
   { id: 'tasks', label: 'Tasks', Icon: ListTodo, tour: 'menu-tasks' },
   { id: 'schedule', label: 'Schedule', Icon: Calendar, tour: 'menu-schedule' },
   { id: 'leads', label: 'Leads', Icon: UserSearch, tour: 'menu-leads' },
   { id: 'deals', label: 'Deals', Icon: Briefcase, tour: 'menu-deals' },
+]
+
+const DOCUMENTS_MENU = [
   { id: 'quotes', label: 'Quotes', Icon: QuoteIcon, tour: 'menu-quotes' },
   { id: 'forms', label: 'Forms', Icon: ClipboardList, tour: 'menu-forms' },
   { id: 'reports', label: 'Reports', Icon: FileText, tour: 'menu-reports' },
 ]
+
+/** Bar-primary items that only appear in the menu when they overflow off the action bar. */
+const BAR_OVERFLOW_ONLY = [...CRM_MENU, ...DOCUMENTS_MENU]
 
 const TOOLS_MENU = [
   { id: 'lists', label: 'Lists', Icon: List, tour: 'menu-lists' },
@@ -122,15 +135,21 @@ export function ActionBarMenu({
   const overflowMenuItems = BAR_OVERFLOW_ONLY.filter(
     (item) => overflowSet.has(item.id) && !onBarSet.has(item.id)
   )
+  const overflowCrmItems = CRM_MENU.filter(
+    (item) => overflowSet.has(item.id) && !onBarSet.has(item.id)
+  )
+  const overflowDocItems = DOCUMENTS_MENU.filter(
+    (item) => overflowSet.has(item.id) && !onBarSet.has(item.id)
+  )
 
   const toolsMenuItems = TOOLS_MENU.filter((item) => !onBarSet.has(item.id))
 
   const showActivityInMenu = currentUser && !onBarSet.has('activity')
   const showOverflowSection = overflowMenuItems.length > 0
+  const showCrmOverflow = overflowCrmItems.length > 0
+  const showDocOverflow = overflowDocItems.length > 0
   const showToolsSection = toolsMenuItems.length > 0
   const showTopDivider = showActivityInMenu && (showOverflowSection || showToolsSection)
-  const showMiddleDivider = showOverflowSection && showToolsSection
-
   const run = (fn) => {
     onClose?.()
     fn?.()
@@ -166,7 +185,8 @@ export function ActionBarMenu({
 
         {showTopDivider && <MenuDivider />}
 
-        {overflowMenuItems.map(({ id, label, Icon, tour }) => (
+        {showCrmOverflow && <MenuSectionLabel>CRM</MenuSectionLabel>}
+        {overflowCrmItems.map(({ id, label, Icon, tour }) => (
           <MenuButton
             key={id}
             tour={tour}
@@ -180,7 +200,29 @@ export function ActionBarMenu({
           />
         ))}
 
-        {showMiddleDivider && <MenuDivider />}
+        {showDocOverflow && (
+          <>
+            {showCrmOverflow && <MenuDivider />}
+            <MenuSectionLabel>Documents</MenuSectionLabel>
+          </>
+        )}
+        {overflowDocItems.map(({ id, label, Icon, tour }) => (
+          <MenuButton
+            key={id}
+            tour={tour}
+            Icon={Icon}
+            label={label}
+            onClick={() => run(handlers[id])}
+            onPointerEnter={() => {
+              const key = MENU_PREFETCH_KEY[id]
+              if (key) prefetchPanel(key)
+            }}
+          />
+        ))}
+
+        {(showCrmOverflow || showDocOverflow) && showToolsSection && <MenuDivider />}
+
+        {showToolsSection && <MenuSectionLabel>Tools</MenuSectionLabel>}
 
         {toolsMenuItems.map(({ id, label, Icon, tour }) => (
           <MenuButton

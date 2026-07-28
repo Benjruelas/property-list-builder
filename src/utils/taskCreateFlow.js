@@ -3,7 +3,6 @@
  */
 
 import { findDealInPipelines } from './deals'
-import { createTeamTask } from './tasks'
 import { leadTaskKey } from './leadTasks'
 
 /** Find a lead by parcel id or lead id stored on a task. */
@@ -89,31 +88,9 @@ export function normalizeServerTask(task) {
   }
 }
 
-/** Create a server-backed team task when assignees are selected. */
-export async function createServerAssignedTask(getToken, {
-  title,
-  scheduledAt = null,
-  scheduledEndAt = null,
-  assignedUids = [],
-  leadId = null,
-  dealId = null,
-  deal = null,
-  leads = [],
-  pipelines = [],
-  pipelineId = null,
-  notes = null,
-}) {
-  if (!getToken || !assignedUids?.length) return null
-  const ctx = resolveTaskContext({ leadId, dealId, deal, leads, pipelines })
-  return createTeamTask(getToken, {
-    title,
-    assignedUids,
-    leadId: ctx.leadId,
-    dealId: ctx.dealId,
-    pipelineId: pipelineId || ctx.pipelineId,
-    parcelId: ctx.parcelId,
-    scheduledAt,
-    scheduledEndAt,
-    notes,
-  })
+/** Create a server-backed task (with or without assignees). */
+export async function createServerAssignedTask(getToken, fields) {
+  if (!getToken) throw new Error('Sign in to create tasks')
+  const { createServerTask } = await import('./serverTaskOps')
+  return createServerTask(getToken, fields)
 }

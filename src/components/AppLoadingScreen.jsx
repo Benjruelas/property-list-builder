@@ -4,6 +4,7 @@ import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 import {
   configureLogoVideoElement,
   beginLogoSplashPlayback,
+  getLogoSplashScale,
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
@@ -26,8 +27,7 @@ function prefersReducedMotion() {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** Logo size vs viewport-fitted contain (1 = fit). */
-const LOGO_SCALE = 1.875
+/** Logo size vs viewport-fitted contain — see getLogoSplashScale(). */
 /** Cover this fraction of the drawn video height at top + bottom (hides edge black lines). */
 const EDGE_COVER_RATIO = 0.035
 const EDGE_COVER_MIN_PX = 3
@@ -36,7 +36,7 @@ const EDGE_COVER_TOP_RATIO = 0.12
 const EDGE_COVER_TOP_MIN_PX = 14
 
 /**
- * Full-bleed canvas: fill plate blue, draw logo contained & centered at LOGO_SCALE.
+ * Full-bleed canvas: fill plate blue, draw logo contained & centered at getLogoSplashScale().
  * Plate fill is sampled from the rendered video so edges don’t show a hairline.
  */
 function startCanvasMirror(video, canvas) {
@@ -101,7 +101,7 @@ function startCanvasMirror(video, canvas) {
 
     const vw = video.videoWidth
     const vh = video.videoHeight
-    const fit = Math.min(cssW / vw, cssH / vh) * LOGO_SCALE
+    const fit = Math.min(cssW / vw, cssH / vh) * getLogoSplashScale()
     const dw = vw * fit * dpr
     const dh = vh * fit * dpr
     const dx = (canvas.width - dw) / 2

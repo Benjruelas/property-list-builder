@@ -147,6 +147,7 @@ function prefAllows(kind, prefs) {
     formSubmitted: 'formSubmitted',
     teamAdded: 'teamAdded',
     taskDeadline: 'taskDeadline',
+    taskAssigned: 'taskDeadline',
   }
   const key = map[kind]
   if (!key) return true
@@ -650,9 +651,16 @@ function emailForUid(uid, teamsIndex) {
   return null
 }
 
+function formatTaskAssignedMessage(entityLabel, taskTitle) {
+  const name = clip(entityLabel, 72) || 'Task'
+  const taskPart = clip(taskTitle, 96) || 'Untitled task'
+  return `${name}: ${taskPart}`
+}
+
 /** Notify teammates when a task is assigned to them (by uid). */
-export async function notifyTaskAssigned(assignedUids, { taskTitle, taskId, actorEmail }, teamsIndex = {}) {
-  const title = 'Task assigned to you'
+export async function notifyTaskAssigned(assignedUids, { taskTitle, taskId, actorEmail, entityLabel }, teamsIndex = {}) {
+  const title = 'A task has been assigned to you'
+  const body = formatTaskAssignedMessage(entityLabel, taskTitle)
   for (const uid of assignedUids || []) {
     const email = emailForUid(uid, teamsIndex)
     if (!email) continue
@@ -660,11 +668,11 @@ export async function notifyTaskAssigned(assignedUids, { taskTitle, taskId, acto
       email,
       {
         title,
-        body: '',
+        body,
         tag: `task-assign-${taskId || Date.now()}-${uid}`,
-        data: { type: 'taskAssigned', taskId, taskTitle: clip(taskTitle) || undefined },
+        data: { type: 'taskAssigned', taskId, taskTitle: clip(taskTitle) || undefined, entityLabel: clip(entityLabel) || undefined },
       },
-      'taskDeadline',
+      'taskAssigned',
       { email: actorEmail }
     )
   }

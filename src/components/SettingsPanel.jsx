@@ -12,11 +12,8 @@ import { DEFAULT_SETTINGS } from '../utils/settings'
 import { saveUserData, readLocalBlob } from '../utils/userDataSync'
 import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotifications'
 import { cn } from '@/lib/utils'
-import { getSkipTracedList, subscribeSkipTracedList } from '../utils/skipTracedList'
 import { useAuth } from '@/contexts/AuthContext'
 import { TeamSettingsSection } from './TeamSettingsSection'
-import { resolveLeadStatuses, canEditLeadStatuses } from '../utils/leadStatuses'
-import { resolveDealStatuses, canEditDealStatuses } from '../utils/dealStatuses'
 
 const MAP_STYLES = [
   { value: 'satellite', label: 'Satellite' },
@@ -250,25 +247,13 @@ export function SettingsPanel({
   const [savingName, setSavingName] = useState(false)
   const showDevPersonaSwitcher = import.meta.env.DEV && typeof switchDevPersona === 'function'
   const [syncing, setSyncing] = useState(false)
-  const [skipTracedList, setSkipTracedList] = useState(null)
-  const [expandedSkipTracedLists, setExpandedSkipTracedLists] = useState(new Set())
 
   useEffect(() => {
     if (isOpen) {
       const s = settings || DEFAULT_SETTINGS
       setDisplayNameDraft((s.profile?.displayName || currentUser?.displayName || '').trim())
-      setSkipTracedList(getSkipTracedList())
-    } else {
-      setSkipTracedList(null)
-      setExpandedSkipTracedLists(new Set())
     }
   }, [isOpen, settings, currentUser?.displayName])
-
-  useEffect(() => {
-    if (!isOpen) return undefined
-    // Event-driven updates (replaces 2s polling while the panel is open).
-    return subscribeSkipTracedList(setSkipTracedList)
-  }, [isOpen])
 
   const update = useCallback((partial) => {
     if (onSettingsChange) onSettingsChange(partial)
@@ -443,12 +428,6 @@ export function SettingsPanel({
               onOpenTeamDetail={onOpenTeamDetail}
               defaultOpen={settingsTeamSectionOpen}
               settingsPanelOpen={isOpen}
-              leadStatuses={resolveLeadStatuses({ settings: s, teams, teamMembership })}
-              canEditLeadStatuses={canEditLeadStatuses(teamMembership)}
-              onSaveUserStatuses={(normalized) => update({ leadStatuses: normalized })}
-              dealStatuses={resolveDealStatuses({ settings: s, teams, teamMembership })}
-              canEditDealStatuses={canEditDealStatuses(teamMembership)}
-              onSaveUserDealStatuses={(normalized) => update({ dealStatuses: normalized })}
             />
           )}
 
@@ -544,134 +523,6 @@ export function SettingsPanel({
             <SettingRow label="Distance Units" stacked>
               <SegmentedControl value={s.distanceUnit} onChange={v => update({ distanceUnit: v })} options={UNIT_OPTIONS} />
             </SettingRow>
-          </Section>
-
-          {/* ---- Skip Traced Parcels ---- */}
-          <Section panelOpen={isOpen} icon={Phone} title="Skip Traced Parcels" dataTour="settings-skip-traced-section">
-            {(!skipTracedList || (skipTracedList.parcels.length === 0 && skipTracedList.listItems.length === 0)) ? (
-              <p className="text-xs opacity-50 -mt-1">No skip traced parcels yet.</p>
-            ) : (
-              <div className="space-y-3 -mt-1">
-                {skipTracedList.parcels.length > 0 && (
-                  <div className="space-y-1.5">
-                    <h4 className="text-xs font-semibold opacity-60 uppercase tracking-wide">Individual Parcels ({skipTracedList.parcels.length})</h4>
-                    {skipTracedList.parcels.map((parcel, index) => {
-                      const parcelId = parcel.id || parcel.properties?.PROP_ID || `parcel-${index}`
-                      const addr = parcel.properties?.SITUS_ADDR || parcel.properties?.SITE_ADDR || parcel.properties?.ADDRESS || parcel.address || 'No address'
-                      return (
-                        <button
-                          key={parcelId}
-                          type="button"
-                          className="w-full text-left p-2.5 rounded-lg border border-white/15 hover:border-white/30 hover:bg-white/5 transition-colors"
-                          onClick={() => {
-                            if (!onOpenParcelDetails) return
-                            onClose?.()
-                            onOpenParcelDetails({
-                              id: parcelId,
-                              properties: parcel.properties || parcel,
-                              address: addr,
-                              lat: parcel.lat || parcel.properties?.LATITUDE ? parseFloat(parcel.lat || parcel.properties?.LATITUDE) : null,
-                              lng: parcel.lng || parcel.properties?.LONGITUDE ? parseFloat(parcel.lng || parcel.properties?.LONGITUDE) : null,
-                            })
-                          }}
-                        >
-                          <div className="text-sm font-medium truncate">{addr}</div>
-                          {parcel.skipTracedAt && <div className="text-xs opacity-50">{new Date(parcel.skipTracedAt).toLocaleDateString()}</div>}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-                {skipTracedList.listItems.length > 0 && (
-                  <div className="space-y-1.5">
-                    <h4 className="text-xs font-semibold opacity-60 uppercase tracking-wide">Skip Traced Lists ({skipTracedList.listItems.length})</h4>
-                    {skipTracedList.listItems.map((listItem) => {
-                      const isExpanded = expandedSkipTracedLists.has(listItem.listId)
-                      return (
-                        <div key={listItem.listId} className="rounded-lg border border-white/15">
-                          <button
-                            type="button"
-                            className="w-full flex items-center gap-2 p-2.5 text-left hover:bg-white/5 transition-colors rounded-lg"
-                            onClick={() => setExpandedSkipTracedLists(prev => {
-                              const next = new Set(prev)
-                              next.has(listItem.listId) ? next.delete(listItem.listId) : next.add(listItem.listId)
-                              return next
-                            })}
-                          >
-                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 opacity-60 flex-shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 opacity-60 flex-shrink-0" />}
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{listItem.listName}</div>
-                              <div className="text-xs opacity-50">{listItem.parcels.length} parcel{listItem.parcels.length !== 1 ? 's' : ''}{listItem.skipTracedAt ? ` • ${new Date(listItem.skipTracedAt).toLocaleDateString()}` : ''}</div>
-                            </div>
-                          </button>
-                          {isExpanded && (
-                            <div className="px-2.5 pb-2.5 pt-1 space-y-1 border-t border-white/10">
-                              {listItem.parcels.map((parcel, idx) => {
-                                const pid = parcel.id || parcel.properties?.PROP_ID || `p-${idx}`
-                                const addr = parcel.properties?.SITUS_ADDR || parcel.properties?.SITE_ADDR || parcel.properties?.ADDRESS || parcel.address || 'No address'
-                                return (
-                                  <button
-                                    key={pid}
-                                    type="button"
-                                    className="w-full text-left p-2 rounded border border-white/10 hover:border-white/25 hover:bg-white/5 transition-colors text-sm"
-                                    onClick={() => {
-                                      if (!onOpenParcelDetails) return
-                                      onClose?.()
-                                      onOpenParcelDetails({
-                                        id: pid,
-                                        properties: parcel.properties || parcel,
-                                        address: addr,
-                                        lat: parcel.lat || parcel.properties?.LATITUDE ? parseFloat(parcel.lat || parcel.properties?.LATITUDE) : null,
-                                        lng: parcel.lng || parcel.properties?.LONGITUDE ? parseFloat(parcel.lng || parcel.properties?.LONGITUDE) : null,
-                                      })
-                                    }}
-                                  >
-                                    <div className="font-medium truncate">{addr}</div>
-                                    {parcel.skipTracedAt && <div className="text-xs opacity-50">{new Date(parcel.skipTracedAt).toLocaleDateString()}</div>}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </Section>
-
-          {/* ---- Email & Export ---- */}
-          <Section panelOpen={isOpen} icon={Mail} title="Email & Export">
-            <SettingRow label="Email Test Mode" description="Route all emails to the address below instead of real recipients">
-              <Toggle checked={s.emailTestMode} onChange={v => update({ emailTestMode: v })} />
-            </SettingRow>
-            <div>
-              <label className="block text-sm font-medium mb-1">Test Email Address</label>
-              <p className="text-xs opacity-50 mb-1.5">Used when test mode is on, or for CSV exports</p>
-              <input
-                type="email"
-                value={s.defaultEmail}
-                onChange={e => update({ defaultEmail: e.target.value })}
-                placeholder="your@email.com"
-                className="w-full text-sm rounded-lg px-3 py-2"
-              />
-            </div>
-            <SettingRow label="Email Signature" description="Append a signature to the end of all outgoing emails">
-              <Toggle checked={s.emailSignatureEnabled} onChange={v => update({ emailSignatureEnabled: v })} />
-            </SettingRow>
-            {s.emailSignatureEnabled && (
-              <div>
-                <textarea
-                  value={s.emailSignature}
-                  onChange={e => update({ emailSignature: e.target.value })}
-                  placeholder="e.g. Best regards,&#10;John Doe&#10;(555) 123-4567"
-                  className="w-full text-sm rounded-lg px-3 py-2 min-h-[80px] resize-y"
-                  rows={3}
-                />
-              </div>
-            )}
           </Section>
 
           {/* ---- Notifications ---- */}

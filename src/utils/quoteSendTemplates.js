@@ -3,6 +3,7 @@
  */
 
 import { formatQuoteMoney } from './quoteMath'
+import { replaceMustacheTags } from './sendTemplateTags'
 
 export const QUOTE_SEND_TAGS = [
   { tag: '{{clientName}}', label: 'Client name' },
@@ -35,7 +36,7 @@ export const DEFAULT_QUOTE_TEXT_TEMPLATE = {
 export function replaceQuoteTags(text, data = {}) {
   if (!text) return ''
   const senderName = data.senderName || data.senderEmail?.split('@')[0] || 'Your rep'
-  const map = {
+  return replaceMustacheTags(text, {
     clientName: data.clientName || 'there',
     quoteTitle: data.quoteTitle || 'your quote',
     quoteTotal: data.quoteTotal != null ? formatQuoteMoney(data.quoteTotal) : '',
@@ -43,8 +44,7 @@ export function replaceQuoteTags(text, data = {}) {
     senderName,
     validUntil: data.validUntil || '',
     companyName: data.companyName || 'KnockScout',
-  }
-  return String(text).replace(/\{\{(\w+)\}\}/g, (_, key) => map[key] ?? '')
+  })
 }
 
 export function getQuoteSendTemplatesFromSettings(appSettings) {

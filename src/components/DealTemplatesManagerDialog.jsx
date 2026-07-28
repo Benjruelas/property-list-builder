@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react'
 import { Briefcase, MoreVertical, Plus } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
-import { getDealTemplates, deleteDealTemplate, dealTemplateSummary } from '@/utils/dealTemplates'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
-import { showToast } from './ui/toast'
+import {
+  getDealTemplates,
+  fetchDealTemplates,
+  deleteDealTemplateApi,
+  dealTemplateSummary,
+} from '@/utils/dealTemplates'
 import { showConfirm } from './ui/confirm-dialog'
+import { showToast } from './ui/toast'
 import {
   DealTemplatePanelShell,
   DealTemplatePanelScroll,
@@ -20,25 +24,36 @@ export function DealTemplatesManagerDialog({
   onOpenChange,
   onCreateTemplate,
   onEditTemplate,
+  getToken,
   nestedOverlay = true,
   refreshKey = 0,
 }) {
-  const { scheduleSync } = useUserDataSync()
   const [templates, setTemplates] = useState([])
   const { openId, menuAnchor, openMenu, closeMenu } = useDealTemplateRowMenu(open)
 
   const reload = () => setTemplates(getDealTemplates())
 
   useEffect(() => {
-    if (open) reload()
-  }, [open, refreshKey])
+    if (!open) return
+    if (!getToken) {
+      reload()
+      return
+    }
+    fetchDealTemplates(getToken)
+      .then(setTemplates)
+      .catch(() => reload())
+  }, [open, refreshKey, getToken])
 
   const handleDelete = async (id) => {
     if (!await showConfirm('Delete this deal template?', 'Delete template')) return
-    deleteDealTemplate(id)
-    scheduleSync()
-    reload()
-    showToast('Template deleted', 'success')
+    try {
+      if (getToken) await deleteDealTemplateApi(getToken, id)
+      else setTemplates((prev) => prev.filter((t) => t.id !== id))
+      reload()
+      showToast('Template deleted', 'success')
+    } catch (err) {
+      showToast(err.message || 'Could not delete template', 'error')
+    }
   }
 
   const activeTemplate = openId ? templates.find((t) => t.id === openId) : null

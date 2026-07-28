@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Users2, Shield, Mail, Check, X, ChevronDown, ChevronRight, Tag } from 'lucide-react'
+import { Plus, Users2, Shield, Mail, Check, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { showToast } from './ui/toast'
@@ -9,29 +9,9 @@ import {
   acceptTeamInvite,
   declineTeamInvite,
 } from '@/utils/teams'
-import { LeadStatusesSettingsContent } from './settings/LeadStatusesSettingsSection'
-import { DealStatusesSettingsContent } from './settings/DealStatusesSettingsSection'
 
 const TEAM_LIST_ITEM_CLASS =
   'teams-panel-list-item map-panel-list-item w-full flex flex-col items-stretch p-3 rounded-lg transition-all cursor-pointer text-left border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98]'
-
-function SettingsNestedSection({ icon: Icon, title, children, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="rounded-lg border border-white/10 overflow-hidden bg-white/[0.02]">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-white/5 transition-colors"
-      >
-        <Icon className="h-4 w-4 flex-shrink-0 opacity-70" />
-        <span className="flex-1 text-left">{title}</span>
-        {open ? <ChevronDown className="h-4 w-4 opacity-50" /> : <ChevronRight className="h-4 w-4 opacity-50" />}
-      </button>
-      {open && <div className="px-3 pb-3 pt-1 space-y-3 border-t border-white/10">{children}</div>}
-    </div>
-  )
-}
 
 function TeamInvitesBanner({ invites, inviteBusy, onAccept, onDecline }) {
   if (!invites.length) return null
@@ -73,12 +53,6 @@ export function TeamSettingsSection({
   onOpenTeamDetail,
   defaultOpen = false,
   settingsPanelOpen = false,
-  leadStatuses = [],
-  canEditLeadStatuses = false,
-  onSaveUserStatuses,
-  dealStatuses = [],
-  canEditDealStatuses = false,
-  onSaveUserDealStatuses,
 }) {
   const isTeamAdmin = teamMembership?.role === 'admin'
   const [open, setOpen] = useState(defaultOpen)
@@ -243,29 +217,6 @@ export function TeamSettingsSection({
             </div>
           ))}
 
-          <SettingsNestedSection icon={Tag} title="Lead statuses">
-            <LeadStatusesSettingsContent
-              isOpen={settingsPanelOpen}
-              leadStatuses={leadStatuses}
-              canEdit={canEditLeadStatuses}
-              teamMembership={teamMembership}
-              getToken={getToken}
-              onSaveUserStatuses={onSaveUserStatuses}
-              onTeamsChange={onTeamsChange}
-            />
-          </SettingsNestedSection>
-
-          <SettingsNestedSection icon={Tag} title="Deal statuses">
-            <DealStatusesSettingsContent
-              isOpen={settingsPanelOpen}
-              dealStatuses={dealStatuses}
-              canEdit={canEditDealStatuses}
-              teamMembership={teamMembership}
-              getToken={getToken}
-              onSaveUserStatuses={onSaveUserDealStatuses}
-              onTeamsChange={onTeamsChange}
-            />
-          </SettingsNestedSection>
         </div>
       )}
     </div>

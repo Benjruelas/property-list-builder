@@ -1,18 +1,12 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NewTaskDialog } from './NewTaskDialog'
-import { ConvertToLeadPipelineDialog } from './ConvertToLeadPipelineDialog'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
+import { MoveDealDialog } from './MoveDealDialog'
 import { showToast } from './ui/toast'
-import { addTask } from '@/utils/leadTasks'
-import { addPipelineTask, pipelinesContainingParcel } from '@/utils/pipelineTasks'
-import { addTeamTask } from '@/utils/teamTasks'
-import {
-  getAllTeamMembers,
-  resolveTeamTaskLeadId,
-  shouldStoreAsTeamTask,
-} from '@/utils/teamTaskUtils'
+import { pipelinesContainingParcel } from '@/utils/pipelineTasks'
+import { getAllTeamMembers } from '@/utils/teamTaskUtils'
 import { flattenDealsFromPipelines } from '@/utils/deals'
-import { createServerAssignedTask, resolveTaskContext } from '@/utils/taskCreateFlow'
+import { resolveTaskContext } from '@/utils/taskCreateFlow'
+import { createServerTask } from '@/utils/serverTaskOps'
 
 export function CreateTaskPanel({
   open,
@@ -27,9 +21,15 @@ export function CreateTaskPanel({
   onCreated,
   onCreateLead,
 }) {
-  const { scheduleSync } = useUserDataSync()
   const [pipePickerState, setPipePickerState] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const apiMode = pipelines.length > 0
+
+  const resetSaving = useCallback(() => {
+    savingRef.current = false
+    setSaving(false)
+  }, [])
 
   const allDeals = useMemo(() => {
     const fromPipelines = flattenDealsFromPipelines(pipelines)
@@ -47,106 +47,32 @@ export function CreateTaskPanel({
     onOpenChange?.(false)
   }, [onOpenChange])
 
+  useEffect(() => {
+    if (!open) resetSaving()
+  }, [open, resetSaving])
+
   const finish = useCallback(() => {
     close()
     onCreated?.()
   }, [close, onCreated])
 
-  const finalizeTaskCreate = useCallback(async ({
-    pipelineId,
-    parcelId,
-    dealId,
-    title,
-    scheduledAt,
-    scheduledEndAt,
-    assignedUids = [],
-    leadId = null,
-    deal = null,
-    notes = null,
-  }) => {
-    if (assignedUids.length > 0 && getToken) {
-      try {
-        await createServerAssignedTask(getToken, {
-          title,
-          scheduledAt,
-          scheduledEndAt,
-          assignedUids,
-          leadId,
-          dealId,
-          deal,
-          leads,
-          pipelines,
-          pipelineId,
-          notes,
-        })
-        showToast('Task added', 'success')
-        finish()
-      } catch (error) {
-        showToast(error.message || 'Could not add task', 'error')
-      }
+  const finalizeTaskCreate = useCallback(async (payload) => {
+    if (savingRef.current) return
+    if (!getToken) {
+      showToast('Sign in to create tasks', 'error')
       return
     }
-
-    if (pipelineId) {
-      const pipeline = pipelines.find((item) => item.id === pipelineId)
-      const resolvedLeadId = resolveTeamTaskLeadId(pipeline, {
-        parcelId,
-        dealId,
-        deals: pipeline?.deals || [],
-        displayLeads: leads,
-      })
-      if (shouldStoreAsTeamTask(pipeline, { assignedUids, leadId: resolvedLeadId })) {
-        try {
-          await addTeamTask(getToken, pipelineId, resolvedLeadId, {
-            title,
-            dueAt: scheduledAt,
-            assignedUids,
-            dealId: dealId || null,
-          })
-          await onPipelinesChange?.()
-          showToast('Task added', 'success')
-          finish()
-        } catch (error) {
-          showToast(error.message || 'Could not add task', 'error')
-        }
-        return
-      }
-      if (assignedUids.length > 0 && !resolvedLeadId) {
-        showToast('Could not resolve a lead for this pipe task', 'error')
-        return
-      }
-      try {
-        await addPipelineTask(getToken, pipelineId, {
-          title,
-          parcelId: parcelId || null,
-          dealId: dealId || null,
-          scheduledAt,
-          scheduledEndAt,
-          notes,
-        })
-        await onPipelinesChange?.()
-        showToast('Task added', 'success')
-        finish()
-      } catch (error) {
-        showToast(error.message || 'Could not add task', 'error')
-      }
-      return
+    savingRef.current = true
+    setSaving(true)
+    try {
+      await createServerTask(getToken, { ...payload, leads, pipelines })
+      showToast('Task added', 'success')
+      finish()
+    } catch (error) {
+      showToast(error.message || 'Could not add task', 'error')
+      resetSaving()
     }
-
-    addTask({
-      pipelineId: null,
-      parcelId: parcelId || null,
-      dealId: dealId || null,
-      leadId: leadId || null,
-      title,
-      scheduledAt,
-      scheduledEndAt,
-      notes,
-    })
-    scheduleSync()
-    showToast('Task added', 'success')
-    finish()
-  }, [finish, getToken, leads, onPipelinesChange, pipelines, scheduleSync])
+  }, [finish, getToken, leads, pipelines, resetSaving])
 
   const handleCreateTask = useCallback(({
     title,
@@ -189,12 +115,12 @@ export function CreateTaskPanel({
       notes,
     }
 
-    if (assignedUids.length > 0) {
-      if (!getToken) {
-        showToast('Sign in to assign tasks to teammates', 'error')
-        return
-      }
-      void finalizeTaskCreate({ ...payload, pipelineId: context.pipelineId })
+    if (assignedUids.length > 0 && !getToken) {
+      showToast('Sign in to assign tasks to teammates', 'error')
+      return
+    }
+    if (!getToken) {
+      showToast('Sign in to create tasks', 'error')
       return
     }
     if (context.dealId && apiMode && context.pipelineId) {
@@ -242,11 +168,12 @@ export function CreateTaskPanel({
         teamMembers={teamMembers}
         onSubmit={handleCreateTask}
         onCreateLead={onCreateLead}
+        saving={saving}
         nestedOverlay
         topLayer
       />
 
-      <ConvertToLeadPipelineDialog
+      <MoveDealDialog
         open={!!pipePickerState?.open}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setPipePickerState(null)

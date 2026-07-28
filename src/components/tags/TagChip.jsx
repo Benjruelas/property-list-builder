@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { CRM_LIST_ROW_BADGE_SIZE } from '@/components/crm/crmListBadgeStyles'
 
 export function TagChip({
   tag,
@@ -30,9 +31,16 @@ export function TagChip({
               isSmall ? 'min-h-[30px] px-2.5 py-1 text-[11px]' : 'min-h-[34px] px-3 py-1.5 text-xs',
               selected && 'panel-filter-option--status-active'
             )
-          : cn(
+          : variant === 'crmRow'
+            ? cn(
+                'tag-chip--pill tag-chip--crm-row rounded-md border',
+                CRM_LIST_ROW_BADGE_SIZE,
+                interactive && 'cursor-pointer transition-opacity hover:opacity-90',
+                selected && 'ring-1 ring-offset-1 ring-offset-transparent'
+              )
+            : cn(
               'tag-chip--pill rounded-full',
-              isSmall ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs',
+              isSmall ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
               interactive && 'cursor-pointer transition-opacity hover:opacity-90',
               selected && 'ring-1 ring-offset-1 ring-offset-transparent'
             ),

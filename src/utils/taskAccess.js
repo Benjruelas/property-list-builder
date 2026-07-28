@@ -12,7 +12,6 @@ export function canManageServerTask(task, user, teamMembership = null) {
   return false
 }
 
-export function canDeleteServerTask(task, user) {
-  if (!task || task.__source !== 'server' || !user?.uid) return false
-  return task.ownerId === user.uid
+export function canDeleteServerTask(task, user, teamMembership = null) {
+  return canManageServerTask(task, user, teamMembership)
 }

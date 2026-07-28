@@ -3,53 +3,52 @@
  */
 
 import { getSettings, updateSettings } from './settings'
+import {
+  migrateLegacyReportTemplateText,
+  replaceReportSendTags,
+  REPORT_SEND_TAGS,
+} from './sendTemplateTags'
 
-export const REPORT_SEND_TAGS = [
-  '{ClientName}',
-  '{ReportTitle}',
-  '{ReportLink}',
-  '{SenderName}',
-  '{CompanyName}',
-  '{LeadAddress}',
-]
+export { REPORT_SEND_TAGS }
 
-export const DEFAULT_REPORT_EMAIL_SUBJECT = 'Photo report: {ReportTitle}'
-export const DEFAULT_REPORT_EMAIL_BODY = `Hi {ClientName},
+export const DEFAULT_REPORT_EMAIL_SUBJECT = 'Photo report: {{reportTitle}}'
+export const DEFAULT_REPORT_EMAIL_BODY = `Hi {{clientName}},
 
 Please review the photo report for your property.
 
-{ReportLink}
+{{reportLink}}
 
 Thank you,
-{SenderName}
-{CompanyName}`
+{{senderName}}
+{{companyName}}`
 
-export const DEFAULT_REPORT_TEXT_BODY = `Hi {ClientName}, your photo report "{ReportTitle}" is ready: {ReportLink} — {SenderName}, {CompanyName}`
+export const DEFAULT_REPORT_TEXT_BODY = `Hi {{clientName}}, your photo report "{{reportTitle}}" is ready: {{reportLink}} — {{senderName}}, {{companyName}}`
 
 export function replaceReportTags(template, data) {
-  let out = String(template || '')
-  for (const [key, value] of Object.entries(data)) {
-    const tag = `{${key}}`
-    out = out.split(tag).join(value ?? '')
-  }
-  return out
+  return replaceReportSendTags(template, data)
 }
 
 /** Replace report link placeholders in editable message text. */
 export function applyReportLinkToText(text, link) {
   if (!link) return String(text || '')
-  return String(text || '')
+  const withLegacy = String(text || '')
     .split('{ReportLink}').join(link)
-    .split('[link will appear after send]').join(link)
+    .split('{{reportLink}}').join(link)
+  return withLegacy.split('[link will appear after send]').join(link)
+}
+
+function normalizeStoredTemplate(value, fallback) {
+  const raw = value || fallback
+  return migrateLegacyReportTemplateText(raw)
 }
 
 export function getReportSendTemplatesFromSettings(settings = null) {
   const s = settings || getSettings()
   const t = s.reportSendTemplates || {}
   return {
-    emailSubject: t.emailSubject || DEFAULT_REPORT_EMAIL_SUBJECT,
-    emailBody: t.emailBody || DEFAULT_REPORT_EMAIL_BODY,
-    textBody: t.textBody || DEFAULT_REPORT_TEXT_BODY,
+    emailSubject: normalizeStoredTemplate(t.emailSubject, DEFAULT_REPORT_EMAIL_SUBJECT),
+    emailBody: normalizeStoredTemplate(t.emailBody, DEFAULT_REPORT_EMAIL_BODY),
+    textBody: normalizeStoredTemplate(t.textBody, DEFAULT_REPORT_TEXT_BODY),
   }
 }
 

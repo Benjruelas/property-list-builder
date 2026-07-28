@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Plus, Eye, EyeOff, Trash2, MoreVertical, FileDown, Share2, Pencil, Tag, List, Search } from 'lucide-react'
+import { Plus, Eye, EyeOff, Trash2, MoreVertical, FileDown, Share2, Pencil, Tag, List, Search, Phone } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
+import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { cn } from '@/lib/utils'
@@ -95,6 +96,7 @@ export function ListPanel({
   getToken,
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
+  onOpenSkipTraced,
 }) {
   const [selectedTagIds, setSelectedTagIds] = useState([])
   const [tagEditListId, setTagEditListId] = useState(null)
@@ -412,6 +414,11 @@ export function ListPanel({
               title="Create new list"
               iconColor={parcelBoundaryColor}
             />
+            {onOpenSkipTraced && (
+              <Button variant="ghost" size="icon" onClick={onOpenSkipTraced} title="Skip-traced parcels">
+                <Phone className="h-4 w-4" />
+              </Button>
+            )}
           </PanelHeader>
         </DialogHeader>
 

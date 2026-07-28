@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Briefcase } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
-import { getDealTemplates } from '@/utils/dealTemplates'
+import { getDealTemplates, fetchDealTemplates } from '@/utils/dealTemplates'
 import {
   DealTemplatePanelShell,
   DealTemplatePanelScroll,
@@ -14,13 +14,21 @@ export function DealTemplatePickerDialog({
   open,
   onOpenChange,
   onSelect,
+  getToken,
   nestedOverlay = true,
 }) {
   const [templates, setTemplates] = useState([])
 
   useEffect(() => {
-    if (open) setTemplates(getDealTemplates())
-  }, [open])
+    if (!open) return
+    if (!getToken) {
+      setTemplates(getDealTemplates())
+      return
+    }
+    fetchDealTemplates(getToken)
+      .then(setTemplates)
+      .catch(() => setTemplates(getDealTemplates()))
+  }, [open, getToken])
 
   const handleNoTemplate = () => {
     onSelect?.(null)

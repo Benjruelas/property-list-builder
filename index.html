@@ -186,7 +186,14 @@
         }
         if (!ctx) return;
         var raf = 0;
-        var LOGO_SCALE = 1.875;
+        var LOGO_SCALE_MOBILE = 1.875;
+        var LOGO_SCALE_DESKTOP = 1.25;
+        var LOGO_DESKTOP_MIN = 768;
+        var logoSplashScale = function() {
+          return window.matchMedia('(min-width: ' + LOGO_DESKTOP_MIN + 'px)').matches
+            ? LOGO_SCALE_DESKTOP
+            : LOGO_SCALE_MOBILE;
+        };
         var EDGE_COVER_RATIO = 0.035;
         var EDGE_COVER_MIN_PX = 3;
         var EDGE_COVER_TOP_RATIO = 0.12;
@@ -232,7 +239,7 @@
           fillPlate();
           var vw = video.videoWidth;
           var vh = video.videoHeight;
-          var fit = Math.min(size.cssW / vw, size.cssH / vh) * LOGO_SCALE;
+          var fit = Math.min(size.cssW / vw, size.cssH / vh) * logoSplashScale();
           var dw = vw * fit * size.dpr;
           var dh = vh * fit * size.dpr;
           var dx = (canvas.width - dw) / 2;

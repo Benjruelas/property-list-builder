@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getPrimaryBarCount, resolveActionBarLayout } from '../actionBarLayout'
+import { getPrimaryBarCount, resolveActionBarLayout, DESKTOP_MENU_OVERFLOW } from '../actionBarLayout'
 
 describe('actionBarLayout', () => {
   it('shows 3 primary items on phone', () => {
@@ -9,15 +9,16 @@ describe('actionBarLayout', () => {
     expect(isDesktop).toBe(false)
   })
 
-  it('shows full desktop bar at 768px+ with no menu', () => {
+  it('shows compact desktop bar with menu overflow at 768px+', () => {
     const { barIds, overflowPrimaryIds, isDesktop } = resolveActionBarLayout(1600)
     expect(barIds).toEqual([
-      'leads', 'tasks', 'schedule', 'pipes', 'deals', 'quotes', 'forms', 'reports', 'lists', 'activity',
-      'photoMode', 'paths', 'outreach', 'settings',
+      'leads', 'tasks', 'schedule', 'activity', 'photoMode', 'settings', 'menu',
     ])
-    expect(overflowPrimaryIds).toEqual([])
+    expect(overflowPrimaryIds).toEqual(DESKTOP_MENU_OVERFLOW)
     expect(isDesktop).toBe(true)
-    expect(barIds).not.toContain('menu')
+    expect(barIds).not.toContain('pipes')
+    expect(overflowPrimaryIds).toContain('pipes')
+    expect(overflowPrimaryIds).toContain('quotes')
   })
 
   it('keeps three primaries plus menu on phone', () => {
@@ -25,11 +26,10 @@ describe('actionBarLayout', () => {
     expect(resolveActionBarLayout(700).isDesktop).toBe(false)
   })
 
-  it('switches to the full bar at 768px', () => {
+  it('switches to desktop layout at 768px', () => {
     const layout = resolveActionBarLayout(768)
     expect(layout.isDesktop).toBe(true)
-    expect(layout.barIds).not.toContain('menu')
-    expect(layout.barIds).toContain('paths')
+    expect(layout.barIds).toContain('menu')
     expect(layout.barIds).toContain('settings')
     expect(layout.barIds).toContain('photoMode')
   })

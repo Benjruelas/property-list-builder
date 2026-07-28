@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   taskVisibleToUser,
   canManageTask,
+  canDeleteTask,
   sharedViewerMayPatch,
 } from '../taskAccess.js'
 
@@ -53,5 +54,12 @@ describe('taskAccess', () => {
     expect(sharedViewerMayPatch({ taskId: 'task-1' })).toBe(false)
     expect(sharedViewerMayPatch({ taskId: 'task-1', completed: true, title: 'nope' })).toBe(false)
     expect(sharedViewerMayPatch({ taskId: 'task-1', notes: 'nope' })).toBe(false)
+  })
+
+  it('allows assignees and shared viewers to delete tasks', () => {
+    expect(canDeleteTask(baseTask, owner, team)).toBe(true)
+    expect(canDeleteTask(baseTask, assignee, team)).toBe(true)
+    expect(canDeleteTask(baseTask, sharedMember, team)).toBe(true)
+    expect(canDeleteTask(baseTask, teammate, team)).toBe(false)
   })
 })

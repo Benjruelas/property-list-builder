@@ -2,58 +2,55 @@
  * @vitest-environment jsdom
  */
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CreateTaskPanel } from '../CreateTaskPanel'
-
-const mocks = vi.hoisted(() => ({
-  addTask: vi.fn(),
-  scheduleSync: vi.fn(),
-}))
+import { createServerTask } from '@/utils/serverTaskOps'
 
 vi.mock('../NewTaskDialog', () => ({
-  NewTaskDialog: ({ open, onSubmit }) => open ? (
-    <button
-      type="button"
-      onClick={() => onSubmit({
-        title: 'Follow up',
-        scheduledAt: null,
-        scheduledEndAt: null,
-        assignedUids: [],
-        leadId: 'lead-1',
-        dealId: null,
-      })}
-    >
-      Submit task
-    </button>
+  NewTaskDialog: ({ open, onSubmit, saving }) => open ? (
+    <>
+      <button
+        type="button"
+        onClick={() => onSubmit({
+          title: 'Follow up',
+          scheduledAt: null,
+          scheduledEndAt: null,
+          assignedUids: [],
+          leadId: 'lead-1',
+          dealId: null,
+        })}
+      >
+        Submit task
+      </button>
+      <button
+        type="button"
+        onClick={() => onSubmit({
+          title: 'Assigned task',
+          scheduledAt: null,
+          scheduledEndAt: null,
+          assignedUids: ['teammate-1'],
+          leadId: 'lead-1',
+          dealId: null,
+        })}
+      >
+        Submit assigned task
+      </button>
+      <span data-testid="saving-state">{saving ? 'saving' : 'idle'}</span>
+    </>
   ) : null,
 }))
 
-vi.mock('../ConvertToLeadPipelineDialog', () => ({
-  ConvertToLeadPipelineDialog: () => null,
-}))
-
-vi.mock('@/contexts/UserDataSyncContext', () => ({
-  useUserDataSync: () => ({ scheduleSync: mocks.scheduleSync }),
-}))
-
-vi.mock('@/utils/leadTasks', () => ({
-  addTask: mocks.addTask,
+vi.mock('../MoveDealDialog', () => ({
+  MoveDealDialog: () => null,
 }))
 
 vi.mock('@/utils/pipelineTasks', () => ({
-  addPipelineTask: vi.fn(),
   pipelinesContainingParcel: () => [],
-}))
-
-vi.mock('@/utils/teamTasks', () => ({
-  addTeamTask: vi.fn(),
 }))
 
 vi.mock('@/utils/teamTaskUtils', () => ({
   getAllTeamMembers: () => [],
-  resolveTeamTaskLeadId: () => null,
-  shouldStoreAsTeamTask: () => false,
 }))
 
 vi.mock('@/utils/deals', () => ({
@@ -61,7 +58,6 @@ vi.mock('@/utils/deals', () => ({
 }))
 
 vi.mock('@/utils/taskCreateFlow', () => ({
-  createServerAssignedTask: vi.fn(),
   resolveTaskContext: ({ leadId, dealId }) => ({
     leadId,
     dealId,
@@ -70,16 +66,42 @@ vi.mock('@/utils/taskCreateFlow', () => ({
   }),
 }))
 
+vi.mock('@/utils/serverTaskOps', () => ({
+  createServerTask: vi.fn(),
+}))
+
 vi.mock('../ui/toast', () => ({
   showToast: vi.fn(),
 }))
 
 describe('CreateTaskPanel', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+  afterEach(() => {
+    cleanup()
   })
 
-  it('uses the shared create flow and closes after saving a personal task', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    createServerTask.mockResolvedValue({ id: 'task-1' })
+  })
+
+  it('requires sign-in to create tasks', async () => {
+    const { showToast } = await import('../ui/toast')
+    render(
+      <CreateTaskPanel
+        open
+        leads={[{ id: 'lead-1', firstName: 'Ada' }]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit task' }))
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith('Sign in to create tasks', 'error')
+    })
+    expect(createServerTask).not.toHaveBeenCalled()
+  })
+
+  it('uses server create and closes after save', async () => {
     const onOpenChange = vi.fn()
     const onCreated = vi.fn()
 
@@ -87,6 +109,7 @@ describe('CreateTaskPanel', () => {
       <CreateTaskPanel
         open
         onOpenChange={onOpenChange}
+        getToken={async () => 'token'}
         leads={[{ id: 'lead-1', firstName: 'Ada' }]}
         onCreated={onCreated}
       />,
@@ -95,13 +118,45 @@ describe('CreateTaskPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit task' }))
 
     await waitFor(() => {
-      expect(mocks.addTask).toHaveBeenCalledWith(expect.objectContaining({
+      expect(createServerTask).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
         title: 'Follow up',
-        leadId: 'lead-1',
       }))
     })
-    expect(mocks.scheduleSync).toHaveBeenCalledOnce()
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(onCreated).toHaveBeenCalledOnce()
+  })
+
+  it('ignores duplicate submits while create is in flight', async () => {
+    const onOpenChange = vi.fn()
+    let resolveCreate
+    createServerTask.mockImplementation(
+      () => new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
+    )
+
+    render(
+      <CreateTaskPanel
+        open
+        onOpenChange={onOpenChange}
+        getToken={async () => 'token'}
+        leads={[{ id: 'lead-1', firstName: 'Ada' }]}
+      />,
+    )
+
+    const submit = screen.getByRole('button', { name: 'Submit task' })
+    fireEvent.click(submit)
+    fireEvent.click(submit)
+
+    await waitFor(() => {
+      expect(createServerTask).toHaveBeenCalledTimes(1)
+      expect(screen.getByTestId('saving-state').textContent).toBe('saving')
+    })
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+
+    resolveCreate({ id: 'task-1' })
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
   })
 })

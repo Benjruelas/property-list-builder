@@ -374,7 +374,7 @@ export function DealsPanel({
             'map-panel list-panel deals-panel fullscreen-panel flex flex-col min-h-0 p-0',
             listObscuredByDetail && 'crm-list-under-detail',
           )}
-          panelDockSlot={panelDockSlot}
+          panelDockSlot={listObscuredByDetail ? undefined : panelDockSlot}
           showCloseButton={false}
           hideOverlay
           suppressBackdrop

@@ -1,8 +1,6 @@
 import { useMemo, useCallback } from 'react'
 import { NewTaskDialog } from './NewTaskDialog'
-import { updateLeadTaskTitle, updateLeadTaskSchedule } from '@/utils/leadTasks'
-import { updatePipelineTask } from '@/utils/pipelineTasks'
-import { updateTeamTask } from '@/utils/teamTasks'
+import { patchServerTask } from '@/utils/serverTaskOps'
 import { getMembersForTeamSharedPipeline } from '@/utils/teamTaskUtils'
 import { resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
 import { showToast } from './ui/toast'
@@ -19,8 +17,6 @@ export function EditLeadTaskDialog({
   displayLeads = [],
   deals = [],
   getToken,
-  onPipelinesChange,
-  scheduleSync,
   onSaved,
 }) {
   const task = context?.task
@@ -46,56 +42,25 @@ export function EditLeadTaskDialog({
     async ({ title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
       const trimmed = (title || '').toString().trim()
       if (!trimmed || !task) return
-      if (task.__source === 'team' && task.pipelineId && task.leadId) {
-        if (!getToken) {
-          showToast('Sign in to update tasks', 'error')
-          return
-        }
-        try {
-          await updateTeamTask(getToken, task.pipelineId, task.leadId, {
-            id: task.id,
-            title: trimmed,
-            dueAt: scheduledAt,
-            assignedUids,
-          })
-          await onPipelinesChange?.()
-          showToast('Task updated', 'success')
-          onOpenChange(false)
-          onSaved?.()
-        } catch (err) {
-          showToast(err.message || 'Could not update task', 'error')
-        }
+      if (!getToken) {
+        showToast('Sign in to update tasks', 'error')
         return
       }
-      if (task.__source === 'pipeline' && task.pipelineId) {
-        if (!getToken) {
-          showToast('Sign in to update tasks', 'error')
-          return
-        }
-        try {
-          await updatePipelineTask(getToken, task.pipelineId, {
-            id: task.id,
-            title: trimmed,
-            scheduledAt,
-            scheduledEndAt,
-          })
-          await onPipelinesChange?.()
-          showToast('Task updated', 'success')
-          onOpenChange(false)
-          onSaved?.()
-        } catch (err) {
-          showToast(err.message || 'Could not update task', 'error')
-        }
-        return
+      try {
+        await patchServerTask(getToken, task.id, {
+          title: trimmed,
+          scheduledAt,
+          scheduledEndAt,
+          assignedUids: teamMembers.length > 0 ? assignedUids : undefined,
+        })
+        showToast('Task updated', 'success')
+        onOpenChange(false)
+        onSaved?.()
+      } catch (err) {
+        showToast(err.message || 'Could not update task', 'error')
       }
-      updateLeadTaskTitle(task.parcelId, task.id, trimmed)
-      updateLeadTaskSchedule(task.parcelId, task.id, scheduledAt, scheduledEndAt)
-      scheduleSync?.()
-      showToast('Task updated', 'success')
-      onOpenChange(false)
-      onSaved?.()
     },
-    [task, getToken, onPipelinesChange, scheduleSync, onOpenChange, onSaved]
+    [task, getToken, teamMembers.length, onOpenChange, onSaved]
   )
 
   return (
@@ -118,15 +83,9 @@ export function EditLeadTaskDialog({
       }
       initialScheduledEndAt={task && !isTeamTask ? (task.scheduledEndAt ?? null) : null}
       initialDateTimeExpanded={!!(task?.scheduledAt || task?.dueAt)}
-      initialTeamAssignUids={
-        isTeamTask && Array.isArray(task?.assignedUids) ? [...task.assignedUids] : []
-      }
-      lockLead={!!formIds.leadId}
-      lockDeal={!!formIds.dealId}
-      disableDealClear={!!formIds.dealId}
-      showTeamAssign={isTeamTask && teamMembers.length > 0}
+      initialAssignedUids={task?.assignedUids || []}
+      showTeamAssign={teamMembers.length > 0}
       teamMembers={teamMembers}
-      teamContextActive={isTeamTask}
       onSubmit={handleSubmit}
       nestedOverlay
       topLayer

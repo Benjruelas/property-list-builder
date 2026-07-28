@@ -1,10 +1,21 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { beginLogoSplashPlayback } from '../logoSplashPlayback'
+import {
+  beginLogoSplashPlayback,
+  getLogoSplashScale,
+  LOGO_SPLASH_SCALE_DESKTOP,
+  LOGO_SPLASH_SCALE_MOBILE,
+} from '../logoSplashPlayback'
 
 describe('logoSplashPlayback', () => {
   let video
+  let matchMediaMock
 
   beforeEach(() => {
+    matchMediaMock = vi.fn().mockReturnValue({ matches: false })
+    vi.stubGlobal('matchMedia', matchMediaMock)
     video = {
       muted: false,
       defaultMuted: false,
@@ -30,5 +41,14 @@ describe('logoSplashPlayback', () => {
     expect(video.volume).toBe(0)
     expect(video.setAttribute).toHaveBeenCalledWith('muted', '')
     expect(video.play).toHaveBeenCalled()
+  })
+
+  it('uses a smaller logo scale on desktop viewports', () => {
+    matchMediaMock.mockReturnValue({ matches: false })
+    expect(getLogoSplashScale()).toBe(LOGO_SPLASH_SCALE_MOBILE)
+
+    matchMediaMock.mockReturnValue({ matches: true })
+    expect(getLogoSplashScale()).toBe(LOGO_SPLASH_SCALE_DESKTOP)
+    expect(matchMediaMock).toHaveBeenCalledWith('(min-width: 768px)')
   })
 })

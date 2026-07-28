@@ -612,7 +612,7 @@
 
 @media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
-  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.create-lead-panel) {
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.report-editor-panel):not(.report-details-panel):not(.create-lead-panel):not(.create-deal-panel) {
     width: auto !important;
     min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
@@ -674,8 +674,7 @@
 
   /* Desktop: form fill/editor — same footprint as other CRM panels */
   .form-fill-panel.fullscreen-panel,
-  .form-editor-panel.fullscreen-panel,
-  .report-editor-panel.fullscreen-panel:not(.square-picker-panel) {
+  .form-editor-panel.fullscreen-panel {
     width: var(--action-bar-width) !important;
     min-width: 0 !important;
     max-width: var(--action-bar-width) !important;
@@ -692,16 +691,6 @@
   html[data-tasks-dock-leave="1"] .map-panel-dialog.report-editor-panel.square-picker-panel[data-state="open"],
   html[data-tasks-dock-swap="1"] .map-panel-dialog.report-editor-panel.square-picker-panel[data-state="open"] {
     transform: translate3d(-50%, -50%, 0) !important;
-  }
-
-  /* Desktop: quote editor — two-thirds of the viewport */
-  .quote-editor-panel.fullscreen-panel {
-    width: calc(100vw * 2 / 3) !important;
-    min-width: 0 !important;
-    max-width: calc(100vw * 2 / 3) !important;
-    height: var(--ui-panel-height) !important;
-    min-height: var(--ui-panel-min-height) !important;
-    max-height: var(--ui-panel-height) !important;
   }
 
   /* Desktop: Leads, Deals, Quotes, Reports, Pipes & Schedule — same width as floating action bar */
@@ -1113,7 +1102,15 @@
   }
 
   html[data-tasks-docked="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel),
-  html[data-tasks-dock-leave="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel),
+  html[data-tasks-dock-leave="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel) {
+    transform: translate3d(calc(-50% - var(--tasks-dock-primary-shift)), -50%, 0) !important;
+    transition:
+      transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
+      max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) !important;
+    z-index: 10001 !important;
+  }
+
   html[data-tasks-docked="1"] .map-panel-dialog.lead-details-panel[data-tasks-dock-slot="primary"][data-state="open"],
   html[data-tasks-docked="1"] .map-panel-dialog.deal-details-panel[data-tasks-dock-slot="primary"][data-state="open"],
   html[data-tasks-dock-leave="1"] .map-panel-dialog.lead-details-panel[data-tasks-dock-slot="primary"][data-state="open"],
@@ -1123,7 +1120,7 @@
       transform var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
       width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease),
       max-width var(--tasks-panel-motion-duration) var(--tasks-panel-motion-ease) !important;
-    z-index: 10001 !important;
+    z-index: 10021 !important;
   }
 
   html[data-tasks-dock-leave="1"] .map-panel-dialog[data-tasks-dock-slot="primary"][data-state="open"]:not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel) {
@@ -1496,13 +1493,19 @@
     overflow: hidden !important;
   }
 
-  /* Desktop: Create / Edit lead — compact width, height fits content (scrolls at max) */
+  /* Desktop: Create lead/deal, quote & report editor — compact width (+50% vs half-height baseline) */
   .map-panel-dialog.create-lead-panel.fullscreen-panel,
-  .create-lead-panel.fullscreen-panel {
-    --create-lead-panel-width: calc(var(--ui-panel-height) * 0.5);
-    width: var(--create-lead-panel-width) !important;
-    min-width: min(var(--create-lead-panel-width), calc(100vw - 2rem)) !important;
-    max-width: var(--create-lead-panel-width) !important;
+  .create-lead-panel.fullscreen-panel,
+  .map-panel-dialog.create-deal-panel.fullscreen-panel:not(.call-confirm-panel),
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel),
+  .map-panel-dialog.quote-editor-panel.fullscreen-panel,
+  .quote-editor-panel.fullscreen-panel,
+  .map-panel-dialog.report-editor-panel.fullscreen-panel:not(.square-picker-panel),
+  .report-editor-panel.fullscreen-panel:not(.square-picker-panel) {
+    --create-form-panel-width: calc(var(--ui-panel-height) * 0.75);
+    width: var(--create-form-panel-width) !important;
+    min-width: min(var(--create-form-panel-width), calc(100vw - 2rem)) !important;
+    max-width: var(--create-form-panel-width) !important;
     height: auto !important;
     max-height: var(--ui-panel-height) !important;
     min-height: 0 !important;
@@ -1530,13 +1533,45 @@
     flex-shrink: 0;
   }
 
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel) > form {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel) > form > .overflow-y-auto {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .create-deal-panel.fullscreen-panel:not(.call-confirm-panel) > form > .flex-shrink-0.border-t {
+    flex-shrink: 0;
+  }
+
+  .quote-editor-panel.fullscreen-panel > .overflow-y-auto {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .report-editor-panel.fullscreen-panel:not(.square-picker-panel) > .overflow-y-auto {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
   /* Maximized desktop panels — anchor below top inset, gap above action bar */
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel),
   html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) .map-panel-dialog[data-state="closed"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not([data-tasks-panel-close-settled="1"]) {
     top: var(--ui-panel-center-y) !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel) {
     box-sizing: border-box !important;
     width: var(--ui-panel-width) !important;
     max-width: var(--ui-panel-width) !important;
@@ -1547,7 +1582,7 @@
     overflow-x: clip !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel) {
     width: var(--ui-panel-width) !important;
     min-width: 0 !important;
     max-width: var(--ui-panel-width) !important;
@@ -2666,12 +2701,27 @@
 
   .map-panel.lead-details-panel .lead-detail-status-btn,
   .map-panel.lead-details-panel .lead-detail-section .panel-filter-option,
+  .map-panel.lead-details-panel .tag-picker-pills .tag-chip--pill,
+  .map-panel.lead-details-panel .tag-picker-pills .tag-chip-add,
   .map-panel.deal-details-panel .lead-detail-status-btn,
-  .map-panel.deal-details-panel .lead-detail-section .panel-filter-option {
+  .map-panel.deal-details-panel .lead-detail-section .panel-filter-option,
+  .map-panel.deal-details-panel .tag-picker-pills .tag-chip--pill,
+  .map-panel.deal-details-panel .tag-picker-pills .tag-chip-add {
     min-height: 2.75rem;
     padding: 0.5625rem 1rem;
     font-size: 0.875rem;
     border-radius: 0.625rem;
+  }
+
+  .map-panel.lead-details-panel .tag-picker-pills .tag-chip-remove svg,
+  .map-panel.deal-details-panel .tag-picker-pills .tag-chip-remove svg {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+
+  .map-panel.lead-details-panel .tag-picker-pills,
+  .map-panel.deal-details-panel .tag-picker-pills {
+    gap: 0.625rem !important;
   }
 
   .map-panel.lead-details-panel .lead-detail-section .flex.flex-wrap.gap-1\.5,
@@ -6407,10 +6457,36 @@ button.leads-analytics-stat-value-toggle:focus-visible {
     0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
+/* Lead/Deal detail — tag pills match status pill sizing (Status section + Tags section). */
+.map-panel.lead-details-panel .tag-picker-pills .tag-chip--pill,
+.map-panel.deal-details-panel .tag-picker-pills .tag-chip--pill,
+.map-panel.lead-details-panel .tag-picker-pills .tag-chip-add,
+.map-panel.deal-details-panel .tag-picker-pills .tag-chip-add {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0.375rem 0.625rem !important;
+  font-size: 0.6875rem !important;
+  line-height: 1.2 !important;
+  font-weight: 500;
+  gap: 0.25rem;
+  border-radius: 0.375rem;
+}
+
+.map-panel.lead-details-panel .tag-picker-pills .tag-chip-remove svg,
+.map-panel.deal-details-panel .tag-picker-pills .tag-chip-remove svg {
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+
 /* Main panel list rows — compact tag pills and status/stage badges (Leads, Deals, Lists, Paths, Pipes, etc.) */
+.map-panel :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card) .entity-tag-pills .tag-chip--crm-row,
 .map-panel :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card) .entity-tag-pills .tag-chip--pill,
 .map-panel :is(.map-panel-list-item, .leads-panel-list-item, .teams-panel-list-item, .deal-pipeline-lead-card) .crm-row-status-badge,
+.crm-lead-row .entity-tag-pills .tag-chip--crm-row,
 .crm-lead-row .entity-tag-pills .tag-chip--pill,
+.crm-deal-row .entity-tag-pills .tag-chip--crm-row,
 .crm-deal-row .entity-tag-pills .tag-chip--pill,
 .crm-lead-row .crm-row-status-badge,
 .crm-deal-row .crm-row-status-badge {
@@ -6430,11 +6506,20 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 }
 
 @media (min-width: 768px) {
-  .tag-chip--pill {
+  .map-panel.lead-details-panel .tag-picker-pills .tag-chip--pill,
+  .map-panel.deal-details-panel .tag-picker-pills .tag-chip--pill {
     min-height: 2.75rem;
-    padding: 0.5625rem 1.125rem !important;
+    padding: 0.5625rem 1rem !important;
     font-size: 0.875rem !important;
     line-height: 1.25;
+    gap: 0.4375rem;
+  }
+
+  .map-panel.lead-details-panel .tag-picker-pills .tag-chip-add,
+  .map-panel.deal-details-panel .tag-picker-pills .tag-chip-add {
+    min-height: 2.75rem;
+    padding: 0.5625rem 1rem !important;
+    font-size: 0.875rem !important;
     gap: 0.4375rem;
   }
 
@@ -6446,25 +6531,12 @@ button.leads-analytics-stat-value-toggle:focus-visible {
     border-radius: 0.625rem;
   }
 
-  .tag-chip-remove svg {
+  .map-panel.lead-details-panel .tag-picker-pills .tag-chip-remove svg,
+  .map-panel.deal-details-panel .tag-picker-pills .tag-chip-remove svg {
     width: 1rem !important;
     height: 1rem !important;
   }
 
-  .tag-chip-add {
-    min-height: 2.75rem;
-    padding: 0.5625rem 1.125rem !important;
-    font-size: 0.875rem !important;
-    gap: 0.4375rem;
-  }
-
-  .tag-chip-add svg {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .entity-tag-pills,
-  .tag-picker-pills,
   .tag-filter-bar {
     gap: 0.625rem !important;
   }
@@ -6666,7 +6738,9 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   }
 
   /* Leads/Deals desktop table — tag pills and status/stage badges must match exactly */
+  .crm-lead-row .entity-tag-pills .tag-chip--crm-row,
   .crm-lead-row .entity-tag-pills .tag-chip--pill,
+  .crm-deal-row .entity-tag-pills .tag-chip--crm-row,
   .crm-deal-row .entity-tag-pills .tag-chip--pill,
   .crm-lead-row .crm-row-status-badge,
   .crm-deal-row .crm-row-status-badge {
@@ -6761,7 +6835,8 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 @media (min-width: 768px) {
   .mobile-action-bar {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + calc(12px * var(--ui-touch-scale)));
-    max-height: calc(var(--ui-chrome-stack-height) - var(--ui-panel-height));
+    /* Panel layout already reserves --ui-action-bar-block; shrinking here clipped label descenders */
+    max-height: none;
   }
 }
 
@@ -6837,7 +6912,8 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   }
   .mobile-action-bar-btn {
     min-width: 0;
-    height: calc(3.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
+    min-height: calc(3.5rem * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
+    height: auto;
     gap: calc(6px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
     padding: calc(4px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale))
       calc(2px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale))
@@ -6851,7 +6927,7 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   }
   .mobile-action-bar-label {
     font-size: calc(9px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
-    line-height: 1.1;
+    line-height: 1.25;
   }
   .mobile-action-bar-inner[data-action-bar-count='13'] .mobile-action-bar-label {
     font-size: calc(8px * var(--ui-touch-scale) * var(--ui-action-bar-item-scale));
@@ -6892,7 +6968,8 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   flex-direction: column;
   gap: calc(6px * var(--ui-touch-scale));
   padding: calc(4px * var(--ui-touch-scale)) calc(4px * var(--ui-touch-scale)) calc(6px * var(--ui-touch-scale));
-  height: calc(3.5rem * var(--ui-touch-scale));
+  min-height: calc(3.5rem * var(--ui-touch-scale));
+  height: auto;
   border-radius: calc(8px * var(--ui-touch-scale));
   background: transparent;
   border: 1px solid transparent;
@@ -6961,13 +7038,14 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 
 .mobile-action-bar-label {
   font-size: calc(10px * var(--ui-touch-scale));
-  line-height: 1;
+  line-height: 1.25;
   font-weight: 500;
   letter-spacing: 0.02em;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-bottom: 1px;
 }
 
 /* ---- Action Bar: Menu popup ---- */

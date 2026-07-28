@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -49,6 +49,7 @@ export function NewTaskDialog({
   headerSubtitle = null,
   onSubmit,
   onCreateLead,
+  saving = false,
   nestedOverlay = true,
   topLayer: topLayerProp,
 }) {
@@ -175,6 +176,7 @@ export function NewTaskDialog({
 
   const handleDialogOpenChange = (nextOpen) => {
     if (!nextOpen) {
+      if (saving) return
       if (suppressDismissAfterCreateLeadRef.current) {
         suppressDismissAfterCreateLeadRef.current = false
         return
@@ -188,7 +190,10 @@ export function NewTaskDialog({
     onOpenChange?.(true)
   }
 
-  const close = () => onOpenChange?.(false)
+  const close = () => {
+    if (saving) return
+    onOpenChange?.(false)
+  }
 
   const setScheduledAtTracked = (value) => {
     scheduleRef.current = { ...scheduleRef.current, scheduledAt: value }
@@ -206,6 +211,7 @@ export function NewTaskDialog({
   }
 
   const handleSave = () => {
+    if (saving) return
     flushScheduleFocus()
     const trimmed = title.trim()
     if (!trimmed) {
@@ -296,7 +302,7 @@ export function NewTaskDialog({
               className="text-sm"
               autoFocus
               aria-required={!isEditMode}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              onKeyDown={(e) => e.key === 'Enter' && !saving && handleSave()}
             />
           </div>
           {showLeadField && (
@@ -396,10 +402,17 @@ export function NewTaskDialog({
             className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]"
             onMouseDown={flushScheduleFocus}
             onClick={handleSave}
+            disabled={saving}
           >
-            {isEditMode ? 'Save' : 'Create'}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : (isEditMode ? 'Save' : 'Create')}
           </Button>
-          <Button size="sm" variant="outline" className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]" onClick={close}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="create-list-btn flex-1 md:flex-none md:min-w-[7.5rem]"
+            onClick={close}
+            disabled={saving}
+          >
             Cancel
           </Button>
         </div>

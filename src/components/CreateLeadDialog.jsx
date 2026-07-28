@@ -205,7 +205,6 @@ export function CreateLeadDialog({
         visibility: shareState.visibility,
         sharedMemberUids: shareState.sharedMemberUids,
         teamId: activeTeam?.id || null,
-        teamShares: shareState.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
       }
       if (isEdit) {
         const lead = await updateLead(getToken, editLead.id, payload)

@@ -21,6 +21,8 @@ import { fetchQuotes, getCachedDealQuotes, setCachedDealQuotes } from '@/utils/q
 import { QuoteStatusBadge } from './quotes/QuoteStatusBadge'
 import { formatQuoteMoney } from '@/utils/quoteMath'
 import { TagPicker } from './tags/TagPicker'
+import { VisibilityBadge } from './ResourceSharePicker'
+import { normalizeResourceVisibility, visibilityLabel } from '@/utils/access'
 import { collectTagMetaFromEntities } from '@/utils/tags'
 import { PhotoGallery } from '@/photos/PhotoGallery'
 
@@ -147,6 +149,13 @@ export function DealDetails({
   useEffect(() => {
     setMenuOpen(false)
   }, [d?.id])
+
+  const pipelineVisibility = useMemo(() => {
+    if (!pipeline && !pipelineMeta) return null
+    const src = pipeline || pipelineMeta
+    return normalizeResourceVisibility(src)
+  }, [pipeline, pipelineMeta])
+  const pipelineVisibilityLabel = pipelineVisibility ? visibilityLabel(pipelineVisibility) : ''
 
   if (!d) return null
 
@@ -303,6 +312,11 @@ export function DealDetails({
                   {pipelineTitle && (
                     <span className="text-[11px] text-white/40 truncate" title={pipelineTitle}>
                       {pipelineTitle}
+                    </span>
+                  )}
+                  {pipelineVisibilityLabel && pipelineVisibility?.visibility !== 'private' && (
+                    <span title={`Pipe visibility: ${pipelineVisibilityLabel}`}>
+                      <VisibilityBadge resource={pipelineVisibility} className="text-[10px]" />
                     </span>
                   )}
                 </div>

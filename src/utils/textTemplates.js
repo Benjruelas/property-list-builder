@@ -1,23 +1,22 @@
 /**
- * Utility functions for managing text message templates
- * Templates are stored in localStorage (name + body only, no subject)
+ * Text message templates — server-backed via outreachTemplates.js.
  */
+
+import { getCachedOutreachTemplates } from './outreachTemplates'
 
 const STORAGE_KEY = 'text_templates'
 
+try {
+  localStorage.removeItem(STORAGE_KEY)
+} catch {
+  /* legacy local templates dropped — use /api/outreach-templates when signed in */
+}
+
 /**
- * Get all text templates
+ * Get all text templates (server cache when signed in; empty until fetched).
  * @returns {Array} Array of template objects
  */
-export const getTextTemplates = () => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch (error) {
-    console.error('Error getting text templates:', error)
-    return []
-  }
-}
+export const getTextTemplates = () => getCachedOutreachTemplates('text')
 
 /**
  * Save templates array to localStorage

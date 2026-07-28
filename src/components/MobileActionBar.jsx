@@ -59,7 +59,7 @@ const BAR_PREFETCH_KEY = {
 /**
  * FloatingActionBar — responsive bottom dock (phone → desktop).
  * Mobile: Leads, Tasks, Schedule, and Menu overflow.
- * Desktop (768+): every action on the bar — no Menu.
+ * Desktop (768+): core items on bar; CRM / Documents / Tools in Menu.
  */
 
 const ITEM_DEFS = {
@@ -110,10 +110,6 @@ export function MobileActionBar({
   const menuBtnRef = useRef(null)
   const [menuAnchor, setMenuAnchor] = useState(null)
 
-  useEffect(() => {
-    if (isDesktop && showMenu) setShowMenu?.(false)
-  }, [isDesktop, showMenu, setShowMenu])
-
   const updateMenuAnchor = useCallback(() => {
     const el = menuBtnRef.current
     if (!el) {
@@ -146,11 +142,13 @@ export function MobileActionBar({
   }, [showMenu, barIds, updateMenuAnchor])
 
   useEffect(() => {
-    if (!showMenu || isDesktop) return
+    if (!showMenu) return
     prefetchPanel('outreach')
     prefetchPanel('paths')
     prefetchPanel('settings')
-  }, [showMenu, isDesktop])
+    prefetchPanel('pipes')
+    prefetchPanel('quotes')
+  }, [showMenu])
 
   const handlers = {
     pipes: onOpenPipes,
@@ -171,12 +169,12 @@ export function MobileActionBar({
     menu: () => setShowMenu?.(!showMenu),
   }
 
-  const computedActiveId = !isDesktop && showMenu ? 'menu' : activeId
+  const computedActiveId = showMenu && barIds.includes('menu') ? 'menu' : activeId
 
   const chrome = (
     <>
       <ActionBarMenu
-        show={!isDesktop && showMenu}
+        show={showMenu && barIds.includes('menu')}
         onClose={() => setShowMenu?.(false)}
         barIds={barIds}
         overflowPrimaryIds={overflowPrimaryIds}

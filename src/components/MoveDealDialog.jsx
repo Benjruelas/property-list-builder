@@ -1,25 +1,11 @@
 import { Users, User } from 'lucide-react'
 import { PanelBackButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog'
-import { Button } from './ui/button'
 
 /**
- * @param {{
- *   open: boolean,
- *   onOpenChange: (open: boolean) => void,
- *   pipelines: Array<{ id: string, title?: string, ownerId?: string }>,
- *   currentUser: { uid?: string } | null,
- *   onSelect: (pipelineId: string) => void,
- *   title?: string,
- *   description?: string,
- *   allowNoPipe?: boolean,
- *   noPipeLabel?: string,
- *   noPipeDescription?: string,
- *   onSelectNoPipe?: () => void,
- *   topLayer?: boolean
- * }} props
+ * Compact pipeline picker (move deal, assign task to a pipe, etc.).
  */
-export function ConvertToLeadPipelineDialog({
+export function MoveDealDialog({
   open,
   onOpenChange,
   pipelines,
@@ -36,7 +22,7 @@ export function ConvertToLeadPipelineDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="map-panel convert-to-lead-pipeline-dialog max-w-xs p-0 gap-0 overflow-hidden border border-white/15 rounded-2xl"
+        className="map-panel move-deal-dialog max-w-xs p-0 gap-0 overflow-hidden border border-white/15 rounded-2xl"
         showCloseButton={false}
         blurOverlay
         topLayer={topLayer}

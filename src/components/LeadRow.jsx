@@ -10,6 +10,7 @@ import {
 import { LeadSharingIcon } from './ResourceSharePicker'
 import { isLeadOwnedByCurrentUser } from '@/utils/leadOwner'
 import { EntityTagPills } from './tags/EntityTagPills'
+import { CRM_LIST_ROW_STATUS_BADGE_CLASS } from './crm/crmListBadgeStyles'
 import { CrmPhoneCell, CrmEmailCell } from './crm/CrmTableCells'
 import { cn } from '@/lib/utils'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
@@ -20,13 +21,7 @@ export const LEAD_LIST_ROW_CLASS =
 
 function LeadStatusBadge({ statusMeta, className }) {
   return (
-    <span
-      className={cn(
-        'crm-row-status-badge inline-flex shrink-0 max-w-full rounded-md border uppercase tracking-wide',
-        statusMeta.color,
-        className
-      )}
-    >
+    <span className={cn(CRM_LIST_ROW_STATUS_BADGE_CLASS, statusMeta.color, className)}>
       {statusMeta.label}
     </span>
   )

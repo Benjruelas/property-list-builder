@@ -74,7 +74,6 @@ export function CreatePipelineDialog({
         visibility: shareState.visibility,
         sharedMemberUids: shareState.sharedMemberUids,
         teamId: activeTeam?.id || null,
-        teamShares: shareState.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
       }
       const created = await createPipeline(getToken, payload)
       await onPipelinesChange?.()

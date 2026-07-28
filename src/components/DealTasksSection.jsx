@@ -1,30 +1,17 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from './ui/button'
 import { CompletedTasksToggleButton } from './CompletedTasksToggleButton'
 import { TaskListLoading } from './ui/PanelListLoadingShell'
 import { splitOpenAndCompletedTasks } from '@/utils/taskListDisplay'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
-import {
-  deleteLeadTask,
-  addTask,
-  updateLeadTaskTitle,
-  updateLeadTaskSchedule,
-} from '@/utils/leadTasks'
-import {
-  addPipelineTask,
-  removePipelineTask,
-  updatePipelineTask,
-} from '@/utils/pipelineTasks'
-import { addTeamTask, removeTeamTask, updateTeamTask } from '@/utils/teamTasks'
+import { createServerTask, patchServerTask, removeServerTask } from '@/utils/serverTaskOps'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
-import { getAllTeamMembers, getMembersForTeamSharedPipeline, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { getAllTeamMembers, getMembersForTeamSharedPipeline } from '@/utils/teamTaskUtils'
 import { flattenDealsFromPipelines } from '@/utils/deals'
 import { collectTasksForDealFresh } from '@/utils/dealTaskMatching'
-import { createServerAssignedTask } from '@/utils/taskCreateFlow'
 import { TaskRow } from './TasksPanel'
 import { NewTaskDialog } from './NewTaskDialog'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 
 /**
@@ -44,12 +31,19 @@ export function DealTasksSection({
   readOnly = false,
   onNestedOverlayChange,
 }) {
-  const { scheduleSync } = useUserDataSync()
+  const savingRef = useRef(false)
+
   const [tasks, setTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(false)
   const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  const resetSaving = useCallback(() => {
+    savingRef.current = false
+    setSaving(false)
+  }, [])
 
   const showTaskDialog = showAddTask || !!editingTask
   const isEditMode = !!editingTask
@@ -120,6 +114,10 @@ export function DealTasksSection({
     setEditingTask(null)
   }
 
+  useEffect(() => {
+    if (!showTaskDialog) resetSaving()
+  }, [showTaskDialog, resetSaving])
+
   const editTaskPipeline = useMemo(() => {
     if (!editingTask?.pipelineId) return pipeline
     return pipelines.find((p) => p.id === editingTask.pipelineId) || pipeline
@@ -138,82 +136,45 @@ export function DealTasksSection({
 
   const finalizeTaskCreate = useCallback(
     async ({ title, scheduledAt, scheduledEndAt, assignedUids = [] }) => {
-      const pipelineId = pipeline?.id
-      if (assignedUids.length > 0 && getToken) {
-        try {
-          await createServerAssignedTask(getToken, {
-            title,
-            scheduledAt,
-            scheduledEndAt,
-            assignedUids,
-            leadId: deal?.leadId || taskLead?.id || null,
-            dealId: deal?.id || null,
-            deal,
-            leads: displayLeads,
-            pipelines,
-            pipelineId,
-          })
-          showToast('Task added', 'success')
-          setShowAddTask(false)
-          refreshTasks()
-          return
-        } catch (err) {
-          showToast(err.message || 'Could not add task', 'error')
-          return
-        }
+      if (savingRef.current) return
+      if (!getToken) {
+        showToast('Sign in to create tasks', 'error')
+        return
       }
-      if (pipelineId) {
-        if (shouldStoreAsTeamTask(pipeline, { assignedUids, leadId: deal?.leadId })) {
-          try {
-            await addTeamTask(getToken, pipelineId, deal.leadId, {
-              title,
-              dueAt: scheduledAt,
-              assignedUids,
-              dealId: deal?.id || null,
-            })
-            await onPipelinesChange?.()
-            showToast('Task added', 'success')
-          } catch (err) {
-            showToast(err.message || 'Could not add task', 'error')
-            return
-          }
-        } else {
-          try {
-            await addPipelineTask(getToken, pipelineId, {
-              title,
-              parcelId: deal?.parcelId || null,
-              dealId: deal?.id || null,
-              scheduledAt,
-              scheduledEndAt,
-            })
-            await onPipelinesChange?.()
-            showToast('Task added', 'success')
-          } catch (err) {
-            showToast(err.message || 'Could not add task', 'error')
-            return
-          }
-        }
-      } else {
-        addTask({
-          pipelineId: null,
-          parcelId: deal?.parcelId || deal?.leadId || null,
-          dealId: deal?.id || null,
+      savingRef.current = true
+      setSaving(true)
+      try {
+        await createServerTask(getToken, {
           title,
           scheduledAt,
           scheduledEndAt,
+          assignedUids,
+          leadId: deal?.leadId || taskLead?.id || null,
+          dealId: deal?.id || null,
+          deal,
+          leads: displayLeads,
+          pipelines,
+          pipelineId: pipeline?.id || null,
+          parcelId: deal?.parcelId || null,
         })
-        scheduleSync()
         showToast('Task added', 'success')
+        setShowAddTask(false)
+        refreshTasks()
+      } catch (err) {
+        showToast(err.message || 'Could not add task', 'error')
+        resetSaving()
       }
-      setShowAddTask(false)
-      refreshTasks()
     },
-    [getToken, onPipelinesChange, refreshTasks, scheduleSync, pipeline, deal, taskLead, displayLeads, pipelines]
+    [getToken, refreshTasks, resetSaving, pipeline, deal, taskLead, displayLeads, pipelines]
   )
 
   const handleDialogSubmit = ({ title, scheduledAt, scheduledEndAt, assignedUids }) => {
     if (isEditMode) {
       handleSaveEdit({ title, scheduledAt, scheduledEndAt, assignedUids })
+      return
+    }
+    if (assignedUids.length > 0 && !getToken) {
+      showToast('Sign in to assign tasks to teammates', 'error')
       return
     }
     finalizeTaskCreate({ title, scheduledAt, scheduledEndAt, assignedUids })
@@ -229,28 +190,17 @@ export function DealTasksSection({
     }
 
     const task = editingTask
+    if (!getToken) {
+      showToast('Sign in to edit tasks', 'error')
+      return
+    }
     try {
-      if (task.__source === 'team' && task.pipelineId && task.leadId) {
-        await updateTeamTask(getToken, task.pipelineId, task.leadId, {
-          id: task.id,
-          title: trimmed,
-          dueAt: scheduledAt,
-          assignedUids,
-        })
-        await onPipelinesChange?.()
-      } else if (task.__source === 'pipeline' && task.pipelineId) {
-        await updatePipelineTask(getToken, task.pipelineId, {
-          id: task.id,
-          title: trimmed,
-          scheduledAt,
-          scheduledEndAt: endAt,
-        })
-        await onPipelinesChange?.()
-      } else {
-        updateLeadTaskTitle(task.parcelId, task.id, trimmed)
-        updateLeadTaskSchedule(task.parcelId, task.id, scheduledAt, endAt)
-        scheduleSync()
-      }
+      await patchServerTask(getToken, task.id, {
+        title: trimmed,
+        scheduledAt,
+        scheduledEndAt: endAt,
+        assignedUids: editIsTeamContext ? assignedUids : undefined,
+      })
       showToast('Task updated', 'success')
       closeTaskDialog()
       refreshTasks()
@@ -263,41 +213,24 @@ export function DealTasksSection({
     createOptimisticTaskToggleHandler({
       setTaskList: setTasks,
       getToken,
-      onPipelinesChange,
-      scheduleSync,
       onAfterLocalToggle: refreshTasks,
       onError: (err) => showToast(err.message || 'Could not update task', 'error'),
     }),
-    [getToken, onPipelinesChange, scheduleSync, refreshTasks]
+    [getToken, refreshTasks]
   )
 
   const handleDeleteTask = async (task) => {
-    if (task.__source === 'team' && task.pipelineId && task.leadId) {
-      try {
-        await removeTeamTask(getToken, task.pipelineId, task.leadId, task.id)
-        await onPipelinesChange?.()
-        showToast('Task deleted', 'success')
-      } catch (err) {
-        showToast(err.message || 'Could not delete task', 'error')
-      }
-      refreshTasks()
+    if (!getToken) {
+      showToast('Sign in to delete tasks', 'error')
       return
     }
-    if (task.__source === 'pipeline' && task.pipelineId) {
-      try {
-        await removePipelineTask(getToken, task.pipelineId, task.id)
-        await onPipelinesChange?.()
-        showToast('Task deleted', 'success')
-      } catch (err) {
-        showToast(err.message || 'Could not delete task', 'error')
-      }
+    try {
+      await removeServerTask(getToken, task.id)
+      showToast('Task deleted', 'success')
       refreshTasks()
-      return
+    } catch (err) {
+      showToast(err.message || 'Could not delete task', 'error')
     }
-    deleteLeadTask(task.parcelId, task.id)
-    scheduleSync()
-    refreshTasks()
-    showToast('Task deleted', 'success')
   }
 
   const handleViewOnSchedule = (task) => {
@@ -348,7 +281,7 @@ export function DealTasksSection({
         {tasksLoading && tasks.length === 0 ? (
           <TaskListLoading />
         ) : openTasks.length === 0 && !(showCompletedTasks && completedTasks.length > 0) ? (
-          <p className="text-xs text-white/40 py-2">No open tasks yet.</p>
+          <p className="text-xs text-white/40">No tasks yet</p>
         ) : (
           <>
             {openTasks.length > 0 && (
@@ -440,6 +373,7 @@ export function DealTasksSection({
           leadName={leadLabel || dealLabel}
           leadAddress={leadAddress}
           onSubmit={handleDialogSubmit}
+          saving={!isEditMode && saving}
           nestedOverlay
           topLayer
         />

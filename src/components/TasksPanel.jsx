@@ -6,34 +6,16 @@ import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from '.
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { handlePanelDialogOpenChange, ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
-import {
-  getAllTasks,
-  getPersonalTasks,
-  deleteLeadTask,
-  removeLocalTaskById,
-  groupOpenTasksByPipeline,
-  groupCompletedTasksByPipeline,
-  addTask,
-  getPipelineForTask,
-  updateTaskById
-} from '@/utils/leadTasks'
-import {
-  addPipelineTask,
-  updatePipelineTask,
-  removePipelineTask,
-  flattenPipelineTasks
-} from '@/utils/pipelineTasks'
-import { updateTeamTask, removeTeamTask } from '@/utils/teamTasks'
-import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
 import { buildVisibleTaskListFresh } from '@/utils/taskListSync'
-import { flattenTeamTasks, getAllTeamMembers, getMembersForTeamSharedPipeline } from '@/utils/teamTaskUtils'
+import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
+import { getAllTeamMembers, getMembersForTeamSharedPipeline } from '@/utils/teamTaskUtils'
 import { getTaskRowDisplayFields } from '@/utils/taskRowDisplay'
 import { flattenDealsFromPipelines, findDealInPipelines } from '@/utils/deals'
-import { fetchTeamTasks, updateTeamTask as updateServerTeamTask, deleteTeamTask } from '@/utils/tasks'
-import { normalizeServerTask, resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
+import { patchServerTask, removeServerTask } from '@/utils/serverTaskOps'
+import { resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
+import { getAllTasks, groupOpenTasksByPipeline, groupCompletedTasksByPipeline } from '@/utils/leadTasks'
 import { CreateTaskPanel } from './CreateTaskPanel'
 import { NewTaskDialog } from './NewTaskDialog'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 import { WindowedItems } from '@/hooks/useWindowedList'
@@ -62,7 +44,6 @@ export function TasksPanel({
   teams = [],
   onCreateLead,
 }) {
-  const { scheduleSync } = useUserDataSync()
   const [allTasks, setAllTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(false)
   const tasksLoadedOnce = useRef(false)
@@ -83,7 +64,13 @@ export function TasksPanel({
     try {
       // Tasks panel always shows the full merged list (TASK_LIST_SCOPE.ALL).
       if (apiMode) {
-        const merged = await buildVisibleTaskListFresh({ pipelines, getToken, teams })
+        if (!getToken) {
+          setTasksWithPendingMerge(setAllTasks, [])
+          tasksLoadedOnce.current = true
+          setListReady(true)
+          return
+        }
+        const merged = await buildVisibleTaskListFresh({ getToken, teams })
         setTasksWithPendingMerge(setAllTasks, merged)
       } else {
         setTasksWithPendingMerge(setAllTasks, getAllTasks())
@@ -136,6 +123,10 @@ export function TasksPanel({
   const editTeamContext = editingTask?.__source === 'team'
 
   const openAddTask = () => {
+    if (apiMode && !getToken) {
+      showToast('Sign in to create tasks', 'error')
+      return
+    }
     setShowAddTask(true)
   }
 
@@ -158,49 +149,24 @@ export function TasksPanel({
     createOptimisticTaskToggleHandler({
       setTaskList: setAllTasks,
       getToken,
-      onPipelinesChange,
-      scheduleSync,
       onAfterLocalToggle: refreshTasks,
       onError: (err) => showToast(err.message || 'Could not update task', 'error'),
     }),
-    [getToken, onPipelinesChange, scheduleSync, refreshTasks]
+    [getToken, refreshTasks]
   )
 
   const handleDeleteTask = async (task) => {
-    if (task.__source === 'server' && getToken) {
-      try {
-        await deleteTeamTask(getToken, task.id)
-        showToast('Task deleted', 'success')
-        refreshTasks()
-      } catch (err) {
-        showToast(err.message || 'Could not delete task', 'error')
-      }
+    if (!getToken) {
+      showToast('Sign in to delete tasks', 'error')
       return
     }
-    if (task.__source === 'team' && task.pipelineId && task.leadId) {
-      try {
-        await removeTeamTask(getToken, task.pipelineId, task.leadId, task.id)
-        await onPipelinesChange?.()
-        showToast('Task deleted', 'success')
-      } catch (err) {
-        showToast(err.message || 'Could not delete task', 'error')
-      }
-      return
+    try {
+      await removeServerTask(getToken, task.id)
+      showToast('Task deleted', 'success')
+      refreshTasks()
+    } catch (err) {
+      showToast(err.message || 'Could not delete task', 'error')
     }
-    if (task.__source === 'pipeline' && task.pipelineId) {
-      try {
-        await removePipelineTask(getToken, task.pipelineId, task.id)
-        await onPipelinesChange?.()
-        showToast('Task deleted', 'success')
-      } catch (err) {
-        showToast(err.message || 'Could not delete task', 'error')
-      }
-      return
-    }
-    deleteLeadTask(task.parcelId, task.id)
-    refreshTasks()
-    scheduleSync()
-    showToast('Task deleted', 'success')
   }
 
   const handleViewOnSchedule = (task) => {
@@ -261,8 +227,6 @@ export function TasksPanel({
     scheduledAt,
     scheduledEndAt,
     assignedUids = [],
-    leadId = null,
-    dealId = null,
   }) => {
     if (!editingTask) return
     const t = title.trim()
@@ -270,127 +234,22 @@ export function TasksPanel({
       showToast('Enter a task title', 'error')
       return
     }
+    if (!getToken) {
+      showToast('Sign in to edit tasks', 'error')
+      return
+    }
     const endAt = scheduledEndAt && scheduledEndAt > (scheduledAt || 0) ? scheduledEndAt : null
-    if (editingTask.__source === 'server' && getToken) {
-      try {
-        await updateServerTeamTask(getToken, editingTask.id, {
-          title: t,
-          scheduledAt,
-          scheduledEndAt: endAt,
-          assignedUids,
-        })
-        showToast('Task updated', 'success')
-        setEditingTask(null)
-        refreshTasks()
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
-      return
-    }
-    if (editingTask.__source === 'team' && editingTask.pipelineId && editingTask.leadId) {
-      try {
-        await updateTeamTask(getToken, editingTask.pipelineId, editingTask.leadId, {
-          id: editingTask.id,
-          title: t,
-          dueAt: scheduledAt,
-          assignedUids,
-        })
-        await onPipelinesChange?.()
-        showToast('Task updated', 'success')
-        setEditingTask(null)
-        refreshTasks()
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
-      return
-    }
     if (endAt && scheduledAt && endAt <= scheduledAt) {
       showToast('End time must be after start time', 'error')
       return
     }
-
-    const deal = dealId ? allDeals.find((d) => d.id === dealId) : null
-    const ctx = resolveTaskContext({
-      leadId,
-      dealId,
-      deal,
-      leads: displayLeads,
-      pipelines,
-    })
-    let parcelId = ctx.parcelId
-    let pipelineId = ctx.pipelineId
-
-    if (apiMode && parcelId) {
-      const lead = displayLeads.find(
-        (l) => String(l.parcelId) === String(parcelId) || String(l.id) === String(parcelId)
-      )
-      pipelineId = lead?.__pipelineId ?? pipelineId
-    }
-
-    const wasPipeline = editingTask.__source === 'pipeline' && editingTask.pipelineId
-    const goingToPipe = !!pipelineId
-    const sameTargetPipe = wasPipeline && goingToPipe && editingTask.pipelineId === pipelineId
-
     try {
-      if (sameTargetPipe) {
-        await updatePipelineTask(getToken, pipelineId, {
-          id: editingTask.id,
-          title: t,
-          scheduledAt,
-          scheduledEndAt: endAt,
-          parcelId,
-          dealId: ctx.dealId,
-        })
-        await onPipelinesChange?.()
-      } else if (wasPipeline && !goingToPipe) {
-        await removePipelineTask(getToken, editingTask.pipelineId, editingTask.id)
-        addTask({
-          pipelineId: null,
-          parcelId: parcelId || null,
-          dealId: ctx.dealId,
-          leadId: ctx.leadId,
-          title: t,
-          scheduledAt,
-          scheduledEndAt: endAt,
-        })
-        await onPipelinesChange?.()
-        scheduleSync()
-      } else if (wasPipeline && goingToPipe && !sameTargetPipe) {
-        await removePipelineTask(getToken, editingTask.pipelineId, editingTask.id)
-        await addPipelineTask(getToken, pipelineId, {
-          id: editingTask.id,
-          title: t,
-          parcelId: parcelId || null,
-          dealId: ctx.dealId,
-          scheduledAt,
-          scheduledEndAt: endAt,
-        })
-        await onPipelinesChange?.()
-      } else if (!wasPipeline && goingToPipe) {
-        removeLocalTaskById(editingTask.id)
-        await addPipelineTask(getToken, pipelineId, {
-          id: editingTask.id,
-          title: t,
-          parcelId: parcelId || null,
-          dealId: ctx.dealId,
-          scheduledAt,
-          scheduledEndAt: endAt,
-        })
-        await onPipelinesChange?.()
-        scheduleSync()
-      } else {
-        updateTaskById(editingTask.id, {
-          title: t,
-          scheduledAt,
-          scheduledEndAt: endAt,
-          pipelineId: null,
-          parcelId,
-          dealId: ctx.dealId,
-          leadId: ctx.leadId,
-        })
-        refreshTasks()
-        scheduleSync()
-      }
+      await patchServerTask(getToken, editingTask.id, {
+        title: t,
+        scheduledAt,
+        scheduledEndAt: endAt,
+        assignedUids,
+      })
       showToast('Task updated', 'success')
       setEditingTask(null)
       refreshTasks()
@@ -398,6 +257,8 @@ export function TasksPanel({
       showToast(err.message || 'Could not update task', 'error')
     }
   }
+
+  const needsSignIn = apiMode && !getToken
 
   const hasOpen = unlabeled.length > 0 || groups.length > 0
   const hasClosedContent = closedUnlabeled.length > 0 || closedGroups.length > 0
@@ -446,7 +307,9 @@ export function TasksPanel({
           className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-6 py-4"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          {tasksLoading && allTasks.length === 0 ? (
+          {needsSignIn ? (
+            <p className="text-sm text-white/60 py-8 text-center">Sign in to view and manage tasks.</p>
+          ) : tasksLoading && allTasks.length === 0 ? (
             <PanelListBodyLoading />
           ) : (
             <div className={cn(listReady && 'panel-data-fade-in')}>

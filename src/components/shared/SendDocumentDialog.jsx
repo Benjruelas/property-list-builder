@@ -11,22 +11,28 @@ import {
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
-import { useAuth } from '../../contexts/AuthContext'
-import { createFormInvite } from '../../utils/forms'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export function SendFormLinkDialog({ open, template, prefillValues, onClose }) {
-  const { getToken } = useAuth()
+/**
+ * Shared “email a link / request” shell for forms and similar send flows.
+ */
+export function SendDocumentDialog({
+  open,
+  onClose,
+  title = 'Send',
+  description,
+  confirmLabel = 'Send link',
+  confirmIcon: ConfirmIcon = Link2,
+  onSend,
+  sending: externalSending = false,
+}) {
   const [recipient, setRecipient] = useState('')
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sentTo, setSentTo] = useState(null)
 
-  const prefillCount = useMemo(
-    () => Object.keys(prefillValues || {}).length,
-    [prefillValues]
-  )
+  const busy = sending || externalSending
 
   const resetForm = () => {
     setRecipient('')
@@ -35,7 +41,7 @@ export function SendFormLinkDialog({ open, template, prefillValues, onClose }) {
   }
 
   const handleClose = () => {
-    if (sending) return
+    if (busy) return
     resetForm()
     onClose?.()
   }
@@ -46,23 +52,18 @@ export function SendFormLinkDialog({ open, template, prefillValues, onClose }) {
       showToast('Enter a valid recipient email', 'error')
       return
     }
-    if (!template?.id) return
     setSending(true)
     try {
-      await createFormInvite(getToken, {
-        templateId: template.id,
-        recipientEmail: trimmed,
-        message: message.trim() || undefined,
-        prefillValues: prefillCount > 0 ? prefillValues : undefined,
-      })
+      await onSend({ recipientEmail: trimmed, message: message.trim() || undefined })
       setSentTo(trimmed)
-      showToast(`Request sent to ${trimmed}`, 'success')
     } catch (e) {
-      showToast(e.message || 'Failed to send form link', 'error')
+      showToast(e.message || 'Failed to send', 'error')
     } finally {
       setSending(false)
     }
   }
+
+  const desc = useMemo(() => description, [description])
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose() }}>
@@ -96,12 +97,12 @@ export function SendFormLinkDialog({ open, template, prefillValues, onClose }) {
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Request Completion</DialogTitle>
-              <DialogDescription className="text-sm opacity-90 leading-relaxed">
-                {prefillCount > 0
-                  ? `Email a link with your ${prefillCount} filled field${prefillCount === 1 ? '' : 's'}. The recipient completes the rest. Expires in 30 days.`
-                  : 'Email a one-time link for the recipient to complete this form. Expires in 30 days.'}
-              </DialogDescription>
+              <DialogTitle>{title}</DialogTitle>
+              {desc ? (
+                <DialogDescription className="text-sm opacity-90 leading-relaxed">
+                  {desc}
+                </DialogDescription>
+              ) : null}
             </DialogHeader>
 
             <div className="space-y-4">
@@ -128,12 +129,12 @@ export function SendFormLinkDialog({ open, template, prefillValues, onClose }) {
             </div>
 
             <DialogFooter className="gap-2 sm:flex-row flex-col-reverse">
-              <Button variant="outline" onClick={handleClose} disabled={sending} className="flex-1 min-w-0 share-dialog-btn forms-send-cancel">
+              <Button variant="outline" onClick={handleClose} disabled={busy} className="flex-1 min-w-0 share-dialog-btn forms-send-cancel">
                 Cancel
               </Button>
-              <Button variant="outline" onClick={handleSend} disabled={sending} className="flex-1 min-w-0 share-dialog-btn forms-send-confirm">
-                {sending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Link2 className="h-4 w-4 mr-2" />}
-                Send link
+              <Button variant="outline" onClick={handleSend} disabled={busy} className="flex-1 min-w-0 share-dialog-btn forms-send-confirm">
+                {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ConfirmIcon className="h-4 w-4 mr-2" />}
+                {confirmLabel}
               </Button>
             </DialogFooter>
           </>
@@ -142,5 +143,3 @@ export function SendFormLinkDialog({ open, template, prefillValues, onClose }) {
     </Dialog>
   )
 }
-
-export default SendFormLinkDialog

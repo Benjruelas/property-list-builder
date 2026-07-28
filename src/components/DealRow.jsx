@@ -7,6 +7,7 @@ import { getLeadPhones, getLeadEmails } from '@/utils/leadContact'
 import { DealProfitBadge } from './DealLineItemsSection'
 import { dealHasFinancials } from '@/utils/dealFinances'
 import { cn } from '@/lib/utils'
+import { CRM_LIST_ROW_STATUS_BADGE_CLASS } from './crm/crmListBadgeStyles'
 
 export const DEAL_LIST_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item crm-deal-row flex flex-col px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
@@ -30,7 +31,7 @@ function DealStageBadge({ label, closed = false, className, title }) {
   return (
     <span
       className={cn(
-        'crm-row-status-badge inline-flex max-w-full shrink-0 rounded-md border uppercase tracking-wide',
+        CRM_LIST_ROW_STATUS_BADGE_CLASS,
         closed
           ? 'bg-white/10 text-white/70 border-white/20'
           : 'bg-blue-500/20 text-blue-200 border-blue-400/40',

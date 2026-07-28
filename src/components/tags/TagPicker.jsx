@@ -237,7 +237,7 @@ export function TagPicker({
       {showAddTrigger && !disabled && (
         <button
           type="button"
-          className="tag-chip-add inline-flex items-center gap-1 rounded-full border border-dashed border-white/25 px-2 py-0.5 text-[11px] text-white/50 hover:text-white/80 hover:border-white/40 transition-colors"
+          className="tag-chip-add inline-flex items-center gap-1 rounded-md border border-dashed border-white/25 px-2 py-0.5 text-[10px] text-white/50 hover:text-white/80 hover:border-white/40 transition-colors"
           onClick={(e) => {
             e.stopPropagation()
             openPicker(e)

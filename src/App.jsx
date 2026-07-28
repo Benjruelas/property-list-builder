@@ -4,7 +4,6 @@ import { getModalPortalContainer } from './utils/modalPortal'
 import MapGL, { Marker as MapMarker, Source, Layer } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { CompassOrientation } from './components/CompassOrientation'
-// import { NorthIndicator } from './components/NorthIndicator'
 import { PMTilesParcelLayer } from './components/PMTilesParcelLayer'
 import { LeadMapLayer } from './components/LeadMapLayer'
 import { StateBoundaryLayer } from './components/StateBoundaryLayer'
@@ -85,7 +84,7 @@ import { subscribeToWebPush } from './utils/pushNotifications'
 import { reverseGeocodeCity, addressFromProperties, resolveParcelDisplayAddress } from './utils/reverseGeocode'
 import { fetchLandRecordsParcel } from './utils/fetchLandRecordsParcel'
 import { smoothPath, totalDistanceMiles, totalDistanceKm } from './utils/pathSmoothing'
-import { ConvertToLeadPipelineDialog } from './components/ConvertToLeadPipelineDialog'
+import { MoveDealDialog } from './components/MoveDealDialog'
 import { CreateLeadDialog } from './components/CreateLeadDialog'
 import { CreateTaskPanel } from './components/CreateTaskPanel'
 import { CreateDealDialog } from './components/CreateDealDialog'
@@ -104,7 +103,6 @@ import { findDockablePrimaryRoot } from './navigation/taskDock'
 import { resolvePanelDockSlot } from './navigation/panelDockSlot'
 import { HailStormOverlay, HailStormDismissPill, HailStormMapMarkers } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
-// import { RoofInspectorPanel } from './components/RoofInspectorPanel' // roof inspector — restore later
 import { PermissionPrompt, hasCompletedPermissionOnboarding } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
@@ -112,11 +110,11 @@ import { useTeamDataSync } from './hooks/useTeamDataSync'
 import { countPendingUploadsByLeadId, shouldEnableSharedAssetSync } from './utils/sharedAssetSync'
 import { photoUploadManager } from './photos/PhotoUploadManager'
 import { getSettings, updateSettings, consumeSettingsMigrationPending } from './utils/settings'
-import { resolveLeadStatuses } from './utils/leadStatuses'
-import { resolveDealStatuses } from './utils/dealStatuses'
+import { resolveLeadStatuses, canEditLeadStatuses } from './utils/leadStatuses'
+import { resolveDealStatuses, canEditDealStatuses } from './utils/dealStatuses'
 import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
-import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, migrateLeadTasksToPipelines, updateTaskById } from './utils/leadTasks'
-import { removePipelineTask, addPipelineTask } from './utils/pipelineTasks'
+import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, updateTaskById } from './utils/leadTasks'
+import { ensureUnifiedTasks } from './utils/taskMigration'
 import { getParcelNote, saveParcelNote } from './utils/parcelNotes'
 import { loadClosedDeals, addClosedDeal, buildClosedDealRecord, runApiPipelinesFreshStartMigration, runLeadsDealsFreshStartMigration } from './utils/closedDeals'
 import { invalidateCachedLeadForms } from './utils/leadForms'
@@ -823,16 +821,17 @@ function App() {
   // Task deadline local notifications (while app runs)
   useEffect(() => {
     if (!permissionsReady) return undefined
-    const tick = () => {
+    let cancelled = false
+
+    const notifyForTasks = (tasks) => {
       const g = getSettings()
       const n = g.notifications || {}
       if (n.deviceAlertsEnabled === false || !n.taskDeadline || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
         return
       }
       const leadMs = (n.taskDeadlineLeadMinutes || 60) * 60 * 1000
-      const tasks = getAllTasks()
       const now = Date.now()
-      for (const t of tasks) {
+      for (const t of tasks || []) {
         if (t.completed || !t.scheduledAt) continue
         const at =
           typeof t.scheduledAt === 'number' ? t.scheduledAt : new Date(t.scheduledAt).getTime()
@@ -859,10 +858,31 @@ function App() {
         })
       }
     }
-    const id = setInterval(tick, 60000)
+
+    const tick = async () => {
+      if (cancelled) return
+      if (currentUser && getToken) {
+        try {
+          const { fetchAllServerTasks } = await import('./utils/taskMigration')
+          const tasks = await fetchAllServerTasks(getToken)
+          notifyForTasks(tasks)
+        } catch {
+          /* ignore */
+        }
+        return
+      }
+      notifyForTasks(getAllTasks())
+    }
+
+    const id = setInterval(() => {
+      tick()
+    }, 60000)
     tick()
-    return () => clearInterval(id)
-  }, [permissionsReady])
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [permissionsReady, currentUser, getToken])
 
   // Returning visits inspect permission without invoking browser/OS UI.
   // When the check reports "prompt" but access was previously attained (common
@@ -1630,36 +1650,17 @@ function App() {
     })()
   }, [currentUser, pipelines.length, getToken, refreshPipelines])
 
-  // One-shot client migration: move local tasks with a pipelineId up to pipeline.tasks
-  const leadTasksMigrationRunRef = useRef(false)
+  // Unified task store migration (local + embedded → /api/tasks)
   useEffect(() => {
-    if (!currentUser?.uid || !getToken) return
-    if (pipelines.length === 0) return
-    if (leadTasksMigrationRunRef.current) return
-    const flagKey = `leadTasksMigratedV1:${currentUser.uid}`
-    let flagged = false
-    try { flagged = localStorage.getItem(flagKey) === 'true' } catch { /* ignore */ }
-    if (flagged) {
-      leadTasksMigrationRunRef.current = true
-      return
-    }
-    leadTasksMigrationRunRef.current = true
-    ;(async () => {
-      try {
-        const stats = await migrateLeadTasksToPipelines(
-          pipelines,
-          (pipelineId, task) => addPipelineTask(getToken, pipelineId, task)
-        )
-        if (stats.migrated > 0) {
-          await refreshPipelines()
-        }
-        try { localStorage.setItem(flagKey, 'true') } catch { /* ignore */ }
-        scheduleUserDataSync(getToken)
-      } catch (e) {
-        console.warn('leadTasks migration failed:', e?.message || e)
-      }
-    })()
-  }, [currentUser?.uid, getToken, pipelines, refreshPipelines])
+    if (!getToken) return
+    void ensureUnifiedTasks(getToken).catch((e) => {
+      console.warn('task migration failed:', e?.message || e)
+    })
+    void import('./utils/outreachTemplates').then(({ fetchOutreachTemplates }) => {
+      fetchOutreachTemplates(getToken, 'email').catch(() => {})
+      fetchOutreachTemplates(getToken, 'text').catch(() => {})
+    })
+  }, [getToken])
 
   useEffect(() => {
     if (isDealPipelineOpen && pipelines.length === 0) setDealPipelineDeals(loadDeals())
@@ -3625,45 +3626,6 @@ function App() {
     }
   }, [lists, currentUser, getToken])
 
-  const handleSkipTraceList = useCallback(async (listId) => {
-    if (authLoading) return
-    if (!currentUser?.uid) { nav.openLogin(); return }
-    const list = lists.find((l) => l.id === listId)
-    if (!list?.parcels?.length) {
-      showToast('List has no parcels to skip trace', 'error')
-      return
-    }
-    const parcelsToTrace = []
-    for (const parcel of list.parcels) {
-      const parcelId = parcel?.id || parcel?.properties?.PROP_ID || parcel
-      const parcelData = typeof parcel === 'object' && parcel?.properties
-        ? { id: parcelId, properties: parcel.properties }
-        : { id: parcelId, properties: { PROP_ID: parcelId } }
-      const { payload, error } = buildSkipTraceRequest(parcelData, {
-        previousFullAddress: getSkipTracedParcel(parcelId)?.address || ''
-      })
-      if (payload) parcelsToTrace.push({ parcelId, address: payload.address, request: payload })
-      else if (error) console.warn('skip trace list skip parcel', parcelId, error)
-    }
-    if (!parcelsToTrace.length) {
-      showToast('No parcels with valid addresses to skip trace', 'error')
-      return
-    }
-    addSkipTraceJob({
-      listId: list.id,
-      listName: list.name,
-      parcelsToTrace,
-      status: 'pending'
-    })
-    scheduleUserDataSync(getToken)
-    setSkipTracingInProgress((prev) => {
-      const next = new Set(prev)
-      parcelsToTrace.forEach((p) => next.add(p.parcelId))
-      return next
-    })
-    showToast(`Skip trace queued for "${list.name}" (${parcelsToTrace.length} parcels)`, 'info')
-  }, [authLoading, currentUser, lists, getToken])
-
   const resolveParcelDataForSkipTrace = useCallback((parcelId) => {
     for (const list of lists) {
       for (const parcel of list.parcels || []) {
@@ -3981,7 +3943,6 @@ function App() {
             getHeading={getHeading}
             subscribeHeading={subscribeHeading}
           />
-          {/* <NorthIndicator mapRef={mapInstanceRef} /> */}
           <StateBoundaryLayer />
           <PMTilesParcelLayer 
             mapRef={mapInstanceRef}
@@ -4186,6 +4147,7 @@ function App() {
         getToken={getToken}
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('lists', tag)}
+        onOpenSkipTraced={() => nav.openSkipTraced()}
       />
 
       <ParcelListPanel
@@ -4425,6 +4387,7 @@ function App() {
         parcelData={phoneActionPanel?.parcelData}
         leadId={phoneActionPanel?.leadId}
         initialStep={phoneActionPanel?.initialStep ?? 1}
+        getToken={getToken}
         onOutreach={(type) => handleLogLeadOutreach(phoneActionPanel?.leadId, type, phoneActionPanel?.phone)}
       />
 
@@ -4432,7 +4395,7 @@ function App() {
         isOpen={!!emailActionPanel}
         onClose={() => nav.popMapOverlay()}
         email={emailActionPanel?.email}
-        parcelData={emailActionPanel?.parcelData}
+        getToken={getToken}
         onSelectTemplate={handleOpenEmailComposer}
         onNoTemplate={() => handleOpenEmailComposer(null)}
       />
@@ -4447,6 +4410,9 @@ function App() {
           setSelectedEmailTemplate(null)
         }}
         initialTab={outreachInitialTab}
+        getToken={getToken}
+        settings={settings}
+        onSettingsChange={handleSettingsChange}
       />
       </Suspense>
       )}
@@ -4672,6 +4638,13 @@ function App() {
         onClose={() => nav.popIfTop('teams.detail')}
         onTeamsChange={refreshTeams}
         pendingInvites={pendingTeamInvites}
+        teamMembership={teamMembership}
+        leadStatuses={resolveLeadStatuses({ settings, teams, teamMembership })}
+        canEditLeadStatuses={canEditLeadStatuses(teamMembership)}
+        onSaveUserLeadStatuses={(normalized) => handleSettingsChange({ leadStatuses: normalized })}
+        dealStatuses={resolveDealStatuses({ settings, teams, teamMembership })}
+        canEditDealStatuses={canEditDealStatuses(teamMembership)}
+        onSaveUserDealStatuses={(normalized) => handleSettingsChange({ dealStatuses: normalized })}
       />
       </Suspense>
       )}
@@ -4881,6 +4854,7 @@ function App() {
         open={dealTemplatePickerOpen}
         onOpenChange={(v) => { if (!v) nav.popModal() }}
         onSelect={handleDealTemplatePicked}
+        getToken={getToken}
         nestedOverlay={dealTemplateNestedOverlay}
       />
 
@@ -4891,6 +4865,7 @@ function App() {
         pipelines={pipelines.filter((p) => canAddDealsToPipeline(currentUser, p, teams))}
         teams={teams}
         onSaved={bumpDealTemplatesRefresh}
+        getToken={getToken}
         nestedOverlay={dealTemplateNestedOverlay || dealTemplatesManagerOpen}
         canSeeDealAmounts={showDealAmounts}
       />
@@ -4904,6 +4879,7 @@ function App() {
           openCreateDealTemplateEditor(id)
         }}
         refreshKey={dealTemplatesRefreshKey}
+        getToken={getToken}
         nestedOverlay={isDealsPanelOpen}
       />
 
@@ -4931,20 +4907,6 @@ function App() {
       </Suspense>
       )}
 
-      {/*
-      <RoofInspectorPanel
-        isOpen={isRoofInspectorOpen}
-        onClose={() => {
-          setIsRoofInspectorOpen(false)
-          if (returnToParcelDetailsAfterRoofRef.current) {
-            returnToParcelDetailsAfterRoofRef.current = false
-            setIsParcelDetailsOpen(true)
-          }
-        }}
-        parcelData={roofInspectorParcel}
-      />
-      */}
-
       {/* Authentication Dialogs */}
       <Login
         isOpen={isLoginOpen}
@@ -4963,7 +4925,7 @@ function App() {
         onSwitchToLogin={() => nav.openLogin()}
       />
 
-      <ConvertToLeadPipelineDialog
+      <MoveDealDialog
         open={!!moveDealContext}
         onOpenChange={(o) => { if (!o) nav.popModal() }}
         pipelines={moveDealContext?.eligiblePipelines ?? []}

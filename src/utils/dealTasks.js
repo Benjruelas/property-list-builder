@@ -1,6 +1,4 @@
-import { addTask } from './leadTasks'
-import { addPipelineTask } from './pipelineTasks'
-import { addTeamTask } from './teamTasks'
+import { createServerTask } from './serverTaskOps'
 
 export function normalizePendingDealTask(item) {
   return {
@@ -44,7 +42,7 @@ export function taskRowsForSubmit(items) {
 }
 
 /**
- * Create pipeline / personal tasks linked to a deal after it is persisted.
+ * Create server tasks linked to a deal after it is persisted.
  */
 export async function createTasksForDeal({
   deal,
@@ -53,12 +51,13 @@ export async function createTasksForDeal({
   tasks,
   getToken,
   apiMode = false,
+  leads = [],
+  pipelines = [],
 }) {
   const rows = taskRowsForSubmit(tasks)
   if (rows.length === 0 || !deal?.id) return { created: 0, failed: 0 }
 
   const pipelineId = pipeline?.id || deal.pipelineId || null
-  const isTeamPipe = Array.isArray(pipeline?.teamShares) && pipeline.teamShares.length > 0
   const parcelId = deal.parcelId || lead?.parcelId || null
   const leadId = deal.leadId || lead?.id || null
   let created = 0
@@ -67,45 +66,25 @@ export async function createTasksForDeal({
   for (const row of rows) {
     const trimmed = String(row.title ?? '').trim()
     if (!trimmed) continue
+    if (!getToken) {
+      failed += 1
+      continue
+    }
     try {
-      if (apiMode && pipelineId && getToken) {
-        if (isTeamPipe && leadId) {
-          try {
-            await addTeamTask(getToken, pipelineId, leadId, {
-              title: trimmed,
-              dueAt: row.scheduledAt,
-              assignedUids: row.assignedUids,
-              dealId: deal.id,
-            })
-            created += 1
-            continue
-          } catch {
-            // fall back to pipeline-scoped task
-          }
-        }
-        await addPipelineTask(getToken, pipelineId, {
-          title: trimmed,
-          parcelId,
-          dealId: deal.id,
-          scheduledAt: row.scheduledAt,
-          scheduledEndAt: row.scheduledEndAt,
-          completed: row.completed,
-          completedAt: row.completed ? row.completedAt : null,
-        })
-        created += 1
-      } else {
-        addTask({
-          pipelineId: pipelineId || null,
-          parcelId: parcelId || leadId || null,
-          dealId: deal.id,
-          title: trimmed,
-          scheduledAt: row.scheduledAt,
-          scheduledEndAt: row.scheduledEndAt,
-          completed: row.completed,
-          completedAt: row.completed ? row.completedAt : null,
-        })
-        created += 1
-      }
+      await createServerTask(getToken, {
+        title: trimmed,
+        scheduledAt: row.scheduledAt,
+        scheduledEndAt: row.scheduledEndAt,
+        assignedUids: row.assignedUids,
+        leadId,
+        dealId: deal.id,
+        deal,
+        leads,
+        pipelines,
+        pipelineId,
+        parcelId,
+      })
+      created += 1
     } catch {
       failed += 1
     }

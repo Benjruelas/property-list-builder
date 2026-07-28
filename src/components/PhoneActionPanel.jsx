@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Phone } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getTextTemplates } from '@/utils/textTemplates'
+import { getCachedOutreachTemplates, fetchOutreachTemplates } from '@/utils/outreachTemplates'
 import { replaceTemplateTags } from '@/utils/emailTemplates'
 import { normalizePhoneForTel } from '@/utils/phoneFormat'
 import {
@@ -55,6 +55,7 @@ export function PhoneActionPanel({
   leadId = null,
   onOutreach,
   initialStep = 1,
+  getToken = null,
   nestedOverlay = true,
 }) {
   const [step, setStep] = useState(STEP_MENU)
@@ -66,9 +67,25 @@ export function PhoneActionPanel({
       if (initialStep === STEP_TEXT_TEMPLATES) setStep(STEP_TEXT_TEMPLATES)
       else if (initialStep === STEP_CALL_CONFIRM) setStep(STEP_CALL_CONFIRM)
       else setStep(STEP_MENU)
-      setTemplates(getTextTemplates())
+      let cancelled = false
+      const load = async () => {
+        if (getToken) {
+          try {
+            const list = await fetchOutreachTemplates(getToken, 'text')
+            if (!cancelled) setTemplates(list)
+            return
+          } catch {
+            /* cache fallback */
+          }
+        }
+        if (!cancelled) setTemplates(getCachedOutreachTemplates('text'))
+      }
+      load()
+      return () => {
+        cancelled = true
+      }
     }
-  }, [isOpen, initialStep])
+  }, [isOpen, initialStep, getToken])
 
   const handleCall = () => {
     const tel = normalizePhoneForTel(phone)

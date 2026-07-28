@@ -11,12 +11,13 @@ import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 import { loadColumns, saveColumns, loadDeals, saveDeals, loadTitle, saveTitle } from '@/utils/dealPipeline'
 import { getAllTasks, getPersonalTasks, addTask, toggleLeadTask, updateLeadTaskSchedule, updateLeadTaskTitle, deleteLeadTask, deleteAllLeadTasks, formatTaskCompletedDate, formatTaskScheduledDate, taskBelongsToPipeline } from '@/utils/leadTasks'
-import { addPipelineTask, updatePipelineTask, togglePipelineTask, removePipelineTask, flattenPipelineTasks } from '@/utils/pipelineTasks'
-import { addTeamTask, updateTeamTask, removeTeamTask, toggleTeamTask } from '@/utils/teamTasks'
-import { getAllTeamMembers, flattenTeamTasks, formatAssigneeList, shouldStoreAsTeamTask } from '@/utils/teamTaskUtils'
+import { buildVisibleTaskListFresh } from '@/utils/taskListSync'
+import { createServerTask, patchServerTask, removeServerTask } from '@/utils/serverTaskOps'
+import { fetchAllServerTasks } from '@/utils/taskMigration'
 import { createOptimisticTaskToggleHandler, setTasksWithPendingMerge } from '@/utils/taskToggle'
+import { getAllTeamMembers, formatAssigneeList } from '@/utils/teamTaskUtils'
 import { NewTaskDialog } from './NewTaskDialog'
-import { createServerAssignedTask, resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
+import { resolveTaskContext, resolveTaskFormIdsFromTask } from '@/utils/taskCreateFlow'
 import { useUserDataSync } from '@/contexts/UserDataSyncContext'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
@@ -318,16 +319,22 @@ export function DealPipeline({
     showToast('Email added to share list', 'success')
   }, [sharePipelineId, onSharePipeline, shareEmail, shareEmailValid, onValidateShareEmail, pipelines])
 
-  const refreshAllTasks = useCallback(() => {
-    // Personal tasks = local leadTasks store with no pipelineId (tasks with a
-    // pipelineId now live on the pipeline doc; legacy rows are migrated away
-    // on first load in App.jsx). Pipeline tasks are flattened from
-    // pipelines[].tasks which are fetched by /api/pipelines (access-filtered).
-    const personal = apiMode ? getPersonalTasks() : getAllTasks()
-    const pipeScoped = apiMode ? flattenPipelineTasks(pipelines) : []
-    const teamScoped = apiMode ? flattenTeamTasks(pipelines) : []
-    setTasksWithPendingMerge(setAllTasks, [...personal, ...pipeScoped, ...teamScoped])
-  }, [apiMode, pipelines])
+  const refreshAllTasks = useCallback(async () => {
+    if (!apiMode) {
+      setTasksWithPendingMerge(setAllTasks, getAllTasks())
+      return
+    }
+    if (!getToken) {
+      setTasksWithPendingMerge(setAllTasks, [])
+      return
+    }
+    try {
+      const merged = await buildVisibleTaskListFresh({ getToken })
+      setTasksWithPendingMerge(setAllTasks, merged)
+    } catch (e) {
+      console.warn('refreshAllTasks', e)
+    }
+  }, [apiMode, getToken])
 
   useEffect(() => {
     if (!activeDealId) refreshAllTasks()
@@ -337,12 +344,10 @@ export function DealPipeline({
     createOptimisticTaskToggleHandler({
       setTaskList: setAllTasks,
       getToken,
-      onPipelinesChange,
-      scheduleSync,
       onAfterLocalToggle: refreshAllTasks,
       onError: (err) => showToast(err.message || 'Failed to update task', 'error'),
     }),
-    [getToken, onPipelinesChange, scheduleSync, refreshAllTasks]
+    [getToken, refreshAllTasks]
   )
 
   const leadOverlay = leadOverlayId ? leads.find((l) => l.id === leadOverlayId) : null
@@ -528,24 +533,20 @@ export function DealPipeline({
     persistDeals(displayDeals.filter(d => d.id !== dealId))
 
     const parcelId = deal?.parcelId
-    if (parcelId) {
-      if (apiMode && activePipeline) {
-        const pipelineTasksForDeal = (activePipeline.tasks || []).filter((t) => t?.parcelId === parcelId || t?.dealId === dealId)
-        let removedAny = false
-        for (const t of pipelineTasksForDeal) {
+    if (apiMode && getToken && dealId) {
+      try {
+        const serverTasks = await fetchAllServerTasks(getToken)
+        for (const t of serverTasks.filter((task) => task.dealId === dealId)) {
           try {
-            await removePipelineTask(getToken, activePipeline.id, t.id)
-            removedAny = true
+            await removeServerTask(getToken, t.id)
           } catch { /* non-fatal */ }
         }
-        if (removedAny) {
-          try { await onPipelinesChange?.() } catch { /* non-fatal */ }
-        }
-      } else {
-        deleteAllLeadTasks(parcelId, null)
         refreshAllTasks()
-        scheduleSync()
-      }
+      } catch { /* non-fatal */ }
+    } else if (parcelId) {
+      deleteAllLeadTasks(parcelId, null)
+      refreshAllTasks()
+      scheduleSync()
     }
 
     showToast('Deal removed', 'success')
@@ -720,86 +721,42 @@ export function DealPipeline({
         pipelines,
       })
       const parcelId = ctx.parcelId || deal?.parcelId || selectedLead?.parcelId || null
-      if (assignedUids.length > 0 && getToken) {
-        try {
-          await createServerAssignedTask(getToken, {
-            title: trimmed,
-            scheduledAt,
-            scheduledEndAt,
-            assignedUids,
-            leadId: ctx.leadId,
-            dealId: ctx.dealId,
-            deal,
-            leads: leads || [],
-            pipelines,
-            pipelineId: activePipelineId || ctx.pipelineId,
-          })
-          showToast('Task added', 'success')
-          setShowAddTaskDialog(false)
-          setAddTaskPrefill(null)
-          if (deal) onOpenDeal?.(deal.id)
-          return
-        } catch (err) {
-          showToast(err.message || 'Could not add task', 'error')
-          return
-        }
+      if (!getToken) {
+        showToast('Sign in to create tasks', 'error')
+        return
       }
-      const leadId = ctx.leadId || deal?.leadId || null
-      if (apiMode && activePipelineId && shouldStoreAsTeamTask(activePipeline, { assignedUids, leadId })) {
-        try {
-          await addTeamTask(getToken, activePipelineId, leadId, {
-            title: trimmed,
-            dueAt: scheduledAt,
-            assignedUids,
-            dealId: deal?.id || null,
-          })
-          await onPipelinesChange?.()
-          showToast('Task added', 'success')
-        } catch (err) {
-          showToast(err.message || 'Could not add task', 'error')
-          return
-        }
-      } else if (apiMode && activePipelineId) {
-        try {
-          await addPipelineTask(getToken, activePipelineId, {
-            title: trimmed,
-            parcelId,
-            dealId: deal?.id || null,
-            scheduledAt,
-            scheduledEndAt,
-          })
-          await onPipelinesChange?.()
-          showToast('Task added', 'success')
-        } catch (err) {
-          showToast(err.message || 'Could not add task', 'error')
-          return
-        }
-      } else {
-        addTask({
-          pipelineId: null,
-          parcelId,
+      try {
+        await createServerTask(getToken, {
           title: trimmed,
           scheduledAt,
           scheduledEndAt,
+          assignedUids,
+          leadId: ctx.leadId,
+          dealId: ctx.dealId,
+          deal,
+          leads: leads || [],
+          pipelines,
+          pipelineId: activePipelineId || ctx.pipelineId,
+          parcelId,
         })
-        refreshAllTasks()
-        scheduleSync()
         showToast('Task added', 'success')
+        setShowAddTaskDialog(false)
+        setAddTaskPrefill(null)
+        refreshAllTasks()
+        if (deal) onOpenDeal?.(deal.id)
+      } catch (err) {
+        showToast(err.message || 'Could not add task', 'error')
       }
-      setShowAddTaskDialog(false)
-      setAddTaskPrefill(null)
-      if (deal) onOpenDeal?.(deal.id)
     },
     [
       apiMode,
       activePipelineId,
-      activePipeline,
       getToken,
-      onPipelinesChange,
       refreshAllTasks,
-      scheduleSync,
       pipelines,
       onOpenDeal,
+      displayDeals,
+      leads,
     ]
   )
 
@@ -807,45 +764,24 @@ export function DealPipeline({
     const trimmed = (title || '').toString().trim()
     if (!trimmed || !editTask?.task) return
     const task = editTask.task
-    if (task.__source === 'team' && task.pipelineId && task.leadId) {
-      try {
-        await updateTeamTask(getToken, task.pipelineId, task.leadId, {
-          id: task.id,
-          title: trimmed,
-          dueAt: scheduledAt,
-          assignedUids,
-        })
-        await onPipelinesChange?.()
-        showToast('Task updated', 'success')
-        setEditTask(null)
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
+    if (!getToken) {
+      showToast('Sign in to edit tasks', 'error')
       return
     }
-    if (task.__source === 'pipeline' && task.pipelineId) {
-      try {
-        await updatePipelineTask(getToken, task.pipelineId, {
-          id: task.id,
-          title: trimmed,
-          scheduledAt,
-          scheduledEndAt,
-        })
-        await onPipelinesChange?.()
-        showToast('Task updated', 'success')
-        setEditTask(null)
-      } catch (err) {
-        showToast(err.message || 'Could not update task', 'error')
-      }
-      return
+    try {
+      await patchServerTask(getToken, task.id, {
+        title: trimmed,
+        scheduledAt,
+        scheduledEndAt,
+        assignedUids,
+      })
+      showToast('Task updated', 'success')
+      setEditTask(null)
+      refreshAllTasks()
+    } catch (err) {
+      showToast(err.message || 'Could not update task', 'error')
     }
-    updateLeadTaskTitle(task.parcelId, task.id, trimmed)
-    updateLeadTaskSchedule(task.parcelId, task.id, scheduledAt, scheduledEndAt)
-    refreshAllTasks()
-    scheduleSync()
-    showToast('Task updated', 'success')
-    setEditTask(null)
-  }, [editTask, getToken, onPipelinesChange, refreshAllTasks, scheduleSync])
+  }, [editTask, getToken, refreshAllTasks])
 
   const newTaskTeamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
 
@@ -1658,27 +1594,16 @@ export function DealPipeline({
                   variant: 'danger',
                   onConfirm: async () => {
                     const task = taskMenu.task
-                    if (task.__source === 'team' && task.pipelineId && task.leadId) {
-                      try {
-                        await removeTeamTask(getToken, task.pipelineId, task.leadId, task.id)
-                        await onPipelinesChange?.()
-                      } catch (err) {
-                        showToast(err.message || 'Could not delete task', 'error')
-                      }
+                    if (!getToken) {
+                      showToast('Sign in to delete tasks', 'error')
                       return
                     }
-                    if (task.__source === 'pipeline' && task.pipelineId) {
-                      try {
-                        await removePipelineTask(getToken, task.pipelineId, task.id)
-                        await onPipelinesChange?.()
-                      } catch (err) {
-                        showToast(err.message || 'Could not delete task', 'error')
-                      }
-                      return
+                    try {
+                      await removeServerTask(getToken, task.id)
+                      refreshAllTasks()
+                    } catch (err) {
+                      showToast(err.message || 'Could not delete task', 'error')
                     }
-                    deleteLeadTask(task.parcelId, task.id)
-                    refreshAllTasks()
-                    scheduleSync()
                   }
                 })
               }}

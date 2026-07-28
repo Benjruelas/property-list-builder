@@ -1,7 +1,7 @@
 /**
  * Progressive disclosure for the floating action bar.
- * Mobile/tablet: wider viewports surface more primary actions; overflow stays in Menu.
- * Desktop (768+): every action on the bar — no Menu.
+ * Mobile: Leads, Tasks, Schedule + Menu overflow.
+ * Desktop (768+): direct access to core items; CRM / Documents / Tools via Menu.
  */
 
 /** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'paths' | 'outreach' | 'settings' | 'photoMode' | 'menu'} ActionBarItemId */
@@ -22,18 +22,31 @@ export const PRIMARY_BAR_ORDER = [
   'activity',
 ]
 
-/**
- * Extra items surfaced on the bar at desktop widths (formerly menu-only).
- * 'photoMode' is desktop-bar-only here — on mobile, Photo Mode lives as a
- * floating button on the map (see MapControls).
- */
-export const DESKTOP_EXTRA_BAR_ORDER = ['photoMode', 'paths', 'outreach', 'settings']
+/** Shown on the bar at desktop widths; CRM/Documents/Tools live in Menu. */
+export const DESKTOP_BAR_ORDER = [
+  'leads',
+  'tasks',
+  'schedule',
+  'activity',
+  'photoMode',
+  'settings',
+  'menu',
+]
 
-export const DESKTOP_BAR_ORDER = [...PRIMARY_BAR_ORDER, ...DESKTOP_EXTRA_BAR_ORDER]
+/** Desktop menu overflow — grouped in ActionBarMenu. */
+export const DESKTOP_MENU_OVERFLOW = [
+  'pipes',
+  'deals',
+  'quotes',
+  'forms',
+  'reports',
+  'lists',
+  'paths',
+  'outreach',
+]
 
 /**
  * How many primary items (excluding Menu) to show at a given viewport width.
- * Smallest (phone): 3 → Leads, Tasks, Schedule, Menu (Pipes in overflow).
  * @param {number} width
  */
 export function getPrimaryBarCount(width) {
@@ -49,7 +62,7 @@ export function resolveActionBarLayout(width) {
   if (width >= DESKTOP_MIN_WIDTH) {
     return {
       barIds: [...DESKTOP_BAR_ORDER],
-      overflowPrimaryIds: [],
+      overflowPrimaryIds: [...DESKTOP_MENU_OVERFLOW],
       isDesktop: true,
     }
   }

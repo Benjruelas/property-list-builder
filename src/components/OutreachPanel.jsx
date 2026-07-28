@@ -33,16 +33,13 @@ import { cn } from '@/lib/utils'
 import { showToast } from './ui/toast'
 import { showConfirm } from './ui/confirm-dialog'
 import {
-  getEmailTemplates,
-  deleteEmailTemplate,
-  serializeEmailTemplateForShare,
-} from '../utils/emailTemplates'
-import {
-  getTextTemplates,
-  deleteTextTemplate,
-  serializeTextTemplateForShare,
-} from '../utils/textTemplates'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
+  fetchOutreachTemplates,
+  getCachedOutreachTemplates,
+  deleteOutreachTemplateApi,
+  serializeOutreachTemplateForShare,
+} from '../utils/outreachTemplates'
+import { updateSettings } from '../utils/settings'
+import { OutreachEmailPrefsSection } from './outreach/OutreachEmailPrefsSection'
 
 const OutreachTemplateEditorDialog = lazy(() =>
   import('./outreach/OutreachTemplateEditorDialog').then((m) => ({
@@ -58,20 +55,21 @@ const TABS = [
   { id: 'text', label: 'Text' },
 ]
 
-const EMAIL_CONFIG = {
-  kind: 'email',
-  tabLabel: 'Email',
-  getTemplates: getEmailTemplates,
-  remove: deleteEmailTemplate,
-  serialize: serializeEmailTemplateForShare,
-}
-
-const TEXT_CONFIG = {
-  kind: 'text',
-  tabLabel: 'Text',
-  getTemplates: getTextTemplates,
-  remove: deleteTextTemplate,
-  serialize: serializeTextTemplateForShare,
+function buildTabConfig(kind, getToken) {
+  const channel = kind === 'text' ? 'text' : 'email'
+  return {
+    kind,
+    tabLabel: kind === 'email' ? 'Email' : 'Text',
+    getTemplates: () => getCachedOutreachTemplates(channel),
+    reloadFromServer: getToken
+      ? () => fetchOutreachTemplates(getToken, channel)
+      : null,
+    remove: async (id) => {
+      if (!getToken) throw new Error('Sign in to manage templates')
+      await deleteOutreachTemplateApi(getToken, id)
+    },
+    serialize: serializeOutreachTemplateForShare,
+  }
 }
 
 function OutreachTabs({ activeTab, onChange }) {
@@ -202,8 +200,7 @@ function TemplateDetail({ template, kind, onEdit }) {
   )
 }
 
-function useTemplateTab(config) {
-  const { scheduleSync } = useUserDataSync()
+function useTemplateTab(config, getToken) {
   const [templates, setTemplates] = useState([])
   const [screen, setScreen] = useState('list')
   const [selected, setSelected] = useState(null)
@@ -215,10 +212,21 @@ function useTemplateTab(config) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorTemplate, setEditorTemplate] = useState(null)
 
-  const reload = useCallback(() => setTemplates(config.getTemplates()), [config])
+  const reload = useCallback(async () => {
+    if (config.reloadFromServer && getToken) {
+      try {
+        const list = await config.reloadFromServer()
+        setTemplates(list)
+        return
+      } catch {
+        /* fall through */
+      }
+    }
+    setTemplates(config.getTemplates())
+  }, [config, getToken])
 
   useEffect(() => {
-    reload()
+    void reload()
   }, [reload])
 
   const goToList = useCallback(() => {
@@ -261,15 +269,18 @@ function useTemplateTab(config) {
 
   const handleDelete = async (id) => {
     if (!(await showConfirm('Delete this template?', 'Delete template'))) return
-    config.remove(id)
-    scheduleSync()
-    reload()
-    if (selected?.id === id) goToList()
-    showToast('Template deleted', 'success')
+    try {
+      await config.remove(id)
+      await reload()
+      if (selected?.id === id) goToList()
+      showToast('Template deleted', 'success')
+    } catch (e) {
+      showToast(e.message || 'Could not delete template', 'error')
+    }
   }
 
   const handleEditorSaved = () => {
-    reload()
+    void reload()
     if (editorTemplate?.id && selected?.id === editorTemplate.id) {
       const fresh = config.getTemplates().find((t) => t.id === editorTemplate.id)
       if (fresh) setSelected(fresh)
@@ -305,11 +316,11 @@ function useTemplateTab(config) {
 }
 
 const TemplateTabPane = forwardRef(function TemplateTabPane(
-  { tab, searchQuery, onNavChange },
+  { tab, searchQuery, onNavChange, getToken },
   ref
 ) {
-  const config = tab === 'email' ? EMAIL_CONFIG : TEXT_CONFIG
-  const t = useTemplateTab(config)
+  const config = buildTabConfig(tab, getToken)
+  const t = useTemplateTab(config, getToken)
   const {
     kind,
     tabLabel,
@@ -411,6 +422,7 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
             kind={kind}
             template={editorTemplate}
             onSaved={handleEditorSaved}
+            getToken={getToken}
             nestedOverlay
             topLayer
           />
@@ -462,7 +474,15 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
   )
 })
 
-export function OutreachPanel({ isOpen, onClose, initialTab = 'email', panelDockSlot }) {
+export function OutreachPanel({
+  isOpen,
+  onClose,
+  initialTab = 'email',
+  panelDockSlot,
+  getToken = null,
+  settings = {},
+  onSettingsChange,
+}) {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
   const [nav, setNav] = useState({ screen: 'list', title: null })
@@ -522,6 +542,13 @@ export function OutreachPanel({ isOpen, onClose, initialTab = 'email', panelDock
         >
           {showListChrome && (
             <div className="mb-3 space-y-3">
+              <OutreachEmailPrefsSection
+                settings={settings}
+                onUpdate={(patch) => {
+                  onSettingsChange?.(patch)
+                  if (getToken) updateSettings(patch, getToken)
+                }}
+              />
               <OutreachTabs activeTab={activeTab} onChange={setActiveTab} />
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40 pointer-events-none" />
@@ -542,6 +569,7 @@ export function OutreachPanel({ isOpen, onClose, initialTab = 'email', panelDock
             tab={activeTab}
             searchQuery={searchQuery}
             onNavChange={setNav}
+            getToken={getToken}
           />
         </div>
       </DialogContent>

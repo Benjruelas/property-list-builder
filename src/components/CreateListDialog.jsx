@@ -54,7 +54,6 @@ export function CreateListDialog({
         visibility: shareState.visibility,
         sharedMemberUids: shareState.sharedMemberUids,
         teamId: activeTeam?.id || null,
-        teamShares: shareState.visibility === VISIBILITY.TEAM && activeTeam ? [activeTeam.id] : [],
       }
       const list = await createList(getToken, payload)
       showToast('List created', 'success')

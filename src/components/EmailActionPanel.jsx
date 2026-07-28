@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getEmailTemplates } from '@/utils/emailTemplates'
+import { getCachedOutreachTemplates, fetchOutreachTemplates } from '@/utils/outreachTemplates'
 import {
   DealTemplatePanelShell,
   DealTemplatePanelScroll,
@@ -14,6 +14,7 @@ export function EmailActionPanel({
   isOpen,
   onClose,
   email,
+  getToken = null,
   onSelectTemplate,
   onNoTemplate,
   nestedOverlay = true,
@@ -21,10 +22,25 @@ export function EmailActionPanel({
   const [templates, setTemplates] = useState([])
 
   useEffect(() => {
-    if (isOpen) {
-      setTemplates(getEmailTemplates())
+    if (!isOpen) return
+    let cancelled = false
+    const load = async () => {
+      if (getToken) {
+        try {
+          const list = await fetchOutreachTemplates(getToken, 'email')
+          if (!cancelled) setTemplates(list)
+          return
+        } catch {
+          /* fall through to cache */
+        }
+      }
+      if (!cancelled) setTemplates(getCachedOutreachTemplates('email'))
     }
-  }, [isOpen])
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, getToken])
 
   if (!email) return null
 

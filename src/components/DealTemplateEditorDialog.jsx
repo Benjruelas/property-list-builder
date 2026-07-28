@@ -4,8 +4,7 @@ import { Button } from './ui/button'
 import { PipelineDropdown } from './PipelineDropdown'
 import { CreateDealFinancesEditor, mapPrefillFinanceRows, financeRowsForSubmit } from './CreateDealFinancesEditor'
 import { CreateDealTasksEditor, mapPrefillTaskRows, taskRowsForSubmit } from './CreateDealTasksEditor'
-import { addDealTemplate, updateDealTemplate, getDealTemplateById } from '@/utils/dealTemplates'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
+import { createDealTemplate, updateDealTemplateApi, getDealTemplateById, fetchDealTemplates } from '@/utils/dealTemplates'
 import { showToast } from './ui/toast'
 import {
   DealTemplatePanelShell,
@@ -19,10 +18,10 @@ export function DealTemplateEditorDialog({
   pipelines = [],
   teams = [],
   onSaved,
+  getToken,
   nestedOverlay = true,
   canSeeDealAmounts = true,
 }) {
-  const { scheduleSync } = useUserDataSync()
   const [name, setName] = useState('')
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
@@ -45,19 +44,29 @@ export function DealTemplateEditorDialog({
     if (initializedRef.current) return
     initializedRef.current = true
 
-    const existing = templateId ? getDealTemplateById(templateId) : null
-    setName(existing?.name || '')
-    setTitle(existing?.title || '')
-    setNotes(existing?.notes || '')
-    const initialPipeline =
-      existing?.pipelineId && pipelines.some((p) => p.id === existing.pipelineId)
-        ? existing.pipelineId
-        : pipelines[0]?.id || ''
-    setPipelineId(initialPipeline)
-    setPayments(mapPrefillFinanceRows(existing?.payments))
-    setCosts(mapPrefillFinanceRows(existing?.costs))
-    setTasks(mapPrefillTaskRows(existing?.tasks))
-  }, [open, templateId, pipelines])
+    const load = async () => {
+      if (getToken) {
+        try {
+          await fetchDealTemplates(getToken)
+        } catch {
+          /* use cache */
+        }
+      }
+      const existing = templateId ? getDealTemplateById(templateId) : null
+      setName(existing?.name || '')
+      setTitle(existing?.title || '')
+      setNotes(existing?.notes || '')
+      const initialPipeline =
+        existing?.pipelineId && pipelines.some((p) => p.id === existing.pipelineId)
+          ? existing.pipelineId
+          : pipelines[0]?.id || ''
+      setPipelineId(initialPipeline)
+      setPayments(mapPrefillFinanceRows(existing?.payments))
+      setCosts(mapPrefillFinanceRows(existing?.costs))
+      setTasks(mapPrefillTaskRows(existing?.tasks))
+    }
+    load()
+  }, [open, templateId, pipelines, getToken])
 
   const canSubmit = !!name.trim()
 
@@ -76,15 +85,18 @@ export function DealTemplateEditorDialog({
         tasks: taskRowsForSubmit(tasks),
       }
       if (isEdit) {
-        updateDealTemplate(templateId, payload)
+        if (!getToken) throw new Error('Sign in required')
+        await updateDealTemplateApi(getToken, templateId, payload)
         showToast('Template updated', 'success')
       } else {
-        addDealTemplate(payload)
+        if (!getToken) throw new Error('Sign in required')
+        await createDealTemplate(getToken, payload)
         showToast('Template created', 'success')
       }
-      scheduleSync()
       onSaved?.()
       onOpenChange(false)
+    } catch (err) {
+      showToast(err.message || 'Could not save template', 'error')
     } finally {
       setSaving(false)
     }

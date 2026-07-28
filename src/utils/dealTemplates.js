@@ -1,29 +1,40 @@
 /**
  * Deal templates — reusable defaults for Create Deal (notes, finances, tasks).
- * Stored in localStorage; synced via userDataSync when signed in.
+ * Server-backed via /api/deal-templates (legacy localStorage cleared on load).
  */
 
+import { getApiBase } from './apiBase'
 import { normalizeDealLineItems } from './dealFinances'
 import { normalizePendingDealTask } from './dealTasks'
 
-const STORAGE_KEY = 'deal_templates'
+const LEGACY_STORAGE_KEY = 'deal_templates'
 
-export function getDealTemplates() {
+try {
+  localStorage.removeItem(LEGACY_STORAGE_KEY)
+} catch {
+  /* ignore */
+}
+
+let templateCache = []
+
+async function parseJsonSafe(res) {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch (error) {
-    console.error('Error getting deal templates:', error)
-    return []
+    return await res.json()
+  } catch {
+    return {}
   }
 }
 
-function saveDealTemplates(templates) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(templates))
-  } catch (error) {
-    console.error('Error saving deal templates:', error)
-  }
+async function authFetch(getToken, path, options = {}) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in required')
+  return fetch(`${getApiBase()}${path}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  })
 }
 
 function normalizeTemplatePayload(template) {
@@ -40,53 +51,105 @@ function normalizeTemplatePayload(template) {
   }
 }
 
+export function getDealTemplates() {
+  return templateCache
+}
+
+export function setDealTemplatesCache(templates) {
+  templateCache = Array.isArray(templates) ? templates : []
+}
+
+export async function fetchDealTemplates(getToken) {
+  const res = await authFetch(getToken, '/deal-templates')
+  if (!res.ok) throw new Error('Failed to fetch deal templates')
+  const data = await parseJsonSafe(res)
+  const templates = data.templates || []
+  setDealTemplatesCache(templates)
+  return templates
+}
+
+export async function createDealTemplate(getToken, template) {
+  const payload = normalizeTemplatePayload(template)
+  const res = await authFetch(getToken, '/deal-templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to create template')
+  }
+  const data = await parseJsonSafe(res)
+  const created = data.template
+  setDealTemplatesCache([...templateCache, created])
+  return created
+}
+
+export async function updateDealTemplateApi(getToken, templateId, updates) {
+  const merged = { ...getDealTemplateById(templateId), ...updates }
+  const payload = { templateId, ...normalizeTemplatePayload(merged) }
+  const res = await authFetch(getToken, '/deal-templates', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to update template')
+  }
+  const data = await parseJsonSafe(res)
+  const updated = data.template
+  setDealTemplatesCache(templateCache.map((t) => (t.id === templateId ? updated : t)))
+  return updated
+}
+
+export async function deleteDealTemplateApi(getToken, templateId) {
+  const res = await authFetch(getToken, '/deal-templates', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ templateId }),
+  })
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to delete template')
+  }
+  setDealTemplatesCache(templateCache.filter((t) => t.id !== templateId))
+}
+
+/** @deprecated use createDealTemplate / updateDealTemplateApi */
 export function addDealTemplate(template) {
-  const templates = getDealTemplates()
-  const id = `deal_tpl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  console.warn('addDealTemplate is deprecated; sign in and use createDealTemplate')
+  const id = `deal_tpl_local_${Date.now()}`
   const now = new Date().toISOString()
   const normalized = normalizeTemplatePayload(template)
-  const newTemplate = {
-    id,
-    ...normalized,
-    createdAt: now,
-    updatedAt: now,
-  }
-  templates.push(newTemplate)
-  saveDealTemplates(templates)
+  const newTemplate = { id, ...normalized, createdAt: now, updatedAt: now }
+  setDealTemplatesCache([...templateCache, newTemplate])
   return id
 }
 
+/** @deprecated use updateDealTemplateApi */
 export function updateDealTemplate(templateId, updates) {
-  const templates = getDealTemplates()
-  const index = templates.findIndex((t) => t.id === templateId)
-  if (index === -1) {
-    console.warn('Deal template not found:', templateId)
-    return false
-  }
-  const merged = { ...templates[index], ...updates }
+  const index = templateCache.findIndex((t) => t.id === templateId)
+  if (index === -1) return false
+  const merged = { ...templateCache[index], ...updates }
   const normalized = normalizeTemplatePayload(merged)
-  templates[index] = {
-    ...templates[index],
+  templateCache[index] = {
+    ...templateCache[index],
     ...normalized,
     updatedAt: new Date().toISOString(),
   }
-  saveDealTemplates(templates)
   return true
 }
 
+/** @deprecated use deleteDealTemplateApi */
 export function deleteDealTemplate(templateId) {
-  const templates = getDealTemplates().filter((t) => t.id !== templateId)
-  saveDealTemplates(templates)
+  setDealTemplatesCache(templateCache.filter((t) => t.id !== templateId))
 }
 
 export function getDealTemplateById(templateId) {
-  return getDealTemplates().find((t) => t.id === templateId) || null
+  return templateCache.find((t) => t.id === templateId) || null
 }
 
-/**
- * Map a saved template to CreateDealDialog prefill fields.
- * Caller prefill wins for leadId and pipelineId.
- */
 export function templateToCreateDealPrefill(template, callerPrefill = {}) {
   if (!template) return { ...callerPrefill }
   const fromTemplate = {

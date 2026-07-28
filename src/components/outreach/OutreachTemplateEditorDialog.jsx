@@ -3,14 +3,9 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { AVAILABLE_TAGS } from '@/utils/emailTemplates'
 import {
-  addEmailTemplate,
-  updateEmailTemplate,
-} from '@/utils/emailTemplates'
-import {
-  addTextTemplate,
-  updateTextTemplate,
-} from '@/utils/textTemplates'
-import { useUserDataSync } from '@/contexts/UserDataSyncContext'
+  createOutreachTemplate,
+  updateOutreachTemplateApi,
+} from '@/utils/outreachTemplates'
 import { showToast } from '../ui/toast'
 import {
   OutreachTemplatePanelShell,
@@ -48,11 +43,11 @@ export function OutreachTemplateEditorDialog({
   onOpenChange,
   kind = 'email',
   template = null,
+  getToken = null,
   onSaved,
   nestedOverlay = true,
   topLayer = true,
 }) {
-  const { scheduleSync } = useUserDataSync()
   const isEdit = !!template?.id
   const initializedRef = useRef(false)
 
@@ -99,25 +94,29 @@ export function OutreachTemplateEditorDialog({
       showToast('Enter a template name', 'error')
       return
     }
+    if (!getToken) {
+      showToast('Sign in to save templates', 'error')
+      return
+    }
     setSaving(true)
     try {
       const payload = {
+        channel: kind === 'text' ? 'text' : 'email',
         name: name.trim(),
         body,
         ...(kind === 'email' ? { subject } : {}),
       }
       if (isEdit) {
-        if (kind === 'email') updateEmailTemplate(template.id, payload)
-        else updateTextTemplate(template.id, payload)
+        await updateOutreachTemplateApi(getToken, template.id, payload)
         showToast('Template updated', 'success')
       } else {
-        if (kind === 'email') addEmailTemplate(payload)
-        else addTextTemplate(payload)
+        await createOutreachTemplate(getToken, payload)
         showToast('Template created', 'success')
       }
-      scheduleSync()
       onSaved?.()
       onOpenChange(false)
+    } catch (e) {
+      showToast(e.message || 'Could not save template', 'error')
     } finally {
       setSaving(false)
     }
