@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback } from 'react'
 import { mapProperties, canonicalParcelId } from '@/utils/parcelPropertyMap'
 import { parcelTileUrl } from '@/config/mapProviders'
 import { computeOwnerOccupied } from '@/utils/ownerOccupied'
-import { resolveOwnerOccupiedAnchor } from '@/utils/parcelGeometry'
 
 const PARCEL_MIN_ZOOM = 15
 const PARCEL_TILE_MAXZOOM = 16
@@ -12,8 +11,6 @@ const FILL_LAYER = 'parcels-fill'
 const LINE_LAYER = 'parcels-line'
 const LABEL_SOURCE = 'parcels-label-pts'
 const LABEL_LAYER = 'parcels-label'
-const OO_SOURCE = 'parcels-oo-pts'
-const OO_LAYER = 'parcels-oo-icon'
 const OO_ICON_ID = 'parcel-owner-occupied'
 
 /** Leading house number from situs; skips assessor placeholders like "0" / "00". */
@@ -36,7 +33,7 @@ function buildLabelGeoJSON(features) {
   const pts = []
   for (const f of features) {
     if (pts.length >= MAX_LABEL_FEATURES) break
-    const p = f.properties
+    const p = f.properties || {}
     const id = p.lrid || p.parcelid
     if (!id || seen.has(id)) continue
     const cx = Number(p.centroidx)
@@ -45,29 +42,11 @@ function buildLabelGeoJSON(features) {
     const num = extractHouseNumber(p.parceladdr)
     if (!num) continue
     seen.add(id)
-    pts.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [cx, cy] }, properties: { _label: num } })
-  }
-  return { type: 'FeatureCollection', features: pts }
-}
-
-/** Owner-occupied-only points at the inward NE corner of each parcel. */
-function buildOwnerOccupiedGeoJSON(features) {
-  const seen = new Set()
-  const pts = []
-  for (const f of features) {
-    if (pts.length >= MAX_LABEL_FEATURES) break
-    const raw = f.properties || {}
-    const id = raw.lrid || raw.parcelid
-    if (!id || seen.has(id)) continue
-    const props = mapProperties(raw)
-    if (computeOwnerOccupied(props) !== 'Yes') continue
-    const anchor = resolveOwnerOccupiedAnchor(f.geometry, raw)
-    if (!anchor) continue
-    seen.add(id)
+    const oo = computeOwnerOccupied(mapProperties(p)) === 'Yes' ? 1 : 0
     pts.push({
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [anchor.lng, anchor.lat] },
-      properties: {},
+      geometry: { type: 'Point', coordinates: [cx, cy] },
+      properties: { _label: num, _oo: oo },
     })
   }
   return { type: 'FeatureCollection', features: pts }
@@ -82,24 +61,57 @@ function labelGeoJSONKey(geo) {
     feats.length,
     first.properties?._label,
     last.properties?._label,
+    first.properties?._oo,
+    last.properties?._oo,
     first.geometry?.coordinates?.[0],
     first.geometry?.coordinates?.[1],
     last.geometry?.coordinates?.[0],
   ].join('|')
 }
 
-function ooGeoJSONKey(geo) {
-  const feats = geo.features
-  if (!feats.length) return 'empty'
-  const first = feats[0]
-  const last = feats[feats.length - 1]
-  return [
-    feats.length,
-    first.geometry?.coordinates?.[0],
-    first.geometry?.coordinates?.[1],
-    last.geometry?.coordinates?.[0],
-    last.geometry?.coordinates?.[1],
-  ].join('|')
+/** Shared layout for house-number labels with optional owner-occupied home glyph. */
+function parcelLabelLayerLayout() {
+  return {
+    'text-field': ['get', '_label'],
+    'text-font': ['Open Sans Semibold'],
+    'text-size': ['interpolate', ['linear'], ['zoom'], 17, 10, 20, 14],
+    'text-anchor': [
+      'case',
+      ['==', ['get', '_oo'], 1],
+      'right',
+      'center',
+    ],
+    'text-offset': [
+      'case',
+      ['==', ['get', '_oo'], 1],
+      ['literal', [-0.15, 0]],
+      ['literal', [0, 0]],
+    ],
+    'text-allow-overlap': false,
+    'text-ignore-placement': false,
+    'text-padding': 2,
+    'icon-image': [
+      'case',
+      ['==', ['get', '_oo'], 1],
+      OO_ICON_ID,
+      '',
+    ],
+    'icon-size': ['interpolate', ['linear'], ['zoom'], 17, 0.45, 20, 0.7],
+    'icon-anchor': 'left',
+    'icon-offset': [2, 0],
+    'icon-allow-overlap': false,
+    'icon-ignore-placement': false,
+    'icon-padding': 2,
+    'symbol-placement': 'point',
+  }
+}
+
+function parcelLabelLayerPaint() {
+  return {
+    'text-color': '#ffffff',
+    'text-halo-color': 'rgba(0,0,0,0.8)',
+    'text-halo-width': 1.5,
+  }
 }
 
 /** Green home glyph for owner-occupied symbol layer. */
@@ -167,34 +179,6 @@ function ensureOwnerOccupiedIcon(map) {
   } catch {
     /* already added or map not ready */
   }
-}
-
-function addOwnerOccupiedOverlay(map, emptyGeoJSON) {
-  ensureOwnerOccupiedIcon(map)
-  if (!map.getSource(OO_SOURCE)) {
-    map.addSource(OO_SOURCE, { type: 'geojson', data: emptyGeoJSON })
-  }
-  if (!map.getLayer(OO_LAYER)) {
-    map.addLayer({
-      id: OO_LAYER,
-      type: 'symbol',
-      source: OO_SOURCE,
-      minzoom: 17,
-      layout: {
-        'icon-image': OO_ICON_ID,
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 17, 0.45, 20, 0.7],
-        'icon-allow-overlap': true,
-        'icon-ignore-placement': true,
-        'icon-anchor': 'center',
-        'symbol-placement': 'point',
-      },
-    })
-  }
-}
-
-function removeOwnerOccupiedOverlay(map) {
-  if (map.getLayer(OO_LAYER)) map.removeLayer(OO_LAYER)
-  if (map.getSource(OO_SOURCE)) map.removeSource(OO_SOURCE)
 }
 
 const LIST_HIGHLIGHT_COLORS = [
@@ -615,7 +599,6 @@ export function PMTilesParcelLayer({
     let cancelled = false
     let labelUpdateTimer = null
     let lastLabelKey = ''
-    let lastOoKey = ''
     let lastLabelRefreshAt = 0
     let idleLabelHandler = null
     const LABEL_DEBOUNCE_MS = 200
@@ -634,36 +617,21 @@ export function PMTilesParcelLayer({
         try {
           const zoom = map.getZoom()
           const labelSrc = map.getSource(LABEL_SOURCE)
-          const ooSrc = map.getSource(OO_SOURCE)
-          if (!labelSrc && !ooSrc) return
+          if (!labelSrc) return
           if (zoom < 17) {
-            if (lastLabelKey !== 'empty' && labelSrc) {
+            if (lastLabelKey !== 'empty') {
               labelSrc.setData(emptyGeoJSON)
               lastLabelKey = 'empty'
-            }
-            if (lastOoKey !== 'empty' && ooSrc) {
-              ooSrc.setData(emptyGeoJSON)
-              lastOoKey = 'empty'
             }
             lastLabelRefreshAt = now
             return
           }
           const features = map.queryRenderedFeatures({ layers: [FILL_LAYER] })
-          if (labelSrc) {
-            const geo = buildLabelGeoJSON(features)
-            const key = labelGeoJSONKey(geo)
-            if (key !== lastLabelKey) {
-              lastLabelKey = key
-              labelSrc.setData(geo)
-            }
-          }
-          if (ooSrc) {
-            const ooGeo = buildOwnerOccupiedGeoJSON(features)
-            const ooKey = ooGeoJSONKey(ooGeo)
-            if (ooKey !== lastOoKey) {
-              lastOoKey = ooKey
-              ooSrc.setData(ooGeo)
-            }
+          const geo = buildLabelGeoJSON(features)
+          const key = labelGeoJSONKey(geo)
+          if (key !== lastLabelKey) {
+            lastLabelKey = key
+            labelSrc.setData(geo)
           }
           lastLabelRefreshAt = now
         } catch { /* ignore */ }
@@ -699,7 +667,6 @@ export function PMTilesParcelLayer({
         const hasCorrectPromoteId = styleSrc
           && JSON.stringify(styleSrc.promoteId) === JSON.stringify(expectedPromoteId)
         if (styleSrc && !hasCorrectPromoteId) {
-          removeOwnerOccupiedOverlay(map)
           if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
           if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
@@ -735,6 +702,7 @@ export function PMTilesParcelLayer({
             paint: { 'line-color': colorRef.current, 'line-width': 2, 'line-opacity': opacityRef.current / 100 },
           })
         }
+        ensureOwnerOccupiedIcon(map)
         if (!map.getSource(LABEL_SOURCE)) {
           map.addSource(LABEL_SOURCE, { type: 'geojson', data: emptyGeoJSON })
         }
@@ -744,23 +712,10 @@ export function PMTilesParcelLayer({
             type: 'symbol',
             source: LABEL_SOURCE,
             minzoom: 17,
-            layout: {
-              'text-field': ['get', '_label'],
-              'text-font': ['Open Sans Semibold'],
-              'text-size': ['interpolate', ['linear'], ['zoom'], 17, 10, 20, 14],
-              'text-allow-overlap': false,
-              'text-ignore-placement': false,
-              'text-padding': 2,
-              'symbol-placement': 'point',
-            },
-            paint: {
-              'text-color': '#ffffff',
-              'text-halo-color': 'rgba(0,0,0,0.8)',
-              'text-halo-width': 1.5,
-            },
+            layout: parcelLabelLayerLayout(),
+            paint: parcelLabelLayerPaint(),
           })
         }
-        addOwnerOccupiedOverlay(map, emptyGeoJSON)
         layersAddedRef.current = true
         repaint()
         refreshLabels()
@@ -863,7 +818,6 @@ export function PMTilesParcelLayer({
       map.off('style.load', registerOoIcon)
       map.off('load', registerOoIcon)
       try {
-        removeOwnerOccupiedOverlay(map)
         if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
         if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
         if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
@@ -941,7 +895,6 @@ export function PMTilesParcelLayer({
     const map = mapRef?.current
     if (!map) return
     try {
-      removeOwnerOccupiedOverlay(map)
       if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
       if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
       if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
@@ -973,28 +926,16 @@ export function PMTilesParcelLayer({
         minzoom: PARCEL_MIN_ZOOM,
         paint: { 'line-color': colorRef.current, 'line-width': 2, 'line-opacity': opacityRef.current / 100 },
       })
+      ensureOwnerOccupiedIcon(map)
       map.addSource(LABEL_SOURCE, { type: 'geojson', data: emptyGeoJSON })
       map.addLayer({
         id: LABEL_LAYER,
         type: 'symbol',
         source: LABEL_SOURCE,
         minzoom: 17,
-        layout: {
-          'text-field': ['get', '_label'],
-          'text-font': ['Open Sans Semibold'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 17, 10, 20, 14],
-          'text-allow-overlap': false,
-          'text-ignore-placement': false,
-          'text-padding': 2,
-          'symbol-placement': 'point',
-        },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1.5,
-        },
+        layout: parcelLabelLayerLayout(),
+        paint: parcelLabelLayerPaint(),
       })
-      addOwnerOccupiedOverlay(map, emptyGeoJSON)
       layersAddedRef.current = true
       repaint()
     } catch { /* ignore if style not ready */ }
