@@ -247,7 +247,7 @@
   position: relative !important;
   z-index: 0 !important;
   isolation: isolate;
-  background: #111 !important;
+  background: #000 !important;
 }
 
 @layer base {
@@ -259,19 +259,23 @@
     padding: 0;
     height: 100%;
     min-height: 100vh;
-    min-height: var(--vw-height, 100vh);
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    min-height: var(--vw-height, 100dvh);
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
-    background: #111;
+    background: #000;
   }
   body {
     @apply text-foreground;
-    background: #111;
+    background: #000;
     margin: 0;
     padding: 0;
     min-height: 100%;
     min-height: 100vh;
-    min-height: var(--vw-height, 100vh);
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    min-height: var(--vw-height, 100dvh);
     height: 100%;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -289,7 +293,10 @@
     width: 100%;
     height: 100%;
     min-height: 100vh;
-    min-height: var(--vw-height, 100vh);
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    min-height: var(--vw-height, 100dvh);
+    background: #000;
     z-index: 0;
   }
 }
@@ -4856,6 +4863,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   --ks-blue-soft: rgba(17, 81, 239, 0.55);
   --ks-ink: #060912;
   --ks-logo-blue: #1251f0;
+  --ks-logo-plate: #000000;
   position: fixed;
   inset: 0;
   z-index: 10045;
@@ -4868,10 +4876,10 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   pointer-events: auto;
   opacity: 1;
 }
-/* Logo splash must match the MP4 plate color (not the dark ink boot chrome). */
+/* Logo splash must match the MP4 plate color (black for on-black mark). */
 #initial-loader,
 .app-loading-screen--video {
-  background: var(--ks-logo-blue);
+  background: var(--ks-logo-plate, #000000);
   padding: 0; /* safe-area padding can create a false “seam” band */
   width: 100%;
   height: 100%;
@@ -4885,7 +4893,7 @@ html:has(#initial-loader),
 html:has(.app-loading-screen--video),
 body:has(#initial-loader),
 body:has(.app-loading-screen--video) {
-  background: var(--ks-logo-blue, #1251f0) !important;
+  background: var(--ks-logo-plate, #000000) !important;
 }
 /* Cover FAB / action bar / menus that also portal into #modal-root */
 #modal-root .app-loading-screen {
@@ -5023,7 +5031,7 @@ body:has(.app-loading-screen--video) {
 .app-loading-screen__video-slot {
   position: fixed;
   inset: 0;
-  background: var(--ks-logo-blue, #1251f0);
+  background: var(--ks-logo-plate, #000000);
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   min-height: var(--vw-height, 100dvh);
@@ -5048,7 +5056,7 @@ body:has(.app-loading-screen--video) {
   min-height: -webkit-fill-available;
   min-height: var(--vw-height, 100dvh);
   display: block;
-  background: var(--ks-logo-blue, #1251f0);
+  background: var(--ks-logo-plate, #000000);
 }
 
 @media (prefers-reduced-motion: reduce) {

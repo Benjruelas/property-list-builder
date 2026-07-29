@@ -3,7 +3,7 @@ let playSetupInFlight = null
 
 /** Logo size vs viewport-fitted contain (1 = fit). Mobile uses a slight zoom to hide edge artifacts. */
 export const LOGO_SPLASH_SCALE_MOBILE = 1.875
-export const LOGO_SPLASH_SCALE_DESKTOP = 1.25
+export const LOGO_SPLASH_SCALE_DESKTOP = 1.0
 export const LOGO_SPLASH_DESKTOP_MIN_WIDTH_PX = 768
 
 /**

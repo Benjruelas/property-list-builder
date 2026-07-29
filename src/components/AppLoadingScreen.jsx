@@ -11,10 +11,10 @@ import {
 const FADE_OUT_MS = 320
 /** Fallback if `ended` never fires (decode error). */
 const PLAY_FALLBACK_MS = 4500
-const LOGO_VIDEO_SRC = '/brand/knockscout-LogoMark.mp4'
-const LOGO_POSTER_SRC = '/brand/knockscout-LogoMark-poster.png'
+const LOGO_VIDEO_SRC = '/brand/knockscout-LogoMark-on-black.mp4'
+const LOGO_POSTER_SRC = '/brand/knockscout-LogoMark-on-black-poster.png'
 const BOOT_VIDEO_ID = 'boot-logo-video'
-const LOGO_BLUE = '#1251f0'
+const LOGO_PLATE = '#000000'
 
 function loadingPortalTarget() {
   // #modal-root sits at max z-index (map chrome / FAB / action bar live there).
@@ -36,7 +36,7 @@ const EDGE_COVER_TOP_RATIO = 0.12
 const EDGE_COVER_TOP_MIN_PX = 14
 
 /**
- * Full-bleed canvas: fill plate blue, draw logo contained & centered at getLogoSplashScale().
+ * Full-bleed canvas: fill plate black, draw logo contained & centered at getLogoSplashScale().
  * Plate fill is sampled from the rendered video so edges don’t show a hairline.
  */
 function startCanvasMirror(video, canvas) {
@@ -50,7 +50,7 @@ function startCanvasMirror(video, canvas) {
 
   let raf = 0
   let stopped = false
-  let plateFill = LOGO_BLUE
+  let plateFill = LOGO_PLATE
   const probe = document.createElement('canvas')
   probe.width = 48
   probe.height = 48
@@ -307,7 +307,7 @@ export function AppLoadingScreen({
       aria-live="polite"
       aria-label={message}
       aria-hidden={exiting || undefined}
-      style={{ background: LOGO_BLUE }}
+      style={{ background: LOGO_PLATE }}
     >
       <div className="app-loading-screen__content app-loading-screen__content--video">
         <div ref={stageRef} className="app-loading-screen__video-slot">
