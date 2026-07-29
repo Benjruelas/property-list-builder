@@ -1,8 +1,10 @@
 /**
  * User-scoped paths API. All methods require an async getToken() that returns Firebase ID token.
+ * Writes go through the offline outbox so path saves survive dead zones.
  */
 
 import { getApiBase } from './apiBase'
+import { mutateOrQueue, newTempId } from './offlineMutate'
 
 export async function fetchPaths(getToken) {
   const token = await getToken()
@@ -17,101 +19,80 @@ export async function fetchPaths(getToken) {
 }
 
 export async function createPath(getToken, name, points, distanceMiles, city = '') {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to save paths')
-  const res = await fetch(`${getApiBase()}/paths`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, points, distanceMiles, city: city || undefined })
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to create path')
+  if (!(await getToken())) throw new Error('Sign in to save paths')
+  const tempId = newTempId('path')
+  const optimistic = {
+    id: tempId,
+    name,
+    points,
+    distanceMiles: typeof distanceMiles === 'number' ? distanceMiles : 0,
+    city: city || '',
+    tagIds: [],
+    tagMeta: [],
+    sharedWith: [],
+    teamShares: [],
+    visibility: 'private',
+    sharedMemberUids: [],
+    createdAt: new Date().toISOString(),
+    _offlineQueued: true,
   }
-  const data = await res.json()
-  return data.path
+  const result = await mutateOrQueue({
+    endpoint: '/paths',
+    method: 'POST',
+    body: { name, points, distanceMiles, city: city || undefined },
+    getToken,
+    resource: 'paths',
+    tempId,
+    optimistic,
+  })
+  if (result.queued) return result.data || optimistic
+  return result.data?.path
+}
+
+async function pathMutation(getToken, body, { optimistic } = {}) {
+  if (!(await getToken())) throw new Error('Sign in to update paths')
+  const result = await mutateOrQueue({
+    endpoint: '/paths',
+    method: 'PATCH',
+    body,
+    getToken,
+    resource: 'paths',
+    optimistic,
+  })
+  if (result.queued) return result.data || optimistic || { id: body.pathId, ...body, _offlineQueued: true }
+  return result.data?.path
 }
 
 export async function updatePathTags(getToken, pathId, { tagIds, tagMeta }) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to update paths')
-  const res = await fetch(`${getApiBase()}/paths`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ pathId, tagIds, tagMeta }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to update path tags')
-  }
-  const data = await res.json()
-  return data.path
+  return pathMutation(getToken, { pathId, tagIds, tagMeta })
 }
 
 export async function renamePath(getToken, pathId, name) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to rename paths')
-  const res = await fetch(`${getApiBase()}/paths`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ pathId, name })
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to rename path')
-  }
-  const data = await res.json()
-  return data.path
+  return pathMutation(getToken, { pathId, name }, { optimistic: { id: pathId, name, _offlineQueued: true } })
 }
 
 export async function sharePath(getToken, pathId, sharedWith) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to share paths')
-  const res = await fetch(`${getApiBase()}/paths`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ pathId, sharedWith })
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to share path')
-  }
-  const data = await res.json()
-  return data.path
+  return pathMutation(getToken, { pathId, sharedWith })
 }
 
 export async function sharePathWithTeams(getToken, pathId, sharePatch, teamId = null) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to share paths')
-  const res = await fetch(`${getApiBase()}/paths`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      pathId,
-      visibility: sharePatch.visibility,
-      sharedMemberUids: sharePatch.sharedMemberUids || [],
-      teamId: sharePatch.visibility === 'team' ? teamId : null,
-      teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
-    })
+  return pathMutation(getToken, {
+    pathId,
+    visibility: sharePatch.visibility,
+    sharedMemberUids: sharePatch.sharedMemberUids || [],
+    teamId: sharePatch.visibility === 'team' ? teamId : null,
+    teamShares: sharePatch.visibility === 'team' && teamId ? [teamId] : [],
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to share path with team')
-  }
-  const data = await res.json()
-  return data.path
 }
 
 export async function deletePath(getToken, pathId) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to delete paths')
-  const res = await fetch(`${getApiBase()}/paths`, {
+  if (!(await getToken())) throw new Error('Sign in to delete paths')
+  const result = await mutateOrQueue({
+    endpoint: '/paths',
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ pathId })
+    body: { pathId },
+    getToken,
+    resource: 'paths',
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to delete path')
-  }
+  if (result.queued) return
 }

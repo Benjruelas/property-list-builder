@@ -25,7 +25,10 @@ import { ConfirmDialog, showConfirm } from './components/ui/confirm-dialog'
 import { useAuth } from './contexts/AuthContext'
 import { useNavigation } from './navigation/NavigationContext'
 import { UserDataSyncProvider } from './contexts/UserDataSyncContext'
+import { OfflineStatusProvider } from './contexts/OfflineStatusContext'
+import { OfflineBanner } from './components/OfflineBanner'
 import { loadUserData, scheduleUserDataSync } from './utils/userDataSync'
+import { subscribeOutboxReplay } from './utils/offlineMutate'
 import { fetchLists, updateList, deleteList, validateShareEmail } from './utils/lists'
 import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline, localPipelineMigrationKey, pipelinesUserCanWorkIn } from './utils/pipelines'
 import { auth } from './config/firebase'
@@ -1265,12 +1268,17 @@ function App() {
           !Number.isNaN(lat) && !Number.isNaN(lng)
             ? await reverseGeocodeCity(lat, lng)
             : ''
-        await createPath(getToken, name, rawPoints, distance, city)
+        const saved = await createPath(getToken, name, rawPoints, distance, city)
         const displayDist = settings.distanceUnit === 'km'
           ? `${Math.round(distance * 1.60934 * 100) / 100} km`
           : `${distance} mi`
-        showToast(`Path saved (${displayDist})`, 'success')
-        await refreshPaths()
+        if (saved?._offlineQueued) {
+          setPaths((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)])
+          showToast(`Path saved offline (${displayDist}) — will sync when online`, 'info')
+        } else {
+          showToast(`Path saved (${displayDist})`, 'success')
+          await refreshPaths()
+        }
       } catch (e) {
         console.error('Error saving path:', e)
         showToast(e.message || 'Failed to save path', 'error')
@@ -3849,7 +3857,20 @@ function App() {
     }
   }, [clickedParcelData, clickedParcelId, skipTracingInProgress, lists, isParcelALeadCheck, openParcelPopup, isParcelDetailsOpen, nav, authLoading, currentUser, getToken, syncSkipTraceToLeads])
 
+  // After offline outbox flushes, refresh server-backed collections so temp IDs
+  // are replaced with real ones.
+  useEffect(() => {
+    return subscribeOutboxReplay((event) => {
+      if (event?.type !== 'sync-complete' && event?.type !== 'flushed') return
+      if (!currentUser) return
+      refreshPaths().catch(() => {})
+      refreshLists().catch(() => {})
+      refreshLeads().catch(() => {})
+    })
+  }, [currentUser, refreshPaths, refreshLists, refreshLeads])
+
   return (
+    <OfflineStatusProvider getToken={getToken}>
     <UserDataSyncProvider getToken={getToken}>
     <PhotoUploadProvider getToken={getToken} onEntityUpdated={handlePhotoEntityUpdated}>
     <AppLoadingScreen
@@ -3857,6 +3878,7 @@ function App() {
       message={appLoadingMessage}
       onVisibleChange={setBootSplashVisible}
     />
+    <OfflineBanner />
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
         <PermissionPrompt onComplete={({ orientationGranted, locationState, position }) => {
@@ -4946,6 +4968,7 @@ function App() {
     </div>
     </PhotoUploadProvider>
     </UserDataSyncProvider>
+    </OfflineStatusProvider>
   )
 }
 

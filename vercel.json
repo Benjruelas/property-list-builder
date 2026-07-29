@@ -73,7 +73,7 @@
       "destination": "/icon-180.png"
     },
     {
-      "source": "/((?!api/|@vite|@react-refresh|@fs/|src/|node_modules/|assets/|brand/|emblem-|manifest\\.webmanifest|favicon|apple-touch-icon|icon-|sw\\.js).*)",
+      "source": "/((?!api/|@vite|@react-refresh|@fs/|src/|node_modules/|assets/|brand/|emblem-|manifest\\.webmanifest|favicon|apple-touch-icon|icon-|sw\\.js|workbox-).*)",
       "destination": "/index.html"
     }
   ],

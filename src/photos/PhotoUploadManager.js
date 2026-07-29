@@ -9,6 +9,11 @@ import {
   loadAllJobs,
 } from './photoStoreIdb'
 import {
+  backupPhotoBlobs,
+  restorePhotoBlobs,
+  clearPhotoBackup,
+} from './photoNativeBackup'
+import {
   presignUpload,
   completeUpload,
   uploadBytesViaApi,
@@ -201,6 +206,8 @@ class PhotoUploadManager {
     this.blobCache.set(jobId, { thumb: compressed.thumbnail, full: compressed.file })
     await saveJob(job)
     await saveBlobs(jobId, { thumb: compressed.thumbnail, full: compressed.file })
+    // Native secondary store — survives WebView IDB eviction in the field.
+    backupPhotoBlobs(jobId, { thumb: compressed.thumbnail, full: compressed.file }).catch(() => {})
     photoLog('queue.enqueue', 'Job queued', {
       jobId,
       entityKey: job.entityKey,
@@ -248,6 +255,7 @@ class PhotoUploadManager {
     this.jobs.delete(jobId)
     this.blobCache.delete(jobId)
     deleteJob(jobId)
+    clearPhotoBackup(jobId).catch(() => {})
     this.emit()
   }
 
@@ -370,7 +378,16 @@ class PhotoUploadManager {
 
     try {
       const cached = this.blobCache.get(job.jobId)
-      const blobs = cached || await getBlobs(job.jobId)
+      let blobs = cached || await getBlobs(job.jobId)
+      if (!blobs?.thumb || !blobs?.full) {
+        const restored = await restorePhotoBlobs(job.jobId)
+        if (restored?.thumb && restored?.full) {
+          blobs = restored
+          this.blobCache.set(job.jobId, restored)
+          await saveBlobs(job.jobId, restored).catch(() => {})
+          photoLog('queue.process', 'Restored blobs from native filesystem', { jobId: job.jobId })
+        }
+      }
       if (!blobs?.thumb || !blobs?.full) {
         photoLogError('queue.process', 'Local blobs missing', null, { jobId: job.jobId, hadCache: !!cached })
         job.status = JOB_STATUS.failed
@@ -427,6 +444,7 @@ class PhotoUploadManager {
       job.progress = 1
       this.blobCache.delete(job.jobId)
       await deleteJob(job.jobId)
+      clearPhotoBackup(job.jobId).catch(() => {})
       this.jobs.delete(job.jobId)
       this.emit()
 

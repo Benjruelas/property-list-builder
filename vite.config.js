@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { viteApiDevPlugin } from './scripts/viteApiDevPlugin.js'
@@ -41,6 +42,23 @@ export default defineConfig({
   plugins: [
     react(),
     viteApiDevPlugin({ apiDir: path.join(__dirname, 'api') }),
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
+      registerType: 'autoUpdate',
+      injectRegister: false,
+      manifest: false,
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,webmanifest}'],
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+      },
+      // Keep SW off in Vite dev so HMR and /api proxy stay uncomplicated.
+      // Production builds (and `vite preview`) get the full offline SW.
+      devOptions: {
+        enabled: false,
+      },
+    }),
     // Serve init.json and proxy auth for Firebase (fixes 404 that breaks sign-in)
     {
       name: 'firebase-auth-proxy',

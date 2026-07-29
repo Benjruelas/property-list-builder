@@ -32,6 +32,7 @@ import {
 import { projectLeadsForList } from './_lib/leadListProjection.js'
 import { paginateArray } from './_lib/pagination.js'
 import { kv, kvAvailable } from './_lib/kvBootstrap.js'
+import { beginIdempotent, finishIdempotent } from './_lib/idempotency.js'
 
 /**
  * User-scoped leads CRM with team sharing v2. Firebase Bearer auth.
@@ -197,7 +198,7 @@ async function logLeadActivity(type, lead, user, summary, { audience, delta = 1,
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match, Idempotency-Key')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
@@ -260,6 +261,8 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
+      const idem = await beginIdempotent(req, res, 'leads')
+      if (idem.replay) return
       const tagRegistry = (body.tagIds !== undefined || body.tagMeta !== undefined)
         ? await loadTagRegistry(kv, user.uid)
         : null
@@ -300,12 +303,16 @@ export default async function handler(req, res) {
         summaryContext: { label, leadName: name, count: 1 },
       })
 
-      return res.status(201).json({ lead })
+      const createdBody = { lead }
+      await finishIdempotent(idem.key, 201, createdBody)
+      return res.status(201).json(createdBody)
     }
 
     if (method === 'PATCH') {
       const { leadId, action } = body
       if (!leadId) return res.status(400).json({ error: 'leadId is required' })
+      const idem = await beginIdempotent(req, res, 'leads')
+      if (idem.replay) return
 
       const all = await getAllLeads()
       const idx = all.findIndex((l) => l.id === leadId)
@@ -417,12 +424,16 @@ export default async function handler(req, res) {
         })
       }
 
-      return res.status(200).json({ lead })
+      const patchedBody = { lead }
+      await finishIdempotent(idem.key, 200, patchedBody)
+      return res.status(200).json(patchedBody)
     }
 
     if (method === 'DELETE') {
       const { leadId } = body
       if (!leadId) return res.status(400).json({ error: 'leadId is required' })
+      const idem = await beginIdempotent(req, res, 'leads')
+      if (idem.replay) return
 
       const all = await getAllLeads()
       const idx = all.findIndex((l) => l.id === leadId)
@@ -441,7 +452,9 @@ export default async function handler(req, res) {
       const name = leadDisplayName(removed)
       await logLeadActivity('lead.deleted', removed, user, `${label} deleted lead ${name}`)
 
-      return res.status(200).json({ message: 'Lead deleted' })
+      const deletedBody = { message: 'Lead deleted' }
+      await finishIdempotent(idem.key, 200, deletedBody)
+      return res.status(200).json(deletedBody)
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

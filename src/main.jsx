@@ -15,7 +15,9 @@ applyUiThemeFromStorage()
 import { NavigationProvider } from './navigation/NavigationContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
-if ('serviceWorker' in navigator) {
+// Production SW (Workbox + push) is built by vite-plugin-pwa from src/sw.js.
+// Skip registration in Vite dev so HMR and the /api proxy stay clean.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   const registerServiceWorker = () => {
     navigator.serviceWorker
       .register('/sw.js')

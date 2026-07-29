@@ -265,6 +265,10 @@ export async function saveUserData(getToken, data) {
         return
       } catch (e) {
         console.warn('saveUserData failed:', e.message)
+        // Signal OfflineStatusProvider when the failure looks like a dead zone.
+        if (typeof window !== 'undefined' && /failed to fetch|networkerror|load failed|offline/i.test(e.message || '')) {
+          try { window.dispatchEvent(new Event('offline-detected')) } catch { /* ignore */ }
+        }
         return
       }
     }

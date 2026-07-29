@@ -79,13 +79,24 @@ export default async function handler(req, res) {
       ]
 
       // Serialize the read-modify-write under a short lock so concurrent PATCHes
-      // (multiple tabs/devices) can't lose each other's *other* field updates.
-      // Clients may still send __baseVersion for compatibility; we ignore it for
-      // conflict rejection because delta merges under the lock are safe, and a
-      // 409 only produced noisy retries without improving same-key last-write-wins.
+      // can't lose each other's field updates. When the client sends __baseVersion
+      // and it doesn't match the server's current version, return 409 so the
+      // client's mergeConflictKeepingLocalEdits path can reconcile offline edits.
       const applyMerge = async () => {
         const existing = await getUserData(user.uid) || {}
         const currentVersion = Number(existing.__version) || 0
+
+        if (body.__baseVersion !== undefined && body.__baseVersion !== null && body.__baseVersion !== '') {
+          const clientBase = Number(body.__baseVersion)
+          if (Number.isFinite(clientBase) && clientBase !== currentVersion) {
+            return {
+              conflict: true,
+              currentVersion,
+              data: existing,
+            }
+          }
+        }
+
         const merged = { ...existing }
         for (const key of allowedKeys) {
           if (key in body && body[key] !== undefined) {
@@ -110,11 +121,19 @@ export default async function handler(req, res) {
         }
         merged.__version = currentVersion + 1
         await saveUserData(user.uid, merged)
-        return { currentVersion: merged.__version, data: merged }
+        return { conflict: false, currentVersion: merged.__version, data: merged }
       }
 
       const locked = await withKvLock(lockKey(user.uid), applyMerge, { ttlMs: 5000, maxWaitMs: 3000 })
       const result = locked !== null ? locked : await applyMerge()
+
+      if (result.conflict) {
+        return res.status(409).json({
+          error: 'Version conflict',
+          version: result.currentVersion,
+          data: result.data,
+        })
+      }
 
       if (!membership && body.appSettings?.leadStatuses !== undefined) {
         const statuses = normalizeLeadStatuses(result.data.appSettings?.leadStatuses)

@@ -3,6 +3,7 @@ import { getAllTeams } from './_lib/teams.js'
 import { getAllLists, saveAllLists } from './_lib/listStore.js'
 import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 import { authenticate } from './_lib/auth.js'
+import { beginIdempotent, finishIdempotent } from './_lib/idempotency.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -44,7 +45,7 @@ function normalizeParcel(p) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
@@ -74,6 +75,8 @@ export default async function handler(req, res) {
       if (!name || !name.trim()) {
         return res.status(400).json({ error: 'List name is required' })
       }
+      const idem = await beginIdempotent(req, res, 'lists')
+      if (idem.replay) return
       const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
 
@@ -159,12 +162,16 @@ export default async function handler(req, res) {
         console.warn('list create share notify', e.message)
       }
 
-      return res.status(201).json({ list: newList })
+      const createdBody = { list: newList }
+      await finishIdempotent(idem.key, 201, createdBody)
+      return res.status(201).json(createdBody)
     }
 
     if (method === 'PATCH') {
       const { listId, parcels: newParcels, removeParcels, sharedWith, teamShares, name } = body
       if (!listId) return res.status(400).json({ error: 'listId is required' })
+      const idem = await beginIdempotent(req, res, 'lists')
+      if (idem.replay) return
 
       const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
       const idx = all.findIndex((l) => l.id === listId)
@@ -348,12 +355,16 @@ export default async function handler(req, res) {
         console.warn('list activity log', e.message)
       }
 
-      return res.status(200).json({ list })
+      const patchedBody = { list }
+      await finishIdempotent(idem.key, 200, patchedBody)
+      return res.status(200).json(patchedBody)
     }
 
     if (method === 'DELETE') {
       const { listId } = body
       if (!listId) return res.status(400).json({ error: 'listId is required' })
+      const idem = await beginIdempotent(req, res, 'lists')
+      if (idem.replay) return
 
       const [all, allTeams] = await Promise.all([getAllLists(), getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
@@ -365,7 +376,9 @@ export default async function handler(req, res) {
       }
       all.splice(idx, 1)
       await saveAllLists(all)
-      return res.status(200).json({ message: 'List deleted' })
+      const deletedBody = { message: 'List deleted' }
+      await finishIdempotent(idem.key, 200, deletedBody)
+      return res.status(200).json(deletedBody)
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

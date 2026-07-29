@@ -1,8 +1,10 @@
 /**
  * User-scoped lists API. All methods require an async getToken() that returns Firebase ID token.
+ * Writes go through the offline outbox so list edits survive dead zones.
  */
 
 import { getApiBase } from './apiBase'
+import { mutateOrQueue, newTempId } from './offlineMutate'
 
 export async function fetchLists(getToken) {
   const token = await getToken()
@@ -17,8 +19,7 @@ export async function fetchLists(getToken) {
 }
 
 export async function createList(getToken, input, parcels = []) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to create lists')
+  if (!(await getToken())) throw new Error('Sign in to create lists')
 
   const opts = typeof input === 'string' ? { name: input, parcels } : { parcels: [], ...input }
   const {
@@ -42,17 +43,35 @@ export async function createList(getToken, input, parcels = []) {
   if (teamId !== undefined) body.teamId = teamId
   if (sharedWith !== undefined) body.sharedWith = sharedWith
 
-  const res = await fetch(`${getApiBase()}/lists`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body)
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to create list')
+  const tempId = newTempId('list')
+  const optimistic = {
+    id: tempId,
+    name: body.name,
+    parcels: parcelList,
+    tagIds: tagIds || [],
+    tagMeta: tagMeta || [],
+    sharedWith: sharedWith || [],
+    teamShares: teamShares || [],
+    teamId: teamId || null,
+    visibility: visibility || 'private',
+    sharedMemberUids: sharedMemberUids || [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    _offlineQueued: true,
   }
-  const data = await res.json()
-  return data.list
+
+  const result = await mutateOrQueue({
+    endpoint: '/lists',
+    method: 'POST',
+    body,
+    getToken,
+    resource: 'lists',
+    tempId,
+    optimistic,
+  })
+  if (result.queued) return result.data || optimistic
+  if (!result.data?.list) throw new Error('Failed to create list')
+  return result.data.list
 }
 
 export async function updateList(getToken, listId, updates = {}) {
@@ -68,8 +87,7 @@ export async function updateList(getToken, listId, updates = {}) {
     tagIds,
     tagMeta,
   } = updates
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to update lists')
+  if (!(await getToken())) throw new Error('Sign in to update lists')
   if (listId == null || String(listId).trim() === '') {
     throw new Error('List id is missing')
   }
@@ -84,13 +102,19 @@ export async function updateList(getToken, listId, updates = {}) {
   if (name !== undefined) body.name = name
   if (tagIds !== undefined) body.tagIds = tagIds
   if (tagMeta !== undefined) body.tagMeta = tagMeta
-  let res
+
   try {
-    res = await fetch(`${getApiBase()}/lists`, {
+    const result = await mutateOrQueue({
+      endpoint: '/lists',
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
+      body,
+      getToken,
+      resource: 'lists',
+      optimistic: { id: String(listId), ...updates, _offlineQueued: true },
     })
+    if (result.queued) return result.data || { id: String(listId), ...updates, _offlineQueued: true }
+    if (!result.data?.list) throw new Error('Invalid response from server when updating list')
+    return result.data.list
   } catch (e) {
     const msg = e?.message || ''
     throw new Error(
@@ -99,15 +123,6 @@ export async function updateList(getToken, listId, updates = {}) {
         : msg || 'Failed to update list'
     )
   }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to update list')
-  }
-  const data = await res.json().catch(() => ({}))
-  if (!data || typeof data !== 'object' || data.list == null) {
-    throw new Error('Invalid response from server when updating list')
-  }
-  return data.list
 }
 
 export async function validateShareEmail(getToken, email) {
@@ -127,18 +142,16 @@ export async function validateShareEmail(getToken, email) {
 }
 
 export async function deleteList(getToken, listId) {
-  const token = await getToken()
-  if (!token) throw new Error('Sign in to delete lists')
+  if (!(await getToken())) throw new Error('Sign in to delete lists')
   if (listId == null || String(listId).trim() === '') {
     throw new Error('List id is missing')
   }
-  const res = await fetch(`${getApiBase()}/lists`, {
+  const result = await mutateOrQueue({
+    endpoint: '/lists',
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ listId: String(listId) }),
+    body: { listId: String(listId) },
+    getToken,
+    resource: 'lists',
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to delete list')
-  }
+  if (result.queued) return
 }

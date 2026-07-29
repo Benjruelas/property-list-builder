@@ -22,6 +22,7 @@ export {
 } from './leadContact'
 
 import { getApiBase } from './apiBase'
+import { mutateOrQueue, newTempId } from './offlineMutate'
 
 const LOCAL_LEADS_KEY = 'user_leads_local'
 const LOCAL_LEADS_UID_KEY = 'user_leads_local_uid'
@@ -389,17 +390,36 @@ export async function createLead(getToken, leadData) {
     saveLocalLeads([...leads, lead])
     return lead
   }
-  const res = await fetch(`${getApiBase()}/leads`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(normalizedData)
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to create lead')
+
+  const tempId = newTempId('lead')
+  const now = new Date().toISOString()
+  const optimistic = {
+    id: tempId,
+    status: 'new',
+    statusUpdatedAt: now,
+    activity: [],
+    ...normalizedData,
+    createdAt: now,
+    updatedAt: now,
+    _offlineQueued: true,
   }
-  const data = await res.json()
-  return data.lead
+  // Keep optimistic lead in local cache so the UI stays consistent while queued.
+  saveLocalLeads([...loadLocalLeads().filter((l) => l.id !== tempId), optimistic])
+
+  const result = await mutateOrQueue({
+    endpoint: '/leads',
+    method: 'POST',
+    body: normalizedData,
+    getToken,
+    resource: 'leads',
+    tempId,
+    optimistic,
+  })
+  if (result.queued) return result.data || optimistic
+  const lead = result.data?.lead
+  if (!lead) throw new Error('Failed to create lead')
+  saveLocalLeads([...loadLocalLeads().filter((l) => l.id !== tempId && l.id !== lead.id), lead])
+  return lead
 }
 
 /** Strip owner/sharing fields when syncing a full lead record (e.g. after photo upload). */
@@ -445,17 +465,29 @@ export async function updateLead(getToken, leadId, updates) {
     saveLocalLeads(leads)
     return lead
   }
-  const res = await fetch(`${getApiBase()}/leads`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ leadId, ...normalizedUpdates })
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to update lead')
+
+  const existing = loadLocalLeads().find((l) => l.id === leadId) || { id: leadId }
+  const optimistic = {
+    ...existing,
+    ...normalizedUpdates,
+    updatedAt: new Date().toISOString(),
+    _offlineQueued: true,
   }
-  const data = await res.json()
-  return data.lead
+  saveLocalLeads(loadLocalLeads().map((l) => (l.id === leadId ? optimistic : l)))
+
+  const result = await mutateOrQueue({
+    endpoint: '/leads',
+    method: 'PATCH',
+    body: { leadId, ...normalizedUpdates },
+    getToken,
+    resource: 'leads',
+    optimistic,
+  })
+  if (result.queued) return result.data || optimistic
+  const lead = result.data?.lead
+  if (!lead) throw new Error('Failed to update lead')
+  saveLocalLeads(loadLocalLeads().map((l) => (l.id === leadId ? lead : l)))
+  return lead
 }
 
 export async function deleteLead(getToken, leadId) {
@@ -464,17 +496,17 @@ export async function deleteLead(getToken, leadId) {
     saveLocalLeads(loadLocalLeads().filter((l) => l.id !== leadId))
     return
   }
-  const res = await fetch(`${getApiBase()}/leads`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ leadId })
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Failed to delete lead')
-  }
+  // Optimistic remove; outbox will sync the DELETE.
   resetLeadsListEtag()
   saveLocalLeads(loadLocalLeads().filter((l) => l.id !== leadId))
+  const result = await mutateOrQueue({
+    endpoint: '/leads',
+    method: 'DELETE',
+    body: { leadId },
+    getToken,
+    resource: 'leads',
+  })
+  if (result.queued) return
 }
 
 function parcelIdCandidateSet(parcelOrId) {

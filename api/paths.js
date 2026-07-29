@@ -13,6 +13,7 @@ import { getAllTeams } from './_lib/teams.js'
 import { getAllPaths, saveAllPaths } from './_lib/pathStore.js'
 import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 import { authenticate } from './_lib/auth.js'
+import { beginIdempotent, finishIdempotent } from './_lib/idempotency.js'
 import {
   buildAccessContext,
   getResourceAccess,
@@ -28,7 +29,7 @@ import { loadTagRegistry, mergeEntityTags } from './_lib/tagHelpers.js'
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
@@ -56,6 +57,8 @@ export default async function handler(req, res) {
       if (!Array.isArray(points) || points.length < 2) {
         return res.status(400).json({ error: 'Path must contain at least 2 points' })
       }
+      const idem = await beginIdempotent(req, res, 'paths')
+      if (idem.replay) return
       const city =
         typeof cityRaw === 'string' ? cityRaw.trim().slice(0, 160) : ''
       const tagRegistry = (body.tagIds !== undefined || body.tagMeta !== undefined)
@@ -141,12 +144,16 @@ export default async function handler(req, res) {
         console.warn('path create share notify', e.message)
       }
 
-      return res.status(201).json({ path: newPath })
+      const createdBody = { path: newPath }
+      await finishIdempotent(idem.key, 201, createdBody)
+      return res.status(201).json(createdBody)
     }
 
     if (method === 'PATCH') {
       const { pathId, name, sharedWith, teamShares } = body
       if (!pathId) return res.status(400).json({ error: 'pathId is required' })
+      const idem = await beginIdempotent(req, res, 'paths')
+      if (idem.replay) return
 
       const [all, allTeams] = await Promise.all([getAllPaths(), getAllTeams()])
       const idx = all.findIndex((p) => p.id === pathId)
@@ -276,12 +283,16 @@ export default async function handler(req, res) {
         console.warn('path activity log', e.message)
       }
 
-      return res.status(200).json({ path })
+      const patchedBody = { path }
+      await finishIdempotent(idem.key, 200, patchedBody)
+      return res.status(200).json(patchedBody)
     }
 
     if (method === 'DELETE') {
       const { pathId } = body
       if (!pathId) return res.status(400).json({ error: 'pathId is required' })
+      const idem = await beginIdempotent(req, res, 'paths')
+      if (idem.replay) return
 
       const [all, allTeams] = await Promise.all([getAllPaths(), getAllTeams()])
       const ctx = buildAccessContext(allTeams, user)
@@ -293,7 +304,9 @@ export default async function handler(req, res) {
       }
       all.splice(idx, 1)
       await saveAllPaths(all)
-      return res.status(200).json({ message: 'Path deleted' })
+      const deletedBody = { message: 'Path deleted' }
+      await finishIdempotent(idem.key, 200, deletedBody)
+      return res.status(200).json(deletedBody)
     }
 
     return res.status(405).json({ error: 'Method not allowed' })
