@@ -1823,12 +1823,12 @@
   }
 
   @starting-style {
-    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel) {
+    .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel):not(.hail-data-panel) {
       opacity: 0;
     }
   }
 
-  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel):not([data-tasks-panel-close-settled="1"]) {
+  .map-panel-dialog[data-state='closed']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel):not(.hail-data-panel):not([data-tasks-panel-close-settled="1"]) {
     opacity: 0;
     transition-duration: 220ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -1837,7 +1837,7 @@
     z-index: 10001 !important;
   }
 
-  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel) {
+  .map-panel-dialog[data-state='open']:not(.animate-none):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.tasks-panel):not(.lead-details-panel):not(.deal-details-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-editor-panel):not(.form-fill-panel):not(.parcel-list-panel):not(.new-task-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.lead-picker-dialog):not(.share-list-dialog):not(.outreach-template-panel):not(.phone-action-panel):not(.hail-data-panel) {
     opacity: 1;
     animation: none !important;
     z-index: 10002 !important;
