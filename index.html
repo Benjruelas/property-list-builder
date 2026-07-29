@@ -49,7 +49,11 @@
       })();
     </script>
     <style>
-      /* iOS: paint logo blue immediately; avoid dark body strip under 100vh loaders */
+      /*
+       * Default shell is dark. Logo blue is only while #initial-loader is present
+       * (and later via CSS :has(.app-loading-screen--video)). Leaving blue on
+       * html/body/#root after boot made the soft keyboard reveal brand blue.
+       */
       html,
       body {
         margin: 0;
@@ -59,14 +63,20 @@
         min-height: 100dvh;
         min-height: -webkit-fill-available;
         min-height: var(--vw-height, 100dvh);
-        background: #1251f0 !important;
+        background: #111 !important;
         overflow: hidden;
       }
       #root {
         min-height: 100dvh;
         min-height: -webkit-fill-available;
         min-height: var(--vw-height, 100dvh);
-        background: #1251f0;
+        background: #111;
+      }
+      /* iOS: paint logo blue during boot so no dark strip under the 100vh loader */
+      html:has(#initial-loader),
+      html:has(#initial-loader) body,
+      html:has(#initial-loader) #root {
+        background: #1251f0 !important;
       }
       /* Critical boot loader — logo MP4 until React AppLoadingScreen takes over */
       #initial-loader {
@@ -132,15 +142,34 @@
         var ruler = document.createElement('div');
         ruler.style.cssText = 'position:fixed;width:1px;height:100vh;top:0;pointer-events:none;visibility:hidden;';
         document.body.appendChild(ruler);
+        var lockedH = 0;
         function setViewportHeight() {
-          var h = ruler.offsetHeight || window.innerHeight;
-          document.documentElement.style.setProperty('--vw-height', h + 'px');
+          var h = ruler.offsetHeight || window.innerHeight || 0;
+          if (!(h > 0)) return;
+          var vv = window.visualViewport;
+          // Soft keyboard shrinks the visual viewport (and sometimes 100vh in
+          // WKWebView). Keep the pre-keyboard height so the shell doesn't
+          // compress and flash empty document background behind the keyboard.
+          if (vv && lockedH > 0 && vv.height < lockedH - 120 && h <= lockedH) {
+            return;
+          }
+          // Orientation / multitasking can legitimately change height a lot.
+          if (lockedH > 0 && Math.abs(h - lockedH) > 160) {
+            lockedH = h;
+          } else {
+            lockedH = Math.max(lockedH, h);
+          }
+          document.documentElement.style.setProperty('--vw-height', lockedH + 'px');
         }
         setViewportHeight();
         requestAnimationFrame(setViewportHeight);
         window.visualViewport && window.visualViewport.addEventListener('resize', setViewportHeight);
         window.visualViewport && window.visualViewport.addEventListener('scroll', setViewportHeight);
         window.addEventListener('resize', setViewportHeight);
+        window.addEventListener('orientationchange', function() {
+          lockedH = 0;
+          setViewportHeight();
+        });
         window.addEventListener('load', setViewportHeight);
       })();
     </script>
