@@ -8,7 +8,7 @@ import { getBlobs } from './photoStoreIdb'
 import { VISIBILITY } from '@/utils/access'
 import { getTeamForMembership } from '@/utils/profile'
 import { showToast } from '../components/ui/toast'
-import { createLead, formatLeadAddress } from '@/utils/leads'
+import { createLead, findLeadByParcelId, formatLeadAddress, loadLocalLeads } from '@/utils/leads'
 import { FilePreviewOverlay } from '../components/ui/FilePreviewOverlay'
 import { cn } from '@/lib/utils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
@@ -375,10 +375,30 @@ function PhotoCaptureModalInner({
     }
 
     const source = entity || {}
-    const parcel = source.parcelId
-    if (parcel && existingLeads.some((l) => l.parcelId === parcel)) {
-      throw new Error('A lead already exists for this parcel')
+    const findExistingForSource = () => (
+      findLeadByParcelId(existingLeads, source, { matchCoords: false })
+      || (source.parcelId
+        ? existingLeads.find((l) => l?.parcelId != null && String(l.parcelId) === String(source.parcelId))
+        : null)
+    )
+
+    const adoptExistingLead = async (lead) => {
+      if (!lead?.id) return null
+      photoLog('capture.promote', 'Reusing existing lead for parcel', { leadId: lead.id })
+      savedLeadRef.current = lead
+      if (draftIdRef.current) {
+        const newRef = { entityType: 'lead', leadId: lead.id, entityId: lead.id }
+        await reassignDraftJobs(draftIdRef.current, newRef)
+      }
+      onLeadCreated?.(lead, { keepOpen: true })
+      onEntityUpdate?.(lead)
+      return lead
     }
+
+    // If this parcel is already linked, reuse that lead instead of failing.
+    // Photo mode must never error just because a lead already exists.
+    const existing = findExistingForSource()
+    if (existing?.id) return adoptExistingLead(existing)
 
     let firstName = (source.firstName ?? '').trim()
     let lastName = (source.lastName ?? '').trim()
@@ -413,6 +433,14 @@ function PhotoCaptureModalInner({
       onEntityUpdate?.(created)
       photoLog('capture.promote', 'Lead auto-created', { leadId: created.id })
       return created
+    } catch (e) {
+      const msg = String(e?.message || '')
+      if (/lead already exists/i.test(msg)) {
+        const fallback = findExistingForSource()
+          || findLeadByParcelId(loadLocalLeads(), source, { matchCoords: false })
+        if (fallback?.id) return adoptExistingLead(fallback)
+      }
+      throw e
     } finally {
       promotingLeadRef.current = false
       setPromotingLead(false)

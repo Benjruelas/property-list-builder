@@ -29,34 +29,26 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
   const [candidate, setCandidate] = useState(null)
   const [manualAddress, setManualAddress] = useState('')
   const [manualBusy, setManualBusy] = useState(false)
-  const [forceNewLead, setForceNewLead] = useState(false)
   const requestIdRef = useRef(0)
 
-  const resolveAt = useCallback(async (lat, lng, { ignoreExistingLeads = false } = {}) => {
+  const resolveAt = useCallback(async (lat, lng) => {
     const requestId = ++requestIdRef.current
     setStep(STEP.LOCATING)
     setStatusMessage('Looking up this property…')
     setErrorMessage('')
+    // Never match leads by GPS proximity alone — only by parcel ID — so a
+    // nearby wrong lead is not reused. Parcel-linked leads must still surface.
     const leadLookupOptions = { matchCoords: false }
     try {
       const parcelData = await resolveLeadParcelAtLocation(lat, lng)
       if (requestId !== requestIdRef.current) return
       if (parcelData) {
-        const existingLead = ignoreExistingLeads
-          ? null
-          : findLeadByParcelId(leads, parcelData, leadLookupOptions)
+        const existingLead = findLeadByParcelId(leads, parcelData, leadLookupOptions)
         setCandidate({ parcelData, lead: existingLead || null, lat, lng })
         setStep(STEP.CONFIRM)
         return
       }
-      const existingLead = ignoreExistingLeads
-        ? null
-        : findLeadByParcelId(leads, { lat, lng }, leadLookupOptions)
-      if (existingLead) {
-        setCandidate({ parcelData: null, lead: existingLead, lat, lng })
-        setStep(STEP.CONFIRM)
-        return
-      }
+      // No assessor parcel: do not attach to a nearby lead by coordinates.
       const cityLabel = await reverseGeocodeCity(lat, lng).catch(() => '')
       setCandidate({ parcelData: null, lead: null, lat, lng, cityLabel })
       setStep(STEP.NO_PARCEL)
@@ -92,7 +84,6 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
       setCandidate(null)
       setManualAddress('')
       setManualBusy(false)
-      setForceNewLead(false)
       return
     }
     void locate()
@@ -103,7 +94,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
   const handleManualSelect = useCallback(({ address, latParsed, lngParsed }) => {
     setManualAddress(address || '')
     if (Number.isFinite(latParsed) && Number.isFinite(lngParsed)) {
-      void resolveAt(latParsed, lngParsed, { ignoreExistingLeads: true })
+      void resolveAt(latParsed, lngParsed)
     }
   }, [resolveAt])
 
@@ -117,7 +108,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
         showToast('Could not find that address', 'error')
         return
       }
-      await resolveAt(geo.lat, geo.lng, { ignoreExistingLeads: true })
+      await resolveAt(geo.lat, geo.lng)
     } finally {
       setManualBusy(false)
     }
@@ -125,7 +116,9 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
 
   const handleConfirm = () => {
     if (!candidate) return
-    if (candidate.lead && !forceNewLead) {
+    // If this parcel is already linked to a lead, always reuse it — even after
+    // manual address correction. Duplicate leads per parcel are not allowed.
+    if (candidate.lead) {
       onConfirm?.({ lead: candidate.lead })
       return
     }
@@ -150,7 +143,6 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
   }
 
   const openManualStep = () => {
-    setForceNewLead(true)
     setStep(STEP.MANUAL)
   }
 
@@ -246,10 +238,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
                 <button
                   type="button"
                   className="flex items-center gap-1 text-xs opacity-60 hover:opacity-90"
-                  onClick={() => {
-                    setForceNewLead(false)
-                    void locate()
-                  }}
+                  onClick={() => void locate()}
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   Try my location again
