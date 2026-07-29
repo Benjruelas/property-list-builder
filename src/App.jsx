@@ -3230,6 +3230,9 @@ function App() {
     if (!requireAuth()) return
     guardFeature('photos', () => {
       const { parcelData, lead, autoCamera = false, forceNewLead = false } = opts
+      // forceNewLead only disables GPS-proximity matching so a nearby wrong lead
+      // is not reused. Parcel-ID matches must still win — duplicate leads per
+      // parcel are not allowed, and photo mode should attach to the existing one.
       const leadLookupOptions = forceNewLead ? { matchCoords: false } : undefined
       if (lead?.id && !forceNewLead) {
         openPhotoModeForLead(lead, {
@@ -3240,9 +3243,7 @@ function App() {
         return
       }
       if (parcelData) {
-        const existing = forceNewLead
-          ? null
-          : findLeadByParcelId(leads, parcelData, leadLookupOptions)
+        const existing = findLeadByParcelId(leads, parcelData, leadLookupOptions)
         if (existing) {
           openPhotoModeForLead(existing, {
             parcelId: resolveParcelId(parcelData) || parcelData.id,
@@ -3256,9 +3257,7 @@ function App() {
       }
       const parcelId = opts.parcelId || null
       if (parcelId) {
-        const existing = forceNewLead
-          ? null
-          : findLeadByParcelId(leads, parcelId, leadLookupOptions)
+        const existing = findLeadByParcelId(leads, parcelId, leadLookupOptions)
         if (existing) {
           openPhotoModeForLead(existing, {
             parcelId,
@@ -3286,12 +3285,12 @@ function App() {
 
   const handleQuickPhotoModeConfirm = useCallback(({ parcelData, lead, forceNewLead = false } = {}) => {
     setQuickPhotoModeOpen(false)
-    if (lead?.id && !forceNewLead) {
+    if (lead?.id) {
       beginPhotoCapture({ lead, autoCamera: true })
       return
     }
     if (parcelData) {
-      beginPhotoCapture({ parcelData, autoCamera: true, forceNewLead: forceNewLead || !lead?.id })
+      beginPhotoCapture({ parcelData, autoCamera: true, forceNewLead })
     }
   }, [beginPhotoCapture])
 
