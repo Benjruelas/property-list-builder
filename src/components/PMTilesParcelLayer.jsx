@@ -11,7 +11,10 @@ const FILL_LAYER = 'parcels-fill'
 const LINE_LAYER = 'parcels-line'
 const LABEL_SOURCE = 'parcels-label-pts'
 const LABEL_LAYER = 'parcels-label'
-const OO_ICON_ID = 'parcel-owner-occupied'
+const OO_ICON_YES_ID = 'parcel-owner-occupied'
+const OO_ICON_NO_ID = 'parcel-absentee'
+const OO_ICON_YES_COLOR = '#22c55e'
+const OO_ICON_NO_COLOR = '#eab308'
 
 /** Leading house number from situs; skips assessor placeholders like "0" / "00". */
 function extractHouseNumber(addr) {
@@ -69,32 +72,22 @@ function labelGeoJSONKey(geo) {
   ].join('|')
 }
 
-/** Shared layout for house-number labels with optional owner-occupied home glyph. */
+/** Shared layout for house-number labels with ownership home glyph (green / yellow). */
 function parcelLabelLayerLayout() {
   return {
     'text-field': ['get', '_label'],
     'text-font': ['Open Sans Semibold'],
     'text-size': ['interpolate', ['linear'], ['zoom'], 17, 10, 20, 14],
-    'text-anchor': [
-      'case',
-      ['==', ['get', '_oo'], 1],
-      'right',
-      'center',
-    ],
-    'text-offset': [
-      'case',
-      ['==', ['get', '_oo'], 1],
-      ['literal', [-0.15, 0]],
-      ['literal', [0, 0]],
-    ],
+    'text-anchor': 'right',
+    'text-offset': [-0.15, 0],
     'text-allow-overlap': false,
     'text-ignore-placement': false,
     'text-padding': 2,
     'icon-image': [
       'case',
       ['==', ['get', '_oo'], 1],
-      OO_ICON_ID,
-      '',
+      OO_ICON_YES_ID,
+      OO_ICON_NO_ID,
     ],
     'icon-size': ['interpolate', ['linear'], ['zoom'], 17, 0.45, 20, 0.7],
     'icon-anchor': 'left',
@@ -114,8 +107,8 @@ function parcelLabelLayerPaint() {
   }
 }
 
-/** Green home glyph for owner-occupied symbol layer. */
-function createOwnerOccupiedIconImageData(size = 64) {
+/** Home glyph for parcel labels — green when owner-occupied, yellow when not. */
+function createHomeIconImageData(size = 64, fillColor = OO_ICON_YES_COLOR) {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -151,16 +144,14 @@ function createOwnerOccupiedIconImageData(size = 64) {
   ctx.closePath()
   ctx.fill()
 
-  // Roof
-  ctx.fillStyle = '#22c55e'
+  // Roof + body
+  ctx.fillStyle = fillColor
   ctx.beginPath()
   ctx.moveTo(roofPeakX, roofPeakY)
   ctx.lineTo(roofRightX, roofBaseY)
   ctx.lineTo(roofLeftX, roofBaseY)
   ctx.closePath()
   ctx.fill()
-
-  // Body
   ctx.fillRect(bodyLeft, bodyTop, bodyRight - bodyLeft, bodyBottom - bodyTop)
 
   // Door
@@ -170,14 +161,21 @@ function createOwnerOccupiedIconImageData(size = 64) {
   return ctx.getImageData(0, 0, size, size)
 }
 
-function ensureOwnerOccupiedIcon(map) {
-  if (!map || map.hasImage?.(OO_ICON_ID)) return
-  const imageData = createOwnerOccupiedIconImageData(64)
-  if (!imageData) return
-  try {
-    map.addImage(OO_ICON_ID, imageData, { pixelRatio: 2 })
-  } catch {
-    /* already added or map not ready */
+function ensureOwnershipIcons(map) {
+  if (!map) return
+  const icons = [
+    [OO_ICON_YES_ID, OO_ICON_YES_COLOR],
+    [OO_ICON_NO_ID, OO_ICON_NO_COLOR],
+  ]
+  for (const [id, color] of icons) {
+    if (map.hasImage?.(id)) continue
+    const imageData = createHomeIconImageData(64, color)
+    if (!imageData) continue
+    try {
+      map.addImage(id, imageData, { pixelRatio: 2 })
+    } catch {
+      /* already added or map not ready */
+    }
   }
 }
 
@@ -702,7 +700,7 @@ export function PMTilesParcelLayer({
             paint: { 'line-color': colorRef.current, 'line-width': 2, 'line-opacity': opacityRef.current / 100 },
           })
         }
-        ensureOwnerOccupiedIcon(map)
+        ensureOwnershipIcons(map)
         if (!map.getSource(LABEL_SOURCE)) {
           map.addSource(LABEL_SOURCE, { type: 'geojson', data: emptyGeoJSON })
         }
@@ -731,7 +729,7 @@ export function PMTilesParcelLayer({
       map.once('idle', ensureLayers)
     }
 
-    const registerOoIcon = () => ensureOwnerOccupiedIcon(map)
+    const registerOoIcon = () => ensureOwnershipIcons(map)
     registerOoIcon()
     map.on('style.load', registerOoIcon)
     map.on('load', registerOoIcon)
@@ -741,7 +739,7 @@ export function PMTilesParcelLayer({
         layersAddedRef.current = false
         ensureLayers()
       } else {
-        ensureOwnerOccupiedIcon(map)
+        ensureOwnershipIcons(map)
       }
     }
     map.on('styledata', onStyleData)
@@ -926,7 +924,7 @@ export function PMTilesParcelLayer({
         minzoom: PARCEL_MIN_ZOOM,
         paint: { 'line-color': colorRef.current, 'line-width': 2, 'line-opacity': opacityRef.current / 100 },
       })
-      ensureOwnerOccupiedIcon(map)
+      ensureOwnershipIcons(map)
       map.addSource(LABEL_SOURCE, { type: 'geojson', data: emptyGeoJSON })
       map.addLayer({
         id: LABEL_LAYER,
