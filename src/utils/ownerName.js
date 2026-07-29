@@ -40,8 +40,28 @@ const SUFFIX_PHRASES = [
   'AS TRUSTEE', 'AS TRUSTEES', 'HUSBAND AND WIFE', 'H AND W'
 ]
 
+/** Particles that GIS often splits from the following surname token. */
+const JOIN_PARTICLES = new Set(['MC', 'MAC', 'O', 'ST', 'SAINT'])
+
 function normalizeUpper(s) {
   return String(s || '').trim().replace(/["']/g, '').replace(/\s+/g, ' ').toUpperCase()
+}
+
+/** Join split surname particles: "MC MILLIAN" -> "MCMILLIAN". */
+function joinNameParticles(words) {
+  const list = Array.isArray(words) ? words.filter(Boolean) : []
+  const out = []
+  for (let i = 0; i < list.length; i++) {
+    const w = list[i]
+    const next = list[i + 1]
+    if (next && JOIN_PARTICLES.has(w) && next.length >= 2 && !JOIN_PARTICLES.has(next)) {
+      out.push(w + next)
+      i++
+      continue
+    }
+    out.push(w)
+  }
+  return out
 }
 
 export function isBusinessName(name) {
@@ -107,17 +127,19 @@ export function splitOwnerName(raw) {
 
   if (original.includes(',')) {
     const parts = cleaned.split(',')
-    const lastRaw = (parts[0] || '').trim()
+    const lastWords = joinNameParticles(
+      (parts[0] || '').trim().replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean)
+    )
     const restRaw = (parts.slice(1).join(',') || '').trim().replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim()
-    const restWords = restRaw.split(/\s+/).filter(Boolean)
+    const restWords = joinNameParticles(restRaw.split(/\s+/).filter(Boolean))
     return {
       firstName: titleCase(restWords[0] || ''),
-      lastName: titleCase(lastRaw)
+      lastName: titleCase(lastWords[0] || '')
     }
   }
 
   cleaned = cleaned.replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim()
-  const words = cleaned.split(/\s+/).filter(Boolean)
+  const words = joinNameParticles(cleaned.split(/\s+/).filter(Boolean))
   if (words.length === 0) return { firstName: '', lastName: '' }
   if (words.length === 1) return { firstName: '', lastName: titleCase(words[0]) }
 
