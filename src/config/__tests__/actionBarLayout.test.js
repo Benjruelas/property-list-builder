@@ -12,7 +12,7 @@ describe('actionBarLayout', () => {
   it('shows compact desktop bar with menu overflow at 768px+', () => {
     const { barIds, overflowPrimaryIds, isDesktop } = resolveActionBarLayout(1600)
     expect(barIds).toEqual([
-      'leads', 'tasks', 'schedule', 'activity', 'photoMode', 'settings', 'menu',
+      'leads', 'tasks', 'schedule', 'activity', 'settings', 'menu',
     ])
     expect(overflowPrimaryIds).toEqual(DESKTOP_MENU_OVERFLOW)
     expect(isDesktop).toBe(true)
@@ -31,6 +31,6 @@ describe('actionBarLayout', () => {
     expect(layout.isDesktop).toBe(true)
     expect(layout.barIds).toContain('menu')
     expect(layout.barIds).toContain('settings')
-    expect(layout.barIds).toContain('photoMode')
+    expect(layout.barIds).not.toContain('photoMode')
   })
 })

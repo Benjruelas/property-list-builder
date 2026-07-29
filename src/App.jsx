@@ -4063,13 +4063,6 @@ function App() {
         }}
         mapInstanceRef={mapInstanceRef}
         onCloseParcelPopup={() => nav.clearMapOverlays()}
-      />
-
-      <MapControls
-        onRecenter={handleRecenter}
-        locationPermission={locationPermission}
-        onToggleCompass={handleToggleCompass}
-        isCompassActive={isCompassActive}
         onToggleMultiSelect={handleToggleMultiSelect}
         isMultiSelectActive={isMultiSelectActive}
         multiSelectParcelCount={selectedParcels.size}
@@ -4090,6 +4083,13 @@ function App() {
         }}
         isPathTrackingActive={isPathTrackingActive}
         currentUser={currentUser}
+      />
+
+      <MapControls
+        onRecenter={handleRecenter}
+        locationPermission={locationPermission}
+        onToggleCompass={handleToggleCompass}
+        isCompassActive={isCompassActive}
         onCloseParcelPopup={() => nav.clearMapOverlays()}
         onQuickPhotoMode={beginQuickPhotoCapture}
       />
@@ -4129,7 +4129,6 @@ function App() {
         onOpenOutreach={handleOpenOutreach}
         onOpenForms={openFormsPanel}
         onOpenSettings={openSettingsPanel}
-        onOpenPhotoMode={beginQuickPhotoCapture}
         currentUser={currentUser}
         onLogin={openLogin}
       />

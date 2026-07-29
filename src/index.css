@@ -361,6 +361,10 @@
   margin-right: var(--map-chrome-btn-gap);
 }
 
+.map-chrome-btn-offset-left {
+  margin-left: var(--map-chrome-btn-gap);
+}
+
 .map-search-open-pill {
   height: var(--map-chrome-btn-size);
   box-sizing: border-box;
@@ -384,7 +388,7 @@
   top: calc(var(--map-chrome-btn-size) + var(--map-chrome-btn-gap));
 }
 
-/* North indicator — below search + zoom column (3 square buttons + gaps) */
+/* North indicator — below left chrome column (search + multi-select + path) */
 .north-indicator {
   top: calc(var(--map-chrome-top) + (var(--map-chrome-btn-size) + var(--map-chrome-btn-gap)) * 3);
   left: var(--map-chrome-left);
@@ -2113,11 +2117,13 @@
 [data-ui-theme='dark'] .map-search-stack [class*="hover:bg-gray"]:hover {
   background-color: rgba(255, 255, 255, 0.06) !important;
 }
-[data-ui-theme='dark'] .map-controls-stack [class*="hover:bg-red"]:hover:not(.path-tracking-active) {
+[data-ui-theme='dark'] .map-controls-stack [class*="hover:bg-red"]:hover:not(.path-tracking-active),
+[data-ui-theme='dark'] .map-search-stack [class*="hover:bg-red"]:hover:not(.path-tracking-active) {
   background-color: rgba(255, 255, 255, 0.06) !important;
 }
 
 /* Path recording: keep red on mobile where :hover sticks after tap and would dim the button */
+.map-search-stack button.path-tracking-active,
 .map-controls-stack button.path-tracking-active {
   background-color: rgb(220 38 38 / 0.85) !important;
   border-color: rgb(248 113 113 / 0.5) !important;

@@ -9,11 +9,11 @@ const MOBILE_MAX = 767
 /** Map chrome → parcel demo → action bar / menu, top-to-bottom and left-to-right. */
 const DESKTOP_TOUR_ORDER = [
   'address-search',
-  'zoom',
-  'recenter',
-  'compass',
   'multi-select',
   'path-recording',
+  'recenter',
+  'compass',
+  'photo-mode',
   'parcel-intro',
   'parcel-action-details',
   'parcel-action-list',
@@ -29,7 +29,6 @@ const DESKTOP_TOUR_ORDER = [
   'reports',
   'lists',
   'activity',
-  'photo-mode-bar',
   'paths',
   'outreach',
   'settings-menu',
@@ -38,12 +37,11 @@ const DESKTOP_TOUR_ORDER = [
 
 const MOBILE_TOUR_ORDER = [
   'address-search',
-  'zoom',
+  'multi-select',
+  'path-recording',
   'recenter',
   'compass',
   'photo-mode',
-  'multi-select',
-  'path-recording',
   'parcel-intro',
   'parcel-action-details',
   'parcel-action-list',
@@ -74,13 +72,6 @@ const TOUR_STEPS_BY_ID = {
     target: '.map-search-stack button',
     tooltipPrefer: 'right',
   },
-  zoom: {
-    id: 'zoom',
-    title: 'Zoom Controls',
-    desc: 'Zoom in on parcel lines or out to scan a whole neighborhood.',
-    target: '[data-tour="zoom-controls"]',
-    tooltipPrefer: 'right',
-  },
   recenter: {
     id: 'recenter',
     title: 'Recenter Map',
@@ -108,7 +99,7 @@ const TOUR_STEPS_BY_ID = {
     title: 'Multi-Select',
     desc: 'Tag a whole street at once — select multiple parcels and add them to a list.',
     target: '[data-tour="multi-select"]',
-    tooltipPrefer: 'left',
+    tooltipPrefer: 'right',
   },
   'path-recording': {
     id: 'path-recording',
@@ -116,7 +107,7 @@ const TOUR_STEPS_BY_ID = {
     desc: 'Record your drive or walk and revisit that route anytime.',
     target: '[data-tour="path-recording"]',
     featureId: 'paths',
-    tooltipPrefer: 'left',
+    tooltipPrefer: 'right',
   },
   'parcel-intro': {
     id: 'parcel-intro',
@@ -256,13 +247,6 @@ const TOUR_STEPS_BY_ID = {
     mobileTarget: '[data-tour="menu-lists"]',
     menuRequired: true,
     featureId: 'lists',
-  },
-  'photo-mode-bar': {
-    id: 'photo-mode-bar',
-    title: 'Photo Mode',
-    desc: 'Open Photo Mode from the bar — same quick capture flow, one tap away.',
-    target: '[data-tour="action-bar-photoMode"]',
-    featureId: 'photos',
   },
   paths: {
     id: 'paths',

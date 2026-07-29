@@ -55,11 +55,11 @@ describe('welcome tour order', () => {
     const mapChrome = DESKTOP_TOUR_ORDER.slice(0, 6)
     expect(mapChrome).toEqual([
       'address-search',
-      'zoom',
-      'recenter',
-      'compass',
       'multi-select',
       'path-recording',
+      'recenter',
+      'compass',
+      'photo-mode',
     ])
   })
 
@@ -79,7 +79,6 @@ describe('welcome tour order', () => {
       'reports',
       'lists',
       'activity',
-      'photo-mode-bar',
       'paths',
       'outreach',
       'settings-menu',

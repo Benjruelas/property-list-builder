@@ -33,7 +33,6 @@ import {
   Settings,
   User,
   Circle,
-  Camera,
 } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { cn } from '@/lib/utils'
@@ -76,7 +75,6 @@ const ITEM_DEFS = {
   paths: { label: 'Paths', Icon: Route },
   outreach: { label: 'Outreach', Icon: Send },
   settings: { label: 'Settings', Icon: Settings },
-  photoMode: { label: 'Photo Mode', Icon: Camera },
   login: { label: 'Sign In', Icon: User },
   menu: { label: 'Menu', Icon: Menu },
 }
@@ -100,7 +98,6 @@ export function MobileActionBar({
   onOpenOutreach,
   onOpenForms,
   onOpenSettings,
-  onOpenPhotoMode,
   currentUser,
   onLogin,
   activityUnreadCount = 0,
@@ -164,7 +161,6 @@ export function MobileActionBar({
     paths: onOpenPathsPanel,
     outreach: onOpenOutreach,
     settings: onOpenSettings,
-    photoMode: onOpenPhotoMode,
     login: onLogin,
     menu: () => setShowMenu?.(!showMenu),
   }

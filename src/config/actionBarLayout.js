@@ -4,7 +4,7 @@
  * Desktop (768+): direct access to core items; CRM / Documents / Tools via Menu.
  */
 
-/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'paths' | 'outreach' | 'settings' | 'photoMode' | 'menu'} ActionBarItemId */
+/** @typedef {'pipes' | 'tasks' | 'schedule' | 'leads' | 'deals' | 'quotes' | 'forms' | 'reports' | 'lists' | 'activity' | 'paths' | 'outreach' | 'settings' | 'menu'} ActionBarItemId */
 
 export const DESKTOP_MIN_WIDTH = 768
 
@@ -28,7 +28,6 @@ export const DESKTOP_BAR_ORDER = [
   'tasks',
   'schedule',
   'activity',
-  'photoMode',
   'settings',
   'menu',
 ]
