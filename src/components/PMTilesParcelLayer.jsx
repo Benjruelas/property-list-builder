@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { mapProperties, canonicalParcelId } from '@/utils/parcelPropertyMap'
 import { parcelTileUrl } from '@/config/mapProviders'
+import { computeOwnerOccupied } from '@/utils/ownerOccupied'
+import { resolveOwnerOccupiedAnchor } from '@/utils/parcelGeometry'
 
 const PARCEL_MIN_ZOOM = 15
 const PARCEL_TILE_MAXZOOM = 16
@@ -10,6 +12,9 @@ const FILL_LAYER = 'parcels-fill'
 const LINE_LAYER = 'parcels-line'
 const LABEL_SOURCE = 'parcels-label-pts'
 const LABEL_LAYER = 'parcels-label'
+const OO_SOURCE = 'parcels-oo-pts'
+const OO_LAYER = 'parcels-oo-icon'
+const OO_ICON_ID = 'parcel-owner-occupied'
 
 /** Leading house number from situs; skips assessor placeholders like "0" / "00". */
 function extractHouseNumber(addr) {
@@ -45,6 +50,29 @@ function buildLabelGeoJSON(features) {
   return { type: 'FeatureCollection', features: pts }
 }
 
+/** Owner-occupied-only points at the inward NE corner of each parcel. */
+function buildOwnerOccupiedGeoJSON(features) {
+  const seen = new Set()
+  const pts = []
+  for (const f of features) {
+    if (pts.length >= MAX_LABEL_FEATURES) break
+    const raw = f.properties || {}
+    const id = raw.lrid || raw.parcelid
+    if (!id || seen.has(id)) continue
+    const props = mapProperties(raw)
+    if (computeOwnerOccupied(props) !== 'Yes') continue
+    const anchor = resolveOwnerOccupiedAnchor(f.geometry, raw)
+    if (!anchor) continue
+    seen.add(id)
+    pts.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [anchor.lng, anchor.lat] },
+      properties: {},
+    })
+  }
+  return { type: 'FeatureCollection', features: pts }
+}
+
 function labelGeoJSONKey(geo) {
   const feats = geo.features
   if (!feats.length) return 'empty'
@@ -58,6 +86,115 @@ function labelGeoJSONKey(geo) {
     first.geometry?.coordinates?.[1],
     last.geometry?.coordinates?.[0],
   ].join('|')
+}
+
+function ooGeoJSONKey(geo) {
+  const feats = geo.features
+  if (!feats.length) return 'empty'
+  const first = feats[0]
+  const last = feats[feats.length - 1]
+  return [
+    feats.length,
+    first.geometry?.coordinates?.[0],
+    first.geometry?.coordinates?.[1],
+    last.geometry?.coordinates?.[0],
+    last.geometry?.coordinates?.[1],
+  ].join('|')
+}
+
+/** Green home glyph for owner-occupied symbol layer. */
+function createOwnerOccupiedIconImageData(size = 64) {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.clearRect(0, 0, size, size)
+
+  const pad = size * 0.12
+  const roofPeakX = size * 0.5
+  const roofPeakY = pad
+  const roofLeftX = pad
+  const roofRightX = size - pad
+  const roofBaseY = size * 0.42
+  const bodyLeft = size * 0.22
+  const bodyRight = size * 0.78
+  const bodyTop = size * 0.38
+  const bodyBottom = size * 0.88
+  const doorW = size * 0.16
+  const doorH = size * 0.28
+  const doorLeft = roofPeakX - doorW / 2
+  const doorTop = bodyBottom - doorH
+
+  // Dark halo / outline
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.beginPath()
+  ctx.moveTo(roofPeakX, roofPeakY - 1)
+  ctx.lineTo(roofRightX + 1, roofBaseY + 1)
+  ctx.lineTo(bodyRight + 1, roofBaseY + 1)
+  ctx.lineTo(bodyRight + 1, bodyBottom + 1)
+  ctx.lineTo(bodyLeft - 1, bodyBottom + 1)
+  ctx.lineTo(bodyLeft - 1, roofBaseY + 1)
+  ctx.lineTo(roofLeftX - 1, roofBaseY + 1)
+  ctx.closePath()
+  ctx.fill()
+
+  // Roof
+  ctx.fillStyle = '#22c55e'
+  ctx.beginPath()
+  ctx.moveTo(roofPeakX, roofPeakY)
+  ctx.lineTo(roofRightX, roofBaseY)
+  ctx.lineTo(roofLeftX, roofBaseY)
+  ctx.closePath()
+  ctx.fill()
+
+  // Body
+  ctx.fillRect(bodyLeft, bodyTop, bodyRight - bodyLeft, bodyBottom - bodyTop)
+
+  // Door
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'
+  ctx.fillRect(doorLeft, doorTop, doorW, doorH)
+
+  return ctx.getImageData(0, 0, size, size)
+}
+
+function ensureOwnerOccupiedIcon(map) {
+  if (!map || map.hasImage?.(OO_ICON_ID)) return
+  const imageData = createOwnerOccupiedIconImageData(64)
+  if (!imageData) return
+  try {
+    map.addImage(OO_ICON_ID, imageData, { pixelRatio: 2 })
+  } catch {
+    /* already added or map not ready */
+  }
+}
+
+function addOwnerOccupiedOverlay(map, emptyGeoJSON) {
+  ensureOwnerOccupiedIcon(map)
+  if (!map.getSource(OO_SOURCE)) {
+    map.addSource(OO_SOURCE, { type: 'geojson', data: emptyGeoJSON })
+  }
+  if (!map.getLayer(OO_LAYER)) {
+    map.addLayer({
+      id: OO_LAYER,
+      type: 'symbol',
+      source: OO_SOURCE,
+      minzoom: 17,
+      layout: {
+        'icon-image': OO_ICON_ID,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 17, 0.45, 20, 0.7],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'icon-anchor': 'center',
+        'symbol-placement': 'point',
+      },
+    })
+  }
+}
+
+function removeOwnerOccupiedOverlay(map) {
+  if (map.getLayer(OO_LAYER)) map.removeLayer(OO_LAYER)
+  if (map.getSource(OO_SOURCE)) map.removeSource(OO_SOURCE)
 }
 
 const LIST_HIGHLIGHT_COLORS = [
@@ -478,6 +615,7 @@ export function PMTilesParcelLayer({
     let cancelled = false
     let labelUpdateTimer = null
     let lastLabelKey = ''
+    let lastOoKey = ''
     let lastLabelRefreshAt = 0
     let idleLabelHandler = null
     const LABEL_DEBOUNCE_MS = 200
@@ -486,7 +624,7 @@ export function PMTilesParcelLayer({
     const tileUrl = parcelTileUrl()
     const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
 
-    function refreshLabels() {
+    function refreshViewportOverlays() {
       if (cancelled) return
       if (labelUpdateTimer) clearTimeout(labelUpdateTimer)
       labelUpdateTimer = setTimeout(() => {
@@ -495,26 +633,45 @@ export function PMTilesParcelLayer({
         if (now - lastLabelRefreshAt < LABEL_MIN_INTERVAL_MS) return
         try {
           const zoom = map.getZoom()
-          const src = map.getSource(LABEL_SOURCE)
-          if (!src) return
+          const labelSrc = map.getSource(LABEL_SOURCE)
+          const ooSrc = map.getSource(OO_SOURCE)
+          if (!labelSrc && !ooSrc) return
           if (zoom < 17) {
-            if (lastLabelKey !== 'empty') {
-              src.setData(emptyGeoJSON)
+            if (lastLabelKey !== 'empty' && labelSrc) {
+              labelSrc.setData(emptyGeoJSON)
               lastLabelKey = 'empty'
-              lastLabelRefreshAt = now
             }
+            if (lastOoKey !== 'empty' && ooSrc) {
+              ooSrc.setData(emptyGeoJSON)
+              lastOoKey = 'empty'
+            }
+            lastLabelRefreshAt = now
             return
           }
           const features = map.queryRenderedFeatures({ layers: [FILL_LAYER] })
-          const geo = buildLabelGeoJSON(features)
-          const key = labelGeoJSONKey(geo)
-          if (key === lastLabelKey) return
-          lastLabelKey = key
+          if (labelSrc) {
+            const geo = buildLabelGeoJSON(features)
+            const key = labelGeoJSONKey(geo)
+            if (key !== lastLabelKey) {
+              lastLabelKey = key
+              labelSrc.setData(geo)
+            }
+          }
+          if (ooSrc) {
+            const ooGeo = buildOwnerOccupiedGeoJSON(features)
+            const ooKey = ooGeoJSONKey(ooGeo)
+            if (ooKey !== lastOoKey) {
+              lastOoKey = ooKey
+              ooSrc.setData(ooGeo)
+            }
+          }
           lastLabelRefreshAt = now
-          src.setData(geo)
         } catch { /* ignore */ }
       }, LABEL_DEBOUNCE_MS)
     }
+
+    // Keep prior name as alias — move/zoom/idle handlers still call this.
+    const refreshLabels = refreshViewportOverlays
 
     function scheduleLabelRefreshAfterMove() {
       refreshLabels()
@@ -542,9 +699,11 @@ export function PMTilesParcelLayer({
         const hasCorrectPromoteId = styleSrc
           && JSON.stringify(styleSrc.promoteId) === JSON.stringify(expectedPromoteId)
         if (styleSrc && !hasCorrectPromoteId) {
+          removeOwnerOccupiedOverlay(map)
           if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
           if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
+          if (map.getSource(LABEL_SOURCE)) map.removeSource(LABEL_SOURCE)
           map.removeSource(SOURCE_ID)
         }
         if (!map.getSource(SOURCE_ID)) {
@@ -601,6 +760,7 @@ export function PMTilesParcelLayer({
             },
           })
         }
+        addOwnerOccupiedOverlay(map, emptyGeoJSON)
         layersAddedRef.current = true
         repaint()
         refreshLabels()
@@ -616,10 +776,17 @@ export function PMTilesParcelLayer({
       map.once('idle', ensureLayers)
     }
 
+    const registerOoIcon = () => ensureOwnerOccupiedIcon(map)
+    registerOoIcon()
+    map.on('style.load', registerOoIcon)
+    map.on('load', registerOoIcon)
+
     const onStyleData = () => {
       if (!map.getSource(SOURCE_ID)) {
         layersAddedRef.current = false
         ensureLayers()
+      } else {
+        ensureOwnerOccupiedIcon(map)
       }
     }
     map.on('styledata', onStyleData)
@@ -693,7 +860,10 @@ export function PMTilesParcelLayer({
       map.off('mouseenter', FILL_LAYER, onEnter)
       map.off('mouseleave', FILL_LAYER, onLeave)
       map.off('styledata', onStyleData)
+      map.off('style.load', registerOoIcon)
+      map.off('load', registerOoIcon)
       try {
+        removeOwnerOccupiedOverlay(map)
         if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
         if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
         if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
@@ -771,6 +941,7 @@ export function PMTilesParcelLayer({
     const map = mapRef?.current
     if (!map) return
     try {
+      removeOwnerOccupiedOverlay(map)
       if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
       if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
       if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
@@ -823,6 +994,7 @@ export function PMTilesParcelLayer({
           'text-halo-width': 1.5,
         },
       })
+      addOwnerOccupiedOverlay(map, emptyGeoJSON)
       layersAddedRef.current = true
       repaint()
     } catch { /* ignore if style not ready */ }
