@@ -612,7 +612,7 @@
 
 @media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
-  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.report-editor-panel):not(.report-details-panel):not(.create-lead-panel):not(.create-deal-panel) {
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.report-editor-panel):not(.report-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.hail-data-panel) {
     width: auto !important;
     min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
@@ -1493,7 +1493,7 @@
     overflow: hidden !important;
   }
 
-  /* Desktop: Create lead/deal, quote & report editor — compact width (+50% vs half-height baseline) */
+  /* Desktop: Create lead/deal, quote & report editor, hail data — compact width (+50% vs half-height baseline) */
   .map-panel-dialog.create-lead-panel.fullscreen-panel,
   .create-lead-panel.fullscreen-panel,
   .map-panel-dialog.create-deal-panel.fullscreen-panel:not(.call-confirm-panel),
@@ -1501,7 +1501,9 @@
   .map-panel-dialog.quote-editor-panel.fullscreen-panel,
   .quote-editor-panel.fullscreen-panel,
   .map-panel-dialog.report-editor-panel.fullscreen-panel:not(.square-picker-panel),
-  .report-editor-panel.fullscreen-panel:not(.square-picker-panel) {
+  .report-editor-panel.fullscreen-panel:not(.square-picker-panel),
+  .map-panel-dialog.hail-data-panel.fullscreen-panel,
+  .hail-data-panel.fullscreen-panel {
     --create-form-panel-width: calc(var(--ui-panel-height) * 0.75);
     width: var(--create-form-panel-width) !important;
     min-width: min(var(--create-form-panel-width), calc(100vw - 2rem)) !important;
@@ -1571,7 +1573,7 @@
     top: var(--ui-panel-center-y) !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.hail-data-panel) {
     box-sizing: border-box !important;
     width: var(--ui-panel-width) !important;
     max-width: var(--ui-panel-width) !important;
@@ -1582,7 +1584,7 @@
     overflow-x: clip !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.hail-data-panel) {
     width: var(--ui-panel-width) !important;
     min-width: 0 !important;
     max-width: var(--ui-panel-width) !important;
