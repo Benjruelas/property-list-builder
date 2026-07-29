@@ -347,7 +347,7 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
     handleEditorSaved,
   } = t
 
-  useImperativeHandle(ref, () => ({ goToList }))
+  useImperativeHandle(ref, () => ({ goToList, openCreate }), [goToList, openCreate])
 
   useEffect(() => {
     setSearch(searchQuery)
@@ -492,6 +492,8 @@ export function OutreachPanel({
     if (isOpen) setActiveTab(initialTab)
   }, [isOpen, initialTab])
 
+  // Reset list chrome on tab switch. Create is invoked via activeTabRef (not nav.onCreate)
+  // because this effect runs after the child's onNavChange and would wipe those handlers.
   useEffect(() => {
     setNav({ screen: 'list', title: null })
     setSearchQuery('')
@@ -525,7 +527,10 @@ export function OutreachPanel({
             title={nav.title || 'Outreach'}
           >
             {showListChrome && (
-              <PanelCreateButton title="New template" onClick={() => nav.onCreate?.()} />
+              <PanelCreateButton
+                title="New template"
+                onClick={() => activeTabRef.current?.openCreate?.()}
+              />
             )}
             {nav.screen === 'detail' && (
               <PanelOptionsButton
