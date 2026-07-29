@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Plus, Eye, EyeOff, Trash2, MoreVertical, FileDown, Share2, Pencil, Tag, List, Search, Phone } from 'lucide-react'
+import { Plus, Check, Eye, EyeOff, Trash2, MoreVertical, FileDown, Share2, Pencil, Tag, List, Search, Phone } from 'lucide-react'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
@@ -137,6 +137,9 @@ export function ListPanel({
   const validateTimeoutRef = useRef(null)
   /** Optimistic team picks in Share dialog; avoids waiting for server to show checkmarks */
   const [localShareState, setLocalShareState] = useState(null)
+  /** Two-click confirm: first click selects a list, second click adds parcels */
+  const [pendingConfirmListId, setPendingConfirmListId] = useState(null)
+  const isAddMode = isAddingSingleParcel || selectedParcelsCount > 0
 
   useEffect(() => {
     if (!isOpen) {
@@ -151,12 +154,43 @@ export function ListPanel({
       setShareEmailValid(null)
       setShareEmailError('')
       setIsValidatingShare(false)
+      setPendingConfirmListId(null)
       if (validateTimeoutRef.current) {
         clearTimeout(validateTimeoutRef.current)
         validateTimeoutRef.current = null
       }
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isAddMode) setPendingConfirmListId(null)
+  }, [isAddMode])
+
+  useEffect(() => {
+    if (!pendingConfirmListId) return
+    const onPointerDown = (e) => {
+      const target = e.target
+      if (!(target instanceof Element)) {
+        setPendingConfirmListId(null)
+        return
+      }
+      const row = target.closest('[data-list-confirm-row]')
+      if (row?.getAttribute('data-list-confirm-row') === pendingConfirmListId) return
+      setPendingConfirmListId(null)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [pendingConfirmListId])
+
+  const handleAddTargetClick = useCallback((listId) => {
+    if (!isAddMode) return
+    if (pendingConfirmListId === listId) {
+      setPendingConfirmListId(null)
+      onAddParcelsToList?.(listId)
+      return
+    }
+    setPendingConfirmListId(listId)
+  }, [isAddMode, pendingConfirmListId, onAddParcelsToList])
 
   useEffect(() => {
     if (renamingListId && renameInputRef.current) {
@@ -428,12 +462,14 @@ export function ListPanel({
         >
           {isAddingSingleParcel && (
             <div className="mb-3 p-3 rounded-lg text-sm font-medium text-center border" style={parcelPromptBannerStyle}>
-              Select a list to add this parcel to
+              {pendingConfirmListId ? 'Click again to confirm' : 'Select a list to add this parcel to'}
             </div>
           )}
           {!isAddingSingleParcel && selectedParcelsCount > 0 && (
             <div className="mb-3 p-3 rounded-lg text-sm font-medium text-center border" style={parcelPromptBannerStyle}>
-              {selectedParcelsCount} parcel{selectedParcelsCount !== 1 ? 's' : ''} selected
+              {pendingConfirmListId
+                ? 'Click again to confirm'
+                : `${selectedParcelsCount} parcel${selectedParcelsCount !== 1 ? 's' : ''} selected`}
             </div>
           )}
 
@@ -494,7 +530,8 @@ export function ListPanel({
               const listColorIndex = isSelected ? selectedListIds.indexOf(list.id) : -1
               const listColor = listColorIndex >= 0 ? LIST_HIGHLIGHT_COLORS[listColorIndex] : undefined
               const parcelCount = list.parcels?.length ?? 0
-              const rowDisabled = !isAddingSingleParcel && parcelCount === 0
+              const rowDisabled = !isAddMode && parcelCount === 0
+              const isPendingConfirm = pendingConfirmListId === list.id
               const createdLabel = formatListCreatedAt(list.createdAt)
 
               return (
@@ -502,18 +539,29 @@ export function ListPanel({
                   key={list.id}
                   role="button"
                   tabIndex={rowDisabled ? -1 : 0}
+                  data-list-confirm-row={isAddMode ? list.id : undefined}
+                  aria-pressed={isAddMode ? isPendingConfirm : undefined}
                   className={cn(
                     'w-full text-left map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 cursor-pointer',
-                    isSelected && 'border-solid bg-white/[0.08]',
+                    (isSelected || isPendingConfirm) && 'border-solid bg-white/[0.08]',
                     rowDisabled && 'cursor-not-allowed opacity-75'
                   )}
-                  style={isSelected ? {
-                    borderColor: listColor ?? LIST_HIGHLIGHT_COLORS[0],
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  } : undefined}
+                  style={
+                    isPendingConfirm
+                      ? {
+                          borderColor: parcelBoundaryColor,
+                          backgroundColor: isHex6 ? `${parcelBoundaryColor}22` : 'rgba(255, 255, 255, 0.08)',
+                        }
+                      : isSelected
+                        ? {
+                            borderColor: listColor ?? LIST_HIGHLIGHT_COLORS[0],
+                            backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                          }
+                        : undefined
+                  }
                   onClick={() => {
-                    if (isAddingSingleParcel) {
-                      onAddParcelsToList?.(list.id)
+                    if (isAddMode) {
+                      handleAddTargetClick(list.id)
                       return
                     }
                     if (parcelCount > 0 && onViewListContents) onViewListContents(list.id)
@@ -522,13 +570,13 @@ export function ListPanel({
                     if (rowDisabled) return
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      if (isAddingSingleParcel) onAddParcelsToList?.(list.id)
+                      if (isAddMode) handleAddTargetClick(list.id)
                       else if (parcelCount > 0) onViewListContents?.(list.id)
                     }
                   }}
                   title={
-                    isAddingSingleParcel
-                      ? 'Click to add parcel to this list'
+                    isAddMode
+                      ? (isPendingConfirm ? 'Click again to add' : 'Select this list')
                       : parcelCount > 0
                         ? 'Click to view list contents'
                         : 'List is empty'
@@ -577,20 +625,28 @@ export function ListPanel({
                       className="mt-0.5"
                     />
                   </div>
-                  {selectedParcelsCount > 0 && (
+                  {isAddMode && (
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        onAddParcelsToList?.(list.id)
+                        handleAddTargetClick(list.id)
                       }}
                       onMouseEnter={addParcelsBtnHoverEnter}
                       onMouseLeave={addParcelsBtnHoverLeave}
-                      className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full transition-colors"
+                      className={cn(
+                        'shrink-0 flex items-center justify-center w-8 h-8 rounded-full transition-colors',
+                        isPendingConfirm && 'bg-white/10'
+                      )}
                       style={{ color: parcelBoundaryColor }}
-                      title="Add selected parcels to this list"
+                      title={isPendingConfirm ? 'Click again to add' : 'Select this list'}
+                      aria-label={isPendingConfirm ? 'Confirm add to list' : 'Select list to add parcels'}
                     >
-                      <Plus className="h-5 w-5" strokeWidth={2.5} color={parcelBoundaryColor} />
+                      {isPendingConfirm ? (
+                        <Check className="h-5 w-5" strokeWidth={2.5} color={parcelBoundaryColor} />
+                      ) : (
+                        <Plus className="h-5 w-5" strokeWidth={2.5} color={parcelBoundaryColor} />
+                      )}
                     </button>
                   )}
                   {!isAddingSingleParcel && (
