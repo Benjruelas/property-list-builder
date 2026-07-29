@@ -54,6 +54,31 @@ describe('DialogContent overlay layering', () => {
     expect(panel.className).toContain('z-[10021]')
   })
 
+  it('keeps create-list panels above their own topLayer scrim', () => {
+    document.body.innerHTML = '<div id="modal-root"></div>'
+
+    render(
+      <Dialog open modal={false}>
+        <DialogContent
+          className="map-panel list-panel create-list-panel fullscreen-panel"
+          showCloseButton={false}
+          nestedOverlay
+          topLayer
+        >
+          <div>Create List</div>
+        </DialogContent>
+      </Dialog>,
+    )
+
+    const backdrop = document.querySelector('[data-app-dialog-backdrop]')
+    const panel = document.querySelector('.create-list-panel')
+    expect(backdrop).toBeTruthy()
+    expect(panel).toBeTruthy()
+    expect(backdrop.className).toContain('z-[10020]')
+    expect(panel.className).toContain('z-[10021]')
+    expect(backdrop.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('keeps hail data panel above its own topLayer scrim', () => {
     document.body.innerHTML = '<div id="modal-root"></div>'
 

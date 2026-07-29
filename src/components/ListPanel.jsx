@@ -702,6 +702,7 @@ export function ListPanel({
       tagRegistry={tagRegistry}
       onRefreshTags={onRefreshTags}
       nestedOverlay
+      topLayer
     />
 
     {shareListId && (() => {

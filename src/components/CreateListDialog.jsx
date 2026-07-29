@@ -19,8 +19,11 @@ export function CreateListDialog({
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   nestedOverlay = false,
-  topLayer = false,
+  topLayer: topLayerProp,
 }) {
+  // Nested opens from Lists must elevate above the list panel (z-10002).
+  // Mirror CreateLeadDialog: nestedOverlay implies topLayer unless overridden.
+  const topLayer = topLayerProp ?? nestedOverlay
   const activeTeam = teams?.[0] || null
   const allowExternalSharing = teamMembership?.allowExternalSharing === true
   const [name, setName] = useState('')
