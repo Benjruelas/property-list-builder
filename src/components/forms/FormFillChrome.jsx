@@ -197,7 +197,7 @@ export function FormFillChrome({
         >
           <div className="form-fill-footer-inner form-fill-footer-inner--public-submit">
             <p className="form-fill-review-hint form-fill-review-hint--public">
-              Review your form above, then submit.
+              All required fields are filled. Submit when you&apos;re ready.
             </p>
             {renderSubmitButton('form-fill-footer-btn form-fill-submit-btn--footer')}
           </div>
