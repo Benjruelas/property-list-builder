@@ -3,6 +3,7 @@ import { Bell, ChevronDown, Loader2, Search, UserSearch, Briefcase, CheckSquare,
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { mapListDialogOpen, listPanelObscuredByDetail } from './ui/panelDialogUtils'
 import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
+import { isFeedItemNavActionable } from '@/navigation/feedNavigation'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
 const ACTIVITY_FEED_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer w-full text-left'
@@ -409,7 +410,7 @@ export function useNotificationInbox({
 
   const handleOpenItem = useCallback((item) => {
     const nav = item.nav || { type: item.type }
-    if (nav?.type) onNavigate?.(nav)
+    if (isFeedItemNavActionable(nav)) onNavigate?.(nav)
   }, [onNavigate])
 
   const displayTeams = feedTeams.length > 0 ? feedTeams : (teams || []).map((t) => ({ id: t.id, name: t.name }))
