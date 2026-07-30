@@ -4,6 +4,7 @@ import { Resend } from 'resend'
 import {
   findInviteByToken,
   markInviteSubmitted,
+  recordInviteView,
   getAllTemplates,
   appendSubmission,
   isValidEmail,
@@ -132,15 +133,59 @@ export default async function handler(req, res) {
         }
       }
 
+      // Metadata GET counts as a view (not the PDF stream — fill UI loads both).
+      let viewedInvite = invite
+      try {
+        const viewResult = await recordInviteView(token)
+        if (viewResult.ok) {
+          viewedInvite = viewResult.invite
+          if (viewResult.isFirst) {
+            const ownerEmail = (invite.ownerEmail || '').trim().toLowerCase()
+            const viewerEmail = (invite.recipientEmail || '').trim().toLowerCase()
+            const templateName = template.name || 'Form'
+            try {
+              const { notifyFormViewed } = await import('./_lib/pushUtils.js')
+              await notifyFormViewed(ownerEmail, {
+                formName: templateName,
+                viewerEmail,
+                templateId: invite.templateId,
+                inviteId: invite.id,
+              })
+            } catch (e) {
+              console.warn('form view push notify', e.message)
+            }
+            try {
+              const { logTeamActivity, teamIdsFromResource } = await import('./_lib/activityLog.js')
+              const teamIds = teamIdsFromResource(template || {})
+              if (teamIds.length > 0) {
+                await logTeamActivity({
+                  teamIds,
+                  actor: { email: viewerEmail },
+                  type: 'form.viewed',
+                  summary: `${viewerEmail || 'Someone'} viewed form "${templateName}"`,
+                  entity: { kind: 'form', templateId: invite.templateId, inviteId: invite.id },
+                  nav: { type: 'form', templateId: invite.templateId },
+                })
+              }
+            } catch (e) {
+              console.warn('form view activity log', e.message)
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('form view tracking', e.message)
+      }
+
       return res.status(200).json({
         templateName: template.name || 'Form',
         fields: template.fields || [],
-        recipientEmail: invite.recipientEmail,
-        message: invite.message || '',
-        prefillValues: invite.prefillValues || {},
-        lockedFieldIds: Object.keys(invite.prefillValues || {}),
-        status: invite.status,
-        expiresAt: invite.expiresAt
+        recipientEmail: viewedInvite.recipientEmail,
+        message: viewedInvite.message || '',
+        prefillValues: viewedInvite.prefillValues || {},
+        lockedFieldIds: Object.keys(viewedInvite.prefillValues || {}),
+        status: viewedInvite.status,
+        expiresAt: viewedInvite.expiresAt,
+        viewedAt: viewedInvite.viewTracking?.firstViewedAt || null,
       })
     }
 

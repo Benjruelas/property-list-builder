@@ -14,7 +14,7 @@ import {
   sanitizePrefillValues,
 } from './_lib/formInvites.js'
 import {
-  resolveSenderBranding,
+  resolveSendAsSender,
   buildBrandedEmailHtml,
   buildFromAddress,
 } from './_lib/senderBranding.js'
@@ -60,8 +60,15 @@ export default async function handler(req, res) {
       leadId,
       leadName,
       skipEmail,
+      senderUid,
     } = req.body || {}
     if (!templateId) return res.status(400).json({ error: 'templateId is required' })
+
+    const senderResult = await resolveSendAsSender({ actingUser: user, senderUid })
+    if (senderResult.error) {
+      return res.status(senderResult.status || 400).json({ error: senderResult.error })
+    }
+    const branding = senderResult.branding
 
     const trimmedEmail = recipientEmail ? String(recipientEmail).trim().toLowerCase() : ''
     const trimmedPhone = recipientPhone ? String(recipientPhone).replace(/\D/g, '').slice(-10) : ''
@@ -129,7 +136,10 @@ export default async function handler(req, res) {
       status: 'pending',
       createdAt: now.toISOString(),
       expiresAt,
-      submittedAt: null
+      submittedAt: null,
+      sentByUid: senderResult.uid || user.uid,
+      sentByEmail: (senderResult.email || user.email || '').toLowerCase() || null,
+      sentByName: branding?.senderName || null,
     }
 
     const { invites: nextInvites } = hasEmail
@@ -146,7 +156,6 @@ export default async function handler(req, res) {
     const formLink = `${appOrigin}/?form=${encodeURIComponent(token)}`
 
     if (shouldSendEmail) {
-      const branding = await resolveSenderBranding(user)
       const senderLabel = branding.senderName
       const innerHtml = `
       <p>${escapeHtml(senderLabel)} has asked you to complete a form: <strong>${escapeHtml(templateName)}</strong>.</p>
@@ -159,9 +168,9 @@ export default async function handler(req, res) {
       const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
       const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      const userEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
-        ? user.email.trim()
-        : null
+      const userEmail = typeof senderResult.email === 'string' && EMAIL_RE.test(senderResult.email.trim())
+        ? senderResult.email.trim()
+        : (typeof user.email === 'string' && EMAIL_RE.test(user.email.trim()) ? user.email.trim() : null)
       const replyTo = (branding.companyEmail && EMAIL_RE.test(branding.companyEmail.trim()))
         ? branding.companyEmail.trim()
         : userEmail

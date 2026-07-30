@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 import { requireAuth } from './_lib/apiAuth.js'
 import {
-  resolveSenderBranding,
+  resolveSendAsSender,
   buildBrandedEmailHtml,
   buildFromAddress,
   escapeHtml,
@@ -115,6 +115,7 @@ export default async function handler(req, res) {
       sendMeCopy,
       leadId,
       leadName,
+      senderUid,
     } = req.body || {}
 
     if (!pdfBase64 || typeof pdfBase64 !== 'string') {
@@ -124,6 +125,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Valid recipientEmail is required' })
     }
     if (!templateId) return res.status(400).json({ error: 'templateId is required' })
+
+    const senderResult = await resolveSendAsSender({ actingUser: user, senderUid })
+    if (senderResult.error) {
+      return res.status(senderResult.status || 400).json({ error: senderResult.error })
+    }
+    const branding = senderResult.branding
 
     // Verify the caller actually has access to this template so submissions
     // can't be attributed to someone else's template.
@@ -146,32 +153,36 @@ export default async function handler(req, res) {
       return res.status(413).json({ error: `PDF must be between 1 byte and ${MAX_PDF_BYTES} bytes` })
     }
 
-    const safeSubject = sanitizeHeader(subject || `Completed form: ${templateName || 'Form'}`, 200)
+    const displayName = templateName || template.name || 'Form'
+    const safeSubject = sanitizeHeader(subject || `Form: ${displayName}`, 200)
     const safeMessage = String(message || '').slice(0, 4000)
-    const filename = `${sanitizeFilename(templateName || templateId)}_${Date.now()}.pdf`
+    const filename = `${sanitizeFilename(displayName)}_${Date.now()}.pdf`
 
-    const branding = await resolveSenderBranding(user)
     const innerHtml = `
-      <p>${escapeHtml(branding.senderName)} has sent you a completed form.</p>
+      <p>${escapeHtml(branding.senderName)} has sent you a form: <strong>${escapeHtml(displayName)}</strong>.</p>
       ${safeMessage ? `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>` : ''}
-      <p>The completed PDF is attached.</p>
+      <p>The PDF is attached.</p>
     `
     const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
     // Only include `replyTo` / `bcc` when we actually have a well-formed
     // email address — Resend rejects empty strings / missing local-parts.
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const senderEmail = typeof senderResult.email === 'string' && EMAIL_RE.test(senderResult.email.trim())
+      ? senderResult.email.trim()
+      : null
     const userEmail = typeof user.email === 'string' && EMAIL_RE.test(user.email.trim())
       ? user.email.trim()
       : null
     const replyTo = (branding.companyEmail && EMAIL_RE.test(branding.companyEmail.trim()))
       ? branding.companyEmail.trim()
-      : userEmail
+      : (senderEmail || userEmail)
 
     // "Send me a copy" — BCC the signed-in user on the same message. Skip it
     // when the user is also the recipient (avoids a duplicate in their inbox).
-    const bccList = (sendMeCopy && userEmail && userEmail.toLowerCase() !== recipientEmail.trim().toLowerCase())
-      ? [userEmail]
+    const bccTarget = userEmail || senderEmail
+    const bccList = (sendMeCopy && bccTarget && bccTarget.toLowerCase() !== recipientEmail.trim().toLowerCase())
+      ? [bccTarget]
       : null
 
     const { data, error } = await resend.emails.send({
@@ -199,6 +210,7 @@ export default async function handler(req, res) {
       leadId: leadId ? String(leadId).trim().slice(0, 80) : null,
       leadName: leadName ? String(leadName).trim().slice(0, 200) : null,
       sentCopyToSender: !!bccList,
+      source: 'pdf_attachment',
       values: values && typeof values === 'object' ? values : {}
     }
     appendSubmission(submission).catch(() => {})

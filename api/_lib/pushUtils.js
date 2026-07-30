@@ -420,6 +420,22 @@ export async function notifyFormSubmitted(ownerEmail, { formName, submitterEmail
   )
 }
 
+export async function notifyFormViewed(ownerEmail, { formName, viewerEmail, templateId, inviteId }) {
+  const name = clip(formName) || 'Untitled form'
+  const who = clip(viewerEmail, 40)
+  await sendWebPushToEmail(
+    ownerEmail,
+    {
+      title: 'Form viewed',
+      body: who ? `${name} · ${who}` : name,
+      tag: `form-view-${inviteId || templateId || Date.now()}`,
+      data: { type: 'formViewed', templateId, inviteId },
+    },
+    'formSubmitted',
+    { email: viewerEmail }
+  )
+}
+
 export async function notifyTeamMemberAdded(memberEmail, { teamName, teamId, actorEmail }) {
   await sendWebPushToEmail(
     memberEmail,
