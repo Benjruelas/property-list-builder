@@ -36,17 +36,27 @@ function clientFallbackResponse(res, mapType) {
 }
 
 async function createGoogleSession(key, mapType) {
-  const resp = await fetch(`https://tile.googleapis.com/v1/createSession?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(googleSessionBody(mapType)),
-  })
-  if (!resp.ok) {
-    const errText = await resp.text()
-    console.error('Google Map Tiles session error:', resp.status, errText)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 6_000)
+  try {
+    const resp = await fetch(`https://tile.googleapis.com/v1/createSession?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(googleSessionBody(mapType)),
+      signal: controller.signal,
+    })
+    if (!resp.ok) {
+      const errText = await resp.text()
+      console.error('Google Map Tiles session error:', resp.status, errText)
+      return null
+    }
+    return resp.json()
+  } catch (e) {
+    console.error('Google Map Tiles session fetch failed:', e?.name || e)
     return null
+  } finally {
+    clearTimeout(timer)
   }
-  return resp.json()
 }
 
 export default async function handler(req, res) {

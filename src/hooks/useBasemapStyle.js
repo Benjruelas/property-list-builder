@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { buildMapStyle } from '../config/buildMapStyle'
 import { getMapboxFallbackSource, normalizeGoogleSource } from '../config/mapProviders'
+import { resolveApiUrl } from '../utils/apiBase'
+import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 
 const SESSION_REFRESH_BUFFER_MS = 120_000
 const BASEMAP_SESSION_STORAGE_KEY = 'knockscout_basemap_sessions'
+/** VPN / flaky DNS often hangs rather than fails — fall back to Mapbox instead of spinning forever. */
+const BASEMAP_SESSION_TIMEOUT_MS = 8_000
 
 function readPersistedSession(mapStyleSetting) {
   try {
@@ -84,7 +88,10 @@ export function useBasemapStyle(mapStyleSetting, options = {}) {
     }
 
     try {
-      const res = await fetch(`/api/google-tiles-session?mapType=${encodeURIComponent(mapStyleSetting)}`)
+      const sessionUrl = resolveApiUrl(
+        `/api/google-tiles-session?mapType=${encodeURIComponent(mapStyleSetting)}`,
+      )
+      const res = await fetchWithTimeout(sessionUrl, { timeoutMs: BASEMAP_SESSION_TIMEOUT_MS })
       if (res.ok) {
         const data = await res.json()
         if (loadId !== loadIdRef.current) return
@@ -109,7 +116,7 @@ export function useBasemapStyle(mapStyleSetting, options = {}) {
         return
       }
     } catch {
-      /* fall through to Mapbox */
+      /* timeout / offline / DNS — fall through to Mapbox */
     }
 
     if (loadId !== loadIdRef.current) return
