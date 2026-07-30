@@ -5849,9 +5849,10 @@ body:has(.app-loading-screen--video) {
   caret-color: #111827 !important;
 }
 
-/* Form fill — smooth scroll when stepping between fields */
+/* Form fill scroll: JS controls smooth vs instant per step.
+   CSS smooth + JS smooth stacks and feels like hopping on mobile. */
 .fill-scroll-container {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 /* Form fill header — icon-only, no fills (matches pipeline / list panels) */
