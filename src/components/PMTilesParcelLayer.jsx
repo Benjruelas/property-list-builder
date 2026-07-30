@@ -827,13 +827,25 @@ export function PMTilesParcelLayer({
   }, [mapRef, mapReady])
 
 
-  const queryParcelFeatureAtLocation = useCallback((lat, lng) => {
+  const queryParcelFeatureAtLocation = useCallback((lat, lng, { pixelRadius = 0 } = {}) => {
     const map = mapRef?.current
     if (!map) return null
     try {
       if (!map.getLayer(FILL_LAYER)) return null
       const point = map.project([lng, lat])
-      const features = map.queryRenderedFeatures(point, { layers: [FILL_LAYER] })
+      const radius = Number(pixelRadius) > 0 ? Number(pixelRadius) : 0
+      // Exact point first; optional box covers GPS jitter so the blue-dot
+      // location still hits the parcel under the marker.
+      let features = map.queryRenderedFeatures(point, { layers: [FILL_LAYER] })
+      if (!features.length && radius > 0) {
+        features = map.queryRenderedFeatures(
+          [
+            [point.x - radius, point.y - radius],
+            [point.x + radius, point.y + radius],
+          ],
+          { layers: [FILL_LAYER] },
+        )
+      }
       if (!features.length) return null
       const feature = pickBestFeature(features)
       if (!feature) return null

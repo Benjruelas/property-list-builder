@@ -1689,7 +1689,35 @@ function App() {
   const isParcelALeadCheck = useCallback((parcelId) => isParcelInLeadsList(leads, parcelId), [leads])
 
   const handleResolveParcelForLead = useCallback(async (lat, lng) => {
-    const tileHit = parcelLayerRef.current?.queryParcelFeatureAtLocation?.(lat, lng)
+    const queryHit = () =>
+      parcelLayerRef.current?.queryParcelFeatureAtLocation?.(lat, lng, { pixelRadius: 28 }) || null
+
+    let tileHit = queryHit()
+    // Parcels may still be streaming in when Photo Mode opens; wait once for
+    // the map to go idle so the visible parcel under the blue dot can supply lrid.
+    if (!tileHit?.lrid) {
+      const map = mapInstanceRef.current
+      if (map) {
+        tileHit = await new Promise((resolve) => {
+          let settled = false
+          const finish = (hit) => {
+            if (settled) return
+            settled = true
+            try { map.off('idle', onIdle) } catch { /* ignore */ }
+            resolve(hit)
+          }
+          const onIdle = () => finish(queryHit())
+          map.once('idle', onIdle)
+          const immediate = queryHit()
+          if (immediate?.lrid) {
+            finish(immediate)
+            return
+          }
+          setTimeout(() => finish(queryHit()), 1200)
+        })
+      }
+    }
+
     return resolveLeadParcelAtLocation(lat, lng, { lrid: tileHit?.lrid || '' })
   }, [])
 
@@ -4656,6 +4684,7 @@ function App() {
         onClose={() => setQuickPhotoModeOpen(false)}
         leads={leads}
         onConfirm={handleQuickPhotoModeConfirm}
+        onResolveParcel={handleResolveParcelForLead}
       />
 
       {pathsPanelMounted && pathsPanelReady && (
