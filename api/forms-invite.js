@@ -145,7 +145,6 @@ export default async function handler(req, res) {
     const appOrigin = resolveOrigin(req)
     const formLink = `${appOrigin}/?form=${encodeURIComponent(token)}`
 
-    const shouldSendEmail = hasEmail && skipEmail !== true
     if (shouldSendEmail) {
       const branding = await resolveSenderBranding(user)
       const senderLabel = branding.senderName
