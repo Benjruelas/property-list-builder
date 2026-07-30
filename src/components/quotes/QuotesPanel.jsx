@@ -53,6 +53,7 @@ const MENU_WIDTH = 180
 export function QuotesPanel({
   isOpen,
   isQuotesEditorStandalone = false,
+  isQuotesListOpen = true,
   panelDockSlot,
   onClose,
   onBack,
@@ -82,10 +83,11 @@ export function QuotesPanel({
   const headerMenuTriggerRef = useRef(null)
   const editorOpen = !!editorFrame
   const hasNestedQuoteView = editorOpen || !!detailQuoteId
-  const listDialogOpen = mapListDialogOpen(isOpen)
-  const listObscuredByEditor = listPanelObscuredByDetail(isOpen, editorOpen)
+  // Standalone quote detail from Activity must not mount the quotes list under it.
+  const listDialogOpen = mapListDialogOpen(isOpen && isQuotesListOpen)
+  const listObscuredByEditor = listPanelObscuredByDetail(isOpen && isQuotesListOpen, editorOpen)
   const hasQuoteDetail = !!detailQuoteId
-  const listBesideQuoteDetail = listPanelObscuredByDetail(isOpen, hasQuoteDetail)
+  const listBesideQuoteDetail = listPanelObscuredByDetail(isOpen && isQuotesListOpen, hasQuoteDetail)
   const [fetchedDetailQuote, setFetchedDetailQuote] = useState(null)
   const editorSeed = editorFrame?.prefill ?? editorFrame?.quote ?? null
   const editorTemplate = editorFrame?.template ?? null

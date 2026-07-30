@@ -4564,6 +4564,7 @@ function App() {
         <Suspense fallback={null}>
           <QuotesPanel
             isOpen={isQuotesListOpen || !!quotesDetailQuoteId}
+            isQuotesListOpen={isQuotesListOpen}
             isQuotesEditorStandalone={isQuotesEditorStandalone}
             panelDockSlot={panelDockSlot('quotes', isQuotesListOpen || !!quotesDetailQuoteId)}
             onClose={handlePanelBack}

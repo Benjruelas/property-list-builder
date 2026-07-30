@@ -201,7 +201,7 @@ export function ActivityPanel({
         ref={panelRef}
         className={cn(
           'map-panel list-panel activity-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0',
-          dialogObscured && 'crm-list-under-detail',
+          dialogObscured && 'crm-list-under-detail crm-panel-obscured pointer-events-none',
         )}
         panelDockSlot={panelDockSlot}
         showCloseButton={false}
