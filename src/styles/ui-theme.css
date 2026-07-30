@@ -133,6 +133,13 @@
   --map-panel-section-border: rgba(255, 255, 255, 0.1);
   --map-panel-detail-surface: rgb(18, 22, 34);
 
+  /* Match glass-outline map chrome buttons */
+  --map-chrome-bg: rgba(255, 255, 255, 0.3);
+  --map-chrome-bg-hover: rgba(255, 255, 255, 0.5);
+  --map-chrome-border: rgba(255, 255, 255, 0.6);
+  --map-chrome-text: rgba(255, 255, 255, 0.95);
+  --map-chrome-shadow: 0 10px 24px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
+
   --map-accent-blue: rgba(147, 197, 253, 1);
   --map-accent-green: rgba(134, 239, 172, 1);
   --map-accent-red: rgba(252, 165, 165, 1);
@@ -225,11 +232,9 @@
   border-color: rgba(0, 0, 0, 0.18) !important;
 }
 
-/* Light: expanded address search pill */
-[data-ui-theme='light'] .map-search-stack > div.rounded-md {
-  background: #ffffff !important;
-  border-color: var(--map-chrome-border) !important;
-  color: var(--map-chrome-text) !important;
+/* Light: expanded search pill matches solid white map chrome buttons */
+[data-ui-theme='light'] .map-search-open-pill {
+  background: #ffffff;
 }
 
 [data-ui-theme='dark'] .mobile-action-bar-inner {
