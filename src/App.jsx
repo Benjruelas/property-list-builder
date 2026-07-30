@@ -149,7 +149,7 @@ import {
   logLeadDealCreated,
 } from './utils/leadActivity'
 import { fetchTagRegistry, upsertTagInRegistry } from './utils/tags'
-import { buildDealFromLead, resolvePipelineId, findDealsForLead, buildDealCountByLeadId } from './utils/deals'
+import { buildDealFromLead, resolvePipelineId, findDealsForLead, buildDealCountByLeadId, findDealInPipelines } from './utils/deals'
 import { buildLeadParcelColors } from './utils/leadMapFeatures'
 import { createTasksForDeal } from './utils/dealTasks'
 import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeline'
@@ -4082,6 +4082,42 @@ function App() {
         }}
         isPathTrackingActive={isPathTrackingActive}
         currentUser={currentUser}
+        leads={leads}
+        pipelines={pipelines}
+        getToken={getToken}
+        onOpenLead={(lead) => {
+          if (!lead?.id) return
+          openLeadDetails(lead)
+        }}
+        onOpenDeal={(deal) => {
+          if (!deal?.id) return
+          const pipelineId = deal.__pipelineId || deal.pipelineId || null
+          guardFeature('deals', () => nav.openDealDetailFromTasks(deal.id, pipelineId))
+        }}
+        onOpenTask={(task) => {
+          if (!task) return
+          if (task.dealId) {
+            const { pipeline } = findDealInPipelines(pipelines, task.dealId)
+            handleOpenTaskInDealPipeline({
+              pipelineId: pipeline?.id || task.pipelineId || null,
+              dealId: task.dealId,
+              mode: 'api',
+            })
+            return
+          }
+          if (task.leadId) {
+            const lead = leads.find((l) => l.id === task.leadId)
+            if (lead) openLeadDetails(lead)
+          }
+        }}
+        onOpenQuote={(quote) => {
+          if (!quote?.id) return
+          handleOpenQuoteFromDeal(quote)
+        }}
+        onOpenReport={(report) => {
+          if (!report?.id) return
+          handleOpenPhotoReport(report)
+        }}
       />
 
       <MapControls
