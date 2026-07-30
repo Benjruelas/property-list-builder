@@ -224,11 +224,11 @@ export function AddressSearch({
         </Button>
       ) : (
         <div
-          className="map-search-open-pill relative flex items-center rounded-md shadow-lg touch-manipulation border border-white/60 bg-white/30 text-gray-900 backdrop-blur-sm"
+          className="map-search-open-pill relative flex items-center rounded-md touch-manipulation"
           style={openPillStyle}
         >
           <div className="map-chrome-icon-slot flex-shrink-0">
-            <Search className="text-gray-700" />
+            <Search />
           </div>
           <input
             ref={inputRef}
@@ -238,10 +238,10 @@ export function AddressSearch({
             placeholder="Search leads or address..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 min-w-0 h-full bg-transparent outline-none border-none pr-2 text-sm text-gray-900 placeholder:text-gray-600"
+            className="map-search-open-pill__input flex-1 min-w-0 h-full bg-transparent outline-none border-none pr-2 text-sm"
           />
           {isSearching && (
-            <Loader2 className="mr-1 h-4 w-4 flex-shrink-0 animate-spin text-gray-700" />
+            <Loader2 className="map-search-open-pill__spinner mr-1 h-4 w-4 flex-shrink-0 animate-spin" />
           )}
           <button
             type="button"
@@ -250,7 +250,7 @@ export function AddressSearch({
             title="Close search"
             aria-label="Close search"
           >
-            <X className="text-gray-700" />
+            <X />
           </button>
         </div>
       )}
@@ -359,14 +359,14 @@ export function AddressSearch({
           data-debounced-query={debouncedQuery}
         >
           {showGeocodeError && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 border-b border-red-200">
+            <div className="map-search-results-error p-3 text-sm border-b">
               {geocodeError}
             </div>
           )}
 
           <div className="max-h-80 overflow-y-auto parcel-details-scroll">
             {rows.length > 0 ? (
-              <ul className="divide-y divide-gray-200">
+              <ul className="map-search-results-list">
                 {rows.map((row) => {
                   const Icon = KIND_ICON[row.kind] || Search
                   return (
@@ -382,22 +382,22 @@ export function AddressSearch({
                       role="option"
                       tabIndex={0}
                       className={cn(
-                        'p-3 hover:bg-gray-50 cursor-pointer transition-colors flex items-start gap-2',
+                        'map-search-result-row p-3 cursor-pointer transition-colors flex items-start gap-2',
                         row.nested && 'pl-8'
                       )}
                     >
-                      <Icon className="h-4 w-4 mt-0.5 flex-shrink-0 text-gray-500" aria-hidden />
+                      <Icon className="map-search-result-row__icon h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden />
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-gray-900 truncate">
+                        <div className="map-search-result-row__label text-sm font-medium truncate">
                           {row.label}
                         </div>
                         {row.secondary && (
-                          <div className="text-xs text-gray-500 mt-0.5 truncate">
+                          <div className="map-search-result-row__secondary text-xs mt-0.5 truncate">
                             {row.secondary}
                           </div>
                         )}
                         {row.kind === 'address' && row.result?.address && (
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="map-search-result-row__secondary text-xs mt-1">
                             {[
                               row.result.address.city,
                               row.result.address.county,
@@ -414,14 +414,14 @@ export function AddressSearch({
                 })}
               </ul>
             ) : showEmptyHint ? (
-              <div className="p-3 text-sm text-gray-600 text-center">
+              <div className="map-search-results-empty p-3 text-sm text-center">
                 <div>No results found for "{query}"</div>
-                <div className="text-xs mt-2 text-gray-500">
+                <div className="map-search-result-row__secondary text-xs mt-2">
                   Try: street address, city name, zip code, or coordinates (lat, lng)
                 </div>
               </div>
             ) : trimmed.length > 0 && trimmed.length < 2 ? (
-              <div className="p-3 text-sm text-gray-600 text-center">
+              <div className="map-search-results-empty p-3 text-sm text-center">
                 Type at least 2 characters to search
               </div>
             ) : null}
