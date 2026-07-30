@@ -206,4 +206,29 @@ describe('AddressSearch dual-purpose results', () => {
     })
     expect(props.onOpenLead).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }))
   })
+
+  it('notifies onOpenChange, stretches the pill, and fades sibling chrome while open', async () => {
+    const onOpenChange = vi.fn()
+    const { container } = await renderSearch({ onOpenChange })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+
+    await openSearch(container)
+    expect(onOpenChange).toHaveBeenCalledWith(true)
+    expect(container.querySelector('[data-search-open="1"]')).toBeTruthy()
+
+    const pill = container.querySelector('.map-search-open-pill')
+    expect(pill).toBeTruthy()
+    expect(pill.style.width).toContain('--map-chrome-left')
+    expect(pill.style.width).toContain('--map-chrome-right')
+
+    const pathBtn = container.querySelector('[data-tour="path-recording"]')
+    expect(pathBtn.className).toMatch(/opacity-0/)
+    expect(pathBtn.className).toMatch(/pointer-events-none/)
+
+    await act(async () => {
+      document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    })
+    expect(container.querySelector('[data-search-open="0"]')).toBeTruthy()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
 })

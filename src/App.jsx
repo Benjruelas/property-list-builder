@@ -501,6 +501,7 @@ function App() {
   const [dealPipelineAddTaskKey, setDealPipelineAddTaskKey] = useState(0)
   const [dealPipelineAddTaskParcelId, setDealPipelineAddTaskParcelId] = useState(null)
   const [isPathTrackingActive, setIsPathTrackingActive] = useState(false)
+  const [isMapSearchOpen, setIsMapSearchOpen] = useState(false)
   const [paths, setPaths] = useState([])
   const pathColorMap = useMemo(() => buildPathColorMap(paths), [paths])
   const [visiblePathIds, setVisiblePathIds] = useState([])
@@ -4118,6 +4119,7 @@ function App() {
           if (!report?.id) return
           handleOpenPhotoReport(report)
         }}
+        onOpenChange={setIsMapSearchOpen}
       />
 
       <MapControls
@@ -4127,6 +4129,7 @@ function App() {
         isCompassActive={isCompassActive}
         onCloseParcelPopup={() => nav.clearMapOverlays()}
         onQuickPhotoMode={beginQuickPhotoCapture}
+        faded={isMapSearchOpen}
       />
 
       <MobileActionBar
