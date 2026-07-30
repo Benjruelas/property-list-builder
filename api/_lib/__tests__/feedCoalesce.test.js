@@ -114,6 +114,27 @@ describe('batchPipelineDealActivities', () => {
     expect(batches.find((b) => b.type === 'deal.moved')).toMatchObject({
       delta: 2,
       entity: { kind: 'pipeline', pipelineId: 'pipe_1', count: 2 },
+      nav: { type: 'pipeline', pipelineId: 'pipe_1' },
     })
+    expect(batches.find((b) => b.type === 'deal.created')).toMatchObject({
+      delta: 1,
+      entity: { kind: 'deal', dealId: 'd3', pipelineId: 'pipe_1' },
+      nav: { type: 'deal', dealId: 'd3', pipelineId: 'pipe_1' },
+    })
+  })
+
+  it('uses deal nav for a single deal change', () => {
+    const batches = batchPipelineDealActivities(
+      [{ type: 'deal.moved', deal: { id: 'd9' } }],
+      { label: 'Ben', pipeTitle: 'Roofing', pipelineId: 'pipe_1' },
+    )
+    expect(batches).toEqual([
+      expect.objectContaining({
+        type: 'deal.moved',
+        delta: 1,
+        entity: { kind: 'deal', dealId: 'd9', pipelineId: 'pipe_1' },
+        nav: { type: 'deal', dealId: 'd9', pipelineId: 'pipe_1' },
+      }),
+    ])
   })
 })

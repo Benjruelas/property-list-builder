@@ -6,7 +6,7 @@ import {
 } from '../navigationReducer.js'
 import { NAV_ACTIONS } from '../types.js'
 import { selectPanelProps, selectIsStackedUnderSchedule, selectTasksDockLayout, selectActionBarActiveId, selectTopCoreFrame } from '../selectors.js'
-import { feedDataToFrames } from '../feedNavigation.js'
+import { feedDataToFrames, isFeedItemNavActionable } from '../feedNavigation.js'
 import {
   recipeOpenLeads,
   recipeOpenDeals,
@@ -264,7 +264,7 @@ describe('navigationReducer', () => {
 describe('feedNavigation', () => {
   const ctx = {
     leads: [{ id: 'l1' }],
-    pipelines: [{ id: 'pipe1' }],
+    pipelines: [{ id: 'pipe1', deals: [{ id: 'd1' }] }],
     lists: [{ id: 'list1' }],
   }
 
@@ -278,9 +278,19 @@ describe('feedNavigation', () => {
 
   it('maps deal notification to promoted pipes deal detail', () => {
     const r = feedDataToFrames({ type: 'deal', dealId: 'd1', pipelineId: 'pipe1' }, ctx)
+    expect(r.ok).toBe(true)
     expect(r.frames).toEqual([
       { type: 'pipes', pipelineId: 'pipe1' },
       { type: 'deals.detail', dealId: 'd1', pipelineId: 'pipe1', returnToPipesList: true },
+    ])
+  })
+
+  it('maps quote notification to quotes list + detail', () => {
+    const r = feedDataToFrames({ panel: 'quotes', quoteId: 'q1' }, ctx)
+    expect(r.ok).toBe(true)
+    expect(r.frames).toEqual([
+      { type: 'quotes' },
+      { type: 'quotes.detail', quoteId: 'q1' },
     ])
   })
 
@@ -330,6 +340,13 @@ describe('feedNavigation', () => {
     expect(r.frames).toEqual([{ type: 'quotes.detail', quoteId: 'q1' }])
   })
 
+  it('treats quote panel nav as actionable for activity clicks', () => {
+    expect(isFeedItemNavActionable({ panel: 'quotes', quoteId: 'q1' })).toBe(true)
+    expect(isFeedItemNavActionable({ panel: 'quotes' })).toBe(false)
+    expect(isFeedItemNavActionable({ type: 'lead', leadId: 'l1' })).toBe(true)
+    expect(isFeedItemNavActionable({})).toBe(false)
+  })
+
   it('maps pipelineLeadStage activity to standalone lead detail', () => {
     const r = feedDataToFrames(
       { type: 'pipelineLeadStage', pipelineId: 'pipe1', leadId: 'l1' },
@@ -357,6 +374,13 @@ describe('feedNavigation', () => {
     const r = feedDataToFrames({ type: 'lead', leadId: 'missing' }, ctx)
     expect(r.ok).toBe(false)
     expect(r.toast).toBeTruthy()
+  })
+
+  it('rejects inaccessible or missing deal', () => {
+    const r = feedDataToFrames({ type: 'deal', dealId: 'missing', pipelineId: 'pipe1' }, ctx)
+    expect(r.ok).toBe(false)
+    expect(r.toast).toBeTruthy()
+    expect(r.frames).toBeUndefined()
   })
 })
 

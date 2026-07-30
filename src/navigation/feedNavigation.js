@@ -1,4 +1,17 @@
 /**
+ * Whether an activity/notification nav payload should be forwarded to navigate handlers.
+ * Quotes use panel-based nav without `type`.
+ *
+ * @param {object|null|undefined} nav
+ * @returns {boolean}
+ */
+export function isFeedItemNavActionable(nav) {
+  if (!nav || typeof nav !== 'object') return false
+  if (nav.type) return true
+  return nav.panel === 'quotes' && !!nav.quoteId
+}
+
+/**
  * Maps notification feed types to navigation stack frames.
  * Mirrors handleNotificationNavigate in App.jsx.
  *
@@ -41,6 +54,10 @@ export function feedDataToFrames(data, ctx, opts = {}) {
 
   if ((type === 'deal' || type === 'pipelinedealstage') && data.dealId) {
     if (data.pipelineId && !pipelines.some((p) => p.id === data.pipelineId)) {
+      return { ok: false, toast: "You don't have access to this deal" }
+    }
+    const dealExists = pipelines.some((p) => (p.deals || []).some((d) => d.id === data.dealId))
+    if (!dealExists) {
       return { ok: false, toast: "You don't have access to this deal" }
     }
     const pipelineId = data.pipelineId

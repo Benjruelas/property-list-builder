@@ -177,15 +177,31 @@ export function batchPipelineDealActivities(dealChanges, { label, pipeTitle, pip
 
   return Object.entries(grouped)
     .filter(([, changes]) => changes.length > 0)
-    .map(([activityType, changes]) => ({
-      type: activityType,
-      delta: changes.length,
-      summaryContext: {
-        label,
-        pipeTitle,
-        count: changes.length,
-      },
-      entity: { kind: 'pipeline', pipelineId, count: changes.length },
-      nav: { type: 'pipeline', pipelineId },
-    }))
+    .map(([activityType, changes]) => {
+      const dealId = changes.length === 1 ? changes[0]?.deal?.id : null
+      if (dealId) {
+        return {
+          type: activityType,
+          delta: changes.length,
+          summaryContext: {
+            label,
+            pipeTitle,
+            count: changes.length,
+          },
+          entity: { kind: 'deal', dealId, pipelineId },
+          nav: { type: 'deal', dealId, pipelineId },
+        }
+      }
+      return {
+        type: activityType,
+        delta: changes.length,
+        summaryContext: {
+          label,
+          pipeTitle,
+          count: changes.length,
+        },
+        entity: { kind: 'pipeline', pipelineId, count: changes.length },
+        nav: { type: 'pipeline', pipelineId },
+      }
+    })
 }
