@@ -62,6 +62,7 @@ const NESTED_DISMISS_GUARD_SELECTORS = [
   '[data-confirm-dialog]',
   '[data-send-quote-dialog]',
   '[data-send-report-dialog]',
+  '[data-send-form-dialog]',
   '[data-lead-picker-dialog]',
   '[data-pipe-menu]',
   '[data-deals-panel-menu]',

@@ -66,6 +66,7 @@ export async function fetchLeadForms(getToken, leadId) {
 export function leadFormStatusLabel(status) {
   switch (status) {
     case 'completed': return 'Completed'
+    case 'viewed': return 'Viewed'
     case 'sent': return 'Sent'
     case 'pending': return 'Pending'
     case 'expired': return 'Expired'

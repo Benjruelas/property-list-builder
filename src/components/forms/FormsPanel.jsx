@@ -34,10 +34,11 @@ import {
   deleteTemplate,
   uploadFormPdf,
   fetchFormPdfBlob,
-  createFormInvite,
+  downloadFormPdf,
+  bytesToBase64,
 } from '../../utils/forms'
 import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
-import { SendDocumentDialog } from '../shared/SendDocumentDialog'
+import { SendFormDialog } from './SendFormDialog'
 
 const FormBuilderView = lazy(() => import('./FormBuilderView'))
 const FormFillView = lazy(() => import('./FormFillView'))
@@ -551,7 +552,7 @@ export function FormsPanel({
                 </OptionsMenuItem>
               )}
               <OptionsMenuItem onClick={() => { setLinkTemplateId(t.id); setLinkPrefillValues(null); setOpenMenuId(null) }}>
-                <Link2 className="h-4 w-4" /> Send link
+                <Link2 className="h-4 w-4" /> Send
               </OptionsMenuItem>
               {owned ? (
                 <OptionsMenuItem destructive onClick={() => { handleDelete(t); setOpenMenuId(null) }}>
@@ -624,14 +625,10 @@ export function FormsPanel({
               <FormFillView
                 template={activeTemplate}
                 onBack={handleSubViewBack}
-                onTemplateUpdated={handleTemplateUpdated}
                 lead={lead}
                 onFormSent={onFormSent}
-                onRequestCompletion={(prefillValues) => {
-                  if (lead) return
-                  setLinkTemplateId(activeTemplate.id)
-                  setLinkPrefillValues(prefillValues || null)
-                }}
+                teams={teams}
+                teamMembership={teamMembership}
               />
             </Suspense>
           ) : (
@@ -675,28 +672,24 @@ export function FormsPanel({
         )
       })()}
 
-      <SendDocumentDialog
+      <SendFormDialog
         open={!!linkTemplateId}
-        title="Request Completion"
-        description={
-          Object.keys(linkPrefillValues || {}).length > 0
-            ? `Email a link with your ${Object.keys(linkPrefillValues || {}).length} filled field${Object.keys(linkPrefillValues || {}).length === 1 ? '' : 's'}. The recipient completes the rest. Expires in 30 days.`
-            : 'Email a one-time link for the recipient to complete this form. Expires in 30 days.'
-        }
-        confirmLabel="Send link"
+        template={linkTemplate}
+        prefillValues={linkPrefillValues}
+        teams={teams}
+        teamMembership={teamMembership}
+        initialDelivery="link"
+        preparePdf={linkTemplate?.originalPdfKey ? async () => {
+          const buf = await downloadFormPdf(getToken, linkTemplate.originalPdfKey)
+          return bytesToBase64(new Uint8Array(buf))
+        } : null}
         onClose={() => {
           setLinkTemplateId(null)
           setLinkPrefillValues(null)
         }}
-        onSend={async ({ recipientEmail, message }) => {
-          if (!linkTemplate?.id) throw new Error('Form not found')
-          await createFormInvite(getToken, {
-            templateId: linkTemplate.id,
-            recipientEmail,
-            message,
-            prefillValues: Object.keys(linkPrefillValues || {}).length > 0 ? linkPrefillValues : undefined,
-          })
-          showToast(`Request sent to ${recipientEmail}`, 'success')
+        onSent={() => {
+          setLinkTemplateId(null)
+          setLinkPrefillValues(null)
         }}
       />
 

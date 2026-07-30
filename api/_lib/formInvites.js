@@ -158,6 +158,39 @@ export async function markInviteSubmitted(token) {
   return { ok: true, invite: all[index] }
 }
 
+/**
+ * Record a public open/view on a pending invite. Returns
+ * { ok, invite, isFirst } — isFirst is true only on the first view.
+ */
+export async function recordInviteView(token) {
+  const all = await getAllInvites()
+  const index = all.findIndex((inv) => inv.token === String(token || '').trim())
+  if (index === -1) return { ok: false, reason: 'not_found', invite: null, isFirst: false }
+  const invite = all[index]
+  if (invite.status === 'submitted') {
+    return { ok: false, reason: 'submitted', invite, isFirst: false }
+  }
+  if (invite.status === 'revoked') {
+    return { ok: false, reason: 'revoked', invite, isFirst: false }
+  }
+  if (invite.status === 'expired' || isInviteExpired(invite)) {
+    return { ok: false, reason: 'expired', invite, isFirst: false }
+  }
+  const now = new Date().toISOString()
+  const vt = invite.viewTracking || { viewCount: 0 }
+  const isFirst = !vt.firstViewedAt
+  all[index] = {
+    ...invite,
+    viewTracking: {
+      firstViewedAt: vt.firstViewedAt || now,
+      lastViewedAt: now,
+      viewCount: (vt.viewCount || 0) + 1,
+    },
+  }
+  await saveAllInvites(all)
+  return { ok: true, invite: all[index], isFirst }
+}
+
 export function isValidEmail(e) {
   return typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())
 }

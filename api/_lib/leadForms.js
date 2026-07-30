@@ -7,6 +7,7 @@ function inviteStatusLabel(invite) {
     return 'expired'
   }
   if (invite.status === 'revoked' || invite.status === 'expired') return invite.status
+  if (invite.status === 'pending' && invite.viewTracking?.firstViewedAt) return 'viewed'
   return 'pending'
 }
 
@@ -40,7 +41,8 @@ export async function listLeadFormActivityForUser(leadId, user, allTeams) {
       templateId: invite.templateId,
       templateName: template?.name || 'Form',
       status: inviteStatusLabel(invite),
-      at: invite.submittedAt || invite.createdAt,
+      at: invite.submittedAt || invite.viewTracking?.lastViewedAt || invite.createdAt,
+      viewedAt: invite.viewTracking?.firstViewedAt || null,
       recipientEmail: invite.recipientEmail || null,
       recipientPhone: invite.recipientPhone || null,
       inviteId: invite.id,

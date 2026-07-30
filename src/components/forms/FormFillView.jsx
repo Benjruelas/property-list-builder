@@ -1,21 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Send, Loader2, CheckCircle2 } from 'lucide-react'
 import { Button } from '../ui/button'
-import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
 import { cn } from '@/lib/utils'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '../ui/dialog'
 import { useAuth } from '../../contexts/AuthContext'
-import { downloadFormPdf, sendForm, bytesToBase64, updateTemplate, downloadPublicFormPdf, submitPublicForm } from '../../utils/forms'
+import { downloadFormPdf, bytesToBase64, downloadPublicFormPdf, submitPublicForm } from '../../utils/forms'
 import { SendFormDialog } from './SendFormDialog'
-import { buildSendPayload } from '../../lib/forms/emailPayload'
 import { SignaturePadModal } from './SignaturePadModal'
 import { resolveFormUiLayout } from './formFillLayout'
 import { FormFillChrome } from './FormFillChrome'
@@ -40,11 +30,12 @@ export function FormFillView({
   publicToken,
   onSubmitted,
   onSubmittingChange,
-  onRequestCompletion,
   initialValues,
   lockedFieldIds,
   lead = null,
   onFormSent,
+  teams = [],
+  teamMembership = null,
 }) {
   const isPublic = mode === 'public'
   const { getToken } = useAuth()
@@ -68,11 +59,6 @@ export function FormFillView({
   const [sigFieldId, setSigFieldId] = useState(null)
   const [sendOpen, setSendOpen] = useState(false)
   const [sending, setSending] = useState(false)
-  const [recipient, setRecipient] = useState('')
-  const [subject, setSubject] = useState(`Completed form: ${template?.name || 'Form'}`)
-  const [message, setMessage] = useState('')
-  const [sendMeCopy, setSendMeCopy] = useState(false)
-  const [leadSendState, setLeadSendState] = useState(null)
   /** Public forms start in fill mode; authenticated forms open in view mode first. */
   const [fillMode, setFillMode] = useState(isPublic)
 
@@ -701,51 +687,6 @@ export function FormFillView({
     })
   }, [pdfBuffer, template.fields, values])
 
-  const handleSend = useCallback(async () => {
-    const missing = validateRequired()
-    if (missing.length > 0) {
-      showToast(
-        `There are required fields still empty: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}`,
-        'error'
-      )
-      setSendOpen(false)
-      const firstMissingIdx = activeTourFields.findIndex(
-        (f) => f.required && !isFieldFilled(f, values[f.id])
-      )
-      if (firstMissingIdx >= 0) setTourStep(firstMissingIdx)
-      return
-    }
-    if (!recipient.trim()) {
-      showToast('Enter a recipient email', 'error')
-      return
-    }
-    setSending(true)
-    try {
-      const flattened = await flattenPdf()
-      const pdfBase64 = bytesToBase64(flattened)
-      const payload = buildSendPayload({
-        template,
-        values,
-        recipient,
-        subject,
-        message,
-        sendMeCopy,
-        flattenedPdfBase64: pdfBase64,
-      })
-      await sendForm(getToken, payload)
-      try {
-        await updateTemplate(getToken, template.id, { lastUsedAt: new Date().toISOString() })
-      } catch { /* non-fatal */ }
-      showToast('Form sent', 'success')
-      setSendOpen(false)
-      onBack?.()
-    } catch (e) {
-      showToast(e.message || 'Failed to send form', 'error')
-    } finally {
-      setSending(false)
-    }
-  }, [flattenPdf, getToken, isFieldFilled, message, onBack, activeTourFields, recipient, sendMeCopy, subject, template, validateRequired, values])
-
   const stripValuesForSubmit = useCallback(() => {
     const strippedValues = {}
     const fieldsById = new Map((template.fields || []).map((f) => [f.id, f]))
@@ -802,6 +743,11 @@ export function FormFillView({
     return out
   }, [isFieldFilled, template.fields, values])
 
+  const preparePdfForSend = useCallback(async () => {
+    const flattened = await flattenPdf()
+    return bytesToBase64(flattened)
+  }, [flattenPdf])
+
   const tryOpenSend = useCallback(() => {
     const missing = validateRequired()
     if (isPublic) {
@@ -825,42 +771,16 @@ export function FormFillView({
       handlePublicSubmit()
       return
     }
-    if (missing.length > 0) {
-      if (lead) {
-        setLeadSendState({ mode: 'invite', prefillValues: getFilledValuesForInvite() })
-        return
-      }
-      onRequestCompletion?.(getFilledValuesForInvite())
-      return
-    }
-    if (lead) {
-      setSending(true)
-      flattenPdf()
-        .then((flattened) => {
-          setLeadSendState({
-            mode: 'completed',
-            pdfBase64: bytesToBase64(flattened),
-            values: stripValuesForSubmit(),
-          })
-        })
-        .catch((e) => {
-          showToast(e.message || 'Failed to prepare form', 'error')
-        })
-        .finally(() => setSending(false))
-      return
-    }
+    // Authenticated: always open the send dialog so the user can choose
+    // link-to-complete (with prefills) or PDF attachment.
     setSendOpen(true)
   }, [
     activeTourFields,
     enterFillMode,
     fillMode,
-    getFilledValuesForInvite,
     handlePublicSubmit,
     isFieldFilled,
     isPublic,
-    lead,
-    flattenPdf,
-    onRequestCompletion,
     validateRequired,
     values,
   ])
@@ -964,10 +884,10 @@ export function FormFillView({
         )}
         title={isPublic
           ? (submitReady ? 'Review your form, then submit' : 'Submit form')
-          : (submitReady ? 'Send completed form' : 'Send link to complete form')}
+          : 'Send form link or PDF'}
         aria-label={isPublic
           ? (submitReady ? 'Submit completed form now' : 'Submit form')
-          : (submitReady ? 'Send completed form' : 'Send link to complete form')}
+          : 'Send form link or PDF'}
       >
         {sending ? (
           <Loader2 className="h-4 w-4 animate-spin shrink-0" />
@@ -1150,94 +1070,20 @@ export function FormFillView({
         initialDataUrl={sigFieldId ? values[sigFieldId] : null}
       />
 
-      {!isPublic && !lead && (
-      <Dialog open={sendOpen} onOpenChange={(open) => { if (!open && !sending) setSendOpen(false) }}>
-        <DialogContent
-          className="map-panel list-panel share-list-dialog forms-send-dialog w-[min(92vw,22rem)] max-w-sm max-h-[min(88vh,640px)] overflow-y-auto rounded-2xl p-6 gap-4"
-          focusOverlay
-          topLayer
-          confirmLayer
-        >
-          <DialogHeader>
-            <DialogTitle>Send completed form</DialogTitle>
-            <DialogDescription className="text-sm opacity-90 leading-relaxed">
-              The flattened PDF will be emailed as an attachment.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <label className="block text-sm font-medium opacity-95">
-              Recipient email
-              <Input
-                type="email"
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-                placeholder="name@example.com"
-                className="mt-1.5"
-              />
-            </label>
-            <label className="block text-sm font-medium opacity-95">
-              Subject
-              <Input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="mt-1.5"
-              />
-            </label>
-            <label className="block text-sm font-medium opacity-95">
-              Message (optional)
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={4}
-                className="forms-send-textarea mt-1.5 flex w-full rounded-md px-3 py-2 text-sm focus-visible:outline-none"
-              />
-            </label>
-            <label className="flex items-center gap-2 text-sm opacity-95 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={sendMeCopy}
-                onChange={(e) => setSendMeCopy(e.target.checked)}
-                className="h-4 w-4 accent-blue-600 cursor-pointer"
-              />
-              Send me a copy
-            </label>
-          </div>
-
-          <DialogFooter className="gap-2 sm:flex-row flex-col-reverse">
-            <Button
-              variant="outline"
-              onClick={() => setSendOpen(false)}
-              disabled={sending}
-              className="flex-1 min-w-0 share-dialog-btn forms-send-cancel"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSend}
-              disabled={sending}
-              className="flex-1 min-w-0 share-dialog-btn forms-send-confirm"
-            >
-              {sending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-              Send
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      )}
-
-      {!isPublic && lead && leadSendState && (
+      {!isPublic && sendOpen && (
         <SendFormDialog
           open
           template={template}
-          prefillValues={leadSendState.prefillValues}
-          pdfBase64={leadSendState.pdfBase64}
-          values={leadSendState.values}
-          mode={leadSendState.mode === 'invite' ? 'invite' : 'completed'}
+          prefillValues={getFilledValuesForInvite()}
+          values={stripValuesForSubmit()}
+          preparePdf={preparePdfForSend}
           lead={lead}
-          onClose={() => setLeadSendState(null)}
+          teams={teams}
+          teamMembership={teamMembership}
+          initialDelivery={submitReady ? 'pdf' : 'link'}
+          onClose={() => setSendOpen(false)}
           onSent={() => {
-            setLeadSendState(null)
+            setSendOpen(false)
             onFormSent?.()
             onBack?.()
           }}

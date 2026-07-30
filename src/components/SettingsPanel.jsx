@@ -543,7 +543,7 @@ export function SettingsPanel({
                 <SettingRow label="Lead stage changes" description="When a lead moves columns in a shared pipeline">
                   <Toggle checked={n.pipelineLeadStage} onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })} disabled={!getToken} />
                 </SettingRow>
-                <SettingRow label="Form submitted" description="When someone completes a form you sent">
+                <SettingRow label="Form activity" description="When someone views or completes a form you sent">
                   <Toggle checked={n.formSubmitted} onChange={(v) => update({ notifications: { ...n, formSubmitted: v } })} disabled={!getToken} />
                 </SettingRow>
                 <SettingRow label="Added to a team" description="When you are invited to a team">

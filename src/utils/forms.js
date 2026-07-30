@@ -173,6 +173,7 @@ export async function createFormInvite(getToken, {
   leadId,
   leadName,
   skipEmail,
+  senderUid,
 }) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to send form links')
@@ -189,6 +190,7 @@ export async function createFormInvite(getToken, {
       leadId,
       leadName,
       skipEmail,
+      senderUid,
     }),
   })
   if (!res.ok) {
