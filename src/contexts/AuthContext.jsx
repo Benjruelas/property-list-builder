@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth'
 import { auth } from '../config/firebase'
 import { showToast } from '../components/ui/toast'
+import { formatAuthError, isAuthNetworkError } from '../utils/authErrors'
 
 const AuthContext = createContext({})
 
@@ -44,21 +45,8 @@ export const AuthProvider = ({ children }) => {
       showToast('Account created successfully!', 'success')
       return userCredential
     } catch (error) {
-      let errorMessage = 'Failed to create account'
-      switch (error.code) {
-        case 'auth/email-already-in-use':
-          errorMessage = 'This email is already registered'
-          break
-        case 'auth/invalid-email':
-          errorMessage = 'Invalid email address'
-          break
-        case 'auth/weak-password':
-          errorMessage = 'Password should be at least 6 characters'
-          break
-        default:
-          errorMessage = error.message
-      }
-      showToast(errorMessage, 'error')
+      const errorMessage = formatAuthError(error, 'Failed to create account')
+      if (errorMessage) showToast(errorMessage, 'error')
       throw error
     }
   }
@@ -72,11 +60,17 @@ export const AuthProvider = ({ children }) => {
       showToast('Signed in successfully!', 'success')
       return userCredential
     } catch (error) {
+      // Surface network/VPN failures as a toast; Login maps credential errors inline.
+      if (isAuthNetworkError(error)) {
+        showToast(formatAuthError(error), 'error')
+      }
       throw error
     }
   }
 
   // Full-page redirect to Google (better on mobile than popup).
+  // Note: VPNs / Private DNS often break this mid-redirect (white screen) because
+  // the browser must reach accounts.google.com + Firebase Identity Toolkit.
   const signInWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider()
@@ -84,7 +78,8 @@ export const AuthProvider = ({ children }) => {
       await signInWithRedirect(auth, provider)
       showToast('Redirecting to Google…', 'info')
     } catch (error) {
-      showToast(error.message || 'Failed to sign in with Google', 'error')
+      const message = formatAuthError(error, 'Failed to sign in with Google')
+      if (message) showToast(message, 'error')
       throw error
     }
   }
@@ -108,10 +103,10 @@ export const AuthProvider = ({ children }) => {
         }
       })
       .catch((error) => {
-        const code = error?.code || ''
-        if (code && code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+        const message = formatAuthError(error, 'Sign-in failed')
+        if (message) {
           console.error('Google redirect sign-in failed:', error)
-          showToast(error.message || 'Sign-in failed', 'error')
+          showToast(message, 'error')
         }
       })
   }, [])
@@ -152,21 +147,11 @@ export const AuthProvider = ({ children }) => {
       await requestPasswordResetEmail(email)
       showToast('Password reset email sent! Check your inbox.', 'success')
     } catch (error) {
-      let errorMessage = 'Failed to send password reset email'
-      switch (error.code) {
-        case 'auth/user-not-found':
-          errorMessage = 'No account found with this email'
-          break
-        case 'auth/invalid-email':
-          errorMessage = 'Invalid email address'
-          break
-        case 'auth/too-many-requests':
-          errorMessage = error.message
-          break
-        default:
-          errorMessage = error.message
+      let errorMessage = formatAuthError(error, 'Failed to send password reset email')
+      if (error?.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email'
       }
-      showToast(errorMessage, 'error')
+      if (errorMessage) showToast(errorMessage, 'error')
       throw error
     }
   }

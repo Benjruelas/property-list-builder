@@ -4,6 +4,7 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { useAuth } from '../contexts/AuthContext'
+import { formatAuthError, isAuthNetworkError } from '../utils/authErrors'
 
 const SIGN_IN_ERROR = 'Incorrect email or password'
 
@@ -46,8 +47,12 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
       await login(email, password)
       // Reset loading state - dialog will close via useEffect when currentUser is set
       setIsLoading(false)
-    } catch {
-      setSignInError(SIGN_IN_ERROR)
+    } catch (error) {
+      setSignInError(
+        isAuthNetworkError(error)
+          ? formatAuthError(error)
+          : SIGN_IN_ERROR,
+      )
       setIsLoading(false)
     }
   }
@@ -57,10 +62,13 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
     setIsLoading(true)
     try {
       await signInWithGoogle()
-      // Reset loading state - dialog will close via useEffect when currentUser is set
+      // Redirect navigates away; if it throws (network/VPN), stay on the dialog.
       setIsLoading(false)
     } catch (error) {
-      // Error is handled in AuthContext
+      // Toast is handled in AuthContext; show inline copy for network failures.
+      if (isAuthNetworkError(error)) {
+        setSignInError(formatAuthError(error))
+      }
       setIsLoading(false)
     }
   }

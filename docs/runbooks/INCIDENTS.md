@@ -1,5 +1,28 @@
 # KnockScout Incident Runbooks
 
+## VPN / Private DNS — Google sign-in white screen + tiles/Firebase fail
+
+**Symptoms (often one device only):**
+1. “Sign in with Google” opens a **white screen** and never returns.
+2. After turning VPN off / restarting: logo MP4 may not play, **map tiles blank**, Firebase error on sign-in (`auth/network-request-failed` or “Failed to fetch”).
+
+**Cause:** Google OAuth + Firebase Auth require the device to reach Google Identity endpoints (`accounts.google.com`, `*.googleapis.com`). Many VPNs, “Private DNS”, ad-block DNS (AdGuard/NextDNS), or corporate filters block or hang those. Residual DNS after disconnecting a VPN can leave the device half-broken even though the app shell still loads from the service worker cache.
+
+**Support steps (user device):**
+1. Turn **VPN fully off** (not just disconnect — quit the VPN app).
+2. iOS: Settings → Wi‑Fi → (i) → **Configure DNS → Automatic**. Disable Private Relay for the test if used.
+   Android: Settings → Network → Private DNS → **Off**.
+3. Toggle Airplane Mode 10s, or forget/rejoin Wi‑Fi; prefer cellular briefly to rule out the network.
+4. Force-quit KnockScout, clear site data for `knockscout.app` (Safari: Website Data; Chrome: Clear & reset), reopen.
+5. Try **email/password** sign-in first (still needs Firebase, but avoids the OAuth redirect white screen).
+6. If still broken: Settings → General → Transfer or Reset → Reset Network Settings (last resort).
+
+**App behavior after fix (client):**
+- Basemap session fetch times out (~8s) and falls back to Mapbox instead of hanging forever.
+- Auth toasts call out VPN / Private DNS on network failures.
+
+**Not a production outage** if only one user/device is affected and `/api/health` is healthy.
+
 ## KV / Redis unavailable
 
 1. Check `/api/health` — `checks.kv` should be `true`.
