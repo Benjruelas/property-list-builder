@@ -15,7 +15,8 @@ let package = Package(
         .package(name: "CapacitorCommunityMedia", path: "../../../node_modules/@capacitor-community/media"),
         .package(name: "CapacitorApp", path: "../../../node_modules/@capacitor/app"),
         .package(name: "CapacitorFilesystem", path: "../../../node_modules/@capacitor/filesystem"),
-        .package(name: "CapacitorGeolocation", path: "../../../node_modules/@capacitor/geolocation")
+        .package(name: "CapacitorGeolocation", path: "../../../node_modules/@capacitor/geolocation"),
+        .package(name: "CapacitorScreenOrientation", path: "../../../node_modules/@capacitor/screen-orientation")
     ],
     targets: [
         .target(
@@ -26,7 +27,8 @@ let package = Package(
                 .product(name: "CapacitorCommunityMedia", package: "CapacitorCommunityMedia"),
                 .product(name: "CapacitorApp", package: "CapacitorApp"),
                 .product(name: "CapacitorFilesystem", package: "CapacitorFilesystem"),
-                .product(name: "CapacitorGeolocation", package: "CapacitorGeolocation")
+                .product(name: "CapacitorGeolocation", package: "CapacitorGeolocation"),
+                .product(name: "CapacitorScreenOrientation", package: "CapacitorScreenOrientation")
             ]
         )
     ]

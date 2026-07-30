@@ -129,6 +129,7 @@ export default defineConfig({
       '@capacitor/app',
       '@capacitor/filesystem',
       '@capacitor/geolocation',
+      '@capacitor/screen-orientation',
       '@capacitor-community/media',
     ],
   },
