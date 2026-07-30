@@ -4,6 +4,7 @@ import {
   findLeadMatchField,
   searchMapEntities,
   buildMapSearchRows,
+  linkedEntityMatchesQuery,
   MAP_ENTITY_SEARCH_LEAD_LIMIT,
 } from '../mapEntitySearch'
 
@@ -123,7 +124,7 @@ describe('searchMapEntities', () => {
   const quotes = [{ id: 'q1', leadId: 'l1', title: 'Quote A' }]
   const reports = [{ id: 'r1', leadId: 'l1', title: 'Photo report' }]
 
-  it('returns lead matches with nested linked entities', () => {
+  it('nests only linked entities whose text contains the query', () => {
     const matches = searchMapEntities({
       query: 'john',
       leads,
@@ -135,16 +136,50 @@ describe('searchMapEntities', () => {
     expect(matches).toHaveLength(1)
     expect(matches[0].id).toBe('l1')
     expect(matches[0].matchedFieldLabel).toBe('Name')
-    const types = matches[0].linked.map((x) => x.type)
-    expect(types).toContain('deal')
-    expect(types).toContain('task')
-    expect(types).toContain('quote')
-    expect(types).toContain('report')
+    // Deal title is "John deal" → included; unrelated task/quote/report titles → excluded
+    expect(matches[0].linked.map((x) => x.type)).toEqual(['deal'])
+    expect(matches[0].linked[0].id).toBe('d1')
+  })
+
+  it('includes matching tasks/quotes/reports under a matched lead', () => {
+    const matches = searchMapEntities({
+      query: 'john',
+      leads,
+      pipelines,
+      tasks: [{ id: 't1', leadId: 'l1', title: 'Call John back' }],
+      quotes: [{ id: 'q1', leadId: 'l1', title: 'John roof quote' }],
+      reports: [{ id: 'r1', leadId: 'l1', title: 'John inspection report' }],
+    })
+    expect(matches[0].linked.map((x) => `${x.type}:${x.id}`).sort()).toEqual([
+      'deal:d1',
+      'quote:q1',
+      'report:r1',
+      'task:t1',
+    ])
+  })
+
+  it('omits nested items that do not contain the query', () => {
+    const matches = searchMapEntities({
+      query: 'smith',
+      leads,
+      pipelines,
+      tasks,
+      quotes,
+      reports,
+    })
+    expect(matches).toHaveLength(1)
+    expect(matches[0].linked).toEqual([])
   })
 
   it('matches by address and sorts by recency', () => {
     const matches = searchMapEntities({ query: '123 main', leads, pipelines })
     expect(matches.map((m) => m.id)).toEqual(['l2', 'l1'])
+  })
+
+  it('linkedEntityMatchesQuery checks entity fields', () => {
+    expect(linkedEntityMatchesQuery('deal', { title: 'Roof deal' }, 'roof')).toBe(true)
+    expect(linkedEntityMatchesQuery('deal', { title: 'Roof deal' }, 'plumbing')).toBe(false)
+    expect(linkedEntityMatchesQuery('task', { title: 'Follow up' }, 'follow')).toBe(true)
   })
 
   it('caps lead matches at the limit', () => {
