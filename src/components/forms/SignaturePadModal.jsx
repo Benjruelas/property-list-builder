@@ -1,57 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Capacitor } from '@capacitor/core'
-import { ScreenOrientation } from '@capacitor/screen-orientation'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
 
-async function lockOrientationForPad() {
-  const orientation =
-    typeof window !== 'undefined' && window.innerHeight > window.innerWidth
-      ? 'portrait'
-      : 'landscape'
-  try {
-    if (Capacitor.isNativePlatform()) {
-      await ScreenOrientation.lock({ orientation })
-      return
-    }
-  } catch {
-    /* native lock unavailable — try web fallback */
-  }
-  try {
-    await screen?.orientation?.lock?.(orientation)
-  } catch {
-    /* web lock often requires Fullscreen API; ignore */
-  }
-}
-
-async function unlockOrientationForPad() {
-  try {
-    if (Capacitor.isNativePlatform()) {
-      await ScreenOrientation.unlock()
-      return
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    screen?.orientation?.unlock?.()
-  } catch {
-    /* ignore */
-  }
-}
+/** Canvas aspect ratio (width:height) for the mobile signing surface. */
+const MOBILE_CANVAS_ASPECT = 2
+const MOBILE_TOOLBAR_H = 56
 
 /**
  * Signature capture modal.
  *
  * Desktop / tablet: uses `signature_pad` inside a standard Radix Dialog.
- * Mobile (< 768px viewport): renders a fullscreen overlay that is ALWAYS
- * presented in landscape orientation. If the device is currently portrait
- * we CSS-rotate the pad 90° so the signing area spans the long edge of
- * the phone — the user does not need to physically rotate the device. The
- * toolbar sits horizontally across the top of the landscape pad. We use
- * a small custom drawing implementation with offsetX/offsetY because
- * `signature_pad` breaks under CSS transforms.
+ * Mobile (< 768px viewport): centered panel at 95% viewport width with
+ * proportional height (2:1 signing surface + toolbar). Custom pointer
+ * drawing keeps touch reliable on mobile.
  */
 export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null }) {
   // Desktop pad (signature_pad) refs
@@ -75,17 +37,12 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
   }))
 
   const isMobile = viewport.w < 768
-  const MOBILE_TOOLBAR_H = 56
 
-  // Pad is ALWAYS presented in landscape. If the current viewport is
-  // portrait (h > w) we swap dimensions and CSS-rotate the container 90°
-  // so the pad fills the phone diagonally-rotated while leaving the rest
-  // of the app unaffected by device rotation.
-  const isPortrait = isMobile && viewport.h > viewport.w
-  const padW = isPortrait ? viewport.h : viewport.w
-  const padH = isPortrait ? viewport.w : viewport.h
-  const canvasCssW = padW
-  const canvasCssH = Math.max(1, padH - MOBILE_TOOLBAR_H)
+  // Panel: 95% of viewport width; height scales with width (2:1 canvas + toolbar).
+  const panelW = Math.round(viewport.w * 0.95)
+  const canvasCssW = panelW
+  const canvasCssH = Math.max(1, Math.round(panelW / MOBILE_CANVAS_ASPECT))
+  const panelH = canvasCssH + MOBILE_TOOLBAR_H
 
   useEffect(() => {
     if (!open) return
@@ -99,21 +56,6 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
       window.removeEventListener('orientationchange', onResize)
     }
   }, [open])
-
-  // Keep the host app from rotating while the mobile fullscreen pad is open.
-  // The pad already CSS-rotates into landscape; a real OS rotation fights that layout.
-  useEffect(() => {
-    if (!open || !isMobile) return
-    let cancelled = false
-    ;(async () => {
-      if (cancelled) return
-      await lockOrientationForPad()
-    })()
-    return () => {
-      cancelled = true
-      void unlockOrientationForPad()
-    }
-  }, [open, isMobile])
 
   // ——— Desktop: signature_pad lifecycle ——————————————————————————————————————
   const fitDesktopCanvas = useCallback(() => {
@@ -168,7 +110,7 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
     }
   }, [open, isMobile, fitDesktopCanvas])
 
-  // ——— Mobile: custom pad using offsetX/offsetY (transform-aware) ————————————
+  // ——— Mobile: custom pad ————————————————————————————————————————————————
   const sizeMobileCanvas = useCallback(() => {
     const canvas = mobileCanvasRef.current
     if (!canvas) return
@@ -181,10 +123,8 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.scale(ratio, ratio)
     ctx.clearRect(0, 0, canvasCssW, canvasCssH)
-    // Redraw initial image if provided.
     const img = mobileDrawingRef.current.initialImage
     if (img) {
-      // Fit the initial image inside the canvas (preserve aspect ratio).
       const scale = Math.min(canvasCssW / img.width, canvasCssH / img.height)
       const drawW = img.width * scale
       const drawH = img.height * scale
@@ -312,57 +252,46 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
     const content = (
       <div
         // z-index low enough that toasts (99999) sit above it.
-        // NOTE: `pointerEvents: 'auto'` is REQUIRED because our portal target
-        // (#modal-root) sets `pointer-events: none` on itself to allow clicks
-        // through when no modal is open. Without this, clicks fall through
-        // the rotated pad to whatever underlying UI is beneath, making the
-        // buttons appear unresponsive.
-        className="fixed inset-0 z-[20000] bg-black/95"
+        // `pointerEvents: 'auto'` is required because #modal-root sets
+        // pointer-events: none so clicks pass through when no modal is open.
+        className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/50"
         style={{ pointerEvents: 'auto' }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose?.()
+        }}
       >
-        {/* Pad container — sized to the landscape-oriented writing surface.
-            In portrait we CSS-rotate 90° so the pad always presents as
-            landscape without requiring the user to rotate their phone. */}
         <div
+          className="overflow-hidden rounded-lg bg-white shadow-lg"
           style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: `${padW}px`,
-            height: `${padH}px`,
-            transform: isPortrait
-              ? 'translate(-50%, -50%) rotate(90deg)'
-              : 'translate(-50%, -50%)',
-            transformOrigin: 'center center',
-            background: '#ffffff',
+            width: `${panelW}px`,
+            height: `${panelH}px`,
             display: 'flex',
             flexDirection: 'column',
-            overflow: 'hidden',
             pointerEvents: 'auto',
           }}
+          onClick={(e) => e.stopPropagation()}
         >
-          {/* Horizontal toolbar across the TOP of the landscape pad. */}
           <div
-            className="flex items-center justify-between bg-gray-50 border-b border-gray-200"
+            className="flex items-center justify-between border-b border-gray-200 bg-gray-50"
             style={{
               height: `${MOBILE_TOOLBAR_H}px`,
               flexShrink: 0,
-              padding: '0 16px',
+              padding: '0 12px',
             }}
           >
             <button
               type="button"
               onClick={onClose}
-              className="text-sm text-gray-700 font-medium px-4 py-2 rounded-md active:bg-gray-200"
+              className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 active:bg-gray-200"
             >
               Cancel
             </button>
             <div className="text-sm font-semibold text-gray-900">Sign here</div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={handleClear}
-                className="text-sm text-gray-700 font-medium px-4 py-2 rounded-md active:bg-gray-200"
+                className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 active:bg-gray-200"
               >
                 Clear
               </button>
@@ -370,7 +299,7 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
                 type="button"
                 onClick={handleSave}
                 disabled={isEmpty}
-                className="text-sm font-semibold px-4 py-2 rounded-md bg-blue-600 text-white disabled:opacity-40"
+                className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
               >
                 Save
               </button>
@@ -378,7 +307,7 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
           </div>
 
           <div
-            className="flex-1 relative bg-white"
+            className="relative flex-1 bg-white"
             style={{ touchAction: 'none' }}
           >
             <canvas
@@ -391,7 +320,7 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
               }}
             />
             {loading && (
-              <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500 bg-white/80">
+              <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-xs text-gray-500">
                 Loading signature pad…
               </div>
             )}
