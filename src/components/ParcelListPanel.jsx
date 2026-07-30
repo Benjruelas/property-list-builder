@@ -121,6 +121,7 @@ export function ParcelListPanel({
         showCloseButton={false}
         hideOverlay
         suppressBackdrop
+        topLayer={!!isOpen && !!selectedListId}
       >
         <DialogHeader className={PANEL_LIST_HEADER_CLASS} style={PANEL_LIST_HEADER_STYLE}>
           <DialogDescription className="sr-only">
