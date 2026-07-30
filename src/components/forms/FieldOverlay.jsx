@@ -26,12 +26,15 @@ export function FieldOverlay({
   onSelect,
   onDelete,
   children,
-  className = ''
+  className = '',
+  /** Larger delete / resize hits and label placement suited to touch. */
+  touchFriendly = false,
 }) {
   const rootRef = useRef(null)
   const dragState = useRef(null)
 
   const Icon = FIELD_ICON[field.type] || Type
+  const labelBelow = touchFriendly || field.y < 0.06
 
   const beginDrag = useCallback((mode, startEvt) => {
     if (readOnly) return
@@ -112,7 +115,9 @@ export function FieldOverlay({
     >
       {!readOnly && (
         <div
-          className="form-field-overlay-label absolute -top-5 left-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap"
+          className={`form-field-overlay-label absolute left-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap ${
+            labelBelow ? 'top-full mt-0.5' : '-top-5'
+          }`}
           style={{ pointerEvents: 'none' }}
         >
           <Icon className="h-3 w-3" />
@@ -131,14 +136,22 @@ export function FieldOverlay({
             type="button"
             data-field-delete
             onClick={(e) => { e.stopPropagation(); onDelete?.(field.id) }}
-            className="form-field-overlay-delete absolute -top-2 -right-2 h-5 w-5 rounded-full flex items-center justify-center shadow"
+            className={`form-field-overlay-delete absolute rounded-full flex items-center justify-center shadow ${
+              touchFriendly
+                ? '-top-3 -right-3 h-9 w-9'
+                : '-top-2 -right-2 h-5 w-5'
+            }`}
             title="Delete field"
           >
-            <Trash2 className="h-3 w-3" />
+            <Trash2 className={touchFriendly ? 'h-4 w-4' : 'h-3 w-3'} />
           </button>
           <div
             data-resize-handle
-            className="form-field-overlay-resize absolute -bottom-1 -right-1 h-3 w-3 rounded-sm cursor-se-resize"
+            className={`form-field-overlay-resize absolute rounded-sm cursor-se-resize ${
+              touchFriendly
+                ? '-bottom-2 -right-2 h-5 w-5'
+                : '-bottom-1 -right-1 h-3 w-3'
+            }`}
             style={{ touchAction: 'none' }}
           />
         </>
