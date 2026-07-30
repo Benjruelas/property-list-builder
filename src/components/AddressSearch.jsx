@@ -342,7 +342,6 @@ export function AddressSearch({
               <ul className="divide-y divide-gray-200">
                 {rows.map((row) => {
                   const Icon = KIND_ICON[row.kind] || Search
-                  const nested = !!row.nested
                   return (
                     <li
                       key={row.key}
@@ -356,35 +355,17 @@ export function AddressSearch({
                       role="option"
                       tabIndex={0}
                       className={cn(
-                        'hover:bg-gray-50 cursor-pointer transition-colors flex items-start gap-2',
-                        nested
-                          ? 'py-1.5 pr-3 pl-9 border-l-2 border-l-gray-200 ml-3'
-                          : 'p-3'
+                        'p-3 hover:bg-gray-50 cursor-pointer transition-colors flex items-start gap-2',
+                        row.nested && 'pl-8'
                       )}
                     >
-                      <Icon
-                        className={cn(
-                          'flex-shrink-0 text-gray-500',
-                          nested ? 'h-3 w-3 mt-0.5' : 'h-4 w-4 mt-0.5'
-                        )}
-                        aria-hidden
-                      />
+                      <Icon className="h-4 w-4 mt-0.5 flex-shrink-0 text-gray-500" aria-hidden />
                       <div className="min-w-0 flex-1">
-                        <div
-                          className={cn(
-                            'text-gray-900 truncate',
-                            nested ? 'text-xs font-medium' : 'text-sm font-medium'
-                          )}
-                        >
+                        <div className="text-sm font-medium text-gray-900 truncate">
                           {row.label}
                         </div>
                         {row.secondary && (
-                          <div
-                            className={cn(
-                              'text-gray-500 truncate',
-                              nested ? 'text-[10px] leading-tight mt-0.5' : 'text-xs mt-0.5'
-                            )}
-                          >
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">
                             {row.secondary}
                           </div>
                         )}
