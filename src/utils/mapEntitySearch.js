@@ -50,6 +50,39 @@ function fieldMatchesTokens(haystack, tokens) {
   return tokens.every((tok) => h.includes(tok))
 }
 
+function searchableMatchesQuery(fields, query) {
+  const tokens = tokenize(query)
+  if (!tokens.length) return false
+  const haystack = (fields || []).filter(Boolean).join(' ').toLowerCase()
+  return fieldMatchesTokens(haystack, tokens)
+}
+
+/** True when a linked deal/task/quote/report textually contains the query. */
+export function linkedEntityMatchesQuery(type, entity, query) {
+  if (!entity) return false
+  switch (type) {
+    case 'deal':
+      return searchableMatchesQuery(
+        [entity.title, entity.leadName, entity.leadAddress, entity.notes],
+        query,
+      )
+    case 'task':
+      return searchableMatchesQuery([entity.title, entity.notes], query)
+    case 'quote':
+      return searchableMatchesQuery(
+        [entity.title, entity.clientName, entity.leadName],
+        query,
+      )
+    case 'report':
+      return searchableMatchesQuery(
+        [entity.title, entity.address, entity.leadName],
+        query,
+      )
+    default:
+      return false
+  }
+}
+
 /**
  * Find the first field on a lead that matches the query tokens.
  * Priority: name → phones → emails → addresses → notes.
@@ -148,13 +181,10 @@ export function searchMapEntities({
     const match = findLeadMatchField(lead, q)
     if (!match) continue
 
-    const linkedDeals = resolveLeadDeals(lead, pipelines)
-    const linkedTasks = (tasks || []).filter((t) => taskMatchesLead(t, lead, pipelines))
-    const linkedQuotes = (quotes || []).filter((qt) => qt?.leadId === lead.id)
-    const linkedReports = (reports || []).filter((r) => r?.leadId === lead.id)
-
+    // Only nest linked items that themselves contain the query (not every related record).
     const linked = []
-    for (const deal of linkedDeals) {
+    for (const deal of resolveLeadDeals(lead, pipelines)) {
+      if (!linkedEntityMatchesQuery('deal', deal, q)) continue
       linked.push({
         type: 'deal',
         id: deal.id,
@@ -162,7 +192,8 @@ export function searchMapEntities({
         entity: deal,
       })
     }
-    for (const task of linkedTasks) {
+    for (const task of (tasks || []).filter((t) => taskMatchesLead(t, lead, pipelines))) {
+      if (!linkedEntityMatchesQuery('task', task, q)) continue
       linked.push({
         type: 'task',
         id: task.id,
@@ -170,7 +201,8 @@ export function searchMapEntities({
         entity: task,
       })
     }
-    for (const quote of linkedQuotes) {
+    for (const quote of (quotes || []).filter((qt) => qt?.leadId === lead.id)) {
+      if (!linkedEntityMatchesQuery('quote', quote, q)) continue
       linked.push({
         type: 'quote',
         id: quote.id,
@@ -178,7 +210,8 @@ export function searchMapEntities({
         entity: quote,
       })
     }
-    for (const report of linkedReports) {
+    for (const report of (reports || []).filter((r) => r?.leadId === lead.id)) {
+      if (!linkedEntityMatchesQuery('report', report, q)) continue
       linked.push({
         type: 'report',
         id: report.id,
