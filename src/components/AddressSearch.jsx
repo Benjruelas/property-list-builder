@@ -321,30 +321,35 @@ export function AddressSearch({
         )}
       </div>
 
-      <Button
-        data-tour="path-recording"
-        onClick={runAction(onTogglePathTracking)}
-        size="icon"
-        variant={isPathTrackingActive ? "glass" : "glass-outline"}
+      <div
         className={cn(
-          MAP_CHROME_BTN,
-          'transition-opacity duration-150',
-          isPathTrackingActive &&
-            "path-tracking-active bg-red-600/80 hover:bg-red-700/90 border-red-400/50 text-white",
-          !currentUser && "opacity-50 cursor-not-allowed",
+          'map-chrome-slot flex shrink-0 items-center justify-center transition-opacity duration-150',
           isOpen && 'opacity-0 pointer-events-none'
         )}
-        disabled={!currentUser || isOpen}
-        title={!currentUser
-          ? "Sign in to record paths"
-          : isPathTrackingActive
-            ? "Recording path - tap to stop & save"
-            : "Start recording path"}
-        tabIndex={isOpen ? -1 : undefined}
         aria-hidden={isOpen || undefined}
       >
-        <Route />
-      </Button>
+        <Button
+          data-tour="path-recording"
+          onClick={runAction(onTogglePathTracking)}
+          size="icon"
+          variant={isPathTrackingActive ? "glass" : "glass-outline"}
+          className={cn(
+            MAP_CHROME_BTN,
+            isPathTrackingActive &&
+              "path-tracking-active bg-red-600/80 hover:bg-red-700/90 border-red-400/50 text-white",
+            !currentUser && "opacity-50 cursor-not-allowed"
+          )}
+          disabled={!currentUser}
+          title={!currentUser
+            ? "Sign in to record paths"
+            : isPathTrackingActive
+              ? "Recording path - tap to stop & save"
+              : "Start recording path"}
+          tabIndex={isOpen ? -1 : undefined}
+        >
+          <Route />
+        </Button>
+      </div>
 
       {showResultsPanel && (
         <div

@@ -222,8 +222,11 @@ describe('AddressSearch dual-purpose results', () => {
     expect(pill.style.width).toContain('--map-chrome-right')
 
     const pathBtn = container.querySelector('[data-tour="path-recording"]')
-    expect(pathBtn.className).toMatch(/opacity-0/)
-    expect(pathBtn.className).toMatch(/pointer-events-none/)
+    expect(pathBtn).toBeTruthy()
+    // Fade is on the wrapper so Button's disabled:opacity-50 cannot keep it visible.
+    const pathSlot = pathBtn.parentElement
+    expect(pathSlot.className).toMatch(/opacity-0/)
+    expect(pathSlot.className).toMatch(/pointer-events-none/)
 
     await act(async () => {
       document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
