@@ -239,4 +239,19 @@ describe('buildMapSearchRows', () => {
     })
     expect(rows.map((r) => r.kind)).toEqual(['lead'])
   })
+
+  it('omits redundant Name secondary under lead rows', () => {
+    const rows = buildMapSearchRows({
+      leadMatches: [
+        {
+          id: 'l1',
+          label: 'John Smith',
+          matchedFieldLabel: 'Name',
+          matchedFieldValue: 'John Smith',
+          linked: [],
+        },
+      ],
+    })
+    expect(rows[0].secondary).toBeNull()
+  })
 })
