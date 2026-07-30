@@ -19,9 +19,14 @@ const FILL_ZOOM_MIN = 1
 const FILL_ZOOM_MAX = 2.5
 /** Auto-fit can scale below 1 so the full form fits on screen for review */
 const FIT_TO_SCREEN_MIN = 0.35
-/** Auto-focus zoom when stepping between fields */
+/** Auto-focus zoom when stepping between fields (in-app) */
 const FILL_FOCUS_ZOOM_MIN = 1.45
 const FILL_FOCUS_ZOOM_MAX = 2.35
+/** Milder sticky zoom for public/recipient fill — avoids hop on every step */
+const PUBLIC_FOCUS_ZOOM_MIN = 1.12
+const PUBLIC_FOCUS_ZOOM_MAX = 1.55
+/** Pan instead of hard-reanchor when the field center is already near the viewport */
+const NEAR_VIEWPORT_PAD_PX = 72
 
 export function FormFillView({
   template,
@@ -341,40 +346,54 @@ export function FormFillView({
   }, [])
 
   const computeFieldFocusZoom = useCallback((field, pageEl, scroller) => {
+    const minZ = isPublic ? PUBLIC_FOCUS_ZOOM_MIN : FILL_FOCUS_ZOOM_MIN
+    const maxZ = isPublic ? PUBLIC_FOCUS_ZOOM_MAX : FILL_FOCUS_ZOOM_MAX
     const pw = pageEl.offsetWidth
     const ph = pageEl.offsetHeight
-    if (pw < 1 || ph < 1) return FILL_FOCUS_ZOOM_MIN
+    if (pw < 1 || ph < 1) return minZ
 
     const fieldW = Math.max(field.width * pw, 28)
     const fieldH = Math.max(field.height * ph, 18)
-    const viewW = Math.max(scroller.clientWidth * 0.72, 240)
-    const viewH = Math.max(scroller.clientHeight * 0.5, 200)
+    // Public: keep more of the page in view so step-to-step pans stay small.
+    const viewW = Math.max(scroller.clientWidth * (isPublic ? 0.88 : 0.72), 240)
+    const viewH = Math.max(scroller.clientHeight * (isPublic ? 0.62 : 0.5), 200)
 
     const zoomW = viewW / fieldW
     const zoomH = viewH / fieldH
-    return Math.min(
-      FILL_FOCUS_ZOOM_MAX,
-      Math.max(FILL_FOCUS_ZOOM_MIN, Math.min(zoomW, zoomH))
-    )
-  }, [])
+    return Math.min(maxZ, Math.max(minZ, Math.min(zoomW, zoomH)))
+  }, [isPublic])
 
   const resolveFocusZoom = useCallback((field, pageEl, scroller, prevField) => {
     const pageChanged = !!prevField && prevField.page !== field.page
-    if (pageChanged) formFocusZoomRef.current = null
+    // Public keeps one sticky zoom across pages so we never re-zoom mid-tour.
+    if (pageChanged && !isPublic) formFocusZoomRef.current = null
 
     if (formFocusZoomRef.current != null) return formFocusZoomRef.current
 
     const idealZoom = computeFieldFocusZoom(field, pageEl, scroller)
     formFocusZoomRef.current = idealZoom
     return idealZoom
-  }, [computeFieldFocusZoom])
+  }, [computeFieldFocusZoom, isPublic])
+
+  const isFieldNearViewport = useCallback((field, zoom) => {
+    const scroller = scrollContainerRef.current
+    const metrics = getFieldMetrics(field, zoom)
+    if (!scroller || !metrics) return false
+    const pad = NEAR_VIEWPORT_PAD_PX
+    return (
+      metrics.centerX >= scroller.scrollLeft - pad &&
+      metrics.centerX <= scroller.scrollLeft + scroller.clientWidth + pad &&
+      metrics.centerY >= scroller.scrollTop - pad &&
+      metrics.centerY <= scroller.scrollTop + scroller.clientHeight + pad
+    )
+  }, [getFieldMetrics])
 
   /**
    * Pan along the straight vector from the previous field center to the next.
    * If the previous field was anchored in the viewport, the next field lands
    * in the same spot — no recentre oscillation.
    */
-  const scrollLinearToField = useCallback((fromField, toField, zoom) => {
+  const scrollLinearToField = useCallback((fromField, toField, zoom, { forceInstant = false } = {}) => {
     const scroller = scrollContainerRef.current
     const toMetrics = getFieldMetrics(toField, zoom)
     if (!scroller || !toMetrics) return
@@ -401,11 +420,10 @@ export function FormFillView({
     targetTop = Math.min(maxTop, Math.max(0, targetTop))
 
     const deltaMag = Math.hypot(targetLeft - scroller.scrollLeft, targetTop - scroller.scrollTop)
-    scroller.scrollTo({
-      left: targetLeft,
-      top: targetTop,
-      behavior: deltaMag < 3 ? 'auto' : 'smooth',
-    })
+    // Instant for tiny moves / post-zoom settle; short smooth pans otherwise.
+    // Avoid stacking with CSS scroll-behavior:smooth.
+    const behavior = forceInstant || deltaMag < 48 ? 'auto' : 'smooth'
+    scroller.scrollTo({ left: targetLeft, top: targetTop, behavior })
   }, [getFieldMetrics])
 
   const handleScrollContainerScroll = useCallback((e) => {
@@ -593,16 +611,11 @@ export function FormFillView({
     return () => window.clearTimeout(t)
   }, [fillZoom, fillMode, loading, pdfDoc, redrawRenderedPages])
 
-  const allFieldsFilled = useMemo(() => {
-    const fields = template.fields || []
-    if (!fields.length) return false
-    return fields.every((f) => isFieldFilled(f, values[f.id]))
-  }, [isFieldFilled, template.fields, values])
-
   // Linear pan from previous field → current field (fill mode only).
+  // Prefer sticky zoom + pan-only steps; hard-reanchor only on first focus or
+  // when the next field is far outside the viewport (avoids public hop).
   useEffect(() => {
     if (!fillMode || !currentField || loading || loadingErr || !pdfDoc) return
-    if (isPublic && allFieldsFilled) return
     const scroller = scrollContainerRef.current
     const pageEl = pageRefs.current[currentField.page]?.wrapper
     if (!scroller || !pageEl) return
@@ -626,11 +639,18 @@ export function FormFillView({
         if (cancelled) return
         await renderPage(currentField.page, true)
         if (cancelled) return
+        // After a zoom change, settle instantly under the anchor once — do not
+        // keep treating every later step as a zoom-driven hard reanchor.
+        scrollLinearToField(null, currentField, fillZoomRef.current, { forceInstant: true })
+        lastFocusedFieldRef.current = currentField
+        return
       }
 
-      const pageChanged = fromField && fromField.page !== currentField.page
-      if (!fromField || pageChanged || zoomChanged) {
-        scrollLinearToField(null, currentField, fillZoomRef.current)
+      const near = isFieldNearViewport(currentField, fillZoomRef.current)
+      if (!fromField || !near) {
+        scrollLinearToField(null, currentField, fillZoomRef.current, {
+          forceInstant: !fromField && isPublic,
+        })
       } else {
         scrollLinearToField(fromField, currentField, fillZoomRef.current)
       }
@@ -638,7 +658,18 @@ export function FormFillView({
     })()
 
     return () => { cancelled = true }
-  }, [allFieldsFilled, fillMode, isPublic, currentField, loading, loadingErr, pdfDoc, renderPage, resolveFocusZoom, scrollLinearToField])
+  }, [
+    fillMode,
+    currentField,
+    loading,
+    loadingErr,
+    pdfDoc,
+    isPublic,
+    renderPage,
+    resolveFocusZoom,
+    scrollLinearToField,
+    isFieldNearViewport,
+  ])
 
   // Redraw canvases only after manual pinch/wheel zoom (CSS transform + canvas compositing bug).
   useEffect(() => {
@@ -809,12 +840,8 @@ export function FormFillView({
 
   const showSubmitControl = isPublic ? submitReady : true
 
-  // Recipient only: auto-fit for review once every field is complete.
-  useEffect(() => {
-    if (!isPublic || !fillMode || !allFieldsFilled) return
-    exitFillMode()
-  }, [allFieldsFilled, exitFillMode, fillMode, isPublic])
-
+  // Stay in fill mode when the recipient finishes fields — auto-exiting to
+  // review-fit caused a large zoom/scroll hop right as they completed the form.
   const publicReviewMode = isPublic && !fillMode
   const viewFitReady = !fillMode && unscaledSize.w > 0 && unscaledSize.h > 0
 
@@ -1118,9 +1145,11 @@ function InteractiveFillField({
     if (isReadOnly || !isCurrent) return
     const el = elRef.current
     if (!el?.focus) return
+    // Wait for tour pan to settle before focusing (preventScroll still fights
+    // mobile keyboard less when we don't focus mid-scroll).
     const t = setTimeout(() => {
       try { el.focus({ preventScroll: true }) } catch { el.focus() }
-    }, 220)
+    }, 320)
     return () => clearTimeout(t)
   }, [isCurrent, isReadOnly])
 
@@ -1133,9 +1162,10 @@ function InteractiveFillField({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    // ≥16px in fill mode avoids iOS input focus zoom fighting our tour pan.
     fontSize: reviewTypography
       ? `clamp(10px, ${field.height * 90}cqh, 20px)`
-      : `clamp(9px, ${field.height * 70}cqh, 16px)`,
+      : `clamp(16px, ${field.height * 70}cqh, 18px)`,
     boxSizing: 'border-box',
     background: locked
       ? 'rgba(107,114,128,0.14)'
