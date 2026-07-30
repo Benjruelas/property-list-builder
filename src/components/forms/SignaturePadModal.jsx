@@ -1,7 +1,45 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { Capacitor } from '@capacitor/core'
+import { ScreenOrientation } from '@capacitor/screen-orientation'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
+
+async function lockOrientationForPad() {
+  const orientation =
+    typeof window !== 'undefined' && window.innerHeight > window.innerWidth
+      ? 'portrait'
+      : 'landscape'
+  try {
+    if (Capacitor.isNativePlatform()) {
+      await ScreenOrientation.lock({ orientation })
+      return
+    }
+  } catch {
+    /* native lock unavailable — try web fallback */
+  }
+  try {
+    await screen?.orientation?.lock?.(orientation)
+  } catch {
+    /* web lock often requires Fullscreen API; ignore */
+  }
+}
+
+async function unlockOrientationForPad() {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      await ScreenOrientation.unlock()
+      return
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    screen?.orientation?.unlock?.()
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Signature capture modal.
@@ -61,6 +99,21 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
       window.removeEventListener('orientationchange', onResize)
     }
   }, [open])
+
+  // Keep the host app from rotating while the mobile fullscreen pad is open.
+  // The pad already CSS-rotates into landscape; a real OS rotation fights that layout.
+  useEffect(() => {
+    if (!open || !isMobile) return
+    let cancelled = false
+    ;(async () => {
+      if (cancelled) return
+      await lockOrientationForPad()
+    })()
+    return () => {
+      cancelled = true
+      void unlockOrientationForPad()
+    }
+  }, [open, isMobile])
 
   // ——— Desktop: signature_pad lifecycle ——————————————————————————————————————
   const fitDesktopCanvas = useCallback(() => {
