@@ -141,7 +141,8 @@ describe('AddressSearch dual-purpose results', () => {
     const panel = container.querySelector('.map-search-results-panel')
     expect(panel).toBeTruthy()
     expect(panel.textContent).toContain('John Smith')
-    expect(panel.textContent).toMatch(/Name:\s*John Smith/)
+    // Name matches should not repeat "Name: …" under the lead title
+    expect(panel.textContent).not.toMatch(/Name:\s*John Smith/)
   })
 
   it('puts top Mapbox address above CRM when address-like and CRM matches', async () => {

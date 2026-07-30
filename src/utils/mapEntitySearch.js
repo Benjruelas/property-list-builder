@@ -258,12 +258,15 @@ export function buildMapSearchRows({ addressResults = [], leadMatches = [] } = {
   }
 
   for (const match of leadMatches || []) {
+    // Name matches already show the lead name as the primary label — skip redundant "Name: …".
+    const showMatchedField =
+      !!match.matchedFieldValue && match.matchedFieldLabel && match.matchedFieldLabel !== 'Name'
     rows.push({
       kind: 'lead',
       key: `lead:${match.id}`,
       match,
       label: match.label,
-      secondary: match.matchedFieldValue
+      secondary: showMatchedField
         ? `${match.matchedFieldLabel}: ${match.matchedFieldValue}`
         : null,
       nested: false,
