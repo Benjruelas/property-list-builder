@@ -12,6 +12,8 @@ export function MapControls({
   onCloseParcelPopup,
   /** Quick Photo Mode — geolocate, resolve parcel, jump straight to camera. */
   onQuickPhotoMode,
+  /** When true, fade out and ignore pointer events (e.g. map search is open). */
+  faded = false,
 }) {
   const locationUnavailable = locationPermission != null && locationPermission !== 'granted'
   // Run any map-control action through this so the parcel popup auto-closes.
@@ -21,7 +23,14 @@ export function MapControls({
   }
 
   return (
-    <div className={MAP_CHROME_STACK_RIGHT}>
+    <div
+      className={cn(
+        MAP_CHROME_STACK_RIGHT,
+        'transition-opacity duration-150',
+        faded && 'opacity-0 pointer-events-none'
+      )}
+      aria-hidden={faded || undefined}
+    >
       <Button
         data-tour="recenter"
         onClick={runAction(onRecenter)}
@@ -33,6 +42,7 @@ export function MapControls({
         )}
         title={locationUnavailable ? "Enable location" : "Recenter map"}
         aria-label={locationUnavailable ? "Enable location" : "Recenter map"}
+        tabIndex={faded ? -1 : undefined}
       >
         <Navigation />
       </Button>
@@ -46,6 +56,7 @@ export function MapControls({
           isCompassActive && "bg-amber-500/80 hover:bg-amber-600/90 border-amber-400/50 text-white"
         )}
         title={isCompassActive ? "Disable compass (map faces your direction)" : "Enable compass (orient map to face your direction)"}
+        tabIndex={faded ? -1 : undefined}
       >
         <Compass />
       </Button>
@@ -57,6 +68,7 @@ export function MapControls({
           variant="glass"
           className={MAP_CHROME_BTN}
           title="Photo Mode — find this property and start shooting"
+          tabIndex={faded ? -1 : undefined}
         >
           <Camera />
         </Button>

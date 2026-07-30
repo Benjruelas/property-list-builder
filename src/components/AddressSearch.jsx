@@ -58,6 +58,8 @@ export function AddressSearch({
   onOpenTask,
   onOpenQuote,
   onOpenReport,
+  /** Notifies parent when search opens/closes so other map chrome can fade. */
+  onOpenChange,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const {
@@ -86,10 +88,19 @@ export function AddressSearch({
       enabled: isOpen,
     })
 
+  const closeSearch = () => {
+    setIsOpen(false)
+    clearGeocode()
+  }
+
   const runAction = (fn) => (...args) => {
     onCloseParcelPopup?.()
     return fn?.(...args)
   }
+
+  useEffect(() => {
+    onOpenChange?.(isOpen)
+  }, [isOpen, onOpenChange])
 
   useEffect(() => {
     if (!isOpen) return
@@ -120,13 +131,11 @@ export function AddressSearch({
       onLocationFound({ lat, lng, address: displayName })
     }
 
-    setIsOpen(false)
-    clearGeocode()
+    closeSearch()
   }
 
   const closeAfterSelect = () => {
-    setIsOpen(false)
-    clearGeocode()
+    closeSearch()
   }
 
   const handleSelectRow = (row) => {
@@ -162,8 +171,7 @@ export function AddressSearch({
 
   const handleToggle = () => {
     if (isOpen) {
-      setIsOpen(false)
-      clearGeocode()
+      closeSearch()
     } else {
       setIsOpen(true)
       setTimeout(() => {
@@ -172,9 +180,9 @@ export function AddressSearch({
     }
   }
 
+  // Stretch from left chrome inset to the right edge of the right-side map buttons.
   const openPillStyle = {
-    width:
-      'calc(100vw - 12px - var(--map-chrome-btn-gap) - var(--map-chrome-btn-size) - 12px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))'
+    width: 'calc(100vw - var(--map-chrome-left) - var(--map-chrome-right))',
   }
 
   const trimmed = query.trim()
@@ -198,7 +206,8 @@ export function AddressSearch({
   return (
     <div
       ref={containerRef}
-      className={MAP_CHROME_STACK_LEFT}
+      className={cn(MAP_CHROME_STACK_LEFT, isOpen && 'z-[1100]')}
+      data-search-open={isOpen ? '1' : '0'}
     >
       {!isOpen ? (
         <Button
@@ -215,7 +224,7 @@ export function AddressSearch({
         </Button>
       ) : (
         <div
-          className="map-search-open-pill relative flex items-center rounded-md shadow-lg touch-manipulation md:!w-[280px] border border-white/60 bg-white/30 text-gray-900 backdrop-blur-sm"
+          className="map-search-open-pill relative flex items-center rounded-md shadow-lg touch-manipulation border border-white/60 bg-white/30 text-gray-900 backdrop-blur-sm"
           style={openPillStyle}
         >
           <div className="map-chrome-icon-slot flex-shrink-0">
@@ -246,7 +255,13 @@ export function AddressSearch({
         </div>
       )}
 
-      <div className="map-chrome-slot relative flex shrink-0 items-center justify-center">
+      <div
+        className={cn(
+          'map-chrome-slot relative flex shrink-0 items-center justify-center transition-opacity duration-150',
+          isOpen && 'opacity-0 pointer-events-none'
+        )}
+        aria-hidden={isOpen || undefined}
+      >
         {multiSelectAddToListMode && (
           <Button
             type="button"
@@ -259,6 +274,7 @@ export function AddressSearch({
               MAP_CHROME_BTN_OFFSET_LEFT
             )}
             title="Cancel multi-select and clear selection"
+            tabIndex={isOpen ? -1 : undefined}
           >
             <X strokeWidth={2.5} />
           </Button>
@@ -274,6 +290,7 @@ export function AddressSearch({
               'shrink-0 bg-blue-600/90 hover:bg-blue-700/95 border-blue-400/60 text-white'
             )}
             title={`Add ${multiSelectParcelCount} selected parcel${multiSelectParcelCount === 1 ? "" : "s"} to a list`}
+            tabIndex={isOpen ? -1 : undefined}
           >
             <Plus strokeWidth={2.5} />
           </Button>
@@ -297,6 +314,7 @@ export function AddressSearch({
                   ? "Multi-select ON - Click to turn off"
                   : "Multi-select OFF - Click to turn on"
             }
+            tabIndex={isOpen ? -1 : undefined}
           >
             {isMultiSelectActive ? <CheckSquare /> : <Square />}
           </Button>
@@ -310,23 +328,27 @@ export function AddressSearch({
         variant={isPathTrackingActive ? "glass" : "glass-outline"}
         className={cn(
           MAP_CHROME_BTN,
+          'transition-opacity duration-150',
           isPathTrackingActive &&
             "path-tracking-active bg-red-600/80 hover:bg-red-700/90 border-red-400/50 text-white",
-          !currentUser && "opacity-50 cursor-not-allowed"
+          !currentUser && "opacity-50 cursor-not-allowed",
+          isOpen && 'opacity-0 pointer-events-none'
         )}
-        disabled={!currentUser}
+        disabled={!currentUser || isOpen}
         title={!currentUser
           ? "Sign in to record paths"
           : isPathTrackingActive
             ? "Recording path - tap to stop & save"
             : "Start recording path"}
+        tabIndex={isOpen ? -1 : undefined}
+        aria-hidden={isOpen || undefined}
       >
         <Route />
       </Button>
 
       {showResultsPanel && (
         <div
-          className="map-search-results-panel map-panel absolute left-0 rounded-xl overflow-hidden z-50 md:!w-[280px]"
+          className="map-search-results-panel map-panel absolute left-0 rounded-xl overflow-hidden z-50"
           style={openPillStyle}
           data-address-like={addressLike || addressLikeLive ? '1' : '0'}
           data-debounced-query={debouncedQuery}
