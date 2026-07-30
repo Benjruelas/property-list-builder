@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '../ui/button'
 import { AddressAutocompleteField } from '../AddressAutocompleteField'
 import { getCurrentPositionWithFallback } from '@/utils/geolocation'
+import { getUserLocation } from '@/utils/locationStore'
 import { resolveLeadParcelAtLocation } from '@/utils/resolveLeadParcel'
 import { findLeadByParcelId, displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { geocodeAddressForLead } from '@/utils/geocodeAddress'
@@ -17,12 +18,20 @@ const STEP = {
   MANUAL: 'manual',
 }
 
+function coordsNearlyEqual(aLat, aLng, bLat, bLng, epsilon = 1e-5) {
+  return Math.abs(aLat - bLat) < epsilon && Math.abs(aLng - bLng) < epsilon
+}
+
 /**
  * Quick Photo Mode: geolocate the user, resolve the parcel/lead at that point,
  * let them confirm (or type the real address), then hand the result back so
  * the caller can open PhotoCaptureModal straight into the camera.
+ *
+ * Prefer the same onResolveParcel path as map parcel clicks (tile lrid → WFS)
+ * so the parcel visible under the blue dot is picked up even when WMS point
+ * queries miss.
  */
-export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
+export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm, onResolveParcel }) {
   const [step, setStep] = useState(STEP.LOCATING)
   const [statusMessage, setStatusMessage] = useState('Finding your location…')
   const [errorMessage, setErrorMessage] = useState('')
@@ -30,6 +39,13 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
   const [manualAddress, setManualAddress] = useState('')
   const [manualBusy, setManualBusy] = useState(false)
   const requestIdRef = useRef(0)
+
+  const resolveParcel = useCallback(async (lat, lng) => {
+    if (typeof onResolveParcel === 'function') {
+      return onResolveParcel(lat, lng)
+    }
+    return resolveLeadParcelAtLocation(lat, lng)
+  }, [onResolveParcel])
 
   const resolveAt = useCallback(async (lat, lng) => {
     const requestId = ++requestIdRef.current
@@ -40,24 +56,47 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
     // nearby wrong lead is not reused. Parcel-linked leads must still surface.
     const leadLookupOptions = { matchCoords: false }
     try {
-      const parcelData = await resolveLeadParcelAtLocation(lat, lng)
+      let resolvedLat = lat
+      let resolvedLng = lng
+      let parcelData = await resolveParcel(lat, lng)
+
+      // Fresh GPS can differ slightly from the map blue-dot store. If the first
+      // lookup misses, retry at the location the map is already showing.
+      if (!parcelData) {
+        const stored = getUserLocation()
+        if (
+          stored &&
+          Number.isFinite(stored.lat) &&
+          Number.isFinite(stored.lng) &&
+          !coordsNearlyEqual(lat, lng, stored.lat, stored.lng)
+        ) {
+          const retry = await resolveParcel(stored.lat, stored.lng)
+          if (retry) {
+            parcelData = retry
+            resolvedLat = stored.lat
+            resolvedLng = stored.lng
+          }
+        }
+      }
+
       if (requestId !== requestIdRef.current) return
       if (parcelData) {
         const existingLead = findLeadByParcelId(leads, parcelData, leadLookupOptions)
-        setCandidate({ parcelData, lead: existingLead || null, lat, lng })
+        setCandidate({ parcelData, lead: existingLead || null, lat: resolvedLat, lng: resolvedLng })
         setStep(STEP.CONFIRM)
         return
       }
       // No assessor parcel: do not attach to a nearby lead by coordinates.
-      const cityLabel = await reverseGeocodeCity(lat, lng).catch(() => '')
-      setCandidate({ parcelData: null, lead: null, lat, lng, cityLabel })
+      const cityLabel = await reverseGeocodeCity(resolvedLat, resolvedLng).catch(() => '')
+      if (requestId !== requestIdRef.current) return
+      setCandidate({ parcelData: null, lead: null, lat: resolvedLat, lng: resolvedLng, cityLabel })
       setStep(STEP.NO_PARCEL)
     } catch {
       if (requestId !== requestIdRef.current) return
       setErrorMessage('Could not look up this location — try entering the address instead')
       setStep(STEP.MANUAL)
     }
-  }, [leads])
+  }, [leads, resolveParcel])
 
   const locate = useCallback(async () => {
     const requestId = ++requestIdRef.current
@@ -65,9 +104,23 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
     setStatusMessage('Finding your location…')
     setErrorMessage('')
     try {
-      const pos = await getCurrentPositionWithFallback()
+      let lat
+      let lng
+      try {
+        const pos = await getCurrentPositionWithFallback()
+        lat = pos.coords.latitude
+        lng = pos.coords.longitude
+      } catch {
+        // Map may already have a live blue-dot fix even if a fresh getCurrentPosition fails.
+        const stored = getUserLocation()
+        if (!stored || !Number.isFinite(stored.lat) || !Number.isFinite(stored.lng)) {
+          throw new Error('Geolocation failed')
+        }
+        lat = stored.lat
+        lng = stored.lng
+      }
       if (requestId !== requestIdRef.current) return
-      await resolveAt(pos.coords.latitude, pos.coords.longitude)
+      await resolveAt(lat, lng)
     } catch {
       if (requestId !== requestIdRef.current) return
       setErrorMessage('Could not get your location — enter the address instead')
@@ -108,6 +161,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
         showToast('Could not find that address', 'error')
         return
       }
+      setManualAddress(geo.address || trimmed)
       await resolveAt(geo.lat, geo.lng)
     } finally {
       setManualBusy(false)
@@ -151,13 +205,13 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose?.()}>
       <DialogContent
-        className="map-panel share-list-dialog quick-photo-mode-dialog w-[min(92vw,24rem)] max-w-md rounded-xl p-0 gap-0 overflow-hidden flex flex-col"
+        className="map-panel share-list-dialog quick-photo-mode-dialog w-[min(92vw,24rem)] max-w-md rounded-xl p-0 gap-0 overflow-visible flex flex-col"
         showCloseButton
         focusOverlay
         topLayer
       >
-        <div className="share-dialog-inner flex flex-col min-h-0">
-          <DialogHeader className="share-dialog-header shrink-0 relative">
+        <div className="share-dialog-inner flex flex-col min-h-0 overflow-visible rounded-xl">
+          <DialogHeader className="share-dialog-header shrink-0 relative overflow-hidden rounded-t-xl">
             <DialogTitle className="share-dialog-title flex items-center gap-2">
               <Camera className="h-4 w-4" />
               Photo Mode
@@ -167,7 +221,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="share-dialog-body space-y-4 px-5 py-4">
+          <div className="share-dialog-body space-y-4 px-5 py-4 overflow-visible">
             {step === STEP.LOCATING && (
               <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
                 <Loader2 className="h-7 w-7 animate-spin opacity-70" />
@@ -234,7 +288,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
             )}
 
             {step === STEP.MANUAL && (
-              <div className="space-y-3">
+              <div className="space-y-3 overflow-visible pb-2">
                 <button
                   type="button"
                   className="flex items-center gap-1 text-xs opacity-60 hover:opacity-90"
@@ -249,7 +303,7 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
                     {errorMessage}
                   </p>
                 )}
-                <div>
+                <div className="overflow-visible">
                   <label className="text-xs opacity-60 mb-1 block">Property address</label>
                   <AddressAutocompleteField
                     value={manualAddress}
@@ -257,6 +311,9 @@ export function QuickPhotoModeDialog({ open, onClose, leads = [], onConfirm }) {
                     onSelectResult={handleManualSelect}
                     placeholder="Start typing an address…"
                   />
+                  <p className="text-[11px] opacity-50 mt-1.5 leading-snug">
+                    Pick a suggestion or press Use this address
+                  </p>
                 </div>
                 <Button
                   type="button"
