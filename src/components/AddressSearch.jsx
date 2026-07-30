@@ -1,18 +1,42 @@
-import { useState, useRef, useEffect } from 'react'
-import { Search, X, Loader2, Plus, CheckSquare, Square, Route } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import {
+  Search,
+  X,
+  Loader2,
+  Plus,
+  CheckSquare,
+  Square,
+  Route,
+  User,
+  Briefcase,
+  ListTodo,
+  FileText,
+  Camera,
+  MapPin,
+} from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 import { useMapboxGeocode } from '@/hooks/useMapboxGeocode'
+import { useMapEntitySearch } from '@/hooks/useMapEntitySearch'
+import { isAddressLikeQuery } from '@/utils/mapEntitySearch'
 import {
   MAP_CHROME_BTN,
   MAP_CHROME_BTN_OFFSET_LEFT,
   MAP_CHROME_STACK_LEFT,
 } from '@/lib/mapChrome'
 
+const KIND_ICON = {
+  address: MapPin,
+  lead: User,
+  deal: Briefcase,
+  task: ListTodo,
+  quote: FileText,
+  report: Camera,
+}
+
 /**
- * Address search using Mapbox Geocoding API.
- * Geocoding itself lives in `useMapboxGeocode`; this component is the
- * left map chrome (search, multi-select, path recording, results dropdown, flyTo).
+ * Dual-purpose map search: CRM leads (+ linked deals/tasks/quotes/reports)
+ * with Mapbox address suggestions when the query looks like a street address.
  */
 export function AddressSearch({
   onLocationFound,
@@ -26,12 +50,41 @@ export function AddressSearch({
   onTogglePathTracking,
   isPathTrackingActive,
   currentUser,
+  leads = [],
+  pipelines = [],
+  getToken,
+  onOpenLead,
+  onOpenDeal,
+  onOpenTask,
+  onOpenQuote,
+  onOpenReport,
 }) {
   const [isOpen, setIsOpen] = useState(false)
-  const { query, setQuery, results, isSearching, error, clear } = useMapboxGeocode()
+  const {
+    query,
+    setQuery,
+    results: geocodeResults,
+    isSearching: geocodeSearching,
+    error: geocodeError,
+    clear: clearGeocode,
+  } = useMapboxGeocode()
   const inputRef = useRef(null)
   const containerRef = useRef(null)
   const multiSelectAddToListMode = isMultiSelectActive && multiSelectParcelCount > 0
+
+  const addressLikeLive = useMemo(() => isAddressLikeQuery(query), [query])
+
+  const { rows, leadMatches, addressResults, addressLike, isSearching, debouncedQuery } =
+    useMapEntitySearch({
+      query,
+      leads,
+      pipelines,
+      getToken,
+      currentUser,
+      geocodeResults,
+      geocodeSearching,
+      enabled: isOpen,
+    })
 
   const runAction = (fn) => (...args) => {
     onCloseParcelPopup?.()
@@ -43,14 +96,14 @@ export function AddressSearch({
     const handlePointerDown = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsOpen(false)
-        clear()
+        clearGeocode()
       }
     }
     document.addEventListener('pointerdown', handlePointerDown, true)
     return () => document.removeEventListener('pointerdown', handlePointerDown, true)
-  }, [isOpen, clear])
+  }, [isOpen, clearGeocode])
 
-  const handleSelectResult = (result) => {
+  const handleSelectAddress = (result) => {
     const [lng, lat] = result.center || (result.geometry?.coordinates || [])
     const displayName = result.place_name || query
 
@@ -68,13 +121,49 @@ export function AddressSearch({
     }
 
     setIsOpen(false)
-    clear()
+    clearGeocode()
+  }
+
+  const closeAfterSelect = () => {
+    setIsOpen(false)
+    clearGeocode()
+  }
+
+  const handleSelectRow = (row) => {
+    onCloseParcelPopup?.()
+    switch (row.kind) {
+      case 'address':
+        handleSelectAddress(row.result)
+        return
+      case 'lead':
+        onOpenLead?.(row.match.lead)
+        closeAfterSelect()
+        return
+      case 'deal':
+        onOpenDeal?.(row.entity)
+        closeAfterSelect()
+        return
+      case 'task':
+        onOpenTask?.(row.entity)
+        closeAfterSelect()
+        return
+      case 'quote':
+        onOpenQuote?.(row.entity)
+        closeAfterSelect()
+        return
+      case 'report':
+        onOpenReport?.(row.entity)
+        closeAfterSelect()
+        return
+      default:
+        break
+    }
   }
 
   const handleToggle = () => {
     if (isOpen) {
       setIsOpen(false)
-      clear()
+      clearGeocode()
     } else {
       setIsOpen(true)
       setTimeout(() => {
@@ -87,8 +176,24 @@ export function AddressSearch({
     width:
       'calc(100vw - 12px - var(--map-chrome-btn-gap) - var(--map-chrome-btn-size) - 12px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))'
   }
+
+  const trimmed = query.trim()
+  const showGeocodeError =
+    addressLike && !!geocodeError && leadMatches.length === 0 && addressResults.length === 0
+  const showEmptyHint =
+    trimmed.length >= 2 &&
+    !isSearching &&
+    !showGeocodeError &&
+    rows.length === 0 &&
+    addressLike
+  // Name-like queries with no CRM hits: hide the panel entirely ("show nothing").
   const showResultsPanel =
-    isOpen && (query.length > 0 || isSearching || error || results.length > 0)
+    isOpen &&
+    (rows.length > 0 ||
+      isSearching ||
+      showGeocodeError ||
+      showEmptyHint ||
+      (trimmed.length > 0 && trimmed.length < 2))
 
   return (
     <div
@@ -104,7 +209,7 @@ export function AddressSearch({
           size="icon"
           variant="glass-outline"
           className={MAP_CHROME_BTN}
-          title="Search address"
+          title="Search leads or address"
         >
           <Search />
         </Button>
@@ -121,7 +226,7 @@ export function AddressSearch({
             type="text"
             inputMode="search"
             autoComplete="off"
-            placeholder="Search address or coordinates..."
+            placeholder="Search leads or address..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="flex-1 min-w-0 h-full bg-transparent outline-none border-none pr-2 text-sm text-gray-900 placeholder:text-gray-600"
@@ -223,48 +328,72 @@ export function AddressSearch({
         <div
           className="map-search-results-panel map-panel absolute left-0 rounded-xl overflow-hidden z-50 md:!w-[280px]"
           style={openPillStyle}
+          data-address-like={addressLike || addressLikeLive ? '1' : '0'}
+          data-debounced-query={debouncedQuery}
         >
-          {error && (
+          {showGeocodeError && (
             <div className="p-3 text-sm text-red-600 bg-red-50 border-b border-red-200">
-              {error}
+              {geocodeError}
             </div>
           )}
 
-          <div className="max-h-64 overflow-y-auto parcel-details-scroll">
-            {results.length > 0 ? (
+          <div className="max-h-80 overflow-y-auto parcel-details-scroll">
+            {rows.length > 0 ? (
               <ul className="divide-y divide-gray-200">
-                {results.map((result) => (
-                  <li
-                    key={result.id || result._mapboxFeature?.id}
-                    onClick={() => handleSelectResult(result)}
-                    className="p-3 hover:bg-gray-50 cursor-pointer transition-colors"
-                  >
-                    <div className="text-sm font-medium text-gray-900">
-                      {result.place_name}
-                    </div>
-                    {result.address && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {[
-                          result.address.city,
-                          result.address.county,
-                          result.address.stateLong || result.address.state,
-                          result.address.zip
-                        ]
-                          .filter(Boolean)
-                          .join(', ')}
+                {rows.map((row) => {
+                  const Icon = KIND_ICON[row.kind] || Search
+                  return (
+                    <li
+                      key={row.key}
+                      onClick={() => handleSelectRow(row)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleSelectRow(row)
+                        }
+                      }}
+                      role="option"
+                      tabIndex={0}
+                      className={cn(
+                        'p-3 hover:bg-gray-50 cursor-pointer transition-colors flex items-start gap-2',
+                        row.nested && 'pl-8 bg-gray-50/40'
+                      )}
+                    >
+                      <Icon className="h-4 w-4 mt-0.5 flex-shrink-0 text-gray-500" aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {row.label}
+                        </div>
+                        {row.secondary && (
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">
+                            {row.secondary}
+                          </div>
+                        )}
+                        {row.kind === 'address' && row.result?.address && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {[
+                              row.result.address.city,
+                              row.result.address.county,
+                              row.result.address.stateLong || row.result.address.state,
+                              row.result.address.zip
+                            ]
+                              .filter(Boolean)
+                              .join(', ')}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
-            ) : query.length >= 2 && !isSearching && !error ? (
+            ) : showEmptyHint ? (
               <div className="p-3 text-sm text-gray-600 text-center">
                 <div>No results found for "{query}"</div>
                 <div className="text-xs mt-2 text-gray-500">
                   Try: street address, city name, zip code, or coordinates (lat, lng)
                 </div>
               </div>
-            ) : query.length > 0 && query.length < 2 ? (
+            ) : trimmed.length > 0 && trimmed.length < 2 ? (
               <div className="p-3 text-sm text-gray-600 text-center">
                 Type at least 2 characters to search
               </div>
