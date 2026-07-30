@@ -38,10 +38,16 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
 
   const isMobile = viewport.w < 768
 
-  // Panel: 95% of viewport width; height scales with width (2:1 canvas + toolbar).
+  // Panel: 95% of viewport width; height scales with width (2:1 canvas + toolbar),
+  // clamped so the panel still fits when the phone is landscape.
   const panelW = Math.round(viewport.w * 0.95)
+  const maxPanelH = Math.round(viewport.h * 0.9)
+  const idealCanvasH = Math.round(panelW / MOBILE_CANVAS_ASPECT)
   const canvasCssW = panelW
-  const canvasCssH = Math.max(1, Math.round(panelW / MOBILE_CANVAS_ASPECT))
+  const canvasCssH = Math.max(
+    1,
+    Math.min(idealCanvasH, maxPanelH - MOBILE_TOOLBAR_H),
+  )
   const panelH = canvasCssH + MOBILE_TOOLBAR_H
 
   useEffect(() => {
