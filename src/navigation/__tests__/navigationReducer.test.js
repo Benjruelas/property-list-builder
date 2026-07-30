@@ -1252,4 +1252,28 @@ describe('selectors', () => {
     expect(selectPanelProps(state).isActivityPanelFocused).toBe(true)
     expect(selectPanelProps(state).isParcelListPanelOpen).toBe(false)
   })
+
+  it('activity destination leaves feed mounted but unfocused (obscured, not top layer)', () => {
+    const state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'leads.detail', leadId: 'l1' },
+    ])
+    const props = selectPanelProps(state)
+    expect(props.isActivityPanelOpen).toBe(true)
+    expect(props.isActivityPanelFocused).toBe(false)
+    expect(props.isActivityPanelTopLayer).toBe(false)
+    expect(props.isLeadsDetailTopLayer).toBe(true)
+    expect(props.fromActivity).toBe(true)
+  })
+
+  it('activity quote destination is standalone (no quotes list frame)', () => {
+    const state = replaceStack(createInitialState(), [
+      { type: 'activity' },
+      { type: 'quotes.detail', quoteId: 'q1' },
+    ])
+    const props = selectPanelProps(state)
+    expect(props.isActivityPanelFocused).toBe(false)
+    expect(props.isQuotesListOpen).toBe(false)
+    expect(props.quotesDetailQuoteId).toBe('q1')
+  })
 })
