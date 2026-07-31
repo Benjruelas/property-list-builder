@@ -22,7 +22,7 @@ import { formatPhoneDisplay } from '@/utils/phoneFormat'
 import { logLeadFormSent } from '@/utils/leadActivity'
 import { invalidateCachedLeadForms } from '@/utils/leadForms'
 import { displayLeadName } from '@/utils/leads'
-import { getSenderDisplayName, getCompanyNameForSends } from '@/utils/profile'
+import { getSenderDisplayName, getCompanyNameForSends, toActivityActor } from '@/utils/profile'
 import { SendAsField } from '../shared/SendAsField'
 import { AutoResizeTextarea } from '../ui/auto-resize-textarea'
 import { cn } from '@/lib/utils'
@@ -170,7 +170,7 @@ export function SendFormDialog({
         templateId: template?.id,
         templateName: template?.name,
         ...meta,
-      })
+      }, toActivityActor(currentUser))
       invalidateCachedLeadForms(lead.id)
     } catch {
       /* non-blocking */

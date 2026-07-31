@@ -162,14 +162,14 @@ export default async function handler(req, res) {
       const url = `/api/lead-files?key=${encodeURIComponent(key)}`
 
       try {
-        const { logTeamActivity, actorLabel, teamIdsFromResource } = await import('./_lib/activityLog.js')
+        const { logTeamActivity, resolveActorLabel, teamIdsFromResource } = await import('./_lib/activityLog.js')
         const teamIds = teamIdsFromResource(lead)
         if (teamIds.length > 0) {
           await logTeamActivity({
             teamIds,
             actor: user,
             type: 'lead.file_uploaded',
-            summary: `${actorLabel(user)} uploaded "${safeName}" to lead "${leadDisplayName(lead)}"`,
+            summary: `${await resolveActorLabel(user)} uploaded "${safeName}" to lead "${leadDisplayName(lead)}"`,
             entity: { kind: 'lead', leadId: lid, fileId },
             nav: { type: 'lead', leadId: lid },
           })
@@ -257,7 +257,7 @@ export default async function handler(req, res) {
       if (lid) {
         try {
           const { lead } = await getLeadWithAccess(user, lid)
-          const { logTeamActivity, actorLabel, teamIdsFromResource } = await import('./_lib/activityLog.js')
+          const { logTeamActivity, resolveActorLabel, teamIdsFromResource } = await import('./_lib/activityLog.js')
           const teamIds = lead ? teamIdsFromResource(lead) : []
           const fileName = key.split('/').pop()?.replace(/^\d+_[a-z0-9]+_/, '') || 'file'
           if (teamIds.length > 0 && lead) {
@@ -265,7 +265,7 @@ export default async function handler(req, res) {
               teamIds,
               actor: user,
               type: 'lead.file_deleted',
-              summary: `${actorLabel(user)} deleted "${fileName}" from lead "${leadDisplayName(lead)}"`,
+              summary: `${await resolveActorLabel(user)} deleted "${fileName}" from lead "${leadDisplayName(lead)}"`,
               entity: { kind: 'lead', leadId: lid },
               nav: { type: 'lead', leadId: lid },
             })

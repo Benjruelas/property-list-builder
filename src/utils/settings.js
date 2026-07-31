@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS = {
 
   tourCompleted: false,
 
-  /** Your name on outbound quote/form emails (synced to server for email templates). */
+  /** Your name for activity, client emails, and documents (synced to server). */
   profile: {
     displayName: '',
   },

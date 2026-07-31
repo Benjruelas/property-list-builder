@@ -148,7 +148,7 @@ async function runPipelineActivityLog({
   try {
     const {
       logTeamActivity,
-      actorLabel,
+      resolveActorLabel,
       teamIdsFromResource,
       diffDealChanges,
       batchPipelineDealActivities,
@@ -157,7 +157,7 @@ async function runPipelineActivityLog({
     const teamIds = teamIdsFromResource(pipeline)
     if (teamIds.length === 0) return
 
-    const label = actorLabel(user)
+    const label = await resolveActorLabel(user)
     const pipeTitle = pipeline.title || 'pipeline'
 
     if (newlyAddedTeamShares?.length > 0) {

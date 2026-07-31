@@ -32,10 +32,11 @@ function findTeamMemberLabel(teams, uid) {
   for (const team of teams) {
     if (team?.ownerId && uidsMatch(team.ownerId, uid)) {
       const member = team.members?.find((m) => uidsMatch(m.uid, uid))
-      return labelFromEmail(member?.email) || member?.displayName || labelFromEmail(team.ownerEmail) || 'Team owner'
+      return member?.displayName || member?.name
+        || labelFromEmail(member?.email) || labelFromEmail(team.ownerEmail) || 'Team owner'
     }
     const member = team.members?.find((m) => uidsMatch(m.uid, uid))
-    if (member) return labelFromEmail(member.email) || member.displayName || null
+    if (member) return member.displayName || member.name || labelFromEmail(member.email) || null
   }
   return null
 }
@@ -67,10 +68,11 @@ export function displayActivityActorLabel(entry, { teams = [], currentUserId = n
   if (!entry) return null
   if (entry.byUid && currentUserId && uidsMatch(entry.byUid, currentUserId)) return 'You'
   if (entry.byUid && DEV_UID_LABELS[entry.byUid]) return DEV_UID_LABELS[entry.byUid]
-  const fromTeam = findTeamMemberLabel(teams, entry.byUid)
-  if (fromTeam) return fromTeam
+  // Prefer the stamped Settings "Your name" over email-derived team labels.
   const fromName = String(entry.byName || '').trim()
   if (fromName) return fromName
+  const fromTeam = findTeamMemberLabel(teams, entry.byUid)
+  if (fromTeam) return fromTeam
   return labelFromEmail(entry.byEmail)
 }
 

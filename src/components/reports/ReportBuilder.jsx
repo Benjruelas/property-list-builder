@@ -17,6 +17,8 @@ import {
   fetchPhotoReports,
 } from '@/utils/photoReports'
 import { logLeadReportEvent } from '@/utils/leadActivity'
+import { toActivityActor } from '@/utils/profile'
+import { useAuth } from '../../contexts/AuthContext'
 import { fetchPhotoThumbnailBlob } from '@/photos/photosClient'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
 import { cn } from '@/lib/utils'
@@ -68,6 +70,7 @@ export function ReportBuilder({
   panelDockSlot,
   primaryDetail = false,
 }) {
+  const { currentUser } = useAuth()
   const isTemplate = mode === 'template'
   const [name, setName] = useState('')
   const [title, setTitle] = useState('Photo Report')
@@ -416,9 +419,15 @@ export function ReportBuilder({
     }
     const report = await createPhotoReport(getToken, payload)
     setSavedReportId(report.id)
-    await logLeadReportEvent(getToken, lead.id, `Photo report created: ${report.title}`, { reportId: report.id })
+    await logLeadReportEvent(
+      getToken,
+      lead.id,
+      `Photo report created: ${report.title}`,
+      { reportId: report.id },
+      toActivityActor(currentUser),
+    )
     return report
-  }, [lead, buildReportPayload, savedReportId, initialReport, getToken])
+  }, [lead, buildReportPayload, savedReportId, initialReport, getToken, currentUser])
 
   const handlePreview = async () => {
     if (!lead) {
@@ -753,7 +762,13 @@ export function ReportBuilder({
             onSaved?.(updated, { keepOpen: true })
             setSendReport(updated)
             if (lead?.id) {
-              await logLeadReportEvent(getToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })
+              await logLeadReportEvent(
+                getToken,
+                lead.id,
+                `Photo report sent: ${updated.title}`,
+                { reportId: updated.id },
+                toActivityActor(currentUser),
+              )
             }
             setSendOpen(false)
           }}

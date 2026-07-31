@@ -14,6 +14,7 @@ import {
   actorLabel,
   teamIdsFromResource,
 } from './_lib/activityLog.js'
+import { enrichUserWithProfileName, resolveProfileDisplayName } from './_lib/profileDisplayName.js'
 import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './_lib/tagHelpers.js'
 import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './_lib/leadStatuses.js'
 import { normalizeLeadContactsForStorage } from './_lib/leadContact.js'
@@ -66,7 +67,7 @@ function normalizeLeadStatus(value, existing, allowedIds) {
   return normalizeLeadStatusValue(value, existing, allowedIds)
 }
 
-function normalizeActivityEntry(entry, user, now) {
+async function normalizeActivityEntry(entry, user, now) {
   if (!entry || typeof entry !== 'object') {
     throw new Error('activity entry is required')
   }
@@ -77,8 +78,9 @@ function normalizeActivityEntry(entry, user, now) {
   const summary = String(entry.summary || '').trim()
   if (!summary) throw new Error('activity summary is required')
   const byEmail = String(user?.email || entry.byEmail || '').trim().toLowerCase() || null
-  // Prefer an explicit display name; do not persist actorLabel's email local-part fallback.
-  const byName = String(user?.displayName || entry.byName || '').trim().slice(0, 120) || null
+  // Prefer Settings "Your name" / explicit display name; do not persist email local-part fallback.
+  const profileName = await resolveProfileDisplayName(user?.uid)
+  const byName = String(user?.displayName || entry.byName || profileName || '').trim().slice(0, 120) || null
   return {
     id: entry.id || `act_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     type,
@@ -186,11 +188,12 @@ function leadDisplayFieldsChanged(existing, lead) {
 async function logLeadActivity(type, lead, user, summary, { audience, delta = 1, summaryContext = null } = {}) {
   const teamIds = teamIdsFromResource(lead)
   if (teamIds.length === 0) return
-  const label = actorLabel(user)
+  const actor = await enrichUserWithProfileName(user)
+  const label = actorLabel(actor)
   const leadName = leadDisplayName(lead)
   await logTeamActivity({
     teamIds,
-    actor: user,
+    actor,
     type,
     summary,
     entity: { kind: 'lead', leadId: lead.id, leadName },
@@ -208,7 +211,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
 
-  const { user } = await authenticate(req)
+  let { user } = await authenticate(req)
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
@@ -231,6 +234,8 @@ export default async function handler(req, res) {
       getAllTeams(),
       loadUserAppSettings(user.uid),
     ])
+    const profileName = String(userAppSettings?.profile?.displayName || '').trim()
+    if (profileName) user = { ...user, displayName: profileName }
     const ctx = buildAccessContext(allTeams, user)
     const allowedStatusIds = resolveAllowedLeadStatusIds(ctx, userAppSettings)
 
@@ -334,7 +339,7 @@ export default async function handler(req, res) {
         const now = new Date().toISOString()
         let entry
         try {
-          entry = normalizeActivityEntry(body.entry, user, now)
+          entry = await normalizeActivityEntry(body.entry, user, now)
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }

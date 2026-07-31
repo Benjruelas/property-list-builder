@@ -85,8 +85,9 @@ export async function resolveSenderBranding(user) {
   const data = await getUserDataBlob(user.uid)
   const appSettings = data?.appSettings || {}
   const profileName = (appSettings?.profile?.displayName || '').trim()
+  const authName = String(user?.displayName || '').trim()
   const emailLocal = (user.email || '').split('@')[0] || ''
-  const senderName = profileName || emailLocal || 'Your representative'
+  const senderName = profileName || authName || emailLocal || 'Your representative'
 
   const allTeams = await getAllTeams()
   const userTeams = loadTeamsForUser(allTeams, user.uid)

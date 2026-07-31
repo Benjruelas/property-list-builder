@@ -1,15 +1,36 @@
 import { getSettings } from './settings'
 
-/** Display name for quotes/forms/outreach (settings override Firebase profile). */
-export function getSenderDisplayName(currentUser, settings = null) {
+/**
+ * Explicit Settings "Your name" / Firebase display name (no email fallback).
+ * Prefer this for activity attribution so we don't stamp email local-parts as byName.
+ */
+export function getProfileDisplayName(currentUser, settings = null) {
   const s = settings || getSettings()
   const fromSettings = (s?.profile?.displayName || '').trim()
   if (fromSettings) return fromSettings
   const fromAuth = (currentUser?.displayName || '').trim()
   if (fromAuth) return fromAuth
+  return ''
+}
+
+/** Display name for quotes/forms/outreach/docs (settings override Firebase profile). */
+export function getSenderDisplayName(currentUser, settings = null) {
+  const fromProfile = getProfileDisplayName(currentUser, settings)
+  if (fromProfile) return fromProfile
   const email = currentUser?.email || ''
   if (email.includes('@')) return email.split('@')[0]
   return 'Your rep'
+}
+
+/** Actor object for lead/team activity stamping using Settings "Your name". */
+export function toActivityActor(currentUser, settings = null) {
+  if (!currentUser?.uid) return null
+  const displayName = getProfileDisplayName(currentUser, settings)
+  return {
+    uid: currentUser.uid,
+    email: currentUser.email || '',
+    ...(displayName ? { displayName } : {}),
+  }
 }
 
 export function getTeamForMembership(teams, teamMembership) {

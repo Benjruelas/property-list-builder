@@ -7,7 +7,7 @@ import { authenticate } from './_lib/auth.js'
 import { getAllTasks, saveAllTasks } from './_lib/taskStore.js'
 import { getAllTeams, fullTeamsIndex } from './_lib/teams.js'
 import { userHasTeamMembership } from './_lib/access.js'
-import { logTeamActivity, actorLabel, dealActivityLabel } from './_lib/activityLog.js'
+import { logTeamActivity, resolveActorLabel, dealActivityLabel } from './_lib/activityLog.js'
 import { taskVisibleToUser, canManageTask, canDeleteTask, sharedViewerMayPatch } from './_lib/taskAccess.js'
 import { paginateArray } from './_lib/pagination.js'
 import { getAllLeads } from './_lib/leadStore.js'
@@ -111,7 +111,7 @@ export default async function handler(req, res) {
       await saveAllTasks(all)
 
       if (membership) {
-        const label = actorLabel(user)
+        const label = await resolveActorLabel(user)
         await logTeamActivity({
           teamIds: [membership.id],
           actor: user,
@@ -196,7 +196,7 @@ export default async function handler(req, res) {
           teamIds: [membership.id],
           actor: user,
           type: 'task.completed',
-          summary: `${actorLabel(user)} completed task "${task.title}"`,
+          summary: `${await resolveActorLabel(user)} completed task "${task.title}"`,
           entity: { kind: 'task', taskId: task.id },
           nav: { type: 'task', taskId: task.id },
           audience: 'resource_viewers',

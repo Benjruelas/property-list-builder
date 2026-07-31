@@ -119,13 +119,29 @@ export function teamIdsFromResource(resource) {
   return []
 }
 
-/** Format actor name for summaries. */
+/** Format actor name for summaries (sync; prefers actor.displayName). */
 export function actorLabel(actor) {
   const name = (actor?.displayName || '').trim()
   if (name) return name
   const email = (actor?.email || '').trim()
   if (email) return email.split('@')[0]
   return 'Someone'
+}
+
+/**
+ * Format actor name using Settings "Your name" when available.
+ * @param {{ uid?: string, email?: string, displayName?: string }|null} actor
+ */
+export async function resolveActorLabel(actor) {
+  if (!actor) return 'Someone'
+  if (String(actor.displayName || '').trim()) return actorLabel(actor)
+  try {
+    const { enrichUserWithProfileName } = await import('./profileDisplayName.js')
+    const enriched = await enrichUserWithProfileName(actor)
+    return actorLabel(enriched)
+  } catch {
+    return actorLabel(actor)
+  }
 }
 
 /** Diff deal array changes for activity logging. */

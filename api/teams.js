@@ -487,12 +487,12 @@ export default async function handler(req, res) {
           await cancelInvitesForTeamEmail(team.id, removedMember.email)
         }
         try {
-          const { logTeamActivity, actorLabel } = await import('./_lib/activityLog.js')
+          const { logTeamActivity, resolveActorLabel } = await import('./_lib/activityLog.js')
           await logTeamActivity({
             teamIds: [team.id],
             actor: user,
             type: 'team.member_removed',
-            summary: `${actorLabel(user)} removed ${removedMember?.email || 'a member'} from team "${team.name}"`,
+            summary: `${await resolveActorLabel(user)} removed ${removedMember?.email || 'a member'} from team "${team.name}"`,
             entity: { kind: 'team', teamId: team.id },
             nav: { type: 'team', teamId: team.id },
             audience: 'resource_viewers',

@@ -184,6 +184,17 @@ describe('lead CRM helpers', () => {
       },
     )).toBe('Casey')
 
+    expect(displayActivityActorLabel(
+      { byUid: 'user_5', byName: 'Pat Morgan', byEmail: 'pat@example.com' },
+      {
+        currentUserId: 'user_1',
+        teams: [{
+          id: 't1',
+          members: [{ uid: 'user_5', email: 'pat@example.com' }],
+        }],
+      },
+    )).toBe('Pat Morgan')
+
     expect(displayActivityActorLabel({ summary: 'Called from app' }, { currentUserId: 'user_1' })).toBeNull()
   })
 

@@ -389,7 +389,9 @@ export function SettingsPanel({
             <Section panelOpen={isOpen} icon={User} title="Your profile" defaultOpen>
               <div className="settings-profile-account rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5">
                 <p className="text-sm font-semibold truncate">
-                  {(currentUser.displayName || '').trim() || currentUser.email?.split('@')[0] || 'User'}
+                  {(s.profile?.displayName || currentUser.displayName || '').trim()
+                    || currentUser.email?.split('@')[0]
+                    || 'User'}
                 </p>
                 {currentUser.email && (
                   <p className="text-xs opacity-60 truncate mt-0.5">{currentUser.email}</p>
@@ -397,7 +399,7 @@ export function SettingsPanel({
               </div>
               <SettingRow
                 label="Your name"
-                description="Used when you send quotes and forms to clients (instead of your email)"
+                description="Used for your activity, client emails, and documents (instead of your email)"
                 stacked
               >
                 <div className="flex gap-2">

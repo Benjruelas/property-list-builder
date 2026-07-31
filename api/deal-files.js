@@ -205,14 +205,14 @@ export default async function handler(req, res) {
       const url = `/api/deal-files?key=${encodeURIComponent(key)}`
 
       try {
-        const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./_lib/activityLog.js')
+        const { logTeamActivity, resolveActorLabel, teamIdsFromResource, dealActivityLabel } = await import('./_lib/activityLog.js')
         const teamIds = teamIdsFromResource(pipeline)
         if (teamIds.length > 0) {
           await logTeamActivity({
             teamIds,
             actor: user,
             type: 'deal.file_uploaded',
-            summary: `${actorLabel(user)} uploaded "${safeName}" to deal "${dealActivityLabel(deal)}"`,
+            summary: `${await resolveActorLabel(user)} uploaded "${safeName}" to deal "${dealActivityLabel(deal)}"`,
             entity: { kind: 'deal', dealId: did, pipelineId: pid, fileId },
             nav: { type: 'deal', dealId: did, pipelineId: pid },
           })
@@ -320,7 +320,7 @@ export default async function handler(req, res) {
         try {
           if (pipeline && dealIdFromKey) {
             const deal = (pipeline.deals || []).find((d) => d.id === dealIdFromKey)
-            const { logTeamActivity, actorLabel, teamIdsFromResource, dealActivityLabel } = await import('./_lib/activityLog.js')
+            const { logTeamActivity, resolveActorLabel, teamIdsFromResource, dealActivityLabel } = await import('./_lib/activityLog.js')
             const teamIds = teamIdsFromResource(pipeline)
             const fileName = key.split('/').pop()?.replace(/^\d+_[a-z0-9]+_/, '') || 'file'
             if (teamIds.length > 0 && deal) {
@@ -328,7 +328,7 @@ export default async function handler(req, res) {
                 teamIds,
                 actor: user,
                 type: 'deal.file_deleted',
-                summary: `${actorLabel(user)} deleted "${fileName}" from deal "${dealActivityLabel(deal)}"`,
+                summary: `${await resolveActorLabel(user)} deleted "${fileName}" from deal "${dealActivityLabel(deal)}"`,
                 entity: { kind: 'deal', dealId: dealIdFromKey, pipelineId: pid },
                 nav: { type: 'deal', dealId: dealIdFromKey, pipelineId: pid },
               })
