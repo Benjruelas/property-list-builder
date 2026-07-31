@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { resolveTourSelector, stepUsesActionBar } from '../welcomeTourUtils'
+import {
+  resolveTourSelector,
+  stepUsesActionBar,
+  alignSideTooltipWithSpotlightTop,
+} from '../welcomeTourUtils'
 import {
   DESKTOP_TOUR_ORDER,
   MOBILE_TOUR_ORDER,
@@ -187,7 +191,23 @@ describe('welcome tour order', () => {
     expect(TOUR_STEPS_BY_ID['address-search'].target).toBe('[data-tour="address-search"]')
     expect(TOUR_STEPS_BY_ID['parcel-action-lead'].title).toBe('Add to Pipeline')
     expect(TOUR_STEPS_BY_ID.forms.desc.toLowerCase()).toMatch(/link|pdf/)
-    expect(TOUR_STEPS_BY_ID['address-search'].desc.toLowerCase()).toMatch(/lead/)
+    expect(TOUR_STEPS_BY_ID['address-search'].desc.toLowerCase()).toMatch(/lead|address/)
+    expect(TOUR_STEPS_BY_ID.reports.title).toBe('Reports')
+    expect(TOUR_STEPS_BY_ID.teams.title).toBe('Team')
+    expect(TOUR_STEPS_BY_ID.compass.title).toBe('Compass')
+  })
+
+  it('keeps side tooltips from rising above the spotlight on top chrome steps', () => {
+    // Tall tooltip centered on a short top-chrome control would start above the focus window.
+    expect(
+      alignSideTooltipWithSpotlightTop({ top: 8, spotlightTop: 56, placedBeside: true })
+    ).toBe(56)
+    expect(
+      alignSideTooltipWithSpotlightTop({ top: 80, spotlightTop: 56, placedBeside: true })
+    ).toBe(80)
+    expect(
+      alignSideTooltipWithSpotlightTop({ top: 8, spotlightTop: 56, placedBeside: false })
+    ).toBe(8)
   })
 
   it('resolves every desktop overflow step to a menu selector when bar is empty', () => {

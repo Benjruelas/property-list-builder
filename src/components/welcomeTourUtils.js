@@ -26,3 +26,14 @@ export function stepUsesActionBar(step, isMobile, findTarget) {
   const selector = resolveTourSelector(step, isMobile, findTarget)
   return Boolean(selector?.includes('action-bar'))
 }
+
+/**
+ * Side-placed tooltips next to top map chrome can center above the spotlight
+ * and clip into the iOS status bar. Keep the tooltip top at or below the
+ * spotlight top so the card lines up with the focus window.
+ */
+export function alignSideTooltipWithSpotlightTop({ top, spotlightTop, placedBeside }) {
+  if (!placedBeside) return top
+  if (!Number.isFinite(top) || !Number.isFinite(spotlightTop)) return top
+  return Math.max(top, spotlightTop)
+}

@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { TourDemoParcelPopup } from './TourDemoParcelPopup'
-import { resolveTourSelector, stepUsesActionBar as usesActionBar } from './welcomeTourUtils'
+import {
+  resolveTourSelector,
+  stepUsesActionBar as usesActionBar,
+  alignSideTooltipWithSpotlightTop,
+} from './welcomeTourUtils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
 
 const MOBILE_MAX = 767
@@ -69,7 +73,7 @@ const TOUR_STEPS_BY_ID = {
   'address-search': {
     id: 'address-search',
     title: 'Search',
-    desc: 'Find leads, deals, tasks, and more — or search an address to jump the map.',
+    desc: 'Search leads or an address — open a lead, or jump the map to a property.',
     target: '[data-tour="address-search"]',
     tooltipPrefer: 'right',
   },
@@ -82,15 +86,15 @@ const TOUR_STEPS_BY_ID = {
   },
   compass: {
     id: 'compass',
-    title: 'Compass Mode',
-    desc: 'Keep the map facing the same direction you are while you walk.',
+    title: 'Compass',
+    desc: 'Orient the map to face the direction you\'re walking.',
     target: '[data-tour="compass"]',
     tooltipPrefer: 'left',
   },
   'photo-mode': {
     id: 'photo-mode',
     title: 'Photo Mode',
-    desc: 'Find this property and start shooting — geolocate, jump to the parcel, and open the camera.',
+    desc: 'Find this property and start shooting — geolocate, open the camera, and save photos to a lead.',
     target: '[data-tour="photo-mode"]',
     featureId: 'photos',
     tooltipPrefer: 'left',
@@ -98,14 +102,14 @@ const TOUR_STEPS_BY_ID = {
   'multi-select': {
     id: 'multi-select',
     title: 'Multi-Select',
-    desc: 'Tag a whole street at once — select multiple parcels and add them to a list.',
+    desc: 'Tag a whole street at once — select parcels, then add them to a list.',
     target: '[data-tour="multi-select"]',
     tooltipPrefer: 'right',
   },
   'path-recording': {
     id: 'path-recording',
     title: 'Path',
-    desc: 'Record your drive or walk and revisit that route anytime.',
+    desc: 'Tap to record your drive or walk, then stop to save the route.',
     target: '[data-tour="path-recording"]',
     featureId: 'paths',
     tooltipPrefer: 'right',
@@ -121,7 +125,7 @@ const TOUR_STEPS_BY_ID = {
   'parcel-action-details': {
     id: 'parcel-action-details',
     title: 'Details',
-    desc: 'Everything on one property — owner, skip trace, hail history, and more.',
+    desc: 'Open the full property sheet — owner, skip trace, hail history, and more.',
     target: '[data-tour="parcel-demo-details"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
@@ -138,7 +142,7 @@ const TOUR_STEPS_BY_ID = {
   'parcel-action-lead': {
     id: 'parcel-action-lead',
     title: 'Add to Pipeline',
-    desc: 'Turn the property into a lead and start tracking outreach from one place.',
+    desc: 'Turn the property into a lead and start tracking it in your pipeline.',
     target: '[data-tour="parcel-demo-convert-lead"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
@@ -147,7 +151,7 @@ const TOUR_STEPS_BY_ID = {
   'parcel-action-photos': {
     id: 'parcel-action-photos',
     title: 'Photos',
-    desc: 'Capture field photos for a lead, annotate them, and use them in photo reports.',
+    desc: 'Capture field photos for a lead, annotate them, and use them in reports.',
     target: '[data-tour="parcel-demo-photos"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
@@ -185,12 +189,12 @@ const TOUR_STEPS_BY_ID = {
     target: '[data-tour="action-bar-menu"]',
     mobileTarget: '[data-tour="action-bar-menu"]',
     mobileTitle: 'Menu',
-    mobileDesc: 'Activity, CRM, Documents, Tools, and settings — right from the bottom bar.',
+    mobileDesc: 'Activity, CRM, Documents, Tools, and Settings — right from the bottom bar.',
   },
   activity: {
     id: 'activity',
     title: 'Activity',
-    desc: 'Notifications and team updates — shared lists, pipes, and mentions show up here first.',
+    desc: 'Notifications and team updates — shared work and mentions show up here first.',
     target: '[data-tour="action-bar-activity"]',
     mobileTarget: '[data-tour="menu-notifications"]',
     menuRequired: true,
@@ -216,7 +220,7 @@ const TOUR_STEPS_BY_ID = {
   quotes: {
     id: 'quotes',
     title: 'Quotes',
-    desc: 'Build and send quotes from your deals — clients get a share link to review, accept, pay, and download a PDF.',
+    desc: 'Build and send quotes — clients get a share link to review, accept, pay, and download a PDF.',
     target: '[data-tour="action-bar-quotes"]',
     mobileTarget: '[data-tour="menu-quotes"]',
     menuRequired: true,
@@ -233,7 +237,7 @@ const TOUR_STEPS_BY_ID = {
   },
   reports: {
     id: 'reports',
-    title: 'Photo Reports',
+    title: 'Reports',
     desc: 'Turn lead photos into branded reports — email or text a link so clients can view and download a PDF.',
     target: '[data-tour="action-bar-reports"]',
     mobileTarget: '[data-tour="menu-reports"]',
@@ -270,15 +274,15 @@ const TOUR_STEPS_BY_ID = {
   'settings-menu': {
     id: 'settings-menu',
     title: 'Settings',
-    desc: 'Map, appearance, notifications, and data — open Settings anytime; each section expands when you tap it.',
+    desc: 'Profile, team, map, appearance, notifications, and data — each section expands when you tap it.',
     target: '[data-tour="action-bar-settings"]',
     mobileTarget: '[data-tour="menu-settings"]',
     menuRequired: true,
   },
   teams: {
     id: 'teams',
-    title: 'Team & Lead Statuses',
-    desc: 'Collaborate with your crew in Settings — create a team, invite members, and customize lead statuses for your pipeline.',
+    title: 'Team',
+    desc: 'Create a team, invite members, and customize lead statuses from team settings.',
     target: '[data-tour="settings-team-section"]',
     settingsRequired: true,
     expandSettingsSection: 'team',
@@ -597,18 +601,22 @@ export default function WelcomeTour({
     const preferRight = current?.tooltipPrefer === 'right'
     const preferLeft = current?.tooltipPrefer === 'left'
 
+    let placedBeside = false
     if (preferAbove && spaceAbove >= tt.height + TOOLTIP_GAP) {
       top = rect.top - tt.height - TOOLTIP_GAP
       left = rect.left + rect.width / 2 - tt.width / 2
     } else if (preferRight && spaceRight >= tt.width + TOOLTIP_GAP) {
       left = rect.right + TOOLTIP_GAP
       top = rect.top + rect.height / 2 - tt.height / 2
+      placedBeside = true
     } else if (preferLeft && spaceLeft >= tt.width + TOOLTIP_GAP) {
       left = rect.left - tt.width - TOOLTIP_GAP
       top = rect.top + rect.height / 2 - tt.height / 2
+      placedBeside = true
     } else if (spaceLeft >= tt.width + TOOLTIP_GAP) {
       left = rect.left - tt.width - TOOLTIP_GAP
       top = rect.top + rect.height / 2 - tt.height / 2
+      placedBeside = true
     } else if (spaceBelow >= tt.height + TOOLTIP_GAP) {
       top = rect.bottom + TOOLTIP_GAP
       left = rect.left + rect.width / 2 - tt.width / 2
@@ -618,6 +626,7 @@ export default function WelcomeTour({
     } else if (spaceRight >= tt.width + TOOLTIP_GAP) {
       left = rect.right + TOOLTIP_GAP
       top = rect.top + rect.height / 2 - tt.height / 2
+      placedBeside = true
     } else {
       top = vh / 2 - tt.height / 2
       left = vw / 2 - tt.width / 2
@@ -628,6 +637,13 @@ export default function WelcomeTour({
     if (preferAbove || selector?.includes('action-bar')) {
       top = Math.min(top, vh - actionBarReserve - tt.height - 12)
     }
+    // Top map-chrome steps on iPhone: after viewport clamp, keep the card from
+    // riding into the status bar by lining its top with the spotlight top.
+    top = alignSideTooltipWithSpotlightTop({
+      top,
+      spotlightTop: rect.top,
+      placedBeside,
+    })
     left = Math.max(12, Math.min(vw - tt.width - 12, left))
     setTooltipPos((prev) => (prev.top === top && prev.left === left ? prev : { top, left }))
   }, [rect, centered, current, current?.parcelLayout, current?.tooltipPrefer, isMobile, stepReady])
