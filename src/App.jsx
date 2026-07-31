@@ -550,6 +550,10 @@ function App() {
   } = {}) => {
     const map = mapInstanceRef.current
     if (!map || lat == null || lng == null) return
+    // Leave follow mode so GPS updates do not snap the camera back to the user
+    // after jumping to a lead/parcel (programmatic moves intentionally skip the
+    // drag/zoom handlers that normally clear follow).
+    setIsFollowing(false)
     programmaticMoveRef.current = true
     const opts = { center: [lng, lat], duration, essential: true }
     if (zoom != null) opts.zoom = zoom
@@ -779,6 +783,8 @@ function App() {
     const panTo = (loc, duration) => {
       const map = mapInstanceRef.current
       if (!map || !loc || !initialSetDoneRef.current) return
+      // Do not fight intentional camera moves (e.g. jump-to-lead flyTo).
+      if (programmaticMoveRef.current) return
       const c = map.getCenter()
       const dx = Math.abs(c.lng - loc.lng)
       const dy = Math.abs(c.lat - loc.lat)
