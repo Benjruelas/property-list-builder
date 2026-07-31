@@ -6,7 +6,7 @@ import { getModalPortalContainer } from '@/utils/modalPortal'
 
 const MOBILE_MAX = 767
 
-/** Map chrome → parcel demo → action bar / menu, top-to-bottom and left-to-right. */
+/** Map chrome → parcel demo → compact bar L→R → Menu → overflow T→B → teams. */
 const DESKTOP_TOUR_ORDER = [
   'address-search',
   'multi-select',
@@ -22,16 +22,17 @@ const DESKTOP_TOUR_ORDER = [
   'leads',
   'tasks',
   'schedule',
+  'activity',
+  'settings-menu',
+  'navigation',
   'pipes',
   'deals',
   'quotes',
   'forms',
   'reports',
   'lists',
-  'activity',
   'paths',
   'outreach',
-  'settings-menu',
   'teams',
 ]
 
@@ -67,8 +68,8 @@ const MOBILE_TOUR_ORDER = [
 const TOUR_STEPS_BY_ID = {
   'address-search': {
     id: 'address-search',
-    title: 'Address Search',
-    desc: 'Jump to any property — search an address or paste coordinates.',
+    title: 'Search',
+    desc: 'Find leads, deals, tasks, and more — or search an address to jump the map.',
     target: '.map-search-stack button',
     tooltipPrefer: 'right',
   },
@@ -136,8 +137,8 @@ const TOUR_STEPS_BY_ID = {
   },
   'parcel-action-lead': {
     id: 'parcel-action-lead',
-    title: 'Convert to Lead',
-    desc: 'Add the property to Leads and start tracking outreach from one place.',
+    title: 'Add to Pipeline',
+    desc: 'Turn the property into a lead and start tracking outreach from one place.',
     target: '[data-tour="parcel-demo-convert-lead"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
@@ -180,11 +181,11 @@ const TOUR_STEPS_BY_ID = {
   navigation: {
     id: 'navigation',
     title: 'Menu',
-    desc: 'Lists, paths, outreach, and settings — anything not on the action bar lives here.',
+    desc: 'CRM, Documents, and Tools — anything not on the action bar lives here.',
     target: '[data-tour="action-bar-menu"]',
     mobileTarget: '[data-tour="action-bar-menu"]',
     mobileTitle: 'Menu',
-    mobileDesc: 'Lists, paths, outreach, and settings — right from the bottom bar.',
+    mobileDesc: 'Activity, CRM, Documents, Tools, and settings — right from the bottom bar.',
   },
   activity: {
     id: 'activity',
@@ -224,7 +225,7 @@ const TOUR_STEPS_BY_ID = {
   forms: {
     id: 'forms',
     title: 'Forms',
-    desc: 'Fill PDFs in the field and email them when you\'re done.',
+    desc: 'Fill PDFs in the field, then send a completion link or attach the finished PDF.',
     target: '[data-tour="action-bar-forms"]',
     mobileTarget: '[data-tour="menu-forms"]',
     menuRequired: true,
@@ -467,13 +468,15 @@ export default function WelcomeTour({
       return
     }
 
-    const selector = resolveSelector(current, isMobile)
-    if (!selector) {
-      settleStep(null, true)
-      return
-    }
-
     const tryMeasure = (attempt = 0) => {
+      // Re-resolve each attempt so a late-opening menu can switch from a
+      // missing bar selector to the visible menu-* target.
+      const selector = resolveSelector(current, isMobile)
+      if (!selector) {
+        settleStep(null, true)
+        return
+      }
+
       const el = findTourTarget(selector)
       if (el) {
         settleStep(getRect(el), false)
@@ -550,9 +553,15 @@ export default function WelcomeTour({
   useEffect(() => {
     if (!currentStepId) return
     let delay = 60
-    if (current?.settingsRequired) delay = current?.expandSettingsSection ? 380 : 320
-    else if (current?.menuRequired) delay = 200
-    else if (current?.parcelDemo === 'show') delay = 150
+    if (current?.settingsRequired) {
+      // Settings panel mount + optional section expand before measure.
+      delay = current?.expandSettingsSection ? 380 : 320
+    } else if (current?.menuRequired) {
+      // Wait for overflow menu open/anchor before measuring menu-* rows.
+      delay = showMenu ? 200 : 240
+    } else if (current?.parcelDemo === 'show') {
+      delay = 150
+    }
     const timer = setTimeout(measureTarget, delay)
     return () => clearTimeout(timer)
   }, [measureTarget, step, currentStepId, current, showMenu])

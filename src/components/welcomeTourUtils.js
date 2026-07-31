@@ -13,7 +13,9 @@ export function resolveTourSelector(step, isMobile, findTarget) {
     if (findTarget(sel)) return sel
   }
 
-  if (isMobile && step.menuRequired && step.mobileTarget) {
+  // Menu items live under mobileTarget on both breakpoints when the bar
+  // control is not mounted (compact desktop bar + mobile overflow).
+  if (step.menuRequired && step.mobileTarget) {
     return step.mobileTarget
   }
 

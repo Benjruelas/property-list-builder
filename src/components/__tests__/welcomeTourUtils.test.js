@@ -6,6 +6,7 @@ import {
   TOUR_STEPS_BY_ID,
   buildVisibleSteps,
 } from '../WelcomeTour'
+import { DESKTOP_BAR_ORDER, DESKTOP_MENU_OVERFLOW } from '@/config/actionBarLayout'
 
 describe('resolveTourSelector', () => {
   it('uses bar target when it is visible', () => {
@@ -27,12 +28,31 @@ describe('resolveTourSelector', () => {
     expect(resolveTourSelector(step, false, findTarget)).toBe('[data-tour="menu-leads"]')
   })
 
-  it('returns menu target for retries when nothing is visible yet', () => {
+  it('returns menu target for retries when nothing is visible yet on mobile', () => {
     const step = {
       target: '[data-tour="menu-lists"]',
       menuRequired: true,
     }
     expect(resolveTourSelector(step, true, () => null)).toBe('[data-tour="menu-lists"]')
+  })
+
+  it('prefers menu target for desktop menuRequired steps when bar is missing', () => {
+    const step = {
+      target: '[data-tour="action-bar-pipes"]',
+      mobileTarget: '[data-tour="menu-pipes"]',
+      menuRequired: true,
+    }
+    expect(resolveTourSelector(step, false, () => null)).toBe('[data-tour="menu-pipes"]')
+  })
+
+  it('still uses visible desktop bar target when menuRequired', () => {
+    const step = {
+      target: '[data-tour="action-bar-activity"]',
+      mobileTarget: '[data-tour="menu-notifications"]',
+      menuRequired: true,
+    }
+    const findTarget = (sel) => sel === '[data-tour="action-bar-activity"]'
+    expect(resolveTourSelector(step, false, findTarget)).toBe('[data-tour="action-bar-activity"]')
   })
 })
 
@@ -63,26 +83,39 @@ describe('welcome tour order', () => {
     ])
   })
 
-  it('walks the action bar left-to-right on desktop', () => {
-    const bar = DESKTOP_TOUR_ORDER.slice(
-      DESKTOP_TOUR_ORDER.indexOf('leads'),
-      DESKTOP_TOUR_ORDER.indexOf('settings-menu') + 1
-    )
+  it('walks the compact desktop action bar left-to-right before Menu', () => {
+    const barStart = DESKTOP_TOUR_ORDER.indexOf('leads')
+    const menuIntro = DESKTOP_TOUR_ORDER.indexOf('navigation')
+    const bar = DESKTOP_TOUR_ORDER.slice(barStart, menuIntro + 1)
     expect(bar).toEqual([
       'leads',
       'tasks',
       'schedule',
+      'activity',
+      'settings-menu',
+      'navigation',
+    ])
+
+    const barIds = DESKTOP_BAR_ORDER.filter((id) => id !== 'menu')
+    expect(bar.slice(0, -1).map((id) => (id === 'settings-menu' ? 'settings' : id))).toEqual(barIds)
+  })
+
+  it('walks desktop menu overflow top-to-bottom after Menu intro', () => {
+    const overflow = DESKTOP_TOUR_ORDER.slice(
+      DESKTOP_TOUR_ORDER.indexOf('navigation') + 1,
+      DESKTOP_TOUR_ORDER.indexOf('teams')
+    )
+    expect(overflow).toEqual([
       'pipes',
       'deals',
       'quotes',
       'forms',
       'reports',
       'lists',
-      'activity',
       'paths',
       'outreach',
-      'settings-menu',
     ])
+    expect(overflow).toEqual([...DESKTOP_MENU_OVERFLOW])
   })
 
   it('walks the overflow menu top-to-bottom on mobile', () => {
@@ -108,5 +141,18 @@ describe('welcome tour order', () => {
     expect(steps.some((s) => s.id === 'deals')).toBe(false)
     expect(steps.some((s) => s.id === 'quotes')).toBe(false)
     expect(steps.some((s) => s.id === 'leads')).toBe(true)
+  })
+
+  it('keeps spotlight preferences for map chrome and parcel actions', () => {
+    expect(TOUR_STEPS_BY_ID['address-search'].tooltipPrefer).toBe('right')
+    expect(TOUR_STEPS_BY_ID['multi-select'].tooltipPrefer).toBe('right')
+    expect(TOUR_STEPS_BY_ID['path-recording'].tooltipPrefer).toBe('right')
+    expect(TOUR_STEPS_BY_ID.recenter.tooltipPrefer).toBe('left')
+    expect(TOUR_STEPS_BY_ID.compass.tooltipPrefer).toBe('left')
+    expect(TOUR_STEPS_BY_ID['photo-mode'].tooltipPrefer).toBe('left')
+    expect(TOUR_STEPS_BY_ID['parcel-action-details'].tooltipPrefer).toBe('above')
+    expect(TOUR_STEPS_BY_ID['parcel-action-list'].tooltipPrefer).toBe('above')
+    expect(TOUR_STEPS_BY_ID['parcel-action-lead'].tooltipPrefer).toBe('above')
+    expect(TOUR_STEPS_BY_ID['parcel-action-photos'].tooltipPrefer).toBe('above')
   })
 })

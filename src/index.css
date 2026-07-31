@@ -5371,7 +5371,15 @@ body:has(.app-loading-screen--video) {
   pointer-events: none;
 }
 
-/* Portaled to #modal-root so tour stacks above the desktop action bar (z ~10003). */
+/*
+ * Welcome tour stacking (inside #modal-root):
+ *   elevated action bar 10003
+ *   < tour overlay 10055 / demo parcel anchor 10055
+ *   < menu backdrop 10057 < menu dropdown 10058
+ *   < spotlight (+ 9999px box-shadow scrim) 10059
+ *   < tooltip / parcel intro stack 10060
+ *   tour shell stacking context 10100 (above bar + settings panels)
+ */
 #modal-root .tour-shell {
   position: fixed;
   inset: 0;
