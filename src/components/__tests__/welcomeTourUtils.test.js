@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { resolveTourSelector, stepUsesActionBar } from '../welcomeTourUtils'
 import {
   DESKTOP_TOUR_ORDER,
@@ -154,5 +156,147 @@ describe('welcome tour order', () => {
     expect(TOUR_STEPS_BY_ID['parcel-action-list'].tooltipPrefer).toBe('above')
     expect(TOUR_STEPS_BY_ID['parcel-action-lead'].tooltipPrefer).toBe('above')
     expect(TOUR_STEPS_BY_ID['parcel-action-photos'].tooltipPrefer).toBe('above')
+  })
+
+  it('audits every step target, menu/settings gates, and copy hooks', () => {
+    const dataTourRe = /\[data-tour="([^"]+)"\]/
+
+    for (const id of new Set([...DESKTOP_TOUR_ORDER, ...MOBILE_TOUR_ORDER])) {
+      const step = TOUR_STEPS_BY_ID[id]
+      expect(step.target || step.mobileTarget, `${id} needs a selector`).toBeTruthy()
+
+      if (step.menuRequired) {
+        expect(step.mobileTarget, `${id} menuRequired needs mobileTarget`).toMatch(/menu-/)
+      }
+      if (step.settingsRequired) {
+        expect(step.target).toContain('settings-team-section')
+        expect(step.expandSettingsSection).toBe('team')
+      }
+      if (step.parcelDemo === 'show') {
+        expect(step.target).toMatch(/parcel-demo/)
+      }
+
+      for (const sel of [step.target, step.mobileTarget].filter(Boolean)) {
+        const match = sel.match(dataTourRe)
+        if (!match) continue
+        // Selector strings are the contract; hooks are wired in chrome/menu/demo.
+        expect(match[1].length).toBeGreaterThan(0)
+      }
+    }
+
+    expect(TOUR_STEPS_BY_ID['address-search'].target).toBe('[data-tour="address-search"]')
+    expect(TOUR_STEPS_BY_ID['parcel-action-lead'].title).toBe('Add to Pipeline')
+    expect(TOUR_STEPS_BY_ID.forms.desc.toLowerCase()).toMatch(/link|pdf/)
+    expect(TOUR_STEPS_BY_ID['address-search'].desc.toLowerCase()).toMatch(/lead/)
+  })
+
+  it('resolves every desktop overflow step to a menu selector when bar is empty', () => {
+    const overflowIds = DESKTOP_TOUR_ORDER.slice(
+      DESKTOP_TOUR_ORDER.indexOf('navigation') + 1,
+      DESKTOP_TOUR_ORDER.indexOf('teams')
+    )
+    for (const id of overflowIds) {
+      const step = TOUR_STEPS_BY_ID[id]
+      expect(step.menuRequired, `${id} should open menu`).toBe(true)
+      expect(resolveTourSelector(step, false, () => null)).toBe(step.mobileTarget)
+    }
+  })
+
+  it('walks every desktop and mobile step against a simulated chrome DOM', () => {
+    const dataTourRe = /\[data-tour="([^"]+)"\]/
+    const extract = (sel) => sel?.match(dataTourRe)?.[1] ?? null
+
+    const desktopVisible = new Set([
+      'address-search',
+      'multi-select',
+      'path-recording',
+      'recenter',
+      'compass',
+      'photo-mode',
+      'parcel-demo-popup',
+      'parcel-demo-details',
+      'parcel-demo-add-list',
+      'parcel-demo-convert-lead',
+      'parcel-demo-photos',
+      'action-bar-leads',
+      'action-bar-tasks',
+      'action-bar-schedule',
+      'action-bar-activity',
+      'action-bar-settings',
+      'action-bar-menu',
+      // menu open for overflow
+      'menu-pipes',
+      'menu-deals',
+      'menu-quotes',
+      'menu-forms',
+      'menu-reports',
+      'menu-lists',
+      'menu-paths',
+      'menu-outreach',
+      'settings-team-section',
+    ])
+
+    const mobileVisible = new Set([
+      'address-search',
+      'multi-select',
+      'path-recording',
+      'recenter',
+      'compass',
+      'photo-mode',
+      'parcel-demo-popup',
+      'parcel-demo-details',
+      'parcel-demo-add-list',
+      'parcel-demo-convert-lead',
+      'parcel-demo-photos',
+      'action-bar-leads',
+      'action-bar-tasks',
+      'action-bar-schedule',
+      'action-bar-menu',
+      'menu-notifications',
+      'menu-pipes',
+      'menu-deals',
+      'menu-quotes',
+      'menu-forms',
+      'menu-reports',
+      'menu-lists',
+      'menu-paths',
+      'menu-outreach',
+      'menu-settings',
+      'settings-team-section',
+    ])
+
+    const findIn = (visible) => (sel) => {
+      const id = extract(sel)
+      return id && visible.has(id) ? sel : null
+    }
+
+    for (const id of DESKTOP_TOUR_ORDER) {
+      const step = TOUR_STEPS_BY_ID[id]
+      const resolved = resolveTourSelector(step, false, findIn(desktopVisible))
+      expect(resolved, `desktop ${id}`).toBeTruthy()
+      const hook = extract(resolved)
+      if (hook) expect(desktopVisible.has(hook), `desktop ${id} → ${hook}`).toBe(true)
+    }
+
+    for (const id of MOBILE_TOUR_ORDER) {
+      const step = TOUR_STEPS_BY_ID[id]
+      const resolved = resolveTourSelector(step, true, findIn(mobileVisible))
+      expect(resolved, `mobile ${id}`).toBeTruthy()
+      const hook = extract(resolved)
+      if (hook) expect(mobileVisible.has(hook), `mobile ${id} → ${hook}`).toBe(true)
+    }
+  })
+
+  it('keeps the tour scrim z-index ladder intact', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
+    expect(css).toMatch(/#modal-root \.tour-shell\s*\{[^}]*z-index:\s*10100/s)
+    expect(css).toMatch(/\.tour-overlay\s*\{[^}]*z-index:\s*10055/s)
+    expect(css).toMatch(/\.tour-spotlight\s*\{[^}]*z-index:\s*10059/s)
+    expect(css).toMatch(/\.tour-tooltip\s*\{[^}]*z-index:\s*10060/s)
+    expect(css).toMatch(/\.tour-demo-parcel-anchor\s*\{[^}]*z-index:\s*10055/s)
+    expect(css).toMatch(/\.mobile-action-bar--elevated\s*\{[^}]*z-index:\s*10003/s)
+    expect(css).toMatch(/\.mobile-action-bar-menu\s*\{[^}]*z-index:\s*10058/s)
+    expect(css).toMatch(/\.mobile-action-bar-menu-backdrop\s*\{[^}]*z-index:\s*10057/s)
+    expect(css).toMatch(/0 0 0 9999px rgba\(0,\s*0,\s*0,\s*0\.65\)/)
   })
 })

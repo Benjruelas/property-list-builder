@@ -70,7 +70,7 @@ const TOUR_STEPS_BY_ID = {
     id: 'address-search',
     title: 'Search',
     desc: 'Find leads, deals, tasks, and more — or search an address to jump the map.',
-    target: '.map-search-stack button',
+    target: '[data-tour="address-search"]',
     tooltipPrefer: 'right',
   },
   recenter: {

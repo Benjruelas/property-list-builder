@@ -211,6 +211,7 @@ export function AddressSearch({
     >
       {!isOpen ? (
         <Button
+          data-tour="address-search"
           onClick={() => {
             onCloseParcelPopup?.()
             handleToggle()
