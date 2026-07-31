@@ -76,13 +76,19 @@ function normalizeActivityEntry(entry, user, now) {
   }
   const summary = String(entry.summary || '').trim()
   if (!summary) throw new Error('activity summary is required')
+  const byEmail = String(user?.email || entry.byEmail || '').trim().toLowerCase() || null
+  // Prefer an explicit display name; do not persist actorLabel's email local-part fallback.
+  const byName = String(user?.displayName || entry.byName || '').trim().slice(0, 120) || null
   return {
     id: entry.id || `act_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     type,
     at: entry.at || now,
     summary: summary.slice(0, 500),
     meta: entry.meta && typeof entry.meta === 'object' ? entry.meta : {},
-    byUid: entry.byUid || user.uid,
+    // Always attribute to the authenticated user making the write.
+    byUid: user.uid,
+    ...(byEmail ? { byEmail } : {}),
+    ...(byName ? { byName } : {}),
   }
 }
 

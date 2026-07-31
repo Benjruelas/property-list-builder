@@ -20,7 +20,7 @@ import {
   updateLead,
   saveLocalLeads,
 } from '../leads'
-import { buildActivityEntry } from '../leadActivity'
+import { buildActivityEntry, displayActivityActorLabel } from '../leadActivity'
 
 function mockLocalStorage() {
   const store = new Map()
@@ -143,6 +143,48 @@ describe('lead CRM helpers', () => {
     expect(entry.summary).toBe('Called from app')
     expect(entry.meta.phone).toBe('555')
     expect(entry.id).toMatch(/^act_/)
+  })
+
+  it('buildActivityEntry stamps contacting user attribution', () => {
+    const entry = buildActivityEntry(
+      'call',
+      'Called from app',
+      { phone: '555' },
+      { uid: 'user_1', email: 'Alex@Example.com', displayName: 'Alex Rivera' },
+    )
+    expect(entry.byUid).toBe('user_1')
+    expect(entry.byEmail).toBe('alex@example.com')
+    expect(entry.byName).toBe('Alex Rivera')
+  })
+
+  it('displayActivityActorLabel resolves who contacted the lead', () => {
+    expect(displayActivityActorLabel(
+      { byUid: 'user_1', byEmail: 'alex@example.com' },
+      { currentUserId: 'user_1' },
+    )).toBe('You')
+
+    expect(displayActivityActorLabel(
+      { byUid: 'user_2', byName: 'Sam Lee', byEmail: 'sam@example.com' },
+      { currentUserId: 'user_1' },
+    )).toBe('Sam Lee')
+
+    expect(displayActivityActorLabel(
+      { byUid: 'user_3', byEmail: 'jordan@example.com' },
+      { currentUserId: 'user_1' },
+    )).toBe('Jordan')
+
+    expect(displayActivityActorLabel(
+      { byUid: 'user_4' },
+      {
+        currentUserId: 'user_1',
+        teams: [{
+          id: 't1',
+          members: [{ uid: 'user_4', email: 'casey@example.com' }],
+        }],
+      },
+    )).toBe('Casey')
+
+    expect(displayActivityActorLabel({ summary: 'Called from app' }, { currentUserId: 'user_1' })).toBeNull()
   })
 
   it('formatLastContacted handles recent dates', () => {
