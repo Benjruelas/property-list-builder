@@ -1823,19 +1823,20 @@ function App() {
     const lead = leads.find((l) => l.id === leadId)
     if (!lead) return
     try {
-      let saved = await logLeadOutreach(getToken, leadId, type, contact)
+      let saved = await logLeadOutreach(getToken, leadId, type, contact, currentUser)
       const dealCount = findDealsForLead(pipelines, leadId).length
       saved = await bumpLeadStatusOnContact(
         getToken,
         saved,
         getLeadStatus(saved, dealCount, leadStatuses),
         leadStatuses,
+        currentUser,
       )
       setLeads((prev) => prev.map((l) => (l.id === leadId ? saved : l)))
     } catch (e) {
       console.warn('Lead outreach log failed', e)
     }
-  }, [leads, pipelines, getToken, leadStatuses])
+  }, [leads, pipelines, getToken, leadStatuses, currentUser])
 
   const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks } = {}) => {
     if (!lead?.id) return

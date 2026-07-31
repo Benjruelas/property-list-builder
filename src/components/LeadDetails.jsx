@@ -49,6 +49,7 @@ import {
 import {
   setLeadStatus,
   sortActivitiesNewestFirst,
+  displayActivityActorLabel,
 } from '@/utils/leadActivity'
 import { VisibilityBadge } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
@@ -1179,6 +1180,11 @@ export function LeadDetails({
                   <ul className="space-y-2">
                     {activities.map((entry) => {
                       const Icon = ACTIVITY_ICONS[entry.type] || StickyNote
+                      const actorLabel = displayActivityActorLabel(entry, {
+                        teams,
+                        currentUserId: currentUser?.uid || currentUserId,
+                      })
+                      const when = formatActivityWhen(entry.at)
                       return (
                         <li
                           key={entry.id}
@@ -1188,7 +1194,9 @@ export function LeadDetails({
                           <Icon className="h-3.5 w-3.5 mt-0.5 opacity-50 shrink-0" />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm leading-snug break-words">{entry.summary}</p>
-                            <p className="text-[10px] text-white/40 mt-0.5">{formatActivityWhen(entry.at)}</p>
+                            <p className="text-[10px] text-white/40 mt-0.5">
+                              {[when, actorLabel ? `by ${actorLabel}` : null].filter(Boolean).join(' · ')}
+                            </p>
                           </div>
                         </li>
                       )
