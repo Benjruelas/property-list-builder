@@ -2,8 +2,13 @@
   "appId": "com.knockscout.app",
   "appName": "KnockScout",
   "webDir": "dist",
+  "backgroundColor": "#000000",
   "server": {
     "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#000000"
   },
   "plugins": {
     "Media": {

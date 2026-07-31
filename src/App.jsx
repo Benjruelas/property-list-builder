@@ -3908,7 +3908,7 @@ function App() {
       onVisibleChange={setBootSplashVisible}
     />
     <OfflineBanner />
-    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
+    <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minHeight: 'var(--vw-height, 100dvh)' }}>
       {!permissionsReady && (
         <PermissionPrompt onComplete={({ orientationGranted, locationState, position }) => {
           if (position) {
@@ -3977,7 +3977,7 @@ function App() {
               map.fire('moveend')
             }
           }}
-          style={{ width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}
+          style={{ width: '100%', height: '100%', minHeight: 'var(--vw-height, 100dvh)' }}
           mapStyle={basemapStyle}
           minZoom={1}
           maxZoom={20.5}

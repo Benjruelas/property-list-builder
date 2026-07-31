@@ -49,12 +49,14 @@
       })();
     </script>
     <style>
-      /* iOS: paint black plate immediately; avoid body strip under 100vh loaders */
+      /* iOS: paint black plate immediately; fill past the home-indicator band */
       html,
       body {
         margin: 0;
         padding: 0;
         height: 100%;
+        height: 100dvh;
+        height: -webkit-fill-available;
         min-height: 100vh;
         min-height: 100dvh;
         min-height: -webkit-fill-available;
@@ -63,6 +65,10 @@
         overflow: hidden;
       }
       #root {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: auto;
         min-height: 100dvh;
         min-height: -webkit-fill-available;
         min-height: var(--vw-height, 100dvh);
@@ -130,10 +136,17 @@
     <script>
       (function() {
         var ruler = document.createElement('div');
-        ruler.style.cssText = 'position:fixed;width:1px;height:100vh;top:0;pointer-events:none;visibility:hidden;';
+        // Prefer the largest stable viewport signal so iOS safe-area letterboxing
+        // cannot shrink --vw-height below the true screen height.
+        ruler.style.cssText = 'position:fixed;width:1px;height:100vh;height:100dvh;height:-webkit-fill-available;top:0;left:0;pointer-events:none;visibility:hidden;';
         document.body.appendChild(ruler);
         function setViewportHeight() {
-          var h = ruler.offsetHeight || window.innerHeight;
+          var h = Math.max(
+            ruler.offsetHeight || 0,
+            window.innerHeight || 0,
+            document.documentElement.clientHeight || 0
+          );
+          if (!(h > 0)) return;
           document.documentElement.style.setProperty('--vw-height', h + 'px');
         }
         setViewportHeight();
@@ -141,6 +154,7 @@
         window.visualViewport && window.visualViewport.addEventListener('resize', setViewportHeight);
         window.visualViewport && window.visualViewport.addEventListener('scroll', setViewportHeight);
         window.addEventListener('resize', setViewportHeight);
+        window.addEventListener('orientationchange', setViewportHeight);
         window.addEventListener('load', setViewportHeight);
       })();
     </script>
