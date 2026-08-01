@@ -49,6 +49,7 @@ import {
 import { getSettings, updateSettings } from '../../utils/settings'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { logLeadReportEvent } from '@/utils/leadActivity'
+import { toActivityActor } from '@/utils/profile'
 import { clearReportEditorDraft, clearReportEditorDraftForReport } from '../../utils/reportEditorDraft'
 import { ReportBuilder } from './ReportBuilder'
 import { ReportDetail } from './ReportDetail'
@@ -80,7 +81,7 @@ export function ReportsPanel({
   onLeadUpdate,
   onLeadReportSaved,
 }) {
-  const { getToken } = useAuth()
+  const { getToken, currentUser } = useAuth()
   const [tab, setTab] = useState('reports')
   const [reports, setReports] = useState([])
   const [templates, setTemplates] = useState([])
@@ -716,7 +717,13 @@ export function ReportsPanel({
           if (updated?.leadId) onLeadReportSaved?.(updated.leadId, updated)
           const lead = updated.leadId ? leads.find((l) => l.id === updated.leadId) : null
           if (lead?.id) {
-            await logLeadReportEvent(getToken, lead.id, `Photo report sent: ${updated.title}`, { reportId: updated.id })
+            await logLeadReportEvent(
+              getToken,
+              lead.id,
+              `Photo report sent: ${updated.title}`,
+              { reportId: updated.id },
+              toActivityActor(currentUser),
+            )
           }
           setSendReport(null)
         }}

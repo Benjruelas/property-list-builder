@@ -266,8 +266,8 @@ export default async function handler(req, res) {
       }
 
       try {
-        const { logTeamActivity, actorLabel } = await import('./_lib/activityLog.js')
-        const label = actorLabel(user)
+        const { logTeamActivity, resolveActorLabel } = await import('./_lib/activityLog.js')
+        const label = await resolveActorLabel(user)
         for (const tid of newlyAddedTeamShares) {
           await logTeamActivity({
             teamIds: [tid],

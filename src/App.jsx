@@ -148,6 +148,7 @@ import {
   setLeadStatus,
   logLeadDealCreated,
 } from './utils/leadActivity'
+import { toActivityActor } from './utils/profile'
 import { fetchTagRegistry, upsertTagInRegistry } from './utils/tags'
 import { buildDealFromLead, resolvePipelineId, findDealsForLead, buildDealCountByLeadId, findDealInPipelines } from './utils/deals'
 import { buildLeadParcelColors } from './utils/leadMapFeatures'
@@ -1807,30 +1808,33 @@ function App() {
   const markLeadConvertedAfterDeal = useCallback(async (lead, deal) => {
     if (!lead?.id || !deal) return
     try {
+      const actor = toActivityActor(currentUser)
       let saved = await setLeadStatus(getToken, lead.id, 'converted', {
         fromStatus: lead.status || 'new',
         leadStatuses,
+        actor,
       })
-      saved = await logLeadDealCreated(getToken, lead.id, deal.title || deal.leadAddress, deal.id)
+      saved = await logLeadDealCreated(getToken, lead.id, deal.title || deal.leadAddress, deal.id, actor)
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? saved : l)))
     } catch (e) {
       console.warn('Could not update lead CRM status after deal', e)
     }
-  }, [getToken, leadStatuses])
+  }, [getToken, leadStatuses, currentUser])
 
   const handleLogLeadOutreach = useCallback(async (leadId, type, contact) => {
     if (!leadId) return
     const lead = leads.find((l) => l.id === leadId)
     if (!lead) return
     try {
-      let saved = await logLeadOutreach(getToken, leadId, type, contact, currentUser)
+      const actor = toActivityActor(currentUser)
+      let saved = await logLeadOutreach(getToken, leadId, type, contact, actor)
       const dealCount = findDealsForLead(pipelines, leadId).length
       saved = await bumpLeadStatusOnContact(
         getToken,
         saved,
         getLeadStatus(saved, dealCount, leadStatuses),
         leadStatuses,
-        currentUser,
+        actor,
       )
       setLeads((prev) => prev.map((l) => (l.id === leadId ? saved : l)))
     } catch (e) {

@@ -14,7 +14,7 @@ import {
   publicQuoteLineItem,
   resolveAcceptedLineIds,
 } from './_lib/quoteMath.js'
-import { logTeamActivity, actorLabel } from './_lib/activityLog.js'
+import { logTeamActivity } from './_lib/activityLog.js'
 import { resolvePublicDocumentBranding } from './_lib/senderBranding.js'
 import { buildQuotePdfBuffer, safeQuotePdfFilename } from './_lib/buildQuotePdf.js'
 import { buildQuotePublicPath } from './_lib/publicLinks.js'

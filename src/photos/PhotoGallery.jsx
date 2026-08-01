@@ -21,6 +21,7 @@ import { displayLeadName, formatLeadAddress, leadNeedsPhotoHydrate } from '@/uti
 import { showToast } from '../components/ui/toast'
 import { stripClientPhotoFields, dedupePhotosById } from '@/utils/photoDisplay'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
+import { toActivityActor } from '@/utils/profile'
 import { PhotoAnnotator } from '../components/photos/PhotoAnnotator'
 import { DealPhotoAnnotator } from '../components/photos/DealPhotoAnnotator'
 import { getBlobs } from './photoStoreIdb'
@@ -476,7 +477,7 @@ export function PhotoGallery({
           onEntityUpdate={onEntityUpdate}
           onPhotosAdded={async () => {
             if (entityType === 'lead' && entity?.id) {
-              await logLeadPhotosAdded(getToken, entity.id, 1)
+              await logLeadPhotosAdded(getToken, entity.id, 1, toActivityActor(currentUser))
             }
           }}
         />

@@ -29,6 +29,12 @@ vi.mock('@/utils/photoReports', () => ({
 }))
 
 vi.mock('@/utils/leadActivity', () => ({ logLeadReportEvent: vi.fn() }))
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    currentUser: { uid: 'user_1', email: 'alex@example.com', displayName: 'Alex Rivera' },
+    getToken: async () => 'token',
+  }),
+}))
 vi.mock('@/photos/photosClient', () => ({ fetchPhotoThumbnailBlob: vi.fn() }))
 vi.mock('@/utils/clientPreview', () => ({
   fetchClientPreviewUrl: vi.fn(),

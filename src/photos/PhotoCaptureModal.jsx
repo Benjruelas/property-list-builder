@@ -6,7 +6,7 @@ import { usePhotoUpload, useEntityUploadJobs } from './PhotoUploadProvider'
 import { draftSessionId, entityKey } from './entityRef'
 import { getBlobs } from './photoStoreIdb'
 import { VISIBILITY } from '@/utils/access'
-import { getTeamForMembership } from '@/utils/profile'
+import { getTeamForMembership, getSenderDisplayName, toActivityActor } from '@/utils/profile'
 import { showToast } from '../components/ui/toast'
 import { createLead, findLeadByParcelId, formatLeadAddress, loadLocalLeads } from '@/utils/leads'
 import { FilePreviewOverlay } from '../components/ui/FilePreviewOverlay'
@@ -353,7 +353,7 @@ function PhotoCaptureModalInner({
 
   const buildMetadata = useCallback(async () => {
     const pos = await getCurrentPosition()
-    const name = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User'
+    const name = getSenderDisplayName(currentUser)
     return {
       capturedByUid: currentUser?.uid ?? null,
       capturedByName: name,
@@ -487,13 +487,13 @@ function PhotoCaptureModalInner({
       if (withFlash) triggerFlash()
       if (leadId) {
         onPhotosAdded?.()
-        void logLeadPhotosAdded(getToken, leadId, 1).catch(() => {})
+        void logLeadPhotosAdded(getToken, leadId, 1, toActivityActor(currentUser)).catch(() => {})
       }
     } catch (e) {
       photoLogError('capture.add', 'Capture failed', e)
       showToast(e.message || 'Could not add photo', 'error')
     }
-  }, [storageFull, resolveCaptureRef, buildMetadata, enqueueCapture, onPhotosAdded, getToken])
+  }, [storageFull, resolveCaptureRef, buildMetadata, enqueueCapture, onPhotosAdded, getToken, currentUser])
 
   const captureFromVideo = useCallback(() => {
     const video = videoRef.current

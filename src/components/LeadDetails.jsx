@@ -51,6 +51,7 @@ import {
   sortActivitiesNewestFirst,
   displayActivityActorLabel,
 } from '@/utils/leadActivity'
+import { toActivityActor } from '@/utils/profile'
 import { VisibilityBadge } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
 import { LeadOwnerChip } from './leads/LeadOwnerChip'
@@ -636,6 +637,7 @@ export function LeadDetails({
       const saved = await setLeadStatus(getToken, lead.id, nextStatus, {
         fromStatus: lead.status || 'new',
         leadStatuses,
+        actor: toActivityActor(currentUser || (currentUserId ? { uid: currentUserId } : null)),
       })
       onLeadUpdate?.(saved)
     } catch (e) {
