@@ -3908,7 +3908,7 @@ function App() {
       onVisibleChange={setBootSplashVisible}
     />
     <OfflineBanner />
-    <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minHeight: 'var(--vw-height, 100dvh)' }}>
+    <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}>
       {!permissionsReady && (
         <PermissionPrompt onComplete={({ orientationGranted, locationState, position }) => {
           if (position) {
@@ -3965,6 +3965,12 @@ function App() {
             mapInstanceRef.current = map
             mapRef.current = map
             setMapReady(true)
+            // iOS black-translucent: canvas can mount against a short box; remeasure
+            // after layout so tiles fill under the floating action bar.
+            requestAnimationFrame(() => {
+              map.resize()
+              window.setTimeout(() => map.resize(), 150)
+            })
             const loc = getUserLocation()
             if (loc && !initialSetDoneRef.current) {
               initialSetDoneRef.current = true
@@ -3977,7 +3983,7 @@ function App() {
               map.fire('moveend')
             }
           }}
-          style={{ width: '100%', height: '100%', minHeight: 'var(--vw-height, 100dvh)' }}
+          style={{ width: '100%', height: '100%', minHeight: 'var(--vw-height, 100vh)' }}
           mapStyle={basemapStyle}
           minZoom={1}
           maxZoom={20.5}
