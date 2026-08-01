@@ -16,6 +16,7 @@ import {
 } from './_lib/resourceContext.js'
 import { loadTagRegistry, mergeEntityTags } from './_lib/tagHelpers.js'
 import { paginateArray } from './_lib/pagination.js'
+import { normalizeParcel, parcelsToAdd } from './_lib/listParcels.js'
 
 /**
  * Vercel Serverless Function - property lists. Firebase Bearer auth.
@@ -26,21 +27,6 @@ import { paginateArray } from './_lib/pagination.js'
  *         Collaborators (email or team) may add/remove parcels only.
  * - DELETE: delete list (owner only)
  */
-
-function normalizeParcel(p) {
-  if (typeof p === 'string') return { id: p, addedAt: new Date().toISOString() }
-  if (p && p.id) {
-    return {
-      id: p.id,
-      properties: p.properties || {},
-      address: p.address || null,
-      lat: p.lat || null,
-      lng: p.lng || null,
-      addedAt: p.addedAt || new Date().toISOString()
-    }
-  }
-  return null
-}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -272,9 +258,8 @@ export default async function handler(req, res) {
         const ids = new Set(removeParcels)
         list.parcels = list.parcels.filter((p) => !ids.has(p.id || p))
       }
-      if (newParcels && Array.isArray(newParcels)) {
-        const existingIds = new Set((list.parcels || []).map((p) => p.id || p))
-        const toAdd = newParcels.map(normalizeParcel).filter((p) => p && !existingIds.has(p.id))
+      const toAdd = parcelsToAdd(list.parcels, newParcels)
+      if (toAdd.length > 0) {
         list.parcels = [...(list.parcels || []), ...toAdd]
       }
 
@@ -329,14 +314,14 @@ export default async function handler(req, res) {
             })
           }
         }
-        if (teamIds.length > 0 && newParcels && Array.isArray(newParcels) && newParcels.length > 0) {
+        if (teamIds.length > 0 && toAdd.length > 0) {
           await logTeamActivity({
             teamIds,
             actor: user,
             type: 'list.parcel_added',
-            delta: newParcels.length,
-            summaryContext: { label, listName: list.name, count: newParcels.length },
-            entity: { kind: 'list', listId: list.id, listName: list.name, count: newParcels.length },
+            delta: toAdd.length,
+            summaryContext: { label, listName: list.name, count: toAdd.length },
+            entity: { kind: 'list', listId: list.id, listName: list.name, count: toAdd.length },
             nav: { type: 'list', listId: list.id },
           })
         }
