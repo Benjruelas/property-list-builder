@@ -45,7 +45,10 @@ function buildLabelGeoJSON(features) {
     const num = extractHouseNumber(p.parceladdr)
     if (!num) continue
     seen.add(id)
-    const oo = computeOwnerOccupied(mapProperties(p)) === 'Yes' ? 1 : 0
+    // Only color OO when we also emit a house number (same feature / gate).
+    // 1 = Yes, 0 = No, -1 = unknown (no home icon).
+    const ooStatus = computeOwnerOccupied(mapProperties(p))
+    const oo = ooStatus === 'Yes' ? 1 : ooStatus === 'No' ? 0 : -1
     pts.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [cx, cy] },
@@ -78,8 +81,19 @@ function parcelLabelLayerLayout() {
     'text-field': ['get', '_label'],
     'text-font': ['Open Sans Semibold'],
     'text-size': ['interpolate', ['linear'], ['zoom'], 17, 10, 20, 14],
-    'text-anchor': 'right',
-    'text-offset': [-0.15, 0],
+    // Right-anchor when an OO icon is shown; center when occupancy is unknown.
+    'text-anchor': [
+      'case',
+      ['==', ['get', '_oo'], -1],
+      'center',
+      'right',
+    ],
+    'text-offset': [
+      'case',
+      ['==', ['get', '_oo'], -1],
+      ['literal', [0, 0]],
+      ['literal', [-0.15, 0]],
+    ],
     'text-allow-overlap': false,
     'text-ignore-placement': false,
     'text-padding': 2,
@@ -87,7 +101,9 @@ function parcelLabelLayerLayout() {
       'case',
       ['==', ['get', '_oo'], 1],
       OO_ICON_YES_ID,
+      ['==', ['get', '_oo'], 0],
       OO_ICON_NO_ID,
+      '',
     ],
     'icon-size': ['interpolate', ['linear'], ['zoom'], 17, 0.45, 20, 0.7],
     'icon-anchor': 'left',
