@@ -32,11 +32,44 @@ describe('activityCoalesceKey', () => {
     expect(activityCoalesceKey(activity())).toBe('list.parcel_added:user_a:list:list_1')
   })
 
-  it('keys lead.created as a batch key', () => {
+  it('does not coalesce lead.created (each lead is its own row)', () => {
     expect(activityCoalesceKey(activity({
       type: 'lead.created',
-      entity: { kind: 'lead', leadId: 'lead_1' },
-    }))).toBe('lead.created:user_a:lead:_batch')
+      entity: { kind: 'lead', leadId: 'lead_1', leadName: 'Acme' },
+      coalesceKey: 'lead.created:user_a:lead:_batch',
+    }))).toBeNull()
+  })
+})
+
+describe('lead.created feed rows', () => {
+  it('keeps each new lead as a separate unseen activity item', () => {
+    const items = [
+      activity({
+        id: 'act_2',
+        createdAt: '2026-07-16T12:02:00.000Z',
+        type: 'lead.created',
+        summary: 'Ben created lead Acme Roofing',
+        entity: { kind: 'lead', leadId: 'lead_2', leadName: 'Acme Roofing' },
+        nav: { type: 'lead', leadId: 'lead_2' },
+        coalesceKey: 'lead.created:user_a:lead:_batch',
+      }),
+      activity({
+        id: 'act_1',
+        createdAt: '2026-07-16T12:01:00.000Z',
+        type: 'lead.created',
+        summary: 'Ben created lead Beta LLC',
+        entity: { kind: 'lead', leadId: 'lead_1', leadName: 'Beta LLC' },
+        nav: { type: 'lead', leadId: 'lead_1' },
+        coalesceKey: 'lead.created:user_a:lead:_batch',
+      }),
+    ]
+    const collapsed = collapseFeedActivityItems(items)
+    expect(collapsed).toHaveLength(2)
+    expect(collapsed.map((item) => item.nav.leadId)).toEqual(['lead_2', 'lead_1'])
+    expect(collapsed.map((item) => item.summary)).toEqual([
+      'Ben created lead Acme Roofing',
+      'Ben created lead Beta LLC',
+    ])
   })
 })
 

@@ -6,7 +6,8 @@ export const ACTIVITY_COALESCE_SCAN_LIMIT = 30
 export const COLLAPSIBLE_ACTIVITY_TYPES = new Set([
   'list.parcel_added',
   'list.parcel_removed',
-  'lead.created',
+  // lead.created is intentionally not collapsible — each new lead is its own
+  // activity row with the lead name and nav to open that lead.
   'lead.updated',
   'deal.created',
   'deal.moved',
@@ -29,9 +30,6 @@ function entityIdForActivityCoalesce(type, entity) {
   if (type === 'lead.updated') {
     return String(entity.leadId || '')
   }
-  if (type === 'lead.created') {
-    return '_batch'
-  }
   if (type === 'deal.created' || type === 'deal.moved' || type === 'deal.removed') {
     return String(entity.pipelineId || '')
   }
@@ -49,7 +47,7 @@ function entityIdForActivityCoalesce(type, entity) {
 
 function entityKindForActivityCoalesce(type, entity) {
   if (type === 'list.parcel_added' || type === 'list.parcel_removed') return 'list'
-  if (type === 'lead.created' || type === 'lead.updated' || type === 'lead.file_uploaded') return 'lead'
+  if (type === 'lead.updated' || type === 'lead.file_uploaded') return 'lead'
   if (type === 'deal.created' || type === 'deal.moved' || type === 'deal.removed' || type === 'deal.file_uploaded') {
     return type.startsWith('deal.') && entity?.pipelineId ? 'pipeline' : 'deal'
   }
@@ -114,9 +112,7 @@ export function buildActivitySummary(type, ctx = {}) {
     case 'list.parcel_removed':
       return `${label} removed ${count} ${plural(count, 'parcel')} from "${listName}"`
     case 'lead.created':
-      return count > 1
-        ? `${label} created ${count} leads`
-        : `${label} created lead ${leadName}`
+      return `${label} created lead ${leadName}`
     case 'lead.updated':
       return count > 1
         ? `${label} updated ${count} leads`
@@ -178,6 +174,9 @@ export function buildNotificationContent(type, ctx = {}) {
 
 /** @deprecated use buildActivityCoalesceKey */
 export function activityCoalesceKey(activity) {
+  const type = String(activity?.type || '')
+  // Ignore stale stored keys for types that are no longer collapsible (e.g. lead.created).
+  if (!COLLAPSIBLE_ACTIVITY_TYPES.has(type)) return null
   if (activity?.coalesceKey) return activity.coalesceKey
   return buildActivityCoalesceKey({
     type: activity?.type,
@@ -208,11 +207,18 @@ export function generalizeActivitySummary(activity, collapseCount = 1) {
  * @returns {string|null}
  */
 export function feedItemCoalesceKey(item) {
-  if (item?.coalesceKey) return item.coalesceKey
   if (item?.source === 'notification') {
-    return buildNotificationCoalesceKey({ type: item.type, data: item.nav || item.data })
+    return buildNotificationCoalesceKey({
+      type: item.type,
+      data: item.nav || item.data,
+      coalesceKey: item.coalesceKey,
+    })
   }
   if (item?.source === 'activity') {
+    const type = String(item.type || '')
+    // Ignore stale stored keys for types that are no longer collapsible (e.g. lead.created).
+    if (!COLLAPSIBLE_ACTIVITY_TYPES.has(type)) return null
+    if (item?.coalesceKey) return item.coalesceKey
     return buildActivityCoalesceKey({
       type: item.type,
       actorUid: item.actorUid,

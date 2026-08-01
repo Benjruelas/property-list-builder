@@ -10,7 +10,7 @@ import {
 import { batchPipelineDealActivities } from '../activityLog.js'
 
 describe('feedCoalesce helpers', () => {
-  it('builds activity keys for list, lead batch, and pipeline deal events', () => {
+  it('builds activity keys for list and pipeline deal events, not lead.created', () => {
     expect(buildActivityCoalesceKey({
       type: 'list.parcel_added',
       actorUid: 'u1',
@@ -20,14 +20,22 @@ describe('feedCoalesce helpers', () => {
     expect(buildActivityCoalesceKey({
       type: 'lead.created',
       actorUid: 'u1',
-      entity: { kind: 'lead' },
-    })).toBe('lead.created:u1:lead:_batch')
+      entity: { kind: 'lead', leadId: 'lead_1' },
+    })).toBeNull()
 
     expect(buildActivityCoalesceKey({
       type: 'deal.moved',
       actorUid: 'u1',
       entity: { pipelineId: 'pipe_1' },
     })).toBe('deal.moved:u1:pipeline:pipe_1')
+  })
+
+  it('keeps lead.created summary tied to the lead name', () => {
+    expect(buildActivitySummary('lead.created', {
+      label: 'Ben',
+      leadName: 'Acme Roofing',
+      count: 5,
+    })).toBe('Ben created lead Acme Roofing')
   })
 
   it('builds pipeline-level notification keys', () => {
