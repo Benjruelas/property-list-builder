@@ -265,16 +265,18 @@
   html {
     margin: 0;
     padding: 0;
-    /* Prefer dvh / fill-available over bare % — on iOS WKWebView, height:100%
-       can resolve to the safe-area box and leave a black strip under the map. */
-    height: 100%;
+    /*
+     * iOS standalone + apple-mobile-web-app-status-bar-style=black-translucent:
+     * height:100% / -webkit-fill-available size to the safe-area box and leave a
+     * bottom dead band. 100vh fills the true screen. ce50bfe painted that band
+     * #000 (was #111), so the dead band reads as a solid black bar under the
+     * floating action bar.
+     */
+    height: 100vh;
     height: 100dvh;
-    height: -webkit-fill-available;
-    min-height: 100%;
     min-height: 100vh;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
-    min-height: var(--vw-height, 100dvh);
+    min-height: var(--vw-height, 100vh);
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     background: #000;
@@ -284,14 +286,11 @@
     background: #000;
     margin: 0;
     padding: 0;
-    height: 100%;
+    height: 100vh;
     height: 100dvh;
-    height: -webkit-fill-available;
-    min-height: 100%;
     min-height: 100vh;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
-    min-height: var(--vw-height, 100dvh);
+    min-height: var(--vw-height, 100vh);
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -301,16 +300,14 @@
   }
   #root {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
     width: 100%;
-    /* inset:0 stretches the box. Do NOT also set height:100% — that % can win
-       over bottom:0 on iOS and clip the map above the home-indicator band. */
-    height: auto;
-    min-height: 100%;
+    height: 100vh;
+    height: 100dvh;
     min-height: 100vh;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
-    min-height: var(--vw-height, 100dvh);
+    min-height: var(--vw-height, 100vh);
     background: #000;
     z-index: 0;
   }
