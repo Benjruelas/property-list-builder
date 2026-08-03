@@ -189,7 +189,8 @@ describe('welcome tour order', () => {
     }
 
     expect(TOUR_STEPS_BY_ID['address-search'].target).toBe('[data-tour="address-search"]')
-    expect(TOUR_STEPS_BY_ID['parcel-action-lead'].title).toBe('Add to Pipeline')
+    expect(TOUR_STEPS_BY_ID['parcel-action-lead'].title).toBe('Create Lead')
+    expect(TOUR_STEPS_BY_ID['parcel-action-lead'].desc.toLowerCase()).toMatch(/create.*lead|lead.*prefill/)
     expect(TOUR_STEPS_BY_ID.forms.desc.toLowerCase()).toMatch(/link|pdf/)
     expect(TOUR_STEPS_BY_ID['address-search'].desc.toLowerCase()).toMatch(/lead|address/)
     expect(TOUR_STEPS_BY_ID.reports.title).toBe('Reports')

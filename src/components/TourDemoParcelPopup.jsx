@@ -63,7 +63,7 @@ export function TourDemoParcelPopup() {
           tabIndex={-1}
           data-tour="parcel-demo-convert-lead"
           className="parcel-popup-card__btn-pipeline p-2 rounded-lg transition-colors pointer-events-none"
-          title="Add to Pipeline"
+          title="Create Lead"
         >
           <UserPlus size={13} />
         </button>

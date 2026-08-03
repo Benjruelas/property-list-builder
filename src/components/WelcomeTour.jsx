@@ -141,8 +141,8 @@ const TOUR_STEPS_BY_ID = {
   },
   'parcel-action-lead': {
     id: 'parcel-action-lead',
-    title: 'Add to Pipeline',
-    desc: 'Turn the property into a lead and start tracking it in your pipeline.',
+    title: 'Create Lead',
+    desc: 'Create a lead for this property — owner and address are prefilled for you.',
     target: '[data-tour="parcel-demo-convert-lead"]',
     parcelDemo: 'show',
     tooltipPrefer: 'above',
@@ -160,7 +160,7 @@ const TOUR_STEPS_BY_ID = {
   pipes: {
     id: 'pipes',
     title: 'Pipes',
-    desc: 'See every deal by stage — drag jobs through your pipeline.',
+    desc: 'Track momentum visually — leads and deals sorted by stage, drag to move them forward.',
     target: '[data-tour="action-bar-pipes"]',
     mobileTarget: '[data-tour="menu-pipes"]',
     menuRequired: true,
@@ -169,7 +169,7 @@ const TOUR_STEPS_BY_ID = {
   tasks: {
     id: 'tasks',
     title: 'Tasks',
-    desc: 'Never miss a follow-up — all tasks for your leads and deals.',
+    desc: 'See what\'s due next — tasks on leads, deals, and anything else you\'re tracking, sorted so nothing slips.',
     target: '[data-tour="action-bar-tasks"]',
     mobileTarget: '[data-tour="action-bar-tasks"]',
     featureId: 'tasks',
@@ -203,7 +203,7 @@ const TOUR_STEPS_BY_ID = {
   leads: {
     id: 'leads',
     title: 'Leads',
-    desc: 'Every property you\'re actively working, in one place.',
+    desc: 'See every lead you\'re working — check status, log updates, or fly back to the property on the map.',
     target: '[data-tour="action-bar-leads"]',
     mobileTarget: '[data-tour="action-bar-leads"]',
     featureId: 'leads',
@@ -211,7 +211,7 @@ const TOUR_STEPS_BY_ID = {
   deals: {
     id: 'deals',
     title: 'Deals',
-    desc: 'Follow jobs from first contact through close.',
+    desc: 'Business with a lead lives here — open a deal to manage stage, finances, quotes, and tasks on your pipe.',
     target: '[data-tour="action-bar-deals"]',
     mobileTarget: '[data-tour="menu-deals"]',
     menuRequired: true,
@@ -229,7 +229,7 @@ const TOUR_STEPS_BY_ID = {
   forms: {
     id: 'forms',
     title: 'Forms',
-    desc: 'Fill PDFs in the field, then send a completion link or attach the finished PDF.',
+    desc: 'Fill out forms, then finish in person or send a link. Both of you get a copy.',
     target: '[data-tour="action-bar-forms"]',
     mobileTarget: '[data-tour="menu-forms"]',
     menuRequired: true,
