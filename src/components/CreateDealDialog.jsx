@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Briefcase, Loader2 } from 'lucide-react'
+import { Briefcase, FileText, Loader2, Trash2, Upload } from 'lucide-react'
 import { Button } from './ui/button'
 import { PanelHeader } from './ui/panel-header'
 import { PipelineDropdown } from './PipelineDropdown'
@@ -7,6 +7,22 @@ import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dia
 import { LeadPickerField } from './pickers/LeadPickerField'
 import { CreateDealFinancesEditor, mapPrefillFinanceRows, financeRowsForSubmit } from './CreateDealFinancesEditor'
 import { CreateDealTasksEditor, mapPrefillTaskRows, taskRowsForSubmit } from './CreateDealTasksEditor'
+import { StorageUsageBar } from './ui/StorageUsageBar'
+import { showToast } from './ui/toast'
+import {
+  DEAL_STORAGE_LIMIT_BYTES,
+  MAX_SINGLE_UPLOAD_BYTES,
+  formatStorageBytes,
+  sumDealFileBytes,
+} from '../utils/dealFiles'
+import { entityStorageError } from '../utils/uploadLimits'
+
+function makePendingFile(file) {
+  return {
+    id: `pending_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    file,
+  }
+}
 
 export function CreateDealDialog({
   open,
@@ -27,6 +43,8 @@ export function CreateDealDialog({
   const [payments, setPayments] = useState([])
   const [costs, setCosts] = useState([])
   const [tasks, setTasks] = useState([])
+  const [pendingFiles, setPendingFiles] = useState([])
+  const fileInputRef = useRef(null)
 
   const apiMode = pipelines.length > 0
   const showPipelinePicker = pipelines.length > 1
@@ -58,7 +76,34 @@ export function CreateDealDialog({
     setPayments(mapPrefillFinanceRows(prefill?.payments))
     setCosts(mapPrefillFinanceRows(prefill?.costs))
     setTasks(mapPrefillTaskRows(prefill?.tasks))
+    setPendingFiles([])
   }, [open, prefill, leads, pipelines])
+
+  const pendingFileRecords = useMemo(
+    () => pendingFiles.map((p) => ({ size: p.file.size })),
+    [pendingFiles]
+  )
+  const filesUsed = sumDealFileBytes(pendingFileRecords)
+  const storageFull = filesUsed >= DEAL_STORAGE_LIMIT_BYTES
+
+  const handleFilePick = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > MAX_SINGLE_UPLOAD_BYTES) {
+      showToast(`Each upload must be ${formatStorageBytes(MAX_SINGLE_UPLOAD_BYTES)} or smaller`, 'error')
+      return
+    }
+    if (filesUsed + file.size > DEAL_STORAGE_LIMIT_BYTES) {
+      showToast(entityStorageError('deal', DEAL_STORAGE_LIMIT_BYTES), 'error')
+      return
+    }
+    setPendingFiles((prev) => [...prev, makePendingFile(file)])
+  }
+
+  const removePendingFile = (id) => {
+    setPendingFiles((prev) => prev.filter((p) => p.id !== id))
+  }
 
   const handleSubmit = (e) => {
     e?.preventDefault?.()
@@ -74,6 +119,7 @@ export function CreateDealDialog({
       payments: financeRowsForSubmit(payments),
       costs: financeRowsForSubmit(costs),
       tasks: taskRowsForSubmit(tasks),
+      pendingFiles: pendingFiles.map((p) => p.file),
     })
   }
 
@@ -188,6 +234,63 @@ export function CreateDealDialog({
               pipeline={selectedPipeline}
               teams={teams}
             />
+
+            {apiMode && (
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="text-xs font-medium opacity-90">Files</label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFilePick}
+                    disabled={saving || storageFull}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    disabled={saving || storageFull}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5 mr-1" /> Add file
+                  </Button>
+                </div>
+                <StorageUsageBar
+                  usedBytes={filesUsed}
+                  limitBytes={DEAL_STORAGE_LIMIT_BYTES}
+                  className="mb-2"
+                  label="Deal storage"
+                />
+                <ul className="space-y-1.5">
+                  {pendingFiles.length === 0 && (
+                    <li className="text-xs text-white/40 py-1">No files</li>
+                  )}
+                  {pendingFiles.map((p) => (
+                    <li key={p.id}>
+                      <div className="flex items-center gap-2 rounded-lg px-3 py-2 bg-white/5 border border-white/10">
+                        <FileText className="h-4 w-4 shrink-0 opacity-50" />
+                        <span className="flex-1 text-sm truncate">{p.file.name}</span>
+                        <span className="text-[10px] text-white/40 shrink-0">
+                          {(p.file.size / 1024).toFixed(0)} KB
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 p-1 rounded opacity-40 hover:opacity-80"
+                          onClick={() => removePendingFile(p.id)}
+                          disabled={saving}
+                          title="Remove"
+                          aria-label={`Remove ${p.file.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-3 flex-shrink-0 border-t border-white/10 mt-3">

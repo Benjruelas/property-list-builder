@@ -311,6 +311,82 @@ export function publicDocumentStyles(pageSize = QUOTE_PDF_VIEWPORT) {
       font-size: 0.75rem;
       color: #9ca3af;
     }
+    .google-reviews {
+      margin: 0 0 1.5rem;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      padding: 1rem;
+    }
+    .google-reviews__header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .google-reviews__mark {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .google-reviews__label {
+      margin: 0;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+    .google-reviews__rating-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.15rem;
+      flex-wrap: wrap;
+    }
+    .google-reviews__avg {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #111827;
+    }
+    .google-reviews__count {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+    .google-reviews__stars {
+      color: #fbbf24;
+      letter-spacing: 0.05em;
+      font-size: 0.8rem;
+      line-height: 1;
+    }
+    .google-reviews__stars span {
+      color: #d1d5db;
+    }
+    .google-reviews__stars span.filled {
+      color: #fbbf24;
+    }
+    .google-reviews__item {
+      border-top: 1px solid #f3f4f6;
+      padding-top: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .google-reviews__item:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+      margin-top: 0;
+    }
+    .google-reviews__name {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #111827;
+      margin: 0 0 0.15rem;
+    }
+    .google-reviews__comment {
+      margin: 0.25rem 0 0;
+      font-size: 0.875rem;
+      color: #4b5563;
+      line-height: 1.45;
+    }
     /* Discrete print sheets: page 1 top-aligned, later pages vertically centered. */
     .pdf-shell {
       width: ${width}px;
@@ -373,6 +449,56 @@ function brandHeaderHtml(branding) {
         </div>
       </div>
     </header>
+  `
+}
+
+function starsHtml(rating) {
+  const value = Math.max(0, Math.min(5, Number(rating) || 0))
+  let html = ''
+  for (let i = 1; i <= 5; i += 1) {
+    html += `<span class="${value >= i - 0.25 ? 'filled' : ''}">★</span>`
+  }
+  return `<span class="google-reviews__stars" aria-label="${value} out of 5 stars">${html}</span>`
+}
+
+const GOOGLE_MARK_SVG = `<svg class="google-reviews__mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>`
+
+export function googleReviewsHtml(googleReviews) {
+  const featured = Array.isArray(googleReviews?.featuredReviews)
+    ? googleReviews.featuredReviews.slice(0, 3)
+    : []
+  if (!featured.length) return ''
+
+  const averageRating = Number(googleReviews.averageRating) || 0
+  const totalReviewCount = Number(googleReviews.totalReviewCount) || 0
+  const items = featured.map((review) => {
+    const name = escapeHtml(review.reviewerName || 'Google user')
+    const comment = (review.comment || '').trim()
+    return `
+      <div class="google-reviews__item">
+        <p class="google-reviews__name">${name} ${starsHtml(review.starRating)}</p>
+        ${comment ? `<p class="google-reviews__comment">${escapeHtml(comment)}</p>` : ''}
+      </div>
+    `
+  }).join('')
+
+  return `
+    <section class="google-reviews" data-pdf-block aria-label="Google reviews">
+      <div class="google-reviews__header">
+        ${GOOGLE_MARK_SVG}
+        <div>
+          <p class="google-reviews__label">Google reviews</p>
+          <div class="google-reviews__rating-row">
+            <span class="google-reviews__avg">${escapeHtml(averageRating.toFixed(1))}</span>
+            ${starsHtml(averageRating)}
+            ${totalReviewCount > 0
+              ? `<span class="google-reviews__count">(${totalReviewCount} review${totalReviewCount === 1 ? '' : 's'})</span>`
+              : ''}
+          </div>
+        </div>
+      </div>
+      ${items}
+    </section>
   `
 }
 
@@ -498,6 +624,8 @@ export function buildQuoteDocumentHtml({ quote, invite, branding }) {
         <h2>Terms</h2>
         <p>${nl2br(quote.terms.trim())}</p>
       </div>` : ''}
+
+      ${googleReviewsHtml(pdfBranding?.googleReviews || branding?.googleReviews)}
     </div>
   `
 
@@ -568,6 +696,7 @@ export function buildReportDocumentHtml({ report, lead, branding, message = '', 
       <div class="sections">
         ${sectionHtml}
       </div>
+      ${googleReviewsHtml(branding?.googleReviews)}
     </div>
   `
 

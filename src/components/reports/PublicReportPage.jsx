@@ -5,6 +5,7 @@ import { resolveApiUrl } from '@/utils/apiBase'
 import { PublicFormBrandBar } from '../forms/PublicFormBrand'
 import { PublicPdfDownload } from '../shared/PublicPdfDownload'
 import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
+import { GoogleReviewsBlock } from '../shared/GoogleReviewsBlock'
 import { cn } from '@/lib/utils'
 import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
 import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
@@ -176,6 +177,8 @@ export function PublicReportPage({ token }) {
             )}
           </section>
         ))}
+
+        <GoogleReviewsBlock googleReviews={branding?.googleReviews} className="mb-6" />
 
         <PublicPdfDownload
           url={data?.pdfDownloadUrl}

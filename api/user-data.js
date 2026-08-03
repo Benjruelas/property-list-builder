@@ -18,6 +18,16 @@ import { normalizeLeadStatuses } from './_lib/leadStatuses.js'
 import { normalizeDealStatuses } from './_lib/dealStatuses.js'
 import { mutateLeads } from './_lib/leadStore.js'
 import { mutatePipelines } from './_lib/pipelineStoreFull.js'
+import { toPublicGoogleBusinessProfile } from './_lib/googleBusinessProfile.js'
+
+function stripSecretsForClient(data) {
+  if (!data || typeof data !== 'object') return data || {}
+  const out = { ...data }
+  if (out.googleBusinessProfile) {
+    out.googleBusinessProfile = toPublicGoogleBusinessProfile(out.googleBusinessProfile)
+  }
+  return out
+}
 
 function kvKey(uid) {
   return `user_data_${uid}`
@@ -66,7 +76,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const data = await getUserData(user.uid)
       const version = Number(data?.__version) || 0
-      return res.status(200).json({ data: data || {}, version })
+      return res.status(200).json({ data: stripSecretsForClient(data || {}), version })
     }
 
     if (req.method === 'PATCH') {
@@ -131,7 +141,7 @@ export default async function handler(req, res) {
         return res.status(409).json({
           error: 'Version conflict',
           version: result.currentVersion,
-          data: result.data,
+          data: stripSecretsForClient(result.data),
         })
       }
 
@@ -165,7 +175,10 @@ export default async function handler(req, res) {
         }))
       }
 
-      return res.status(200).json({ data: result.data, version: result.currentVersion })
+      return res.status(200).json({
+        data: stripSecretsForClient(result.data),
+        version: result.currentVersion,
+      })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

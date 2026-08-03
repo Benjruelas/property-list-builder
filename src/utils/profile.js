@@ -28,6 +28,24 @@ export function getTeamEmailBranding(team) {
   }
 }
 
+/** Featured Google reviews payload for quote/report previews (from public team profile). */
+export function getGoogleReviewsFromProfile(profile) {
+  const gbp = profile?.googleBusinessProfile || profile
+  if (!gbp?.connected) return null
+  const reviews = Array.isArray(gbp.reviews) ? gbp.reviews : (gbp.reviewsCache || [])
+  const byId = Object.fromEntries(reviews.map((r) => [r.id, r]).filter(([id]) => id))
+  const featuredReviews = (gbp.featuredReviewIds || [])
+    .map((id) => byId[id])
+    .filter(Boolean)
+    .slice(0, 3)
+  if (!featuredReviews.length) return null
+  return {
+    averageRating: Number(gbp.averageRating) || 0,
+    totalReviewCount: Number(gbp.totalReviewCount) || 0,
+    featuredReviews,
+  }
+}
+
 export function getCompanyNameForSends(teams, teamMembership, settings = null) {
   const team = getTeamForMembership(teams, teamMembership)
   const fromTeam = getTeamEmailBranding(team).businessName

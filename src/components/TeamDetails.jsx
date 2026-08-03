@@ -23,6 +23,7 @@ import {
 } from '@/utils/teams'
 import { TeamMemberFeaturesDialog } from './TeamMemberFeaturesDialog'
 import { TeamEmailBrandingSection } from './TeamEmailBrandingSection'
+import { GoogleBusinessProfileSection } from './settings/GoogleBusinessProfileSection'
 import { LeadStatusesSettingsContent } from './settings/LeadStatusesSettingsSection'
 import { DealStatusesSettingsContent } from './settings/DealStatusesSettingsSection'
 
@@ -348,6 +349,17 @@ export function TeamDetails({
               getToken={getToken}
               onSaved={refresh}
               disabled={busy}
+            />
+          )}
+
+          {isAdmin && (
+            <GoogleBusinessProfileSection
+              getToken={getToken}
+              scope="team"
+              teamId={team.id}
+              canEdit
+              disabled={busy}
+              onChanged={refresh}
             />
           )}
 

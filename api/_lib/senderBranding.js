@@ -3,6 +3,7 @@
  */
 
 import { getAllTeams, loadTeamsForUser } from './teams.js'
+import { resolveGbpForBranding } from './googleBusinessProfile.js'
 
 let kv = null
 let kvAvailable = false
@@ -93,6 +94,7 @@ export async function resolveSenderBranding(user) {
   const team = userTeams[0]
   const eb = normalizeEmailBranding(team?.emailBranding || {})
   const businessName = eb.businessName || (team?.name || '').trim() || 'KnockScout'
+  const googleReviews = await resolveGbpForBranding(user)
 
   return {
     senderName,
@@ -102,6 +104,7 @@ export async function resolveSenderBranding(user) {
     companyWebsite: eb.companyWebsite,
     companyEmail: eb.companyEmail,
     logoBase64: eb.logoBase64,
+    googleReviews,
   }
 }
 
@@ -136,6 +139,7 @@ export async function resolveSendAsSender({ actingUser, senderUid = null }) {
           companyWebsite: '',
           companyEmail: '',
           logoBase64: '',
+          googleReviews: { averageRating: 0, totalReviewCount: 0, featuredReviews: [] },
         },
       }
     }
@@ -196,6 +200,11 @@ export async function resolvePublicDocumentBranding({
       logoBase64: branding.logoBase64,
       senderName: sentByName || branding.senderName,
       senderEmail: sentByEmail || branding.senderEmail || ownerEmail || '',
+      googleReviews: branding.googleReviews || {
+        averageRating: 0,
+        totalReviewCount: 0,
+        featuredReviews: [],
+      },
     }
   } catch {
     return null

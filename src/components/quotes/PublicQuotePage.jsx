@@ -6,6 +6,7 @@ import { PublicFormBrandBar } from '../forms/PublicFormBrand'
 import { PublicPdfDownload } from '../shared/PublicPdfDownload'
 import { QuoteBrandHeader } from './QuoteBrandHeader'
 import { QuoteCheckToggle } from './QuoteCheckToggle'
+import { GoogleReviewsBlock } from '../shared/GoogleReviewsBlock'
 import { cn } from '@/lib/utils'
 import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
 import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
@@ -265,6 +266,8 @@ export function PublicQuotePage({ token }) {
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.terms.trim()}</p>
           </div>
         )}
+
+        <GoogleReviewsBlock googleReviews={branding?.googleReviews} className="mb-6" />
 
         <PublicPdfDownload
           url={data.pdfDownloadUrl}

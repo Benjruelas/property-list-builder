@@ -9,7 +9,13 @@ import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
 import { showToast } from '../ui/toast'
 import { showConfirm } from '../ui/confirm-dialog'
-import { getTeamEmailBranding, getTeamForMembership, getSenderDisplayName } from '@/utils/profile'
+import {
+  getTeamEmailBranding,
+  getTeamForMembership,
+  getSenderDisplayName,
+  getGoogleReviewsFromProfile,
+} from '@/utils/profile'
+import { GoogleReviewsBlock } from '../shared/GoogleReviewsBlock'
 import { useAuth } from '@/contexts/AuthContext'
 import { getAllTeamMembers } from '@/utils/teamTaskUtils'
 import { memberPrimaryLabel } from '@/components/pickers/entityPickerShared'
@@ -60,6 +66,7 @@ export function ReportDetail({
 
   const team = getTeamForMembership(teams, teamMembership)
   const teamBranding = getTeamEmailBranding(team)
+  const googleReviews = getGoogleReviewsFromProfile(team)
 
   const resolveDisplaySender = useCallback(() => {
     if (!report) {
@@ -224,6 +231,8 @@ export function ReportDetail({
               senderName={senderName}
               senderEmail={senderEmail}
             />
+
+            <GoogleReviewsBlock googleReviews={googleReviews} />
 
             <SendAsField
               label="Shown to client as"

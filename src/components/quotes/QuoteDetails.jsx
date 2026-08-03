@@ -7,7 +7,13 @@ import { formatQuoteMoney, isQuoteEditable } from '@/utils/quoteMath'
 import { displayLeadName } from '@/utils/leads'
 import { showConfirm } from '../ui/confirm-dialog'
 import { QuoteBrandHeader } from './QuoteBrandHeader'
-import { getTeamEmailBranding, getTeamForMembership, getSenderDisplayName } from '@/utils/profile'
+import { GoogleReviewsBlock } from '../shared/GoogleReviewsBlock'
+import {
+  getTeamEmailBranding,
+  getTeamForMembership,
+  getSenderDisplayName,
+  getGoogleReviewsFromProfile,
+} from '@/utils/profile'
 import { useAuth } from '@/contexts/AuthContext'
 import { ViewAsClientButton } from '../ViewAsClientButton'
 import { PanelActionButton } from '../ui/panel-action-button'
@@ -42,6 +48,7 @@ export function QuoteDetails({
 
   const team = getTeamForMembership(teams, teamMembership)
   const teamBranding = getTeamEmailBranding(team)
+  const googleReviews = getGoogleReviewsFromProfile(team)
   const senderName = quote.lastSentByName || quote.createdByName
     || (quote.ownerId === currentUser?.uid ? getSenderDisplayName(currentUser) : '')
     || (quote.ownerEmail || '').split('@')[0]
@@ -89,6 +96,8 @@ export function QuoteDetails({
             senderName={senderName}
             senderEmail={senderEmail}
           />
+
+          <GoogleReviewsBlock googleReviews={googleReviews} />
 
           <div className="text-sm space-y-1 opacity-90">
             {leadName && <p><span className="opacity-60">Lead:</span> {leadName}</p>}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users, User, Palette } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users, User, Palette, Building2 } from 'lucide-react'
 import { UI_THEME_OPTIONS, getUiThemeFromSettings } from '../utils/uiTheme'
 import { Input } from './ui/input'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
@@ -14,6 +14,7 @@ import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotificatio
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { TeamSettingsSection } from './TeamSettingsSection'
+import { GoogleBusinessProfileSection } from './settings/GoogleBusinessProfileSection'
 
 const MAP_STYLES = [
   { value: 'satellite', label: 'Satellite' },
@@ -429,6 +430,17 @@ export function SettingsPanel({
               defaultOpen={settingsTeamSectionOpen}
               settingsPanelOpen={isOpen}
             />
+          )}
+
+          {currentUser && getToken && !(teams?.length > 0) && !teamMembership && (
+            <Section panelOpen={isOpen} icon={Building2} title="Google reviews" defaultOpen>
+              <GoogleBusinessProfileSection
+                getToken={getToken}
+                scope="user"
+                canEdit
+                className="mb-0 border-0 bg-transparent p-0"
+              />
+            </Section>
           )}
 
           <Section panelOpen={isOpen} icon={Palette} title="Appearance">

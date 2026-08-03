@@ -11,6 +11,10 @@
 import { authenticate } from './_lib/auth.js'
 import { normalizeEmailBranding } from './_lib/senderBranding.js'
 import {
+  toPublicGoogleBusinessProfile,
+  clearPersonalGbpIfAny,
+} from './_lib/googleBusinessProfile.js'
+import {
   getAllTeams,
   saveAllTeams,
   loadTeamsForUser,
@@ -148,6 +152,7 @@ function normalizeTeamForWire(team, viewerUid) {
     allowExternalSharing: team.allowExternalSharing === true,
     membersCanSeeDealAmounts: team.membersCanSeeDealAmounts !== false,
     emailBranding: normalizeEmailBranding(team.emailBranding || {}),
+    googleBusinessProfile: toPublicGoogleBusinessProfile(team.googleBusinessProfile),
     leadStatuses: team.leadStatuses?.length ? normalizeLeadStatuses(team.leadStatuses) : null,
     dealStatuses: team.dealStatuses?.length ? normalizeDealStatuses(team.dealStatuses) : null,
     teamPipelineId: team.teamPipelineId || null,
@@ -253,6 +258,11 @@ export default async function handler(req, res) {
 
       all.push(newTeam)
       await saveAllTeams(all)
+      try {
+        await clearPersonalGbpIfAny(user.uid)
+      } catch (e) {
+        console.warn('clearPersonalGbpIfAny failed', e.message)
+      }
       return res.status(201).json({ team: normalizeTeamForWire(newTeam, user.uid) })
     }
 
@@ -291,6 +301,11 @@ export default async function handler(req, res) {
         all[idx] = team
         await saveAllTeams(all)
         await updateInviteStatus(inv.id, 'accepted')
+        try {
+          await clearPersonalGbpIfAny(user.uid)
+        } catch (e) {
+          console.warn('clearPersonalGbpIfAny failed', e.message)
+        }
         return res.status(200).json({ team: normalizeTeamForWire(team, user.uid) })
       }
 

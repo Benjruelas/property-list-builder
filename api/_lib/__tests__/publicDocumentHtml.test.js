@@ -3,6 +3,7 @@ import {
   buildQuoteDocumentHtml,
   buildReportDocumentHtml,
   publicDocumentStyles,
+  googleReviewsHtml,
 } from '../publicDocumentHtml.js'
 import { resolveReportPhotoImageKey } from '../buildReportPdf.js'
 import { reportPdfContentChanged, isReportPdfStale } from '../reportPdfMeta.js'
@@ -86,6 +87,47 @@ describe('publicDocumentHtml', () => {
     // Required-only total (optional not selected yet).
     expect(html).toMatch(/Total[\s\S]*\$1,296\.00/)
     expect(html).toContain('size: 544px 860px')
+  })
+
+  it('renders featured Google reviews block in quote HTML', () => {
+    const block = googleReviewsHtml({
+      averageRating: 4.8,
+      totalReviewCount: 42,
+      featuredReviews: [
+        { id: '1', reviewerName: 'Pat', starRating: 5, comment: 'Excellent work' },
+        { id: '2', reviewerName: 'Sam', starRating: 4, comment: 'Solid crew' },
+      ],
+    })
+    expect(block).toContain('Google reviews')
+    expect(block).toContain('4.8')
+    expect(block).toContain('Excellent work')
+    expect(block).toContain('Pat')
+
+    const html = buildQuoteDocumentHtml({
+      quote: {
+        title: 'Quote',
+        status: 'sent',
+        taxRate: 0,
+        lineItems: [{ id: 'a', name: 'Work', amount: 100, quantity: 1, isOptional: false }],
+      },
+      branding: {
+        businessName: 'Acme',
+        googleReviews: {
+          averageRating: 5,
+          totalReviewCount: 3,
+          featuredReviews: [
+            { id: 'r1', reviewerName: 'Lee', starRating: 5, comment: 'Top notch' },
+          ],
+        },
+      },
+    })
+    expect(html).toContain('google-reviews')
+    expect(html).toContain('Top notch')
+  })
+
+  it('omits Google reviews block when none featured', () => {
+    expect(googleReviewsHtml(null)).toBe('')
+    expect(googleReviewsHtml({ featuredReviews: [] })).toBe('')
   })
 
   it('builds accepted quote with selected add-ons only', () => {

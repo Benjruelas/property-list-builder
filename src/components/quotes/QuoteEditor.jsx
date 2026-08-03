@@ -12,6 +12,7 @@ import { QuoteLineItemsEditor } from './QuoteLineItemsEditor'
 import { computeQuoteTotals, defaultValidUntil, createQuoteLineItem } from '@/utils/quoteMath'
 import { createQuote, updateQuote, createQuoteTemplate } from '@/utils/quotes'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { findDealsForLead } from '@/utils/deals'
 import { cn } from '@/lib/utils'
 
 const FIELD =
@@ -172,17 +173,29 @@ export function QuoteEditor({
     setValidUntilExpanded(true)
   }, [open, quote, template])
 
+  const dealsForLead = useMemo(
+    () => (leadId ? findDealsForLead(pipelines, leadId) : []),
+    [pipelines, leadId]
+  )
+  const pipelinesWithLeadDeals = useMemo(() => {
+    if (!leadId) return []
+    const ids = new Set(dealsForLead.map((d) => d.__pipelineId))
+    return (pipelines || []).filter((p) => ids.has(p.id))
+  }, [pipelines, leadId, dealsForLead])
+  const showLinkToDeal = !!leadId && (dealsForLead.length > 0 || !!dealId)
+
   const selectedPipeline = pipelines.find((p) => p.id === pipelineId)
   const selectedDeal = selectedPipeline?.deals?.find((d) => d.id === dealId)
   const dealOptions = useMemo(() => {
     const seen = new Set()
     return (selectedPipeline?.deals || []).reduce((acc, d) => {
       if (!d?.id || seen.has(d.id)) return acc
+      if (leadId && d.leadId !== leadId) return acc
       seen.add(d.id)
       acc.push({ id: d.id, label: d.title || d.leadName || d.id })
       return acc
     }, [])
-  }, [selectedPipeline])
+  }, [selectedPipeline, leadId])
 
   useEffect(() => {
     if (selectedDeal?.leadId && !leadId) {
@@ -190,6 +203,21 @@ export function QuoteEditor({
       setLeadPickerOpen(false)
     }
   }, [selectedDeal?.leadId, leadId])
+
+  useEffect(() => {
+    if (!pipelineId && !dealId) return
+    if (!leadId) {
+      setPipelineId('')
+      setDealId('')
+      return
+    }
+    if (!pipelines?.length) return
+    const leadDealIds = new Set(dealsForLead.map((d) => d.id))
+    if (dealId && !leadDealIds.has(dealId)) {
+      setPipelineId('')
+      setDealId('')
+    }
+  }, [leadId, dealId, pipelineId, pipelines, dealsForLead])
 
   const handleLineItemsChange = useCallback((items, rate) => {
     setLineItems(items)
@@ -334,7 +362,15 @@ export function QuoteEditor({
               <div className="space-y-2">
                 <span className="text-xs opacity-70">Lead <span className="text-red-400">*</span></span>
                 {selectedLead && !leadPickerOpen ? (
-                  <SelectedLeadCard lead={selectedLead} onClear={() => { setLeadId(''); setLeadPickerOpen(true) }} />
+                  <SelectedLeadCard
+                    lead={selectedLead}
+                    onClear={() => {
+                      setLeadId('')
+                      setLeadPickerOpen(true)
+                      setPipelineId('')
+                      setDealId('')
+                    }}
+                  />
                 ) : (
                   <div className="rounded-lg border border-white/15 bg-white/[0.03] overflow-hidden">
                     <div className="relative border-b border-white/10">
@@ -397,31 +433,33 @@ export function QuoteEditor({
                 )}
               </div>
 
-              <div className="space-y-2 pt-1 border-t border-white/10">
-                <span className="text-xs opacity-70">Link to deal (optional)</span>
-                <PipelineDropdown
-                  showLabel={false}
-                  allowEmpty
-                  value={pipelineId}
-                  onChange={(id) => {
-                    setPipelineId(id)
-                    setDealId('')
-                  }}
-                  pipelines={pipelines}
-                  placeholder="No pipeline"
-                />
-                {selectedPipeline && (
-                  <InlineDropdown
+              {showLinkToDeal && (
+                <div className="space-y-2 pt-1 border-t border-white/10">
+                  <span className="text-xs opacity-70">Link to deal (optional)</span>
+                  <PipelineDropdown
                     showLabel={false}
                     allowEmpty
-                    value={dealId}
-                    onChange={setDealId}
-                    options={dealOptions}
-                    placeholder="No deal"
-                    emptyLabel="No deal"
+                    value={pipelineId}
+                    onChange={(id) => {
+                      setPipelineId(id)
+                      setDealId('')
+                    }}
+                    pipelines={pipelinesWithLeadDeals}
+                    placeholder="No pipeline"
                   />
-                )}
-              </div>
+                  {selectedPipeline && (
+                    <InlineDropdown
+                      showLabel={false}
+                      allowEmpty
+                      value={dealId}
+                      onChange={setDealId}
+                      options={dealOptions}
+                      placeholder="No deal"
+                      emptyLabel="No deal"
+                    />
+                  )}
+                </div>
+              )}
             </>
           )}
 

@@ -152,6 +152,7 @@ import { fetchTagRegistry, upsertTagInRegistry } from './utils/tags'
 import { buildDealFromLead, resolvePipelineId, findDealsForLead, buildDealCountByLeadId, findDealInPipelines, resolveInitialDealStatus, sanitizeDealStatuses } from './utils/deals'
 import { buildLeadParcelColors } from './utils/leadMapFeatures'
 import { createTasksForDeal } from './utils/dealTasks'
+import { uploadDealFile } from './utils/dealFiles'
 import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeline'
 import { listToCsv } from './utils/exportList'
 import { addSkipTraceJob, updateSkipTraceJob, getPendingSkipTraceJobs, removeSkipTraceJob, cleanupOldJobs } from './utils/skipTraceJobs'
@@ -1838,7 +1839,7 @@ function App() {
     }
   }, [leads, pipelines, getToken, leadStatuses, currentUser])
 
-  const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks } = {}) => {
+  const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks, pendingFiles } = {}) => {
     if (!lead?.id) return
     const pid = pipelineId || activePipelineId
     if (pipelines.length > 0) {
@@ -1856,11 +1857,13 @@ function App() {
         status,
         dealStatuses,
       })
-      const nextDeals = [...sanitizeDealStatuses(pipe.deals, pipe.columns, dealStatuses), deal]
+      let nextDeals = [...sanitizeDealStatuses(pipe.deals, pipe.columns, dealStatuses), deal]
       try {
         await updatePipeline(getToken, pid, { deals: nextDeals })
         setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals: nextDeals } : p)))
         await refreshPipelines()
+
+        let tasksFailed = 0
         if (Array.isArray(tasks) && tasks.length > 0) {
           const { created, failed } = await createTasksForDeal({
             deal,
@@ -1871,13 +1874,46 @@ function App() {
             apiMode: true,
           })
           if (created > 0) await refreshPipelines()
-          if (failed > 0) {
-            showToast('Deal created but some tasks could not be added', 'warning')
+          tasksFailed = failed
+        }
+
+        let filesFailed = 0
+        const filesToUpload = Array.isArray(pendingFiles) ? pendingFiles.filter(Boolean) : []
+        if (filesToUpload.length > 0) {
+          const uploaded = []
+          for (const file of filesToUpload) {
+            try {
+              const record = await uploadDealFile(getToken, {
+                pipelineId: pid,
+                dealId: deal.id,
+                file,
+                existingFiles: uploaded,
+              })
+              uploaded.push(record)
+            } catch {
+              filesFailed += 1
+            }
+          }
+          if (uploaded.length > 0) {
+            const dealWithFiles = { ...deal, files: uploaded, updatedAt: Date.now() }
+            nextDeals = nextDeals.map((d) => (d.id === deal.id ? dealWithFiles : d))
+            await updatePipeline(getToken, pid, { deals: nextDeals })
+            setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals: nextDeals } : p)))
+            await refreshPipelines()
           }
         }
+
         setActivePipelineId(pid)
         nav.openPipes(pid)
-        showToast('Deal added to pipe', 'success')
+        if (tasksFailed > 0 && filesFailed > 0) {
+          showToast('Deal created but some tasks and files could not be added', 'warning')
+        } else if (tasksFailed > 0) {
+          showToast('Deal created but some tasks could not be added', 'warning')
+        } else if (filesFailed > 0) {
+          showToast('Deal created but some files could not be uploaded', 'warning')
+        } else {
+          showToast('Deal added to pipe', 'success')
+        }
         await markLeadConvertedAfterDeal(lead, deal)
       } catch (e) {
         showToast(e.message || 'Could not create deal', 'error')
@@ -1959,7 +1995,7 @@ function App() {
     })
   }, [openCreateDealDialog])
 
-  const handleCreateDealSubmit = useCallback(async ({ title, notes, leadId, pipelineId, payments, costs, tasks }) => {
+  const handleCreateDealSubmit = useCallback(async ({ title, notes, leadId, pipelineId, payments, costs, tasks, pendingFiles }) => {
     const lead = leads.find((l) => l.id === leadId)
     if (!lead) {
       showToast('Lead not found', 'error')
@@ -1967,7 +2003,7 @@ function App() {
     }
     setCreateDealSaving(true)
     try {
-      await handleCreateDeal(lead, pipelineId, { title, notes, payments, costs, tasks })
+      await handleCreateDeal(lead, pipelineId, { title, notes, payments, costs, tasks, pendingFiles })
       nav.popModal()
     } finally {
       setCreateDealSaving(false)
