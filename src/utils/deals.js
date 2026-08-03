@@ -13,9 +13,49 @@ export function resolvePipelineId(pipelineOrId) {
   return null
 }
 
+/** Legacy pipe columns used `col-N`; canonical pipes use deal status ids (`open`, …). */
+export function isLegacyDealColumnId(statusId) {
+  return /^col-\d+$/.test(String(statusId || ''))
+}
+
+/**
+ * First-stage status for a new deal. Prefer deal-status registry, then pipeline columns.
+ * Never falls back to legacy `col-0` (rejected by the pipelines API).
+ */
+export function resolveInitialDealStatus(columns = [], dealStatuses = []) {
+  const fromStatuses = dealStatuses?.[0]?.id
+  if (fromStatuses && !isLegacyDealColumnId(fromStatuses)) return fromStatuses
+  const fromColumns = columns?.[0]?.id
+  if (fromColumns && !isLegacyDealColumnId(fromColumns)) return fromColumns
+  return 'open'
+}
+
+/** Remap deals whose status is missing or a legacy col-N id onto an allowed first stage. */
+export function sanitizeDealStatuses(deals, columns = [], dealStatuses = []) {
+  const allowed = new Set(
+    (dealStatuses?.length ? dealStatuses : columns || [])
+      .map((row) => row?.id)
+      .filter((id) => id && !isLegacyDealColumnId(id)),
+  )
+  if (allowed.size === 0) allowed.add('open')
+  const fallback = resolveInitialDealStatus(columns, dealStatuses)
+  const now = Date.now()
+  return (deals || []).map((deal) => {
+    const status = String(deal?.status || '')
+    if (allowed.has(status)) return deal
+    return {
+      ...deal,
+      status: fallback,
+      statusEnteredAt: now,
+      cumulativeTimeByStatus: {},
+      updatedAt: now,
+    }
+  })
+}
+
 export function buildDealFromLead(lead, columns, pipelineId = null, overrides = {}) {
   if (!lead?.id) return null
-  const firstColId = columns?.[0]?.id || 'col-0'
+  const status = overrides.status || resolveInitialDealStatus(columns, overrides.dealStatuses)
   const now = Date.now()
   const leadName = displayLeadName(lead)
   const leadAddress = lead.address || ''
@@ -25,7 +65,7 @@ export function buildDealFromLead(lead, columns, pipelineId = null, overrides = 
     id: `deal_${now}_${Math.random().toString(36).slice(2, 9)}`,
     leadId: lead.id,
     title: (overrides.title ?? '').trim() || defaultTitle,
-    status: firstColId,
+    status,
     statusEnteredAt: now,
     cumulativeTimeByStatus: {},
     notes: (overrides.notes ?? '').trim(),

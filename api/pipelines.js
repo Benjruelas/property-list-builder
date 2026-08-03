@@ -27,6 +27,7 @@ import {
   DEFAULT_DEAL_STATUSES,
   normalizeDealStatuses,
   resolveAllowedDealStatusIds,
+  coerceDealStatus,
 } from './_lib/dealStatuses.js'
 
 /**
@@ -272,8 +273,14 @@ export default async function handler(req, res) {
       const effectiveStatuses = ctx.team?.dealStatuses || userAppSettings?.dealStatuses || DEFAULT_DEAL_STATUSES
       const cols = statusesToColumns(effectiveStatuses)
       const allowedStatusIds = new Set(cols.map((column) => column.id))
-      if (dealsArr.some((deal) => !allowedStatusIds.has(deal?.status || cols[0]?.id))) {
-        return res.status(400).json({ error: 'Invalid deal status' })
+      const fallbackStatus = cols[0]?.id || 'open'
+      const normalizedDeals = []
+      for (const deal of dealsArr) {
+        const coerced = coerceDealStatus(deal?.status, allowedStatusIds, fallbackStatus)
+        if (coerced == null) {
+          return res.status(400).json({ error: 'Invalid deal status' })
+        }
+        normalizedDeals.push({ ...deal, status: coerced })
       }
 
       let newPipeline = {
@@ -282,7 +289,7 @@ export default async function handler(req, res) {
           : `pipe_user_${String(user.uid).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
         title: 'Deals',
         columns: cols,
-        deals: dealsArr.map((deal) => ({ ...deal, status: deal.status || cols[0].id })),
+        deals: normalizedDeals,
         ownerId: ctx.team?.ownerId || user.uid,
         ownerEmail: ctx.team?.ownerEmail || user.email,
         sharedWith: [],
@@ -410,16 +417,26 @@ export default async function handler(req, res) {
         pipeline.columns = normalizeColumns(columns)
       }
       if (deals !== undefined && Array.isArray(deals)) {
-        const invalidDeal = deals.find((deal) => !allowedDealStatusIds.has(String(deal?.status || '')))
-        if (invalidDeal) {
-          return res.status(400).json({ error: `Invalid deal status: ${invalidDeal.status || ''}` })
-        }
+        const fallbackStatus = [...allowedDealStatusIds][0] || 'open'
         const tagRegistry = await loadTagRegistry(kv, user.uid)
         try {
           pipeline.deals = deals.map((incoming) => {
+            const coerced = coerceDealStatus(incoming?.status, allowedDealStatusIds, fallbackStatus)
+            if (coerced == null) {
+              throw new Error(`Invalid deal status: ${incoming?.status || ''}`)
+            }
             const prevDeal = prevDealsSnapshot.find((d) => d.id === incoming.id) || {}
             const tags = mergeEntityTags(incoming, prevDeal, tagRegistry, 'deals')
-            return { ...incoming, tagIds: tags.tagIds, tagMeta: tags.tagMeta }
+            const statusChanged = coerced !== String(incoming?.status || '')
+            return {
+              ...incoming,
+              status: coerced,
+              ...(statusChanged
+                ? { statusEnteredAt: Date.now(), cumulativeTimeByStatus: {} }
+                : {}),
+              tagIds: tags.tagIds,
+              tagMeta: tags.tagMeta,
+            }
           })
         } catch (e) {
           return res.status(400).json({ error: e.message })

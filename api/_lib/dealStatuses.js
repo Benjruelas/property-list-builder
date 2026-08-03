@@ -40,6 +40,10 @@ export function resolveAllowedDealStatusIds(ctx, userAppSettings) {
   return new Set(DEFAULT_DEAL_STATUSES.map((status) => status.id))
 }
 
+export function isLegacyDealColumnId(statusId) {
+  return /^col-\d+$/.test(String(statusId || ''))
+}
+
 export function normalizeDealStatusValue(value, existing, allowedIds) {
   if (value === undefined || value === null || value === '') {
     return existing?.status || 'open'
@@ -49,4 +53,17 @@ export function normalizeDealStatusValue(value, existing, allowedIds) {
     throw new Error(`Invalid deal status: ${status}`)
   }
   return status
+}
+
+/**
+ * Coerce a deal status into an allowed id.
+ * Legacy `col-N` / empty values map to fallback; other unknown ids stay invalid (null).
+ */
+export function coerceDealStatus(value, allowedIds, fallback = 'open') {
+  const status = String(value ?? '').trim()
+  if (allowedIds.has(status)) return status
+  if (!status || isLegacyDealColumnId(status)) {
+    return allowedIds.has(fallback) ? fallback : ([...allowedIds][0] || 'open')
+  }
+  return null
 }

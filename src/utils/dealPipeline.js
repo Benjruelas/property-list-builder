@@ -3,6 +3,7 @@
  */
 
 import { splitOwnerName } from './ownerName'
+import { DEFAULT_DEAL_STATUSES } from './dealStatuses'
 
 const COLUMNS_KEY = 'deal_pipeline_columns'
 const DEALS_KEY = 'deal_pipeline_deals'
@@ -10,23 +11,23 @@ const LEADS_KEY = 'deal_pipeline_leads' // legacy — cleared on migration
 const TITLE_KEY = 'deal_pipeline_title'
 const DEFAULT_TITLE = 'Pipes'
 
-export const DEFAULT_PIPELINE_STAGES = ['Open', 'Pending', 'Closed']
+export const DEFAULT_PIPELINE_STAGES = DEFAULT_DEAL_STATUSES.map((status) => status.label)
 
-const DEFAULT_COLUMNS = DEFAULT_PIPELINE_STAGES
+const DEFAULT_COLUMNS = DEFAULT_DEAL_STATUSES.map(({ id, label }) => ({ id, name: label }))
 
-/** Default pipeline columns for new pipes (stable col-N ids). */
+/** Default pipeline columns for new pipes (canonical deal status ids). */
 export function createDefaultPipelineColumns() {
-  return DEFAULT_PIPELINE_STAGES.map((name, i) => ({ id: `col-${i}`, name }))
+  return DEFAULT_COLUMNS.map((column) => ({ ...column }))
 }
 
 export const loadColumns = () => {
   try {
     const stored = localStorage.getItem(COLUMNS_KEY)
-    if (!stored) return DEFAULT_COLUMNS.map((name, i) => ({ id: `col-${i}`, name }))
+    if (!stored) return createDefaultPipelineColumns()
     const parsed = JSON.parse(stored)
-    return Array.isArray(parsed) ? parsed : DEFAULT_COLUMNS.map((name, i) => ({ id: `col-${i}`, name }))
+    return Array.isArray(parsed) ? parsed : createDefaultPipelineColumns()
   } catch {
-    return DEFAULT_COLUMNS.map((name, i) => ({ id: `col-${i}`, name }))
+    return createDefaultPipelineColumns()
   }
 }
 

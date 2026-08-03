@@ -149,7 +149,7 @@ import {
   logLeadDealCreated,
 } from './utils/leadActivity'
 import { fetchTagRegistry, upsertTagInRegistry } from './utils/tags'
-import { buildDealFromLead, resolvePipelineId, findDealsForLead, buildDealCountByLeadId, findDealInPipelines } from './utils/deals'
+import { buildDealFromLead, resolvePipelineId, findDealsForLead, buildDealCountByLeadId, findDealInPipelines, resolveInitialDealStatus, sanitizeDealStatuses } from './utils/deals'
 import { buildLeadParcelColors } from './utils/leadMapFeatures'
 import { createTasksForDeal } from './utils/dealTasks'
 import { loadColumns, loadDeals, saveDeals, loadTitle } from './utils/dealPipeline'
@@ -1847,10 +1847,19 @@ function App() {
         showToast('You cannot add deals to this pipeline', 'error')
         return
       }
-      const deal = buildDealFromLead(lead, pipe.columns, pid, { title, notes, payments, costs })
+      const status = resolveInitialDealStatus(pipe.columns, dealStatuses)
+      const deal = buildDealFromLead(lead, pipe.columns, pid, {
+        title,
+        notes,
+        payments,
+        costs,
+        status,
+        dealStatuses,
+      })
+      const nextDeals = [...sanitizeDealStatuses(pipe.deals, pipe.columns, dealStatuses), deal]
       try {
-        await updatePipeline(getToken, pid, { deals: [...(pipe.deals || []), deal] })
-        setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals: [...(p.deals || []), deal] } : p)))
+        await updatePipeline(getToken, pid, { deals: nextDeals })
+        setPipelines((prev) => prev.map((p) => (p.id === pid ? { ...p, deals: nextDeals } : p)))
         await refreshPipelines()
         if (Array.isArray(tasks) && tasks.length > 0) {
           const { created, failed } = await createTasksForDeal({
@@ -1876,7 +1885,7 @@ function App() {
       return
     }
     const cols = loadColumns()
-    const deal = buildDealFromLead(lead, cols, null, { title, notes, payments, costs })
+    const deal = buildDealFromLead(lead, cols, null, { title, notes, payments, costs, dealStatuses })
     const next = [...loadDeals(), deal]
     saveDeals(next)
     setDealPipelineDeals(next)
@@ -1897,7 +1906,7 @@ function App() {
     nav.openPipes(activePipelineId)
     showToast('Deal added to pipe', 'success')
     await markLeadConvertedAfterDeal(lead, deal)
-  }, [activePipelineId, currentUser, getToken, pipelines, refreshPipelines, teams, nav, markLeadConvertedAfterDeal])
+  }, [activePipelineId, currentUser, dealStatuses, getToken, pipelines, refreshPipelines, teams, nav, markLeadConvertedAfterDeal])
 
   const dealTemplateNestedOverlay =
     isDealPipelineOpen || isLeadsPanelOpen || isDealsPanelOpen
@@ -2075,7 +2084,7 @@ function App() {
     const targetColumns = target.columns || []
     const targetStatus = targetColumns.some((c) => c.id === deal.status)
       ? deal.status
-      : (targetColumns[0]?.id || deal.status || 'col-0')
+      : resolveInitialDealStatus(targetColumns, dealStatuses)
     const now = Date.now()
     const movedDeal = {
       ...deal,
@@ -2095,7 +2104,7 @@ function App() {
       showToast(e.message || 'Could not move deal', 'error')
       return false
     }
-  }, [getToken, pipelines, refreshPipelines])
+  }, [dealStatuses, getToken, pipelines, refreshPipelines])
 
   const handleDealUpdate = useCallback(async (updatedDeal, pipelineOrId) => {
     const pid = resolvePipelineId(pipelineOrId) || activePipelineId
