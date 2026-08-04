@@ -540,32 +540,50 @@ export function SettingsPanel({
           {/* ---- Notifications ---- */}
           <Section panelOpen={isOpen} icon={Bell} title="Notifications" dataTour="settings-notifications-section">
             <p className="text-xs opacity-50 -mt-1 mb-2">
-              Collaboration alerts use server push (sign in required). Device alerts work on this browser when permission is granted.
+              Collaboration alerts use server push (sign in required). Device alerts fire locally on this browser.
             </p>
 
             <p className="text-xs font-semibold opacity-70 uppercase tracking-wide mb-1 mt-2">Collaboration (server push)</p>
-            <SettingRow label="Enable collaboration alerts" description="Browser permission + web push when signed in">
+            <SettingRow
+              label="Enable collaboration alerts"
+              description="Browser permission + web push for shares, deals, forms, quotes, tasks, and teams"
+            >
               <Toggle checked={n.pushEnabled} onChange={handlePushMasterToggle} />
             </SettingRow>
             {n.pushEnabled && (
               <>
-                <SettingRow label="Shared item" description="When someone shares a list, pipe, or path with you">
+                <SettingRow
+                  label="Shares"
+                  description={'“List shared with you”, “Path shared with you”, and “Shared with team”'}
+                >
                   <Toggle checked={n.itemShared !== false} onChange={(v) => update({ notifications: { ...n, itemShared: v } })} disabled={!getToken} />
                 </SettingRow>
-                <SettingRow label="Lead stage changes" description="When a lead moves columns in a shared pipeline">
+                <SettingRow
+                  label="Deal stage changes"
+                  description={'“Deal moved” / “Deals moved” when a deal changes stage in a shared pipe'}
+                >
                   <Toggle checked={n.pipelineLeadStage} onChange={(v) => update({ notifications: { ...n, pipelineLeadStage: v } })} disabled={!getToken} />
                 </SettingRow>
-                <SettingRow label="Form activity" description="When someone views or completes a form you sent">
+                <SettingRow
+                  label="Forms & quotes"
+                  description={'“Form viewed / submitted” and “Quote viewed / responded / paid”'}
+                >
                   <Toggle checked={n.formSubmitted} onChange={(v) => update({ notifications: { ...n, formSubmitted: v } })} disabled={!getToken} />
                 </SettingRow>
-                <SettingRow label="Added to a team" description="When you are invited to a team">
+                <SettingRow
+                  label="Added to a team"
+                  description={'“Added to team” when someone adds you to a team'}
+                >
                   <Toggle checked={n.teamAdded} onChange={(v) => update({ notifications: { ...n, teamAdded: v } })} disabled={!getToken} />
                 </SettingRow>
               </>
             )}
 
             <p className="text-xs font-semibold opacity-70 uppercase tracking-wide mb-1 mt-4">This device</p>
-            <SettingRow label="Device alerts" description="Local notifications on this browser">
+            <SettingRow
+              label="Device alerts"
+              description="Local alerts on this browser for skip trace and upcoming tasks"
+            >
               <Toggle
                 checked={n.deviceAlertsEnabled !== false}
                 onChange={async (on) => {
@@ -582,13 +600,22 @@ export function SettingsPanel({
             </SettingRow>
             {n.deviceAlertsEnabled !== false && (
               <>
-                <SettingRow label="Skip trace finished" description="When skip trace completes">
+                <SettingRow
+                  label="Skip trace complete"
+                  description={'“Skip trace complete” when a skip trace finishes with results'}
+                >
                   <Toggle checked={n.skipTraceComplete} onChange={(v) => update({ notifications: { ...n, skipTraceComplete: v } })} />
                 </SettingRow>
-                <SettingRow label="Skip trace failed" description="When skip trace fails">
+                <SettingRow
+                  label="Skip trace failed"
+                  description={'“Skip trace failed” when a skip trace errors or can’t finish'}
+                >
                   <Toggle checked={n.skipTraceFailed !== false} onChange={(v) => update({ notifications: { ...n, skipTraceFailed: v } })} />
                 </SettingRow>
-                <SettingRow label="Task deadline reminders" description="Before a scheduled task time">
+                <SettingRow
+                  label="Task due soon"
+                  description={'“Task due soon” before a scheduled task — also “A task has been assigned to you” when collaboration alerts are on'}
+                >
                   <Toggle checked={n.taskDeadline} onChange={(v) => update({ notifications: { ...n, taskDeadline: v } })} />
                 </SettingRow>
                 {n.taskDeadline && (

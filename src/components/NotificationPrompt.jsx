@@ -67,7 +67,7 @@ export function NotificationPrompt({ getToken }) {
         </div>
         <h2 className="permission-prompt-title">Enable Notifications</h2>
         <p className="permission-prompt-desc">
-          Get notified when items are shared with you, when leads move stages, when skip traces finish, and when task deadlines are coming up.
+          Get notified when items are shared with you, when deals move stages, when forms or quotes update, when skip traces finish, and when tasks are due.
         </p>
         <button
           type="button"

@@ -143,6 +143,8 @@ function prefAllows(kind, prefs) {
   if (!prefs.pushEnabled) return false
   if (SHARE_NOTIFICATION_KINDS.has(kind)) return shareAlertsEnabled(kind, prefs)
   const map = {
+    // Settings toggle is labeled "Deal stage changes"; keep legacy key for stored prefs.
+    pipelineDealStage: 'pipelineLeadStage',
     pipelineLeadStage: 'pipelineLeadStage',
     formSubmitted: 'formSubmitted',
     teamAdded: 'teamAdded',
