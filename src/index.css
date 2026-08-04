@@ -176,8 +176,9 @@
     }
   }
 
-  /* Panel open (DOM): maximize panel footprint — action bar width unchanged */
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)) {
+  /* Panel open (DOM): maximize panel footprint — action bar width unchanged.
+     Send quote/form/report overlays stay compact cards; they must not trigger maximize. */
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.send-quote-dialog):not(.send-form-dialog):not(.send-report-dialog)) {
     --ui-viewport-content-width: min(
       calc(100vw - 2 * var(--ui-chrome-inset) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)),
       calc(100dvw - 2 * var(--ui-chrome-inset) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))
@@ -695,7 +696,7 @@
 
 @media (min-width: 768px) {
   /* Desktop: list-style panels — fit to content (Activity/Tasks use dedicated layout rules) */
-  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.report-editor-panel):not(.report-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.hail-data-panel) {
+  .list-panel.fullscreen-panel:not(.tasks-panel):not(.activity-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.team-details-panel):not(.lead-details-panel):not(.deal-details-panel):not(.parcel-details-panel):not(.quote-editor-panel):not(.report-editor-panel):not(.report-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.hail-data-panel):not(.send-quote-dialog):not(.send-form-dialog):not(.send-report-dialog) {
     width: auto !important;
     min-width: calc(var(--ui-panel-height) * 0.439) !important;
     max-width: 90vw !important;
@@ -1681,7 +1682,7 @@
     top: var(--ui-panel-center-y) !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.hail-data-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.send-quote-dialog):not(.send-form-dialog):not(.send-report-dialog)):not([data-tasks-docked="1"]) .map-panel-dialog.fullscreen-panel:not(.tasks-panel):not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.hail-data-panel):not(.send-quote-dialog):not(.send-form-dialog):not(.send-report-dialog) {
     box-sizing: border-box !important;
     width: var(--ui-panel-width) !important;
     max-width: var(--ui-panel-width) !important;
@@ -1692,7 +1693,7 @@
     overflow-x: clip !important;
   }
 
-  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.hail-data-panel) {
+  html:has(#modal-root .map-panel-dialog.fullscreen-panel[data-state="open"]:not(.confirm-dialog):not(.login-panel):not(.auth-dialog):not(.send-quote-dialog):not(.send-form-dialog):not(.send-report-dialog)):not([data-tasks-docked="1"]) .list-panel.fullscreen-panel:not(.tasks-panel):not(.new-task-panel):not(.square-picker-panel):not(.compact-picker-panel):not(.settings-panel):not(.quote-details-panel):not(.quote-editor-panel):not(.report-details-panel):not(.report-editor-panel):not(.team-details-panel):not(.form-fill-panel):not(.form-editor-panel):not(.parcel-details-panel):not(.create-lead-panel):not(.create-deal-panel):not(.create-list-panel):not(.create-pipeline-panel):not(.hail-data-panel):not(.send-quote-dialog):not(.send-form-dialog):not(.send-report-dialog) {
     width: var(--ui-panel-width) !important;
     min-width: 0 !important;
     max-width: var(--ui-panel-width) !important;
@@ -2185,13 +2186,14 @@
   align-items: flex-start;
 }
 
-.map-panel [class*="hover:bg-gray"]:hover,
-.map-panel [class*="hover:bg-white"]:hover,
-.map-panel [class*="hover:bg-green"]:hover,
-.map-panel [class*="hover:bg-red"]:hover,
-.map-panel [class*="hover:bg-blue"]:hover,
-.map-panel [class*="hover:bg-amber"]:hover,
-.map-panel [class*="hover:bg-accent"]:hover,
+/* Dark-only: glass panels use white-tint hover. Light mode must not inherit this. */
+[data-ui-theme='dark'] .map-panel [class*="hover:bg-gray"]:hover,
+[data-ui-theme='dark'] .map-panel [class*="hover:bg-white"]:hover,
+[data-ui-theme='dark'] .map-panel [class*="hover:bg-green"]:hover,
+[data-ui-theme='dark'] .map-panel [class*="hover:bg-red"]:hover,
+[data-ui-theme='dark'] .map-panel [class*="hover:bg-blue"]:hover,
+[data-ui-theme='dark'] .map-panel [class*="hover:bg-amber"]:hover,
+[data-ui-theme='dark'] .map-panel [class*="hover:bg-accent"]:hover,
 [data-ui-theme='dark'] .map-controls-stack [class*="hover:bg-white"]:hover,
 [data-ui-theme='dark'] .map-controls-stack [class*="hover:bg-gray"]:hover,
 [data-ui-theme='dark'] .map-controls-stack [class*="hover:bg-accent"]:hover,
@@ -2202,6 +2204,22 @@
 [data-ui-theme='dark'] .map-controls-stack [class*="hover:bg-red"]:hover:not(.path-tracking-active),
 [data-ui-theme='dark'] .map-search-stack [class*="hover:bg-red"]:hover:not(.path-tracking-active) {
   background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Light: remap dark-oriented hover utilities to ink washes (beats Tailwind white/accent hovers). */
+[data-ui-theme='light'] .map-panel [class*="hover:bg-white"]:hover,
+[data-ui-theme='light'] .map-panel [class*="hover:bg-gray"]:hover,
+[data-ui-theme='light'] .map-panel [class*="hover:bg-accent"]:hover,
+[data-ui-theme='light'] .list-panel [class*="hover:bg-white"]:hover,
+[data-ui-theme='light'] .list-panel [class*="hover:bg-gray"]:hover,
+[data-ui-theme='light'] .list-panel [class*="hover:bg-accent"]:hover {
+  background-color: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.06)) !important;
+}
+[data-ui-theme='light'] .map-panel [class*="hover:text-white"]:hover,
+[data-ui-theme='light'] .list-panel [class*="hover:text-white"]:hover,
+[data-ui-theme='light'] .map-panel [class*="hover:text-accent"]:hover,
+[data-ui-theme='light'] .list-panel [class*="hover:text-accent"]:hover {
+  color: var(--map-panel-text, #111827) !important;
 }
 
 /* Path recording: keep red on mobile where :hover sticks after tap and would dim the button */
@@ -3673,15 +3691,15 @@
 
 /* List panel - no fills on buttons (except delete, create form actions) */
 /* Exclude calendar-day-btn; leads-panel-list-item (Leads); teams-panel-list-item (Teams); action tiles (parcel/lead details) */
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):not(.send-form-btn):not(.send-tag-chip),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):not(.send-form-btn):not(.send-tag-chip) {
   background: transparent !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled),
-.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):hover:not(:disabled) {
+.list-panel button:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):not(.send-form-btn):not(.send-tag-chip):hover:not(:disabled),
+.list-panel [role="button"]:not(.list-panel-delete-btn):not(.create-list-btn):not(.quote-panel-action-btn):not(.panel-action-btn):not([data-panel-action]):not(.calendar-day-btn):not(.share-dialog-btn):not(.share-dialog-close):not(.share-picker-option):not(.share-picker-member):not(.share-picker-collapse-trigger):not(.color-swatch):not(.leads-panel-list-item):not(.teams-panel-list-item):not(.panel-filter-option):not(.parcel-details-action-tile):not(.lead-detail-action-tile):not(.report-detail-action-tile):not(.schedule-picker-footer-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.schedule-picker-btn):not(.send-form-btn):not(.send-tag-chip):hover:not(:disabled) {
   background: transparent !important;
 }
 
@@ -3695,6 +3713,35 @@
 }
 .list-panel button.calendar-day-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1) !important;
+}
+[data-ui-theme='light'] .list-panel button.calendar-day-btn {
+  border-bottom-color: var(--map-panel-stroke, rgba(0, 0, 0, 0.1)) !important;
+  border-right-color: var(--map-panel-stroke, rgba(0, 0, 0, 0.1)) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+[data-ui-theme='light'] .list-panel button.calendar-day-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.06)) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+[data-ui-theme='light'] .list-panel button.calendar-day-btn.bg-white\/10,
+[data-ui-theme='light'] .list-panel button.calendar-day-btn.bg-white\/22,
+[data-ui-theme='light'] .list-panel .schedule-picker-day.bg-white\/10,
+[data-ui-theme='light'] .list-panel .schedule-picker-day.bg-white\/22 {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: var(--map-panel-text, #111827) !important;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.22);
+}
+[data-ui-theme='light'] .list-panel .schedule-picker-calendar {
+  border-color: var(--map-panel-stroke, rgba(0, 0, 0, 0.12)) !important;
+}
+[data-ui-theme='light'] .list-panel .schedule-picker-calendar .border-white\/15,
+[data-ui-theme='light'] .list-panel .schedule-picker-calendar .border-white\/20 {
+  border-color: var(--map-panel-stroke, rgba(0, 0, 0, 0.1)) !important;
+}
+[data-ui-theme='light'] .list-panel .schedule-picker-calendar .bg-white\/5,
+[data-ui-theme='light'] .list-panel .schedule-picker-calendar .bg-white\/\[0\.04\],
+[data-ui-theme='light'] .list-panel .schedule-picker-calendar .bg-white\/\[0\.02\] {
+  background: var(--map-panel-surface-muted, rgba(0, 0, 0, 0.04)) !important;
 }
 /* Last column - no right border (grid edge) */
 .list-panel .calendar-days-grid > *:nth-child(7n) {
@@ -3718,6 +3765,18 @@
   background: rgba(255, 255, 255, 0.22) !important;
   border-color: rgba(255, 255, 255, 0.6) !important;
   color: rgba(255, 255, 255, 0.95) !important;
+}
+[data-ui-theme='light'] .list-panel button.create-list-btn {
+  background: var(--map-panel-surface-muted, rgba(0, 0, 0, 0.05)) !important;
+  border: 1px solid var(--map-panel-stroke-strong, rgba(0, 0, 0, 0.22)) !important;
+  color: var(--map-panel-text, #111827) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-ui-theme='light'] .list-panel button.create-list-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.08)) !important;
+  border-color: rgba(0, 0, 0, 0.32) !important;
+  color: var(--map-panel-text, #111827) !important;
 }
 .list-panel button.create-list-btn.list-panel-delete-btn {
   background: rgba(127, 29, 29, 0.35) !important;
@@ -3797,6 +3856,20 @@
   background: rgba(255, 255, 255, 0.16) !important;
   border-color: rgba(255, 255, 255, 0.38) !important;
 }
+[data-ui-theme='light'] .list-panel .schedule-nav-btn,
+[data-ui-theme='light'] .map-panel .schedule-nav-btn,
+[data-ui-theme='light'] .schedule-nav-btn {
+  background: var(--map-panel-surface-muted, rgba(0, 0, 0, 0.05)) !important;
+  border-color: var(--map-panel-stroke-strong, rgba(0, 0, 0, 0.22)) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+[data-ui-theme='light'] .list-panel .schedule-nav-btn:hover:not(:disabled),
+[data-ui-theme='light'] .map-panel .schedule-nav-btn:hover:not(:disabled),
+[data-ui-theme='light'] .schedule-nav-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.08)) !important;
+  border-color: rgba(0, 0, 0, 0.32) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
 
 /* Hour / minute dropdown triggers */
 .list-panel .schedule-time-select-btn,
@@ -3861,6 +3934,46 @@
 .schedule-picker-footer-btn--primary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.34) !important;
   border-color: rgba(255, 255, 255, 0.68) !important;
+}
+[data-ui-theme='light'] .list-panel button.schedule-picker-footer-btn,
+[data-ui-theme='light'] .map-panel button.schedule-picker-footer-btn,
+[data-ui-theme='light'] .schedule-picker-footer-btn {
+  background: var(--map-panel-surface-muted, rgba(0, 0, 0, 0.05)) !important;
+  border-color: var(--map-panel-stroke-strong, rgba(0, 0, 0, 0.22)) !important;
+  color: var(--map-panel-text, #111827) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-ui-theme='light'] .list-panel button.schedule-picker-footer-btn:hover:not(:disabled),
+[data-ui-theme='light'] .map-panel button.schedule-picker-footer-btn:hover:not(:disabled),
+[data-ui-theme='light'] .schedule-picker-footer-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.08)) !important;
+  border-color: rgba(0, 0, 0, 0.32) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+[data-ui-theme='light'] .list-panel button.schedule-picker-footer-btn--primary,
+[data-ui-theme='light'] .map-panel button.schedule-picker-footer-btn--primary,
+[data-ui-theme='light'] .schedule-picker-footer-btn--primary {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.28) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+[data-ui-theme='light'] .list-panel button.schedule-picker-footer-btn--primary:hover:not(:disabled),
+[data-ui-theme='light'] .map-panel button.schedule-picker-footer-btn--primary:hover:not(:disabled),
+[data-ui-theme='light'] .schedule-picker-footer-btn--primary:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.12) !important;
+  border-color: rgba(0, 0, 0, 0.38) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+[data-ui-theme='light'] .list-panel .schedule-time-select-btn:hover:not(:disabled),
+[data-ui-theme='light'] .map-panel .schedule-time-select-btn:hover:not(:disabled),
+[data-ui-theme='light'] .schedule-time-select-btn:hover:not(:disabled),
+[data-ui-theme='light'] .list-panel .schedule-picker-btn:hover:not(:disabled),
+[data-ui-theme='light'] .map-panel .schedule-picker-btn:hover:not(:disabled),
+[data-ui-theme='light'] .schedule-picker-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.08)) !important;
+  border-color: rgba(0, 0, 0, 0.32) !important;
+  color: var(--map-panel-text, #111827) !important;
 }
 .list-panel button.schedule-picker-footer-btn:disabled,
 .map-panel button.schedule-picker-footer-btn:disabled,
@@ -6093,8 +6206,8 @@ body:has(.app-loading-screen--video) {
 }
 
 /* Send-form / share popup dialogs — darker panel for readable text on mobile */
-.map-panel.forms-send-dialog,
-.map-panel.share-list-dialog.team-member-features-dialog {
+.map-panel.share-list-dialog.team-member-features-dialog,
+.map-panel.forms-send-dialog:not(.send-form-dialog) {
   height: auto !important;
   max-height: min(88vh, 720px) !important;
   overflow: hidden !important;
@@ -6118,31 +6231,48 @@ body:has(.app-loading-screen--video) {
   color: rgba(255, 255, 255, 0.96) !important;
   border-radius: 0.875rem !important;
 }
-.map-panel.send-quote-dialog {
-  width: min(96vw, 40rem) !important;
-  max-width: min(96vw, 40rem) !important;
-  max-height: min(90vh, 820px) !important;
-}
-.map-panel.send-report-dialog {
+.map-panel.send-quote-dialog,
+.map-panel.send-report-dialog,
+.map-panel.send-form-dialog,
+.map-panel.list-panel.fullscreen-panel.send-quote-dialog,
+.map-panel.list-panel.fullscreen-panel.send-report-dialog,
+.map-panel.list-panel.fullscreen-panel.send-form-dialog {
   width: min(96vw, 42rem) !important;
   max-width: min(96vw, 42rem) !important;
+  min-width: 0 !important;
+  height: auto !important;
   max-height: min(90vh, 820px) !important;
 }
+.map-panel.send-quote-dialog,
+.map-panel.send-report-dialog,
+.map-panel.send-form-dialog,
+.map-panel.list-panel.fullscreen-panel.send-quote-dialog,
+.map-panel.list-panel.fullscreen-panel.send-report-dialog,
+.map-panel.list-panel.fullscreen-panel.send-form-dialog {
+  max-height: min(96vh, 1100px) !important;
+}
+
 .map-panel-dialog.send-report-dialog[data-state='open'],
-.map-panel-dialog.send-quote-dialog[data-state='open'] {
+.map-panel-dialog.send-quote-dialog[data-state='open'],
+.map-panel-dialog.send-form-dialog[data-state='open'] {
   z-index: 10041 !important;
 }
 @media (max-width: 767px) {
-  .map-panel.send-report-dialog.fullscreen-panel {
+  .map-panel.send-report-dialog.fullscreen-panel,
+  .map-panel.send-form-dialog.fullscreen-panel,
+  .map-panel.send-quote-dialog.fullscreen-panel {
     width: 100% !important;
     max-width: none !important;
     height: 100dvh !important;
     max-height: 100dvh !important;
+    border-radius: 0 !important;
   }
 }
-.map-panel.forms-send-dialog {
+.map-panel.forms-send-dialog:not(.send-form-dialog) {
   border-radius: 0.75rem !important;
 }
+
+/* Send-form button outlines — reinforced in quote-panel-actions.css (#modal-root) */
 .forms-send-lead-actions-row--three {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
@@ -6153,8 +6283,10 @@ body:has(.app-loading-screen--video) {
 }
 .forms-send-dialog input,
 .forms-send-dialog textarea,
+.forms-send-dialog select,
 .share-list-dialog input,
-.share-list-dialog textarea {
+.share-list-dialog textarea,
+.share-list-dialog select {
   background: rgba(0, 0, 0, 0.35) !important;
   border: 1px solid rgba(255, 255, 255, 0.28) !important;
   color: rgba(255, 255, 255, 0.98) !important;
@@ -6164,6 +6296,11 @@ body:has(.app-loading-screen--video) {
 .share-list-dialog input::placeholder,
 .share-list-dialog textarea::placeholder {
   color: rgba(255, 255, 255, 0.5) !important;
+}
+.forms-send-dialog select option,
+.share-list-dialog select option {
+  background: rgb(18, 22, 34);
+  color: rgba(255, 255, 255, 0.98);
 }
 /* Legacy class aliases used in create dialogs */
 .share-list-dialog .share-dialog-btn.share-save-valid {
@@ -7600,6 +7737,17 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   line-height: 1.2;
   color: #0f172a;
 }
+.quote-brand-header__contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+}
+.quote-brand-header__contact-sep {
+  opacity: 0.45;
+  user-select: none;
+}
 .quote-brand-header__sender {
   font-size: 0.875rem;
   font-weight: 500;
@@ -7609,6 +7757,7 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   font-size: 0.8125rem;
   color: #2563eb;
   text-decoration: none;
+  word-break: break-word;
 }
 .quote-brand-header__email:hover {
   text-decoration: underline;
@@ -7616,6 +7765,11 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 .quote-brand-header--panel .quote-brand-header__main {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
+  align-items: center;
+}
+.quote-brand-header--panel .quote-brand-header__logo {
+  max-height: 6rem;
+  max-width: 15rem;
 }
 .quote-brand-header--panel .quote-brand-header__company {
   color: inherit;
@@ -7626,6 +7780,9 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 }
 .quote-brand-header--panel .quote-brand-header__email {
   color: #93c5fd;
+}
+[data-ui-theme='light'] .quote-brand-header--panel .quote-brand-header__email {
+  color: #2563eb;
 }
 
 /* Public photo report page */

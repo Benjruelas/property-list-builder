@@ -90,11 +90,27 @@
   color: var(--map-panel-text) !important;
 }
 
+[data-ui-theme='light'] #modal-root .list-panel .quote-details-actions :is(button, a).quote-panel-action-btn:hover:not(:disabled),
+[data-ui-theme='light'] #modal-root .map-panel.list-panel .quote-details-actions :is(button, a).quote-panel-action-btn:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.06)) !important;
+  background-color: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.06)) !important;
+  border-color: rgba(0, 0, 0, 0.4) !important;
+  color: var(--map-panel-text) !important;
+}
+
 [data-ui-theme='light'] #modal-root .list-panel .quote-details-actions :is(button, a).quote-panel-action-btn--primary,
 [data-ui-theme='light'] #modal-root .map-panel.list-panel .quote-details-actions :is(button, a).quote-panel-action-btn--primary {
   background: transparent !important;
   background-color: transparent !important;
   border-color: rgba(0, 0, 0, 0.32) !important;
+}
+
+[data-ui-theme='light'] #modal-root .list-panel .quote-details-actions :is(button, a).quote-panel-action-btn--primary:hover:not(:disabled),
+[data-ui-theme='light'] #modal-root .map-panel.list-panel .quote-details-actions :is(button, a).quote-panel-action-btn--primary:hover:not(:disabled) {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.06)) !important;
+  background-color: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.06)) !important;
+  border-color: rgba(0, 0, 0, 0.48) !important;
+  color: var(--map-panel-text) !important;
 }
 
 [data-ui-theme='light'] #modal-root .list-panel .quote-details-actions :is(button, a).quote-panel-action-btn--danger,
@@ -103,6 +119,14 @@
   background-color: transparent !important;
   border-color: rgba(248, 113, 113, 0.58) !important;
   color: rgb(185, 28, 28) !important;
+}
+
+[data-ui-theme='light'] #modal-root .list-panel .quote-details-actions :is(button, a).quote-panel-action-btn--danger:hover:not(:disabled),
+[data-ui-theme='light'] #modal-root .map-panel.list-panel .quote-details-actions :is(button, a).quote-panel-action-btn--danger:hover:not(:disabled) {
+  background: rgba(254, 226, 226, 0.55) !important;
+  background-color: rgba(254, 226, 226, 0.55) !important;
+  border-color: rgba(185, 28, 28, 0.55) !important;
+  color: rgb(153, 27, 27) !important;
 }
 
 /* Report builder footer — horizontal action row */
@@ -120,4 +144,252 @@
   min-width: 0;
   padding-inline: calc(0.5rem * var(--ui-touch-scale, 1)) !important;
   font-size: calc(0.8125rem * var(--ui-touch-scale, 1)) !important;
+}
+
+/* Send form / report dialogs — outlined buttons (loaded after index.css so list-panel resets cannot win) */
+#modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn,
+#modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  min-height: calc(2.75rem * var(--ui-touch-scale, 1)) !important;
+  border: 2px solid rgba(255, 255, 255, 0.42) !important;
+  border-style: solid !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border-radius: calc(0.75rem * var(--ui-touch-scale, 1)) !important;
+  box-sizing: border-box !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+#modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn:hover:not(:disabled),
+#modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.62) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+}
+
+#modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn[aria-pressed='true'],
+#modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--selected,
+#modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn[aria-pressed='true'],
+#modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--selected {
+  border-color: rgba(255, 255, 255, 0.78) !important;
+  background: rgba(255, 255, 255, 0.16) !important;
+  background-color: rgba(255, 255, 255, 0.16) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+  font-weight: 600 !important;
+}
+
+#modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary,
+#modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary {
+  border-color: rgba(255, 255, 255, 0.58) !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  background-color: rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+  font-weight: 600 !important;
+}
+
+#modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary:hover:not(:disabled),
+#modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.78) !important;
+  background: rgba(255, 255, 255, 0.22) !important;
+  background-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+#modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn:disabled,
+#modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+/* Light mode — dark ink / strokes on white send panels */
+[data-ui-theme='light'] #modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn,
+[data-ui-theme='light'] #modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn {
+  border-color: rgba(0, 0, 0, 0.22) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: rgba(17, 24, 39, 0.88) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn:hover:not(:disabled),
+[data-ui-theme='light'] #modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn:hover:not(:disabled) {
+  border-color: rgba(0, 0, 0, 0.36) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  color: rgba(17, 24, 39, 0.96) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn[aria-pressed='true'],
+[data-ui-theme='light'] #modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--selected,
+[data-ui-theme='light'] #modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn[aria-pressed='true'],
+[data-ui-theme='light'] #modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--selected {
+  border-color: rgba(0, 0, 0, 0.45) !important;
+  background: rgba(0, 0, 0, 0.07) !important;
+  background-color: rgba(0, 0, 0, 0.07) !important;
+  color: rgba(17, 24, 39, 0.96) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary,
+[data-ui-theme='light'] #modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary {
+  border-color: rgba(0, 0, 0, 0.32) !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  color: rgba(17, 24, 39, 0.96) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary:hover:not(:disabled),
+[data-ui-theme='light'] #modal-root .map-panel.list-panel:is(.send-form-dialog, .send-report-dialog, .send-quote-dialog) button.send-form-btn.send-form-btn--primary:hover:not(:disabled) {
+  border-color: rgba(0, 0, 0, 0.45) !important;
+  background: rgba(0, 0, 0, 0.1) !important;
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Light mode send overlays — must load after index.css dark share-list-dialog shell */
+[data-ui-theme='light'] #modal-root :is(
+  .map-panel.share-list-dialog,
+  .map-panel.forms-send-dialog,
+  .map-panel.send-form-dialog,
+  .map-panel.send-report-dialog,
+  .map-panel.send-quote-dialog
+) {
+  background: var(--map-panel-surface, #ffffff) !important;
+  border-color: var(--map-panel-surface-border, rgba(0, 0, 0, 0.1)) !important;
+  box-shadow: var(--map-panel-shadow, 0 12px 40px rgba(0, 0, 0, 0.12)) !important;
+  color: var(--map-panel-text, #111827) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog) :is(input, textarea, select, .quote-msg-tag-editor) {
+  background: var(--map-panel-input-bg, rgba(0, 0, 0, 0.04)) !important;
+  border-color: var(--map-panel-input-border, rgba(0, 0, 0, 0.15)) !important;
+  color: var(--map-panel-text, #111827) !important;
+  -webkit-text-fill-color: var(--map-panel-text, #111827) !important;
+  caret-color: var(--map-panel-text, #111827) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog) :is(input, textarea)::placeholder {
+  color: var(--map-panel-text-muted, rgba(17, 24, 39, 0.55)) !important;
+  -webkit-text-fill-color: var(--map-panel-text-muted, rgba(17, 24, 39, 0.55)) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog) select option {
+  background: #ffffff;
+  color: var(--map-panel-text, #111827);
+}
+
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog) .forms-send-textarea {
+  background: var(--map-panel-input-bg, rgba(0, 0, 0, 0.04)) !important;
+  border-color: var(--map-panel-input-border, rgba(0, 0, 0, 0.15)) !important;
+  color: var(--map-panel-text, #111827) !important;
+  -webkit-text-fill-color: var(--map-panel-text, #111827) !important;
+  caret-color: var(--map-panel-text, #111827) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog) .forms-send-confirm {
+  background: var(--map-panel-surface-muted, rgba(0, 0, 0, 0.05)) !important;
+  border-color: var(--map-panel-stroke-strong, rgba(0, 0, 0, 0.16)) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog) .forms-send-cancel {
+  background: var(--map-panel-surface-subtle, rgba(0, 0, 0, 0.03)) !important;
+  border-color: var(--map-panel-stroke, rgba(0, 0, 0, 0.1)) !important;
+  color: var(--map-panel-ink-secondary, rgba(17, 24, 39, 0.78)) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.send-form-dialog, .send-report-dialog, .send-quote-dialog, .share-list-dialog) .entity-picker-body {
+  border-color: var(--map-panel-stroke, rgba(0, 0, 0, 0.1)) !important;
+  background: var(--map-panel-surface-subtle, rgba(0, 0, 0, 0.03)) !important;
+  color: var(--map-panel-text, #111827) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.send-quote-dialog, .send-form-dialog, .send-report-dialog, .share-list-dialog) button.create-list-btn {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.28) !important;
+  color: rgba(17, 24, 39, 0.96) !important;
+}
+
+[data-ui-theme='light'] #modal-root :is(.send-quote-dialog, .send-form-dialog, .send-report-dialog, .share-list-dialog) button.create-list-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) button.send-tag-chip {
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  min-height: 0 !important;
+  height: auto !important;
+  font-weight: 400 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) button.send-tag-chip:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+[data-ui-theme='light'] #modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) button.send-tag-chip {
+  border-color: rgba(0, 0, 0, 0.2) !important;
+  color: rgba(17, 24, 39, 0.7) !important;
+}
+[data-ui-theme='light'] #modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) button.send-tag-chip:hover:not(:disabled) {
+  border-color: rgba(0, 0, 0, 0.32) !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: rgba(17, 24, 39, 0.95) !important;
+}
+
+/* Message tag editor (contentEditable + in-message pills) — shared by quote/report/form send */
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-editor {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: visible;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.92);
+}
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-editor--single {
+  min-height: 44px;
+  max-height: none;
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-editor--text {
+  min-height: 5.5rem;
+}
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-editor:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-editor:focus {
+  outline: none;
+}
+#modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-pill {
+  display: inline;
+  padding: 0.05em 0.45em;
+  margin: 0 0.1em;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.92em;
+  line-height: 1.35;
+  white-space: nowrap;
+  user-select: none;
+  vertical-align: baseline;
+}
+[data-ui-theme='light'] #modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-editor:empty::before {
+  color: rgba(17, 24, 39, 0.45);
+}
+[data-ui-theme='light'] #modal-root :is(.send-quote-dialog, .send-report-dialog, .send-form-dialog) .quote-msg-tag-pill {
+  border-color: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(17, 24, 39, 0.92);
 }

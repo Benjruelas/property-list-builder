@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, CheckCircle2, Copy, Mail, MessageSquare, FileText, Link2 } from 'lucide-react'
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
 } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { PanelHeader } from '../ui/panel-header'
 import { showToast } from '../ui/toast'
 import { useAuth } from '../../contexts/AuthContext'
 import { createFormInvite, sendForm } from '../../utils/forms'
@@ -23,28 +24,94 @@ import { logLeadFormSent } from '@/utils/leadActivity'
 import { invalidateCachedLeadForms } from '@/utils/leadForms'
 import { displayLeadName } from '@/utils/leads'
 import { getSenderDisplayName, getCompanyNameForSends } from '@/utils/profile'
-import { SendAsField } from '../shared/SendAsField'
-import { AutoResizeTextarea } from '../ui/auto-resize-textarea'
-import { cn } from '@/lib/utils'
+import { FORM_SEND_TAGS, replaceFormSendTags } from '@/utils/sendTemplateTags'
+import { LeadPickerField } from '../pickers/LeadPickerField'
+import { MessageTagEditor } from '../shared/MessageTagEditor'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** Optional note only — invite emails already include an Open form CTA. */
+const DEFAULT_LINK_SUBJECT = 'Please complete: {{formName}}'
+const DEFAULT_PDF_SUBJECT = 'Form: {{formName}}'
 const DEFAULT_LINK_NOTE = ''
+const DEFAULT_TEXT_BODY = `Hi {{firstName}}, please complete this form: {{formLink}}`
 
-const DEFAULT_TEXT_BODY = `Hi {{clientName}}, please complete this form: {{formLink}}`
+const FIELD_LABEL = 'block text-sm font-medium text-white/75 mb-1'
+const TEXT_INPUT = 'w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const SUBJECT_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--single w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const MESSAGE_EDITOR = 'quote-msg-tag-editor w-full min-h-[8rem] p-3 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const TEXT_MESSAGE_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--text w-full min-h-[5.5rem] p-3 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const SEGMENT_BTN =
+  'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
 
-function replaceFormTags(template, data) {
-  return String(template || '').replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    const v = data[key]
-    return v == null ? '' : String(v)
-  })
+function TagInsertStrip({ onInsert, disabled }) {
+  return (
+    <div className="flex flex-wrap gap-1 mb-2">
+      {FORM_SEND_TAGS.map(({ key, label }) => (
+        <button
+          key={key}
+          type="button"
+          className="send-tag-chip text-[10px] px-1.5 py-0.5 rounded"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onInsert(key)}
+          title={`Insert ${label}`}
+          disabled={disabled}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
-/**
- * Unified form send dialog (matches quote/report send panels).
- * Delivery: link-to-complete (invite) or PDF attachment.
- */
+function ContactField({
+  id,
+  label,
+  value,
+  onChange,
+  options = [],
+  type = 'text',
+  placeholder,
+  disabled,
+}) {
+  if (options.length > 1) {
+    const selectValue = options.includes(value) ? value : options[0]
+    return (
+      <div>
+        <label className={FIELD_LABEL} htmlFor={id}>{label}</label>
+        <select
+          id={id}
+          value={selectValue}
+          onChange={(e) => onChange(e.target.value)}
+          className={TEXT_INPUT}
+          disabled={disabled}
+        >
+          {options.map((opt) => (
+            <option key={opt} value={opt}>
+              {type === 'tel' ? formatPhoneDisplay(opt) || opt : opt}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <label className={FIELD_LABEL} htmlFor={id}>{label}</label>
+      <Input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={TEXT_INPUT}
+        disabled={disabled}
+        autoComplete={type === 'email' ? 'email' : type === 'tel' ? 'tel' : undefined}
+      />
+    </div>
+  )
+}
+
 export function SendFormDialog({
   open,
   template,
@@ -55,6 +122,7 @@ export function SendFormDialog({
   onClose,
   lead = null,
   onSent,
+  leads = [],
   teams = [],
   teamMembership = null,
   /** Prefer this delivery when opening. */
@@ -62,95 +130,127 @@ export function SendFormDialog({
 }) {
   const { getToken, currentUser } = useAuth()
   const [tab, setTab] = useState('email')
-  const [delivery, setDelivery] = useState(initialDelivery === 'pdf' ? 'pdf' : 'link')
+  const [delivery, setDelivery] = useState('link')
+  const [selectedLead, setSelectedLead] = useState(null)
   const [recipient, setRecipient] = useState('')
   const [phone, setPhone] = useState('')
-  const [senderUid, setSenderUid] = useState(null)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [textBody, setTextBody] = useState('')
-  const [sendMeCopy, setSendMeCopy] = useState(false)
   const [sending, setSending] = useState(false)
   const [sentTo, setSentTo] = useState(null)
   const [lastLink, setLastLink] = useState('')
-
-  const leadEmails = useMemo(() => (lead ? getLeadEmails(lead) : []), [lead])
-  const leadPhones = useMemo(() => (lead ? getLeadPhones(lead) : []), [lead])
+  const [sendMeCopy, setSendMeCopy] = useState(false)
+  const subjectEditorRef = useRef(null)
+  const emailEditorRef = useRef(null)
+  const textEditorRef = useRef(null)
+  const [focusedField, setFocusedField] = useState(null)
+  const focusBlurTimerRef = useRef(null)
   const canPdf = typeof preparePdf === 'function'
+
+  const pickerLeads = useMemo(() => {
+    if (!lead?.id) return leads
+    if (leads.some((l) => l.id === lead.id)) return leads
+    return [lead, ...leads]
+  }, [leads, lead])
+
+  const leadEmails = useMemo(
+    () => (selectedLead ? getLeadEmails(selectedLead) : []),
+    [selectedLead],
+  )
+  const leadPhones = useMemo(
+    () => (selectedLead ? getLeadPhones(selectedLead) : []),
+    [selectedLead],
+  )
 
   const prefillCount = useMemo(
     () => Object.keys(prefillValues || {}).length,
     [prefillValues],
   )
 
-  const defaultEmail = useMemo(() => {
-    if (leadEmails[0]) return leadEmails[0]
-    return ''
-  }, [leadEmails])
-
-  const defaultPhone = useMemo(() => {
-    if (leadPhones[0]) return leadPhones[0]
-    return ''
-  }, [leadPhones])
-
-  const clientName = useMemo(() => {
-    if (lead) return displayLeadName(lead) || 'there'
-    const emailLocal = recipient.split('@')[0]
-    return emailLocal || 'there'
-  }, [lead, recipient])
-
-  const selectedSenderName = useMemo(
-    () => getSenderDisplayName(currentUser),
-    [currentUser],
-  )
-
   const tagData = useMemo(() => ({
-    clientName,
-    formName: template?.name || 'Form',
-    formLink: lastLink || '[link will appear after send]',
-    senderName: selectedSenderName,
+    firstName: selectedLead?.firstName || '',
+    lastName: selectedLead?.lastName || '',
+    clientName: selectedLead
+      ? displayLeadName(selectedLead) || ''
+      : recipient.split('@')[0] || '',
+    formName: template?.name || '',
+    formLink: lastLink || '',
+    senderName: getSenderDisplayName(currentUser),
     senderEmail: currentUser?.email || '',
     companyName: getCompanyNameForSends(teams, teamMembership),
-  }), [clientName, template?.name, lastLink, selectedSenderName, currentUser?.email, teams, teamMembership])
+  }), [selectedLead, recipient, template?.name, lastLink, currentUser, teams, teamMembership])
+
+  const subtitle = useMemo(() => {
+    const parts = [template?.name || 'Form']
+    if (prefillCount > 0) {
+      parts.push(`${prefillCount} field${prefillCount === 1 ? '' : 's'} prefilled`)
+    }
+    return parts.join(' · ')
+  }, [template?.name, prefillCount])
+
+  const handleEditorFocus = (field) => {
+    if (focusBlurTimerRef.current) {
+      clearTimeout(focusBlurTimerRef.current)
+      focusBlurTimerRef.current = null
+    }
+    setFocusedField(field)
+  }
+
+  const handleEditorBlur = () => {
+    if (focusBlurTimerRef.current) clearTimeout(focusBlurTimerRef.current)
+    focusBlurTimerRef.current = setTimeout(() => {
+      setFocusedField(null)
+      focusBlurTimerRef.current = null
+    }, 120)
+  }
+
+  const insertTag = (key) => {
+    if (focusedField === 'subject') subjectEditorRef.current?.insertTag(key)
+    else if (focusedField === 'text') textEditorRef.current?.insertTag(key)
+    else emailEditorRef.current?.insertTag(key)
+  }
 
   useEffect(() => {
     if (!open) return
     setTab('email')
     setDelivery(canPdf && initialDelivery === 'pdf' ? 'pdf' : 'link')
-    setRecipient('')
-    setPhone('')
-    setSenderUid(null)
+    setSelectedLead(lead || null)
+    setRecipient(lead ? (getLeadEmails(lead)[0] || '') : '')
+    setPhone(lead ? (getLeadPhones(lead)[0] || '') : '')
     setSentTo(null)
     setLastLink('')
     setSendMeCopy(false)
-    const name = template?.name || 'Form'
-    setSubject(`Please complete: ${name}`)
+    setFocusedField(null)
+    setSubject(canPdf && initialDelivery === 'pdf' ? DEFAULT_PDF_SUBJECT : DEFAULT_LINK_SUBJECT)
     setBody(DEFAULT_LINK_NOTE)
     setTextBody(DEFAULT_TEXT_BODY)
-  }, [open, template?.name, initialDelivery, canPdf])
-
-  useEffect(() => {
-    if (!open) return
-    setRecipient((prev) => prev.trim() || defaultEmail)
-    setPhone((prev) => prev.trim() || defaultPhone)
-  }, [open, defaultEmail, defaultPhone])
+  }, [open, template?.name, initialDelivery, canPdf, lead])
 
   useEffect(() => {
     if (!open) return
     if (delivery === 'pdf') {
       setSubject((s) => {
-        const name = template?.name || 'Form'
-        if (!s || s.startsWith('Please complete:')) return `Form: ${name}`
+        if (!s || s === DEFAULT_LINK_SUBJECT || s.startsWith('Please complete:')) return DEFAULT_PDF_SUBJECT
         return s
       })
     } else {
       setSubject((s) => {
-        const name = template?.name || 'Form'
-        if (!s || s.startsWith('Form:')) return `Please complete: ${name}`
+        if (!s || s === DEFAULT_PDF_SUBJECT || s.startsWith('Form:')) return DEFAULT_LINK_SUBJECT
         return s
       })
     }
-  }, [delivery, open, template?.name])
+  }, [delivery, open])
+
+  useEffect(() => {
+    setFocusedField(null)
+  }, [tab])
+
+  const handleLeadChange = (nextLead) => {
+    setSelectedLead(nextLead)
+    setRecipient(nextLead ? (getLeadEmails(nextLead)[0] || '') : '')
+    setPhone(nextLead ? (getLeadPhones(nextLead)[0] || '') : '')
+  }
 
   const handleClose = () => {
     if (sending) return
@@ -158,20 +258,37 @@ export function SendFormDialog({
     onClose?.()
   }
 
-  const leadMeta = lead?.id ? {
-    leadId: lead.id,
-    leadName: displayLeadName(lead),
+  const selectTab = (id) => {
+    setTab(id)
+    if (id === 'text' && delivery === 'pdf') {
+      setDelivery('link')
+    }
+  }
+
+  const selectDelivery = (id) => {
+    if (id === 'pdf' && !canPdf) return
+    if (id === 'pdf' && tab === 'text') {
+      setTab('email')
+    }
+    setDelivery(id)
+  }
+
+  const leadMeta = selectedLead?.id ? {
+    leadId: selectedLead.id,
+    leadName: displayLeadName(selectedLead),
   } : {}
 
+  const resolveTags = (text, extra = {}) => replaceFormSendTags(text, { ...tagData, ...extra })
+
   const logSent = async (summary, meta = {}) => {
-    if (!lead?.id) return
+    if (!selectedLead?.id) return
     try {
-      await logLeadFormSent(getToken, lead.id, summary, {
+      await logLeadFormSent(getToken, selectedLead.id, summary, {
         templateId: template?.id,
         templateName: template?.name,
         ...meta,
       })
-      invalidateCachedLeadForms(lead.id)
+      invalidateCachedLeadForms(selectedLead.id)
     } catch {
       /* non-blocking */
     }
@@ -182,11 +299,10 @@ export function SendFormDialog({
       templateId: template.id,
       recipientEmail: email || undefined,
       recipientPhone: phoneVal || undefined,
-      subject: subject.trim() || undefined,
-      message: body.trim() || undefined,
+      subject: resolveTags(subject) || undefined,
+      message: resolveTags(body) || undefined,
       prefillValues: prefillCount > 0 ? prefillValues : undefined,
       skipEmail,
-      senderUid,
       ...leadMeta,
     })
     return res.formLink
@@ -201,6 +317,8 @@ export function SendFormDialog({
     if (!template?.id) return
     setSending(true)
     try {
+      const resolvedSubject = resolveTags(subject)
+      const resolvedMessage = resolveTags(body)
       if (delivery === 'pdf') {
         if (!canPdf) {
           showToast('PDF send is not available here', 'error')
@@ -211,8 +329,8 @@ export function SendFormDialog({
           template,
           values: values || prefillValues || {},
           recipient: trimmed,
-          subject: subject.trim() || `Form: ${template.name || 'Form'}`,
-          message: body.trim(),
+          subject: resolvedSubject || `Form: ${template.name || 'Form'}`,
+          message: resolvedMessage,
           flattenedPdfBase64: pdfBase64,
           sendMeCopy,
         })
@@ -220,7 +338,6 @@ export function SendFormDialog({
           ...payload,
           ...leadMeta,
           recipientPhone: (phone || '').replace(/\D/g, '').slice(-10) || undefined,
-          senderUid,
         })
         setSentTo(trimmed)
         showToast(`Form sent to ${trimmed}`, 'success')
@@ -237,10 +354,9 @@ export function SendFormDialog({
         templateId: template.id,
         recipientEmail: trimmed,
         recipientPhone: (phone || '').replace(/\D/g, '').slice(-10) || undefined,
-        subject: subject.trim() || undefined,
-        message: body.trim() || undefined,
+        subject: resolvedSubject || undefined,
+        message: resolvedMessage || undefined,
         prefillValues: prefillCount > 0 ? prefillValues : undefined,
-        senderUid,
         ...leadMeta,
       })
       setLastLink(res.formLink || '')
@@ -290,7 +406,7 @@ export function SendFormDialog({
       setSending(false)
     }
 
-    const msg = replaceFormTags(textBody, { ...tagData, formLink: link, clientName })
+    const msg = resolveTags(textBody, { formLink: link })
     window.location.href = `sms:${tel}?body=${encodeURIComponent(msg)}`
     showToast('Opening SMS…', 'success')
     await logSent(`Sent form link via text: ${template.name || 'Form'}`, {
@@ -303,42 +419,32 @@ export function SendFormDialog({
   }
 
   const handleCopyLink = async () => {
-    let link = lastLink
-    if (!link) {
-      const email = recipient.trim() || defaultEmail
-      if (!EMAIL_RE.test(email) && !(phone || defaultPhone)) {
-        showToast('Enter a recipient email to generate a link', 'error')
-        return
-      }
-      setSending(true)
-      try {
+    try {
+      let link = lastLink
+      if (!link) {
+        const email = recipient.trim()
         link = await ensureInviteLink({
           email: EMAIL_RE.test(email) ? email : undefined,
-          phone: (phone || defaultPhone || '').replace(/\D/g, '').slice(-10) || undefined,
           skipEmail: true,
         })
         setLastLink(link)
-      } catch (e) {
-        showToast(e.message || 'Could not generate link', 'error')
-        setSending(false)
-        return
       }
-      setSending(false)
-    }
-    try {
       await navigator.clipboard.writeText(link)
       showToast('Link copied', 'success')
-    } catch {
-      showToast('Could not copy link', 'error')
+    } catch (e) {
+      showToast(e.message || 'Could not copy link', 'error')
     }
   }
 
   if (!template) return null
 
+  const effectiveDelivery = tab === 'text' ? 'link' : delivery
+
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose() }}>
       <DialogContent
-        className="map-panel list-panel share-list-dialog forms-send-dialog send-form-dialog w-[min(96vw,40rem)] max-w-2xl max-h-[min(90vh,820px)] overflow-y-auto rounded-xl p-6 gap-4"
+        className="map-panel list-panel share-list-dialog forms-send-dialog send-form-dialog fullscreen-panel flex flex-col overflow-hidden p-0 max-md:w-full md:max-w-2xl"
+        showCloseButton={false}
         focusOverlay
         topLayer
         confirmLayer
@@ -346,7 +452,10 @@ export function SendFormDialog({
       >
         {sentTo ? (
           <>
-            <DialogHeader>
+            <DialogHeader
+              className="px-6 pt-6 pb-3 flex-shrink-0"
+              style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+            >
               <div className="flex flex-col items-center text-center gap-3 pt-2">
                 <CheckCircle2 className="h-10 w-10 text-green-400" aria-hidden />
                 <DialogTitle>Form sent</DialogTitle>
@@ -355,174 +464,241 @@ export function SendFormDialog({
                 </DialogDescription>
               </div>
             </DialogHeader>
-            {lastLink ? (
-              <Button variant="outline" className="w-full" onClick={handleCopyLink}>
-                <Copy className="h-4 w-4 mr-2" /> Copy link
-              </Button>
-            ) : null}
-            <DialogFooter>
-              <Button className="w-full create-list-btn" onClick={handleClose}>Done</Button>
+            <div className="px-6 pb-4 space-y-3">
+              {lastLink ? (
+                <Button variant="outline" className="send-form-btn w-full min-h-[44px]" onClick={handleCopyLink} disabled={sending}>
+                  <Copy className="h-4 w-4 mr-2" /> Copy link
+                </Button>
+              ) : null}
+            </div>
+            <DialogFooter
+              className="px-6 pb-6 flex-shrink-0"
+              style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+            >
+              <Button variant="outline" className="send-form-btn send-form-btn--primary w-full min-h-[44px]" onClick={handleClose}>Done</Button>
             </DialogFooter>
           </>
         ) : (
           <>
-            <DialogHeader>
-              <DialogTitle>Send form</DialogTitle>
-              <DialogDescription className="text-sm opacity-80">
-                {template.name || 'Form'}
-                {prefillCount > 0
-                  ? ` · ${prefillCount} field${prefillCount === 1 ? '' : 's'} prefilled`
-                  : ''}
-                {lead ? ` · ${displayLeadName(lead)}` : ''}
+            <DialogHeader
+              className="px-6 pt-6 pb-3 border-b border-white/10 flex-shrink-0 text-left"
+              style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+            >
+              <PanelHeader onBack={handleClose} title="Send form" icon={Mail} />
+              <DialogDescription className="text-sm opacity-80 mt-1">
+                {subtitle}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
-              {[
-                { id: 'link', label: 'Link to complete', icon: Link2, disabled: false },
-                { id: 'pdf', label: 'PDF attachment', icon: FileText, disabled: !canPdf },
-              ].map(({ id, label, icon: Icon, disabled }) => (
-                <button
-                  key={id}
-                  type="button"
-                  disabled={disabled}
-                  className={cn(
-                    'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-sm transition-colors disabled:opacity-40',
-                    delivery === id ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white/90',
-                  )}
-                  onClick={() => setDelivery(id)}
-                  title={disabled ? 'Open the form fill view to send a filled PDF' : undefined}
-                >
-                  <Icon className="h-4 w-4" /> {label}
-                </button>
-              ))}
-            </div>
-
-            {delivery === 'link' ? (
-              <p className="text-xs opacity-65 leading-relaxed">
-                Recipient opens a one-time link to finish the form. When they submit, you both get the completed PDF. You&apos;ll be notified when it&apos;s viewed and completed.
-              </p>
-            ) : (
-              <p className="text-xs opacity-65 leading-relaxed">
-                Email the current form as a PDF attachment (no completion link).
-              </p>
-            )}
-
-            <div className="flex gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
-              {[
-                { id: 'email', label: 'Email', icon: Mail },
-                { id: 'text', label: 'Text', icon: MessageSquare },
-              ].map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={cn(
-                    'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-sm transition-colors',
-                    tab === id ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white/90',
-                    delivery === 'pdf' && id === 'text' && 'opacity-40',
-                  )}
-                  onClick={() => {
-                    if (delivery === 'pdf' && id === 'text') {
-                      showToast('PDF attachments can only be emailed', 'error')
-                      return
-                    }
-                    setTab(id)
-                  }}
-                >
-                  <Icon className="h-4 w-4" /> {label}
-                </button>
-              ))}
-            </div>
-
-            {tab === 'email' ? (
-              <div className="space-y-3">
-                <SendAsField
-                  currentUser={currentUser}
-                  teams={teams}
-                  senderUid={senderUid}
-                  onChangeSenderUid={setSenderUid}
-                  disabled={sending}
-                />
-                <Input
-                  placeholder="Recipient email"
-                  type="email"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  autoComplete="email"
-                />
-                <Input
-                  placeholder="Subject"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                />
-                <AutoResizeTextarea
-                  className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 text-sm"
-                  placeholder={delivery === 'pdf' ? 'Optional message' : 'Optional note for the recipient'}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  minRows={3}
-                />
-                {delivery === 'pdf' ? (
-                  <label className="flex items-center gap-2 text-sm opacity-95 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={sendMeCopy}
-                      onChange={(e) => setSendMeCopy(e.target.checked)}
-                      className="h-4 w-4 accent-blue-600 cursor-pointer"
-                    />
-                    Send me a copy
-                  </label>
-                ) : null}
+            <div
+              className="px-6 py-3 space-y-3 max-md:flex-1 max-md:min-h-0 max-md:overflow-y-auto max-md:scrollbar-hide"
+              style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+            >
+              <div className="flex gap-2">
+                {[
+                  { id: 'email', label: 'Email', icon: Mail },
+                  { id: 'text', label: 'Text', icon: MessageSquare },
+                ].map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={tab === id}
+                    className={SEGMENT_BTN}
+                    onClick={() => selectTab(id)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <div className="space-y-3">
-                <SendAsField
-                  currentUser={currentUser}
-                  teams={teams}
-                  senderUid={senderUid}
-                  onChangeSenderUid={setSenderUid}
-                  disabled={sending}
-                />
-                <Input
-                  placeholder="Client phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-                <AutoResizeTextarea
-                  className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 text-sm"
-                  placeholder="Text message"
-                  value={textBody}
-                  onChange={(e) => setTextBody(e.target.value)}
-                  minRows={3}
-                />
-                <p className="text-xs opacity-60">
-                  Opens your device SMS app with the completion link.
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-white/50">Delivery</p>
+                <div className="flex gap-2">
+                  {[
+                    { id: 'link', label: 'Link', icon: Link2, disabled: false },
+                    {
+                      id: 'pdf',
+                      label: 'PDF',
+                      icon: FileText,
+                      disabled: !canPdf || tab === 'text',
+                    },
+                  ].map(({ id, label, icon: Icon, disabled }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={disabled}
+                      aria-pressed={effectiveDelivery === id}
+                      className={SEGMENT_BTN}
+                      onClick={() => selectDelivery(id)}
+                      title={
+                        !canPdf && id === 'pdf'
+                          ? 'Open the form fill view to send a filled PDF'
+                          : tab === 'text' && id === 'pdf'
+                            ? 'PDF attachments can only be emailed'
+                            : undefined
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-white/50 leading-relaxed">
+                  {effectiveDelivery === 'pdf'
+                    ? 'Emails the current form as a PDF attachment.'
+                    : 'One-time link to complete the form; you both get the PDF on submit.'}
                 </p>
               </div>
-            )}
 
-            <DialogFooter className="flex-col gap-2 sm:flex-col">
+              <LeadPickerField
+                label="Lead"
+                leads={pickerLeads}
+                value={selectedLead?.id || null}
+                onChange={handleLeadChange}
+              />
+
               {tab === 'email' ? (
-                <Button className="w-full create-list-btn" disabled={sending} onClick={handleSendEmail}>
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
-                  {delivery === 'pdf' ? 'Send PDF' : 'Send email'}
-                </Button>
+                <>
+                  <ContactField
+                    id="form-send-to"
+                    label="To"
+                    type="email"
+                    value={recipient}
+                    onChange={setRecipient}
+                    options={leadEmails}
+                    placeholder="Recipient email"
+                    disabled={sending}
+                  />
+
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="form-send-subject">Subject</label>
+                    {focusedField === 'subject' && (
+                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                    )}
+                    <MessageTagEditor
+                      ref={subjectEditorRef}
+                      id="form-send-subject"
+                      value={subject}
+                      onChange={setSubject}
+                      tagData={tagData}
+                      tags={FORM_SEND_TAGS}
+                      className={SUBJECT_EDITOR}
+                      placeholder="Email subject"
+                      disabled={sending}
+                      singleLine
+                      onFocus={() => handleEditorFocus('subject')}
+                      onBlur={handleEditorBlur}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="form-send-note">Message</label>
+                    {focusedField === 'body' && (
+                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                    )}
+                    <MessageTagEditor
+                      ref={emailEditorRef}
+                      id="form-send-note"
+                      value={body}
+                      onChange={setBody}
+                      tagData={tagData}
+                      tags={FORM_SEND_TAGS}
+                      className={MESSAGE_EDITOR}
+                      placeholder="Optional message"
+                      disabled={sending}
+                      onFocus={() => handleEditorFocus('body')}
+                      onBlur={handleEditorBlur}
+                    />
+                  </div>
+
+                  {effectiveDelivery === 'pdf' ? (
+                    <label className="flex items-center gap-2 text-sm text-white/75 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={sendMeCopy}
+                        onChange={(e) => setSendMeCopy(e.target.checked)}
+                        disabled={sending || !currentUser?.email}
+                        className="h-4 w-4 accent-blue-600 cursor-pointer disabled:opacity-50"
+                      />
+                      Send me a copy
+                    </label>
+                  ) : null}
+                </>
               ) : (
-                <Button className="w-full create-list-btn" disabled={sending} onClick={handleSendText}>
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
-                  Send via SMS
-                </Button>
+                <>
+                  <ContactField
+                    id="form-send-phone"
+                    label="Phone"
+                    type="tel"
+                    value={phone}
+                    onChange={setPhone}
+                    options={leadPhones}
+                    placeholder="Client phone"
+                    disabled={sending}
+                  />
+
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="form-send-text">Message</label>
+                    {focusedField === 'text' && (
+                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                    )}
+                    <MessageTagEditor
+                      ref={textEditorRef}
+                      id="form-send-text"
+                      value={textBody}
+                      onChange={setTextBody}
+                      tagData={tagData}
+                      tags={FORM_SEND_TAGS}
+                      className={TEXT_MESSAGE_EDITOR}
+                      placeholder="Text message"
+                      disabled={sending}
+                      onFocus={() => handleEditorFocus('text')}
+                      onBlur={handleEditorBlur}
+                    />
+                  </div>
+                  <p className="text-xs text-white/50">
+                    Opens your device SMS app with the completion link.
+                  </p>
+                </>
               )}
-              {delivery === 'link' ? (
-                <Button variant="outline" className="w-full" disabled={sending} onClick={handleCopyLink}>
+
+              {effectiveDelivery === 'link' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="send-form-btn w-full min-h-[44px]"
+                  disabled={sending}
+                  onClick={handleCopyLink}
+                >
                   <Copy className="h-4 w-4 mr-2" /> Copy link
                 </Button>
               ) : null}
-              <Button variant="ghost" size="sm" className="w-full opacity-70" disabled={sending} onClick={handleClose}>
-                Cancel
-              </Button>
-            </DialogFooter>
+
+              {tab === 'email' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
+                  disabled={sending}
+                  onClick={handleSendEmail}
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
+                  {effectiveDelivery === 'pdf' ? 'Send PDF' : 'Send email'}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
+                  disabled={sending}
+                  onClick={handleSendText}
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
+                  Open SMS
+                </Button>
+              )}
+            </div>
           </>
         )}
       </DialogContent>

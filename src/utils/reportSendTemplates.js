@@ -12,7 +12,7 @@ import {
 export { REPORT_SEND_TAGS }
 
 export const DEFAULT_REPORT_EMAIL_SUBJECT = 'Photo report: {{reportTitle}}'
-export const DEFAULT_REPORT_EMAIL_BODY = `Hi {{clientName}},
+export const DEFAULT_REPORT_EMAIL_BODY = `Hi {{firstName}},
 
 Please review the photo report for your property.
 
@@ -22,7 +22,7 @@ Thank you,
 {{senderName}}
 {{companyName}}`
 
-export const DEFAULT_REPORT_TEXT_BODY = `Hi {{clientName}}, your photo report "{{reportTitle}}" is ready: {{reportLink}} — {{senderName}}, {{companyName}}`
+export const DEFAULT_REPORT_TEXT_BODY = `Hi {{firstName}}, your photo report "{{reportTitle}}" is ready: {{reportLink}} — {{senderName}}, {{companyName}}`
 
 export function replaceReportTags(template, data) {
   return replaceReportSendTags(template, data)

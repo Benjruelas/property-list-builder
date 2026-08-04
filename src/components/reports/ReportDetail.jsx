@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/di
 import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
 import { PanelHeader } from '../ui/panel-header'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
-import { SendAsField } from '../shared/SendAsField'
 import { QuoteBrandHeader } from '../quotes/QuoteBrandHeader'
 import { fetchClientPreviewUrl, prepareClientPreviewTab, closeClientPreviewTab, openClientPreviewUrl } from '@/utils/clientPreview'
 import { showToast } from '../ui/toast'
@@ -19,7 +18,6 @@ import { GoogleReviewsBlock } from '../shared/GoogleReviewsBlock'
 import { useAuth } from '@/contexts/AuthContext'
 import { getAllTeamMembers } from '@/utils/teamTaskUtils'
 import { memberPrimaryLabel } from '@/components/pickers/entityPickerShared'
-import { updatePhotoReport } from '@/utils/photoReports'
 import { cn } from '@/lib/utils'
 
 function ReportActionTile({ icon: Icon, label, onClick, disabled, danger = false }) {
@@ -61,7 +59,6 @@ export function ReportDetail({
   const { getToken: authGetToken, currentUser } = useAuth()
   const resolveToken = getToken || authGetToken
   const [previewLoading, setPreviewLoading] = useState(false)
-  const [savingSender, setSavingSender] = useState(false)
   const teamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
 
   const team = getTeamForMembership(teams, teamMembership)
@@ -104,34 +101,6 @@ export function ReportDetail({
 
   const { name: senderName, email: senderEmailBase } = resolveDisplaySender()
   const senderEmail = senderEmailBase || report?.ownerEmail || teamBranding.companyEmail || currentUser?.email || ''
-  const canPickSender = teamMembers.filter((m) => m.uid && m.uid !== currentUser?.uid).length > 0
-
-  const handleChangeDisplaySender = useCallback(async (nextUid) => {
-    if (!report?.id || savingSender) return
-    setSavingSender(true)
-    try {
-      let createdByName = getSenderDisplayName(currentUser)
-      let createdByEmail = currentUser?.email || ''
-      const displaySenderUid = nextUid || null
-      if (nextUid && nextUid !== currentUser?.uid) {
-        const member = teamMembers.find((m) => m.uid === nextUid)
-        if (member) {
-          createdByName = memberPrimaryLabel(member)
-          createdByEmail = member.email || ''
-        }
-      }
-      const updated = await updatePhotoReport(resolveToken, report.id, {
-        displaySenderUid,
-        createdByName,
-        createdByEmail,
-      })
-      onReportUpdated?.(updated)
-    } catch (e) {
-      showToast(e.message || 'Could not update sender', 'error')
-    } finally {
-      setSavingSender(false)
-    }
-  }, [report?.id, savingSender, currentUser, teamMembers, resolveToken, onReportUpdated])
 
   if (!open) return null
 
@@ -233,18 +202,6 @@ export function ReportDetail({
             />
 
             <GoogleReviewsBlock googleReviews={googleReviews} />
-
-            <SendAsField
-              label="Shown to client as"
-              currentUser={currentUser}
-              teams={teams}
-              senderUid={report.displaySenderUid || null}
-              onChangeSenderUid={handleChangeDisplaySender}
-              disabled={savingSender}
-              hint={canPickSender
-                ? 'This name appears on the report when clients view or receive it.'
-                : 'Add teammates in Teams to choose a different sender.'}
-            />
 
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">

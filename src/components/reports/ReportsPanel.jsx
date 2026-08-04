@@ -555,7 +555,7 @@ export function ReportsPanel({
               )
             ) : (
               <div className="space-y-4 pb-4">
-                <p className="text-sm opacity-70">Default templates used when sending photo reports via email or text. Use {'{{reportLink}}'} for the share link — it is filled in automatically when you copy or send. Choose who appears on the report in report details or under Send as when sending.</p>
+                <p className="text-sm opacity-70">Default templates used when sending photo reports via email or text. Use {'{{reportLink}}'} for the share link — it is filled in automatically when you copy or send.</p>
                 <div className="flex flex-wrap gap-1">
                   {REPORT_SEND_TAGS.map(({ tag, label }) => (
                     <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10" title={label}>{tag}</span>

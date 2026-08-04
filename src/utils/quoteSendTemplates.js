@@ -3,21 +3,32 @@
  */
 
 import { formatQuoteMoney } from './quoteMath'
-import { replaceMustacheTags } from './sendTemplateTags'
+import {
+  replaceMustacheTags,
+  mustacheToTagEditorHtml,
+  tagEditorDomToMustache,
+} from './sendTemplateTags'
 
 export const QUOTE_SEND_TAGS = [
-  { tag: '{{clientName}}', label: 'Client name' },
-  { tag: '{{quoteTitle}}', label: 'Quote title' },
-  { tag: '{{quoteTotal}}', label: 'Quote total' },
-  { tag: '{{quoteLink}}', label: 'Quote link' },
-  { tag: '{{senderName}}', label: 'Your name' },
-  { tag: '{{validUntil}}', label: 'Valid until' },
-  { tag: '{{companyName}}', label: 'Company name' },
+  { key: 'firstName', tag: '{{firstName}}', label: 'First Name' },
+  { key: 'lastName', tag: '{{lastName}}', label: 'Last Name' },
+  { key: 'quoteTitle', tag: '{{quoteTitle}}', label: 'Title' },
+  { key: 'quoteTotal', tag: '{{quoteTotal}}', label: 'Total' },
+  { key: 'quoteLink', tag: '{{quoteLink}}', label: 'Quote Link' },
+  { key: 'senderName', tag: '{{senderName}}', label: 'Your Name' },
+  { key: 'validUntil', tag: '{{validUntil}}', label: 'Valid Until' },
+  { key: 'companyName', tag: '{{companyName}}', label: 'Company Name' },
 ]
+
+/** Keys that render as pills (includes legacy clientName for saved templates). */
+const PILL_TAG_LABELS = {
+  ...Object.fromEntries(QUOTE_SEND_TAGS.map((t) => [t.key, t.label])),
+  clientName: 'Client Name',
+}
 
 export const DEFAULT_QUOTE_EMAIL_TEMPLATE = {
   subject: 'Quote from {{senderName}} — {{quoteTitle}}',
-  body: `Hi {{clientName}},
+  body: `Hi {{firstName}},
 
 Please review your quote for {{quoteTitle}} ({{quoteTotal}}).
 
@@ -30,21 +41,84 @@ Thank you,
 }
 
 export const DEFAULT_QUOTE_TEXT_TEMPLATE = {
-  body: `Hi {{clientName}}, here's your quote for {{quoteTitle}} ({{quoteTotal}}): {{quoteLink}} — valid until {{validUntil}}. Reply with any questions!`,
+  body: `Hi {{firstName}}, here's your quote for {{quoteTitle}} ({{quoteTotal}}): {{quoteLink}} — valid until {{validUntil}}. Reply with any questions!`,
 }
 
-export function replaceQuoteTags(text, data = {}) {
-  if (!text) return ''
+function formatTotalForTag(quoteTotal) {
+  if (quoteTotal == null || quoteTotal === '') return ''
+  const s = String(quoteTotal)
+  if (s.includes('$')) return s
+  return formatQuoteMoney(quoteTotal)
+}
+
+/** Resolve values for outbound send (sensible fallbacks). Supports legacy {{clientName}}. */
+export function buildQuoteTagValues(data = {}) {
   const senderName = data.senderName || data.senderEmail?.split('@')[0] || 'Your rep'
-  return replaceMustacheTags(text, {
-    clientName: data.clientName || 'there',
+  const firstName = String(data.firstName || '').trim()
+  const lastName = String(data.lastName || '').trim()
+  const clientName = String(data.clientName || '').trim()
+    || [firstName, lastName].filter(Boolean).join(' ')
+    || 'there'
+  return {
+    firstName: firstName || (clientName !== 'there' ? clientName.split(/\s+/)[0] : '') || 'there',
+    lastName,
+    clientName,
     quoteTitle: data.quoteTitle || 'your quote',
-    quoteTotal: data.quoteTotal != null ? formatQuoteMoney(data.quoteTotal) : '',
+    quoteTotal: formatTotalForTag(data.quoteTotal),
     quoteLink: data.quoteLink || '',
     senderName,
     validUntil: data.validUntil || '',
     companyName: data.companyName || 'KnockScout',
-  })
+  }
+}
+
+export function getQuoteTagLabel(key) {
+  return PILL_TAG_LABELS[key] || key
+}
+
+/** Pill label: resolved value when present, otherwise attribute name (no send fallbacks). */
+export function getQuoteTagPillText(key, data = {}) {
+  const label = getQuoteTagLabel(key)
+  let raw = ''
+  switch (key) {
+    case 'firstName':
+      raw = data.firstName || ''
+      break
+    case 'lastName':
+      raw = data.lastName || ''
+      break
+    case 'clientName':
+      raw = data.clientName || [data.firstName, data.lastName].filter(Boolean).join(' ') || ''
+      break
+    case 'quoteTitle':
+      raw = data.quoteTitle || ''
+      break
+    case 'quoteTotal':
+      raw = formatTotalForTag(data.quoteTotal)
+      break
+    case 'quoteLink':
+      raw = data.quoteLink || ''
+      break
+    case 'senderName':
+      raw = data.senderName || data.senderEmail?.split('@')[0] || ''
+      break
+    case 'validUntil':
+      raw = data.validUntil || ''
+      break
+    case 'companyName':
+      raw = data.companyName || ''
+      break
+    default:
+      raw = data[key] || ''
+  }
+  const text = String(raw).trim()
+  if (!text || text === '[link will appear after send]') return label
+  return text
+}
+
+export function replaceQuoteTags(text, data = {}) {
+  if (!text) return ''
+  return replaceMustacheTags(text, buildQuoteTagValues(data))
 }
 
 export function getQuoteSendTemplatesFromSettings(appSettings) {
@@ -72,4 +146,18 @@ export function buildQuoteSendTemplatesPatch(email, text) {
       },
     },
   }
+}
+
+export function isQuotePillTagKey(key) {
+  return Boolean(PILL_TAG_LABELS[key])
+}
+
+/** Convert mustache template text → contentEditable HTML with pills. */
+export function mustacheToQuoteEditorHtml(text, data = {}) {
+  return mustacheToTagEditorHtml(text, data, QUOTE_SEND_TAGS, (key, d) => getQuoteTagPillText(key, d))
+}
+
+/** Serialize contentEditable root back to mustache template text. */
+export function quoteEditorDomToMustache(root) {
+  return tagEditorDomToMustache(root, QUOTE_SEND_TAGS)
 }

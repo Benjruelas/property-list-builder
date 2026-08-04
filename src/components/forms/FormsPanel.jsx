@@ -84,6 +84,7 @@ export function FormsPanel({
   formsFillReturnToLead = false,
   formsEditReturnToFormPicker = false,
   lead = null,
+  leads = [],
   onOpenEdit,
   onOpenFill,
   onCloseSubView,
@@ -626,6 +627,7 @@ export function FormsPanel({
                 template={activeTemplate}
                 onBack={handleSubViewBack}
                 lead={lead}
+                leads={leads}
                 onFormSent={onFormSent}
                 teams={teams}
                 teamMembership={teamMembership}
@@ -676,6 +678,8 @@ export function FormsPanel({
         open={!!linkTemplateId}
         template={linkTemplate}
         prefillValues={linkPrefillValues}
+        lead={lead}
+        leads={leads}
         teams={teams}
         teamMembership={teamMembership}
         initialDelivery="link"

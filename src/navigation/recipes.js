@@ -485,10 +485,14 @@ export function recipeOpenQuoteDetailFromDeal(currentStack, quoteId, quote = nul
   ]
 }
 
-/** Legacy: openScheduleAtDate — push schedule on current stack */
-export function recipeOpenScheduleAtDate(currentStack, initialDate) {
+/** Open schedule at a date — swap into docked primary when keeping Tasks. */
+export function recipeOpenScheduleAtDate(currentStack, initialDate, opts = {}) {
+  const frame = { type: 'schedule', initialDate: initialDate ?? undefined }
+  if (opts.keepTasks && stackHasTasks(currentStack)) {
+    return recipeSwapPrimaryKeepTasks(currentStack, frame)
+  }
   const withoutSchedule = currentStack.filter((f) => frameRoot(f.type) !== 'schedule')
-  return [...withoutSchedule, { type: 'schedule', initialDate: initialDate ?? undefined }]
+  return [...withoutSchedule, frame]
 }
 
 /** Open deal detail as the primary panel; keeps Deals list mounted underneath for Back. */

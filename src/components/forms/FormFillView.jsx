@@ -33,6 +33,7 @@ export function FormFillView({
   initialValues,
   lockedFieldIds,
   lead = null,
+  leads = [],
   onFormSent,
   teams = [],
   teamMembership = null,
@@ -1078,6 +1079,7 @@ export function FormFillView({
           values={stripValuesForSubmit()}
           preparePdf={preparePdfForSend}
           lead={lead}
+          leads={leads}
           teams={teams}
           teamMembership={teamMembership}
           initialDelivery={submitReady ? 'pdf' : 'link'}

@@ -393,9 +393,12 @@
 }
 [data-ui-theme='light'] .schedule-panel .schedule-task-pill {
   background: var(--map-panel-surface-muted) !important;
-  color: var(--map-panel-ink-secondary) !important;
+  color: var(--map-panel-ink-strong) !important;
   border-left-color: rgba(37, 99, 235, 0.55) !important;
   box-shadow: none !important;
+}
+[data-ui-theme='light'] .schedule-panel .schedule-task-pill-meta {
+  color: var(--map-panel-ink-muted) !important;
 }
 [data-ui-theme='light'] .schedule-panel .schedule-week-time-label {
   border-color: var(--map-panel-stroke) !important;
@@ -742,6 +745,9 @@
 }
 [data-ui-theme='light'] .schedule-task-block:hover {
   background: rgba(59, 130, 246, 0.16) !important;
+}
+[data-ui-theme='light'] .schedule-task-block-meta {
+  color: var(--map-panel-ink-muted) !important;
 }
 
 /* List panel create/cancel buttons */

@@ -36,14 +36,19 @@ export function QuoteBrandHeader({
         ) : null}
         <div className="quote-brand-header__copy">
           {company ? <div className="quote-brand-header__company">{company}</div> : null}
-          {name ? <div className="quote-brand-header__sender">{name}</div> : null}
-          {email ? (
-            <a
-              href={`mailto:${email}`}
-              className="quote-brand-header__email"
-            >
-              {email}
-            </a>
+          {(name || email) ? (
+            <div className="quote-brand-header__contact">
+              {name ? <span className="quote-brand-header__sender">{name}</span> : null}
+              {name && email ? <span className="quote-brand-header__contact-sep" aria-hidden>·</span> : null}
+              {email ? (
+                <a
+                  href={`mailto:${email}`}
+                  className="quote-brand-header__email"
+                >
+                  {email}
+                </a>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

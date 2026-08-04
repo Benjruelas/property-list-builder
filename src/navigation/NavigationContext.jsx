@@ -347,8 +347,8 @@ export function NavigationProvider({ children }) {
   }, [state.navStack, replaceStack])
 
   const openScheduleAtDate = useCallback((ts) => {
-    replaceStack(recipeOpenScheduleAtDate(state.navStack, ts))
-  }, [state.navStack, replaceStack])
+    replaceStack(recipeOpenScheduleAtDate(state.navStack, ts, taskDockOpts()))
+  }, [state.navStack, replaceStack, taskDockOpts])
 
   const openQuoteEditorFromDeal = useCallback((prefill) => {
     replaceStack(recipeOpenQuoteEditorFromDeal(state.navStack, prefill))

@@ -4598,6 +4598,7 @@ function App() {
             formsFillReturnToLead={formsFillReturnToLead}
             formsEditReturnToFormPicker={formsEditReturnToFormPicker}
             lead={formsFillLeadId ? leads.find((l) => l.id === formsFillLeadId) : null}
+            leads={leads}
             onOpenEdit={(templateId) => nav.pushFormsEdit(templateId)}
             onOpenFill={(templateId) => nav.pushFormsFill(templateId)}
             onCloseSubView={handleCloseFormsSubView}

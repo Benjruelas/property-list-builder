@@ -460,8 +460,8 @@ export function QuotesPanel({
               <div className="space-y-4 pb-4">
                 <p className="text-sm opacity-70">Default templates used when sending quotes via email or text. Your name comes from Settings; company name from team branding (Teams → your team).</p>
                 <div className="flex flex-wrap gap-1">
-                  {QUOTE_SEND_TAGS.map(({ tag, label }) => (
-                    <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10" title={label}>{tag}</span>
+                  {QUOTE_SEND_TAGS.map(({ key, tag, label }) => (
+                    <span key={key} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10" title={tag}>{label}</span>
                   ))}
                 </div>
                 <label className="block space-y-1">

@@ -17,33 +17,106 @@ import { sendPhotoReportEmail, buildReportPublicUrl } from '../../utils/photoRep
 import { parseReportTokenFromPublicUrl } from '@/utils/publicLinks'
 import {
   replaceReportTags,
-  applyReportLinkToText,
   getReportSendTemplatesFromSettings,
   buildReportSendTemplatesPatch,
+  REPORT_SEND_TAGS,
 } from '../../utils/reportSendTemplates'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
+import { getLeadEmails, getLeadPhones } from '@/utils/leadContact'
+import { formatPhoneDisplay } from '@/utils/phoneFormat'
 import { getSenderDisplayName, getCompanyNameForSends } from '../../utils/profile'
 import { updateSettings } from '../../utils/settings'
 import { normalizeEmailAddress } from '@/utils/outreachAttachments'
 import { getAllTeamMembers } from '@/utils/teamTaskUtils'
 import { OutreachCcField } from '../outreach/OutreachCcField'
-import { SendAsField } from '../shared/SendAsField'
-import { memberPrimaryLabel } from '@/components/pickers/entityPickerShared'
-import { cn } from '@/lib/utils'
+import { LeadPickerField } from '../pickers/LeadPickerField'
+import { MessageTagEditor } from '../shared/MessageTagEditor'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const REPORT_LINK_TAG = '{ReportLink}'
 
 const FIELD_LABEL = 'block text-sm font-medium text-white/75 mb-1'
-const TEXT_INPUT = 'w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-const MESSAGE_TEXTAREA = 'w-full min-h-[240px] p-3 border border-white/15 rounded-lg bg-white/5 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const TEXT_INPUT = 'w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const SUBJECT_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--single w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const MESSAGE_EDITOR = 'quote-msg-tag-editor w-full min-h-[12rem] p-3 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const TEXT_MESSAGE_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--text w-full min-h-[5.5rem] p-3 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+const SEGMENT_BTN =
+  'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
+
+function TagInsertStrip({ onInsert, disabled }) {
+  return (
+    <div className="flex flex-wrap gap-1 mb-2">
+      {REPORT_SEND_TAGS.map(({ key, label }) => (
+        <button
+          key={key}
+          type="button"
+          className="send-tag-chip text-[10px] px-1.5 py-0.5 rounded"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onInsert(key)}
+          title={`Insert ${label}`}
+          disabled={disabled}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ContactField({
+  id,
+  label,
+  value,
+  onChange,
+  options = [],
+  type = 'text',
+  placeholder,
+  disabled,
+}) {
+  if (options.length > 1) {
+    const selectValue = options.includes(value) ? value : options[0]
+    return (
+      <div>
+        <label className={FIELD_LABEL} htmlFor={id}>{label}</label>
+        <select
+          id={id}
+          value={selectValue}
+          onChange={(e) => onChange(e.target.value)}
+          className={TEXT_INPUT}
+          disabled={disabled}
+        >
+          {options.map((opt) => (
+            <option key={opt} value={opt}>
+              {type === 'tel' ? formatPhoneDisplay(opt) || opt : opt}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <label className={FIELD_LABEL} htmlFor={id}>{label}</label>
+      <Input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={TEXT_INPUT}
+        disabled={disabled}
+        autoComplete={type === 'email' ? 'email' : type === 'tel' ? 'tel' : undefined}
+      />
+    </div>
+  )
+}
 
 export function SendReportDialog({ open, report, onClose, onSent, leads = [], teams = [], teamMembership = null }) {
   const { getToken, currentUser } = useAuth()
   const [tab, setTab] = useState('email')
+  const [selectedLead, setSelectedLead] = useState(null)
   const [recipient, setRecipient] = useState('')
   const [phone, setPhone] = useState('')
-  const [senderUid, setSenderUid] = useState(null)
   const [ccEmails, setCcEmails] = useState([])
   const [sendMeCopy, setSendMeCopy] = useState(false)
   const [subject, setSubject] = useState('')
@@ -58,34 +131,41 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
 
   const teamMembers = useMemo(() => getAllTeamMembers(teams), [teams])
 
-  const selectedSender = useMemo(() => {
-    if (!senderUid || senderUid === currentUser?.uid) {
-      return { name: getSenderDisplayName(currentUser), email: currentUser?.email || '' }
-    }
-    const member = teamMembers.find((m) => m.uid === senderUid)
-    return {
-      name: member ? memberPrimaryLabel(member) : getSenderDisplayName(currentUser),
-      email: member?.email || '',
-    }
-  }, [senderUid, currentUser, teamMembers])
-
   const linkedLead = useMemo(
     () => (report?.leadId ? leads.find((l) => l.id === report.leadId) : null),
-    [report?.leadId, leads]
+    [report?.leadId, leads],
   )
 
-  const baseTagData = useMemo(() => ({
-    ClientName: linkedLead ? displayLeadName(linkedLead) : 'there',
-    ReportTitle: report?.title || 'Photo Report',
-    SenderName: selectedSender.name,
-    CompanyName: getCompanyNameForSends(teams, teamMembership),
-    LeadAddress: linkedLead ? formatLeadAddress(linkedLead) : '',
-  }), [report, linkedLead, selectedSender, teams, teamMembership])
+  const pickerLeads = useMemo(() => {
+    if (!linkedLead?.id) return leads
+    if (leads.some((l) => l.id === linkedLead.id)) return leads
+    return [linkedLead, ...leads]
+  }, [leads, linkedLead])
+
+  const leadEmails = useMemo(
+    () => (selectedLead ? getLeadEmails(selectedLead) : []),
+    [selectedLead],
+  )
+  const leadPhones = useMemo(
+    () => (selectedLead ? getLeadPhones(selectedLead) : []),
+    [selectedLead],
+  )
+
+  const senderName = useMemo(
+    () => report?.createdByName || getSenderDisplayName(currentUser),
+    [report?.createdByName, currentUser],
+  )
 
   const tagData = useMemo(() => ({
-    ...baseTagData,
-    ReportLink: lastLink || REPORT_LINK_TAG,
-  }), [baseTagData, lastLink])
+    firstName: selectedLead?.firstName || '',
+    lastName: selectedLead?.lastName || '',
+    clientName: selectedLead ? displayLeadName(selectedLead) || '' : '',
+    reportTitle: report?.title || '',
+    reportLink: lastLink || '',
+    senderName,
+    companyName: getCompanyNameForSends(teams, teamMembership),
+    leadAddress: selectedLead ? formatLeadAddress(selectedLead) : '',
+  }), [report, selectedLead, senderName, teams, teamMembership, lastLink])
 
   const resolvedCcEmails = useMemo(() => {
     const seen = new Set()
@@ -97,22 +177,33 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     })
   }, [ccEmails, recipient])
 
-  const loadTemplates = useCallback((link = '') => {
-    const t = getReportSendTemplatesFromSettings()
-    const data = {
-      ...baseTagData,
-      ReportLink: link || REPORT_LINK_TAG,
-    }
-    setSubject(replaceReportTags(t.emailSubject, data))
-    setBody(replaceReportTags(t.emailBody, data))
-    setTextBody(replaceReportTags(t.textBody, data))
-  }, [baseTagData])
+  const subjectEditorRef = useRef(null)
+  const emailEditorRef = useRef(null)
+  const textEditorRef = useRef(null)
+  const [focusedField, setFocusedField] = useState(null)
+  const focusBlurTimerRef = useRef(null)
 
-  const applyLinkToMessages = useCallback((link) => {
-    if (!link) return
-    setBody((prev) => applyReportLinkToText(prev, link))
-    setTextBody((prev) => applyReportLinkToText(prev, link))
-  }, [])
+  const handleEditorFocus = (field) => {
+    if (focusBlurTimerRef.current) {
+      clearTimeout(focusBlurTimerRef.current)
+      focusBlurTimerRef.current = null
+    }
+    setFocusedField(field)
+  }
+
+  const handleEditorBlur = () => {
+    if (focusBlurTimerRef.current) clearTimeout(focusBlurTimerRef.current)
+    focusBlurTimerRef.current = setTimeout(() => {
+      setFocusedField(null)
+      focusBlurTimerRef.current = null
+    }, 120)
+  }
+
+  const insertTag = (key) => {
+    if (focusedField === 'subject') subjectEditorRef.current?.insertTag(key)
+    else if (focusedField === 'text') textEditorRef.current?.insertTag(key)
+    else emailEditorRef.current?.insertTag(key)
+  }
 
   const mintReportLink = useCallback(async () => {
     setGeneratingLink(true)
@@ -121,16 +212,14 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         reportId: report.id,
         generateOnly: true,
         token: parseReportTokenFromPublicUrl(lastLink) || report.publicToken || undefined,
-        senderUid: senderUid || undefined,
       })
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
-      applyLinkToMessages(link)
       return link
     } finally {
       setGeneratingLink(false)
     }
-  }, [getToken, report?.id, applyLinkToMessages, lastLink, senderUid])
+  }, [getToken, report?.id, report?.publicToken, lastLink])
 
   useEffect(() => {
     if (!open) {
@@ -144,39 +233,23 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     if (initSessionRef.current === sessionKey) return undefined
     initSessionRef.current = sessionKey
 
+    const initialLead = linkedLead || null
     setTab('email')
-    setRecipient(linkedLead?.email || '')
-    setPhone(linkedLead?.phone || '')
-    setSenderUid(report.displaySenderUid || null)
+    setSelectedLead(initialLead)
+    setRecipient(initialLead ? (getLeadEmails(initialLead)[0] || '') : '')
+    setPhone(initialLead ? (getLeadPhones(initialLead)[0] || '') : '')
     setCcEmails([])
     setSendMeCopy(false)
     setSentTo(null)
 
     const existingLink = report.publicToken ? buildReportPublicUrl(report.publicToken) : ''
     setLastLink(existingLink)
+    setFocusedField(null)
 
-    const initialSenderUid = report.displaySenderUid || null
-    let initialSenderName = getSenderDisplayName(currentUser)
-    if (initialSenderUid && initialSenderUid !== currentUser?.uid) {
-      const member = teamMembers.find((m) => m.uid === initialSenderUid)
-      if (member) initialSenderName = memberPrimaryLabel(member)
-    } else if (report.createdByName) {
-      initialSenderName = report.createdByName
-    }
-
-    // Load templates once from current tag data (avoid effect churn from loadTemplates identity)
     const t = getReportSendTemplatesFromSettings()
-    const data = {
-      ClientName: linkedLead ? displayLeadName(linkedLead) : 'there',
-      ReportTitle: report?.title || 'Photo Report',
-      SenderName: initialSenderName,
-      CompanyName: getCompanyNameForSends(teams, teamMembership),
-      LeadAddress: linkedLead ? formatLeadAddress(linkedLead) : '',
-      ReportLink: existingLink || REPORT_LINK_TAG,
-    }
-    setSubject(replaceReportTags(t.emailSubject, data))
-    setBody(replaceReportTags(t.emailBody, data))
-    setTextBody(replaceReportTags(t.textBody, data))
+    setSubject(t.emailSubject)
+    setBody(t.emailBody)
+    setTextBody(t.textBody)
 
     let cancelled = false
 
@@ -187,27 +260,30 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
           reportId: report.id,
           generateOnly: true,
           token: report.publicToken || parseReportTokenFromPublicUrl(existingLink) || undefined,
-          senderUid: initialSenderUid || undefined,
         })
         if (cancelled) return
         const link = res.publicUrl || buildReportPublicUrl(res.token)
         setLastLink(link)
-        applyLinkToMessages(link)
       } catch (e) {
         if (!cancelled) showToast(e.message || 'Could not create report link', 'error')
       } finally {
-        // Always clear — if this run was cancelled, a newer open may also set it,
-        // but leaving it true permanently disables Send.
         setGeneratingLink(false)
       }
     }
 
     bootstrapLink()
     return () => { cancelled = true }
-  // Intentionally omit loadTemplates / baseTagData — their identity churn was cancelling
-  // bootstrap and leaving generatingLink stuck true.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, report?.id, linkedLead?.id, getToken, applyLinkToMessages, currentUser, teams, teamMembership])
+  }, [open, report?.id, linkedLead?.id, getToken, report?.publicToken])
+
+  useEffect(() => {
+    setFocusedField(null)
+  }, [tab])
+
+  const handleLeadChange = (nextLead) => {
+    setSelectedLead(nextLead)
+    setRecipient(nextLead ? (getLeadEmails(nextLead)[0] || '') : '')
+    setPhone(nextLead ? (getLeadPhones(nextLead)[0] || '') : '')
+  }
 
   const resetAndClose = () => {
     if (sending) return
@@ -253,11 +329,9 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
         sendMeCopy,
         subject: replaceReportTags(subject, tagData),
         message: replaceReportTags(body, tagData),
-        senderUid: senderUid || undefined,
       })
       const link = res.publicUrl || buildReportPublicUrl(res.token)
       setLastLink(link)
-      setBody((prev) => applyReportLinkToText(prev, link))
       setSentTo(trimmed)
       showToast(
         res.sentCopyToSender ? `Report sent to ${trimmed} — copy sent to you` : `Report sent to ${trimmed}`,
@@ -273,14 +347,14 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
 
   const handleSendText = async () => {
     const tel = (phone || '').replace(/[^\d+]/g, '')
-    if (!tel) {
-      showToast('Enter a client phone number', 'error')
+    if (tel.length < 10) {
+      showToast('Enter a valid phone number', 'error')
       return
     }
     setSending(true)
     try {
       const link = await ensureReportLink()
-      const msg = replaceReportTags(textBody, { ...tagData, ReportLink: link })
+      const msg = replaceReportTags(textBody, { ...tagData, reportLink: link })
       window.location.href = `sms:${tel}?body=${encodeURIComponent(msg)}`
       showToast('Opening SMS…', 'success')
     } catch (e) {
@@ -308,7 +382,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose() }}>
       <DialogContent
-        className="map-panel list-panel share-list-dialog send-report-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl md:max-h-[90vh]"
+        className="map-panel list-panel share-list-dialog send-report-dialog fullscreen-panel flex flex-col overflow-hidden p-0 max-md:w-full md:max-w-2xl"
         showCloseButton={false}
         focusOverlay
         topLayer
@@ -327,73 +401,79 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 <DialogDescription className="text-sm opacity-90">to: {sentTo}</DialogDescription>
               </div>
             </DialogHeader>
-            <div className="px-6 pb-4 space-y-3 flex-1 overflow-y-auto scrollbar-hide">
-              {lastLink && (
-                <p className="text-xs opacity-60 break-all">{lastLink}</p>
-              )}
-              <Button variant="outline" className="w-full min-h-[44px]" onClick={handleCopyLink} disabled={busy || linkBusy}>
+            <div className="px-6 pb-4 space-y-3">
+              <Button
+                variant="outline"
+                className="send-form-btn w-full min-h-[44px]"
+                onClick={handleCopyLink}
+                disabled={busy || linkBusy}
+              >
                 {linkBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-                Copy report link
+                Copy link
               </Button>
             </div>
-            <DialogFooter className="px-6 pb-6 flex-shrink-0" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
-              <Button className="w-full create-list-btn min-h-[44px]" onClick={resetAndClose}>Done</Button>
+            <DialogFooter
+              className="px-6 pb-6 flex-shrink-0"
+              style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+            >
+              <Button variant="outline" className="send-form-btn send-form-btn--primary w-full min-h-[44px]" onClick={resetAndClose}>
+                Done
+              </Button>
             </DialogFooter>
           </>
         ) : (
           <>
             <DialogHeader
-              className="px-6 pt-6 pb-4 border-b border-white/10 flex-shrink-0 text-left"
+              className="px-6 pt-6 pb-3 border-b border-white/10 flex-shrink-0 text-left"
               style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
             >
-              <PanelHeader onBack={resetAndClose} title="Send photo report" icon={Mail} />
+              <PanelHeader onBack={resetAndClose} title="Send report" icon={Mail} />
               <DialogDescription className="text-sm opacity-80 mt-1">
                 {report.title || 'Photo Report'}
-                {linkedLead ? ` — ${displayLeadName(linkedLead)}` : ''}
               </DialogDescription>
             </DialogHeader>
 
             <div
-              className="px-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-4 md:max-h-[calc(90vh-200px)]"
-              style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+              className="px-6 py-3 space-y-3 max-md:flex-1 max-md:min-h-0 max-md:overflow-y-auto max-md:scrollbar-hide"
+              style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
             >
               <div className="flex gap-2">
-                {['email', 'text'].map((id) => (
+                {[
+                  { id: 'email', label: 'Email', icon: Mail },
+                  { id: 'text', label: 'Text', icon: MessageSquare },
+                ].map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     type="button"
-                    className={cn(
-                      'flex-1 min-h-[44px] rounded-lg border text-sm font-medium flex items-center justify-center gap-2',
-                      tab === id ? 'border-white/30 bg-white/10' : 'border-white/10 opacity-70'
-                    )}
+                    aria-pressed={tab === id}
+                    className={SEGMENT_BTN}
                     onClick={() => setTab(id)}
                   >
-                    {id === 'email' ? <Mail className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
-                    {id === 'email' ? 'Email' : 'Text'}
+                    <Icon className="h-4 w-4" />
+                    {label}
                   </button>
                 ))}
               </div>
 
+              <LeadPickerField
+                label="Lead"
+                leads={pickerLeads}
+                value={selectedLead?.id || null}
+                onChange={handleLeadChange}
+              />
+
               {tab === 'email' ? (
                 <>
-                  <SendAsField
-                    currentUser={currentUser}
-                    teams={teams}
-                    senderUid={senderUid}
-                    onChangeSenderUid={setSenderUid}
+                  <ContactField
+                    id="report-send-to"
+                    label="To"
+                    type="email"
+                    value={recipient}
+                    onChange={setRecipient}
+                    options={leadEmails}
+                    placeholder="Recipient email"
                     disabled={busy}
                   />
-
-                  <div>
-                    <label className={FIELD_LABEL} htmlFor="report-send-to">To</label>
-                    <Input
-                      id="report-send-to"
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      placeholder="Recipient email"
-                      className={TEXT_INPUT}
-                    />
-                  </div>
 
                   <OutreachCcField
                     teamMembers={teamMembers}
@@ -405,25 +485,42 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
 
                   <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-subject">Subject</label>
-                    <input
+                    {focusedField === 'subject' && (
+                      <TagInsertStrip onInsert={insertTag} disabled={busy} />
+                    )}
+                    <MessageTagEditor
+                      ref={subjectEditorRef}
                       id="report-send-subject"
-                      type="text"
                       value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
-                      className={TEXT_INPUT}
+                      onChange={setSubject}
+                      tagData={tagData}
+                      tags={REPORT_SEND_TAGS}
+                      className={SUBJECT_EDITOR}
                       placeholder="Email subject"
+                      disabled={busy}
+                      singleLine
+                      onFocus={() => handleEditorFocus('subject')}
+                      onBlur={handleEditorBlur}
                     />
                   </div>
 
                   <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-body">Message</label>
-                    <textarea
+                    {focusedField === 'body' && (
+                      <TagInsertStrip onInsert={insertTag} disabled={busy} />
+                    )}
+                    <MessageTagEditor
+                      ref={emailEditorRef}
                       id="report-send-body"
                       value={body}
-                      onChange={(e) => setBody(e.target.value)}
-                      rows={10}
-                      className={MESSAGE_TEXTAREA}
-                      placeholder="Email message"
+                      onChange={setBody}
+                      tagData={tagData}
+                      tags={REPORT_SEND_TAGS}
+                      className={MESSAGE_EDITOR}
+                      placeholder="Optional message"
+                      disabled={busy}
+                      onFocus={() => handleEditorFocus('body')}
+                      onBlur={handleEditorBlur}
                     />
                   </div>
 
@@ -440,63 +537,85 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                 </>
               ) : (
                 <>
-                  <SendAsField
-                    currentUser={currentUser}
-                    teams={teams}
-                    senderUid={senderUid}
-                    onChangeSenderUid={setSenderUid}
+                  <ContactField
+                    id="report-send-phone"
+                    label="Phone"
+                    type="tel"
+                    value={phone}
+                    onChange={setPhone}
+                    options={leadPhones}
+                    placeholder="Client phone"
                     disabled={busy}
                   />
 
                   <div>
-                    <label className={FIELD_LABEL} htmlFor="report-send-phone">Phone</label>
-                    <Input
-                      id="report-send-phone"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Client phone"
-                      className={TEXT_INPUT}
-                    />
-                  </div>
-
-                  <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-text">Message</label>
-                    <textarea
+                    {focusedField === 'text' && (
+                      <TagInsertStrip onInsert={insertTag} disabled={busy} />
+                    )}
+                    <MessageTagEditor
+                      ref={textEditorRef}
                       id="report-send-text"
                       value={textBody}
-                      onChange={(e) => setTextBody(e.target.value)}
-                      rows={10}
-                      className={MESSAGE_TEXTAREA}
+                      onChange={setTextBody}
+                      tagData={tagData}
+                      tags={REPORT_SEND_TAGS}
+                      className={TEXT_MESSAGE_EDITOR}
                       placeholder="Text message"
+                      disabled={busy}
+                      onFocus={() => handleEditorFocus('text')}
+                      onBlur={handleEditorBlur}
                     />
                   </div>
+                  <p className="text-xs text-white/50">
+                    Opens your device SMS app with the report link.
+                  </p>
                 </>
               )}
 
               <Button
                 type="button"
                 variant="outline"
-                className="w-full min-h-[44px]"
+                className="send-form-btn w-full min-h-[44px]"
                 onClick={handleCopyLink}
                 disabled={busy || linkBusy}
               >
                 {linkBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-                Copy report link
+                Copy link
               </Button>
 
               {tab === 'email' ? (
-                <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendEmail} disabled={busy}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
+                  onClick={handleSendEmail}
+                  disabled={busy}
+                >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
                   Send email
                 </Button>
               ) : (
-                <Button type="button" className="w-full min-h-[44px] create-list-btn" onClick={handleSendText} disabled={busy || linkBusy}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
+                  onClick={handleSendText}
+                  disabled={busy || linkBusy}
+                >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
                   Open SMS
                 </Button>
               )}
 
-              <Button type="button" variant="ghost" size="sm" onClick={handleSaveDefault} disabled={savingDefault || busy}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full opacity-70"
+                onClick={handleSaveDefault}
+                disabled={savingDefault || busy}
+              >
                 {savingDefault ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Save as default template
               </Button>

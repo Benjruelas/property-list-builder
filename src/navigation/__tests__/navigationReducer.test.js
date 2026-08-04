@@ -571,6 +571,23 @@ describe('recipes', () => {
     expect(stack.map((f) => f.type)).toEqual(['leads', 'schedule'])
   })
 
+  it('openScheduleAtDate swaps primary and keeps tasks when keepTasks', () => {
+    const stack = recipeOpenScheduleAtDate(
+      [{ type: 'leads' }, { type: 'tasks' }],
+      '2025-06-01',
+      { keepTasks: true },
+    )
+    expect(stack.map((f) => f.type)).toEqual(['schedule', 'tasks'])
+    expect(stack[0].initialDate).toBe('2025-06-01')
+    expect(selectTasksDockLayout({ navStack: stack }).primaryRoot).toBe('schedule')
+  })
+
+  it('openScheduleAtDate from solo tasks docks schedule as primary when keepTasks', () => {
+    const stack = recipeOpenScheduleAtDate([{ type: 'tasks' }], '2025-06-01', { keepTasks: true })
+    expect(stack.map((f) => f.type)).toEqual(['schedule', 'tasks'])
+    expect(selectTasksDockLayout({ navStack: stack }).primaryRoot).toBe('schedule')
+  })
+
   it('navigateFromActivity prefixes activity frame', () => {
     const stack = recipeNavigateFromActivity([], [{ type: 'forms' }])
     expect(stack[0].type).toBe('activity')

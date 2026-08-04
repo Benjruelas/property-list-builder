@@ -22,8 +22,15 @@ describe('reportSendTemplates', () => {
       .toBe('https://app.test/r/abc')
   })
 
-  it('keeps default templates using {{reportLink}}', () => {
+  it('keeps default templates using {{reportLink}} and {{firstName}}', () => {
     expect(DEFAULT_REPORT_EMAIL_BODY).toContain('{{reportLink}}')
+    expect(DEFAULT_REPORT_EMAIL_BODY).toContain('{{firstName}}')
     expect(DEFAULT_REPORT_TEXT_BODY).toContain('{{reportLink}}')
+    expect(DEFAULT_REPORT_TEXT_BODY).toContain('{{firstName}}')
+  })
+
+  it('replaces firstName and legacy clientName', () => {
+    expect(replaceReportTags('Hi {{firstName}}', { firstName: 'Ada' })).toBe('Hi Ada')
+    expect(replaceReportTags('Hi {{clientName}}', { clientName: 'Ada Lovelace' })).toBe('Hi Ada Lovelace')
   })
 })
