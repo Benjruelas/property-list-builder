@@ -1,4 +1,5 @@
-import { Send, Pencil, Trash2, ExternalLink } from 'lucide-react'
+import { useState } from 'react'
+import { Send, Pencil, Trash2, ExternalLink, Eye } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '../ui/dialog'
 import { PanelHeader } from '../ui/panel-header'
 import { QuoteStatusBadge } from './QuoteStatusBadge'
@@ -15,9 +16,34 @@ import {
   getGoogleReviewsFromProfile,
 } from '@/utils/profile'
 import { useAuth } from '@/contexts/AuthContext'
-import { ViewAsClientButton } from '../ViewAsClientButton'
-import { PanelActionButton } from '../ui/panel-action-button'
 import { handleChildPanelDismiss } from '../ui/panelDialogUtils'
+import {
+  fetchClientPreviewUrl,
+  prepareClientPreviewTab,
+  closeClientPreviewTab,
+  openClientPreviewUrl,
+} from '@/utils/clientPreview'
+import { showToast } from '../ui/toast'
+import { cn } from '@/lib/utils'
+
+function QuoteActionTile({ icon: Icon, label, onClick, disabled, danger = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      className={cn(
+        'report-detail-action-tile',
+        danger && 'report-detail-action-tile--danger',
+        disabled && 'opacity-40',
+      )}
+    >
+      <Icon className="report-detail-action-icon" aria-hidden />
+      <span className="report-detail-action-label">{label}</span>
+    </button>
+  )
+}
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -44,6 +70,7 @@ export function QuoteDetails({
 }) {
   const { getToken: authGetToken, currentUser } = useAuth()
   const resolveToken = getToken || authGetToken
+  const [previewLoading, setPreviewLoading] = useState(false)
   if (!quote) return null
 
   const team = getTeamForMembership(teams, teamMembership)
@@ -62,6 +89,41 @@ export function QuoteDetails({
   const leadName = lead ? displayLeadName(lead) : (quote.clientName || null)
   const isLocked = !isQuoteEditable(quote.status)
   const canEditQuote = isQuoteEditable(quote.status)
+  const canSendQuote = quote.status !== 'paid'
+  const showOpenDeal = Boolean(quote.dealId && onOpenDeal)
+  const actionCount = 4 + (showOpenDeal ? 1 : 0)
+
+  const handleViewAsClient = async () => {
+    if (previewLoading || !quote.id) return
+    const previewWindow = prepareClientPreviewTab()
+    if (!previewWindow) {
+      showToast('Allow popups to open the client preview', 'error')
+      return
+    }
+    setPreviewLoading(true)
+    try {
+      const url = await fetchClientPreviewUrl(resolveToken, { type: 'quote', id: quote.id })
+      if (!openClientPreviewUrl(url, previewWindow)) {
+        closeClientPreviewTab(previewWindow)
+        showToast('Could not open client preview tab', 'error')
+      }
+    } catch (e) {
+      closeClientPreviewTab(previewWindow)
+      showToast(e.message || 'Could not load client preview link', 'error')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    const ok = await showConfirm({
+      title: 'Delete quote?',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (ok) onDelete?.(quote)
+  }
 
   return (
     <Dialog
@@ -85,10 +147,7 @@ export function QuoteDetails({
           </PanelHeader>
         </DialogHeader>
 
-        <div
-          className="flex-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto scrollbar-hide overscroll-contain px-4 py-4 space-y-4"
-          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
-        >
+        <div className="flex-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto scrollbar-hide overscroll-contain px-4 py-4 space-y-4">
           <QuoteBrandHeader
             variant="panel"
             businessName={teamBranding.businessName}
@@ -160,33 +219,49 @@ export function QuoteDetails({
               <p className="text-xs opacity-50 mt-1">{formatDateTime(quote.clientResponse.respondedAt)}</p>
             </div>
           )}
+        </div>
 
-          <div className="quote-details-actions flex flex-col gap-2.5 pt-2">
-            {quote.status !== 'paid' && (
-              <PanelActionButton variant="primary" onClick={() => onSend?.(quote)}>
-                <Send className="h-4 w-4 shrink-0" /> Send quote
-              </PanelActionButton>
+        <div
+          className="report-detail-footer flex-shrink-0"
+          style={{ paddingBottom: 'calc(0.85rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <div
+            className="report-detail-actions-row"
+            role="toolbar"
+            aria-label="Quote actions"
+            style={{ gridTemplateColumns: `repeat(${actionCount}, minmax(0, 1fr))` }}
+          >
+            <QuoteActionTile
+              icon={Send}
+              label="Send"
+              onClick={() => onSend?.(quote)}
+              disabled={!canSendQuote}
+            />
+            <QuoteActionTile
+              icon={Eye}
+              label={previewLoading ? 'Opening…' : 'View'}
+              onClick={handleViewAsClient}
+              disabled={previewLoading}
+            />
+            <QuoteActionTile
+              icon={Pencil}
+              label="Edit"
+              onClick={() => onEdit?.(quote)}
+              disabled={!canEditQuote}
+            />
+            {showOpenDeal && (
+              <QuoteActionTile
+                icon={ExternalLink}
+                label="Deal"
+                onClick={() => onOpenDeal(quote)}
+              />
             )}
-            <ViewAsClientButton getToken={resolveToken} type="quote" entityId={quote.id} />
-            {quote.status !== 'paid' && canEditQuote && (
-              <PanelActionButton onClick={() => onEdit?.(quote)}>
-                <Pencil className="h-4 w-4 shrink-0" /> Edit
-              </PanelActionButton>
-            )}
-            {quote.dealId && onOpenDeal && (
-              <PanelActionButton onClick={() => onOpenDeal(quote)}>
-                <ExternalLink className="h-4 w-4 shrink-0" /> Open linked deal
-              </PanelActionButton>
-            )}
-            <PanelActionButton
-              variant="danger"
-              onClick={async () => {
-                const ok = await showConfirm({ title: 'Delete quote?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })
-                if (ok) onDelete?.(quote)
-              }}
-            >
-              <Trash2 className="h-4 w-4 shrink-0" /> Delete
-            </PanelActionButton>
+            <QuoteActionTile
+              icon={Trash2}
+              label="Delete"
+              danger
+              onClick={handleDelete}
+            />
           </div>
         </div>
       </DialogContent>

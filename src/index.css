@@ -6241,15 +6241,10 @@ body:has(.app-loading-screen--video) {
   max-width: min(96vw, 42rem) !important;
   min-width: 0 !important;
   height: auto !important;
-  max-height: min(90vh, 820px) !important;
-}
-.map-panel.send-quote-dialog,
-.map-panel.send-report-dialog,
-.map-panel.send-form-dialog,
-.map-panel.list-panel.fullscreen-panel.send-quote-dialog,
-.map-panel.list-panel.fullscreen-panel.send-report-dialog,
-.map-panel.list-panel.fullscreen-panel.send-form-dialog {
   max-height: min(96vh, 1100px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
 }
 
 .map-panel-dialog.send-report-dialog[data-state='open'],
@@ -6260,12 +6255,21 @@ body:has(.app-loading-screen--video) {
 @media (max-width: 767px) {
   .map-panel.send-report-dialog.fullscreen-panel,
   .map-panel.send-form-dialog.fullscreen-panel,
-  .map-panel.send-quote-dialog.fullscreen-panel {
+  .map-panel.send-quote-dialog.fullscreen-panel,
+  .map-panel.list-panel.fullscreen-panel.send-report-dialog,
+  .map-panel.list-panel.fullscreen-panel.send-form-dialog,
+  .map-panel.list-panel.fullscreen-panel.send-quote-dialog {
     width: 100% !important;
     max-width: none !important;
+    min-width: 0 !important;
     height: 100dvh !important;
     max-height: 100dvh !important;
+    min-height: 100dvh !important;
     border-radius: 0 !important;
+    border: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
 }
 .map-panel.forms-send-dialog:not(.send-form-dialog) {
@@ -9958,7 +9962,8 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 }
 
 @media (max-width: 767px) {
-  .report-details-panel.fullscreen-panel {
+  .report-details-panel.fullscreen-panel,
+  .quote-details-panel.fullscreen-panel {
     width: 100% !important;
     max-width: none !important;
     height: 100dvh !important;
@@ -9966,7 +9971,7 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   }
 }
 
-.report-details-panel .report-detail-action-tile {
+:is(.report-details-panel, .quote-details-panel) .report-detail-action-tile {
   display: flex !important;
   flex-direction: column;
   align-items: center;
@@ -9988,21 +9993,21 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   box-shadow: none !important;
 }
 
-.report-details-panel .report-detail-action-tile:hover:not(:disabled) {
+:is(.report-details-panel, .quote-details-panel) .report-detail-action-tile:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
 
-.report-details-panel .report-detail-action-tile:disabled {
+:is(.report-details-panel, .quote-details-panel) .report-detail-action-tile:disabled {
   cursor: not-allowed;
 }
 
-.report-details-panel .report-detail-action-tile--danger {
+:is(.report-details-panel, .quote-details-panel) .report-detail-action-tile--danger {
   border-color: rgba(248, 113, 113, 0.42) !important;
   color: rgba(254, 202, 202, 0.95) !important;
 }
 
-.report-details-panel .report-detail-action-tile--danger:hover:not(:disabled) {
+:is(.report-details-panel, .quote-details-panel) .report-detail-action-tile--danger:hover:not(:disabled) {
   background: rgba(248, 113, 113, 0.12) !important;
   border-color: rgba(252, 165, 165, 0.62) !important;
   color: rgba(254, 226, 226, 1) !important;
@@ -10025,18 +10030,18 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   white-space: nowrap;
 }
 
-[data-ui-theme='light'] .report-details-panel .report-detail-action-tile {
+[data-ui-theme='light'] :is(.report-details-panel, .quote-details-panel) .report-detail-action-tile {
   border-color: var(--map-panel-stroke-strong) !important;
   background: rgba(0, 0, 0, 0.03) !important;
   color: var(--map-panel-text) !important;
 }
 
-[data-ui-theme='light'] .report-details-panel .report-detail-action-tile:hover:not(:disabled) {
+[data-ui-theme='light'] :is(.report-details-panel, .quote-details-panel) .report-detail-action-tile:hover:not(:disabled) {
   background: rgba(0, 0, 0, 0.06) !important;
   border-color: rgba(0, 0, 0, 0.28) !important;
 }
 
-[data-ui-theme='light'] .report-details-panel .report-detail-action-tile--danger {
+[data-ui-theme='light'] :is(.report-details-panel, .quote-details-panel) .report-detail-action-tile--danger {
   border-color: rgba(185, 28, 28, 0.4) !important;
   color: rgb(185, 28, 28) !important;
 }

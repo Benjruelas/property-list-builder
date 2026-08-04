@@ -443,7 +443,7 @@ export function SendFormDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose() }}>
       <DialogContent
-        className="map-panel list-panel share-list-dialog forms-send-dialog send-form-dialog fullscreen-panel flex flex-col overflow-hidden p-0 max-md:w-full md:max-w-2xl"
+        className="map-panel list-panel share-list-dialog forms-send-dialog send-form-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl"
         showCloseButton={false}
         focusOverlay
         topLayer
@@ -464,7 +464,7 @@ export function SendFormDialog({
                 </DialogDescription>
               </div>
             </DialogHeader>
-            <div className="px-6 pb-4 space-y-3">
+            <div className="px-6 pb-4 space-y-3 flex-1 min-h-0 overflow-y-auto scrollbar-hide">
               {lastLink ? (
                 <Button variant="outline" className="send-form-btn w-full min-h-[44px]" onClick={handleCopyLink} disabled={sending}>
                   <Copy className="h-4 w-4 mr-2" /> Copy link
@@ -472,7 +472,7 @@ export function SendFormDialog({
               ) : null}
             </div>
             <DialogFooter
-              className="px-6 pb-6 flex-shrink-0"
+              className="px-6 pt-3 pb-6 border-t border-white/10 flex-shrink-0"
               style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
             >
               <Button variant="outline" className="send-form-btn send-form-btn--primary w-full min-h-[44px]" onClick={handleClose}>Done</Button>
@@ -490,10 +490,7 @@ export function SendFormDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div
-              className="px-6 py-3 space-y-3 max-md:flex-1 max-md:min-h-0 max-md:overflow-y-auto max-md:scrollbar-hide"
-              style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
-            >
+            <div className="px-6 py-3 space-y-3 flex-1 min-h-0 overflow-y-auto scrollbar-hide">
               <div className="flex gap-2">
                 {[
                   { id: 'email', label: 'Email', icon: Mail },
@@ -674,7 +671,12 @@ export function SendFormDialog({
                   <Copy className="h-4 w-4 mr-2" /> Copy link
                 </Button>
               ) : null}
+            </div>
 
+            <DialogFooter
+              className="px-6 pt-3 pb-6 border-t border-white/10 flex-shrink-0"
+              style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+            >
               {tab === 'email' ? (
                 <Button
                   type="button"
@@ -698,7 +700,7 @@ export function SendFormDialog({
                   Open SMS
                 </Button>
               )}
-            </div>
+            </DialogFooter>
           </>
         )}
       </DialogContent>
