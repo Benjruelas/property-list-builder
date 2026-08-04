@@ -49,7 +49,9 @@ export function filterDeals(deals, query) {
 }
 
 export function dealPrimaryLabel(deal) {
-  return (deal?.title || deal?.leadName || deal?.leadAddress || deal?.id || 'Deal').trim()
+  const title = (deal?.title || '').trim()
+  if (title && String(title) !== String(deal?.id)) return title
+  return (deal?.leadName || deal?.leadAddress || 'Deal').trim()
 }
 
 export function dealSecondaryLabel(deal) {

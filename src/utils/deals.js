@@ -115,8 +115,10 @@ export function buildDealCountByLeadId(pipelines) {
 }
 
 export function findDealInPipelines(pipelines, dealId) {
+  if (dealId == null || dealId === '') return { deal: null, pipeline: null }
+  const want = String(dealId)
   for (const p of pipelines || []) {
-    const deal = (p.deals || []).find((d) => d.id === dealId)
+    const deal = (p.deals || []).find((d) => String(d.id) === want)
     if (deal) {
       return { deal, pipeline: p }
     }

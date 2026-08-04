@@ -98,18 +98,17 @@ describe('welcome tour order', () => {
       'tasks',
       'schedule',
       'activity',
-      'settings-menu',
       'navigation',
     ])
 
     const barIds = DESKTOP_BAR_ORDER.filter((id) => id !== 'menu')
-    expect(bar.slice(0, -1).map((id) => (id === 'settings-menu' ? 'settings' : id))).toEqual(barIds)
+    expect(bar.slice(0, -1)).toEqual(barIds)
   })
 
   it('walks desktop menu overflow top-to-bottom after Menu intro', () => {
     const overflow = DESKTOP_TOUR_ORDER.slice(
       DESKTOP_TOUR_ORDER.indexOf('navigation') + 1,
-      DESKTOP_TOUR_ORDER.indexOf('teams')
+      DESKTOP_TOUR_ORDER.indexOf('settings-menu')
     )
     expect(overflow).toEqual([
       'pipes',
@@ -243,7 +242,6 @@ describe('welcome tour order', () => {
       'action-bar-tasks',
       'action-bar-schedule',
       'action-bar-activity',
-      'action-bar-settings',
       'action-bar-menu',
       // menu open for overflow
       'menu-pipes',
@@ -254,6 +252,7 @@ describe('welcome tour order', () => {
       'menu-lists',
       'menu-paths',
       'menu-outreach',
+      'menu-settings',
       'settings-team-section',
     ])
 

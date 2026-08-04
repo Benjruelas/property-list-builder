@@ -181,14 +181,22 @@ export function TasksPanel({
 
   const resolveLeadFromTask = useCallback((task) => {
     if (task.leadId) {
-      const byId = displayLeads.find((l) => l.id === task.leadId)
+      const byId = displayLeads.find((l) => String(l.id) === String(task.leadId))
       if (byId) return byId
     }
     if (task.parcelId) {
-      return displayLeads.find((l) => l.parcelId === task.parcelId || l.id === task.parcelId)
+      const key = String(task.parcelId)
+      return displayLeads.find((l) => String(l.parcelId) === key || String(l.id) === key)
+    }
+    if (task.dealId) {
+      const deal = allDeals.find((d) => String(d.id) === String(task.dealId))
+      if (deal?.leadId) {
+        const byDealLead = displayLeads.find((l) => String(l.id) === String(deal.leadId))
+        if (byDealLead) return byDealLead
+      }
     }
     return null
-  }, [displayLeads])
+  }, [displayLeads, allDeals])
 
   const handleOpenLeadFromTask = useCallback((task) => {
     const lead = resolveLeadFromTask(task)
@@ -201,16 +209,22 @@ export function TasksPanel({
 
   const handleRowActivate = useCallback((task) => {
     if (task.dealId) {
-      const deal = allDeals.find((d) => d.id === task.dealId)
-      const pipelineId = deal?.__pipelineId
+      const found = findDealInPipelines(pipelines, task.dealId)
+      const deal = found.deal
+        || allDeals.find((d) => String(d.id) === String(task.dealId))
+        || null
+      const pipelineId = found.pipeline?.id
+        ?? deal?.__pipelineId
         ?? deal?.pipelineId
-        ?? findDealInPipelines(pipelines, task.dealId).pipeline?.id
+        ?? task.pipelineId
         ?? null
-      if (onOpenDeal) {
-        onOpenDeal(task.dealId, pipelineId)
-      } else {
+      // Only open when the deal and its pipeline can actually render — otherwise
+      // nav docks Tasks beside a missing primary panel.
+      if (!deal || !pipelineId || !onOpenDeal) {
         showToast('Deal not found', 'error')
+        return
       }
+      onOpenDeal(task.dealId, pipelineId)
       return
     }
 

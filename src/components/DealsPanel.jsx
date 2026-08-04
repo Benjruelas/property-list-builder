@@ -124,14 +124,27 @@ export function DealsPanel({
 
   const selectedDeal = useMemo(() => {
     if (!dealsDetailDealId) return null
+    const want = String(dealsDetailDealId)
     for (const p of pipelines) {
-      const deal = (p.deals || []).find((d) => d.id === dealsDetailDealId)
+      const deal = (p.deals || []).find((d) => String(d.id) === want)
       if (deal) return deal
     }
     return null
   }, [dealsDetailDealId, pipelines])
 
-  const selectedPipelineId = dealsDetailPipelineId ?? (selectedDeal ? pipelines.find((p) => (p.deals || []).some((d) => d.id === selectedDeal.id))?.id : null)
+  // Prefer the pipeline that actually contains the deal. A stale/wrong
+  // dealsDetailPipelineId used to leave selectedPipeline null while dock layout
+  // still reserved space beside Tasks.
+  const selectedPipelineId = useMemo(() => {
+    if (!selectedDeal) return dealsDetailPipelineId ?? null
+    const want = String(selectedDeal.id)
+    const containing = pipelines.find((p) => (p.deals || []).some((d) => String(d.id) === want))
+    if (containing) return containing.id
+    if (dealsDetailPipelineId && pipelines.some((p) => p.id === dealsDetailPipelineId)) {
+      return dealsDetailPipelineId
+    }
+    return null
+  }, [selectedDeal, dealsDetailPipelineId, pipelines])
 
   const selectedClosed = useMemo(
     () => (dealsClosedRecordId ? closedDeals.find((r) => r.id === dealsClosedRecordId) : null),

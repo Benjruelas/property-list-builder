@@ -22,13 +22,12 @@ export const PRIMARY_BAR_ORDER = [
   'activity',
 ]
 
-/** Shown on the bar at desktop widths; CRM/Documents/Tools live in Menu. */
+/** Shown on the bar at desktop widths; CRM/Documents/Tools/Settings live in Menu. */
 export const DESKTOP_BAR_ORDER = [
   'leads',
   'tasks',
   'schedule',
   'activity',
-  'settings',
   'menu',
 ]
 

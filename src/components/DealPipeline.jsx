@@ -695,16 +695,30 @@ export function DealPipeline({
   const hasPipeTasks = displayTasks.length > 0
 
   const getDealLabel = (dealId, parcelId) => {
+    const labelFromDeal = (deal) => {
+      if (!deal) return null
+      const title = (deal.title || '').trim()
+      if (title && String(title) !== String(deal.id)) return title
+      return (deal.leadName || deal.leadAddress || '').trim() || null
+    }
     if (dealId) {
-      const deal = displayDeals.find((d) => d.id === dealId)
-      if (deal) return deal.title || deal.leadName || deal.leadAddress || dealId
+      const deal = displayDeals.find((d) => String(d.id) === String(dealId))
+      const label = labelFromDeal(deal)
+      if (label) return label
     }
     if (parcelId) {
       const deal = displayDeals.find((d) => String(d.parcelId) === String(parcelId))
-      if (deal) return deal.title || deal.leadName || deal.leadAddress || parcelId
+      const label = labelFromDeal(deal)
+      if (label) return label
+      const lead = (leads || []).find((l) => String(l.parcelId) === String(parcelId) || String(l.id) === String(parcelId))
+      if (lead) {
+        const name = [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim()
+        if (name) return name
+        if (lead.address) return lead.address
+      }
     }
     if (!dealId && !parcelId) return 'Pipeline task'
-    return dealId || parcelId
+    return 'Deal'
   }
 
   const commitNewTask = useCallback(

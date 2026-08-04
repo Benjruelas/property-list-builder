@@ -27,7 +27,6 @@ const DESKTOP_TOUR_ORDER = [
   'tasks',
   'schedule',
   'activity',
-  'settings-menu',
   'navigation',
   'pipes',
   'deals',
@@ -37,6 +36,7 @@ const DESKTOP_TOUR_ORDER = [
   'lists',
   'paths',
   'outreach',
+  'settings-menu',
   'teams',
 ]
 
@@ -275,7 +275,7 @@ const TOUR_STEPS_BY_ID = {
     id: 'settings-menu',
     title: 'Settings',
     desc: 'Profile, team, map, appearance, notifications, and data — each section expands when you tap it.',
-    target: '[data-tour="action-bar-settings"]',
+    target: '[data-tour="menu-settings"]',
     mobileTarget: '[data-tour="menu-settings"]',
     menuRequired: true,
   },

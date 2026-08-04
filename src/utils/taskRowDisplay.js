@@ -7,6 +7,28 @@ import {
 
 export { getTaskDueTimestamp }
 
+function sameId(a, b) {
+  if (a == null || b == null) return false
+  return String(a) === String(b)
+}
+
+function findDealForTask(task, allDeals = []) {
+  if (!task?.dealId) return null
+  return allDeals.find((d) => sameId(d.id, task.dealId)) || null
+}
+
+function humanDealLabel(deal) {
+  if (!deal) return null
+  const title = (deal.title || '').trim()
+  // Prefer a real title; ignore titles that are just the backend id.
+  if (title && !sameId(title, deal.id)) return title
+  const leadName = (deal.leadName || '').trim()
+  if (leadName) return leadName
+  const leadAddress = (deal.leadAddress || '').trim()
+  if (leadAddress) return leadAddress
+  return null
+}
+
 export function taskHasLeadLink(task) {
   return !!(task?.parcelId || task?.leadId)
 }
@@ -19,19 +41,26 @@ export function isSharedTask(task) {
   return task?.__source === 'team' || task?.__source === 'server'
 }
 
-export function resolveTaskLeadLabel(task, displayLeads = []) {
-  if (!taskHasLeadLink(task)) return null
+export function resolveTaskLeadLabel(task, displayLeads = [], allDeals = []) {
+  if (!taskHasLeadLink(task) && !taskHasDealLink(task)) return null
+
   const lead = task.parcelId
-    ? displayLeads.find((l) => l.parcelId === task.parcelId || l.id === task.parcelId)
-    : (task.leadId ? displayLeads.find((l) => l.id === task.leadId) : null)
-  if (lead) return displayLeadName(lead) || lead.address || null
-  return task.leadId || task.parcelId || null
+    ? displayLeads.find((l) => sameId(l.parcelId, task.parcelId) || sameId(l.id, task.parcelId))
+    : (task.leadId ? displayLeads.find((l) => sameId(l.id, task.leadId)) : null)
+  if (lead) {
+    const name = (displayLeadName(lead) || lead.address || '').trim()
+    if (name && name !== 'Unknown') return name
+  }
+
+  // When the lead record isn't loaded, use denormalized deal fields — never raw ids.
+  const deal = findDealForTask(task, allDeals)
+  const fromDeal = (deal?.leadName || deal?.leadAddress || '').trim()
+  return fromDeal || null
 }
 
 export function resolveTaskDealLabel(task, allDeals = []) {
   if (!task?.dealId) return null
-  const deal = allDeals.find((d) => d.id === task.dealId)
-  return (deal?.title || deal?.leadName || deal?.leadAddress || 'Deal').trim()
+  return humanDealLabel(findDealForTask(task, allDeals))
 }
 
 export function formatTaskDueLabel(task) {
@@ -50,7 +79,7 @@ export function formatTaskCompletedLabel(task) {
  * @param {TaskRowContext} context
  */
 export function getTaskRowDisplayFields(task, context, { displayLeads = [], allDeals = [] } = {}) {
-  const leadLabel = resolveTaskLeadLabel(task, displayLeads)
+  const leadLabel = resolveTaskLeadLabel(task, displayLeads, allDeals)
   const dealLabel = resolveTaskDealLabel(task, allDeals)
   const shared = isSharedTask(task)
   const dueLabel = task?.completed ? formatTaskCompletedLabel(task) : formatTaskDueLabel(task)
@@ -81,9 +110,11 @@ export function getTaskRowDisplayFields(task, context, { displayLeads = [], allD
     }
   }
 
+  // Panel: Lead + Deal icons only — hide the shared Users icon when entity links are present.
+  const hasEntityLink = taskHasLeadLink(task) || taskHasDealLink(task)
   return {
-    showShared: shared,
-    leadLabel: taskHasLeadLink(task) ? leadLabel : null,
+    showShared: shared && !hasEntityLink,
+    leadLabel: taskHasLeadLink(task) || taskHasDealLink(task) ? leadLabel : null,
     dealLabel: taskHasDealLink(task) ? dealLabel : null,
     dueLabel,
     overdue,
