@@ -9,6 +9,7 @@ import {
   setBootLogoLayout,
   clearBootLogoLayout,
   logoDrawRect,
+  isLogoSplashGreyPlaceholder,
   isUsableLogoSplashPlateSample,
   BOOT_LOGO_LAYOUT_KEY,
   LOGO_SPLASH_SCALE_DESKTOP,
@@ -29,6 +30,7 @@ describe('logoSplashPlayback', () => {
       volume: 1,
       paused: true,
       currentTime: 0.5,
+      readyState: 2,
       pause: vi.fn(),
       play: vi.fn().mockResolvedValue(undefined),
       setAttribute: vi.fn(),
@@ -85,11 +87,48 @@ describe('logoSplashPlayback', () => {
     expect(frozenAfterGrowth.dx).toBe(first.dx)
   })
 
-  it('rejects iOS mid-grey placeholder samples for the splash plate', () => {
+  it('detects iOS mid-grey placeholder frames without blocking real frames', () => {
+    expect(isLogoSplashGreyPlaceholder(0, 0, 0)).toBe(false)
+    expect(isLogoSplashGreyPlaceholder(8, 0, 10)).toBe(false)
+    expect(isLogoSplashGreyPlaceholder(128, 128, 128)).toBe(true)
+    expect(isLogoSplashGreyPlaceholder(180, 180, 182)).toBe(true)
+    expect(isLogoSplashGreyPlaceholder(200, 40, 40)).toBe(false)
+    // Compatibility wrapper: usable == not grey placeholder
     expect(isUsableLogoSplashPlateSample(0, 0, 0)).toBe(true)
-    expect(isUsableLogoSplashPlateSample(8, 0, 10)).toBe(true)
     expect(isUsableLogoSplashPlateSample(128, 128, 128)).toBe(false)
-    expect(isUsableLogoSplashPlateSample(180, 180, 182)).toBe(false)
-    expect(isUsableLogoSplashPlateSample(200, 40, 40)).toBe(false)
+    expect(isUsableLogoSplashPlateSample(200, 40, 40)).toBe(true)
+  })
+
+  it('still plays a second beginLogoSplashPlayback call (handoff must not be swallowed)', async () => {
+    const first = {
+      muted: false,
+      defaultMuted: false,
+      volume: 1,
+      paused: true,
+      currentTime: 0.5,
+      readyState: 2,
+      pause: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+    }
+    const second = {
+      muted: false,
+      defaultMuted: false,
+      volume: 1,
+      paused: true,
+      currentTime: 0.5,
+      readyState: 2,
+      pause: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+    }
+    // Overlap calls the way HTML→React handoff / Strict remount can.
+    const p1 = beginLogoSplashPlayback(first)
+    const p2 = beginLogoSplashPlayback(second)
+    await Promise.all([p1, p2])
+    expect(first.play).toHaveBeenCalled()
+    expect(second.play).toHaveBeenCalled()
   })
 })

@@ -98,13 +98,18 @@
         min-height: 100dvh;
         min-height: var(--vw-height, 100vh);
       }
+      /*
+       * Keep the media element full-bleed + opacity 0 (not 1×1 offscreen).
+       * iOS often skips decoding tiny/offscreen videos, so the canvas stays black.
+       */
       #initial-loader #boot-logo-video {
         position: fixed;
-        width: 1px;
-        height: 1px;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         opacity: 0;
         pointer-events: none;
-        left: -9999px;
+        object-fit: contain;
       }
       #initial-loader #boot-logo-canvas {
         position: fixed;
@@ -116,6 +121,7 @@
         min-height: var(--vw-height, 100vh);
         display: block;
         background: #000000;
+        z-index: 1;
       }
       @media (prefers-reduced-motion: reduce) {
         #initial-loader #boot-logo-video,
@@ -213,12 +219,10 @@
         var EDGE_COVER_TOP_MIN_PX = 14;
         var plateFill = '#000000';
         // iOS often exposes a neutral mid-grey placeholder before real decode.
-        var isUsablePlateSample = function(r, g, b) {
+        var isGreyPlaceholder = function(r, g, b) {
           var max = Math.max(r, g, b);
           var min = Math.min(r, g, b);
-          if (max <= 32) return true;
-          if ((max - min) <= 28 && min >= 40 && max <= 220) return false;
-          return false;
+          return (max - min) <= 28 && min >= 40 && max <= 220;
         };
         var probe = document.createElement('canvas');
         probe.width = 48;
@@ -263,12 +267,7 @@
             var pix = probeCtx.getImageData(4, 4, 1, 1).data;
             r = pix[0]; g = pix[1]; b = pix[2];
           } catch (e) { return; }
-          if (!isUsablePlateSample(r, g, b)) {
-            fillPlate();
-            return;
-          }
-          plateFill = 'rgb(' + r + ',' + g + ',' + b + ')';
-          fillPlate();
+          if (isGreyPlaceholder(r, g, b)) return;
           var vw = video.videoWidth;
           var vh = video.videoHeight;
           var fit = Math.min(size.lockedW / vw, size.lockedH / vh) * logoSplashScale();

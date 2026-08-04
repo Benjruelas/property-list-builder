@@ -63,24 +63,23 @@ export function logoDrawRect({ lockedW, lockedH, videoW, videoH, scale, dpr }) {
 }
 
 /**
- * Whether a video pixel sample is safe for the on-black splash plate / draw.
- * iOS often exposes a neutral mid-grey placeholder before the first real decode;
- * adopting that as plateFill paints the entire screen grey.
+ * iOS often exposes a neutral mid-grey placeholder before the first real decode.
+ * Those frames must not be drawn (and must never become the full-screen plate).
  *
  * @param {number} r
  * @param {number} g
  * @param {number} b
  * @returns {boolean}
  */
-export function isUsableLogoSplashPlateSample(r, g, b) {
+export function isLogoSplashGreyPlaceholder(r, g, b) {
   const max = Math.max(r, g, b)
   const min = Math.min(r, g, b)
-  // Expected on-black plate (and early logo frames).
-  if (max <= 32) return true
-  // Neutral mid-grey decoder placeholder — never use as plate or draw source.
-  if ((max - min) <= 28 && min >= 40 && max <= 220) return false
-  // Other bright/colored corner samples: keep the black plate, skip the frame.
-  return false
+  return (max - min) <= 28 && min >= 40 && max <= 220
+}
+
+/** @deprecated Use isLogoSplashGreyPlaceholder — kept for older imports/tests. */
+export function isUsableLogoSplashPlateSample(r, g, b) {
+  return !isLogoSplashGreyPlaceholder(r, g, b)
 }
 
 /**
@@ -111,16 +110,13 @@ export function configureLogoVideoElement(video) {
 
 /**
  * Muted logo playback from t=0 (reliable autoplay on mobile).
+ * Concurrent callers are chained so each video still gets its own play() —
+ * a prior in-flight setup must not swallow a later handoff play.
  *
  * @param {HTMLVideoElement} video
  */
 export async function beginLogoSplashPlayback(video) {
-  if (playSetupInFlight) {
-    await playSetupInFlight
-    return
-  }
-
-  playSetupInFlight = (async () => {
+  const run = async () => {
     configureLogoVideoElement(video)
     try {
       video.pause()
@@ -128,20 +124,23 @@ export async function beginLogoSplashPlayback(video) {
       /* ignore */
     }
     try {
-      video.currentTime = 0
+      if (video.readyState >= 1) video.currentTime = 0
     } catch {
       /* ignore */
     }
     try {
       await video.play()
     } catch {
-      /* decode / autoplay blocked */
+      /* decode / autoplay blocked — caller may retry on canplay */
     }
-  })()
+  }
 
+  const prior = playSetupInFlight
+  const next = (prior || Promise.resolve()).then(run, run)
+  playSetupInFlight = next
   try {
-    await playSetupInFlight
+    await next
   } finally {
-    playSetupInFlight = null
+    if (playSetupInFlight === next) playSetupInFlight = null
   }
 }

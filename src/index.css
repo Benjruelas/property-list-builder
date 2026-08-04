@@ -5277,14 +5277,19 @@ body:has(.app-loading-screen--video) {
   min-height: -webkit-fill-available;
   min-height: var(--vw-height, 100dvh);
 }
-/* Hidden media element — frames are painted to canvas for sRGB-matched color. */
+/*
+ * Media element stays full-bleed under the canvas at opacity 0.
+ * 1×1 / offscreen sizing makes iOS skip decode → black canvas, no logo.
+ */
 .app-loading-screen__video-source {
   position: fixed !important;
-  width: 1px !important;
-  height: 1px !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   opacity: 0 !important;
   pointer-events: none !important;
-  left: -9999px !important;
+  object-fit: contain !important;
+  z-index: 0 !important;
 }
 /* Full-bleed canvas — logo is drawn centered inside (no scaled box edge / hairline). */
 .app-loading-screen__video,
@@ -5298,6 +5303,7 @@ body:has(.app-loading-screen--video) {
   min-height: var(--vw-height, 100dvh);
   display: block;
   background: var(--ks-logo-plate, #000000);
+  z-index: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

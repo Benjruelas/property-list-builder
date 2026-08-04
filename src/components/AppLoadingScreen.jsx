@@ -9,7 +9,7 @@ import {
   setBootLogoLayout,
   clearBootLogoLayout,
   logoDrawRect,
-  isUsableLogoSplashPlateSample,
+  isLogoSplashGreyPlaceholder,
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
@@ -41,8 +41,8 @@ const EDGE_COVER_TOP_RATIO = 0.12
 const EDGE_COVER_TOP_MIN_PX = 14
 
 /**
- * Full-bleed canvas: fill plate black, draw logo contained & centered at getLogoSplashScale().
- * Plate fill is sampled from the rendered video so edges don’t show a hairline.
+ * Full-bleed canvas: black plate + logo contained & centered at getLogoSplashScale().
+ * Plate stays #000 (never sampled) so iOS grey placeholders cannot flash the screen.
  */
 function startCanvasMirror(video, canvas) {
   let ctx = null
@@ -55,7 +55,7 @@ function startCanvasMirror(video, canvas) {
 
   let raf = 0
   let stopped = false
-  let plateFill = LOGO_PLATE
+  const plateFill = LOGO_PLATE
   const probe = document.createElement('canvas')
   probe.width = 48
   probe.height = 48
@@ -103,15 +103,8 @@ function startCanvasMirror(video, canvas) {
       return
     }
 
-    // iOS can expose a mid-grey placeholder frame before decode; never let that
-    // become the full-screen plateFill (reads as a grey flash before the MP4).
-    if (!isUsableLogoSplashPlateSample(r, g, b)) {
-      fillPlate()
-      return
-    }
-
-    plateFill = `rgb(${r},${g},${b})`
-    fillPlate()
+    // Skip iOS mid-grey decoder placeholders; keep black until a real frame.
+    if (isLogoSplashGreyPlaceholder(r, g, b)) return
 
     const { dx, dy, dw, dh } = logoDrawRect({
       lockedW,
@@ -246,11 +239,25 @@ export function AppLoadingScreen({
       if (!playCompletedRef.current) markCompleted()
     }, PLAY_FALLBACK_MS)
 
+    // iOS can miss the first play() before the element is ready — retry briefly.
+    // Never re-call once playing (beginLogoSplashPlayback seeks to t=0).
+    const ensurePlaying = () => {
+      if (playCompletedRef.current || video.ended || !video.paused) return
+      void beginLogoSplashPlayback(video)
+    }
     void beginLogoSplashPlayback(video)
+    video.addEventListener('loadeddata', ensurePlaying)
+    video.addEventListener('canplay', ensurePlaying)
+    const playRetryTimer = window.setTimeout(ensurePlaying, 200)
+    const playRetryTimer2 = window.setTimeout(ensurePlaying, 800)
 
     return () => {
       window.clearTimeout(fallbackTimer)
+      window.clearTimeout(playRetryTimer)
+      window.clearTimeout(playRetryTimer2)
       video.removeEventListener('ended', onEnded)
+      video.removeEventListener('loadeddata', ensurePlaying)
+      video.removeEventListener('canplay', ensurePlaying)
       stopMirror()
     }
   }, [])
