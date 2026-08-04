@@ -5,6 +5,10 @@ import {
   configureLogoVideoElement,
   beginLogoSplashPlayback,
   getLogoSplashScale,
+  getBootLogoLayout,
+  setBootLogoLayout,
+  clearBootLogoLayout,
+  logoDrawRect,
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
@@ -70,6 +74,8 @@ function startCanvasMirror(video, canvas) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     const cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth))
     const cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight))
+    // Prefer HTML boot lock so handoff does not re-center in a taller viewport.
+    const locked = getBootLogoLayout() || setBootLogoLayout(cssW, cssH) || { w: cssW, h: cssH }
     const w = Math.round(cssW * dpr)
     const h = Math.round(cssH * dpr)
     if (canvas.width !== w || canvas.height !== h) {
@@ -77,11 +83,11 @@ function startCanvasMirror(video, canvas) {
       canvas.height = h
       fillPlate()
     }
-    return { cssW, cssH, dpr }
+    return { cssW, cssH, dpr, lockedW: locked.w, lockedH: locked.h }
   }
 
   const paint = () => {
-    const { cssW, cssH, dpr } = syncSize()
+    const { dpr, lockedW, lockedH } = syncSize()
     fillPlate()
 
     if (!(video.readyState >= 2 && video.videoWidth > 0) || !probeCtx) return
@@ -99,13 +105,14 @@ function startCanvasMirror(video, canvas) {
     plateFill = `rgb(${r},${g},${b})`
     fillPlate()
 
-    const vw = video.videoWidth
-    const vh = video.videoHeight
-    const fit = Math.min(cssW / vw, cssH / vh) * getLogoSplashScale()
-    const dw = vw * fit * dpr
-    const dh = vh * fit * dpr
-    const dx = (canvas.width - dw) / 2
-    const dy = (canvas.height - dh) / 2
+    const { dx, dy, dw, dh } = logoDrawRect({
+      lockedW,
+      lockedH,
+      videoW: video.videoWidth,
+      videoH: video.videoHeight,
+      scale: getLogoSplashScale(),
+      dpr,
+    })
     ctx.drawImage(video, dx, dy, dw, dh)
 
     // Plate-colored bands over the top/bottom video edges (hide black scan lines).
@@ -181,6 +188,8 @@ export function AppLoadingScreen({
     const stage = stageRef.current
     if (!stage || prefersReducedMotion()) {
       window.__removeInitialLoader?.()
+      // HTML boot may have locked layout; static/reduced-motion path does not use it.
+      clearBootLogoLayout()
       return undefined
     }
 
@@ -206,9 +215,9 @@ export function AppLoadingScreen({
     canvasRef.current = canvas
 
     stage.replaceChildren(video, canvas)
-    window.__removeInitialLoader?.()
-
+    // Paint one frozen frame before removing the HTML loader to avoid a gap/jump.
     const stopMirror = startCanvasMirror(video, canvas)
+    window.__removeInitialLoader?.()
 
     const markCompleted = () => {
       if (playCompletedRef.current) return
@@ -291,6 +300,8 @@ export function AppLoadingScreen({
         setMounted(false)
         setExiting(false)
         exitingRef.current = false
+        // Allow a later splash (e.g. public pages) to capture a fresh lock.
+        clearBootLogoLayout()
       },
       reduceMotion ? 0 : FADE_OUT_MS
     )

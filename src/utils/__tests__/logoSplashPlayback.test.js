@@ -5,6 +5,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   beginLogoSplashPlayback,
   getLogoSplashScale,
+  getBootLogoLayout,
+  setBootLogoLayout,
+  clearBootLogoLayout,
+  logoDrawRect,
+  BOOT_LOGO_LAYOUT_KEY,
   LOGO_SPLASH_SCALE_DESKTOP,
   LOGO_SPLASH_SCALE_MOBILE,
 } from '../logoSplashPlayback'
@@ -16,6 +21,7 @@ describe('logoSplashPlayback', () => {
   beforeEach(() => {
     matchMediaMock = vi.fn().mockReturnValue({ matches: false })
     vi.stubGlobal('matchMedia', matchMediaMock)
+    clearBootLogoLayout()
     video = {
       muted: false,
       defaultMuted: false,
@@ -30,6 +36,7 @@ describe('logoSplashPlayback', () => {
   })
 
   afterEach(() => {
+    clearBootLogoLayout()
     vi.restoreAllMocks()
   })
 
@@ -50,5 +57,30 @@ describe('logoSplashPlayback', () => {
     matchMediaMock.mockReturnValue({ matches: true })
     expect(getLogoSplashScale()).toBe(LOGO_SPLASH_SCALE_DESKTOP)
     expect(matchMediaMock).toHaveBeenCalledWith('(min-width: 768px)')
+  })
+
+  it('locks boot logo layout once and clears it', () => {
+    expect(getBootLogoLayout()).toBeNull()
+    expect(setBootLogoLayout(390, 700)).toEqual({ w: 390, h: 700 })
+    expect(window[BOOT_LOGO_LAYOUT_KEY]).toEqual({ w: 390, h: 700 })
+    // Later taller viewport must not replace the lock.
+    expect(setBootLogoLayout(390, 844)).toEqual({ w: 390, h: 700 })
+    expect(getBootLogoLayout()).toEqual({ w: 390, h: 700 })
+    clearBootLogoLayout()
+    expect(getBootLogoLayout()).toBeNull()
+  })
+
+  it('keeps logo dy anchored to locked height when the viewport grows', () => {
+    const locked = { lockedW: 390, lockedH: 700, videoW: 1000, videoH: 1000, scale: 1, dpr: 2 }
+    const first = logoDrawRect(locked)
+    const taller = logoDrawRect({ ...locked, lockedH: 844 })
+    // If paint incorrectly used the live taller box, dy would increase.
+    expect(first.dy).toBe((700 * 2 - first.dh) / 2)
+    expect(taller.dy).toBeGreaterThan(first.dy)
+
+    // Frozen paint path: keep using the original lock after growth.
+    const frozenAfterGrowth = logoDrawRect(locked)
+    expect(frozenAfterGrowth.dy).toBe(first.dy)
+    expect(frozenAfterGrowth.dx).toBe(first.dx)
   })
 })

@@ -224,10 +224,17 @@
           ctx.fillStyle = plateFill;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
         };
+        // Freeze logo center to first measured CSS box so iOS/PWA viewport growth
+        // only expands the black plate (React reuses window.__bootLogoLayout).
         var syncSize = function() {
           var dpr = Math.min(window.devicePixelRatio || 1, 2);
           var cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
           var cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
+          var locked = window.__bootLogoLayout;
+          if (!locked || !(locked.w > 0) || !(locked.h > 0)) {
+            locked = { w: cssW, h: cssH };
+            window.__bootLogoLayout = locked;
+          }
           var w = Math.round(cssW * dpr);
           var h = Math.round(cssH * dpr);
           if (canvas.width !== w || canvas.height !== h) {
@@ -235,7 +242,7 @@
             canvas.height = h;
             fillPlate();
           }
-          return { cssW: cssW, cssH: cssH, dpr: dpr };
+          return { cssW: cssW, cssH: cssH, dpr: dpr, lockedW: locked.w, lockedH: locked.h };
         };
         var paint = function() {
           var size = syncSize();
@@ -251,11 +258,11 @@
           fillPlate();
           var vw = video.videoWidth;
           var vh = video.videoHeight;
-          var fit = Math.min(size.cssW / vw, size.cssH / vh) * logoSplashScale();
+          var fit = Math.min(size.lockedW / vw, size.lockedH / vh) * logoSplashScale();
           var dw = vw * fit * size.dpr;
           var dh = vh * fit * size.dpr;
-          var dx = (canvas.width - dw) / 2;
-          var dy = (canvas.height - dh) / 2;
+          var dx = (size.lockedW * size.dpr - dw) / 2;
+          var dy = (size.lockedH * size.dpr - dh) / 2;
           ctx.drawImage(video, dx, dy, dw, dh);
           var coverBottom = Math.max(EDGE_COVER_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_RATIO));
           var coverTop = Math.max(EDGE_COVER_TOP_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_TOP_RATIO));
