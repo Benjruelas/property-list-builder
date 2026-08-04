@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-ui-theme="dark">
+<html lang="en" data-ui-theme="dark" style="background:#000000;color-scheme:dark">
   <head>
     <script>
       (function () {
@@ -21,6 +21,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#000000" />
     <title>KnockScout</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=7" />
@@ -64,6 +65,7 @@
         min-height: 100dvh;
         min-height: var(--vw-height, 100vh);
         background: #000000 !important;
+        color-scheme: dark;
         overflow: hidden;
       }
       #root {
@@ -156,22 +158,21 @@
         window.addEventListener('load', setViewportHeight);
       })();
     </script>
-    <div id="root">
-      <div id="initial-loader" aria-label="Loading KnockScout" role="status">
-        <video
-          id="boot-logo-video"
-          class="boot-logo-video"
-          src="/brand/knockscout-LogoMark-on-black.mp4"
-          poster="/brand/knockscout-LogoMark-on-black-poster.png"
-          muted
-          playsinline
-          webkit-playsinline
-          preload="auto"
-          aria-hidden="true"
-        ></video>
-        <canvas id="boot-logo-canvas" aria-hidden="true"></canvas>
-      </div>
+    <!-- Keep boot splash outside #root so React mount cannot tear it down. -->
+    <div id="initial-loader" aria-label="Loading KnockScout" role="status">
+      <video
+        id="boot-logo-video"
+        class="boot-logo-video"
+        src="/brand/knockscout-LogoMark-on-black.mp4"
+        muted
+        playsinline
+        webkit-playsinline
+        preload="auto"
+        aria-hidden="true"
+      ></video>
+      <canvas id="boot-logo-canvas" aria-hidden="true"></canvas>
     </div>
+    <div id="root"></div>
     <script>
       window.__removeInitialLoader = function() {
         if (typeof window.__stopBootLogoMirror === 'function') {
@@ -211,6 +212,14 @@
         var EDGE_COVER_TOP_RATIO = 0.12;
         var EDGE_COVER_TOP_MIN_PX = 14;
         var plateFill = '#000000';
+        // iOS often exposes a neutral mid-grey placeholder before real decode.
+        var isUsablePlateSample = function(r, g, b) {
+          var max = Math.max(r, g, b);
+          var min = Math.min(r, g, b);
+          if (max <= 32) return true;
+          if ((max - min) <= 28 && min >= 40 && max <= 220) return false;
+          return false;
+        };
         var probe = document.createElement('canvas');
         probe.width = 48;
         probe.height = 48;
@@ -254,6 +263,10 @@
             var pix = probeCtx.getImageData(4, 4, 1, 1).data;
             r = pix[0]; g = pix[1]; b = pix[2];
           } catch (e) { return; }
+          if (!isUsablePlateSample(r, g, b)) {
+            fillPlate();
+            return;
+          }
           plateFill = 'rgb(' + r + ',' + g + ',' + b + ')';
           fillPlate();
           var vw = video.videoWidth;
@@ -301,7 +314,7 @@
         if (video.readyState >= 2) primeFrame();
       })();
     </script>
-    <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate;"></div>
+    <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate; background: transparent;"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

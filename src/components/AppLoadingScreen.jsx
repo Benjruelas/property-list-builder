@@ -9,6 +9,7 @@ import {
   setBootLogoLayout,
   clearBootLogoLayout,
   logoDrawRect,
+  isUsableLogoSplashPlateSample,
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
@@ -99,6 +100,13 @@ function startCanvasMirror(video, canvas) {
     try {
       ;[r, g, b] = probeCtx.getImageData(4, 4, 1, 1).data
     } catch {
+      return
+    }
+
+    // iOS can expose a mid-grey placeholder frame before decode; never let that
+    // become the full-screen plateFill (reads as a grey flash before the MP4).
+    if (!isUsableLogoSplashPlateSample(r, g, b)) {
+      fillPlate()
       return
     }
 
@@ -200,7 +208,7 @@ export function AppLoadingScreen({
     } else {
       video = document.createElement('video')
       video.src = LOGO_VIDEO_SRC
-      video.poster = LOGO_POSTER_SRC
+      // No poster attr — iOS can flash a grey decoder frame; canvas stays black until a real frame.
       video.setAttribute('aria-hidden', 'true')
     }
 

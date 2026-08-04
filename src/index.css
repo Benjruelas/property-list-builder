@@ -281,6 +281,7 @@
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     background: #000;
+    color-scheme: dark;
   }
   body {
     @apply text-foreground;

@@ -9,6 +9,7 @@ import {
   setBootLogoLayout,
   clearBootLogoLayout,
   logoDrawRect,
+  isUsableLogoSplashPlateSample,
   BOOT_LOGO_LAYOUT_KEY,
   LOGO_SPLASH_SCALE_DESKTOP,
   LOGO_SPLASH_SCALE_MOBILE,
@@ -82,5 +83,13 @@ describe('logoSplashPlayback', () => {
     const frozenAfterGrowth = logoDrawRect(locked)
     expect(frozenAfterGrowth.dy).toBe(first.dy)
     expect(frozenAfterGrowth.dx).toBe(first.dx)
+  })
+
+  it('rejects iOS mid-grey placeholder samples for the splash plate', () => {
+    expect(isUsableLogoSplashPlateSample(0, 0, 0)).toBe(true)
+    expect(isUsableLogoSplashPlateSample(8, 0, 10)).toBe(true)
+    expect(isUsableLogoSplashPlateSample(128, 128, 128)).toBe(false)
+    expect(isUsableLogoSplashPlateSample(180, 180, 182)).toBe(false)
+    expect(isUsableLogoSplashPlateSample(200, 40, 40)).toBe(false)
   })
 })

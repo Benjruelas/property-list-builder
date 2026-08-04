@@ -63,6 +63,27 @@ export function logoDrawRect({ lockedW, lockedH, videoW, videoH, scale, dpr }) {
 }
 
 /**
+ * Whether a video pixel sample is safe for the on-black splash plate / draw.
+ * iOS often exposes a neutral mid-grey placeholder before the first real decode;
+ * adopting that as plateFill paints the entire screen grey.
+ *
+ * @param {number} r
+ * @param {number} g
+ * @param {number} b
+ * @returns {boolean}
+ */
+export function isUsableLogoSplashPlateSample(r, g, b) {
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  // Expected on-black plate (and early logo frames).
+  if (max <= 32) return true
+  // Neutral mid-grey decoder placeholder — never use as plate or draw source.
+  if ((max - min) <= 28 && min >= 40 && max <= 220) return false
+  // Other bright/colored corner samples: keep the black plate, skip the frame.
+  return false
+}
+
+/**
  * @returns {number}
  */
 export function getLogoSplashScale() {
