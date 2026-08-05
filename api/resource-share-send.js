@@ -127,10 +127,8 @@ export default async function handler(req, res) {
       const leadId = String(body.leadId || body.id || '').trim()
       if (!leadId) return res.status(400).json({ error: 'leadId is required' })
       const { lead, access } = await getLeadWithAccess(user, leadId)
+      // Any user with access to the lead (owner or collaborator) can send a share link.
       if (!lead || !access) return res.status(404).json({ error: 'Lead not found' })
-      if (!canChangeVisibility(access)) {
-        return res.status(403).json({ error: 'Only the lead owner can share this lead' })
-      }
       resourceId = lead.id
       ownerId = lead.ownerId || user.uid
       ownerEmail = (lead.ownerEmail || user.email || '').toLowerCase()

@@ -486,8 +486,10 @@ export function LeadDetails({
     return resolveResourceAccess(lead, user, activeTeam, teams)
   }, [lead, uid, currentUser?.email, activeTeam, teams])
   const canShareLead = canChangeVisibility(leadAccess)
+  // External text/email share is available to anyone who can open the lead.
+  const canExternalShareLead = Boolean(leadAccess)
   const canDeleteLead = canDelete(leadAccess)
-  const showLeadOptionsMenu = canShareLead || canDeleteLead || !!onCreateDeal
+  const showLeadOptionsMenu = canShareLead || canExternalShareLead || canDeleteLead || !!onCreateDeal
 
   useEffect(() => {
     if (!shareOpen) {
@@ -1239,7 +1241,7 @@ export function LeadDetails({
             Share lead
           </OptionsMenuItem>
         )}
-        {canShareLead && (
+        {canExternalShareLead && (
           <OptionsMenuItem onClick={() => { closeMenu(); setExternalShareOpen(true) }}>
             <MessageSquare className="h-4 w-4 shrink-0" />
             Share via text/email
