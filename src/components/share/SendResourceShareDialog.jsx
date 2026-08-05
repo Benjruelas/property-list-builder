@@ -17,7 +17,6 @@ import {
   sendResourceShareEmail,
 } from '@/utils/resourceShare'
 import { displayLeadName, formatLeadAddress } from '@/utils/leads'
-import { formatPhoneDisplay } from '@/utils/phoneFormat'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -25,6 +24,12 @@ const FIELD_LABEL = 'block text-sm font-medium text-white/75 mb-1'
 const TEXT_INPUT = 'w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
 const SEGMENT_BTN =
   'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
+
+function openSmsWithBody(body) {
+  const encoded = encodeURIComponent(body)
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/i.test(navigator.userAgent)
+  window.location.href = isIOS ? `sms:&body=${encoded}` : `sms:?body=${encoded}`
+}
 
 /**
  * External share via text / email / copy link for a Lead or Deal.
@@ -41,10 +46,8 @@ export function SendResourceShareDialog({
   const { getToken } = useAuth()
   const [tab, setTab] = useState('text')
   const [recipient, setRecipient] = useState('')
-  const [phone, setPhone] = useState('')
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
-  const [textBody, setTextBody] = useState('')
   const [sending, setSending] = useState(false)
   const [linkBusy, setLinkBusy] = useState(false)
   const [lastLink, setLastLink] = useState('')
@@ -60,10 +63,8 @@ export function SendResourceShareDialog({
   const resetAndClose = useCallback(() => {
     setTab('text')
     setRecipient('')
-    setPhone('')
     setSubject('')
     setMessage('')
-    setTextBody('')
     setSending(false)
     setLinkBusy(false)
     setLastLink('')
@@ -76,10 +77,8 @@ export function SendResourceShareDialog({
     const name = resourceLabel || (type === 'deal' ? 'Deal' : 'Lead')
     setSubject(`${name} shared with you on KnockScout`)
     setMessage(`I shared a ${type} with you on KnockScout:${address ? `\n${address}` : ''}\n\nOpen the link to add it to your account.`)
-    setTextBody(`Shared ${name} on KnockScout${address ? ` — ${address}` : ''}`)
-    // Recipient phone/email are for the person you're sharing *to* — never prefill from the lead.
+    // Recipient email is for the person you're sharing *to* — never prefill from the lead.
     setRecipient('')
-    setPhone('')
   }, [open, resourceLabel, address, type])
 
   const ensureLink = async () => {
@@ -128,17 +127,15 @@ export function SendResourceShareDialog({
   }
 
   const handleSendText = async () => {
-    const tel = (phone || '').replace(/[^\d+]/g, '')
-    if (tel.length < 10) {
-      showToast('Enter a valid phone number', 'error')
-      return
-    }
     setSending(true)
     try {
       const link = await ensureLink()
-      const msg = `${textBody.trim()}\n${link}`.trim()
-      window.location.href = `sms:${tel}?body=${encodeURIComponent(msg)}`
-      showToast('Opening SMS…', 'success')
+      if (!link) {
+        showToast('Failed to generate link', 'error')
+        return
+      }
+      openSmsWithBody(link)
+      showToast('Opening Messages…', 'success')
     } catch (e) {
       showToast(e.message || 'Failed to generate link', 'error')
     } finally {
@@ -273,31 +270,9 @@ export function SendResourceShareDialog({
                   </div>
                 </>
               ) : (
-                <>
-                  <div>
-                    <label className={FIELD_LABEL} htmlFor="share-phone">Phone</label>
-                    <Input
-                      id="share-phone"
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className={TEXT_INPUT}
-                      placeholder={formatPhoneDisplay('5551234567') || '(555) 123-4567'}
-                      disabled={busy}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_LABEL} htmlFor="share-text">Message</label>
-                    <textarea
-                      id="share-text"
-                      value={textBody}
-                      onChange={(e) => setTextBody(e.target.value)}
-                      className={`${TEXT_INPUT} min-h-[5.5rem]`}
-                      disabled={busy}
-                    />
-                    <p className="text-xs text-white/45 mt-1">The share link is added automatically.</p>
-                  </div>
-                </>
+                <p className="text-sm text-white/60">
+                  Opens Messages so you can choose a contact.
+                </p>
               )}
 
               <Button
