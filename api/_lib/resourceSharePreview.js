@@ -89,14 +89,38 @@ export function buildDealSharePreview(deal, lead) {
   }
 }
 
+function formatPhonePreview(value) {
+  let digits = String(value || '').replace(/\D/g, '')
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1)
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+  return String(value || '').trim()
+}
+
+function formatAddressPreview(value) {
+  let s = String(value || '').trim()
+  if (!s) return ''
+  s = s.replace(/,\s*(United States|USA|U\.S\.A\.)\s*$/i, '').trim()
+  s = s.replace(/\s+\d{5}(?:-\d{4})?\s*$/, '').trim()
+  const parts = s.split(',').map((p) => p.trim()).filter(Boolean)
+  if (parts.length >= 3) {
+    const state = parts[2].replace(/\s+\d{5}(?:-\d{4})?.*$/, '').trim()
+    return [parts[0], parts[1], state].filter(Boolean).join(', ')
+  }
+  return s
+}
+
 export function previewDescription(preview) {
   if (!preview) return 'Shared on KnockScout'
   const parts = []
   if (preview.resourceType === 'deal' && preview.title && preview.title !== preview.name) {
     parts.push(preview.title)
   }
-  if (preview.address) parts.push(preview.address)
-  if (preview.phone) parts.push(preview.phone)
-  if (preview.email) parts.push(preview.email)
+  const address = formatAddressPreview(preview.address)
+  if (address) parts.push(address)
+  const phone = formatPhonePreview(preview.phone)
+  if (phone) parts.push(phone)
+  if (preview.email) parts.push(String(preview.email).trim())
   return parts.join(' · ') || 'Shared on KnockScout'
 }
