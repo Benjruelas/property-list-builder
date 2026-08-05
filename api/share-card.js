@@ -142,16 +142,16 @@ async function buildTextOverlay({ name, address, phone, email, resourceType }) {
   const displayEmail = String(email || '').trim()
 
   const children = [
-    line(displayName, { fontSize: 56, fontWeight: 600, marginBottom: 20, maxLines: 2 }),
+    line(displayName, { fontSize: 72, fontWeight: 600, marginBottom: 22, maxLines: 2 }),
   ]
   if (displayAddress) {
-    children.push(line(displayAddress, { fontSize: 32, fontWeight: 400, marginBottom: 16, maxLines: 2 }))
+    children.push(line(displayAddress, { fontSize: 44, fontWeight: 400, marginBottom: 18, maxLines: 2 }))
   }
   if (displayPhone) {
-    children.push(line(displayPhone, { fontSize: 30, fontWeight: 400, marginBottom: 12, maxLines: 1 }))
+    children.push(line(displayPhone, { fontSize: 42, fontWeight: 400, marginBottom: 14, maxLines: 1 }))
   }
   if (displayEmail) {
-    children.push(line(displayEmail, { fontSize: 28, fontWeight: 400, marginBottom: 0, maxLines: 1 }))
+    children.push(line(displayEmail, { fontSize: 40, fontWeight: 400, marginBottom: 0, maxLines: 1 }))
   }
 
   const fonts = await loadFonts()
