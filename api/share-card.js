@@ -1,9 +1,14 @@
 /**
  * GET /api/share-card?token=… — 1200×630 PNG for SMS/iMessage link previews.
  * Satellite → scrim → white logo (left) + formatted lead info (right).
+ *
+ * Text is rendered with Satori + bundled Inter fonts. Sharp's SVG <text>
+ * has no usable fonts on Vercel serverless, which produced tiny glyph blobs.
  */
 
 import sharp from 'sharp'
+import satori from 'satori'
+import { Resvg } from '@resvg/resvg-js'
 import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,14 +20,31 @@ const HEIGHT = 630
 const LOGO_SIZE = 320
 const LOGO_LEFT = 48
 const TEXT_LEFT = 420
-const TEXT_MAX_WIDTH = 720
-// Arial/Helvetica are available in sharp's SVG renderer on Vercel; custom webfonts are not.
-const FONT = 'Arial, Helvetica, sans-serif'
+const TEXT_RIGHT_PAD = 48
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+let fontsPromise = null
+
 function mapboxToken() {
   return process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN || ''
+}
+
+async function loadFonts() {
+  if (!fontsPromise) {
+    fontsPromise = (async () => {
+      const dir = join(__dirname, '_lib/fonts')
+      const [regular, semiBold] = await Promise.all([
+        readFile(join(dir, 'Inter-Regular.woff')),
+        readFile(join(dir, 'Inter-SemiBold.woff')),
+      ])
+      return [
+        { name: 'Inter', data: regular, weight: 400, style: 'normal' },
+        { name: 'Inter', data: semiBold, weight: 600, style: 'normal' },
+      ]
+    })()
+  }
+  return fontsPromise
 }
 
 async function fetchSatellite(lat, lng) {
@@ -59,14 +81,6 @@ async function loadLogo() {
   return null
 }
 
-function escapeSvgText(s) {
-  return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 /** Format US phone as (XXX) XXX-XXXX when possible. */
 function formatPhoneCard(value) {
   let digits = String(value || '').replace(/\D/g, '')
@@ -96,85 +110,79 @@ function formatAddressCard(value) {
   return s
 }
 
-/** Approx wrap by pixel width (Arial ~0.55em average). */
-function wrapText(text, fontSize, maxWidth, maxLines = 2) {
-  const raw = String(text || '').trim()
-  if (!raw) return []
-  const avgChar = fontSize * 0.55
-  const maxChars = Math.max(8, Math.floor(maxWidth / avgChar))
-  const words = raw.split(/\s+/).filter(Boolean)
-  const lines = []
-  let current = ''
-
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word
-    if (next.length <= maxChars) {
-      current = next
-      continue
-    }
-    if (current) lines.push(current)
-    current = word
-    if (lines.length >= maxLines) break
-  }
-  if (lines.length < maxLines && current) lines.push(current)
-
-  // Ellipsis if we still have leftover words
-  const used = lines.join(' ').split(/\s+/).length
-  if (used < words.length && lines.length) {
-    const last = lines[lines.length - 1]
-    lines[lines.length - 1] = last.length > 3 ? `${last.replace(/\s+\S*$/, '')}…` : `${last}…`
-  }
-  return lines.slice(0, maxLines)
+function el(type, style, children) {
+  const props = { style }
+  if (children !== undefined) props.children = children
+  return { type, props }
 }
 
-function buildScrimOverlay() {
-  return Buffer.from(`<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="100%" height="100%" fill="#000000" fill-opacity="0.52"/>
-</svg>`)
+function line(text, { fontSize, fontWeight = 400, marginBottom = 0, maxLines = 2 } = {}) {
+  return el(
+    'div',
+    {
+      display: 'flex',
+      fontSize,
+      fontWeight,
+      color: '#ffffff',
+      marginBottom,
+      lineHeight: 1.2,
+      maxHeight: fontSize * 1.2 * maxLines,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      width: '100%',
+    },
+    String(text),
+  )
 }
 
-function buildTextOverlay({ name, address, phone, email, resourceType }) {
+async function buildTextOverlay({ name, address, phone, email, resourceType }) {
   const displayName = String(name || (resourceType === 'deal' ? 'Deal' : 'Lead')).trim()
   const displayAddress = formatAddressCard(address)
   const displayPhone = formatPhoneCard(phone)
   const displayEmail = String(email || '').trim()
 
-  const blocks = []
-  const nameLines = wrapText(displayName, 58, TEXT_MAX_WIDTH, 2)
-  for (let i = 0; i < nameLines.length; i++) {
-    blocks.push({ text: nameLines[i], size: 58, weight: 700, gapAfter: i === nameLines.length - 1 ? 24 : 8 })
-  }
+  const children = [
+    line(displayName, { fontSize: 56, fontWeight: 600, marginBottom: 20, maxLines: 2 }),
+  ]
   if (displayAddress) {
-    const addrLines = wrapText(displayAddress, 34, TEXT_MAX_WIDTH, 2)
-    for (let i = 0; i < addrLines.length; i++) {
-      blocks.push({ text: addrLines[i], size: 34, weight: 500, gapAfter: i === addrLines.length - 1 ? 18 : 6 })
-    }
+    children.push(line(displayAddress, { fontSize: 32, fontWeight: 400, marginBottom: 16, maxLines: 2 }))
   }
   if (displayPhone) {
-    blocks.push({ text: displayPhone, size: 32, weight: 500, gapAfter: 12 })
+    children.push(line(displayPhone, { fontSize: 30, fontWeight: 400, marginBottom: 12, maxLines: 1 }))
   }
   if (displayEmail) {
-    blocks.push({
-      text: wrapText(displayEmail, 30, TEXT_MAX_WIDTH, 1)[0] || displayEmail,
-      size: 30,
-      weight: 500,
-      gapAfter: 0,
-    })
+    children.push(line(displayEmail, { fontSize: 28, fontWeight: 400, marginBottom: 0, maxLines: 1 }))
   }
 
-  // Measure total height using font sizes + gaps, then vertically center.
-  let totalH = 0
-  for (const b of blocks) totalH += b.size + b.gapAfter
-  let y = Math.round((HEIGHT - totalH) / 2) + (blocks[0]?.size || 56)
+  const fonts = await loadFonts()
+  const svg = await satori(
+    el(
+      'div',
+      {
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        paddingLeft: TEXT_LEFT,
+        paddingRight: TEXT_RIGHT_PAD,
+        fontFamily: 'Inter',
+      },
+      children,
+    ),
+    { width: WIDTH, height: HEIGHT, fonts },
+  )
 
-  const textNodes = blocks.map((b) => {
-    const node = `<text x="${TEXT_LEFT}" y="${y}" font-family="${FONT}" font-size="${b.size}" font-weight="${b.weight}" fill="#ffffff">${escapeSvgText(b.text)}</text>`
-    y += b.size + b.gapAfter
-    return node
-  }).join('\n')
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: 'width', value: WIDTH },
+    background: 'rgba(0,0,0,0)',
+  })
+  return Buffer.from(resvg.render().asPng())
+}
 
+function buildScrimOverlay() {
   return Buffer.from(`<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-  ${textNodes}
+  <rect width="100%" height="100%" fill="#000000" fill-opacity="0.52"/>
 </svg>`)
 }
 
@@ -251,7 +259,7 @@ export default async function handler(req, res) {
     }
 
     composites.push({
-      input: buildTextOverlay({ name, address, phone, email, resourceType }),
+      input: await buildTextOverlay({ name, address, phone, email, resourceType }),
       top: 0,
       left: 0,
     })

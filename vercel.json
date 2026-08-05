@@ -44,7 +44,8 @@
     },
     "api/share-card.js": {
       "maxDuration": 30,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "api/_lib/fonts/**"
     }
   },
   "redirects": [
