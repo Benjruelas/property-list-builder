@@ -1,6 +1,6 @@
 # Navigation Router
 
-Central navigation for the property list builder app. Replaces scattered `is*Open` booleans, activity/schedule refs, and per-panel overlay state with three typed stacks.
+Central navigation for the KnockScout app. Replaces scattered `is*Open` booleans, activity/schedule refs, and per-panel overlay state with three typed stacks.
 
 ## Stacks
 

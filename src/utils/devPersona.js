@@ -1,7 +1,7 @@
 /**
  * Dev persona for local sharing tests — must stay aligned with api/lib/devBypassUsers.js
  */
-const DEV_PERSONA_STORAGE_KEY = 'property_list_builder_dev_persona'
+const DEV_PERSONA_STORAGE_KEY = 'knockscout_dev_persona'
 
 export const DEV_PERSONA_A = '1'
 export const DEV_PERSONA_B = '2'

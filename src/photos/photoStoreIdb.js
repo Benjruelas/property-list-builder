@@ -1,4 +1,4 @@
-const DB_NAME = 'property_list_photos'
+const DB_NAME = 'knockscout_photos'
 const DB_VERSION = 1
 const JOBS = 'uploadJobs'
 const BLOBS = 'blobs'

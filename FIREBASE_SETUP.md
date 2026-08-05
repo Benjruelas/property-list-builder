@@ -54,14 +54,14 @@ VITE_FIREBASE_APP_ID=1:123456789:web:abcdef
 
 **Important**: 
 - Use `VITE_FIREBASE_AUTH_DOMAIN=localhost:3000` for local dev (fixes init.json 404)
-- For production (Vercel), set `VITE_FIREBASE_AUTH_DOMAIN` to your production domain (e.g. `property-list-builder.vercel.app`)
+- For production (Vercel), set `VITE_FIREBASE_AUTH_DOMAIN` to your production domain (e.g. `knockscout.app`)
 - Add both domains to Firebase Console → Authentication → Authorized domains
 - In Google Cloud Console OAuth client, add redirect URIs: `https://your-domain.com/__/auth/handler` and `http://localhost:3000/__/auth/handler`
 
 ## Step 5: Configure Authorized Domains (for Google Sign-In)
 
 1. In Firebase Console, go to **Authentication** → **Settings** → **Authorized domains**
-2. Add your production domain (e.g., `property-list-builder.vercel.app`)
+2. Add your production domain (e.g., `knockscout.app`)
 3. Add `localhost` if not present (for local dev)
 4. In **Google Cloud Console** → APIs & Services → Credentials → your OAuth 2.0 Client ID → add to **Authorized redirect URIs**:
    - `http://localhost:3000/__/auth/handler` (local dev)

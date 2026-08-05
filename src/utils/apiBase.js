@@ -4,7 +4,7 @@
 
 import { Capacitor } from '@capacitor/core'
 
-const DEFAULT_PRODUCTION_API = 'https://property-list-builder.vercel.app/api'
+const DEFAULT_PRODUCTION_API = 'https://knockscout.app/api'
 
 let warnedMissingNativeApiUrl = false
 

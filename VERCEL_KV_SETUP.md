@@ -13,7 +13,7 @@ npm install
 ## Step 2: Create a Vercel KV Database
 
 1. Go to your [Vercel Dashboard](https://vercel.com/dashboard)
-2. Select your project: `property-list-builder`
+2. Select your project: `knockscout`
 3. Go to the **Storage** tab
 4. Click **Create Database**
 5. Select **KV** (Redis)

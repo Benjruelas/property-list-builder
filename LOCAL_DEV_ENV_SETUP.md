@@ -97,7 +97,7 @@ But note that API calls will fail since serverless functions won't have environm
 
 - Open **Settings** and use **Local dev user**: **User A** (`dev@localhost`) vs **User B** (`dev2@localhost`). Switching reloads the app and uses a different API identity (`dev-bypass` vs `dev-bypass-2`).
 - For side-by-side sessions, use two browser profiles (or normal + incognito) and set each to a different persona so both users are signed in at once.
-- You can also set `localStorage.setItem('property_list_builder_dev_persona', '2')` and reload (use `'1'` for User A).
+- You can also set `localStorage.setItem('knockscout_dev_persona', '2')` and reload (use `'1'` for User A).
 
 ### Phone testing on the same Wi‑Fi (dev@localhost not on your team)
 

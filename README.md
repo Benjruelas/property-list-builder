@@ -100,7 +100,7 @@ External Services
 
 ```bash
 git clone <repo-url>
-cd property-list-builder
+cd knockscout
 npm install
 ```
 
@@ -212,7 +212,7 @@ VITE_MAPBOX_ACCESS_TOKEN=      # Mapbox geocoding (address search)
 ## Project Structure
 
 ```
-property_list_builder/
+knockscout/
 ├── api/                          # Vercel serverless functions
 │   ├── lists.js                  # Property list CRUD + sharing
 │   ├── paths.js                  # GPS path CRUD + sharing
@@ -632,7 +632,7 @@ Provides Firebase authentication state to the entire app.
 
 **Value:** `currentUser`, `getToken`, `login`, `signup`, `signInWithGoogle`, `logout`, `resetPassword`, `loading`, and in dev only: `devPersona`, `switchDevPersona`, `DEV_PERSONA_A`, `DEV_PERSONA_B`.
 
-In dev mode, skips Firebase and uses a synthetic user from `localStorage` key `property_list_builder_dev_persona` (`1` = User A + `dev-bypass`, `2` = User B + `dev-bypass-2`). Serverless functions on localhost resolve those tokens to distinct `uid`/`email` for testing sharing.
+In dev mode, skips Firebase and uses a synthetic user from `localStorage` key `knockscout_dev_persona` (`1` = User A + `dev-bypass`, `2` = User B + `dev-bypass-2`). Serverless functions on localhost resolve those tokens to distinct `uid`/`email` for testing sharing.
 
 ### `UserDataSyncContext` (`src/contexts/UserDataSyncContext.jsx`)
 
