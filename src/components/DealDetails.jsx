@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { ChevronRight, Archive, ArrowRightLeft, Trash2, Upload, Download, FileText, Loader2, User, MoreVertical, Plus } from 'lucide-react'
+import { ChevronRight, Archive, ArrowRightLeft, Trash2, Upload, Download, FileText, Loader2, User, MoreVertical, Plus, MessageSquare } from 'lucide-react'
 import { QuoteIcon } from './icons/QuoteIcon'
 import { PanelBackButton } from './ui/panel-header'
 import { Button } from './ui/button'
@@ -25,6 +25,7 @@ import { VisibilityBadge } from './ResourceSharePicker'
 import { normalizeResourceVisibility, visibilityLabel } from '@/utils/access'
 import { collectTagMetaFromEntities } from '@/utils/tags'
 import { PhotoGallery } from '@/photos/PhotoGallery'
+import { SendResourceShareDialog } from './share/SendResourceShareDialog'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -109,6 +110,7 @@ export function DealDetails({
   }, [d?.id])
   const [uploading, setUploading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [externalShareOpen, setExternalShareOpen] = useState(false)
   const menuTriggerRef = useRef(null)
   const [dealQuotes, setDealQuotes] = useState(() =>
     d?.id ? getCachedDealQuotes(d.id) || [] : []
@@ -162,7 +164,14 @@ export function DealDetails({
   const stageName = getColumnName(d.status, columns)
   const timeStr = formatTimeInState(d)
   const isClosed = !!closedRecord
-  const showDealActions = !readOnly && !isClosed && (onRequestMoveDeal || onRequestCloseDeal || onRequestRemoveDeal)
+  const canShareDealExternally = !readOnly
+    && !isClosed
+    && !!currentUser?.uid
+    && !!pipeline?.ownerId
+    && String(pipeline.ownerId) === String(currentUser.uid)
+  const showDealActions = !readOnly && !isClosed && (
+    canShareDealExternally || onRequestMoveDeal || onRequestCloseDeal || onRequestRemoveDeal
+  )
   const address = d.leadAddress || (lead ? formatLeadAddress(lead) : '')
   const leadName = d.leadName || (lead ? displayLeadName(lead) : '')
   const pipelineTitle = pipelineMeta?.title || pipeline?.title || ''
@@ -172,7 +181,7 @@ export function DealDetails({
   const effectiveSuppressBackdrop = true
   const suppressClickOutDismiss = primaryDetail || panelDockSlot === 'primary'
   const hasNestedOverlay =
-    menuOpen || previewFileIndex !== null || leadLinkActive || tasksNestedOverlay || photosNestedOverlay
+    menuOpen || externalShareOpen || previewFileIndex !== null || leadLinkActive || tasksNestedOverlay || photosNestedOverlay
 
   const closeMenu = () => {
     setMenuOpen(false)
@@ -261,6 +270,7 @@ export function DealDetails({
   }
 
   return (
+    <>
     <Dialog
       open
       modal={false}
@@ -611,6 +621,12 @@ export function DealDetails({
         menuWidth={MENU_WIDTH}
         dataAttr="data-deal-details-menu"
       >
+        {canShareDealExternally && (
+          <OptionsMenuItem onClick={() => { closeMenu(); setExternalShareOpen(true) }}>
+            <MessageSquare className="h-4 w-4 shrink-0" />
+            Share via text/email
+          </OptionsMenuItem>
+        )}
         {onRequestMoveDeal && (
           <OptionsMenuItem onClick={() => { closeMenu(); onRequestMoveDeal(d, pipeline?.id ?? pipeline) }}>
             <ArrowRightLeft className="h-4 w-4 shrink-0" />
@@ -635,6 +651,16 @@ export function DealDetails({
         )}
       </OptionsMenuDropdown>
     </Dialog>
+
+    <SendResourceShareDialog
+      open={externalShareOpen}
+      onClose={() => setExternalShareOpen(false)}
+      type="deal"
+      deal={d}
+      lead={lead}
+      pipelineId={pipeline?.id || pipelineMeta?.id || d?.pipelineId || null}
+    />
+    </>
   )
 }
 

@@ -98,6 +98,13 @@ import { templateToCreateDealPrefill } from './utils/dealTemplates'
 import { AppLoadingScreen } from './components/AppLoadingScreen'
 import { getAppLoadingMessage } from './config/appLoadingMessages'
 import { getPublicRouteFromWindow } from './utils/publicLinks'
+import {
+  resolvePendingShareClaimToken,
+  clearShareClaimToken,
+  clearShareQueryFromUrl,
+  claimResourceShare,
+  persistShareClaimToken,
+} from './utils/resourceShare'
 import { BasemapErrorBanner } from './components/BasemapErrorBanner'
 import { useBasemapStyle } from './hooks/useBasemapStyle'
 import { useTasksDockLayout } from './hooks/useTasksDockLayout'
@@ -3641,6 +3648,71 @@ function App() {
     window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`)
   }, [permissionsReady, handleNotificationNavigate])
 
+  // External Lead/Deal share claim: /?share={token} → auth → claim → open item
+  const shareClaimInFlightRef = useRef(false)
+  const shareClaimLoginPromptedRef = useRef(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const token = resolvePendingShareClaimToken()
+    if (!token) {
+      shareClaimLoginPromptedRef.current = false
+      return
+    }
+    if (authLoading) return
+    if (!currentUser?.uid) {
+      persistShareClaimToken(token)
+      if (!shareClaimLoginPromptedRef.current) {
+        shareClaimLoginPromptedRef.current = true
+        nav.openLogin()
+      }
+      return
+    }
+    if (shareClaimInFlightRef.current) return
+    shareClaimInFlightRef.current = true
+    shareClaimLoginPromptedRef.current = false
+    let cancelled = false
+    ;(async () => {
+      try {
+        const result = await claimResourceShare(getToken, token)
+        if (cancelled) return
+        clearShareClaimToken()
+        clearShareQueryFromUrl()
+        if (result.resourceType === 'lead' && result.leadId) {
+          await refreshLeads()
+          if (cancelled) return
+          nav.openLeadDetails(result.leadId)
+          showToast(
+            result.alreadyOwned || result.alreadyShared
+              ? 'Opening shared lead'
+              : 'Lead shared to your account',
+            'success',
+          )
+        } else if (result.resourceType === 'deal' && result.dealId && result.pipelineId) {
+          await refreshPipelines()
+          if (cancelled) return
+          setActivePipelineId(result.pipelineId)
+          nav.openDealInPipes(result.pipelineId, result.dealId)
+          showToast(
+            result.alreadyOwned || result.reused
+              ? 'Opening deal'
+              : 'Deal copied to your account',
+            'success',
+          )
+        } else {
+          showToast('Share link could not be opened', 'error')
+        }
+      } catch (e) {
+        if (cancelled) return
+        clearShareClaimToken()
+        clearShareQueryFromUrl()
+        showToast(e.message || 'Failed to open share link', 'error')
+      } finally {
+        shareClaimInFlightRef.current = false
+      }
+    })()
+    return () => { cancelled = true }
+  }, [authLoading, currentUser?.uid, getToken, nav, refreshLeads, refreshPipelines])
+
   const openLeadsPanel = useCallback(() => {
     if (!requireAuth()) return
     guardFeature('leads', () => nav.openLeads())
@@ -5100,6 +5172,13 @@ export function AppWithPublicFormRoute() {
   const quoteToken = publicRoute?.type === 'quote' ? publicRoute.token : null
   const reportToken = publicRoute?.type === 'report' ? publicRoute.token : null
   const isResetPassword = publicRoute?.type === 'reset-password'
+  // /s/{token} is normally served by the share-landing API. If the SPA loads it
+  // (e.g. local vite), bounce into the authenticated claim flow.
+  if (publicRoute?.type === 'share-redirect' && publicRoute.token && typeof window !== 'undefined') {
+    const next = `/?share=${encodeURIComponent(publicRoute.token)}`
+    window.location.replace(next)
+    return null
+  }
   if (isResetPassword) {
     return (
       <div className="h-[100dvh] overflow-hidden">

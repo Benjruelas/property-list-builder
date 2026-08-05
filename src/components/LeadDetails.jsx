@@ -53,6 +53,7 @@ import {
 } from '@/utils/leadActivity'
 import { VisibilityBadge } from './ResourceSharePicker'
 import { ShareResourceDialog } from './ShareResourceDialog'
+import { SendResourceShareDialog } from './share/SendResourceShareDialog'
 import { LeadOwnerChip } from './leads/LeadOwnerChip'
 import { isLeadOwnedByCurrentUser } from '@/utils/leadOwner'
 import { findDealsForLead } from '@/utils/deals'
@@ -231,6 +232,7 @@ export function LeadDetails({
   const [notesDirty, setNotesDirty] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [externalShareOpen, setExternalShareOpen] = useState(false)
   const [localShareState, setLocalShareState] = useState(null)
   const [statusBusy, setStatusBusy] = useState(false)
   const [leadReports, setLeadReports] = useState(() => peekCachedLeadReports(lead?.id) ?? [])
@@ -485,7 +487,7 @@ export function LeadDetails({
   }, [lead, uid, currentUser?.email, activeTeam, teams])
   const canShareLead = canChangeVisibility(leadAccess)
   const canDeleteLead = canDelete(leadAccess)
-  const showLeadOptionsMenu = canShareLead || canDeleteLead
+  const showLeadOptionsMenu = canShareLead || canDeleteLead || !!onCreateDeal
 
   useEffect(() => {
     if (!shareOpen) {
@@ -1237,6 +1239,12 @@ export function LeadDetails({
             Share lead
           </OptionsMenuItem>
         )}
+        {canShareLead && (
+          <OptionsMenuItem onClick={() => { closeMenu(); setExternalShareOpen(true) }}>
+            <MessageSquare className="h-4 w-4 shrink-0" />
+            Share via text/email
+          </OptionsMenuItem>
+        )}
         {canDeleteLead && (
           <OptionsMenuItem
             destructive
@@ -1263,6 +1271,13 @@ export function LeadDetails({
         allowExternalSharing={teamMembership?.allowExternalSharing === true}
         topLayer
         nestedOverlay
+      />
+
+      <SendResourceShareDialog
+        open={externalShareOpen}
+        onClose={() => setExternalShareOpen(false)}
+        type="lead"
+        lead={lead}
       />
 
       <DirectionsProviderDialog

@@ -38,6 +38,9 @@ GOOGLE_MAPS_TILES_KEY=your_google_map_tiles_key
 SKIPSHERPA_API_KEY=your_api_key
 TRACERFY_API_KEY=your_api_key
 REDIS_URL=your_redis_url
+# Optional: dedicated Mapbox token for /api/share-card satellite previews.
+# Falls back to VITE_MAPBOX_ACCESS_TOKEN when unset.
+MAPBOX_ACCESS_TOKEN=your_token
 ```
 
 ### For Production (Vercel)
@@ -48,6 +51,7 @@ Add all environment variables in Vercel Dashboard:
 3. Add:
    - `GOOGLE_MAPS_TILES_KEY` = Google Cloud API key with **Map Tiles API** enabled (primary basemap)
    - `VITE_MAPBOX_ACCESS_TOKEN` = Mapbox token (geocoding + basemap fallback)
+   - `MAPBOX_ACCESS_TOKEN` = optional server Mapbox token for Lead/Deal share link preview cards (falls back to `VITE_MAPBOX_ACCESS_TOKEN`)
    - `SKIPSHERPA_API_KEY` = your API key
    - `VITE_FIREBASE_API_KEY` = your Firebase key
    - Any other variables you need

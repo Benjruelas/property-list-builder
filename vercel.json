@@ -41,6 +41,10 @@
     },
     "api/eagleview-imagery.js": {
       "maxDuration": 30
+    },
+    "api/share-card.js": {
+      "maxDuration": 30,
+      "memory": 1024
     }
   },
   "redirects": [
@@ -63,6 +67,10 @@
     {
       "source": "/api/:path*",
       "destination": "/api/:path*"
+    },
+    {
+      "source": "/s/:token",
+      "destination": "/api/share-landing?token=:token"
     },
     {
       "source": "/apple-touch-icon.png",

@@ -37,6 +37,14 @@ export function buildReportPublicUrl(origin, token) {
   return `${normalizePublicOrigin(origin)}/r/${encodePublicLinkToken(token)}`
 }
 
+export function buildResourceSharePublicUrl(origin, token) {
+  return `${normalizePublicOrigin(origin)}/s/${encodePublicLinkToken(token)}`
+}
+
+export function buildResourceShareClaimPath(token) {
+  return `/?share=${encodePublicLinkToken(token)}`
+}
+
 export function buildQuotePublicPath(token, { payment } = {}) {
   const params = new URLSearchParams()
   if (payment) params.set('payment', payment)
