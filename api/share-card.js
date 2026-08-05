@@ -91,10 +91,13 @@ function formatPhoneCard(value) {
   return String(value || '').trim()
 }
 
-/** Street, city, state — drop zip / country / extra noise. */
-function formatAddressCard(value) {
+/**
+ * Street on first line, city + state on second.
+ * Drops zip / country / extra noise. Returns [] when empty.
+ */
+function formatAddressLines(value) {
   let s = String(value || '').trim()
-  if (!s) return ''
+  if (!s) return []
   s = s.replace(/,\s*(United States|USA|U\.S\.A\.)\s*$/i, '').trim()
   s = s.replace(/\s+\d{5}(?:-\d{4})?\s*$/, '').trim()
   const parts = s.split(',').map((p) => p.trim()).filter(Boolean)
@@ -102,12 +105,15 @@ function formatAddressCard(value) {
     const street = parts[0]
     const city = parts[1]
     const state = parts[2].replace(/\s+\d{5}(?:-\d{4})?.*$/, '').trim()
-    return [street, city, state].filter(Boolean).join(', ')
+    const cityState = [city, state].filter(Boolean).join(', ')
+    return [street, cityState].filter(Boolean)
   }
   if (parts.length === 2) {
-    return `${parts[0]}, ${parts[1].replace(/\s+\d{5}(?:-\d{4})?.*$/, '').trim()}`
+    const street = parts[0]
+    const cityState = parts[1].replace(/\s+\d{5}(?:-\d{4})?.*$/, '').trim()
+    return [street, cityState].filter(Boolean)
   }
-  return s
+  return [s]
 }
 
 function el(type, style, children) {
@@ -137,15 +143,23 @@ function line(text, { fontSize, fontWeight = 400, marginBottom = 0, maxLines = 2
 
 async function buildTextOverlay({ name, address, phone, email, resourceType }) {
   const displayName = String(name || (resourceType === 'deal' ? 'Deal' : 'Lead')).trim()
-  const displayAddress = formatAddressCard(address)
+  const addressLines = formatAddressLines(address)
   const displayPhone = formatPhoneCard(phone)
   const displayEmail = String(email || '').trim()
 
   const children = [
     line(displayName, { fontSize: 72, fontWeight: 600, marginBottom: 22, maxLines: 2 }),
   ]
-  if (displayAddress) {
-    children.push(line(displayAddress, { fontSize: 44, fontWeight: 400, marginBottom: 18, maxLines: 2 }))
+  for (let i = 0; i < addressLines.length; i++) {
+    const isLast = i === addressLines.length - 1
+    children.push(
+      line(addressLines[i], {
+        fontSize: 44,
+        fontWeight: 400,
+        marginBottom: isLast ? 18 : 6,
+        maxLines: 1,
+      }),
+    )
   }
   if (displayPhone) {
     children.push(line(displayPhone, { fontSize: 42, fontWeight: 400, marginBottom: 14, maxLines: 1 }))
