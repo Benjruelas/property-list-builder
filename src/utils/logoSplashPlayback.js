@@ -63,7 +63,8 @@ export function logoDrawRect({ lockedW, lockedH, videoW, videoH, scale, dpr }) {
 }
 
 /**
- * iOS often exposes a neutral mid-grey placeholder before the first real decode.
+ * iOS often exposes a neutral grey placeholder before the first real decode
+ * (including Capacitor-like dark greys around #111 and classic mid-greys).
  * Those frames must not be drawn (and must never become the full-screen plate).
  *
  * @param {number} r
@@ -74,7 +75,10 @@ export function logoDrawRect({ lockedW, lockedH, videoW, videoH, scale, dpr }) {
 export function isLogoSplashGreyPlaceholder(r, g, b) {
   const max = Math.max(r, g, b)
   const min = Math.min(r, g, b)
-  return (max - min) <= 28 && min >= 40 && max <= 220
+  // Near-black plate / real logo corners stay drawable (allow tiny decode noise).
+  if (max <= 12) return false
+  // Any near-neutral grey above near-black — skip (dark #111 through light grey).
+  return (max - min) <= 28 && max <= 220
 }
 
 /** @deprecated Use isLogoSplashGreyPlaceholder — kept for older imports/tests. */

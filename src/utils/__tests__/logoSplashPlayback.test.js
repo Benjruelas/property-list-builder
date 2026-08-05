@@ -87,14 +87,19 @@ describe('logoSplashPlayback', () => {
     expect(frozenAfterGrowth.dx).toBe(first.dx)
   })
 
-  it('detects iOS mid-grey placeholder frames without blocking real frames', () => {
+  it('detects grey placeholder frames (including dark #111) without blocking real frames', () => {
     expect(isLogoSplashGreyPlaceholder(0, 0, 0)).toBe(false)
     expect(isLogoSplashGreyPlaceholder(8, 0, 10)).toBe(false)
+    // Capacitor default splash / iOS dark-grey decoder plate
+    expect(isLogoSplashGreyPlaceholder(17, 17, 17)).toBe(true)
     expect(isLogoSplashGreyPlaceholder(128, 128, 128)).toBe(true)
     expect(isLogoSplashGreyPlaceholder(180, 180, 182)).toBe(true)
+    // Saturated brand / logo pixels must still draw
     expect(isLogoSplashGreyPlaceholder(200, 40, 40)).toBe(false)
+    expect(isLogoSplashGreyPlaceholder(17, 81, 239)).toBe(false)
     // Compatibility wrapper: usable == not grey placeholder
     expect(isUsableLogoSplashPlateSample(0, 0, 0)).toBe(true)
+    expect(isUsableLogoSplashPlateSample(17, 17, 17)).toBe(false)
     expect(isUsableLogoSplashPlateSample(128, 128, 128)).toBe(false)
     expect(isUsableLogoSplashPlateSample(200, 40, 40)).toBe(true)
   })

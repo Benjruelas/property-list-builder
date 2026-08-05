@@ -218,11 +218,14 @@
         var EDGE_COVER_TOP_RATIO = 0.12;
         var EDGE_COVER_TOP_MIN_PX = 14;
         var plateFill = '#000000';
-        // iOS often exposes a neutral mid-grey placeholder before real decode.
+        // iOS / Capacitor often expose a neutral grey placeholder before real decode
+        // (dark #111 through classic mid-grey). Keep the plate pure black until a
+        // real logo frame arrives.
         var isGreyPlaceholder = function(r, g, b) {
           var max = Math.max(r, g, b);
           var min = Math.min(r, g, b);
-          return (max - min) <= 28 && min >= 40 && max <= 220;
+          if (max <= 12) return false;
+          return (max - min) <= 28 && max <= 220;
         };
         var probe = document.createElement('canvas');
         probe.width = 48;

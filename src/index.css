@@ -5102,7 +5102,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
 #initial-loader {
   --ks-blue: #1151ef;
   --ks-blue-soft: rgba(17, 81, 239, 0.55);
-  --ks-ink: #060912;
+  --ks-ink: #000000;
   --ks-logo-blue: #1251f0;
   --ks-logo-plate: #000000;
   position: fixed;
@@ -5111,7 +5111,7 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ks-ink);
+  background: #000000;
   overflow: hidden;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   pointer-events: auto;
