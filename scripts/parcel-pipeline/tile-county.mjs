@@ -30,9 +30,11 @@ async function main() {
   }
 
   const dir = countyWorkDir(fips)
-  const input = path.join(dir, 'normalized.geojson')
+  const ndjson = path.join(dir, 'normalized.ndjson')
+  const geojson = path.join(dir, 'normalized.geojson')
+  const input = fs.existsSync(ndjson) ? ndjson : geojson
   if (!fs.existsSync(input)) {
-    console.error(`Missing ${input} — run normalize-county first`)
+    console.error(`Missing ${ndjson} — run normalize-county first`)
     process.exit(1)
   }
 

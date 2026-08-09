@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Download county parcel features to local GeoJSON.
- * Supports ArcGIS FeatureServer/MapServer query, GeoJSON URL, or local shapefile zip path.
+ * Download county parcel features to local newline-delimited GeoJSON (NDJSON).
+ * Streams to disk so large counties do not blow V8 string limits.
  */
 import fs from 'fs'
 import path from 'path'
@@ -9,7 +9,7 @@ import { parseArgs, countyWorkDir } from './lib/paths.mjs'
 import { getLocalCounty } from './lib/catalogLocal.mjs'
 import { apiConfigured, apiGetCounty } from './lib/apiClient.mjs'
 
-const PAGE_SIZE = 2000
+const PAGE_SIZE = Number(process.env.PARCEL_DOWNLOAD_PAGE_SIZE || 10000)
 const MAX_FEATURES = Number(process.env.PARCEL_DOWNLOAD_MAX_FEATURES || 2_000_000)
 
 async function resolveCounty(fips) {
@@ -38,9 +38,25 @@ async function fetchJson(url) {
   return res.json()
 }
 
+function openNdjsonWriter(outPath) {
+  const fd = fs.openSync(outPath, 'w')
+  let count = 0
+  return {
+    writeFeature(feature) {
+      fs.writeSync(fd, `${JSON.stringify(feature)}\n`)
+      count++
+    },
+    get count() {
+      return count
+    },
+    close() {
+      fs.closeSync(fd)
+    },
+  }
+}
+
 async function downloadArcgis(source, outPath) {
   const base = layerUrl(source)
-  // Probe
   const meta = await fetchJson(`${base}?f=json`)
   if (meta.error) throw new Error(meta.error.message || JSON.stringify(meta.error))
   if (meta.geometryType && !/polygon/i.test(meta.geometryType)) {
@@ -49,44 +65,45 @@ async function downloadArcgis(source, outPath) {
 
   const supportsPagination = meta.advancedQueryCapabilities?.supportsPagination !== false
   const maxRecordCount = Math.min(meta.maxRecordCount || PAGE_SIZE, PAGE_SIZE)
-  const features = []
+  const writer = openNdjsonWriter(outPath)
   let offset = 0
   let page = 0
 
-  while (features.length < MAX_FEATURES) {
-    page++
-    const params = new URLSearchParams({
-      where: '1=1',
-      outFields: '*',
-      returnGeometry: 'true',
-      outSR: '4326',
-      f: 'geojson',
-      resultRecordCount: String(maxRecordCount),
-    })
-    if (supportsPagination) params.set('resultOffset', String(offset))
+  try {
+    while (writer.count < MAX_FEATURES) {
+      page++
+      const params = new URLSearchParams({
+        where: '1=1',
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '4326',
+        f: 'geojson',
+        resultRecordCount: String(maxRecordCount),
+      })
+      if (supportsPagination) params.set('resultOffset', String(offset))
 
-    const url = `${base}/query?${params}`
-    console.log(`[download] page ${page} offset=${offset}`)
-    const data = await fetchJson(url)
-    const batch = data.features || []
-    if (!batch.length) break
-    features.push(...batch)
-    if (batch.length < maxRecordCount) break
-    if (!supportsPagination) {
-      console.warn('[download] server does not support pagination; stopped after first page')
-      break
+      const url = `${base}/query?${params}`
+      console.log(`[download] page ${page} offset=${offset} written=${writer.count}`)
+      const data = await fetchJson(url)
+      const batch = data.features || []
+      if (!batch.length) break
+      for (const f of batch) writer.writeFeature(f)
+      if (batch.length < maxRecordCount) break
+      if (!supportsPagination) {
+        console.warn('[download] server does not support pagination; stopped after first page')
+        break
+      }
+      offset += batch.length
+      await new Promise((r) => setTimeout(r, 100))
     }
-    offset += batch.length
-    await new Promise((r) => setTimeout(r, 200))
+  } finally {
+    writer.close()
   }
 
-  if (features.length >= MAX_FEATURES) {
+  if (writer.count >= MAX_FEATURES) {
     console.warn(`[download] hit MAX_FEATURES=${MAX_FEATURES}`)
   }
-
-  const fc = { type: 'FeatureCollection', features }
-  fs.writeFileSync(outPath, JSON.stringify(fc))
-  return { featureCount: features.length, outPath }
+  return { featureCount: writer.count, outPath }
 }
 
 async function downloadGeojsonUrl(source, outPath) {
@@ -94,22 +111,49 @@ async function downloadGeojsonUrl(source, outPath) {
     headers: { 'User-Agent': 'KnockScout-parcel-pipeline/1.0' },
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const buf = Buffer.from(await res.arrayBuffer())
-  fs.writeFileSync(outPath, buf)
-  const fc = JSON.parse(buf.toString('utf8'))
-  return { featureCount: fc.features?.length || 0, outPath }
+  const writer = openNdjsonWriter(outPath)
+  try {
+    // Prefer streaming if content is already NDJSON; else parse FeatureCollection once.
+    const text = await res.text()
+    if (text.trimStart().startsWith('{') && text.includes('"FeatureCollection"')) {
+      const fc = JSON.parse(text)
+      for (const f of fc.features || []) writer.writeFeature(f)
+    } else {
+      for (const line of text.split('\n')) {
+        const t = line.trim()
+        if (!t) continue
+        writer.writeFeature(JSON.parse(t))
+      }
+    }
+  } finally {
+    writer.close()
+  }
+  return { featureCount: writer.count, outPath }
 }
 
 async function downloadShapefileHint(source, outPath) {
-  // Expect operator to pre-convert, or provide a .geojson path in source.url
-  if (source.url.endsWith('.geojson') || source.url.endsWith('.json')) {
+  if (source.url.endsWith('.geojson') || source.url.endsWith('.json') || source.url.endsWith('.ndjson')) {
     if (source.url.startsWith('http')) return downloadGeojsonUrl(source, outPath)
-    fs.copyFileSync(source.url, outPath)
-    const fc = JSON.parse(fs.readFileSync(outPath, 'utf8'))
-    return { featureCount: fc.features?.length || 0, outPath }
+    const text = fs.readFileSync(source.url, 'utf8')
+    const writer = openNdjsonWriter(outPath)
+    try {
+      if (text.trimStart().startsWith('{') && text.includes('"FeatureCollection"')) {
+        const fc = JSON.parse(text)
+        for (const f of fc.features || []) writer.writeFeature(f)
+      } else {
+        for (const line of text.split('\n')) {
+          const t = line.trim()
+          if (!t) continue
+          writer.writeFeature(JSON.parse(t))
+        }
+      }
+    } finally {
+      writer.close()
+    }
+    return { featureCount: writer.count, outPath }
   }
   throw new Error(
-    'shapefile source: convert to GeoJSON first (ogr2ogr) and set source.url to the .geojson path or URL',
+    'shapefile source: convert to GeoJSON/NDJSON first (ogr2ogr) and set source.url to that path or URL',
   )
 }
 
@@ -132,7 +176,7 @@ async function main() {
   }
 
   const dir = countyWorkDir(fips)
-  const outPath = path.join(dir, 'raw.geojson')
+  const outPath = path.join(dir, 'raw.ndjson')
   console.log(`[download] ${county.fullName || county.name}, ${county.state} (${fips})`)
   console.log(`[download] source type=${county.source.type} url=${county.source.url}`)
 
@@ -149,6 +193,7 @@ async function main() {
         fips,
         downloadedAt: new Date().toISOString(),
         featureCount: result.featureCount,
+        format: 'ndjson',
         source: county.source,
       },
       null,
