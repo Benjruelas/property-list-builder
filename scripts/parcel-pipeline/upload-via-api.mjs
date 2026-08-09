@@ -13,7 +13,6 @@ import path from 'path'
 import { spawnSync } from 'child_process'
 import { parseArgs, countyWorkDir } from './lib/paths.mjs'
 import { OWNED_TILE_PREFIX } from '../../api/_lib/parcelPipeline/constants.js'
-import { PIPELINE_BOOTSTRAP_TOKEN } from '../../api/_lib/parcelPipeline/opsAuth.js'
 
 const CONCURRENCY = Number(process.env.PARCEL_UPLOAD_CONCURRENCY || 12)
 const BATCH = Number(process.env.PARCEL_UPLOAD_BATCH || 40)
@@ -65,13 +64,12 @@ async function main() {
   const args = parseArgs()
   const fips = String(args.fips || '').padStart(5, '0')
   const base = (process.env.PARCEL_PIPELINE_API_BASE || '').replace(/\/$/, '')
-  const secret =
-    process.env.PARCEL_PIPELINE_SECRET ||
-    process.env.CRON_SECRET ||
-    PIPELINE_BOOTSTRAP_TOKEN
+  const secret = process.env.PARCEL_PIPELINE_SECRET || process.env.CRON_SECRET
 
-  if (!fips || fips === '00000' || !base) {
-    console.error('Usage: PARCEL_PIPELINE_API_BASE=https://… upload-via-api.mjs --fips=48439')
+  if (!fips || fips === '00000' || !base || !secret) {
+    console.error(
+      'Usage: PARCEL_PIPELINE_API_BASE=https://… PARCEL_PIPELINE_SECRET=… upload-via-api.mjs --fips=48439',
+    )
     process.exit(1)
   }
 
