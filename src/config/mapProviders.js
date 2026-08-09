@@ -10,7 +10,7 @@ export const CARTO_LABEL_TILES = {
 }
 export const CARTO_LABEL_ATTRIBUTION = '&copy; OpenStreetMap &copy; CARTO'
 
-/** Same-origin parcel vector tiles (LandRecords via R2 cache). */
+/** Same-origin parcel vector tiles (owned R2 tiles, then LandRecords cache/fallback). */
 export function parcelTileUrl() {
   // `v=3`: bust SW/browser caches after sparse-pyramid empty-tile status change.
   if (typeof window === 'undefined') return '/api/tiles?z={z}&x={x}&y={y}&v=3'

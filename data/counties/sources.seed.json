@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "note": "Starter public ArcGIS parcel endpoints for pipeline testing. Agents expand coverage.",
+  "sources": {
+    "48439": {
+      "type": "arcgis",
+      "url": "https://mapit.tarrantcounty.com/arcgis/rest/services/Dynamic/TADParcels/MapServer/0",
+      "layerId": 0,
+      "licenseNote": "Tarrant County / TAD public GIS",
+      "fieldMap": {
+        "parcelid": ["ACCOUNT", "Account", "PROP_ID", "PROP_ID"],
+        "lrid": ["ACCOUNT", "Account"],
+        "parceladdr": ["SITUS_ADDRESS", "Situs_Address", "SITE_ADDR", "ADDRESS"],
+        "parcelcity": ["SITUS_CITY", "Situs_City", "CITY"],
+        "parcelstate": ["SITUS_STATE", "STATE"],
+        "parcelzip": ["SITUS_ZIP", "ZIP"],
+        "ownername": ["OWNER_NAME", "Owner_Name", "OWNER"],
+        "owneraddr": ["OWNER_ADDRESS", "MAIL_ADDR"],
+        "ownercity": ["OWNER_CITY", "MAIL_CITY"],
+        "ownerzip": ["OWNER_ZIP", "MAIL_ZIP"],
+        "totalvalue": ["TOT_VAL", "MARKET_VALUE", "APPRAISED"],
+        "landvalue": ["LAND_VAL", "LAND_VALUE"],
+        "imprvalue": ["IMPR_VAL", "IMPROVEMENT_VALUE"],
+        "taxacres": ["ACRES", "LEGAL_ACRES", "DEED_ACRES"],
+        "yearbuilt": ["YEAR_BUILT", "YR_BUILT"],
+        "legaldesc": ["LEGAL_DESC", "LEGAL"]
+      }
+    },
+    "48113": {
+      "type": "arcgis",
+      "url": "https://www.dallascad.org/arcgis/rest/services/ParcelPub/MapServer/0",
+      "layerId": 0,
+      "licenseNote": "Dallas CAD public GIS — verify endpoint before production runs",
+      "fieldMap": {
+        "parcelid": ["ACCOUNT_NUM", "Acct", "PROP_ID"],
+        "lrid": ["ACCOUNT_NUM", "Acct"],
+        "parceladdr": ["SITE_ADDR", "SITUS_ADDRESS", "STREET_ADDRESS"],
+        "parcelcity": ["SITE_CITY", "CITY"],
+        "parcelzip": ["SITE_ZIP", "ZIP"],
+        "ownername": ["OWNER_NAME", "OWNER"],
+        "totalvalue": ["TOT_VAL", "MARKET_VALUE"],
+        "taxacres": ["ACRES", "DEED_ACRES"]
+      }
+    },
+    "48201": {
+      "type": "arcgis",
+      "url": "https://www.harris.cadc.com/arcgis/rest/services/Parcels/MapServer/0",
+      "layerId": 0,
+      "licenseNote": "Harris County — placeholder; agents must validate live endpoint",
+      "fieldMap": {
+        "parcelid": ["HCAD_NUM", "ACCOUNT", "TAXACCT"],
+        "lrid": ["HCAD_NUM", "ACCOUNT"],
+        "parceladdr": ["SITE_ADDR", "LOC_ADDR"],
+        "ownername": ["OWNER_NAME", "OWNER"],
+        "totalvalue": ["TOT_VAL", "ASSESSED"],
+        "taxacres": ["ACRES"]
+      }
+    },
+    "06037": {
+      "type": "arcgis",
+      "url": "https://public.gis.lacounty.gov/public/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0",
+      "layerId": 0,
+      "licenseNote": "Los Angeles County public parcel MapServer",
+      "fieldMap": {
+        "parcelid": ["AIN", "APN", "PIN"],
+        "lrid": ["AIN", "APN"],
+        "parceladdr": ["SitusAddress", "SITUS_ADDRESS", "PropertyAddress"],
+        "parcelcity": ["SitusCity", "CITY"],
+        "parcelzip": ["SitusZIP", "ZIP"],
+        "ownername": ["OwnerName", "OWNER_NAME"],
+        "totalvalue": ["TotalValue", "Roll_TotalValue"],
+        "taxacres": ["Shape_Area", "ACRES"],
+        "legaldesc": ["LegalDescription", "LEGAL_DESC"]
+      }
+    },
+    "53033": {
+      "type": "arcgis",
+      "url": "https://gismaps.kingcounty.gov/arcgis/rest/services/Property/KingCo_Parcels/MapServer/0",
+      "layerId": 0,
+      "licenseNote": "King County WA public parcels (may omit owner on public layer)",
+      "fieldMap": {
+        "parcelid": ["PIN", "MAJOR", "APN"],
+        "lrid": ["PIN"],
+        "parceladdr": ["ADDR_FULL", "SITUS_ADDR", "ADDRESS"],
+        "parcelcity": ["CTYNAME", "CITY"],
+        "parcelzip": ["ZIP5", "ZIP"],
+        "taxacres": ["KCAACRES", "ACRES"]
+      }
+    },
+    "12086": {
+      "type": "arcgis",
+      "url": "https://gisweb.miamidade.gov/arcgis/rest/services/MD_LandInformation/MapServer/26",
+      "layerId": 26,
+      "licenseNote": "Miami-Dade Land Information parcels",
+      "fieldMap": {
+        "parcelid": ["FOLIO", "FOLIO_NUM"],
+        "lrid": ["FOLIO"],
+        "parceladdr": ["TRUE_SITE_ADDR", "SITE_ADDR"],
+        "parcelcity": ["TRUE_SITE_CITY", "CITY"],
+        "parcelzip": ["TRUE_SITE_ZIP_CODE", "ZIP"],
+        "ownername": ["TRUE_OWNER1", "OWNER"],
+        "totalvalue": ["TOTAL_VAL", "ASSESSED_VAL"],
+        "taxacres": ["LOT_SIZE", "ACRES"]
+      }
+    }
+  }
+}

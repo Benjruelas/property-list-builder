@@ -6,6 +6,12 @@
     "api/parcel.js": {
       "maxDuration": 30
     },
+    "api/parcel-pipeline/counties.js": {
+      "maxDuration": 60
+    },
+    "api/parcel-pipeline/report.js": {
+      "maxDuration": 30
+    },
     "api/cron-task-reminders.js": {
       "maxDuration": 60
     },
