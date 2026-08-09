@@ -34,3 +34,4 @@ parcel_data/
 production-backup/
 .env*.local
 .local-dev-data/
+data/counties/sources.runtime.json
