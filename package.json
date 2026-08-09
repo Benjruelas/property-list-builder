@@ -25,6 +25,7 @@
     "parcel:normalize": "node scripts/parcel-pipeline/normalize-county.mjs",
     "parcel:tile": "node scripts/parcel-pipeline/tile-county.mjs",
     "parcel:upload": "node scripts/parcel-pipeline/upload-county-tiles.mjs",
+    "parcel:upload-api": "node scripts/parcel-pipeline/upload-via-api.mjs",
     "parcel:run": "node scripts/parcel-pipeline/run-county.mjs"
   },
   "dependencies": {
