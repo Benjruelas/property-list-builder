@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url'
 import { ROOT, DATA_DIR } from './lib/paths.mjs'
 import { getLocalCounty, loadLocalCatalog } from './lib/catalogLocal.mjs'
 import { discoverArcgisSource } from './discover-arcgis-online.mjs'
+import { validateDownloadedCount, validateParcelLayer } from './lib/sourceValidation.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PROGRESS_PATH = path.join(DATA_DIR, 'nationwide-progress.json')
@@ -68,8 +69,14 @@ function ensureR2() {
 
 async function resolveSource(county, rankEntry) {
   const local = getLocalCounty(county.fips)
+  const pop = rankEntry.population2023
   if (local?.source?.url && local.source.type !== 'none') {
-    return { source: local.source, fieldMap: local.fieldMap }
+    const v = await validateParcelLayer(local.source.url, {
+      population2023: pop,
+      title: local.source.licenseNote || local.source.url,
+    })
+    if (v.ok) return { source: local.source, fieldMap: local.fieldMap }
+    console.warn(`[nationwide] seed source rejected ${county.fips}: ${v.reason}`)
   }
   if (process.env.PARCEL_SKIP_DISCOVERY === '1') return null
   console.log(`[nationwide] discovering source for ${rankEntry.name}, ${rankEntry.state} (${county.fips})`)
@@ -77,6 +84,7 @@ async function resolveSource(county, rankEntry) {
     name: rankEntry.name.replace(/\s+County$/i, ''),
     state: rankEntry.state,
     fips: county.fips,
+    population2023: pop,
   })
   return found ? { source: found, fieldMap: found.fieldMap } : null
 }
@@ -185,6 +193,26 @@ async function processCounty(rankEntry, progress) {
       saveProgress(progress)
       cleanupCounty(fips)
       return 'failed'
+    }
+    if (script === 'download-county.mjs') {
+      const metaPath = path.join(DATA_DIR, fips, 'download-meta.json')
+      const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, 'utf8')) : {}
+      const check = validateDownloadedCount(meta.featureCount, rankEntry.population2023)
+      if (!check.ok) {
+        progress.byFips[fips] = {
+          status: 'failed',
+          population2023: rankEntry.population2023,
+          name: rankEntry.name,
+          state: rankEntry.state,
+          error: `thin_source: ${check.reason}`,
+          finishedAt: new Date().toISOString(),
+          source: resolved.source,
+        }
+        progress.stats.failed++
+        saveProgress(progress)
+        cleanupCounty(fips)
+        return 'failed'
+      }
     }
   }
 

@@ -194,6 +194,73 @@
         "ownername": ["OWNER_NAME", "OWNER"],
         "taxacres": ["ACRES"]
       }
+    },
+    "06073": {
+      "type": "arcgis",
+      "url": "https://gis-public.sandiegocounty.gov/arcgis/rest/services/WorkflowLayers/FeatureServer/0",
+      "layerId": 0,
+      "licenseNote": "San Diego County Assessor Parcels (~1.09M)",
+      "fieldMap": {
+        "parcelid": ["APN", "APN_8", "PARCELID"],
+        "lrid": ["APN", "PARCELID"],
+        "parceladdr": ["SITUS_ADDRESS", "SITUS_STREET"],
+        "parcelcity": ["SITUS_COMMUNITY", "SITUS_JURIS"],
+        "parcelzip": ["SITUS_ZIP", "OWN_ZIP"],
+        "ownername": ["OWN_NAME1", "OWN_NAME2"],
+        "totalvalue": ["ASR_TOTAL", "ASR_LAND"],
+        "taxacres": ["ACREAGE"]
+      }
+    },
+    "32003": {
+      "type": "arcgis",
+      "url": "https://maps.clarkcountynv.gov/arcgis/rest/services/GISMO/AssessorMap/FeatureServer/1",
+      "layerId": 1,
+      "licenseNote": "Clark County NV GISMO AssessorMap parcels (~950k)",
+      "fieldMap": {
+        "parcelid": ["APN"],
+        "lrid": ["APN"],
+        "taxacres": ["ASSR_ACRES", "CALC_ACRES"]
+      }
+    },
+    "06071": {
+      "type": "arcgis",
+      "url": "https://services.arcgis.com/aA3snZwJfFkVyDuP/arcgis/rest/services/San_Bernardino_County_Parcel_Dataset/FeatureServer/0",
+      "layerId": 0,
+      "licenseNote": "San Bernardino County Parcel Dataset (~840k)",
+      "fieldMap": {
+        "parcelid": ["APN", "PARCELID", "PIN"],
+        "lrid": ["APN"],
+        "parceladdr": ["SITUS_ADDRESS", "SITE_ADDR", "ADDRESS"],
+        "ownername": ["OWNER_NAME", "OWNER"],
+        "taxacres": ["ACRES", "SHAPE_AREA"]
+      }
+    },
+    "12011": {
+      "type": "arcgis",
+      "url": "https://services.arcgis.com/JMAJrTsHNLrSsWf5/arcgis/rest/services/PARCEL_POLY_BCPA_TAXROLL/FeatureServer/0",
+      "layerId": 0,
+      "licenseNote": "Broward County Parcel Tax Roll (~554k)",
+      "fieldMap": {
+        "parcelid": ["FOLIO", "PARCEL_ID", "PIN"],
+        "lrid": ["FOLIO"],
+        "parceladdr": ["SITE_ADDR", "ADDRESS", "SITUS_ADDRESS"],
+        "parcelcity": ["CITY", "SITE_CITY"],
+        "ownername": ["OWNER_NAME", "OWNER"],
+        "taxacres": ["ACRES"]
+      }
+    },
+    "06065": {
+      "type": "arcgis",
+      "url": "https://gis.conserveriverside.com/arcgis/rest/services/PublicServices/Parcel_Info_Public/FeatureServer/0",
+      "layerId": 0,
+      "licenseNote": "Riverside County Parcel Info Public (~615k)",
+      "fieldMap": {
+        "parcelid": ["APN", "PARCEL", "PIN"],
+        "lrid": ["APN"],
+        "parceladdr": ["SITUS_ADDRESS", "SITE_ADDR", "ADDRESS"],
+        "ownername": ["OWNER_NAME", "OWNER"],
+        "taxacres": ["ACRES"]
+      }
     }
   }
 }

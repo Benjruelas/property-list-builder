@@ -26,6 +26,7 @@ import {
   loadProgress,
 } from './lib/nationwideProgress.mjs'
 import { withTileSlot } from './lib/tileLock.mjs'
+import { validateDownloadedCount, validateParcelLayer } from './lib/sourceValidation.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const WORKER_MODE = process.argv.includes('--worker')
@@ -68,8 +69,21 @@ function cleanupCounty(fips) {
 
 async function resolveSource(county, rankEntry) {
   const local = getLocalCounty(county.fips)
+  const pop = rankEntry.population2023
   if (local?.source?.url && local.source.type !== 'none') {
-    return { source: local.source, fieldMap: local.fieldMap }
+    const v = await validateParcelLayer(local.source.url, {
+      population2023: pop,
+      title: local.source.licenseNote || local.source.url,
+    })
+    if (v.ok) {
+      console.log(
+        `[w${WORKER_ID}] seed source ok ${county.fips} count=${v.count} (min=${v.minRequired})`,
+      )
+      return { source: local.source, fieldMap: local.fieldMap, featureCount: v.count }
+    }
+    console.warn(
+      `[w${WORKER_ID}] seed source rejected ${county.fips}: ${v.reason} — trying discovery`,
+    )
   }
   if (process.env.PARCEL_SKIP_DISCOVERY === '1') return null
   console.log(
@@ -79,8 +93,9 @@ async function resolveSource(county, rankEntry) {
     name: rankEntry.name.replace(/\s+County$/i, ''),
     state: rankEntry.state,
     fips: county.fips,
+    population2023: pop,
   })
-  return found ? { source: found, fieldMap: found.fieldMap } : null
+  return found ? { source: found, fieldMap: found.fieldMap, featureCount: found.featureCount } : null
 }
 
 function writeRuntimeSource(fips, source, fieldMap) {
@@ -169,6 +184,34 @@ async function processClaimed(rankEntry, rankNum, total) {
       )
       cleanupCounty(fips)
       return 'failed'
+    }
+
+    // After download, refuse thin/wrong layers before spending tippecanoe/R2 time
+    if (script === 'download-county.mjs') {
+      const metaPath = path.join(DATA_DIR, fips, 'download-meta.json')
+      const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, 'utf8')) : {}
+      const check = validateDownloadedCount(meta.featureCount, rankEntry.population2023)
+      if (!check.ok) {
+        console.error(`[w${WORKER_ID}] ${fips} thin download rejected: ${check.reason}`)
+        await updateCountyStatus(
+          fips,
+          {
+            status: 'failed',
+            population2023: rankEntry.population2023,
+            name: rankEntry.name,
+            state: rankEntry.state,
+            error: `thin_source: ${check.reason}`,
+            source: resolved.source,
+            workerId: WORKER_ID,
+          },
+          { failed: 1 },
+        )
+        cleanupCounty(fips)
+        return 'failed'
+      }
+      console.log(
+        `[w${WORKER_ID}] ${fips} download size ok count=${check.count} (min=${check.minRequired})`,
+      )
     }
   }
 

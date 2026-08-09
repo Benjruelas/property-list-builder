@@ -42,6 +42,12 @@ Parallel nationwide env knobs:
 - `PARCEL_UPLOAD_CONCURRENCY=8` — per-county R2 upload concurrency
 - `PARCEL_DOWNLOAD_RESUME=1` — resume partial `raw.ndjson` after interrupt
 
+**Source quality gates** (required — prevents specialty/subset layers):
+
+- Discovery rejects titles like surplus land / easements / open space / Big Bear–style subsets
+- Candidate layers must pass a population-scaled `returnCountOnly` minimum (e.g. large metros need ≥ ~25k–pop/80 features)
+- After download, the same minimum is enforced before tippecanoe/R2; thin layers are marked `failed` (`thin_source`) instead of `complete`
+
 Work files land in `parcel_data/{fips}/` (gitignored). Progress: `parcel_data/nationwide-progress.json`.
 
 ## Discovery tips
