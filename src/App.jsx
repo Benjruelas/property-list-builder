@@ -4151,10 +4151,11 @@ function App() {
             // Sparse LandRecords zooms return 410 on purpose so MapLibre keeps parent
             // tiles. Providing onError prevents react-map-gl from console.error'ing each miss.
             const err = e?.error
-            const status = err?.status
-            const url = String(err?.url || '')
+            if (!err) return
+            const status = err.status
+            const url = String(err.url || err.message || '')
             if (status === 410 && url.includes('/api/tiles')) return
-            if (err) console.error(err)
+            console.error(err)
           }}
           onLoad={(evt) => {
             const map = evt.target

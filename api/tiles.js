@@ -5,16 +5,24 @@ const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 const EMPTY_MARKER = Buffer.alloc(0)
 const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'
 
+/** Must match PARCEL_MIN_ZOOM in PMTilesParcelLayer — below this we never request tiles. */
+const PARCEL_MIN_ZOOM = 15
+
 /**
- * LandRecords coverage is a sparse pyramid (e.g. NYC data at z14, Dallas at z15–16,
- * some metros at z17). MapLibre treats HTTP 204 as a successful empty tile and will
- * NOT fall back to parent tiles — parcels vanish when zooming into a missing level.
- * Status 410 (Gone) marks the tile as errored so MapLibre keeps/loads lower-z parents.
- * See maplibre-gl-js#5692.
+ * LandRecords coverage is a sparse pyramid. MapLibre treats HTTP 204 as a successful
+ * empty tile and will NOT keep parent tiles — parcels vanish when zooming into a
+ * missing level. Status 410 (Gone) marks the tile as errored so MapLibre keeps
+ * lower-z parents (maplibre-gl-js#5692).
+ *
+ * At the source minzoom there is no parent to keep, so return 204 (silent blank)
+ * instead of 410 (which would only spam the console).
  */
-function sendEmptyTile(res) {
+function sendEmptyTile(res, zi) {
   res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
-  return res.status(410).end()
+  if (Number.isFinite(zi) && zi > PARCEL_MIN_ZOOM) {
+    return res.status(410).end()
+  }
+  return res.status(204).end()
 }
 
 let _s3
@@ -77,7 +85,7 @@ export default async function handler(req, res) {
     if (cached !== null) {
       if (cached.length === 0) {
         // Empty marker — no parcels at this z/x/y (may exist on a parent zoom)
-        return sendEmptyTile(res)
+        return sendEmptyTile(res, zi)
       }
       res.setHeader('Content-Type', 'application/x-protobuf')
       res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
@@ -104,7 +112,7 @@ export default async function handler(req, res) {
   if (upstream.status === 404 || upstream.status === 204) {
     // No parcels at this zoom — cache empty marker so we don't re-fetch
     putToR2(r2Key, EMPTY_MARKER).catch(() => {})
-    return sendEmptyTile(res)
+    return sendEmptyTile(res, zi)
   }
 
   if (!upstream.ok) {
@@ -115,7 +123,7 @@ export default async function handler(req, res) {
 
   if (buf.length === 0) {
     putToR2(r2Key, EMPTY_MARKER).catch(() => {})
-    return sendEmptyTile(res)
+    return sendEmptyTile(res, zi)
   }
 
   // 3. Write to R2 (fire-and-forget)

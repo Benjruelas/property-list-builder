@@ -12,10 +12,9 @@ export const CARTO_LABEL_ATTRIBUTION = '&copy; OpenStreetMap &copy; CARTO'
 
 /** Same-origin parcel vector tiles (LandRecords via R2 cache). */
 export function parcelTileUrl() {
-  // `v=2`: bust browser caches that stored empty tiles as HTTP 204 (sparse-pyramid
-  // misses now return 410 so MapLibre can keep parent zoom tiles visible).
-  if (typeof window === 'undefined') return '/api/tiles?z={z}&x={x}&y={y}&v=2'
-  return `${window.location.origin}/api/tiles?z={z}&x={x}&y={y}&v=2`
+  // `v=3`: bust SW/browser caches after sparse-pyramid empty-tile status change.
+  if (typeof window === 'undefined') return '/api/tiles?z={z}&x={x}&y={y}&v=3'
+  return `${window.location.origin}/api/tiles?z={z}&x={x}&y={y}&v=3`
 }
 
 const MAPBOX_TOKEN = () => import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''

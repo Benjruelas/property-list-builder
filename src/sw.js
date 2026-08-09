@@ -21,8 +21,8 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-const TILE_CACHE = 'knockscout-map-tiles-v1'
-const PARCEL_CACHE = 'knockscout-parcel-details-v1'
+const TILE_CACHE = 'knockscout-map-tiles-v2'
+const PARCEL_CACHE = 'knockscout-parcel-details-v2'
 
 function isSameOriginApi(url, pathPrefix) {
   try {
