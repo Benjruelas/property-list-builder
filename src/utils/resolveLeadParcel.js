@@ -23,11 +23,45 @@ export function parcelDataFromLandRecords(apiResult, lat, lng) {
   return parcelData
 }
 
-/** Resolve assessor parcel at coordinates (same source as map parcel clicks). */
-export async function resolveLeadParcelAtLocation(lat, lng, { lrid, signal } = {}) {
+/** Build parcel-shaped data from a rendered vector-tile hit (already mapped props). */
+export function parcelDataFromTileHit(tileHit, lat, lng) {
+  if (!tileHit?.properties) return null
+  const id = tileHit.id || resolveParcelId(tileHit)
+  if (!id) return null
+  const parcelLat = Number(tileHit.lat ?? lat)
+  const parcelLng = Number(tileHit.lng ?? lng)
+  const parcelData = {
+    id,
+    properties: tileHit.properties,
+    lat: Number.isFinite(parcelLat) ? parcelLat : lat,
+    lng: Number.isFinite(parcelLng) ? parcelLng : lng,
+  }
+  parcelData.address = getFullAddress(parcelData)
+  return parcelData
+}
+
+function tileHitHasAssessorData(tileParcel) {
+  const props = tileParcel?.properties
+  if (!props) return false
+  return !!(String(props.SITUS_ADDR || props.OWNER_NAME || '').trim())
+}
+
+/**
+ * Resolve assessor parcel at coordinates.
+ * Use rich vector-tile hits first — LandRecords WFS/WMS coverage can lag tiles
+ * and 404 in counties that still paint on the map.
+ */
+export async function resolveLeadParcelAtLocation(lat, lng, { lrid, signal, tileParcel } = {}) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+
+  if (tileHitHasAssessorData(tileParcel)) {
+    return parcelDataFromTileHit(tileParcel, lat, lng)
+  }
+
   const result = await fetchLandRecordsParcel({ lat, lng, lrid, signal })
-  return parcelDataFromLandRecords(result, lat, lng)
+  const fromApi = parcelDataFromLandRecords(result, lat, lng)
+  if (fromApi) return fromApi
+  return parcelDataFromTileHit(tileParcel, lat, lng)
 }
 
 /** Merge resolved parcel fields into a lead form while preserving contact fields. */

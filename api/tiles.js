@@ -5,6 +5,18 @@ const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 const EMPTY_MARKER = Buffer.alloc(0)
 const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'
 
+/**
+ * LandRecords coverage is a sparse pyramid (e.g. NYC data at z14, Dallas at z15–16,
+ * some metros at z17). MapLibre treats HTTP 204 as a successful empty tile and will
+ * NOT fall back to parent tiles — parcels vanish when zooming into a missing level.
+ * Status 410 (Gone) marks the tile as errored so MapLibre keeps/loads lower-z parents.
+ * See maplibre-gl-js#5692.
+ */
+function sendEmptyTile(res) {
+  res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
+  return res.status(410).end()
+}
+
 let _s3
 function getS3() {
   if (_s3) return _s3
@@ -64,9 +76,8 @@ export default async function handler(req, res) {
     const cached = await getFromR2(r2Key)
     if (cached !== null) {
       if (cached.length === 0) {
-        // Empty marker — no parcels for this tile
-        res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
-        return res.status(204).end()
+        // Empty marker — no parcels at this z/x/y (may exist on a parent zoom)
+        return sendEmptyTile(res)
       }
       res.setHeader('Content-Type', 'application/x-protobuf')
       res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
@@ -91,10 +102,9 @@ export default async function handler(req, res) {
   }
 
   if (upstream.status === 404 || upstream.status === 204) {
-    // No parcels — cache empty marker so we don't re-fetch
+    // No parcels at this zoom — cache empty marker so we don't re-fetch
     putToR2(r2Key, EMPTY_MARKER).catch(() => {})
-    res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
-    return res.status(204).end()
+    return sendEmptyTile(res)
   }
 
   if (!upstream.ok) {
@@ -105,8 +115,7 @@ export default async function handler(req, res) {
 
   if (buf.length === 0) {
     putToR2(r2Key, EMPTY_MARKER).catch(() => {})
-    res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
-    return res.status(204).end()
+    return sendEmptyTile(res)
   }
 
   // 3. Write to R2 (fire-and-forget)

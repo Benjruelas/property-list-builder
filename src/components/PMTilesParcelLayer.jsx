@@ -3,6 +3,10 @@ import { mapProperties, canonicalParcelId } from '@/utils/parcelPropertyMap'
 import { parcelTileUrl } from '@/config/mapProviders'
 import { computeOwnerOccupied } from '@/utils/ownerOccupied'
 
+// LandRecords is a sparse pyramid: coverage starts around z15 in most metros (some
+// only at z16). Source maxzoom must stay at a level that usually has data — above
+// it MapLibre overzooms that tile. Empty levels inside the range must error (API 410)
+// so MapLibre keeps parent tiles instead of painting blanks — see api/tiles.js.
 const PARCEL_MIN_ZOOM = 15
 const PARCEL_TILE_MAXZOOM = 16
 const SOURCE_LAYER = 'parcel_us'

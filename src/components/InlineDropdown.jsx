@@ -17,6 +17,8 @@ export function InlineDropdown({
   showLabel = true,
   label = '',
   className,
+  triggerClassName,
+  disabled = false,
   hiddenWhenEmpty = false,
 }) {
   const [open, setOpen] = useState(false)
@@ -28,6 +30,11 @@ export function InlineDropdown({
 
   if (hiddenWhenEmpty && options.length === 0 && !allowEmpty) return null
 
+  const toggle = () => {
+    if (disabled) return
+    setOpen((p) => !p)
+  }
+
   return (
     <div className={className}>
       {showLabel && label && (
@@ -38,9 +45,11 @@ export function InlineDropdown({
           role="combobox"
           aria-expanded={open}
           aria-haspopup="listbox"
-          tabIndex={0}
-          onClick={() => setOpen((p) => !p)}
+          aria-disabled={disabled || undefined}
+          tabIndex={disabled ? -1 : 0}
+          onClick={toggle}
           onKeyDown={(e) => {
+            if (disabled) return
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
               setOpen((p) => !p)
@@ -54,25 +63,25 @@ export function InlineDropdown({
             }
           }}
           className={cn(
-            'pipeline-dropdown-trigger w-full min-h-[44px] rounded-md px-3 py-2.5 text-sm text-left flex items-center justify-between gap-2 cursor-pointer',
-            open && 'rounded-b-none'
+            'pipeline-dropdown-trigger w-full min-h-[44px] rounded-md pl-3 pr-4 py-2.5 text-sm text-left flex items-center justify-between gap-2 cursor-pointer',
+            open && 'rounded-b-none',
+            disabled && 'opacity-50 pointer-events-none cursor-not-allowed',
+            triggerClassName,
           )}
         >
-          <span
-            className="truncate"
-            style={{ color: value ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.5)' }}
-          >
+          <span className={cn('truncate min-w-0', !value && 'opacity-50')}>
             {labelText}
           </span>
           <ChevronDown
-            className="h-3.5 w-3.5 shrink-0 opacity-60 transition-transform"
-            style={{ transform: open ? 'rotate(180deg)' : undefined }}
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 opacity-60 transition-transform',
+              open && 'rotate-180',
+            )}
           />
         </div>
         {open && (
           <div
-            className="pipeline-dropdown-menu absolute z-50 left-0 right-0 top-full rounded-b-md overflow-hidden max-h-48 overflow-y-auto scrollbar-hide"
-            style={{ border: '1px solid rgba(255,255,255,0.25)', borderTop: 'none' }}
+            className="pipeline-dropdown-menu absolute z-50 left-0 right-0 top-full rounded-b-md overflow-hidden max-h-48 overflow-y-auto scrollbar-hide border border-white/25 border-t-0"
             role="listbox"
           >
             {list.map((opt) => {
@@ -87,11 +96,10 @@ export function InlineDropdown({
                     onChange(optId)
                     setOpen(false)
                   }}
-                  className="w-full px-3 py-2.5 text-sm text-left flex items-center justify-between gap-2 transition-colors pipeline-dropdown-item"
-                  style={{
-                    color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
-                    background: isSelected ? 'rgba(255,255,255,0.12)' : undefined,
-                  }}
+                  className={cn(
+                    'w-full px-3 py-2.5 text-sm text-left flex items-center justify-between gap-2 transition-colors pipeline-dropdown-item',
+                    isSelected && 'pipeline-dropdown-item--selected',
+                  )}
                   role="option"
                   aria-selected={isSelected}
                 >

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { Phone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCachedOutreachTemplates, fetchOutreachTemplates } from '@/utils/outreachTemplates'
-import { replaceTemplateTags } from '@/utils/emailTemplates'
 import { normalizePhoneForTel } from '@/utils/phoneFormat'
 import {
   DealTemplatePanelShell,
@@ -54,6 +53,8 @@ export function PhoneActionPanel({
   parcelData,
   leadId = null,
   onOutreach,
+  /** Open send-style compose with a text template (or blank). */
+  onComposeText,
   initialStep = 1,
   getToken = null,
   nestedOverlay = true,
@@ -96,24 +97,23 @@ export function PhoneActionPanel({
     onClose()
   }
 
-  const handleText = (body = '') => {
+  const openTextCompose = (template = null) => {
+    if (typeof onComposeText === 'function') {
+      onComposeText({
+        template,
+        phone,
+        parcelData,
+        leadId,
+      })
+      return
+    }
+    // Fallback: open blank SMS if compose handler missing
     const tel = normalizePhoneForTel(phone)
-    if (!tel) return
-    if (leadId && onOutreach) onOutreach('text')
-    const url = body
-      ? `sms:${tel}?body=${encodeURIComponent(body)}`
-      : `sms:${tel}`
-    window.location.href = url
+    if (tel) {
+      if (leadId && onOutreach) onOutreach('text')
+      window.location.href = `sms:${tel}`
+    }
     onClose()
-  }
-
-  const handleSelectTemplate = (template) => {
-    const body = parcelData ? replaceTemplateTags(template?.body || '', parcelData) : (template?.body || '')
-    handleText(body)
-  }
-
-  const handleNoTemplate = () => {
-    handleText('')
   }
 
   const exitCallConfirm = () => {
@@ -192,7 +192,7 @@ export function PhoneActionPanel({
             <>
               <button
                 type="button"
-                onClick={handleNoTemplate}
+                onClick={() => openTextCompose(null)}
                 className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer border-white/20 bg-white/[0.06]')}
               >
                 <div className="text-sm font-medium">No template</div>
@@ -201,7 +201,7 @@ export function PhoneActionPanel({
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => handleSelectTemplate(t)}
+                  onClick={() => openTextCompose(t)}
                   className={cn(DEAL_TEMPLATE_LIST_ROW, 'w-full text-left cursor-pointer')}
                 >
                   <div className="text-sm font-medium truncate">{t.name}</div>

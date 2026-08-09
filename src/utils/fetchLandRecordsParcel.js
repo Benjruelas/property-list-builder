@@ -2,7 +2,8 @@ import { mapProperties, canonicalParcelId } from './parcelPropertyMap'
 
 /**
  * Fetch full parcel attributes from LandRecords via /api/parcel (WMS/WFS proxy).
- * All map parcel clicks should use this as the single source of truth.
+ * Prefer rendered vector-tile properties when they already include situs/owner —
+ * WFS/WMS coverage can lag tiles and return 404 for counties that still paint.
  */
 export async function fetchLandRecordsParcel({ lat, lng, lrid, signal }) {
   if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {

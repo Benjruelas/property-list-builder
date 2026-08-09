@@ -505,6 +505,10 @@
   background: #ffffff !important;
   color: var(--map-panel-text) !important;
 }
+[data-ui-theme='light'] .pipeline-dropdown-item--selected {
+  background: var(--map-panel-surface-hover, rgba(0, 0, 0, 0.06)) !important;
+  color: var(--map-panel-text) !important;
+}
 [data-ui-theme='light'] .pipeline-dropdown-item:hover {
   background: var(--map-panel-surface-hover) !important;
 }

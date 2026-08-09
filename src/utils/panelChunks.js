@@ -17,7 +17,7 @@ export const panelLazy = {
   leads: () => import('../components/LeadsPanel').then((m) => ({ default: m.LeadsPanel })),
   deals: () => import('../components/DealsPanel').then((m) => ({ default: m.DealsPanel })),
   outreach: () => import('../components/OutreachPanel').then((m) => ({ default: m.OutreachPanel })),
-  emailComposer: () => import('../components/EmailComposer').then((m) => ({ default: m.EmailComposer })),
+  emailComposer: () => import('../components/outreach/SendOutreachDialog').then((m) => ({ default: m.SendOutreachDialog })),
   hailData: () => import('../components/HailDataPanel').then((m) => ({ default: m.HailDataPanel })),
 }
 

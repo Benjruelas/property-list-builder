@@ -183,3 +183,96 @@ export const AVAILABLE_TAGS = [
   'State',
   'Zip'
 ]
+
+/** Mustache keys used by MessageTagEditor; storage remains `{Label}` brace tags. */
+const OUTREACH_TAG_DEFS = [
+  { key: 'firstName', label: 'First Name' },
+  { key: 'lastName', label: 'Last Name' },
+  { key: 'fullName', label: 'Full Name' },
+  { key: 'ownerName', label: 'Owner Name' },
+  { key: 'address', label: 'Address' },
+  { key: 'city', label: 'City' },
+  { key: 'state', label: 'State' },
+  { key: 'zip', label: 'Zip' },
+]
+
+export const OUTREACH_SEND_TAGS = OUTREACH_TAG_DEFS.map(({ key, label }) => ({
+  key,
+  label,
+  tag: `{{${key}}}`,
+}))
+
+const LABEL_TO_KEY = Object.fromEntries(OUTREACH_TAG_DEFS.map((t) => [t.label.toLowerCase(), t.key]))
+const KEY_TO_LABEL = Object.fromEntries(OUTREACH_TAG_DEFS.map((t) => [t.key, t.label]))
+
+/** Legacy brace aliases without spaces → camelCase keys. */
+const LEGACY_BRACE_TO_KEY = {
+  firstname: 'firstName',
+  lastname: 'lastName',
+  fullname: 'fullName',
+  ownername: 'ownerName',
+  propertyid: 'propertyId',
+  yearbuilt: 'yearBuilt',
+  propertyvalue: 'propertyValue',
+}
+
+/** Convert stored `{First Name}` templates → `{{firstName}}` for the tag editor. */
+export function braceTagsToMustache(text) {
+  if (!text) return ''
+  return String(text).replace(/\{([^{}]+)\}/g, (match, raw) => {
+    const normalized = String(raw).replace(/\s+/g, ' ').trim()
+    const key =
+      LABEL_TO_KEY[normalized.toLowerCase()]
+      || LEGACY_BRACE_TO_KEY[normalized.replace(/\s+/g, '').toLowerCase()]
+    return key ? `{{${key}}}` : match
+  })
+}
+
+/** Convert editor `{{firstName}}` → `{First Name}` for storage/API consistency. */
+export function mustacheToBraceTags(text) {
+  if (!text) return ''
+  return String(text).replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    const label = KEY_TO_LABEL[key]
+    return label ? `{${label}}` : match
+  })
+}
+
+/** Resolved camelCase values for outreach tag pills / send-time substitution. */
+export function buildOutreachTagData(parcelData) {
+  if (!parcelData) {
+    return {
+      firstName: '',
+      lastName: '',
+      fullName: '',
+      ownerName: '',
+      address: '',
+      city: '',
+      state: '',
+      zip: '',
+    }
+  }
+  const properties = parcelData.properties || {}
+  const lead = parcelData.lead || null
+  const ownerRaw = properties.OWNER_NAME || parcelData.ownerName || lead?.owner || ''
+  const parsed = ownerRaw ? splitOwnerName(ownerRaw) : { firstName: '', lastName: '' }
+  const firstName = (parcelData.firstName || lead?.firstName || parsed.firstName || '').toString().trim()
+  const lastName = (parcelData.lastName || lead?.lastName || parsed.lastName || '').toString().trim()
+  const fullName = composeFullName(firstName, lastName) || ownerRaw || ''
+  return {
+    firstName,
+    lastName,
+    fullName,
+    ownerName: ownerRaw || fullName,
+    address: parcelData.address || properties.SITUS_ADDR || properties.SITE_ADDR || '',
+    city: properties.scity || properties.PROP_CITY || properties.SITUS_CITY || properties.CITY || '',
+    state: properties.state2 || properties.PROP_STATE || properties.SITUS_STATE || properties.STATE || 'TX',
+    zip: (properties.szip || properties.szip5 || properties.PROP_ZIP || properties.SITUS_ZIP || properties.ZIP || properties.ZIP_CODE || '').toString().trim() || '',
+  }
+}
+
+/** Resolve mustache (or brace) outreach template text against parcel data. */
+export function resolveOutreachTemplateText(text, parcelData) {
+  if (!text) return ''
+  const withBraces = mustacheToBraceTags(String(text))
+  return replaceTemplateTags(withBraces, parcelData)
+}

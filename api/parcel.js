@@ -103,7 +103,9 @@ export default async function handler(req, res) {
     }
 
     if (!properties) {
-      return res.status(404).json({ error: 'parcel not found' })
+      // Expected when WFS/WMS lag vector tiles — 200 keeps the browser console quiet.
+      res.setHeader('Cache-Control', 'private, max-age=60')
+      return res.status(200).json({ properties: null, source: 'none' })
     }
 
     res.setHeader('Cache-Control', 'private, max-age=300')

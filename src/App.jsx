@@ -435,8 +435,9 @@ function App() {
 
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null)
   const [emailComposerParcelData, setEmailComposerParcelData] = useState(null)
-  const [emailComposerRecipient, setEmailComposerRecipient] = useState({ email: '', name: '' })
+  const [emailComposerRecipient, setEmailComposerRecipient] = useState({ email: '', phone: '', name: '' })
   const [emailComposerLeadId, setEmailComposerLeadId] = useState(null)
+  const [emailComposerInitialTab, setEmailComposerInitialTab] = useState('email')
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false)
   // On fresh visits (prompt shown), compass starts from settings default.
   // On return visits where iOS needs a gesture, start OFF until orientation is confirmed.
@@ -1726,7 +1727,10 @@ function App() {
       }
     }
 
-    return resolveLeadParcelAtLocation(lat, lng, { lrid: tileHit?.lrid || '' })
+    return resolveLeadParcelAtLocation(lat, lng, {
+      lrid: tileHit?.lrid || '',
+      tileParcel: tileHit || null,
+    })
   }, [])
 
   const handleConvertToLead = useCallback((parcelData) => {
@@ -2671,7 +2675,32 @@ function App() {
         if (controller.signal.aborted || currentPopupRef.current !== requestId) return
         const parcelData = applyLandRecordsParcel(result)
         if (!parcelData) {
-          if (!hasTileData) showToast('Could not load parcel details', 'error')
+          // WFS/WMS often 404s while tiles still paint — keep tile attrs, drop "Loading…".
+          if (!hasTileData) {
+            const fallback = {
+              ...buildTileParcelData(),
+              address: tileDisplay.title || 'Parcel',
+              addressDisplay: tileDisplay.hasStreetAddress ? tileDisplay : {
+                ...tileDisplay,
+                title: tileDisplay.title || 'Parcel',
+              },
+            }
+            if (isMultiSelectActive) {
+              setSelectedParcelsData((prevData) => {
+                if (!prevData.has(tileParcelId)) return prevData
+                const newMap = new Map(prevData)
+                newMap.set(tileParcelId, {
+                  id: fallback.id,
+                  properties: fallback.properties,
+                  latlng: parcelCenter,
+                  address: fallback.address,
+                })
+                return newMap
+              })
+            } else {
+              onParcelReady?.(fallback)
+            }
+          }
           return
         }
         if (isMultiSelectActive) {
@@ -2692,7 +2721,13 @@ function App() {
         }
       }).catch((err) => {
         if (err?.name === 'AbortError') return
-        if (!hasTileData) showToast('Could not load parcel details', 'error')
+        if (!hasTileData) {
+          onParcelReady?.({
+            ...buildTileParcelData(),
+            address: tileDisplay.title || 'Parcel',
+            addressDisplay: tileDisplay,
+          })
+        }
       })
     }
 
@@ -2720,7 +2755,9 @@ function App() {
             })
             return newMap
           })
-          loadLandRecordsParcel()
+          // Tile attrs are usually complete; only hit /api/parcel when sparse.
+          // LandRecords WFS/WMS coverage lags tiles in some counties (404s).
+          if (!hasTileData) loadLandRecordsParcel()
         }
         return newSet
       })
@@ -2739,7 +2776,7 @@ function App() {
         presentParcelOnMap(data)
       }
 
-      loadLandRecordsParcel(presentWhenCentered)
+      if (!hasTileData) loadLandRecordsParcel(presentWhenCentered)
 
       if (parcelRecenterTimerRef.current) clearTimeout(parcelRecenterTimerRef.current)
       centerMapOnParcel({
@@ -3185,17 +3222,50 @@ function App() {
     guardFeature('outreach', () => {
       prefetchPanel('emailComposer')
       setEmailComposerParcelData(parcelData)
-      setEmailComposerRecipient({ email, name: parcelData?.properties?.OWNER_NAME || '' })
+      setEmailComposerRecipient({
+        email,
+        phone: '',
+        name: [parcelData?.lead?.firstName, parcelData?.lead?.lastName].filter(Boolean).join(' ')
+          || parcelData?.properties?.OWNER_NAME
+          || '',
+      })
       setEmailComposerLeadId(leadId || null)
+      setEmailComposerInitialTab('email')
       nav.showEmailOverlay({ type: 'email', email, parcelData: parcelData || null, leadId: leadId || null })
     })
   }, [currentUser, authLoading, nav, guardFeature])
 
   const handleOpenEmailComposer = useCallback((template) => {
     setSelectedEmailTemplate(template ?? null)
+    setEmailComposerInitialTab('email')
     nav.popMapOverlay()
     nav.push({ type: 'emailComposer' })
   }, [nav])
+
+  const handleOpenTextComposer = useCallback(({ template = null, phone, parcelData, leadId = null } = {}) => {
+    if (authLoading) return
+    if (!currentUser || !currentUser.uid) {
+      nav.openLogin()
+      showToast('Please sign in to send messages', 'info')
+      return
+    }
+    guardFeature('outreach', () => {
+      prefetchPanel('emailComposer')
+      setSelectedEmailTemplate(template ?? null)
+      setEmailComposerParcelData(parcelData || null)
+      setEmailComposerRecipient({
+        email: '',
+        phone: phone || '',
+        name: parcelData?.properties?.OWNER_NAME
+          || [parcelData?.lead?.firstName, parcelData?.lead?.lastName].filter(Boolean).join(' ')
+          || '',
+      })
+      setEmailComposerLeadId(leadId || null)
+      setEmailComposerInitialTab('text')
+      nav.popMapOverlay()
+      nav.push({ type: 'emailComposer' })
+    })
+  }, [currentUser, authLoading, nav, guardFeature])
 
   const handleOpenOutreach = useCallback(() => {
     if (authLoading) return
@@ -3206,7 +3276,7 @@ function App() {
     guardFeature('outreach', () => {
       prefetchPanel('outreach')
       setEmailComposerParcelData(null)
-      setEmailComposerRecipient({ email: '', name: '' })
+      setEmailComposerRecipient({ email: '', phone: '', name: '' })
       nav.openOutreach('email')
     })
   }, [currentUser, authLoading, nav, guardFeature])
@@ -4077,6 +4147,15 @@ function App() {
           onZoomStart={() => {
             if (!programmaticMoveRef.current) setIsFollowing(false)
           }}
+          onError={(e) => {
+            // Sparse LandRecords zooms return 410 on purpose so MapLibre keeps parent
+            // tiles. Providing onError prevents react-map-gl from console.error'ing each miss.
+            const err = e?.error
+            const status = err?.status
+            const url = String(err?.url || '')
+            if (status === 410 && url.includes('/api/tiles')) return
+            if (err) console.error(err)
+          }}
           onLoad={(evt) => {
             const map = evt.target
             mapInstanceRef.current = map
@@ -4600,6 +4679,7 @@ function App() {
         initialStep={phoneActionPanel?.initialStep ?? 1}
         getToken={getToken}
         onOutreach={(type) => handleLogLeadOutreach(phoneActionPanel?.leadId, type, phoneActionPanel?.phone)}
+        onComposeText={handleOpenTextComposer}
       />
 
       <EmailActionPanel
@@ -4631,20 +4711,29 @@ function App() {
       {emailComposerMounted && (
       <Suspense fallback={null}>
       <EmailComposer
-        isOpen={isEmailComposerOpen}
+        open={isEmailComposerOpen}
         onClose={() => {
           nav.pop()
           setSelectedEmailTemplate(null)
           setEmailComposerParcelData(null)
-          setEmailComposerRecipient({ email: '', name: '' })
+          setEmailComposerRecipient({ email: '', phone: '', name: '' })
           setEmailComposerLeadId(null)
+          setEmailComposerInitialTab('email')
         }}
         template={selectedEmailTemplate}
         parcelData={emailComposerParcelData}
         recipientEmail={emailComposerRecipient.email}
+        recipientPhone={emailComposerRecipient.phone}
         recipientName={emailComposerRecipient.name}
         leadId={emailComposerLeadId}
-        onOutreach={() => handleLogLeadOutreach(emailComposerLeadId, 'email', emailComposerRecipient.email)}
+        leads={leads}
+        initialTab={emailComposerInitialTab}
+        onOutreach={(type, contact) => handleLogLeadOutreach(
+          emailComposerLeadId,
+          type || emailComposerInitialTab || 'email',
+          contact
+            || (type === 'text' ? emailComposerRecipient.phone : emailComposerRecipient.email),
+        )}
         getToken={getToken}
         currentUser={currentUser}
         teamMembers={teamMembers}
