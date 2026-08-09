@@ -38,9 +38,31 @@ async function fetchJson(url) {
   return res.json()
 }
 
-function openNdjsonWriter(outPath) {
-  const fd = fs.openSync(outPath, 'w')
-  let count = 0
+function countNdjsonLines(filePath) {
+  if (!fs.existsSync(filePath)) return 0
+  const fd = fs.openSync(filePath, 'r')
+  const buf = Buffer.alloc(1024 * 1024)
+  let lines = 0
+  let bytes = 0
+  let endsWithNewline = true
+  try {
+    let n
+    while ((n = fs.readSync(fd, buf, 0, buf.length, bytes)) > 0) {
+      bytes += n
+      endsWithNewline = buf[n - 1] === 10
+      for (let i = 0; i < n; i++) if (buf[i] === 10) lines++
+    }
+  } finally {
+    fs.closeSync(fd)
+  }
+  // Trailing partial line (no final newline) still counts as one feature
+  if (bytes > 0 && !endsWithNewline) lines++
+  return lines
+}
+
+function openNdjsonWriter(outPath, { append = false, startCount = 0 } = {}) {
+  const fd = fs.openSync(outPath, append ? 'a' : 'w')
+  let count = startCount
   return {
     writeFeature(feature) {
       fs.writeSync(fd, `${JSON.stringify(feature)}\n`)
@@ -65,9 +87,47 @@ async function downloadArcgis(source, outPath) {
 
   const supportsPagination = meta.advancedQueryCapabilities?.supportsPagination !== false
   const maxRecordCount = Math.min(meta.maxRecordCount || PAGE_SIZE, PAGE_SIZE)
-  const writer = openNdjsonWriter(outPath)
-  let offset = 0
+
+  const resume = process.env.PARCEL_DOWNLOAD_RESUME !== '0'
+  let existing = 0
+  if (resume && fs.existsSync(outPath)) {
+    // Drop a trailing partial line if the previous process was killed mid-write
+    const st = fs.statSync(outPath)
+    if (st.size > 0) {
+      const fd = fs.openSync(outPath, 'r+')
+      try {
+        const last = Buffer.alloc(1)
+        fs.readSync(fd, last, 0, 1, st.size - 1)
+        if (last[0] !== 10) {
+          let pos = st.size - 1
+          const buf = Buffer.alloc(1)
+          while (pos > 0) {
+            pos--
+            fs.readSync(fd, buf, 0, 1, pos)
+            if (buf[0] === 10) {
+              pos++
+              break
+            }
+          }
+          fs.ftruncateSync(fd, pos)
+          console.warn(`[download] truncated partial trailing line; size ${st.size} → ${pos}`)
+        }
+      } finally {
+        fs.closeSync(fd)
+      }
+    }
+    existing = countNdjsonLines(outPath)
+  }
+
+  const writer =
+    existing > 0
+      ? openNdjsonWriter(outPath, { append: true, startCount: existing })
+      : openNdjsonWriter(outPath)
+  let offset = existing
   let page = 0
+  if (existing > 0) {
+    console.log(`[download] resuming from ${existing} features (resultOffset=${offset})`)
+  }
 
   try {
     while (writer.count < MAX_FEATURES) {
@@ -103,7 +163,7 @@ async function downloadArcgis(source, outPath) {
   if (writer.count >= MAX_FEATURES) {
     console.warn(`[download] hit MAX_FEATURES=${MAX_FEATURES}`)
   }
-  return { featureCount: writer.count, outPath }
+  return { featureCount: writer.count, outPath, resumedFrom: existing }
 }
 
 async function downloadGeojsonUrl(source, outPath) {

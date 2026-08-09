@@ -31,9 +31,18 @@ npm run parcel:seed          # init KV queues (needs API env)
 npm run parcel:claim         # claim next county
 npm run parcel:discover -- --fips=48439 --url=https://.../MapServer/0 --persist
 npm run parcel:run -- --fips=48439
+npm run parcel:nationwide              # sequential largest→smallest
+npm run parcel:nationwide:parallel     # N workers (default 10) with claim locking
 ```
 
-Work files land in `parcel_data/{fips}/` (gitignored).
+Parallel nationwide env knobs:
+
+- `PARCEL_NATIONWIDE_WORKERS=10` — concurrent county workers
+- `PARCEL_TILE_CONCURRENCY=2` — max simultaneous tippecanoe jobs
+- `PARCEL_UPLOAD_CONCURRENCY=8` — per-county R2 upload concurrency
+- `PARCEL_DOWNLOAD_RESUME=1` — resume partial `raw.ndjson` after interrupt
+
+Work files land in `parcel_data/{fips}/` (gitignored). Progress: `parcel_data/nationwide-progress.json`.
 
 ## Discovery tips
 
