@@ -27,6 +27,7 @@ import {
   loadProgress,
 } from './lib/nationwideProgress.mjs'
 import { withTileSlot, clearDeadTileSlots } from './lib/tileLock.mjs'
+import { withUploadSlot, clearDeadUploadSlots } from './lib/uploadLock.mjs'
 import { validateDownloadedCount, validateParcelLayer } from './lib/sourceValidation.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -261,7 +262,7 @@ async function processClaimed(rankEntry, rankNum, total) {
     ['download-county.mjs', [`--fips=${fips}`], { stage: 'download' }],
     ['normalize-county.mjs', [`--fips=${fips}`], { stage: 'normalize' }],
     ['tile-county.mjs', [`--fips=${fips}`], { stage: 'tile', tileSlot: true }],
-    ['upload-county-tiles-parallel.mjs', [`--fips=${fips}`], { stage: 'upload' }],
+    ['upload-county-tiles-parallel.mjs', [`--fips=${fips}`], { stage: 'upload', uploadSlot: true }],
   ]
   const stageOrder = ['download', 'normalize', 'tile', 'upload']
   const startIdx = stageOrder.indexOf(resumeFrom)
@@ -272,7 +273,9 @@ async function processClaimed(rankEntry, rankNum, total) {
     const run = () => runNode(script, args, { fips, heartbeatMs: 60_000 })
     let code
     try {
-      code = opts?.tileSlot ? await withTileSlot(async () => run()) : await run()
+      if (opts?.tileSlot) code = await withTileSlot(async () => run())
+      else if (opts?.uploadSlot) code = await withUploadSlot(async () => run())
+      else code = await run()
     } catch (e) {
       // e.g. tile slot lock timeout — keep download artifacts for reclaim
       await updateCountyStatus(
@@ -417,9 +420,12 @@ function supervisorMain() {
     0,
     Math.min(workers, Number(process.env.PARCEL_REPAIR_WORKERS || 0)),
   )
-  // Keep uploads reasonable under parallel load (avoid 10×32 R2 storms that stall)
+  // Fewer counties uploading at once, each with higher put concurrency.
+  if (!process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY) {
+    process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY = '3'
+  }
   if (!process.env.PARCEL_UPLOAD_CONCURRENCY) {
-    process.env.PARCEL_UPLOAD_CONCURRENCY = String(Math.max(2, Math.min(6, Math.floor(40 / workers))))
+    process.env.PARCEL_UPLOAD_CONCURRENCY = '16'
   }
   if (!process.env.PARCEL_TILE_CONCURRENCY) {
     process.env.PARCEL_TILE_CONCURRENCY = '2'
@@ -432,6 +438,10 @@ function supervisorMain() {
   if (reclaimedSlots > 0) {
     console.warn(`[nationwide-parallel] cleared ${reclaimedSlots} dead tippecanoe slot(s)`)
   }
+  const reclaimedUploads = clearDeadUploadSlots()
+  if (reclaimedUploads > 0) {
+    console.warn(`[nationwide-parallel] cleared ${reclaimedUploads} dead upload slot(s)`)
+  }
 
   const progress = loadProgress()
   console.log(
@@ -441,7 +451,7 @@ function supervisorMain() {
     `[nationwide-parallel] repairWorkers=${repairWorkers} (failed_only→normal) normalWorkers=${workers - repairWorkers}`,
   )
   console.log(
-    `[nationwide-parallel] uploadConcurrency=${process.env.PARCEL_UPLOAD_CONCURRENCY} tileSlots=${process.env.PARCEL_TILE_CONCURRENCY}`,
+    `[nationwide-parallel] uploadCounties=${process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY} uploadPuts=${process.env.PARCEL_UPLOAD_CONCURRENCY} tileSlots=${process.env.PARCEL_TILE_CONCURRENCY}`,
   )
   console.log(`[nationwide-parallel] progress stats=`, progress.stats)
 
