@@ -273,8 +273,22 @@ async function processClaimed(rankEntry, rankNum, total) {
     const run = () => runNode(script, args, { fips, heartbeatMs: 60_000 })
     let code
     try {
-      if (opts?.tileSlot) code = await withTileSlot(async () => run())
-      else if (opts?.uploadSlot) code = await withUploadSlot(async () => run())
+      // Heartbeat while waiting for scarce tippecanoe/upload slots too.
+      let waitHb = null
+      const withWaitHeartbeat = async (lockFn) => {
+        waitHb = setInterval(() => {
+          heartbeatCounty(fips, WORKER_ID).catch(() => {})
+        }, 60_000)
+        heartbeatCounty(fips, WORKER_ID).catch(() => {})
+        try {
+          return await lockFn()
+        } finally {
+          if (waitHb) clearInterval(waitHb)
+        }
+      }
+      if (opts?.tileSlot) code = await withWaitHeartbeat(() => withTileSlot(async () => run()))
+      else if (opts?.uploadSlot)
+        code = await withWaitHeartbeat(() => withUploadSlot(async () => run()))
       else code = await run()
     } catch (e) {
       // e.g. tile slot lock timeout — keep download artifacts for reclaim
