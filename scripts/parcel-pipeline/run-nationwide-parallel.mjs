@@ -50,15 +50,18 @@ function runNode(script, args) {
   return r.status ?? 1
 }
 
-function cleanupCounty(fips) {
+function cleanupCounty(fips, { keepRaw = false } = {}) {
   const dir = path.join(DATA_DIR, fips)
   if (!fs.existsSync(dir)) return
-  for (const f of ['raw.ndjson', 'normalized.ndjson', 'raw.geojson', 'normalized.geojson']) {
+  const remove = keepRaw
+    ? ['normalized.ndjson', 'raw.geojson', 'normalized.geojson']
+    : ['raw.ndjson', 'normalized.ndjson', 'raw.geojson', 'normalized.geojson']
+  for (const f of remove) {
     const p = path.join(dir, f)
     if (fs.existsSync(p)) fs.unlinkSync(p)
   }
   const mb = path.join(dir, `${fips}.mbtiles`)
-  if (fs.existsSync(mb)) {
+  if (fs.existsSync(mb) && !keepRaw) {
     const free = Number(
       spawnSync('df', ['--output=avail', DATA_DIR], { encoding: 'utf8' }).stdout.trim().split('\n')[1] ||
         0,
@@ -74,6 +77,7 @@ async function resolveSource(county, rankEntry) {
     const v = await validateParcelLayer(local.source.url, {
       population2023: pop,
       title: local.source.licenseNote || local.source.url,
+      where: local.source.where || '1=1',
     })
     if (v.ok) {
       console.log(
@@ -169,6 +173,7 @@ async function processClaimed(rankEntry, rankNum, total) {
     const run = () => runNode(script, args)
     const code = opts?.tileSlot ? await withTileSlot(async () => run()) : run()
     if (code !== 0) {
+      const keepRaw = script === 'download-county.mjs'
       await updateCountyStatus(
         fips,
         {
@@ -182,7 +187,7 @@ async function processClaimed(rankEntry, rankNum, total) {
         },
         { failed: 1 },
       )
-      cleanupCounty(fips)
+      cleanupCounty(fips, { keepRaw })
       return 'failed'
     }
 
@@ -206,7 +211,7 @@ async function processClaimed(rankEntry, rankNum, total) {
           },
           { failed: 1 },
         )
-        cleanupCounty(fips)
+        cleanupCounty(fips) // thin/wrong: discard
         return 'failed'
       }
       console.log(
@@ -247,11 +252,19 @@ async function workerMain() {
   const limit = process.env.PARCEL_NATIONWIDE_LIMIT
     ? Number(process.env.PARCEL_NATIONWIDE_LIMIT)
     : Infinity
+  let claimMode = process.env.PARCEL_CLAIM_MODE || 'normal'
 
-  console.log(`[w${WORKER_ID}] online startRank=${startRank} limit=${limit}`)
+  console.log(`[w${WORKER_ID}] online startRank=${startRank} limit=${limit} claimMode=${claimMode}`)
 
   while (true) {
-    const claimed = await claimNextCounty({ workerId: WORKER_ID, startRank, limit })
+    let claimed = await claimNextCounty({ workerId: WORKER_ID, startRank, limit, claimMode })
+    // Repair workers: when failed queue is empty, rejoin the normal nationwide queue
+    if (!claimed && claimMode === 'failed_only') {
+      console.log(`[w${WORKER_ID}] failed queue empty — switching to normal claimMode`)
+      claimMode = 'normal'
+      process.env.PARCEL_CLAIM_MODE = 'normal'
+      claimed = await claimNextCounty({ workerId: WORKER_ID, startRank, limit, claimMode })
+    }
     if (!claimed) {
       console.log(`[w${WORKER_ID}] no more counties — exiting`)
       break
@@ -272,6 +285,7 @@ async function workerMain() {
         },
         { failed: 1 },
       )
+      cleanupCounty(claimed.county.fips, { keepRaw: true })
     }
   }
 }
@@ -279,6 +293,10 @@ async function workerMain() {
 function supervisorMain() {
   ensureR2()
   const workers = Math.max(1, Number(process.env.PARCEL_NATIONWIDE_WORKERS || 10))
+  const repairWorkers = Math.max(
+    0,
+    Math.min(workers, Number(process.env.PARCEL_REPAIR_WORKERS || 0)),
+  )
   // Keep uploads reasonable under parallel load
   if (!process.env.PARCEL_UPLOAD_CONCURRENCY) {
     process.env.PARCEL_UPLOAD_CONCURRENCY = String(Math.max(4, Math.floor(80 / workers)))
@@ -290,6 +308,9 @@ function supervisorMain() {
   const progress = loadProgress()
   console.log(
     `[nationwide-parallel] starting ${workers} workers bucket=${process.env.R2_BUCKET_NAME || 'parcel-tiles'}`,
+  )
+  console.log(
+    `[nationwide-parallel] repairWorkers=${repairWorkers} (failed_only→normal) normalWorkers=${workers - repairWorkers}`,
   )
   console.log(
     `[nationwide-parallel] uploadConcurrency=${process.env.PARCEL_UPLOAD_CONCURRENCY} tileSlots=${process.env.PARCEL_TILE_CONCURRENCY}`,
@@ -317,11 +338,14 @@ function supervisorMain() {
 
   for (let i = 1; i <= workers; i++) {
     const id = String(i)
+    const claimMode = i <= repairWorkers ? 'failed_only' : process.env.PARCEL_CLAIM_MODE || 'normal'
     const child = spawn(process.execPath, [scriptPath, '--worker', `--worker-id=${id}`], {
       stdio: 'inherit',
       env: {
         ...process.env,
         PARCEL_WORKER_ID: id,
+        PARCEL_CLAIM_MODE: claimMode,
+        PARCEL_RETRY_FAILED: claimMode.startsWith('failed') ? '1' : process.env.PARCEL_RETRY_FAILED || '',
         PARCEL_SOURCES_RUNTIME: path.join(ROOT, 'data/counties/sources.runtime.json'),
         PARCEL_DOWNLOAD_RESUME: process.env.PARCEL_DOWNLOAD_RESUME || '1',
       },

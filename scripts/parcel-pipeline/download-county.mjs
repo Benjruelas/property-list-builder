@@ -2,6 +2,9 @@
 /**
  * Download county parcel features to local newline-delimited GeoJSON (NDJSON).
  * Streams to disk so large counties do not blow V8 string limits.
+ *
+ * Resumes from existing raw.ndjson. Retries transient ArcGIS 5xx / HTML / network errors.
+ * Optional source.where filters multi-county layers down to one county.
  */
 import fs from 'fs'
 import path from 'path'
@@ -11,6 +14,8 @@ import { apiConfigured, apiGetCounty } from './lib/apiClient.mjs'
 
 const PAGE_SIZE = Number(process.env.PARCEL_DOWNLOAD_PAGE_SIZE || 10000)
 const MAX_FEATURES = Number(process.env.PARCEL_DOWNLOAD_MAX_FEATURES || 2_000_000)
+const MAX_RETRIES = Number(process.env.PARCEL_DOWNLOAD_RETRIES || 8)
+const RETRY_BASE_MS = Number(process.env.PARCEL_DOWNLOAD_RETRY_MS || 1500)
 
 async function resolveCounty(fips) {
   if (apiConfigured()) {
@@ -30,12 +35,53 @@ function layerUrl(source) {
   return `${url}/${layerId}`
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'KnockScout-parcel-pipeline/1.0' },
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
-  return res.json()
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+function isRetryableError(err) {
+  const msg = String(err?.message || err || '')
+  if (/HTTP (408|429|500|502|503|504)\b/.test(msg)) return true
+  if (/Unexpected token/.test(msg)) return true
+  if (/not valid JSON/.test(msg)) return true
+  if (/fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|AbortError|socket|network/i.test(msg)) return true
+  if (/HTML error response/.test(msg)) return true
+  return false
+}
+
+async function fetchJson(url, { timeoutMs = 120_000 } = {}) {
+  let lastErr
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/json,application/geo+json,*/*',
+          'User-Agent': 'KnockScout-parcel-pipeline/1.0',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      const text = await res.text()
+      const trimmed = text.trimStart()
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} for ${url}`)
+      }
+      if (trimmed.startsWith('<') || trimmed.startsWith('<!DOCTYPE')) {
+        throw new Error(`HTML error response for ${url}`)
+      }
+      try {
+        return JSON.parse(text)
+      } catch (e) {
+        throw new Error(`Invalid JSON for ${url}: ${e.message}`)
+      }
+    } catch (e) {
+      lastErr = e
+      if (!isRetryableError(e) || attempt === MAX_RETRIES) break
+      const delay = RETRY_BASE_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 500)
+      console.warn(`[download] retry ${attempt}/${MAX_RETRIES} after ${delay}ms: ${e.message}`)
+      await sleep(delay)
+    }
+  }
+  throw lastErr
 }
 
 function countNdjsonLines(filePath) {
@@ -55,7 +101,6 @@ function countNdjsonLines(filePath) {
   } finally {
     fs.closeSync(fd)
   }
-  // Trailing partial line (no final newline) still counts as one feature
   if (bytes > 0 && !endsWithNewline) lines++
   return lines
 }
@@ -77,8 +122,38 @@ function openNdjsonWriter(outPath, { append = false, startCount = 0 } = {}) {
   }
 }
 
+function prepareResumeFile(outPath) {
+  if (!fs.existsSync(outPath)) return 0
+  const st = fs.statSync(outPath)
+  if (st.size > 0) {
+    const fd = fs.openSync(outPath, 'r+')
+    try {
+      const last = Buffer.alloc(1)
+      fs.readSync(fd, last, 0, 1, st.size - 1)
+      if (last[0] !== 10) {
+        let pos = st.size - 1
+        const buf = Buffer.alloc(1)
+        while (pos > 0) {
+          pos--
+          fs.readSync(fd, buf, 0, 1, pos)
+          if (buf[0] === 10) {
+            pos++
+            break
+          }
+        }
+        fs.ftruncateSync(fd, pos)
+        console.warn(`[download] truncated partial trailing line; size ${st.size} → ${pos}`)
+      }
+    } finally {
+      fs.closeSync(fd)
+    }
+  }
+  return countNdjsonLines(outPath)
+}
+
 async function downloadArcgis(source, outPath) {
   const base = layerUrl(source)
+  const where = source.where || '1=1'
   const meta = await fetchJson(`${base}?f=json`)
   if (meta.error) throw new Error(meta.error.message || JSON.stringify(meta.error))
   if (meta.geometryType && !/polygon/i.test(meta.geometryType)) {
@@ -89,35 +164,8 @@ async function downloadArcgis(source, outPath) {
   const maxRecordCount = Math.min(meta.maxRecordCount || PAGE_SIZE, PAGE_SIZE)
 
   const resume = process.env.PARCEL_DOWNLOAD_RESUME !== '0'
-  let existing = 0
-  if (resume && fs.existsSync(outPath)) {
-    // Drop a trailing partial line if the previous process was killed mid-write
-    const st = fs.statSync(outPath)
-    if (st.size > 0) {
-      const fd = fs.openSync(outPath, 'r+')
-      try {
-        const last = Buffer.alloc(1)
-        fs.readSync(fd, last, 0, 1, st.size - 1)
-        if (last[0] !== 10) {
-          let pos = st.size - 1
-          const buf = Buffer.alloc(1)
-          while (pos > 0) {
-            pos--
-            fs.readSync(fd, buf, 0, 1, pos)
-            if (buf[0] === 10) {
-              pos++
-              break
-            }
-          }
-          fs.ftruncateSync(fd, pos)
-          console.warn(`[download] truncated partial trailing line; size ${st.size} → ${pos}`)
-        }
-      } finally {
-        fs.closeSync(fd)
-      }
-    }
-    existing = countNdjsonLines(outPath)
-  }
+  const existing = resume ? prepareResumeFile(outPath) : 0
+  if (!resume && fs.existsSync(outPath)) fs.unlinkSync(outPath)
 
   const writer =
     existing > 0
@@ -128,12 +176,13 @@ async function downloadArcgis(source, outPath) {
   if (existing > 0) {
     console.log(`[download] resuming from ${existing} features (resultOffset=${offset})`)
   }
+  if (where !== '1=1') console.log(`[download] where=${where}`)
 
   try {
     while (writer.count < MAX_FEATURES) {
       page++
       const params = new URLSearchParams({
-        where: '1=1',
+        where,
         outFields: '*',
         returnGeometry: 'true',
         outSR: '4326',
@@ -145,6 +194,7 @@ async function downloadArcgis(source, outPath) {
       const url = `${base}/query?${params}`
       console.log(`[download] page ${page} offset=${offset} written=${writer.count}`)
       const data = await fetchJson(url)
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error))
       const batch = data.features || []
       if (!batch.length) break
       for (const f of batch) writer.writeFeature(f)
@@ -154,7 +204,7 @@ async function downloadArcgis(source, outPath) {
         break
       }
       offset += batch.length
-      await new Promise((r) => setTimeout(r, 100))
+      await sleep(100)
     }
   } finally {
     writer.close()
@@ -163,7 +213,7 @@ async function downloadArcgis(source, outPath) {
   if (writer.count >= MAX_FEATURES) {
     console.warn(`[download] hit MAX_FEATURES=${MAX_FEATURES}`)
   }
-  return { featureCount: writer.count, outPath, resumedFrom: existing }
+  return { featureCount: writer.count, outPath, resumedFrom: existing, where }
 }
 
 async function downloadGeojsonUrl(source, outPath) {
@@ -173,7 +223,6 @@ async function downloadGeojsonUrl(source, outPath) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const writer = openNdjsonWriter(outPath)
   try {
-    // Prefer streaming if content is already NDJSON; else parse FeatureCollection once.
     const text = await res.text()
     if (text.trimStart().startsWith('{') && text.includes('"FeatureCollection"')) {
       const fc = JSON.parse(text)
@@ -241,10 +290,29 @@ async function main() {
   console.log(`[download] source type=${county.source.type} url=${county.source.url}`)
 
   let result
-  if (county.source.type === 'arcgis') result = await downloadArcgis(county.source, outPath)
-  else if (county.source.type === 'geojson') result = await downloadGeojsonUrl(county.source, outPath)
-  else if (county.source.type === 'shapefile') result = await downloadShapefileHint(county.source, outPath)
-  else throw new Error(`Unsupported source type: ${county.source.type}`)
+  try {
+    if (county.source.type === 'arcgis') result = await downloadArcgis(county.source, outPath)
+    else if (county.source.type === 'geojson') result = await downloadGeojsonUrl(county.source, outPath)
+    else if (county.source.type === 'shapefile') result = await downloadShapefileHint(county.source, outPath)
+    else throw new Error(`Unsupported source type: ${county.source.type}`)
+  } catch (err) {
+    // Keep partial raw.ndjson for resume; write failure meta
+    fs.writeFileSync(
+      path.join(dir, 'download-fail.json'),
+      JSON.stringify(
+        {
+          fips,
+          failedAt: new Date().toISOString(),
+          error: String(err.message || err),
+          partialFeatures: fs.existsSync(outPath) ? countNdjsonLines(outPath) : 0,
+          source: county.source,
+        },
+        null,
+        2,
+      ),
+    )
+    throw err
+  }
 
   fs.writeFileSync(
     path.join(dir, 'download-meta.json'),
@@ -255,11 +323,15 @@ async function main() {
         featureCount: result.featureCount,
         format: 'ndjson',
         source: county.source,
+        where: result.where || county.source.where || '1=1',
       },
       null,
       2,
     ),
   )
+  if (fs.existsSync(path.join(dir, 'download-fail.json'))) {
+    fs.unlinkSync(path.join(dir, 'download-fail.json'))
+  }
 
   console.log(`[download] wrote ${result.featureCount} features → ${outPath}`)
 }

@@ -72,50 +72,81 @@ function isStaleRunning(entry, staleMs) {
 /**
  * Claim next largest unfinished county. Returns rank entry + rankNum or null.
  */
+function canClaim(prev, { retryFailed, staleRunningMs }) {
+  if (!prev) return { ok: true }
+  if (TERMINAL.has(prev.status)) return { ok: false }
+  if (prev.status === 'failed') {
+    return retryFailed
+      ? { ok: true, note: `reclaiming failed ${prev.error || ''}`.trim() }
+      : { ok: false }
+  }
+  if (prev.status === 'interrupted') return { ok: true, note: 'reclaiming interrupted' }
+  if (prev.status === 'running') {
+    if (isStaleRunning(prev, staleRunningMs)) {
+      return { ok: true, note: `reclaiming stale running (was ${prev.workerId || 'unknown'})` }
+    }
+    return { ok: false }
+  }
+  return { ok: true }
+}
+
+/**
+ * Claim next county.
+ * claimMode:
+ *   - normal: largest→smallest, skip failed (unless retryFailed)
+ *   - failed_first: prefer failed/interrupted-failed, then fall back to normal
+ *   - failed_only: only failed (returns null when none left — supervisor can switch mode)
+ */
 export async function claimNextCounty({
   workerId,
   startRank = 1,
   limit = Infinity,
   staleRunningMs = Number(process.env.PARCEL_STALE_RUNNING_MS || 6 * 60 * 60 * 1000),
   retryFailed = process.env.PARCEL_RETRY_FAILED === '1',
+  claimMode = process.env.PARCEL_CLAIM_MODE || 'normal',
 } = {}) {
   return withProgressLock(() => {
     const rank = JSON.parse(fs.readFileSync(RANK_PATH, 'utf8'))
     const progress = loadProgress()
     const counties = rank.counties.slice(startRank - 1, startRank - 1 + limit)
+    const total = rank.counties.length
 
-    for (let i = 0; i < counties.length; i++) {
-      const c = counties[i]
-      const rankNum = startRank + i
-      const prev = progress.byFips[c.fips]
-
-      if (!prev) {
-        // claim
-      } else if (TERMINAL.has(prev.status)) {
-        continue
-      } else if (prev.status === 'failed' && !retryFailed) {
-        continue
-      } else if (prev.status === 'interrupted') {
-        console.warn(`[nationwide] reclaiming interrupted ${c.fips}`)
-      } else if (prev.status === 'running' && !isStaleRunning(prev, staleRunningMs)) {
-        continue
-      } else if (prev.status === 'running' && isStaleRunning(prev, staleRunningMs)) {
-        console.warn(`[nationwide] reclaiming stale running ${c.fips} (was ${prev.workerId || 'unknown'})`)
+    const tryClaim = (predicate) => {
+      for (let i = 0; i < counties.length; i++) {
+        const c = counties[i]
+        const rankNum = startRank + i
+        const prev = progress.byFips[c.fips]
+        if (!predicate(prev, c)) continue
+        const decision = canClaim(prev, {
+          retryFailed: retryFailed || claimMode.startsWith('failed'),
+          staleRunningMs,
+        })
+        if (!decision.ok) continue
+        if (decision.note) console.warn(`[nationwide] ${decision.note} ${c.fips}`)
+        if (prev?.status === 'failed' && progress.stats.failed > 0) progress.stats.failed--
+        progress.byFips[c.fips] = {
+          status: 'running',
+          population2023: c.population2023,
+          name: c.name,
+          state: c.state,
+          rank: rankNum,
+          workerId,
+          startedAt: new Date().toISOString(),
+          retryOf: prev?.status === 'failed' ? prev.error || 'failed' : undefined,
+        }
+        saveProgress(progress)
+        return { county: c, rankNum, total, progress, reclaimed: prev?.status || null }
       }
-
-      progress.byFips[c.fips] = {
-        status: 'running',
-        population2023: c.population2023,
-        name: c.name,
-        state: c.state,
-        rank: rankNum,
-        workerId,
-        startedAt: new Date().toISOString(),
-      }
-      saveProgress(progress)
-      return { county: c, rankNum, total: rank.counties.length, progress }
+      return null
     }
-    return null
+
+    if (claimMode === 'failed_only' || claimMode === 'failed_first') {
+      const failedHit = tryClaim((prev) => prev?.status === 'failed')
+      if (failedHit) return failedHit
+      if (claimMode === 'failed_only') return null
+    }
+
+    return tryClaim(() => true)
   })
 }
 

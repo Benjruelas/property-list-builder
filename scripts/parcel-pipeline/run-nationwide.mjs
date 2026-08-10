@@ -74,6 +74,7 @@ async function resolveSource(county, rankEntry) {
     const v = await validateParcelLayer(local.source.url, {
       population2023: pop,
       title: local.source.licenseNote || local.source.url,
+      where: local.source.where || '1=1',
     })
     if (v.ok) return { source: local.source, fieldMap: local.fieldMap }
     console.warn(`[nationwide] seed source rejected ${county.fips}: ${v.reason}`)

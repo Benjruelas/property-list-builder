@@ -41,6 +41,7 @@ export function loadLocalCatalog() {
         url: src.url,
         layerId: src.layerId ?? null,
         licenseNote: src.licenseNote || '',
+        ...(src.where ? { where: src.where } : {}),
       },
       fieldMap: src.fieldMap || null,
     }

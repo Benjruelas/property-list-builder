@@ -24,9 +24,20 @@ export function isRejectedSourceTitle(titleOrUrl = '') {
   return REJECT_TITLE_RE.test(String(titleOrUrl))
 }
 
-export async function fetchFeatureCount(layerUrl, { timeoutMs = 20000 } = {}) {
+/** Statewide / multi-state layers that dwarf a single county's population. */
+export function isOversizedForCounty(featureCount, population2023) {
+  const count = Number(featureCount) || 0
+  const pop = Number(population2023) || 0
+  if (!count || !pop) return false
+  if (count >= 3_000_000 && count > pop * 2) return true
+  if (count > pop * 2.5 && count >= 1_500_000) return true
+  return false
+}
+
+export async function fetchFeatureCount(layerUrl, { timeoutMs = 20000, where = '1=1' } = {}) {
   const base = String(layerUrl).replace(/\/$/, '')
-  const url = `${base}/query?where=1%3D1&returnCountOnly=true&f=json`
+  const params = new URLSearchParams({ where, returnCountOnly: 'true', f: 'json' })
+  const url = `${base}/query?${params}`
   const res = await fetch(url, {
     headers: { Accept: 'application/json', 'User-Agent': 'KnockScout-parcel-pipeline/1.0' },
     signal: AbortSignal.timeout(timeoutMs),
@@ -43,7 +54,7 @@ export async function fetchFeatureCount(layerUrl, { timeoutMs = 20000 } = {}) {
  * Validate a candidate layer before download.
  * Returns { ok, count, minRequired, reason? }
  */
-export async function validateParcelLayer(layerUrl, { population2023, title = '' } = {}) {
+export async function validateParcelLayer(layerUrl, { population2023, title = '', where = '1=1' } = {}) {
   if (isRejectedSourceTitle(title) || isRejectedSourceTitle(layerUrl)) {
     return {
       ok: false,
@@ -54,13 +65,21 @@ export async function validateParcelLayer(layerUrl, { population2023, title = ''
   }
   const minRequired = minParcelCount(population2023)
   try {
-    const count = await fetchFeatureCount(layerUrl)
+    const count = await fetchFeatureCount(layerUrl, { where })
     if (count < minRequired) {
       return {
         ok: false,
         count,
         minRequired,
         reason: `featureCount ${count} < min ${minRequired} for pop ${population2023 || '?'}`,
+      }
+    }
+    if (where === '1=1' && isOversizedForCounty(count, population2023)) {
+      return {
+        ok: false,
+        count,
+        minRequired,
+        reason: `featureCount ${count} oversized for county pop ${population2023 || '?'} (likely statewide/multi-county; use a where filter)`,
       }
     }
     return { ok: true, count, minRequired }

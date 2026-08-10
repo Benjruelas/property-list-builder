@@ -41,6 +41,9 @@ Parallel nationwide env knobs:
 - `PARCEL_TILE_CONCURRENCY=2` — max simultaneous tippecanoe jobs
 - `PARCEL_UPLOAD_CONCURRENCY=8` — per-county R2 upload concurrency
 - `PARCEL_DOWNLOAD_RESUME=1` — resume partial `raw.ndjson` after interrupt
+- `PARCEL_DOWNLOAD_RETRIES=8` — retry ArcGIS 5xx / HTML / network blips
+- `PARCEL_REPAIR_WORKERS=5` — first N workers claim `failed` counties first, then rejoin normal queue
+- Seed sources may include `where` (e.g. `CO_NAME='Hennepin'`) to slice multi-county layers
 
 **Source quality gates** (required — prevents specialty/subset layers):
 

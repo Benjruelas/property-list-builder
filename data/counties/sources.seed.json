@@ -261,6 +261,34 @@
         "ownername": ["OWNER_NAME", "OWNER"],
         "taxacres": ["ACRES"]
       }
+    },
+    "27053": {
+      "type": "arcgis",
+      "url": "https://arcgis.metc.state.mn.us/data1/rest/services/parcels/Parcels_Aggregate/FeatureServer/0",
+      "layerId": 0,
+      "where": "CO_NAME='Hennepin'",
+      "licenseNote": "Metro GIS Parcels_Aggregate filtered to Hennepin (~447k)",
+      "fieldMap": {
+        "parcelid": ["PIN", "COUNTY_PIN", "STATE_PIN"],
+        "lrid": ["PIN"],
+        "parceladdr": ["ANUMBER", "ST_NAME"],
+        "parcelcity": ["CTU_NAME", "POSTCOMM"],
+        "parcelzip": ["ZIP"],
+        "ownername": ["OWNER_NAME", "TAX_NAME"]
+      }
+    },
+    "12057": {
+      "type": "arcgis",
+      "url": "https://services5.arcgis.com/GcvM6vDlR2gM4x31/arcgis/rest/services/FL_Parcels/FeatureServer/0",
+      "layerId": 0,
+      "where": "CountyName='Hillsborough'",
+      "licenseNote": "FL_Parcels filtered to Hillsborough County (~533k)",
+      "fieldMap": {
+        "parcelid": ["PARCEL_ID"],
+        "lrid": ["PARCEL_ID"],
+        "ownername": ["OWN_NAME"],
+        "totalvalue": ["JV", "AV_SD"]
+      }
     }
   }
 }
