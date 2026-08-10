@@ -22,6 +22,7 @@ import { discoverArcgisSource } from './discover-arcgis-online.mjs'
 import {
   claimNextCounty,
   updateCountyStatus,
+  heartbeatCounty,
   withOverlayLock,
   loadProgress,
 } from './lib/nationwideProgress.mjs'
@@ -41,13 +42,28 @@ function ensureR2() {
   }
 }
 
-function runNode(script, args) {
+function runNode(script, args, { fips, heartbeatMs = 60_000 } = {}) {
   const scriptPath = path.join(__dirname, script)
-  const r = spawnSync(process.execPath, [scriptPath, ...args], {
-    stdio: 'inherit',
-    env: process.env,
+  // Use spawn (not spawnSync) so we can heartbeat while long steps run.
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [scriptPath, ...args], {
+      stdio: 'inherit',
+      env: process.env,
+    })
+    let timer = null
+    if (fips && heartbeatMs > 0) {
+      timer = setInterval(() => {
+        heartbeatCounty(fips, WORKER_ID).catch(() => {})
+      }, heartbeatMs)
+      // Touch immediately so reclaim window starts fresh when a step begins.
+      heartbeatCounty(fips, WORKER_ID).catch(() => {})
+    }
+    child.on('exit', (code, signal) => {
+      if (timer) clearInterval(timer)
+      if (signal) resolve(1)
+      else resolve(code ?? 1)
+    })
   })
-  return r.status ?? 1
 }
 
 function cleanupCounty(fips, { keepRaw = false } = {}) {
@@ -253,10 +269,10 @@ async function processClaimed(rankEntry, rankNum, total) {
 
   for (const [script, args, opts] of steps) {
     console.log(`\n[w${WORKER_ID}] ${fips} → ${script}`)
-    const run = () => runNode(script, args)
+    const run = () => runNode(script, args, { fips, heartbeatMs: 60_000 })
     let code
     try {
-      code = opts?.tileSlot ? await withTileSlot(async () => run()) : run()
+      code = opts?.tileSlot ? await withTileSlot(async () => run()) : await run()
     } catch (e) {
       // e.g. tile slot lock timeout — keep download artifacts for reclaim
       await updateCountyStatus(
@@ -401,12 +417,15 @@ function supervisorMain() {
     0,
     Math.min(workers, Number(process.env.PARCEL_REPAIR_WORKERS || 0)),
   )
-  // Keep uploads reasonable under parallel load
+  // Keep uploads reasonable under parallel load (avoid 10×32 R2 storms that stall)
   if (!process.env.PARCEL_UPLOAD_CONCURRENCY) {
-    process.env.PARCEL_UPLOAD_CONCURRENCY = String(Math.max(4, Math.floor(80 / workers)))
+    process.env.PARCEL_UPLOAD_CONCURRENCY = String(Math.max(2, Math.min(6, Math.floor(40 / workers))))
   }
   if (!process.env.PARCEL_TILE_CONCURRENCY) {
     process.env.PARCEL_TILE_CONCURRENCY = '2'
+  }
+  if (!process.env.PARCEL_STALE_RUNNING_MS) {
+    process.env.PARCEL_STALE_RUNNING_MS = String(60 * 60 * 1000) // 1h
   }
 
   const reclaimedSlots = clearDeadTileSlots()

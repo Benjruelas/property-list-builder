@@ -64,7 +64,8 @@ export async function withProgressLock(fn, { timeoutMs = 120_000 } = {}) {
 
 function isStaleRunning(entry, staleMs) {
   if (!entry || entry.status !== 'running') return false
-  const t = Date.parse(entry.startedAt || entry.updatedAt || 0)
+  // Prefer heartbeat so long downloads/uploads aren't reclaimed while alive.
+  const t = Date.parse(entry.heartbeatAt || entry.startedAt || entry.updatedAt || 0)
   if (!Number.isFinite(t)) return true
   return Date.now() - t > staleMs
 }
@@ -101,7 +102,9 @@ export async function claimNextCounty({
   workerId,
   startRank = 1,
   limit = Infinity,
-  staleRunningMs = Number(process.env.PARCEL_STALE_RUNNING_MS || 6 * 60 * 60 * 1000),
+  // Default 1h — long downloads still heartbeat via progress updates / worker activity;
+  // truly stuck workers must not block the queue for half a day.
+  staleRunningMs = Number(process.env.PARCEL_STALE_RUNNING_MS || 60 * 60 * 1000),
   retryFailed = process.env.PARCEL_RETRY_FAILED === '1',
   claimMode = process.env.PARCEL_CLAIM_MODE || 'normal',
 } = {}) {
@@ -154,15 +157,35 @@ export async function updateCountyStatus(fips, patch, statDelta) {
   return withProgressLock(() => {
     const progress = loadProgress()
     const prev = progress.byFips[fips] || {}
+    const finished =
+      patch.status && patch.status !== 'running'
+        ? patch.finishedAt || new Date().toISOString()
+        : patch.finishedAt
     progress.byFips[fips] = {
       ...prev,
       ...patch,
-      finishedAt: patch.finishedAt || new Date().toISOString(),
+      ...(finished ? { finishedAt: finished } : {}),
     }
     if (statDelta) {
       for (const [k, v] of Object.entries(statDelta)) {
         progress.stats[k] = (progress.stats[k] || 0) + v
       }
+    }
+    saveProgress(progress)
+    return progress
+  })
+}
+
+/** Touch running county so stale reclaim (default 1h) does not steal live work. */
+export async function heartbeatCounty(fips, workerId) {
+  return withProgressLock(() => {
+    const progress = loadProgress()
+    const prev = progress.byFips[fips]
+    if (!prev || prev.status !== 'running') return progress
+    progress.byFips[fips] = {
+      ...prev,
+      heartbeatAt: new Date().toISOString(),
+      workerId: workerId || prev.workerId,
     }
     saveProgress(progress)
     return progress

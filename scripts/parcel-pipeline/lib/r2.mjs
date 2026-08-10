@@ -34,7 +34,12 @@ export async function getObjectBuffer(key) {
   }
 }
 
-export async function putObjectBuffer(key, body, contentType = 'application/x-protobuf') {
+export async function putObjectBuffer(
+  key,
+  body,
+  contentType = 'application/x-protobuf',
+  { abortSignal } = {},
+) {
   await getR2().send(
     new PutObjectCommand({
       Bucket: bucket(),
@@ -42,5 +47,6 @@ export async function putObjectBuffer(key, body, contentType = 'application/x-pr
       Body: body,
       ContentType: contentType,
     }),
+    abortSignal ? { abortSignal } : undefined,
   )
 }
