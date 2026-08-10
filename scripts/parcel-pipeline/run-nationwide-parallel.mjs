@@ -17,7 +17,7 @@ import path from 'path'
 import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { ROOT, DATA_DIR } from './lib/paths.mjs'
-import { getLocalCounty } from './lib/catalogLocal.mjs'
+import { getLocalCounty, getSeededCounty } from './lib/catalogLocal.mjs'
 import { discoverArcgisSource } from './discover-arcgis-online.mjs'
 import {
   claimNextCounty,
@@ -25,7 +25,7 @@ import {
   withOverlayLock,
   loadProgress,
 } from './lib/nationwideProgress.mjs'
-import { withTileSlot } from './lib/tileLock.mjs'
+import { withTileSlot, clearDeadTileSlots } from './lib/tileLock.mjs'
 import { validateDownloadedCount, validateParcelLayer } from './lib/sourceValidation.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -71,9 +71,30 @@ function cleanupCounty(fips, { keepRaw = false } = {}) {
 }
 
 async function resolveSource(county, rankEntry) {
-  const local = getLocalCounty(county.fips)
   const pop = rankEntry.population2023
-  if (local?.source?.url && local.source.type !== 'none') {
+  // Prefer curated seed over poisoned runtime/discovery overlays.
+  const seeded = getSeededCounty(county.fips)
+  if (seeded?.source?.url && seeded.source.type !== 'none') {
+    const v = await validateParcelLayer(seeded.source.url, {
+      population2023: pop,
+      title: seeded.source.licenseNote || seeded.source.url,
+      where: seeded.source.where || '1=1',
+    })
+    if (v.ok) {
+      console.log(
+        `[w${WORKER_ID}] seed source ok ${county.fips} count=${v.count} (min=${v.minRequired})`,
+      )
+      return { source: seeded.source, fieldMap: seeded.fieldMap, featureCount: v.count }
+    }
+    console.warn(
+      `[w${WORKER_ID}] seed source rejected ${county.fips}: ${v.reason} — trying local/discovery`,
+    )
+  }
+
+  const local = getLocalCounty(county.fips)
+  const localIsSeed =
+    local?.source?.url && seeded?.source?.url && local.source.url === seeded.source.url
+  if (local?.source?.url && local.source.type !== 'none' && !localIsSeed) {
     const v = await validateParcelLayer(local.source.url, {
       population2023: pop,
       title: local.source.licenseNote || local.source.url,
@@ -81,14 +102,15 @@ async function resolveSource(county, rankEntry) {
     })
     if (v.ok) {
       console.log(
-        `[w${WORKER_ID}] seed source ok ${county.fips} count=${v.count} (min=${v.minRequired})`,
+        `[w${WORKER_ID}] runtime source ok ${county.fips} count=${v.count} (min=${v.minRequired})`,
       )
       return { source: local.source, fieldMap: local.fieldMap, featureCount: v.count }
     }
     console.warn(
-      `[w${WORKER_ID}] seed source rejected ${county.fips}: ${v.reason} — trying discovery`,
+      `[w${WORKER_ID}] runtime source rejected ${county.fips}: ${v.reason} — trying discovery`,
     )
   }
+
   if (process.env.PARCEL_SKIP_DISCOVERY === '1') return null
   console.log(
     `[w${WORKER_ID}] discovering source for ${rankEntry.name}, ${rankEntry.state} (${county.fips})`,
@@ -100,6 +122,25 @@ async function resolveSource(county, rankEntry) {
     population2023: pop,
   })
   return found ? { source: found, fieldMap: found.fieldMap, featureCount: found.featureCount } : null
+}
+
+/** Skip completed stages when reclaiming tile/upload failures. */
+function detectResumeStage(fips) {
+  const dir = path.join(DATA_DIR, fips)
+  const mb = path.join(dir, `${fips}.mbtiles`)
+  const tileMeta = path.join(dir, 'tile-meta.json')
+  const normalized = path.join(dir, 'normalized.ndjson')
+  const raw = path.join(dir, 'raw.ndjson')
+  try {
+    if (fs.existsSync(mb) && fs.existsSync(tileMeta) && fs.statSync(mb).size > 10_000) {
+      return 'upload'
+    }
+    if (fs.existsSync(normalized) && fs.statSync(normalized).size > 0) return 'tile'
+    if (fs.existsSync(raw) && fs.statSync(raw).size > 0) return 'normalize'
+  } catch {
+    /* fall through */
+  }
+  return 'download'
 }
 
 function writeRuntimeSource(fips, source, fieldMap) {
@@ -158,22 +199,84 @@ async function processClaimed(rankEntry, rankNum, total) {
     return 'no_source'
   }
 
+  // Capture prior source URL before we overwrite source.json / runtime overlay.
+  const prevMetaPath = path.join(DATA_DIR, fips, 'download-meta.json')
+  const prevSourcePath = path.join(DATA_DIR, fips, 'source.json')
+  let prevUrl = null
+  try {
+    if (fs.existsSync(prevMetaPath)) {
+      prevUrl = JSON.parse(fs.readFileSync(prevMetaPath, 'utf8'))?.source?.url || null
+    }
+  } catch {
+    /* ignore */
+  }
+  if (!prevUrl && fs.existsSync(prevSourcePath)) {
+    try {
+      prevUrl = JSON.parse(fs.readFileSync(prevSourcePath, 'utf8'))?.source?.url || null
+    } catch {
+      /* ignore */
+    }
+  }
+
   writeRuntimeSource(fips, resolved.source, resolved.fieldMap)
   await writeOverlay(fips, resolved.source, resolved.fieldMap)
 
-  const steps = [
-    ['download-county.mjs', [`--fips=${fips}`]],
-    ['normalize-county.mjs', [`--fips=${fips}`]],
-    ['tile-county.mjs', [`--fips=${fips}`], { tileSlot: true }],
-    ['upload-county-tiles-parallel.mjs', [`--fips=${fips}`]],
+  // If curated/resolved source changed, discard stale downloads/tiles from a bad layer.
+  let resumeFrom = detectResumeStage(fips)
+  if (resumeFrom !== 'download' && prevUrl && prevUrl !== resolved.source.url) {
+    console.warn(
+      `[w${WORKER_ID}] ${fips} source changed (${prevUrl} → ${resolved.source.url}) — discarding stale artifacts`,
+    )
+    cleanupCounty(fips) // drop raw/normalized
+    const mb = path.join(DATA_DIR, fips, `${fips}.mbtiles`)
+    for (const f of [mb, path.join(DATA_DIR, fips, 'tile-meta.json'), path.join(DATA_DIR, fips, 'upload-meta.json')]) {
+      try {
+        if (fs.existsSync(f)) fs.unlinkSync(f)
+      } catch {
+        /* ignore */
+      }
+    }
+    resumeFrom = 'download'
+  } else if (resumeFrom !== 'download') {
+    console.log(`[w${WORKER_ID}] ${fips} resuming from ${resumeFrom} (artifacts present)`)
+  }
+
+  const allSteps = [
+    ['download-county.mjs', [`--fips=${fips}`], { stage: 'download' }],
+    ['normalize-county.mjs', [`--fips=${fips}`], { stage: 'normalize' }],
+    ['tile-county.mjs', [`--fips=${fips}`], { stage: 'tile', tileSlot: true }],
+    ['upload-county-tiles-parallel.mjs', [`--fips=${fips}`], { stage: 'upload' }],
   ]
+  const stageOrder = ['download', 'normalize', 'tile', 'upload']
+  const startIdx = stageOrder.indexOf(resumeFrom)
+  const steps = allSteps.slice(Math.max(0, startIdx))
 
   for (const [script, args, opts] of steps) {
     console.log(`\n[w${WORKER_ID}] ${fips} → ${script}`)
     const run = () => runNode(script, args)
-    const code = opts?.tileSlot ? await withTileSlot(async () => run()) : run()
+    let code
+    try {
+      code = opts?.tileSlot ? await withTileSlot(async () => run()) : run()
+    } catch (e) {
+      // e.g. tile slot lock timeout — keep download artifacts for reclaim
+      await updateCountyStatus(
+        fips,
+        {
+          status: 'failed',
+          population2023: rankEntry.population2023,
+          name: rankEntry.name,
+          state: rankEntry.state,
+          error: e.message || String(e),
+          source: resolved.source,
+          workerId: WORKER_ID,
+        },
+        { failed: 1 },
+      )
+      cleanupCounty(fips, { keepRaw: true })
+      return 'failed'
+    }
     if (code !== 0) {
-      const keepRaw = script === 'download-county.mjs'
+      const keepRaw = opts?.stage !== 'download' || script === 'download-county.mjs'
       await updateCountyStatus(
         fips,
         {
@@ -187,7 +290,8 @@ async function processClaimed(rankEntry, rankNum, total) {
         },
         { failed: 1 },
       )
-      cleanupCounty(fips, { keepRaw })
+      // Keep raw on download fail (resume) and on later-stage fails (re-tile/upload).
+      cleanupCounty(fips, { keepRaw: true })
       return 'failed'
     }
 
@@ -303,6 +407,11 @@ function supervisorMain() {
   }
   if (!process.env.PARCEL_TILE_CONCURRENCY) {
     process.env.PARCEL_TILE_CONCURRENCY = '2'
+  }
+
+  const reclaimedSlots = clearDeadTileSlots()
+  if (reclaimedSlots > 0) {
+    console.warn(`[nationwide-parallel] cleared ${reclaimedSlots} dead tippecanoe slot(s)`)
   }
 
   const progress = loadProgress()

@@ -55,6 +55,50 @@ export function loadLocalCatalog() {
   return cache
 }
 
+/** Seed catalog only (ignores runtime overlay + per-county source.json). */
+export function getSeededCounty(fips) {
+  clearLocalCatalogCache()
+  const padded = String(fips).padStart(5, '0')
+  const raw = JSON.parse(fs.readFileSync(SEED_PATH, 'utf8'))
+  let sources = {}
+  try {
+    sources = JSON.parse(fs.readFileSync(SOURCES_PATH, 'utf8')).sources || {}
+  } catch {
+    sources = {}
+  }
+  const c = (raw.counties || []).find((x) => x.fips === padded)
+  const src = sources[padded]
+  if (!c) {
+    return src
+      ? {
+          fips: padded,
+          status: 'ready',
+          source: {
+            type: src.type,
+            url: src.url,
+            layerId: src.layerId ?? null,
+            licenseNote: src.licenseNote || '',
+            ...(src.where ? { where: src.where } : {}),
+          },
+          fieldMap: src.fieldMap || null,
+        }
+      : null
+  }
+  if (!src) return { ...c }
+  return {
+    ...c,
+    status: 'ready',
+    source: {
+      type: src.type,
+      url: src.url,
+      layerId: src.layerId ?? null,
+      licenseNote: src.licenseNote || '',
+      ...(src.where ? { where: src.where } : {}),
+    },
+    fieldMap: src.fieldMap || null,
+  }
+}
+
 export function getLocalCounty(fips) {
   // Always reload so runtime source overlays are visible between child runs.
   clearLocalCatalogCache()
