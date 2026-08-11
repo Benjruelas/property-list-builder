@@ -25,8 +25,25 @@ function convertMbtiles(mbtiles, pmtilesPath) {
   const bin = pmtilesBin()
   if (!bin) throw new Error('pmtiles CLI not found — install go-pmtiles')
   if (fs.existsSync(pmtilesPath)) fs.unlinkSync(pmtilesPath)
-  console.log(`[pmtiles] convert ${mbtiles} → ${pmtilesPath}`)
-  const r = spawnSync(bin, ['convert', mbtiles, pmtilesPath], { stdio: 'inherit' })
+  // tippecanoe may leave a -journal; convert from a clean copy to avoid readonly SQLite errors
+  const journal = `${mbtiles}-journal`
+  let input = mbtiles
+  let tmpCopy = null
+  if (fs.existsSync(journal)) {
+    tmpCopy = `${pmtilesPath}.src.mbtiles`
+    fs.copyFileSync(mbtiles, tmpCopy)
+    input = tmpCopy
+    console.warn(`[pmtiles] mbtiles journal present — converting from copy ${tmpCopy}`)
+  }
+  console.log(`[pmtiles] convert ${input} → ${pmtilesPath}`)
+  const r = spawnSync(bin, ['convert', input, pmtilesPath], { stdio: 'inherit' })
+  if (tmpCopy) {
+    try {
+      fs.unlinkSync(tmpCopy)
+    } catch {
+      /* ignore */
+    }
+  }
   if (r.status !== 0) throw new Error(`pmtiles convert failed exit ${r.status}`)
 }
 
