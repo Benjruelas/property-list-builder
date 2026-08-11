@@ -37,14 +37,18 @@ npm run parcel:nationwide
 npm run parcel:nationwide:parallel
 ```
 
-Parallel nationwide env knobs:
+Parallel nationwide env knobs (defaults tuned for ~4 vCPU):
 
-- `PARCEL_NATIONWIDE_WORKERS=10`
-- `PARCEL_TILE_CONCURRENCY=2` — max simultaneous tippecanoe jobs
-- `PARCEL_UPLOAD_COUNTY_CONCURRENCY=6` — max simultaneous PMTiles uploads
+- `PARCEL_NATIONWIDE_WORKERS=4`
+- `PARCEL_NORMALIZE_CONCURRENCY=2` — max simultaneous normalize jobs
+- `PARCEL_TILE_CONCURRENCY=1` — max simultaneous tippecanoe jobs
+- `PARCEL_UPLOAD_COUNTY_CONCURRENCY=4` — max simultaneous PMTiles uploads
+- `PARCEL_MAX_ZOOM=15` — z15-first nationwide (set `16` for full detail)
+- `PARCEL_DOWNLOAD_PARALLEL=3` — parallel ArcGIS page fetches per county
+- `PARCEL_TILE_TIMEOUT_MS=2700000` — kill pathological tippecanoe (45m)
 - `PARCEL_DOWNLOAD_RESUME=1`
 - `PARCEL_DOWNLOAD_RETRIES=8`
-- `PARCEL_REPAIR_WORKERS=5`
+- `PARCEL_REPAIR_WORKERS=1`
 - `PARCEL_STALE_RUNNING_MS=3600000` — reclaim stuck `running` after 1h without heartbeat
 
 Work files: `parcel_data/{fips}/` (gitignored). Progress: `parcel_data/nationwide-progress.json`. Heartbeats: `parcel_data/.heartbeats/{fips}` (lock-free).

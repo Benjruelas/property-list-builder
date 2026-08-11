@@ -16,6 +16,8 @@ const PAGE_SIZE = Number(process.env.PARCEL_DOWNLOAD_PAGE_SIZE || 10000)
 const MAX_FEATURES = Number(process.env.PARCEL_DOWNLOAD_MAX_FEATURES || 2_000_000)
 const MAX_RETRIES = Number(process.env.PARCEL_DOWNLOAD_RETRIES || 8)
 const RETRY_BASE_MS = Number(process.env.PARCEL_DOWNLOAD_RETRY_MS || 1500)
+/** Parallel ArcGIS page fetches per county (ordered write). */
+const DOWNLOAD_PARALLEL = Math.max(1, Math.min(8, Number(process.env.PARCEL_DOWNLOAD_PARALLEL || 3)))
 
 async function resolveCounty(fips) {
   if (apiConfigured()) {
@@ -178,33 +180,67 @@ async function downloadArcgis(source, outPath) {
   }
   if (where !== '1=1') console.log(`[download] where=${where}`)
 
-  try {
-    while (writer.count < MAX_FEATURES) {
-      page++
-      const params = new URLSearchParams({
-        where,
-        outFields: '*',
-        returnGeometry: 'true',
-        outSR: '4326',
-        f: 'geojson',
-        resultRecordCount: String(maxRecordCount),
-      })
-      if (supportsPagination) params.set('resultOffset', String(offset))
+  async function fetchPage(resultOffset, pageNum) {
+    const params = new URLSearchParams({
+      where,
+      outFields: '*',
+      returnGeometry: 'true',
+      outSR: '4326',
+      f: 'geojson',
+      resultRecordCount: String(maxRecordCount),
+    })
+    if (supportsPagination) params.set('resultOffset', String(resultOffset))
+    const url = `${base}/query?${params}`
+    console.log(`[download] page ${pageNum} offset=${resultOffset} written=${writer.count}`)
+    const data = await fetchJson(url)
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error))
+    return data.features || []
+  }
 
-      const url = `${base}/query?${params}`
-      console.log(`[download] page ${page} offset=${offset} written=${writer.count}`)
-      const data = await fetchJson(url)
-      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error))
-      const batch = data.features || []
-      if (!batch.length) break
-      for (const f of batch) writer.writeFeature(f)
-      if (batch.length < maxRecordCount) break
-      if (!supportsPagination) {
-        console.warn('[download] server does not support pagination; stopped after first page')
-        break
+  try {
+    if (!supportsPagination || DOWNLOAD_PARALLEL <= 1) {
+      while (writer.count < MAX_FEATURES) {
+        page++
+        const batch = await fetchPage(offset, page)
+        if (!batch.length) break
+        for (const f of batch) writer.writeFeature(f)
+        if (batch.length < maxRecordCount) break
+        if (!supportsPagination) {
+          console.warn('[download] server does not support pagination; stopped after first page')
+          break
+        }
+        offset += batch.length
+        await sleep(50)
       }
-      offset += batch.length
-      await sleep(100)
+    } else {
+      // Fetch N pages in parallel, write in offset order, stop at first short/empty page.
+      console.log(`[download] parallel pages=${DOWNLOAD_PARALLEL} pageSize=${maxRecordCount}`)
+      let done = false
+      while (!done && writer.count < MAX_FEATURES) {
+        const jobs = []
+        for (let i = 0; i < DOWNLOAD_PARALLEL; i++) {
+          const off = offset + i * maxRecordCount
+          if (off >= MAX_FEATURES) break
+          page++
+          jobs.push({ off, pageNum: page, promise: fetchPage(off, page) })
+        }
+        if (!jobs.length) break
+        const batches = await Promise.all(jobs.map((j) => j.promise))
+        for (let i = 0; i < batches.length; i++) {
+          const batch = batches[i]
+          if (!batch.length) {
+            done = true
+            break
+          }
+          for (const f of batch) writer.writeFeature(f)
+          offset += batch.length
+          if (batch.length < maxRecordCount) {
+            done = true
+            break
+          }
+        }
+        if (!done) await sleep(50)
+      }
     }
   } finally {
     writer.close()

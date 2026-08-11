@@ -3,9 +3,12 @@
  * Parallel nationwide runner: N workers claim counties largest→smallest.
  *
  * Env:
- *   PARCEL_NATIONWIDE_WORKERS (default 10)
- *   PARCEL_TILE_CONCURRENCY (default 2) — tippecanoe slots
- *   PARCEL_UPLOAD_CONCURRENCY (recommend 8 when workers=10)
+ *   PARCEL_NATIONWIDE_WORKERS (default 4 on small VMs)
+ *   PARCEL_TILE_CONCURRENCY (default 1) — tippecanoe slots
+ *   PARCEL_NORMALIZE_CONCURRENCY (default 2)
+ *   PARCEL_UPLOAD_COUNTY_CONCURRENCY (default 4)
+ *   PARCEL_MAX_ZOOM (default 15 — z15-first)
+ *   PARCEL_DOWNLOAD_PARALLEL (default 3)
  *   PARCEL_NATIONWIDE_LIMIT / PARCEL_NATIONWIDE_START_RANK
  *   PARCEL_SKIP_DISCOVERY=1
  *   PARCEL_RETRY_FAILED=1
@@ -27,6 +30,7 @@ import {
   loadProgress,
 } from './lib/nationwideProgress.mjs'
 import { withTileSlot, clearDeadTileSlots } from './lib/tileLock.mjs'
+import { withNormalizeSlot, clearDeadNormalizeSlots } from './lib/normalizeLock.mjs'
 import { withUploadSlot, clearDeadUploadSlots } from './lib/uploadLock.mjs'
 import { validateDownloadedCount, validateParcelLayer } from './lib/sourceValidation.mjs'
 
@@ -294,7 +298,7 @@ async function processClaimed(rankEntry, rankNum, total) {
 
   const allSteps = [
     ['download-county.mjs', [`--fips=${fips}`], { stage: 'download' }],
-    ['normalize-county.mjs', [`--fips=${fips}`], { stage: 'normalize' }],
+    ['normalize-county.mjs', [`--fips=${fips}`], { stage: 'normalize', normalizeSlot: true }],
     ['tile-county.mjs', [`--fips=${fips}`], { stage: 'tile', tileSlot: true }],
     // One R2 object per county (PMTiles) — replaces per-tile XYZ explode.
     ['upload-county-pmtiles.mjs', [`--fips=${fips}`], { stage: 'upload', uploadSlot: true }],
@@ -322,6 +326,8 @@ async function processClaimed(rankEntry, rankNum, total) {
         }
       }
       if (opts?.tileSlot) code = await withWaitHeartbeat(() => withTileSlot(async () => run()))
+      else if (opts?.normalizeSlot)
+        code = await withWaitHeartbeat(() => withNormalizeSlot(async () => run()))
       else if (opts?.uploadSlot)
         code = await withWaitHeartbeat(() => withUploadSlot(async () => run()))
       else code = await run()
@@ -465,25 +471,41 @@ async function workerMain() {
 
 function supervisorMain() {
   ensureR2()
-  const workers = Math.max(1, Number(process.env.PARCEL_NATIONWIDE_WORKERS || 10))
+  // Defaults tuned for ~4 vCPU: avoid 10× normalize + 2× tippecanoe thrash.
+  const workers = Math.max(1, Number(process.env.PARCEL_NATIONWIDE_WORKERS || 4))
   const repairWorkers = Math.max(
     0,
     Math.min(workers, Number(process.env.PARCEL_REPAIR_WORKERS || 0)),
   )
-  // PMTiles = one multipart upload per county; many can run safely.
   if (!process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY) {
-    process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY = '6'
+    process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY = '4'
   }
   if (!process.env.PARCEL_TILE_CONCURRENCY) {
-    process.env.PARCEL_TILE_CONCURRENCY = '2'
+    process.env.PARCEL_TILE_CONCURRENCY = '1'
+  }
+  if (!process.env.PARCEL_NORMALIZE_CONCURRENCY) {
+    process.env.PARCEL_NORMALIZE_CONCURRENCY = '2'
+  }
+  if (!process.env.PARCEL_MAX_ZOOM) {
+    process.env.PARCEL_MAX_ZOOM = '15' // z15-first nationwide
+  }
+  if (!process.env.PARCEL_DOWNLOAD_PARALLEL) {
+    process.env.PARCEL_DOWNLOAD_PARALLEL = '3'
   }
   if (!process.env.PARCEL_STALE_RUNNING_MS) {
     process.env.PARCEL_STALE_RUNNING_MS = String(60 * 60 * 1000) // 1h
+  }
+  if (!process.env.PARCEL_TILE_TIMEOUT_MS) {
+    process.env.PARCEL_TILE_TIMEOUT_MS = String(45 * 60 * 1000)
   }
 
   const reclaimedSlots = clearDeadTileSlots()
   if (reclaimedSlots > 0) {
     console.warn(`[nationwide-parallel] cleared ${reclaimedSlots} dead tippecanoe slot(s)`)
+  }
+  const reclaimedNorm = clearDeadNormalizeSlots()
+  if (reclaimedNorm > 0) {
+    console.warn(`[nationwide-parallel] cleared ${reclaimedNorm} dead normalize slot(s)`)
   }
   const reclaimedUploads = clearDeadUploadSlots()
   if (reclaimedUploads > 0) {
@@ -498,7 +520,7 @@ function supervisorMain() {
     `[nationwide-parallel] repairWorkers=${repairWorkers} (failed_only→normal) normalWorkers=${workers - repairWorkers}`,
   )
   console.log(
-    `[nationwide-parallel] uploadCounties=${process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY} uploadPuts=${process.env.PARCEL_UPLOAD_CONCURRENCY} tileSlots=${process.env.PARCEL_TILE_CONCURRENCY}`,
+    `[nationwide-parallel] normalizeSlots=${process.env.PARCEL_NORMALIZE_CONCURRENCY} tileSlots=${process.env.PARCEL_TILE_CONCURRENCY} uploadCounties=${process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY} maxZoom=${process.env.PARCEL_MAX_ZOOM} downloadParallel=${process.env.PARCEL_DOWNLOAD_PARALLEL}`,
   )
   console.log(`[nationwide-parallel] progress stats=`, progress.stats)
 
