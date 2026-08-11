@@ -35,3 +35,4 @@ production-backup/
 .env*.local
 .local-dev-data/
 data/counties/sources.runtime.json
+data/counties/pmtiles-manifest.runtime.json

@@ -1,4 +1,6 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import fs from 'fs'
+import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
 
 let _s3
 
@@ -34,6 +36,37 @@ export async function getObjectBuffer(key) {
   }
 }
 
+export async function getObjectRange(key, offset, length, { etag, abortSignal } = {}) {
+  const end = offset + length - 1
+  const res = await getR2().send(
+    new GetObjectCommand({
+      Bucket: bucket(),
+      Key: key,
+      Range: `bytes=${offset}-${end}`,
+      ...(etag ? { IfMatch: etag } : {}),
+    }),
+    abortSignal ? { abortSignal } : undefined,
+  )
+  const chunks = []
+  for await (const chunk of res.Body) chunks.push(chunk)
+  const buf = Buffer.concat(chunks)
+  return {
+    data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+    etag: res.ETag,
+    cacheControl: res.CacheControl,
+    expires: res.Expires?.toISOString?.(),
+  }
+}
+
+export async function headObject(key) {
+  try {
+    return await getR2().send(new HeadObjectCommand({ Bucket: bucket(), Key: key }))
+  } catch (e) {
+    if (e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) return null
+    throw e
+  }
+}
+
 export async function putObjectBuffer(
   key,
   body,
@@ -49,4 +82,21 @@ export async function putObjectBuffer(
     }),
     abortSignal ? { abortSignal } : undefined,
   )
+}
+
+/** Multipart-friendly upload for large PMTiles / MBTiles files. */
+export async function putObjectFile(key, filePath, contentType = 'application/octet-stream') {
+  const body = fs.createReadStream(filePath)
+  const upload = new Upload({
+    client: getR2(),
+    params: {
+      Bucket: bucket(),
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    },
+    queueSize: 4,
+    partSize: 16 * 1024 * 1024,
+  })
+  await upload.done()
 }

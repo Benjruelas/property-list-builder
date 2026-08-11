@@ -6,6 +6,9 @@ export const COUNTY_KV_PREFIX = 'parcel_pipeline:county:'
 export const CLAIM_LOCK_KV_KEY = 'parcel_pipeline:claim_lock'
 
 export const OWNED_TILE_PREFIX = 'owned/tiles'
+/** Per-county PMTiles archives (preferred owned storage). */
+export const OWNED_PMTILES_PREFIX = 'owned/pmtiles'
+export const OWNED_PMTILES_MANIFEST_KEY = 'owned/pmtiles/manifest.json'
 export const LEGACY_TILE_PREFIX = 'tiles'
 
 export const STATUSES = Object.freeze([

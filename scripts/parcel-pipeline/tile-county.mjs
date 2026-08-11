@@ -65,13 +65,29 @@ async function main() {
   }
 
   const stat = fs.statSync(mbtiles)
+  const pmtilesPath = path.join(dir, `${fips}.pmtiles`)
+  // Prefer PMTiles for one-shot R2 upload (owned/pmtiles/{fips}.pmtiles)
+  const hasPmtilesCli = spawnSync('pmtiles', ['--help'], { encoding: 'utf8' }).status === 0
+  if (hasPmtilesCli) {
+    if (fs.existsSync(pmtilesPath)) fs.unlinkSync(pmtilesPath)
+    console.log(`[tile] pmtiles convert → ${pmtilesPath}`)
+    const c = spawnSync('pmtiles', ['convert', mbtiles, pmtilesPath], { stdio: 'inherit' })
+    if (c.status !== 0) {
+      console.error('pmtiles convert failed')
+      process.exit(c.status || 1)
+    }
+  } else {
+    console.warn('[tile] pmtiles CLI missing — upload step will require it')
+  }
+
   fs.writeFileSync(
     path.join(dir, 'tile-meta.json'),
     JSON.stringify(
       {
         fips,
         mbtiles,
-        bytes: stat.size,
+        pmtiles: fs.existsSync(pmtilesPath) ? pmtilesPath : undefined,
+        bytes: fs.existsSync(pmtilesPath) ? fs.statSync(pmtilesPath).size : stat.size,
         layer: PARCEL_SOURCE_LAYER,
         minzoom: PARCEL_MIN_ZOOM,
         maxzoom: PARCEL_MAX_ZOOM,
@@ -81,7 +97,10 @@ async function main() {
       2,
     ),
   )
-  console.log(`[tile] wrote ${mbtiles} (${stat.size} bytes)`)
+  console.log(
+    `[tile] wrote ${mbtiles} (${stat.size} bytes)` +
+      (fs.existsSync(pmtilesPath) ? ` + ${pmtilesPath} (${fs.statSync(pmtilesPath).size} bytes)` : ''),
+  )
 }
 
 main().catch((err) => {

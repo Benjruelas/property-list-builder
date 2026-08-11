@@ -62,9 +62,32 @@ export async function withProgressLock(fn, { timeoutMs = 120_000 } = {}) {
   }
 }
 
-function isStaleRunning(entry, staleMs) {
+const HEARTBEAT_DIR = path.join(DATA_DIR, '.heartbeats')
+
+export function heartbeatFilePath(fips) {
+  return path.join(HEARTBEAT_DIR, String(fips).padStart(5, '0'))
+}
+
+/** Lock-free heartbeat — avoids nationwide-progress.json contention. */
+export function touchHeartbeat(fips, workerId) {
+  fs.mkdirSync(HEARTBEAT_DIR, { recursive: true })
+  fs.writeFileSync(
+    heartbeatFilePath(fips),
+    JSON.stringify({ workerId, at: new Date().toISOString() }),
+  )
+}
+
+function isStaleRunning(entry, fips, staleMs) {
   if (!entry || entry.status !== 'running') return false
-  // Prefer heartbeat so long downloads/uploads aren't reclaimed while alive.
+  // Prefer lock-free heartbeat file mtime (updated every ~60s while work is live).
+  try {
+    const hbPath = heartbeatFilePath(fips)
+    if (fs.existsSync(hbPath)) {
+      return Date.now() - fs.statSync(hbPath).mtimeMs > staleMs
+    }
+  } catch {
+    /* fall through */
+  }
   const t = Date.parse(entry.heartbeatAt || entry.startedAt || entry.updatedAt || 0)
   if (!Number.isFinite(t)) return true
   return Date.now() - t > staleMs
@@ -73,7 +96,7 @@ function isStaleRunning(entry, staleMs) {
 /**
  * Claim next largest unfinished county. Returns rank entry + rankNum or null.
  */
-function canClaim(prev, { retryFailed, staleRunningMs }) {
+function canClaim(prev, fips, { retryFailed, staleRunningMs }) {
   if (!prev) return { ok: true }
   if (TERMINAL.has(prev.status)) return { ok: false }
   if (prev.status === 'failed') {
@@ -83,7 +106,7 @@ function canClaim(prev, { retryFailed, staleRunningMs }) {
   }
   if (prev.status === 'interrupted') return { ok: true, note: 'reclaiming interrupted' }
   if (prev.status === 'running') {
-    if (isStaleRunning(prev, staleRunningMs)) {
+    if (isStaleRunning(prev, fips, staleRunningMs)) {
       return { ok: true, note: `reclaiming stale running (was ${prev.workerId || 'unknown'})` }
     }
     return { ok: false }
@@ -120,7 +143,7 @@ export async function claimNextCounty({
         const rankNum = startRank + i
         const prev = progress.byFips[c.fips]
         if (!predicate(prev, c)) continue
-        const decision = canClaim(prev, {
+        const decision = canClaim(prev, c.fips, {
           retryFailed: retryFailed || claimMode.startsWith('failed'),
           staleRunningMs,
         })
@@ -135,8 +158,10 @@ export async function claimNextCounty({
           rank: rankNum,
           workerId,
           startedAt: new Date().toISOString(),
+          heartbeatAt: new Date().toISOString(),
           retryOf: prev?.status === 'failed' ? prev.error || 'failed' : undefined,
         }
+        touchHeartbeat(c.fips, workerId)
         saveProgress(progress)
         return { county: c, rankNum, total, progress, reclaimed: prev?.status || null }
       }
@@ -178,18 +203,32 @@ export async function updateCountyStatus(fips, patch, statDelta) {
 
 /** Touch running county so stale reclaim (default 1h) does not steal live work. */
 export async function heartbeatCounty(fips, workerId) {
-  return withProgressLock(() => {
-    const progress = loadProgress()
-    const prev = progress.byFips[fips]
-    if (!prev || prev.status !== 'running') return progress
-    progress.byFips[fips] = {
-      ...prev,
-      heartbeatAt: new Date().toISOString(),
-      workerId: workerId || prev.workerId,
-    }
-    saveProgress(progress)
-    return progress
-  })
+  // Fast path: lock-free file touch (used every 60s during long steps).
+  try {
+    touchHeartbeat(fips, workerId)
+  } catch {
+    /* ignore */
+  }
+  // Slow path (best-effort): mirror into progress JSON without blocking work if lock busy.
+  try {
+    return await withProgressLock(
+      () => {
+        const progress = loadProgress()
+        const prev = progress.byFips[fips]
+        if (!prev || prev.status !== 'running') return progress
+        progress.byFips[fips] = {
+          ...prev,
+          heartbeatAt: new Date().toISOString(),
+          workerId: workerId || prev.workerId,
+        }
+        saveProgress(progress)
+        return progress
+      },
+      { timeoutMs: 2_000 },
+    )
+  } catch {
+    return null
+  }
 }
 
 export async function withOverlayLock(fn) {

@@ -5,6 +5,7 @@ import {
   LEGACY_TILE_PREFIX,
   PARCEL_MIN_ZOOM,
 } from './_lib/parcelPipeline/constants.js'
+import { getOwnedPmtilesTile } from './_lib/parcelPipeline/pmtilesR2.js'
 
 const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days (LandRecords cache only)
 const EMPTY_MARKER = Buffer.alloc(0)
@@ -95,7 +96,19 @@ export default async function handler(req, res) {
   const ownedKey = `${OWNED_TILE_PREFIX}/${zi}/${xi}/${yi}.pbf`
   const cacheKey = `${LEGACY_TILE_PREFIX}/${zi}/${xi}/${yi}.pbf`
 
-  // 1. Prefer permanently owned county tiles (no TTL)
+  // 1. Prefer county PMTiles archives (one object per county — fast ingest)
+  try {
+    const fromPmtiles = await getOwnedPmtilesTile(zi, xi, yi)
+    if (fromPmtiles !== null) {
+      if (fromPmtiles.length === 0) return sendEmptyTile(res, zi)
+      res.setHeader('X-Parcel-Tile-Source', 'owned-pmtiles')
+      return sendPbf(res, fromPmtiles)
+    }
+  } catch (e) {
+    console.error('R2 owned PMTiles read error:', e.message)
+  }
+
+  // 2. Legacy per-tile owned XYZ (counties uploaded before PMTiles cutover)
   try {
     const owned = await getFromR2(ownedKey, { ignoreTtl: true })
     if (owned !== null) {
@@ -111,7 +124,7 @@ export default async function handler(req, res) {
     return sendEmptyTile(res, zi)
   }
 
-  // 2. LandRecords R2 cache (90d TTL)
+  // 3. LandRecords R2 cache (90d TTL)
   try {
     const cached = await getFromR2(cacheKey)
     if (cached !== null) {
@@ -125,7 +138,7 @@ export default async function handler(req, res) {
     console.error('R2 read error (falling through to origin):', e.message)
   }
 
-  // 3. Fetch from LandRecords (TMS y-flip: tms_y = 2^z - 1 - y)
+  // 4. Fetch from LandRecords (TMS y-flip: tms_y = 2^z - 1 - y)
   const tmsY = (1 << zi) - 1 - yi
   const url = `${process.env.LANDRECORDS_TILE_URL}/${zi}/${xi}/${tmsY}.pbf`
 
@@ -156,7 +169,7 @@ export default async function handler(req, res) {
     return sendEmptyTile(res, zi)
   }
 
-  // 4. Write to R2 cache (fire-and-forget) — never overwrite owned/
+  // 5. Write to R2 cache (fire-and-forget) — never overwrite owned/
   putToR2(cacheKey, buf).catch(e => console.error('R2 write error:', e.message))
 
   res.setHeader('X-Parcel-Tile-Source', 'landrecords')

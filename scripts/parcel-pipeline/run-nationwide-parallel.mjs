@@ -67,7 +67,7 @@ function runNode(script, args, { fips, heartbeatMs = 60_000 } = {}) {
   })
 }
 
-function cleanupCounty(fips, { keepRaw = false } = {}) {
+function cleanupCounty(fips, { keepRaw = false, keepTiles = false } = {}) {
   const dir = path.join(DATA_DIR, fips)
   if (!fs.existsSync(dir)) return
   const remove = keepRaw
@@ -77,13 +77,17 @@ function cleanupCounty(fips, { keepRaw = false } = {}) {
     const p = path.join(dir, f)
     if (fs.existsSync(p)) fs.unlinkSync(p)
   }
-  const mb = path.join(dir, `${fips}.mbtiles`)
-  if (fs.existsSync(mb) && !keepRaw) {
-    const free = Number(
-      spawnSync('df', ['--output=avail', DATA_DIR], { encoding: 'utf8' }).stdout.trim().split('\n')[1] ||
-        0,
-    )
-    if (free > 0 && free < 40 * 1024 * 1024) fs.unlinkSync(mb)
+  if (!keepTiles) {
+    for (const f of [`${fips}.mbtiles`, `${fips}.pmtiles`]) {
+      const p = path.join(dir, f)
+      if (fs.existsSync(p)) {
+        try {
+          fs.unlinkSync(p)
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
 }
 
@@ -145,11 +149,21 @@ async function resolveSource(county, rankEntry) {
 function detectResumeStage(fips) {
   const dir = path.join(DATA_DIR, fips)
   const mb = path.join(dir, `${fips}.mbtiles`)
+  const pm = path.join(dir, `${fips}.pmtiles`)
+  const uploadMeta = path.join(dir, 'upload-meta.json')
   const tileMeta = path.join(dir, 'tile-meta.json')
   const normalized = path.join(dir, 'normalized.ndjson')
   const raw = path.join(dir, 'raw.ndjson')
   try {
-    if (fs.existsSync(mb) && fs.existsSync(tileMeta) && fs.statSync(mb).size > 10_000) {
+    // Already uploaded PMTiles — treat as done at runner level if meta says so
+    if (fs.existsSync(uploadMeta)) {
+      const meta = JSON.parse(fs.readFileSync(uploadMeta, 'utf8'))
+      if (meta.format === 'pmtiles' || meta.key?.includes('/pmtiles/')) return 'done'
+    }
+    // MBTiles or PMTiles ready → one-shot archive upload
+    if (fs.existsSync(pm) && fs.statSync(pm).size > 10_000) return 'upload'
+    if (fs.existsSync(mb) && fs.statSync(mb).size > 10_000) return 'upload'
+    if (fs.existsSync(tileMeta) && fs.existsSync(mb) && fs.statSync(mb).size > 10_000) {
       return 'upload'
     }
     if (fs.existsSync(normalized) && fs.statSync(normalized).size > 0) return 'tile'
@@ -254,6 +268,26 @@ async function processClaimed(rankEntry, rankNum, total) {
       }
     }
     resumeFrom = 'download'
+  } else if (resumeFrom === 'done') {
+    const uploadMetaPath = path.join(DATA_DIR, fips, 'upload-meta.json')
+    const uploadMeta = JSON.parse(fs.readFileSync(uploadMetaPath, 'utf8'))
+    await updateCountyStatus(
+      fips,
+      {
+        status: 'complete',
+        population2023: rankEntry.population2023,
+        name: rankEntry.name,
+        state: rankEntry.state,
+        source: resolved.source,
+        tileCount: uploadMeta.tileCount,
+        workerId: WORKER_ID,
+        format: 'pmtiles',
+      },
+      { complete: 1 },
+    )
+    cleanupCounty(fips)
+    console.log(`[w${WORKER_ID}] complete ${fips} (already uploaded pmtiles) tiles=${uploadMeta.tileCount}`)
+    return 'complete'
   } else if (resumeFrom !== 'download') {
     console.log(`[w${WORKER_ID}] ${fips} resuming from ${resumeFrom} (artifacts present)`)
   }
@@ -262,7 +296,8 @@ async function processClaimed(rankEntry, rankNum, total) {
     ['download-county.mjs', [`--fips=${fips}`], { stage: 'download' }],
     ['normalize-county.mjs', [`--fips=${fips}`], { stage: 'normalize' }],
     ['tile-county.mjs', [`--fips=${fips}`], { stage: 'tile', tileSlot: true }],
-    ['upload-county-tiles-parallel.mjs', [`--fips=${fips}`], { stage: 'upload', uploadSlot: true }],
+    // One R2 object per county (PMTiles) — replaces per-tile XYZ explode.
+    ['upload-county-pmtiles.mjs', [`--fips=${fips}`], { stage: 'upload', uploadSlot: true }],
   ]
   const stageOrder = ['download', 'normalize', 'tile', 'upload']
   const startIdx = stageOrder.indexOf(resumeFrom)
@@ -372,11 +407,12 @@ async function processClaimed(rankEntry, rankNum, total) {
       source: resolved.source,
       tileCount: uploadMeta.tileCount || uploadMeta.uploaded,
       workerId: WORKER_ID,
+      format: uploadMeta.format || 'pmtiles',
     },
     { complete: 1 },
   )
-  cleanupCounty(fips)
-  console.log(`[w${WORKER_ID}] complete ${fips} tiles=${uploadMeta.uploaded}`)
+  cleanupCounty(fips) // drop raw/normalized/mbtiles/pmtiles after R2 has the archive
+  console.log(`[w${WORKER_ID}] complete ${fips} tiles=${uploadMeta.tileCount || uploadMeta.uploaded} format=${uploadMeta.format || 'pmtiles'}`)
   return 'complete'
 }
 
@@ -434,12 +470,9 @@ function supervisorMain() {
     0,
     Math.min(workers, Number(process.env.PARCEL_REPAIR_WORKERS || 0)),
   )
-  // Fewer counties uploading at once, each with higher put concurrency.
+  // PMTiles = one multipart upload per county; many can run safely.
   if (!process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY) {
-    process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY = '3'
-  }
-  if (!process.env.PARCEL_UPLOAD_CONCURRENCY) {
-    process.env.PARCEL_UPLOAD_CONCURRENCY = '16'
+    process.env.PARCEL_UPLOAD_COUNTY_CONCURRENCY = '6'
   }
   if (!process.env.PARCEL_TILE_CONCURRENCY) {
     process.env.PARCEL_TILE_CONCURRENCY = '2'

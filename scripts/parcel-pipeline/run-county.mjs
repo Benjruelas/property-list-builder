@@ -71,7 +71,7 @@ async function main() {
     runStep('download-county.mjs', fips)
     runStep('normalize-county.mjs', fips)
     runStep('tile-county.mjs', fips)
-    if (!skipUpload) runStep('upload-county-tiles.mjs', fips)
+    if (!skipUpload) runStep('upload-county-pmtiles.mjs', fips)
 
     const dir = countyWorkDir(fips)
     const downloadMeta = JSON.parse(fs.readFileSync(path.join(dir, 'download-meta.json'), 'utf8'))
