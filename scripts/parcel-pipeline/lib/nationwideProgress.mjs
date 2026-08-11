@@ -130,17 +130,53 @@ export async function claimNextCounty({
   staleRunningMs = Number(process.env.PARCEL_STALE_RUNNING_MS || 60 * 60 * 1000),
   retryFailed = process.env.PARCEL_RETRY_FAILED === '1',
   claimMode = process.env.PARCEL_CLAIM_MODE || 'normal',
+  /** FIPS already owned in R2 — never reclaim/re-run these. */
+  skipFips = null,
 } = {}) {
+  const owned = skipFips instanceof Set ? skipFips : null
   return withProgressLock(() => {
     const rank = JSON.parse(fs.readFileSync(RANK_PATH, 'utf8'))
     const progress = loadProgress()
     const counties = rank.counties.slice(startRank - 1, startRank - 1 + limit)
     const total = rank.counties.length
 
+    // Sync local progress for anything already on R2 so we don't touch it again.
+    // Do not clobber in-flight `running` on this VM (worker may still be uploading).
+    if (owned?.size) {
+      let synced = 0
+      for (const fips of owned) {
+        const prev = progress.byFips[fips]
+        if (prev?.status === 'complete' || prev?.status === 'running') continue
+        const rankIdx = rank.counties.findIndex((c) => c.fips === fips)
+        const c = rankIdx >= 0 ? rank.counties[rankIdx] : null
+        if (prev?.status === 'failed' && progress.stats.failed > 0) progress.stats.failed--
+        progress.byFips[fips] = {
+          ...(prev || {}),
+          status: 'complete',
+          population2023: c?.population2023 ?? prev?.population2023,
+          name: c?.name ?? prev?.name,
+          state: c?.state ?? prev?.state,
+          rank: rankIdx >= 0 ? rankIdx + 1 : prev?.rank,
+          format: 'pmtiles',
+          finishedAt: new Date().toISOString(),
+          note: 'synced from R2 owned/pmtiles manifest',
+        }
+        synced++
+      }
+      if (synced) {
+        progress.stats.complete = Object.values(progress.byFips).filter(
+          (r) => r.status === 'complete',
+        ).length
+        saveProgress(progress)
+        console.warn(`[nationwide] synced ${synced} complete counties from R2 manifest`)
+      }
+    }
+
     const tryClaim = (predicate) => {
       for (let i = 0; i < counties.length; i++) {
         const c = counties[i]
         const rankNum = startRank + i
+        if (owned?.has(c.fips)) continue
         const prev = progress.byFips[c.fips]
         if (!predicate(prev, c)) continue
         const decision = canClaim(prev, c.fips, {

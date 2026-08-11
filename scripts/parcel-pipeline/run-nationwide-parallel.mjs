@@ -33,6 +33,7 @@ import { withTileSlot, clearDeadTileSlots } from './lib/tileLock.mjs'
 import { withNormalizeSlot, clearDeadNormalizeSlots } from './lib/normalizeLock.mjs'
 import { withUploadSlot, clearDeadUploadSlots } from './lib/uploadLock.mjs'
 import { validateDownloadedCount, validateParcelLayer } from './lib/sourceValidation.mjs'
+import { loadOwnedFips, rememberOwnedFips } from './lib/ownedCoverage.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const WORKER_MODE = process.argv.includes('--worker')
@@ -436,20 +437,57 @@ async function workerMain() {
   console.log(`[w${WORKER_ID}] online startRank=${startRank} limit=${limit} claimMode=${claimMode}`)
 
   while (true) {
-    let claimed = await claimNextCounty({ workerId: WORKER_ID, startRank, limit, claimMode })
+    // Refresh owned set so we never redo counties another VM already uploaded.
+    const ownedFips = await loadOwnedFips()
+    let claimed = await claimNextCounty({
+      workerId: WORKER_ID,
+      startRank,
+      limit,
+      claimMode,
+      skipFips: ownedFips,
+    })
     // Repair workers: when failed queue is empty, rejoin the normal nationwide queue
     if (!claimed && claimMode === 'failed_only') {
       console.log(`[w${WORKER_ID}] failed queue empty — switching to normal claimMode`)
       claimMode = 'normal'
       process.env.PARCEL_CLAIM_MODE = 'normal'
-      claimed = await claimNextCounty({ workerId: WORKER_ID, startRank, limit, claimMode })
+      claimed = await claimNextCounty({
+        workerId: WORKER_ID,
+        startRank,
+        limit,
+        claimMode,
+        skipFips: ownedFips,
+      })
     }
     if (!claimed) {
       console.log(`[w${WORKER_ID}] no more counties — exiting`)
       break
     }
+    // Double-check after claim (race with another VM's upload).
+    const ownedNow = await loadOwnedFips({ force: true })
+    if (ownedNow.has(claimed.county.fips)) {
+      console.log(
+        `[w${WORKER_ID}] skip ${claimed.county.fips} — already in R2 PMTiles manifest`,
+      )
+      rememberOwnedFips(claimed.county.fips)
+      await updateCountyStatus(
+        claimed.county.fips,
+        {
+          status: 'complete',
+          population2023: claimed.county.population2023,
+          name: claimed.county.name,
+          state: claimed.county.state,
+          format: 'pmtiles',
+          note: 'already owned in R2',
+          workerId: WORKER_ID,
+        },
+        { complete: 1 },
+      )
+      continue
+    }
     try {
-      await processClaimed(claimed.county, claimed.rankNum, claimed.total)
+      const result = await processClaimed(claimed.county, claimed.rankNum, claimed.total)
+      if (result === 'complete') rememberOwnedFips(claimed.county.fips)
     } catch (e) {
       console.error(`[w${WORKER_ID}] unexpected`, e)
       await updateCountyStatus(
