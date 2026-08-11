@@ -26,18 +26,26 @@ function tippecanoeAvailable() {
 function runTippecanoe(cmd, timeoutMs) {
   return new Promise((resolve) => {
     console.log('[tile]', cmd.join(' '))
-    const child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit' })
+    // New process group so timeout can kill tippecanoe + any helpers.
+    const child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit', detached: true })
     let timedOut = false
+    const killTree = () => {
+      try {
+        if (child.pid) process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        try {
+          child.kill('SIGKILL')
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     const timer =
       timeoutMs > 0
         ? setTimeout(() => {
             timedOut = true
             console.error(`[tile] tippecanoe timeout after ${timeoutMs}ms — killing`)
-            try {
-              child.kill('SIGKILL')
-            } catch {
-              /* ignore */
-            }
+            killTree()
           }, timeoutMs)
         : null
     child.on('exit', (code, signal) => {
@@ -79,13 +87,23 @@ async function main() {
     process.exit(1)
   }
 
-  // Drop null-geometry features (tippecanoe wastes time warning on them).
+  // Drop null / world-spanning geometries. One bad (-180,-90)-(180,90) polygon
+  // makes tippecanoe try to build the entire planet at z15 (multi-hour hang).
   const filtered = path.join(dir, 'normalized.tilable.ndjson')
   {
     const py = `
-import json,sys
+import json,sys,math
 inp,out=sys.argv[1],sys.argv[2]
 kept=dropped=0
+world=0
+absurd=0
+
+def walk(c, pts):
+  if not c: return
+  if isinstance(c[0], (int, float)):
+    pts.append((float(c[0]), float(c[1]))); return
+  for x in c: walk(x, pts)
+
 with open(inp) as f, open(out,"w") as o:
   for line in f:
     line=line.strip()
@@ -96,8 +114,24 @@ with open(inp) as f, open(out,"w") as o:
     g=feat.get("geometry")
     if not g or g.get("type") in (None,"GeometryCollection") or not g.get("coordinates"):
       dropped+=1; continue
+    pts=[]
+    try: walk(g.get("coordinates"), pts)
+    except Exception:
+      dropped+=1; continue
+    if not pts:
+      dropped+=1; continue
+    xs=[p[0] for p in pts]; ys=[p[1] for p in pts]
+    if any(math.isnan(v) or math.isinf(v) for v in xs+ys):
+      dropped+=1; continue
+    minx,maxx,miny,maxy=min(xs),max(xs),min(ys),max(ys)
+    # Exact world/sentinel envelopes (seen in Pima AZ parcel 20410003).
+    if minx <= -179.5 and maxx >= 179.5 and miny <= -89.5 and maxy >= 89.5:
+      world+=1; dropped+=1; continue
+    # No US county/borough needs a single parcel this large.
+    if (maxx - minx) >= 40 or (maxy - miny) >= 25:
+      absurd+=1; dropped+=1; continue
     o.write(line+"\\n"); kept+=1
-print(f"[tile] geometry filter kept={kept} dropped={dropped}", flush=True)
+print(f"[tile] geometry filter kept={kept} dropped={dropped} world={world} absurd={absurd}", flush=True)
 `
     const fr = spawnSync('python3', ['-c', py, input, filtered], { stdio: 'inherit' })
     if (fr.status !== 0) {
@@ -124,11 +158,12 @@ print(f"[tile] geometry filter kept={kept} dropped={dropped}", flush=True)
     `--minimum-zoom=${minZoom}`,
     `--maximum-zoom=${maxZoom}`,
     '--drop-densest-as-needed',
-    '--extend-zooms-if-still-dropping',
+    // Do NOT use --extend-zooms-if-still-dropping for z15-first nationwide:
+    // with a bad global-bbox feature it expands work toward planetary z15.
     // Faster defaults: allow tippecanoe to drop/simplify instead of unbounded tiles.
     ...(fullDetail
-      ? ['--no-feature-limit', '--no-tile-size-limit']
-      : ['--maximum-tile-bytes=500000', '--full-detail=12', '--low-detail=10']),
+      ? ['--no-feature-limit', '--no-tile-size-limit', '--extend-zooms-if-still-dropping']
+      : ['--maximum-tile-bytes=500000', '--full-detail=10', '--low-detail=8']),
     '--read-parallel',
     filtered,
   ]
