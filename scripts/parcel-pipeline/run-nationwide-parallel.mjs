@@ -25,9 +25,12 @@ import { discoverArcgisSource } from './discover-arcgis-online.mjs'
 import {
   claimNextCounty,
   updateCountyStatus,
+  recordCountyFailure,
   heartbeatCounty,
   withOverlayLock,
   loadProgress,
+  parkExhaustedFailuresInProgress,
+  saveProgress,
 } from './lib/nationwideProgress.mjs'
 import { withTileSlot, clearDeadTileSlots } from './lib/tileLock.mjs'
 import { withNormalizeSlot, clearDeadNormalizeSlots } from './lib/normalizeLock.mjs'
@@ -333,37 +336,32 @@ async function processClaimed(rankEntry, rankNum, total) {
         code = await withWaitHeartbeat(() => withUploadSlot(async () => run()))
       else code = await run()
     } catch (e) {
-      // e.g. tile slot lock timeout — keep download artifacts for reclaim
-      await updateCountyStatus(
+      // e.g. tile slot lock timeout — keep download artifacts for reclaim (capped)
+      await recordCountyFailure(
         fips,
         {
-          status: 'failed',
           population2023: rankEntry.population2023,
           name: rankEntry.name,
           state: rankEntry.state,
-          error: e.message || String(e),
           source: resolved.source,
           workerId: WORKER_ID,
         },
-        { failed: 1 },
+        e.message || String(e),
       )
       cleanupCounty(fips, { keepRaw: true })
       return 'failed'
     }
     if (code !== 0) {
-      const keepRaw = opts?.stage !== 'download' || script === 'download-county.mjs'
-      await updateCountyStatus(
+      await recordCountyFailure(
         fips,
         {
-          status: 'failed',
           population2023: rankEntry.population2023,
           name: rankEntry.name,
           state: rankEntry.state,
-          error: `${script} exit ${code}`,
           source: resolved.source,
           workerId: WORKER_ID,
         },
-        { failed: 1 },
+        `${script} exit ${code}`,
       )
       // Keep raw on download fail (resume) and on later-stage fails (re-tile/upload).
       cleanupCounty(fips, { keepRaw: true })
@@ -377,18 +375,16 @@ async function processClaimed(rankEntry, rankNum, total) {
       const check = validateDownloadedCount(meta.featureCount, rankEntry.population2023)
       if (!check.ok) {
         console.error(`[w${WORKER_ID}] ${fips} thin download rejected: ${check.reason}`)
-        await updateCountyStatus(
+        await recordCountyFailure(
           fips,
           {
-            status: 'failed',
             population2023: rankEntry.population2023,
             name: rankEntry.name,
             state: rankEntry.state,
-            error: `thin_source: ${check.reason}`,
             source: resolved.source,
             workerId: WORKER_ID,
           },
-          { failed: 1 },
+          `thin_source: ${check.reason}`,
         )
         cleanupCounty(fips) // thin/wrong: discard
         return 'failed'
@@ -490,17 +486,15 @@ async function workerMain() {
       if (result === 'complete') rememberOwnedFips(claimed.county.fips)
     } catch (e) {
       console.error(`[w${WORKER_ID}] unexpected`, e)
-      await updateCountyStatus(
+      await recordCountyFailure(
         claimed.county.fips,
         {
-          status: 'failed',
           population2023: claimed.county.population2023,
           name: claimed.county.name,
           state: claimed.county.state,
-          error: e.message,
           workerId: WORKER_ID,
         },
-        { failed: 1 },
+        e.message || String(e),
       )
       cleanupCounty(claimed.county.fips, { keepRaw: true })
     }
@@ -551,6 +545,13 @@ function supervisorMain() {
   }
 
   const progress = loadProgress()
+  const parked = parkExhaustedFailuresInProgress(progress)
+  if (parked) {
+    saveProgress(progress)
+    console.warn(
+      `[nationwide-parallel] parked ${parked} exhausted/permanent failures before start (no infinite retries)`,
+    )
+  }
   console.log(
     `[nationwide-parallel] starting ${workers} workers bucket=${process.env.R2_BUCKET_NAME || 'parcel-tiles'}`,
   )

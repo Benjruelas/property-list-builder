@@ -4,6 +4,11 @@
 import fs from 'fs'
 import path from 'path'
 import { ROOT, DATA_DIR } from './paths.mjs'
+import {
+  isExhaustedFailure,
+  nextFailureDecision,
+  classifyFailure,
+} from './failurePolicy.mjs'
 
 export const PROGRESS_PATH = path.join(DATA_DIR, 'nationwide-progress.json')
 export const RANK_PATH = path.join(ROOT, 'data/counties/population-rank.json')
@@ -100,6 +105,8 @@ function canClaim(prev, fips, { retryFailed, staleRunningMs }) {
   if (!prev) return { ok: true }
   if (TERMINAL.has(prev.status)) return { ok: false }
   if (prev.status === 'failed') {
+    // Never reclaim permanent / exhausted failures — repair must not spin forever.
+    if (isExhaustedFailure(prev)) return { ok: false }
     return retryFailed
       ? { ok: true, note: `reclaiming failed ${prev.error || ''}`.trim() }
       : { ok: false }
@@ -112,6 +119,38 @@ function canClaim(prev, fips, { retryFailed, staleRunningMs }) {
     return { ok: false }
   }
   return { ok: true }
+}
+
+function recomputeStats(progress) {
+  const stats = { complete: 0, failed: 0, no_source: 0, skipped: 0 }
+  for (const r of Object.values(progress.byFips || {})) {
+    if (r.status && stats[r.status] !== undefined) stats[r.status]++
+  }
+  progress.stats = stats
+}
+
+/** Convert exhausted `failed` rows to terminal `skipped` so they leave the repair queue. */
+export function parkExhaustedFailuresInProgress(progress) {
+  let n = 0
+  for (const [fips, prev] of Object.entries(progress.byFips || {})) {
+    if (prev.status !== 'failed') continue
+    if (!isExhaustedFailure(prev) && !classifyFailure(prev.error).permanent) continue
+    const cls = classifyFailure(prev.error)
+    progress.byFips[fips] = {
+      ...prev,
+      status: 'skipped',
+      permanentFailure: true,
+      failureReason: cls.reason,
+      finishedAt: prev.finishedAt || new Date().toISOString(),
+      note:
+        prev.note && String(prev.note).includes('will not retry')
+          ? prev.note
+          : `parked — will not retry: permanent (${cls.reason || 'exhausted'})`,
+    }
+    n++
+  }
+  if (n) recomputeStats(progress)
+  return n
 }
 
 /**
@@ -142,6 +181,7 @@ export async function claimNextCounty({
 
     // Sync local progress for anything already on R2 so we don't touch it again.
     // Do not clobber in-flight `running` on this VM (worker may still be uploading).
+    let dirty = false
     if (owned?.size) {
       let synced = 0
       for (const fips of owned) {
@@ -149,7 +189,6 @@ export async function claimNextCounty({
         if (prev?.status === 'complete' || prev?.status === 'running') continue
         const rankIdx = rank.counties.findIndex((c) => c.fips === fips)
         const c = rankIdx >= 0 ? rank.counties[rankIdx] : null
-        if (prev?.status === 'failed' && progress.stats.failed > 0) progress.stats.failed--
         progress.byFips[fips] = {
           ...(prev || {}),
           status: 'complete',
@@ -164,12 +203,19 @@ export async function claimNextCounty({
         synced++
       }
       if (synced) {
-        progress.stats.complete = Object.values(progress.byFips).filter(
-          (r) => r.status === 'complete',
-        ).length
-        saveProgress(progress)
+        dirty = true
         console.warn(`[nationwide] synced ${synced} complete counties from R2 manifest`)
       }
+    }
+
+    const parked = parkExhaustedFailuresInProgress(progress)
+    if (parked) {
+      dirty = true
+      console.warn(`[nationwide] parked ${parked} exhausted/permanent failures (no more retries)`)
+    }
+    if (dirty) {
+      recomputeStats(progress)
+      saveProgress(progress)
     }
 
     const tryClaim = (predicate) => {
@@ -185,7 +231,6 @@ export async function claimNextCounty({
         })
         if (!decision.ok) continue
         if (decision.note) console.warn(`[nationwide] ${decision.note} ${c.fips}`)
-        if (prev?.status === 'failed' && progress.stats.failed > 0) progress.stats.failed--
         progress.byFips[c.fips] = {
           status: 'running',
           population2023: c.population2023,
@@ -195,9 +240,14 @@ export async function claimNextCounty({
           workerId,
           startedAt: new Date().toISOString(),
           heartbeatAt: new Date().toISOString(),
+          // Preserve retry counters across reclaim so caps still apply.
+          failCount: prev?.failCount || 0,
+          sameErrorStreak: prev?.sameErrorStreak || 0,
+          error: prev?.error,
           retryOf: prev?.status === 'failed' ? prev.error || 'failed' : undefined,
         }
         touchHeartbeat(c.fips, workerId)
+        recomputeStats(progress)
         saveProgress(progress)
         return { county: c, rankNum, total, progress, reclaimed: prev?.status || null }
       }
@@ -231,9 +281,38 @@ export async function updateCountyStatus(fips, patch, statDelta) {
       for (const [k, v] of Object.entries(statDelta)) {
         progress.stats[k] = (progress.stats[k] || 0) + v
       }
+    } else if (patch.status && patch.status !== prev.status) {
+      recomputeStats(progress)
     }
     saveProgress(progress)
     return progress
+  })
+}
+
+/**
+ * Record a county failure with retry/permanent parking policy.
+ * Permanent errors (normalize kept=0, thin source) → skipped immediately.
+ * Transient errors → failed until PARCEL_MAX_RETRIES, then skipped.
+ */
+export async function recordCountyFailure(fips, basePatch, error) {
+  return withProgressLock(() => {
+    const progress = loadProgress()
+    const prev = progress.byFips[fips] || {}
+    const decision = nextFailureDecision(prev, error)
+    progress.byFips[fips] = {
+      ...prev,
+      ...basePatch,
+      ...decision,
+      finishedAt: new Date().toISOString(),
+    }
+    recomputeStats(progress)
+    saveProgress(progress)
+    if (decision.status === 'skipped') {
+      console.warn(`[nationwide] ${fips} ${decision.note}`)
+    } else {
+      console.warn(`[nationwide] ${fips} ${decision.note}`)
+    }
+    return progress.byFips[fips]
   })
 }
 
