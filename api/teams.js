@@ -40,6 +40,7 @@ import {
 } from './_lib/teamFeatures.js'
 import { normalizeLeadStatuses } from './_lib/leadStatuses.js'
 import { DEFAULT_DEAL_STATUSES, normalizeDealStatuses } from './_lib/dealStatuses.js'
+import { normalizeCustomFieldDefs } from './_lib/customFields.js'
 
 let kv = null
 let kvAvailable = false
@@ -155,6 +156,12 @@ function normalizeTeamForWire(team, viewerUid) {
     googleBusinessProfile: toPublicGoogleBusinessProfile(team.googleBusinessProfile),
     leadStatuses: team.leadStatuses?.length ? normalizeLeadStatuses(team.leadStatuses) : null,
     dealStatuses: team.dealStatuses?.length ? normalizeDealStatuses(team.dealStatuses) : null,
+    leadCustomFields: team.leadCustomFields?.length
+      ? normalizeCustomFieldDefs(team.leadCustomFields)
+      : [],
+    dealCustomFields: team.dealCustomFields?.length
+      ? normalizeCustomFieldDefs(team.dealCustomFields)
+      : [],
     teamPipelineId: team.teamPipelineId || null,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
@@ -207,6 +214,12 @@ export default async function handler(req, res) {
               dealStatuses: membership.dealStatuses?.length
                 ? normalizeDealStatuses(membership.dealStatuses)
                 : null,
+              leadCustomFields: membership.leadCustomFields?.length
+                ? normalizeCustomFieldDefs(membership.leadCustomFields)
+                : [],
+              dealCustomFields: membership.dealCustomFields?.length
+                ? normalizeCustomFieldDefs(membership.dealCustomFields)
+                : [],
               features: resolveMemberFeatures(memberRecord, membership, user.uid),
             }
           : null,
@@ -246,6 +259,8 @@ export default async function handler(req, res) {
         membersCanSeeDealAmounts: true,
         leadStatuses: normalizeLeadStatuses(),
         dealStatuses: normalizeDealStatuses(DEFAULT_DEAL_STATUSES),
+        leadCustomFields: [],
+        dealCustomFields: [],
         teamPipelineId: null,
         createdAt: now,
         updatedAt: now,
@@ -356,6 +371,12 @@ export default async function handler(req, res) {
         }
         if (body.dealStatuses !== undefined) {
           team.dealStatuses = normalizeDealStatuses(body.dealStatuses)
+        }
+        if (body.leadCustomFields !== undefined) {
+          team.leadCustomFields = normalizeCustomFieldDefs(body.leadCustomFields)
+        }
+        if (body.dealCustomFields !== undefined) {
+          team.dealCustomFields = normalizeCustomFieldDefs(body.dealCustomFields)
         }
         team.updatedAt = new Date().toISOString()
         all[idx] = team

@@ -100,6 +100,7 @@ import {
 } from '@/utils/leadFiles'
 import { StorageUsageBar } from './ui/StorageUsageBar'
 import { FilePreviewOverlay } from './ui/FilePreviewOverlay'
+import { CustomFieldsEditor } from './CustomFieldsEditor'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -227,6 +228,7 @@ export function LeadDetails({
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   leadStatuses = [],
+  leadCustomFields = [],
 }) {
   const [notes, setNotes] = useState('')
   const [notesDirty, setNotesDirty] = useState(false)
@@ -1170,6 +1172,19 @@ export function LeadDetails({
                   placeholder="Lead notes…"
                 />
               </section>
+
+              {leadCustomFields.length > 0 && (
+                <section className="lead-detail-section">
+                  <CustomFieldsEditor
+                    fields={leadCustomFields}
+                    values={lead?.customFields || {}}
+                    onChange={(customFields) => {
+                      onLeadUpdate?.({ ...lead, customFields, updatedAt: new Date().toISOString() })
+                    }}
+                    disabled={!onLeadUpdate}
+                  />
+                </section>
+              )}
 
               <section className="lead-detail-section">
                 <LeadDetailSectionTitle>Activity</LeadDetailSectionTitle>

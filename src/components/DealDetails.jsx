@@ -26,6 +26,7 @@ import { normalizeResourceVisibility, visibilityLabel } from '@/utils/access'
 import { collectTagMetaFromEntities } from '@/utils/tags'
 import { PhotoGallery } from '@/photos/PhotoGallery'
 import { SendResourceShareDialog } from './share/SendResourceShareDialog'
+import { CustomFieldsEditor } from './CustomFieldsEditor'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -77,6 +78,7 @@ export function DealDetails({
   visibleDealsForTags = null,
   canAccessPhotos = true,
   currentUser = null,
+  dealCustomFields = [],
 }) {
   const d = closedRecord?.deal || deal
   const pipelineMeta = closedRecord?.closedFrom || pipeline
@@ -402,6 +404,17 @@ export function DealDetails({
                   placeholder="Deal notes…"
                 />
               </section>
+
+              {dealCustomFields.length > 0 && (
+                <section className="lead-detail-section">
+                  <CustomFieldsEditor
+                    fields={dealCustomFields}
+                    values={d?.customFields || {}}
+                    disabled={readOnly || isClosed || !onDealUpdate}
+                    onChange={(customFields) => persist({ customFields })}
+                  />
+                </section>
+              )}
 
               <section className="lead-detail-section">
                 <DealDetailSectionTitle>Tags</DealDetailSectionTitle>

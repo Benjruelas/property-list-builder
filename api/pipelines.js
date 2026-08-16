@@ -29,6 +29,12 @@ import {
   resolveAllowedDealStatusIds,
   coerceDealStatus,
 } from './_lib/dealStatuses.js'
+import { mergeCustomFieldValues, normalizeCustomFieldDefs } from './_lib/customFields.js'
+import {
+  planStatusAutoTasks,
+  normalizeAutoTaskFiredStatusIds,
+} from './_lib/statusAutoTasks.js'
+import { createTasksFromAutoTaskPlan } from './_lib/createStatusAutoTasks.js'
 
 /**
  * Vercel Serverless Function
@@ -66,6 +72,52 @@ function normalizeColumns(cols) {
     id: (c && c.id) || `col-${i}`,
     name: (c && c.name) || ''
   })).filter(c => c.name)
+}
+
+function resolveDealStatusRegistry(ctx, userAppSettings) {
+  if (ctx?.team?.dealStatuses?.length) return normalizeDealStatuses(ctx.team.dealStatuses)
+  if (!ctx?.team && userAppSettings?.dealStatuses?.length) {
+    return normalizeDealStatuses(userAppSettings.dealStatuses)
+  }
+  return normalizeDealStatuses(DEFAULT_DEAL_STATUSES)
+}
+
+function resolveDealCustomFieldDefs(ctx, userAppSettings) {
+  if (ctx?.team) {
+    return normalizeCustomFieldDefs(ctx.team.dealCustomFields || [])
+  }
+  return normalizeCustomFieldDefs(userAppSettings?.dealCustomFields || [])
+}
+
+async function applyDealStatusAutoTasks({
+  deal,
+  prevDeal,
+  user,
+  ctx,
+  statusRegistry,
+  pipeline,
+}) {
+  const prevStatus = prevDeal?.status ?? null
+  const isNew = !prevDeal?.id
+  const plan = planStatusAutoTasks({
+    prevStatus: isNew ? null : prevStatus,
+    nextStatus: deal.status,
+    statusRegistry,
+    firedStatusIds: deal.autoTaskFiredStatusIds || prevDeal?.autoTaskFiredStatusIds || [],
+  })
+  deal.autoTaskFiredStatusIds = plan.nextFiredStatusIds
+  if (plan.shouldFire) {
+    await createTasksFromAutoTaskPlan({
+      plan,
+      user,
+      teamId: pipeline.teamId || ctx?.team?.id || null,
+      leadId: deal.leadId || null,
+      dealId: deal.id,
+      pipelineId: pipeline.id,
+      parcelId: deal.parcelId || null,
+    })
+  }
+  return deal
 }
 
 function normalizePipelineDeals(pipeline) {
@@ -419,25 +471,47 @@ export default async function handler(req, res) {
       if (deals !== undefined && Array.isArray(deals)) {
         const fallbackStatus = [...allowedDealStatusIds][0] || 'open'
         const tagRegistry = await loadTagRegistry(kv, user.uid)
+        const dealFieldDefs = resolveDealCustomFieldDefs(ctx, userAppSettings)
+        const dealStatusRegistry = resolveDealStatusRegistry(ctx, userAppSettings)
         try {
-          pipeline.deals = deals.map((incoming) => {
+          const normalizedDeals = []
+          for (const incoming of deals) {
             const coerced = coerceDealStatus(incoming?.status, allowedDealStatusIds, fallbackStatus)
             if (coerced == null) {
               throw new Error(`Invalid deal status: ${incoming?.status || ''}`)
             }
-            const prevDeal = prevDealsSnapshot.find((d) => d.id === incoming.id) || {}
-            const tags = mergeEntityTags(incoming, prevDeal, tagRegistry, 'deals')
-            const statusChanged = coerced !== String(incoming?.status || '')
-            return {
+            const prevDeal = prevDealsSnapshot.find((d) => d.id === incoming.id) || null
+            const tags = mergeEntityTags(incoming, prevDeal || {}, tagRegistry, 'deals')
+            const coercedFromIncoming = coerced !== String(incoming?.status || '')
+            const customFields = mergeCustomFieldValues(
+              incoming.customFields,
+              prevDeal?.customFields,
+              dealFieldDefs,
+            )
+            let nextDeal = {
               ...incoming,
               status: coerced,
-              ...(statusChanged
+              ...(coercedFromIncoming
                 ? { statusEnteredAt: Date.now(), cumulativeTimeByStatus: {} }
                 : {}),
               tagIds: tags.tagIds,
               tagMeta: tags.tagMeta,
+              customFields,
+              autoTaskFiredStatusIds: normalizeAutoTaskFiredStatusIds(
+                prevDeal?.autoTaskFiredStatusIds || [],
+              ),
             }
-          })
+            nextDeal = await applyDealStatusAutoTasks({
+              deal: nextDeal,
+              prevDeal,
+              user,
+              ctx,
+              statusRegistry: dealStatusRegistry,
+              pipeline,
+            })
+            normalizedDeals.push(nextDeal)
+          }
+          pipeline.deals = normalizedDeals
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }

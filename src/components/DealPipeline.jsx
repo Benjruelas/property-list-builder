@@ -130,6 +130,8 @@ export function DealPipeline({
   onRefreshTags,
   leadStatuses = [],
   dealStatuses = [],
+  leadCustomFields = [],
+  dealCustomFields = [],
   editLeadId = null,
   onCreateLead,
   leadContactActionOpen = false,
@@ -1308,6 +1310,7 @@ export function DealPipeline({
           onRefreshTags={onRefreshTags}
           currentUser={currentUser}
           canAccessPhotos={canAccessPhotos}
+          dealCustomFields={dealCustomFields}
         />
       )}
 
@@ -1346,6 +1349,7 @@ export function DealPipeline({
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
           leadStatuses={leadStatuses}
+          leadCustomFields={leadCustomFields}
         />
       )}
 

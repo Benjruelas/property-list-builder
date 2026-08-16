@@ -1,3 +1,5 @@
+import { normalizeAutoTaskTemplates } from './statusAutoTasks.js'
+
 export const DEFAULT_DEAL_STATUSES = [
   { id: 'open', label: 'Open' },
   { id: 'pending', label: 'Pending' },
@@ -15,11 +17,12 @@ export function normalizeDealStatuses(input) {
     const label = String(raw.label || '').trim()
     if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
     if (!label || label.length > 40) continue
-    byId.set(id, { id, label })
+    const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
+    byId.set(id, { id, label, autoTasks })
   }
 
-  if (!byId.has('open')) byId.set('open', { ...defaultsById.get('open') })
-  if (!byId.has('closed')) byId.set('closed', { ...defaultsById.get('closed') })
+  if (!byId.has('open')) byId.set('open', { ...defaultsById.get('open'), autoTasks: [] })
+  if (!byId.has('closed')) byId.set('closed', { ...defaultsById.get('closed'), autoTasks: [] })
 
   const ordered = [...byId.values()].filter((status) => status.id !== 'open' && status.id !== 'closed')
   ordered.unshift(byId.get('open'))

@@ -1,3 +1,5 @@
+import { normalizeAutoTaskTemplates } from './statusAutoTasks.js'
+
 export const DEFAULT_LEAD_STATUSES = [
   { id: 'new', label: 'New' },
   { id: 'contacted', label: 'Contacted' },
@@ -8,7 +10,7 @@ export const DEFAULT_LEAD_STATUSES = [
 
 export function normalizeLeadStatuses(input) {
   const source = Array.isArray(input) ? input : []
-  if (source.length === 0) return DEFAULT_LEAD_STATUSES.map((status) => ({ ...status }))
+  if (source.length === 0) return DEFAULT_LEAD_STATUSES.map((status) => ({ ...status, autoTasks: [] }))
   const defaultsById = new Map(DEFAULT_LEAD_STATUSES.map((status) => [status.id, status]))
   const byId = new Map()
 
@@ -18,16 +20,17 @@ export function normalizeLeadStatuses(input) {
     const label = String(raw.label || '').trim()
     if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
     if (!label || label.length > 40) continue
-    byId.set(id, { id, label })
+    const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
+    byId.set(id, { id, label, autoTasks })
   }
 
   const ordered = [...byId.values()]
 
   if (!ordered.some((s) => s.id === 'new')) {
-    ordered.unshift({ ...defaultsById.get('new') })
+    ordered.unshift({ ...defaultsById.get('new'), autoTasks: [] })
   }
   if (!ordered.some((s) => s.id === 'converted')) {
-    ordered.push({ ...defaultsById.get('converted') })
+    ordered.push({ ...defaultsById.get('converted'), autoTasks: [] })
   }
 
   return ordered

@@ -26,6 +26,7 @@ import { TeamEmailBrandingSection } from './TeamEmailBrandingSection'
 import { GoogleBusinessProfileSection } from './settings/GoogleBusinessProfileSection'
 import { LeadStatusesSettingsContent } from './settings/LeadStatusesSettingsSection'
 import { DealStatusesSettingsContent } from './settings/DealStatusesSettingsSection'
+import { CustomFieldsSettingsContent } from './settings/CustomFieldsSettingsSection'
 
 const MEMBER_MENU_WIDTH = 200
 
@@ -68,6 +69,12 @@ export function TeamDetails({
   dealStatuses = [],
   canEditDealStatuses = false,
   onSaveUserDealStatuses,
+  leadCustomFields = [],
+  canEditLeadCustomFields = false,
+  onSaveUserLeadCustomFields,
+  dealCustomFields = [],
+  canEditDealCustomFields = false,
+  onSaveUserDealCustomFields,
 }) {
   const [addEmail, setAddEmail] = useState('')
   const [adding, setAdding] = useState(false)
@@ -371,8 +378,21 @@ export function TeamDetails({
                   leadStatuses={leadStatuses}
                   canEdit={canEditLeadStatuses}
                   teamMembership={teamMembership}
+                  teamMembers={members}
                   getToken={getToken}
                   onSaveUserStatuses={onSaveUserLeadStatuses}
+                  onTeamsChange={onTeamsChange}
+                />
+              </TeamNestedSection>
+              <TeamNestedSection title="Lead fields">
+                <CustomFieldsSettingsContent
+                  isOpen
+                  scope="leads"
+                  fields={leadCustomFields}
+                  canEdit={canEditLeadCustomFields}
+                  teamMembership={teamMembership}
+                  getToken={getToken}
+                  onSaveUserFields={onSaveUserLeadCustomFields}
                   onTeamsChange={onTeamsChange}
                 />
               </TeamNestedSection>
@@ -382,8 +402,21 @@ export function TeamDetails({
                   dealStatuses={dealStatuses}
                   canEdit={canEditDealStatuses}
                   teamMembership={teamMembership}
+                  teamMembers={members}
                   getToken={getToken}
                   onSaveUserStatuses={onSaveUserDealStatuses}
+                  onTeamsChange={onTeamsChange}
+                />
+              </TeamNestedSection>
+              <TeamNestedSection title="Deal fields">
+                <CustomFieldsSettingsContent
+                  isOpen
+                  scope="deals"
+                  fields={dealCustomFields}
+                  canEdit={canEditDealCustomFields}
+                  teamMembership={teamMembership}
+                  getToken={getToken}
+                  onSaveUserFields={onSaveUserDealCustomFields}
                   onTeamsChange={onTeamsChange}
                 />
               </TeamNestedSection>

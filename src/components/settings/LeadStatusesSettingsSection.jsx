@@ -11,12 +11,14 @@ import {
   PROTECTED_LEAD_STATUS_IDS,
 } from '@/utils/leadStatuses'
 import { cn } from '@/lib/utils'
+import { StatusAutoTasksEditor } from './StatusAutoTasksEditor'
 
 export function LeadStatusesSettingsContent({
   isOpen,
   leadStatuses,
   canEdit,
   teamMembership = null,
+  teamMembers = [],
   getToken,
   onSaveUserStatuses,
   onTeamsChange,
@@ -34,6 +36,11 @@ export function LeadStatusesSettingsContent({
 
   const updateLabel = useCallback((id, label) => {
     setDraft((rows) => rows.map((r) => (r.id === id ? { ...r, label } : r)))
+    setDirty(true)
+  }, [])
+
+  const updateAutoTasks = useCallback((id, autoTasks) => {
+    setDraft((rows) => rows.map((r) => (r.id === id ? { ...r, autoTasks } : r)))
     setDirty(true)
   }, [])
 
@@ -89,44 +96,52 @@ export function LeadStatusesSettingsContent({
           return (
             <li
               key={row.id}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
+              className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
             >
-              <span
-                className={cn(
-                  'crm-row-status-badge inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[10px] uppercase tracking-wide',
-                  row.color,
-                )}
-              >
-                {row.label || row.id}
-              </span>
-              {canEdit ? (
-                <Input
-                  value={row.label}
-                  onChange={(e) => updateLabel(row.id, e.target.value)}
-                  maxLength={40}
-                  className="flex-1 min-w-0 h-8 text-sm"
-                  aria-label={`Label for ${row.id} status`}
-                />
-              ) : (
-                <span className="flex-1 text-sm text-white/85">{row.label}</span>
-              )}
-              {canEdit && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-white/50 hover:text-red-300"
-                  disabled={!removable}
-                  title={
-                    PROTECTED_LEAD_STATUS_IDS.has(row.id)
-                      ? 'Required status'
-                      : (removable ? 'Remove status' : 'Keep at least two statuses')
-                  }
-                  onClick={() => removeRow(row.id)}
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    'crm-row-status-badge inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[10px] uppercase tracking-wide',
+                    row.color,
+                  )}
                 >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
+                  {row.label || row.id}
+                </span>
+                {canEdit ? (
+                  <Input
+                    value={row.label}
+                    onChange={(e) => updateLabel(row.id, e.target.value)}
+                    maxLength={40}
+                    className="flex-1 min-w-0 h-8 text-sm"
+                    aria-label={`Label for ${row.id} status`}
+                  />
+                ) : (
+                  <span className="flex-1 text-sm text-white/85">{row.label}</span>
+                )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-white/50 hover:text-red-300"
+                    disabled={!removable}
+                    title={
+                      PROTECTED_LEAD_STATUS_IDS.has(row.id)
+                        ? 'Required status'
+                        : (removable ? 'Remove status' : 'Keep at least two statuses')
+                    }
+                    onClick={() => removeRow(row.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <StatusAutoTasksEditor
+                autoTasks={row.autoTasks}
+                canEdit={canEdit}
+                teamMembers={teamMembers}
+                onChange={(autoTasks) => updateAutoTasks(row.id, autoTasks)}
+              />
             </li>
           )
         })}

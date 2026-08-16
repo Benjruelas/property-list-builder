@@ -18,6 +18,7 @@ import {
   CONTACT_SOURCE_USER,
 } from '@/utils/leadContact'
 import { addressDetailsForLeadForm, addressDetailsFromForm } from '@/utils/leadAddresses'
+import { CustomFieldsEditor } from './CustomFieldsEditor'
 
 const emptyContactEntry = { value: '', source: CONTACT_SOURCE_USER, callerId: '', primary: false }
 const emptyAddressEntry = {
@@ -36,6 +37,7 @@ const emptyForm = {
   phoneDetails: [emptyContactEntry],
   emailDetails: [emptyContactEntry],
   notes: '',
+  customFields: {},
 }
 
 function normalizeLeadForm(data = {}) {
@@ -46,6 +48,7 @@ function normalizeLeadForm(data = {}) {
     phoneDetails: phoneDetailsForLeadForm(data),
     emailDetails: emailDetailsForLeadForm(data),
     notes: data.notes ?? '',
+    customFields: data.customFields && typeof data.customFields === 'object' ? { ...data.customFields } : {},
   }
 }
 
@@ -62,6 +65,7 @@ export function CreateLeadDialog({
   teams = [],
   teamMembership = null,
   currentUser = null,
+  leadCustomFields = [],
   nestedOverlay = false,
   topLayer: topLayerProp,
   confirmLayer = false,
@@ -202,6 +206,7 @@ export function CreateLeadDialog({
         ...addressDetailsFromForm({ addressDetails: linkedDetails }),
         ...contactDetailsFromForm(form),
         notes: (form.notes ?? '').trim(),
+        customFields: form.customFields || {},
         visibility: shareState.visibility,
         sharedMemberUids: shareState.sharedMemberUids,
         teamId: activeTeam?.id || null,
@@ -303,6 +308,15 @@ export function CreateLeadDialog({
               className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none"
             />
           </div>
+          )}
+
+          {leadCustomFields.length > 0 && (
+            <CustomFieldsEditor
+              fields={leadCustomFields}
+              values={form.customFields || {}}
+              onChange={(customFields) => setForm((f) => ({ ...f, customFields }))}
+              disabled={saving}
+            />
           )}
 
           <ResourceSharePicker

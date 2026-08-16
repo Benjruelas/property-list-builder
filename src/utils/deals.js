@@ -80,6 +80,10 @@ export function buildDealFromLead(lead, columns, pipelineId = null, overrides = 
     createdAt: now,
     updatedAt: now,
     pipelineId: pipelineId || null,
+    customFields: overrides.customFields && typeof overrides.customFields === 'object'
+      ? overrides.customFields
+      : {},
+    autoTaskFiredStatusIds: [],
   }
 }
 

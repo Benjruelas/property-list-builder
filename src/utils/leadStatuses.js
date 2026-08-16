@@ -2,6 +2,8 @@
  * Lead status registry — defaults, normalization, and team/user resolution.
  */
 
+import { normalizeAutoTaskTemplates } from './statusAutoTasks'
+
 export const DEFAULT_LEAD_STATUSES = [
   { id: 'new', label: 'New', color: 'bg-slate-500/25 text-slate-200 border-slate-400/40' },
   { id: 'contacted', label: 'Contacted', color: 'bg-blue-500/20 text-blue-200 border-blue-400/40' },
@@ -46,7 +48,9 @@ export function slugifyLeadStatusId(label, existingIds = new Set()) {
 
 export function normalizeLeadStatuses(input) {
   const source = Array.isArray(input) ? input : []
-  if (source.length === 0) return DEFAULT_LEAD_STATUSES.map((status) => ({ ...status }))
+  if (source.length === 0) {
+    return DEFAULT_LEAD_STATUSES.map((status) => ({ ...status, autoTasks: [] }))
+  }
   const defaultsById = new Map(DEFAULT_LEAD_STATUSES.map((s) => [s.id, s]))
   const byId = new Map()
 
@@ -60,17 +64,18 @@ export function normalizeLeadStatuses(input) {
     const color = typeof raw.color === 'string' && raw.color.trim()
       ? raw.color.trim()
       : (prev.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length])
-    byId.set(id, { id, label, color })
+    const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
+    byId.set(id, { id, label, color, autoTasks })
   }
 
   const ordered = [...byId.values()]
 
   if (!ordered.some((s) => s.id === 'new')) {
-    ordered.unshift({ ...defaultsById.get('new') })
+    ordered.unshift({ ...defaultsById.get('new'), autoTasks: [] })
   }
   if (!ordered.some((s) => s.id === 'converted')) {
     const converted = defaultsById.get('converted')
-    if (converted) ordered.push({ ...converted })
+    if (converted) ordered.push({ ...converted, autoTasks: [] })
   }
 
   return ordered
@@ -138,6 +143,7 @@ export function createDraftLeadStatus(label, existing = []) {
     id,
     label: label.trim(),
     color: pickStatusColorForNew(existing),
+    autoTasks: [],
   }
 }
 

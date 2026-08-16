@@ -95,6 +95,8 @@ export function LeadsPanel({
   tagRegistry = { leads: [], deals: [], paths: [], lists: [] },
   onRefreshTags,
   leadStatuses = [],
+  leadCustomFields = [],
+  dealCustomFields = [],
   leadsDetailTopLayer = false,
   isLeadsDetailStandalone = false,
   editLeadId = null,
@@ -480,6 +482,7 @@ export function LeadsPanel({
         onSubmit={handleCreateDealFormSubmit}
         nestedOverlay
         canSeeDealAmounts={canSeeDealAmounts}
+        dealCustomFields={dealCustomFields}
       />
 
       {leadForDetail ? (
@@ -536,6 +539,7 @@ export function LeadsPanel({
             tagRegistry={tagRegistry}
             onRefreshTags={onRefreshTags}
             leadStatuses={leadStatuses}
+            leadCustomFields={leadCustomFields}
           />
       ) : null}
     </>

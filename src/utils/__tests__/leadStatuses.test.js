@@ -21,6 +21,20 @@ describe('normalizeLeadStatuses', () => {
     expect(result.find((s) => s.id === 'new')?.label).toBe('Fresh')
   })
 
+  it('preserves autoTasks on statuses', () => {
+    const result = normalizeLeadStatuses([
+      {
+        id: 'new',
+        label: 'New',
+        autoTasks: [{ id: 't1', title: 'Intro', dueDaysOffset: 1, assignedUids: ['u1'] }],
+      },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(result.find((s) => s.id === 'new')?.autoTasks).toEqual([
+      { id: 't1', title: 'Intro', dueDaysOffset: 1, assignedUids: ['u1'] },
+    ])
+  })
+
   it('does not restore removable defaults omitted by the user', () => {
     const result = normalizeLeadStatuses([
       { id: 'new', label: 'New' },

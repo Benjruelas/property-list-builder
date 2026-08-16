@@ -16,6 +16,7 @@ import { getAllTeams } from './_lib/teams.js'
 import { userHasTeamMembership } from './_lib/access.js'
 import { normalizeLeadStatuses } from './_lib/leadStatuses.js'
 import { normalizeDealStatuses } from './_lib/dealStatuses.js'
+import { normalizeCustomFieldDefs } from './_lib/customFields.js'
 import { mutateLeads } from './_lib/leadStore.js'
 import { mutatePipelines } from './_lib/pipelineStoreFull.js'
 import { toPublicGoogleBusinessProfile } from './_lib/googleBusinessProfile.js'
@@ -115,12 +116,20 @@ export default async function handler(req, res) {
               if (membership) {
                 nextSettings.leadStatuses = existing.appSettings?.leadStatuses || null
                 nextSettings.dealStatuses = existing.appSettings?.dealStatuses || null
+                nextSettings.leadCustomFields = existing.appSettings?.leadCustomFields || []
+                nextSettings.dealCustomFields = existing.appSettings?.dealCustomFields || []
               } else {
                 if (body.appSettings.leadStatuses !== undefined) {
                   nextSettings.leadStatuses = normalizeLeadStatuses(body.appSettings.leadStatuses)
                 }
                 if (body.appSettings.dealStatuses !== undefined) {
                   nextSettings.dealStatuses = normalizeDealStatuses(body.appSettings.dealStatuses)
+                }
+                if (body.appSettings.leadCustomFields !== undefined) {
+                  nextSettings.leadCustomFields = normalizeCustomFieldDefs(body.appSettings.leadCustomFields)
+                }
+                if (body.appSettings.dealCustomFields !== undefined) {
+                  nextSettings.dealCustomFields = normalizeCustomFieldDefs(body.appSettings.dealCustomFields)
                 }
               }
               merged[key] = nextSettings

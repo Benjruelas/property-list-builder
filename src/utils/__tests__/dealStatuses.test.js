@@ -34,6 +34,18 @@ describe('normalizeDealStatuses', () => {
 
     expect(result.map((status) => status.id)).toEqual(['open', 'closed'])
   })
+
+  it('preserves autoTasks on statuses', () => {
+    const result = normalizeDealStatuses([
+      {
+        id: 'open',
+        label: 'Open',
+        autoTasks: [{ id: 't1', title: 'Kickoff', dueDaysOffset: 0 }],
+      },
+      { id: 'closed', label: 'Closed' },
+    ])
+    expect(result.find((s) => s.id === 'open')?.autoTasks?.[0]?.title).toBe('Kickoff')
+  })
 })
 
 describe('resolveDealStatuses', () => {

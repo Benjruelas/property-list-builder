@@ -122,6 +122,12 @@ import { photoUploadManager } from './photos/PhotoUploadManager'
 import { getSettings, updateSettings, consumeSettingsMigrationPending } from './utils/settings'
 import { resolveLeadStatuses, canEditLeadStatuses } from './utils/leadStatuses'
 import { resolveDealStatuses, canEditDealStatuses } from './utils/dealStatuses'
+import {
+  resolveLeadCustomFields,
+  resolveDealCustomFields,
+  canEditLeadCustomFields,
+  canEditDealCustomFields,
+} from './utils/customFields'
 import { applyUiTheme, getUiThemeFromSettings } from './utils/uiTheme'
 import { getAllTasks, getLeadTasks, deleteAllLeadTasks, restoreLeadTasks, updateTaskById } from './utils/leadTasks'
 import { ensureUnifiedTasks } from './utils/taskMigration'
@@ -1196,6 +1202,14 @@ function App() {
     () => resolveDealStatuses({ settings, teams, teamMembership }),
     [settings, teams, teamMembership]
   )
+  const leadCustomFields = useMemo(
+    () => resolveLeadCustomFields({ settings, teams, teamMembership }),
+    [settings, teams, teamMembership]
+  )
+  const dealCustomFields = useMemo(
+    () => resolveDealCustomFields({ settings, teams, teamMembership }),
+    [settings, teams, teamMembership]
+  )
 
   const canAccessFeature = useCallback(
     (featureId) => canAccessTeamFeature(teamMembership, teamMemberFeatures, featureId),
@@ -1850,7 +1864,7 @@ function App() {
     }
   }, [leads, pipelines, getToken, leadStatuses, currentUser])
 
-  const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks, pendingFiles } = {}) => {
+  const handleCreateDeal = useCallback(async (lead, pipelineId, { title, notes, payments, costs, tasks, pendingFiles, customFields } = {}) => {
     if (!lead?.id) return
     const pid = pipelineId || activePipelineId
     if (pipelines.length > 0) {
@@ -1867,6 +1881,7 @@ function App() {
         costs,
         status,
         dealStatuses,
+        customFields,
       })
       let nextDeals = [...sanitizeDealStatuses(pipe.deals, pipe.columns, dealStatuses), deal]
       try {
@@ -1932,7 +1947,7 @@ function App() {
       return
     }
     const cols = loadColumns()
-    const deal = buildDealFromLead(lead, cols, null, { title, notes, payments, costs, dealStatuses })
+    const deal = buildDealFromLead(lead, cols, null, { title, notes, payments, costs, dealStatuses, customFields })
     const next = [...loadDeals(), deal]
     saveDeals(next)
     setDealPipelineDeals(next)
@@ -2006,7 +2021,7 @@ function App() {
     })
   }, [openCreateDealDialog])
 
-  const handleCreateDealSubmit = useCallback(async ({ title, notes, leadId, pipelineId, payments, costs, tasks, pendingFiles }) => {
+  const handleCreateDealSubmit = useCallback(async ({ title, notes, leadId, pipelineId, payments, costs, tasks, pendingFiles, customFields }) => {
     const lead = leads.find((l) => l.id === leadId)
     if (!lead) {
       showToast('Lead not found', 'error')
@@ -2014,7 +2029,7 @@ function App() {
     }
     setCreateDealSaving(true)
     try {
-      await handleCreateDeal(lead, pipelineId, { title, notes, payments, costs, tasks, pendingFiles })
+      await handleCreateDeal(lead, pipelineId, { title, notes, payments, costs, tasks, pendingFiles, customFields })
       nav.popModal()
     } finally {
       setCreateDealSaving(false)
@@ -4595,6 +4610,8 @@ function App() {
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
         leadStatuses={leadStatuses}
         dealStatuses={dealStatuses}
+        leadCustomFields={leadCustomFields}
+        dealCustomFields={dealCustomFields}
       />
       </Suspense>
       )}
@@ -4949,6 +4966,12 @@ function App() {
         dealStatuses={resolveDealStatuses({ settings, teams, teamMembership })}
         canEditDealStatuses={canEditDealStatuses(teamMembership)}
         onSaveUserDealStatuses={(normalized) => handleSettingsChange({ dealStatuses: normalized })}
+        leadCustomFields={resolveLeadCustomFields({ settings, teams, teamMembership })}
+        canEditLeadCustomFields={canEditLeadCustomFields(teamMembership)}
+        onSaveUserLeadCustomFields={(normalized) => handleSettingsChange({ leadCustomFields: normalized })}
+        dealCustomFields={resolveDealCustomFields({ settings, teams, teamMembership })}
+        canEditDealCustomFields={canEditDealCustomFields(teamMembership)}
+        onSaveUserDealCustomFields={(normalized) => handleSettingsChange({ dealCustomFields: normalized })}
       />
       </Suspense>
       )}
@@ -5039,6 +5062,8 @@ function App() {
         tagRegistry={tagRegistry}
         onRefreshTags={(tag) => upsertRegistryTag('leads', tag)}
         leadStatuses={leadStatuses}
+        leadCustomFields={leadCustomFields}
+        dealCustomFields={dealCustomFields}
         leadsDetailTopLayer={isLeadsDetailTopLayer}
         isLeadsDetailStandalone={isLeadsDetailStandalone}
         editLeadId={editLead?.id ?? null}
@@ -5107,6 +5132,8 @@ function App() {
         onRefreshTags={(tag) => upsertRegistryTag('deals', tag)}
         leadOverlayPanelDockSlot={leadOverlayPanelDockSlot}
         leadStatuses={leadStatuses}
+        leadCustomFields={leadCustomFields}
+        dealCustomFields={dealCustomFields}
         isDealsDetailStandalone={isDealsDetailStandalone}
         editLeadId={editLead?.id ?? null}
         leadContactActionOpen={isLeadContactActionOpen}
@@ -5133,6 +5160,7 @@ function App() {
         teams={teams}
         teamMembership={teamMembership}
         currentUser={currentUser}
+        leadCustomFields={leadCustomFields}
         nestedOverlay
         topLayer={createLeadOpen || !!editLead}
         confirmLayer={!!editLead}
@@ -5198,6 +5226,7 @@ function App() {
         onSubmit={handleCreateDealSubmit}
         nestedOverlay
         canSeeDealAmounts={showDealAmounts}
+        dealCustomFields={dealCustomFields}
       />
 
       {hailDataMounted && (

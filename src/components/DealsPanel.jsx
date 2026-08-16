@@ -105,6 +105,8 @@ export function DealsPanel({
   onRefreshTags,
   leadOverlayPanelDockSlot,
   leadStatuses = [],
+  dealCustomFields = [],
+  leadCustomFields = [],
   isDealsDetailStandalone = false,
   editLeadId = null,
   leadContactActionOpen = false,
@@ -653,6 +655,7 @@ export function DealsPanel({
         onSubmit={handleCreateDealFormSubmit}
         nestedOverlay
         canSeeDealAmounts={canSeeDealAmounts}
+        dealCustomFields={dealCustomFields}
       />
 
       {selectedDeal && selectedPipeline && dealsDetailDealId && !dealsClosedRecordId && (
@@ -689,6 +692,7 @@ export function DealsPanel({
           visibleDealsForTags={visibleDealsForTags}
           currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
           canAccessPhotos={canAccessPhotos}
+          dealCustomFields={dealCustomFields}
         />
       )}
 
@@ -730,6 +734,7 @@ export function DealsPanel({
           tagRegistry={tagRegistry}
           onRefreshTags={onRefreshTags}
           leadStatuses={leadStatuses}
+          leadCustomFields={leadCustomFields}
         />
       )}
 
@@ -761,6 +766,7 @@ export function DealsPanel({
           visibleDealsForTags={visibleDealsForTags}
           currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
           canAccessPhotos={canAccessPhotos}
+          dealCustomFields={dealCustomFields}
         />
       )}
     </>

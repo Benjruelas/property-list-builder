@@ -16,6 +16,7 @@ import {
   sumDealFileBytes,
 } from '../utils/dealFiles'
 import { entityStorageError } from '../utils/uploadLimits'
+import { CustomFieldsEditor } from './CustomFieldsEditor'
 
 function makePendingFile(file) {
   return {
@@ -35,6 +36,7 @@ export function CreateDealDialog({
   saving = false,
   nestedOverlay = true,
   canSeeDealAmounts = true,
+  dealCustomFields = [],
 }) {
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
@@ -43,6 +45,7 @@ export function CreateDealDialog({
   const [payments, setPayments] = useState([])
   const [costs, setCosts] = useState([])
   const [tasks, setTasks] = useState([])
+  const [customFields, setCustomFields] = useState({})
   const [pendingFiles, setPendingFiles] = useState([])
   const fileInputRef = useRef(null)
 
@@ -76,6 +79,11 @@ export function CreateDealDialog({
     setPayments(mapPrefillFinanceRows(prefill?.payments))
     setCosts(mapPrefillFinanceRows(prefill?.costs))
     setTasks(mapPrefillTaskRows(prefill?.tasks))
+    setCustomFields(
+      prefill?.customFields && typeof prefill.customFields === 'object'
+        ? { ...prefill.customFields }
+        : {},
+    )
     setPendingFiles([])
   }, [open, prefill, leads, pipelines])
 
@@ -119,6 +127,7 @@ export function CreateDealDialog({
       payments: financeRowsForSubmit(payments),
       costs: financeRowsForSubmit(costs),
       tasks: taskRowsForSubmit(tasks),
+      customFields,
       pendingFiles: pendingFiles.map((p) => p.file),
     })
   }
@@ -193,6 +202,15 @@ export function CreateDealDialog({
                 className="w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15 resize-none min-h-[4.5rem]"
               />
             </div>
+
+            {dealCustomFields.length > 0 && (
+              <CustomFieldsEditor
+                fields={dealCustomFields}
+                values={customFields}
+                onChange={setCustomFields}
+                disabled={saving}
+              />
+            )}
 
             {apiMode && showPipelinePicker && (
               <div>

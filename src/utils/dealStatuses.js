@@ -2,6 +2,8 @@
  * Deal status registry — defaults, normalization, and team/user resolution.
  */
 
+import { normalizeAutoTaskTemplates } from './statusAutoTasks'
+
 export const DEFAULT_DEAL_STATUSES = [
   { id: 'open', label: 'Open', color: 'bg-slate-500/25 text-slate-200 border-slate-400/40' },
   { id: 'pending', label: 'Pending', color: 'bg-amber-500/20 text-amber-200 border-amber-400/40' },
@@ -54,11 +56,12 @@ export function normalizeDealStatuses(input) {
     const color = typeof raw.color === 'string' && raw.color.trim()
       ? raw.color.trim()
       : (previous.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length])
-    byId.set(id, { id, label, color })
+    const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
+    byId.set(id, { id, label, color, autoTasks })
   }
 
-  if (!byId.has('open')) byId.set('open', { ...defaultsById.get('open') })
-  if (!byId.has('closed')) byId.set('closed', { ...defaultsById.get('closed') })
+  if (!byId.has('open')) byId.set('open', { ...defaultsById.get('open'), autoTasks: [] })
+  if (!byId.has('closed')) byId.set('closed', { ...defaultsById.get('closed'), autoTasks: [] })
 
   const ordered = [...byId.values()].filter((status) => status.id !== 'open' && status.id !== 'closed')
   ordered.unshift(byId.get('open'))
@@ -103,6 +106,7 @@ export function createDraftDealStatus(label, existing = []) {
     id: slugifyDealStatusId(label, new Set(existing.map((status) => status.id))),
     label: label.trim(),
     color: pickStatusColorForNew(existing),
+    autoTasks: [],
   }
 }
 

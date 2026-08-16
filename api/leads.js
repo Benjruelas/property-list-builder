@@ -15,7 +15,7 @@ import {
   teamIdsFromResource,
 } from './_lib/activityLog.js'
 import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './_lib/tagHelpers.js'
-import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue } from './_lib/leadStatuses.js'
+import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue, normalizeLeadStatuses, DEFAULT_LEAD_STATUSES } from './_lib/leadStatuses.js'
 import { normalizeLeadContactsForStorage } from './_lib/leadContact.js'
 import { normalizeLeadAddressesForStorage } from './_lib/leadAddresses.js'
 import { getAllLeads, mutateLeads, deleteLeadFromStore } from './_lib/leadStore.js'
@@ -33,6 +33,12 @@ import { projectLeadsForList } from './_lib/leadListProjection.js'
 import { paginateArray } from './_lib/pagination.js'
 import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 import { beginIdempotent, finishIdempotent } from './_lib/idempotency.js'
+import { mergeCustomFieldValues, normalizeCustomFieldDefs } from './_lib/customFields.js'
+import {
+  planStatusAutoTasks,
+  normalizeAutoTaskFiredStatusIds,
+} from './_lib/statusAutoTasks.js'
+import { createTasksFromAutoTaskPlan } from './_lib/createStatusAutoTasks.js'
 
 /**
  * User-scoped leads CRM with team sharing v2. Firebase Bearer auth.
@@ -92,7 +98,22 @@ function normalizeActivityEntry(entry, user, now) {
   }
 }
 
-function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry = null, allowedStatusIds = null) {
+function resolveLeadStatusRegistry(ctx, userAppSettings) {
+  if (ctx?.team?.leadStatuses?.length) return normalizeLeadStatuses(ctx.team.leadStatuses)
+  if (!ctx?.team && userAppSettings?.leadStatuses?.length) {
+    return normalizeLeadStatuses(userAppSettings.leadStatuses)
+  }
+  return normalizeLeadStatuses(DEFAULT_LEAD_STATUSES)
+}
+
+function resolveLeadCustomFieldDefs(ctx, userAppSettings) {
+  if (ctx?.team) {
+    return normalizeCustomFieldDefs(ctx.team.leadCustomFields || [])
+  }
+  return normalizeCustomFieldDefs(userAppSettings?.leadCustomFields || [])
+}
+
+function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry = null, allowedStatusIds = null, fieldDefs = []) {
   const now = new Date().toISOString()
   const firstName = String(body.firstName ?? existing?.firstName ?? '').trim()
   const lastName = String(body.lastName ?? existing?.lastName ?? '').trim()
@@ -149,10 +170,45 @@ function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry
     ? (Array.isArray(body.files) ? body.files : existing?.files || [])
     : (existing?.files || [])
 
+  base.customFields = mergeCustomFieldValues(
+    body.customFields,
+    existing?.customFields,
+    fieldDefs,
+  )
+  // Server-managed; clients cannot clear or invent fired status ids.
+  base.autoTaskFiredStatusIds = normalizeAutoTaskFiredStatusIds(
+    existing?.autoTaskFiredStatusIds || [],
+  )
+
   if (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined) {
     return applyResourceVisibilityPatch(base, body, ctx)
   }
   return base
+}
+
+async function applyLeadStatusAutoTasks({ lead, existing, user, ctx, statusRegistry }) {
+  const prevStatus = existing ? existing.status : null
+  const plan = planStatusAutoTasks({
+    prevStatus,
+    nextStatus: lead.status,
+    statusRegistry,
+    firedStatusIds: lead.autoTaskFiredStatusIds || existing?.autoTaskFiredStatusIds || [],
+  })
+  const nextFired = plan.nextFiredStatusIds
+  const firedChanged = JSON.stringify(nextFired) !== JSON.stringify(lead.autoTaskFiredStatusIds || [])
+  if (firedChanged) {
+    lead.autoTaskFiredStatusIds = nextFired
+  }
+  if (plan.shouldFire) {
+    await createTasksFromAutoTaskPlan({
+      plan,
+      user,
+      teamId: lead.teamId || ctx?.team?.id || null,
+      leadId: lead.id,
+      parcelId: lead.parcelId || null,
+    })
+  }
+  return lead
 }
 
 function leadSharingPatchChanges(existing, body) {
@@ -233,6 +289,8 @@ export default async function handler(req, res) {
     ])
     const ctx = buildAccessContext(allTeams, user)
     const allowedStatusIds = resolveAllowedLeadStatusIds(ctx, userAppSettings)
+    const leadFieldDefs = resolveLeadCustomFieldDefs(ctx, userAppSettings)
+    const leadStatusRegistry = resolveLeadStatusRegistry(ctx, userAppSettings)
 
     if (method === 'GET') {
       const leads = await getLeadsForUser(user, ctx)
@@ -274,7 +332,14 @@ export default async function handler(req, res) {
         : null
       let lead
       try {
-        lead = normalizeLeadInput(body, user, null, ctx, tagRegistry, allowedStatusIds)
+        lead = normalizeLeadInput(body, user, null, ctx, tagRegistry, allowedStatusIds, leadFieldDefs)
+        lead = await applyLeadStatusAutoTasks({
+          lead,
+          existing: null,
+          user,
+          ctx,
+          statusRegistry: leadStatusRegistry,
+        })
       } catch (e) {
         return res.status(400).json({ error: e.message })
       }
@@ -365,7 +430,14 @@ export default async function handler(req, res) {
         : null
       let lead
       try {
-        lead = normalizeLeadInput(body, user, existing, ctx, tagRegistry, allowedStatusIds)
+        lead = normalizeLeadInput(body, user, existing, ctx, tagRegistry, allowedStatusIds, leadFieldDefs)
+        lead = await applyLeadStatusAutoTasks({
+          lead,
+          existing,
+          user,
+          ctx,
+          statusRegistry: leadStatusRegistry,
+        })
       } catch (e) {
         return res.status(400).json({ error: e.message })
       }
