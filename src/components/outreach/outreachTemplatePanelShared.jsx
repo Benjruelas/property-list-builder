@@ -1,17 +1,15 @@
 /**
- * Outreach template panels — same shell as deal/quote template pickers.
+ * Outreach template create/edit — same shell family as SendOutreachDialog.
  */
-export {
-  DealTemplatePanelShell as OutreachTemplatePanelShell,
-  DealTemplatePanelScroll as OutreachTemplateFormBody,
-  DEAL_TEMPLATE_SAFE_BODY_STYLE as OUTREACH_TEMPLATE_BODY_STYLE,
-  DEAL_TEMPLATE_PANEL_CLASS as OUTREACH_TEMPLATE_PANEL_CLASS,
-} from '../dealTemplates/dealTemplatePanelShared'
+export const OUTREACH_TEMPLATE_PANEL_CLASS =
+  'map-panel list-panel share-list-dialog send-outreach-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl'
 
-export function OutreachTemplateFormFooter({ children }) {
-  return (
-    <div className="outreach-template-form-footer flex-shrink-0 flex gap-2 px-5 py-4 border-t border-white/10">
-      {children}
-    </div>
-  )
-}
+export const OUTREACH_TEMPLATE_FIELD_LABEL = 'block text-sm font-medium text-white/75 mb-1'
+export const OUTREACH_TEMPLATE_TEXT_INPUT =
+  'w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+export const OUTREACH_TEMPLATE_SUBJECT_EDITOR =
+  'quote-msg-tag-editor quote-msg-tag-editor--single w-full min-h-[44px] px-3 py-2 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+export const OUTREACH_TEMPLATE_MESSAGE_EDITOR =
+  'quote-msg-tag-editor w-full min-h-[10rem] p-3 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'
+export const OUTREACH_TEMPLATE_TEXT_MESSAGE_EDITOR =
+  'quote-msg-tag-editor quote-msg-tag-editor--text w-full min-h-[5.5rem] p-3 border border-white/15 rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm'

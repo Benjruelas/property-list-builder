@@ -1,39 +1,53 @@
 import { useEffect, useRef, useState } from 'react'
+import { FileText, Loader2 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { AVAILABLE_TAGS } from '@/utils/emailTemplates'
+import { PanelHeader } from '../ui/panel-header'
+import { MessageTagEditor } from '../shared/MessageTagEditor'
+import { showToast } from '../ui/toast'
+import {
+  OUTREACH_SEND_TAGS,
+  braceTagsToMustache,
+  mustacheToBraceTags,
+  buildOutreachTagData,
+} from '@/utils/emailTemplates'
 import {
   createOutreachTemplate,
   updateOutreachTemplateApi,
 } from '@/utils/outreachTemplates'
-import { showToast } from '../ui/toast'
 import {
-  OutreachTemplatePanelShell,
-  OutreachTemplateFormBody,
-  OutreachTemplateFormFooter,
+  OUTREACH_TEMPLATE_PANEL_CLASS,
+  OUTREACH_TEMPLATE_FIELD_LABEL,
+  OUTREACH_TEMPLATE_TEXT_INPUT,
+  OUTREACH_TEMPLATE_SUBJECT_EDITOR,
+  OUTREACH_TEMPLATE_MESSAGE_EDITOR,
+  OUTREACH_TEMPLATE_TEXT_MESSAGE_EDITOR,
 } from './outreachTemplatePanelShared'
 
-function TagBar({ onInsertTag }) {
+function TagInsertStrip({ onInsert, disabled }) {
   return (
-    <div className="mb-2">
-      <p className="text-xs mb-2 opacity-60">Insert tag</p>
-      <div className="flex flex-wrap gap-1.5">
-        {AVAILABLE_TAGS.map((tag) => (
-          <Button
-            key={tag}
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs create-list-btn px-2"
-            onMouseDown={(e) => {
-              e.preventDefault()
-              onInsertTag(tag)
-            }}
-          >
-            {tag}
-          </Button>
-        ))}
-      </div>
+    <div className="flex flex-wrap gap-1 mb-2">
+      {OUTREACH_SEND_TAGS.map(({ key, label }) => (
+        <button
+          key={key}
+          type="button"
+          className="send-tag-chip text-[10px] px-1.5 py-0.5 rounded"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onInsert(key)}
+          title={`Insert ${label}`}
+          disabled={disabled}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -45,11 +59,12 @@ export function OutreachTemplateEditorDialog({
   template = null,
   getToken = null,
   onSaved,
-  nestedOverlay = true,
-  topLayer = true,
 }) {
   const isEdit = !!template?.id
   const initializedRef = useRef(false)
+  const focusBlurTimerRef = useRef(null)
+  const subjectEditorRef = useRef(null)
+  const bodyEditorRef = useRef(null)
 
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
@@ -57,36 +72,50 @@ export function OutreachTemplateEditorDialog({
   const [focusedField, setFocusedField] = useState(null)
   const [saving, setSaving] = useState(false)
 
+  const tagData = buildOutreachTagData(null)
+
   useEffect(() => {
     if (!open) {
       initializedRef.current = false
+      if (focusBlurTimerRef.current) {
+        clearTimeout(focusBlurTimerRef.current)
+        focusBlurTimerRef.current = null
+      }
       return
     }
     if (initializedRef.current) return
     initializedRef.current = true
     setName(template?.name || '')
-    setSubject(template?.subject ?? '')
-    setBody(template?.body ?? '')
+    setSubject(braceTagsToMustache(template?.subject ?? ''))
+    setBody(braceTagsToMustache(template?.body ?? ''))
     setFocusedField(null)
   }, [open, template])
 
-  const blurHandler = () => {
-    setTimeout(() => {
-      const el = document.activeElement
-      if (el?.tagName !== 'TEXTAREA' && el?.tagName !== 'INPUT') setFocusedField(null)
-    }, 200)
+  const handleEditorFocus = (field) => {
+    if (focusBlurTimerRef.current) {
+      clearTimeout(focusBlurTimerRef.current)
+      focusBlurTimerRef.current = null
+    }
+    setFocusedField(field)
   }
 
-  const insertTag = (tag) => {
-    const token = `{${tag}}`
-    if (kind === 'email' && focusedField === 'subject') setSubject((p) => p + token)
-    else setBody((p) => p + token)
+  const handleEditorBlur = () => {
+    if (focusBlurTimerRef.current) clearTimeout(focusBlurTimerRef.current)
+    focusBlurTimerRef.current = setTimeout(() => {
+      setFocusedField(null)
+      focusBlurTimerRef.current = null
+    }, 120)
+  }
+
+  const insertTag = (key) => {
+    if (kind === 'email' && focusedField === 'subject') subjectEditorRef.current?.insertTag(key)
+    else bodyEditorRef.current?.insertTag(key)
   }
 
   const hasChanges = isEdit
     ? name.trim() !== (template.name || '').trim()
-      || subject !== (template.subject ?? '')
-      || body !== (template.body ?? '')
+      || mustacheToBraceTags(subject) !== (template.subject ?? '')
+      || mustacheToBraceTags(body) !== (template.body ?? '')
     : true
 
   const handleSave = async () => {
@@ -103,8 +132,8 @@ export function OutreachTemplateEditorDialog({
       const payload = {
         channel: kind === 'text' ? 'text' : 'email',
         name: name.trim(),
-        body,
-        ...(kind === 'email' ? { subject } : {}),
+        body: mustacheToBraceTags(body),
+        ...(kind === 'email' ? { subject: mustacheToBraceTags(subject) } : {}),
       }
       if (isEdit) {
         await updateOutreachTemplateApi(getToken, template.id, payload)
@@ -122,90 +151,130 @@ export function OutreachTemplateEditorDialog({
     }
   }
 
+  const handleClose = () => {
+    if (saving) return
+    onOpenChange(false)
+  }
+
+  if (!open) return null
+
   const title = isEdit ? 'Edit template' : 'New template'
   const subtitle = kind === 'email' ? 'Email outreach template' : 'Text message template'
 
   return (
-    <OutreachTemplatePanelShell
-      open={open}
-      onOpenChange={onOpenChange}
-      title={title}
-      subtitle={subtitle}
-      description={`${isEdit ? 'Edit' : 'Create'} ${kind} outreach template`}
-      nestedOverlay={nestedOverlay}
-      topLayer={topLayer}
-      footer={(
-        <OutreachTemplateFormFooter>
-          <Button
-            type="button"
-            variant="outline"
-            className="create-list-btn flex-1 sm:flex-none sm:min-w-[7rem]"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="create-list-btn flex-1 sm:flex-none sm:min-w-[7rem]"
-            onClick={handleSave}
-            disabled={saving || (isEdit && !hasChanges)}
-          >
-            {saving ? 'Saving…' : isEdit ? 'Save' : 'Create'}
-          </Button>
-        </OutreachTemplateFormFooter>
-      )}
-    >
-      <OutreachTemplateFormBody>
-        <div className="space-y-4 create-list-form max-w-none">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose() }}>
+      <DialogContent
+        className={OUTREACH_TEMPLATE_PANEL_CLASS}
+        showCloseButton={false}
+        focusOverlay
+        topLayer
+        confirmLayer
+        data-send-outreach-dialog
+      >
+        <DialogHeader
+          className="px-6 pt-6 pb-3 border-b border-white/10 flex-shrink-0 text-left"
+          style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+        >
+          <PanelHeader onBack={handleClose} title={title} icon={FileText} />
+          <DialogDescription className="text-sm opacity-80 mt-1">
+            {subtitle}
+          </DialogDescription>
+          <DialogTitle className="sr-only">{title}</DialogTitle>
+        </DialogHeader>
+
+        <div className="px-6 py-3 space-y-3 flex-1 min-h-0 overflow-y-auto scrollbar-hide">
           <div>
-            <label className="text-xs font-medium block mb-1.5 opacity-90">
-              Name <span className="text-red-400">*</span>
+            <label className={OUTREACH_TEMPLATE_FIELD_LABEL} htmlFor="outreach-template-name">
+              Name
             </label>
             <Input
+              id="outreach-template-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={kind === 'email' ? 'e.g. Initial contact' : 'e.g. Follow-up text'}
-              className="text-sm h-11"
+              className={OUTREACH_TEMPLATE_TEXT_INPUT}
               autoFocus
+              disabled={saving}
             />
           </div>
+
           {kind === 'email' && (
             <div>
-              <label className="text-xs font-medium block mb-1.5 opacity-90">Subject</label>
-              {focusedField === 'subject' && <TagBar onInsertTag={insertTag} />}
-              <Input
+              <label className={OUTREACH_TEMPLATE_FIELD_LABEL} htmlFor="outreach-template-subject">
+                Subject
+              </label>
+              {focusedField === 'subject' && (
+                <TagInsertStrip onInsert={insertTag} disabled={saving} />
+              )}
+              <MessageTagEditor
+                ref={subjectEditorRef}
+                id="outreach-template-subject"
                 value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                onFocus={() => setFocusedField('subject')}
-                onBlur={blurHandler}
+                onChange={setSubject}
+                tagData={tagData}
+                tags={OUTREACH_SEND_TAGS}
+                className={OUTREACH_TEMPLATE_SUBJECT_EDITOR}
                 placeholder="Email subject line"
-                className="text-sm h-11"
+                disabled={saving}
+                singleLine
+                onFocus={() => handleEditorFocus('subject')}
+                onBlur={handleEditorBlur}
               />
             </div>
           )}
+
           <div>
-            <label className="text-xs font-medium block mb-1.5 opacity-90">
+            <label className={OUTREACH_TEMPLATE_FIELD_LABEL} htmlFor="outreach-template-body">
               {kind === 'email' ? 'Body' : 'Message'}
             </label>
-            {focusedField === 'body' && <TagBar onInsertTag={insertTag} />}
-            <textarea
+            {focusedField === 'body' && (
+              <TagInsertStrip onInsert={insertTag} disabled={saving} />
+            )}
+            <MessageTagEditor
+              ref={bodyEditorRef}
+              id="outreach-template-body"
               value={body}
-              onChange={(e) => setBody(e.target.value)}
-              onFocus={() => setFocusedField('body')}
-              onBlur={blurHandler}
-              placeholder="Use {Owner Name}, {Address}, and other tags for dynamic fields."
-              className="w-full min-h-[12rem] md:min-h-[14rem] p-3 text-sm rounded-lg border border-white/15 bg-white/[0.04] resize-y scrollbar-hide focus:outline-none focus:ring-2 focus:ring-white/25"
-              rows={10}
+              onChange={setBody}
+              tagData={tagData}
+              tags={OUTREACH_SEND_TAGS}
+              className={
+                kind === 'text'
+                  ? OUTREACH_TEMPLATE_TEXT_MESSAGE_EDITOR
+                  : OUTREACH_TEMPLATE_MESSAGE_EDITOR
+              }
+              placeholder={
+                kind === 'email'
+                  ? 'Email message'
+                  : 'Text message'
+              }
+              disabled={saving}
+              onFocus={() => handleEditorFocus('body')}
+              onBlur={handleEditorBlur}
             />
           </div>
-          <p className="text-xs opacity-45 leading-relaxed">
-            Tags like {'{First Name}'} and {'{Address}'} are replaced when you send from a lead or parcel.
+
+          <p className="text-xs text-white/50 leading-relaxed">
+            Insert tags while editing — they become lead and parcel fields when you send.
           </p>
         </div>
-      </OutreachTemplateFormBody>
-    </OutreachTemplatePanelShell>
+
+        <DialogFooter
+          className="px-6 pt-3 pb-6 border-t border-white/10 flex-shrink-0"
+          style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
+            onClick={handleSave}
+            disabled={saving || (isEdit && !hasChanges)}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {saving ? 'Saving…' : isEdit ? 'Save template' : 'Create template'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
