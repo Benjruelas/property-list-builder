@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users, User, Palette, Building2 } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Map, Route, Mail, Database, RefreshCw, Trash2, Settings, Minus, Plus, Bell, HelpCircle, LogOut, Phone, Users, User, Palette, Building2, HardDrive } from 'lucide-react'
 import { UI_THEME_OPTIONS, getUiThemeFromSettings } from '../utils/uiTheme'
 import { Input } from './ui/input'
 import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE } from './ui/panel-header'
@@ -11,6 +11,7 @@ import { showConfirm } from './ui/confirm-dialog'
 import { DEFAULT_SETTINGS } from '../utils/settings'
 import { saveUserData, readLocalBlob } from '../utils/userDataSync'
 import { subscribeToWebPush, unsubscribeWebPush } from '../utils/pushNotifications'
+import { resetSiteCache } from '../utils/resetSiteCache'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { TeamSettingsSection } from './TeamSettingsSection'
@@ -323,6 +324,16 @@ export function SettingsPanel({
       try { localStorage.removeItem(key) } catch { /* ignore */ }
     }
     showToast('Local data cleared', 'success')
+  }, [])
+
+  const handleResetSiteCache = useCallback(async () => {
+    const confirmed = await showConfirm(
+      'Clear this device\'s map tile cache and service worker, then reload. Use this if the Home Screen app shows Safari\'s offline page or never leaves the splash screen. Your lists and account data on the server are not affected.',
+      'Reset Site Cache'
+    )
+    if (!confirmed) return
+    showToast('Resetting site cache…', 'info')
+    await resetSiteCache()
   }, [])
 
   const handleResetSkipTraces = useCallback(async () => {
@@ -660,7 +671,19 @@ export function SettingsPanel({
                 <Trash2 className="h-3.5 w-3.5" />
                 Clear Local Data
               </button>
+              <button
+                type="button"
+                onClick={handleResetSiteCache}
+                className="settings-data-btn-danger flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors"
+                title="Clear service worker and map caches, then reload — fixes stuck iOS Home Screen / Safari offline"
+              >
+                <HardDrive className="h-3.5 w-3.5" />
+                Reset Site Cache
+              </button>
             </div>
+            <p className="text-xs opacity-50 mt-2">
+              Reset Site Cache clears map tiles and the offline service worker on this device, then reloads. Prefer this when the Home Screen icon fails to open (Safari offline page or endless splash).
+            </p>
           </Section>
 
           {/* ---- Bottom: tour + sign out (account actions) ---- */}

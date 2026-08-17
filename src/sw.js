@@ -4,14 +4,22 @@
  * Built via vite-plugin-pwa injectManifest (self.__WB_MANIFEST injected at build).
  */
 
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
-import { registerRoute } from 'workbox-routing'
+import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
+import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 precacheAndRoute(self.__WB_MANIFEST || [])
 cleanupOutdatedCaches()
+
+// SPA shell for same-origin navigations (iOS Home Screen / standalone cold starts).
+// Avoid binding API or Firebase auth proxy paths to the HTML fallback.
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+    denylist: [/^\/api\//, /^\/__\//],
+  }),
+)
 
 self.addEventListener('install', () => {
   self.skipWaiting()
@@ -21,8 +29,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-const TILE_CACHE = 'knockscout-map-tiles-v2'
-const PARCEL_CACHE = 'knockscout-parcel-details-v2'
+// v3: do not cache opaque/status-0 responses (poisoned tiles on flaky iOS Safari).
+const TILE_CACHE = 'knockscout-map-tiles-v3'
+const PARCEL_CACHE = 'knockscout-parcel-details-v3'
 
 function isSameOriginApi(url, pathPrefix) {
   try {
@@ -34,7 +43,6 @@ function isSameOriginApi(url, pathPrefix) {
 }
 
 // Parcel vector tiles + Google basemap proxy — cache-first with expiry.
-// Respects Cache-Control from R2/proxy responses via CacheableResponsePlugin.
 registerRoute(
   ({ url, request }) => {
     if (request.method !== 'GET') return false
@@ -46,7 +54,7 @@ registerRoute(
   new CacheFirst({
     cacheName: TILE_CACHE,
     plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new CacheableResponsePlugin({ statuses: [200] }),
       new ExpirationPlugin({
         maxEntries: 2500,
         maxAgeSeconds: 7 * 24 * 60 * 60,
@@ -65,7 +73,7 @@ registerRoute(
   new StaleWhileRevalidate({
     cacheName: PARCEL_CACHE,
     plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new CacheableResponsePlugin({ statuses: [200] }),
       new ExpirationPlugin({
         maxEntries: 300,
         maxAgeSeconds: 24 * 60 * 60,
