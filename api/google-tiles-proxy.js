@@ -2,6 +2,8 @@ import { enforceIpRateLimit } from './_lib/rateLimit.js'
 
 const VALID_MAP_TYPES = new Set(['satellite', 'street', 'hybrid'])
 const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'
+/** Abort hung upstream tile fetches so MapLibre can retry instead of stalling. */
+const GOOGLE_TILE_UPSTREAM_TIMEOUT_MS = 8_000
 
 function googleTilesKey() {
   return process.env.GOOGLE_MAPS_TILES_KEY || process.env.GOOGLE_SOLAR_API_KEY || ''
@@ -38,9 +40,11 @@ export default async function handler(req, res) {
   const mapType = VALID_MAP_TYPES.has(req.query.mapType) ? req.query.mapType : 'satellite'
   void mapType
 
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), GOOGLE_TILE_UPSTREAM_TIMEOUT_MS)
   try {
     const url = `https://tile.googleapis.com/v1/2dtiles/${zi}/${xi}/${yi}?session=${encodeURIComponent(sessionToken)}&key=${encodeURIComponent(key)}`
-    const upstream = await fetch(url)
+    const upstream = await fetch(url, { signal: controller.signal })
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => '')
       console.error('Google tile proxy error:', upstream.status, text.slice(0, 200))
@@ -53,7 +57,9 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
     return res.status(200).send(buf)
   } catch (err) {
-    console.error('google-tiles-proxy error', err)
+    console.error('google-tiles-proxy error', err?.name || err?.message || err)
     return res.status(502).json({ error: 'Tile proxy failed' })
+  } finally {
+    clearTimeout(timer)
   }
 }

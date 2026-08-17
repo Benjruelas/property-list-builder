@@ -4,6 +4,8 @@ import { enforceIpRateLimit } from './_lib/rateLimit.js'
 const sessionCache = {}
 
 const VALID_MAP_TYPES = new Set(['satellite', 'street', 'hybrid'])
+/** Abort hung Google createSession so the client can fail over to Mapbox. */
+const GOOGLE_SESSION_UPSTREAM_TIMEOUT_MS = 8_000
 
 function googleSessionBody(mapType) {
   const base = {
@@ -36,17 +38,27 @@ function clientFallbackResponse(res, mapType) {
 }
 
 async function createGoogleSession(key, mapType) {
-  const resp = await fetch(`https://tile.googleapis.com/v1/createSession?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(googleSessionBody(mapType)),
-  })
-  if (!resp.ok) {
-    const errText = await resp.text()
-    console.error('Google Map Tiles session error:', resp.status, errText)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), GOOGLE_SESSION_UPSTREAM_TIMEOUT_MS)
+  try {
+    const resp = await fetch(`https://tile.googleapis.com/v1/createSession?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(googleSessionBody(mapType)),
+      signal: controller.signal,
+    })
+    if (!resp.ok) {
+      const errText = await resp.text()
+      console.error('Google Map Tiles session error:', resp.status, errText)
+      return null
+    }
+    return resp.json()
+  } catch (err) {
+    console.error('Google Map Tiles session fetch failed:', err?.name || err?.message || err)
     return null
+  } finally {
+    clearTimeout(timer)
   }
-  return resp.json()
 }
 
 export default async function handler(req, res) {

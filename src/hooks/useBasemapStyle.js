@@ -3,7 +3,9 @@ import { buildMapStyle } from '../config/buildMapStyle'
 import { getMapboxFallbackSource, normalizeGoogleSource } from '../config/mapProviders'
 
 const SESSION_REFRESH_BUFFER_MS = 120_000
-const BASEMAP_SESSION_STORAGE_KEY = 'knockscout_basemap_sessions'
+/** Max wait for Google tiles session so the boot splash cannot hang forever (iOS/Safari). */
+export const BASEMAP_SESSION_FETCH_TIMEOUT_MS = 10_000
+export const BASEMAP_SESSION_STORAGE_KEY = 'knockscout_basemap_sessions'
 
 function readPersistedSession(mapStyleSetting) {
   try {
@@ -35,6 +37,26 @@ function readyStateFromSession(mapStyleSetting, sessionData) {
     mapStyle: buildMapStyle(normalizeGoogleSource(sessionData), mapStyleSetting),
     basemapStatus: 'ready',
     basemapProvider: 'google',
+  }
+}
+
+/**
+ * Fetch Google Map Tiles session with an AbortController timeout.
+ * Exported for unit tests.
+ * @param {string} mapStyleSetting
+ * @param {{ timeoutMs?: number }} [opts]
+ */
+export async function fetchGoogleTilesSession(mapStyleSetting, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? BASEMAP_SESSION_FETCH_TIMEOUT_MS
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(
+      `/api/google-tiles-session?mapType=${encodeURIComponent(mapStyleSetting)}`,
+      { signal: controller.signal },
+    )
+  } finally {
+    window.clearTimeout(timer)
   }
 }
 
@@ -84,7 +106,7 @@ export function useBasemapStyle(mapStyleSetting, options = {}) {
     }
 
     try {
-      const res = await fetch(`/api/google-tiles-session?mapType=${encodeURIComponent(mapStyleSetting)}`)
+      const res = await fetchGoogleTilesSession(mapStyleSetting)
       if (res.ok) {
         const data = await res.json()
         if (loadId !== loadIdRef.current) return
@@ -109,7 +131,7 @@ export function useBasemapStyle(mapStyleSetting, options = {}) {
         return
       }
     } catch {
-      /* fall through to Mapbox */
+      /* timeout / network — fall through to Mapbox */
     }
 
     if (loadId !== loadIdRef.current) return
