@@ -29,11 +29,17 @@ describe('resetSiteCache', () => {
       },
     })
 
-    const reload = vi.fn()
+    const replace = vi.fn()
     const locationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { ...window.location, reload },
+      value: {
+        href: 'https://knockscout.app/',
+        pathname: '/',
+        search: '',
+        hash: '',
+        replace,
+      },
     })
 
     try {
@@ -48,6 +54,7 @@ describe('resetSiteCache', () => {
     expect(deleteCache).toHaveBeenCalledWith('knockscout-map-tiles-v2')
     expect(deleteCache).toHaveBeenCalledWith('workbox-precache-v2')
     expect(unregister).toHaveBeenCalledTimes(1)
-    expect(reload).toHaveBeenCalledTimes(1)
+    expect(replace).toHaveBeenCalledTimes(1)
+    expect(String(replace.mock.calls[0][0])).toContain('recover=1')
   })
 })

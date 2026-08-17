@@ -22,6 +22,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
+        // Force an update check so iOS Home Screen picks up navigation/recover fixes.
+        registration.update().catch(() => {})
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
             registration.update().catch(() => {})
@@ -32,10 +34,23 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
         console.warn('Service worker registration failed:', err?.message || err)
       })
   }
+  // Defer registration slightly on iOS standalone so the first document paint
+  // is not blocked by a half-activated worker (known WKWebView quirk).
+  const isIosStandalone = (
+    window.navigator.standalone === true
+    || window.matchMedia('(display-mode: standalone)').matches
+  ) && /iP(hone|od|ad)/.test(window.navigator.userAgent)
+  const start = () => {
+    if (isIosStandalone) {
+      window.setTimeout(registerServiceWorker, 1500)
+    } else {
+      registerServiceWorker()
+    }
+  }
   if (document.readyState === 'complete') {
-    registerServiceWorker()
+    start()
   } else {
-    window.addEventListener('load', registerServiceWorker)
+    window.addEventListener('load', start)
   }
 }
 

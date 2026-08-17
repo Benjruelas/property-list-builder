@@ -33,6 +33,8 @@ export async function resetSiteCache() {
     }
   }
 
-  // Hard reload so the next boot re-registers a fresh SW and re-fetches the shell.
-  window.location.reload()
+  // Hard navigation through the recover path so a controlling SW also nukes itself.
+  const url = new URL(window.location.href)
+  url.searchParams.set('recover', '1')
+  window.location.replace(url.toString())
 }

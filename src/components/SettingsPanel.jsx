@@ -328,7 +328,7 @@ export function SettingsPanel({
 
   const handleResetSiteCache = useCallback(async () => {
     const confirmed = await showConfirm(
-      'Clear this device\'s map tile cache and service worker, then reload. Use this if the Home Screen app shows Safari\'s offline page or never leaves the splash screen. Your lists and account data on the server are not affected.',
+      'Open https://knockscout.app/?recover=1 in Safari to wipe this device\'s offline cache if the Home Screen icon shows Safari\'s offline page. Or use the button below. Your lists and account data on the server are not affected.',
       'Reset Site Cache'
     )
     if (!confirmed) return
@@ -682,7 +682,9 @@ export function SettingsPanel({
               </button>
             </div>
             <p className="text-xs opacity-50 mt-2">
-              Reset Site Cache clears map tiles and the offline service worker on this device, then reloads. Prefer this when the Home Screen icon fails to open (Safari offline page or endless splash).
+              If the Home Screen icon will not open, in Safari go to{' '}
+              <span className="opacity-80">knockscout.app/?recover=1</span>
+              , then delete and re-add the icon. Or use Reset Site Cache when the app loads.
             </p>
           </Section>
 

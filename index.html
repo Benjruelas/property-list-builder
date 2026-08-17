@@ -17,6 +17,38 @@
       })();
     </script>
     <meta charset="UTF-8" />
+    <script>
+      /* iOS Home Screen recovery: open https://knockscout.app/?recover=1 in Safari */
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (!params.has('recover') && !params.has('nosw')) return;
+          var finish = function () {
+            params.delete('recover');
+            params.delete('nosw');
+            var q = params.toString();
+            window.location.replace(window.location.pathname + (q ? '?' + q : '') + window.location.hash);
+          };
+          var tasks = [];
+          if ('serviceWorker' in navigator) {
+            tasks.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+              })
+            );
+          }
+          if (typeof caches !== 'undefined' && caches.keys) {
+            tasks.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+              })
+            );
+          }
+          try { sessionStorage.removeItem('knockscout_basemap_sessions'); } catch (e) { /* ignore */ }
+          Promise.all(tasks).then(finish, finish);
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
