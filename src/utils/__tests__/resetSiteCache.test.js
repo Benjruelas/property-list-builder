@@ -30,12 +30,19 @@ describe('resetSiteCache', () => {
     })
 
     const reload = vi.fn()
+    const locationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { reload },
+      value: { ...window.location, reload },
     })
 
-    await resetSiteCache()
+    try {
+      await resetSiteCache()
+    } finally {
+      if (locationDescriptor) {
+        Object.defineProperty(window, 'location', locationDescriptor)
+      }
+    }
 
     expect(sessionStorage.getItem(BASEMAP_SESSION_STORAGE_KEY)).toBeNull()
     expect(deleteCache).toHaveBeenCalledWith('knockscout-map-tiles-v2')

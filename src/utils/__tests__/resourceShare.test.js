@@ -6,6 +6,16 @@ import {
   resolvePendingShareClaimToken,
 } from '../resourceShare'
 
+if (typeof globalThis.sessionStorage === 'undefined') {
+  const store = new Map()
+  globalThis.sessionStorage = {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    clear: () => store.clear(),
+  }
+}
+
 describe('resourceShare client helpers', () => {
   beforeEach(() => {
     clearShareClaimToken()
