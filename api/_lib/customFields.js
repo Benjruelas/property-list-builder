@@ -2,7 +2,7 @@
  * Custom field definitions and value normalization for leads/deals.
  */
 
-export const CUSTOM_FIELD_TYPES = new Set(['text', 'number', 'date', 'select'])
+export const CUSTOM_FIELD_TYPES = new Set(['text', 'date', 'select'])
 
 export function slugifyCustomFieldId(label, existingIds = new Set()) {
   const base = String(label || '')
@@ -72,11 +72,6 @@ export function resolveCustomFieldDefs(scope, { team = null, teamMembership = nu
 export function coerceCustomFieldValue(def, value) {
   if (value === undefined || value === null || value === '') return null
   if (!def) return null
-  if (def.type === 'number') {
-    const n = typeof value === 'number' ? value : Number(String(value).trim())
-    if (!Number.isFinite(n)) return null
-    return n
-  }
   if (def.type === 'date') {
     const s = String(value).trim()
     // Accept YYYY-MM-DD or ISO datetime; store date portion.

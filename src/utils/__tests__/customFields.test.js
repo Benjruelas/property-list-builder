@@ -9,18 +9,18 @@ import {
 } from '../customFields'
 
 describe('normalizeCustomFieldDefs', () => {
-  it('normalizes text number date select fields', () => {
+  it('normalizes text date select fields', () => {
     const result = normalizeCustomFieldDefs([
-      { id: 'roof_age', label: 'Roof age', type: 'number' },
       { id: 'notes', label: 'Extra notes', type: 'text' },
       { id: 'inspect', label: 'Inspect on', type: 'date' },
       { id: 'tier', label: 'Tier', type: 'select', options: ['A', 'B', 'A', ''] },
+      { id: 'roof_age', label: 'Roof age', type: 'number' },
     ])
     expect(result).toEqual([
-      { id: 'roof_age', label: 'Roof age', type: 'number' },
       { id: 'notes', label: 'Extra notes', type: 'text' },
       { id: 'inspect', label: 'Inspect on', type: 'date' },
       { id: 'tier', label: 'Tier', type: 'select', options: ['A', 'B'] },
+      { id: 'roof_age', label: 'Roof age', type: 'text' },
     ])
   })
 
@@ -33,7 +33,7 @@ describe('normalizeCustomFieldDefs', () => {
 
   it('slugifies missing ids from labels', () => {
     const result = normalizeCustomFieldDefs([
-      { label: 'Square Footage', type: 'number' },
+      { label: 'Square Footage', type: 'text' },
     ])
     expect(result[0].id).toBe('square_footage')
   })
@@ -41,8 +41,6 @@ describe('normalizeCustomFieldDefs', () => {
 
 describe('coerceCustomFieldValue', () => {
   it('coerces by type', () => {
-    expect(coerceCustomFieldValue({ type: 'number' }, '12.5')).toBe(12.5)
-    expect(coerceCustomFieldValue({ type: 'number' }, 'x')).toBeNull()
     expect(coerceCustomFieldValue({ type: 'date' }, '2024-05-01T12:00:00Z')).toBe('2024-05-01')
     expect(coerceCustomFieldValue({ type: 'date' }, 'nope')).toBeNull()
     expect(coerceCustomFieldValue({ type: 'select', options: ['A', 'B'] }, 'A')).toBe('A')
@@ -87,9 +85,15 @@ describe('canEditLeadCustomFields', () => {
 })
 
 describe('createDraftCustomField', () => {
-  it('creates select drafts with a default option', () => {
+  it('creates select drafts with an empty option row', () => {
     const draft = createDraftCustomField('Priority', [], 'select')
     expect(draft.type).toBe('select')
-    expect(draft.options).toEqual(['Option 1'])
+    expect(draft.options).toEqual([''])
+  })
+
+  it('creates empty-label drafts for placeholder inputs', () => {
+    const draft = createDraftCustomField('', [], 'text')
+    expect(draft.label).toBe('')
+    expect(draft.id).toMatch(/^field/)
   })
 })

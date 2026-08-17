@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { GripVertical, Loader2, Plus, Trash2 } from 'lucide-react'
+import { GripVertical, Loader2, Plus, Trash2, X } from 'lucide-react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
+import { InlineDropdown } from '../InlineDropdown'
 import { showToast } from '../ui/toast'
 import { updateTeamSettings } from '@/utils/teams'
 import {
@@ -31,14 +32,50 @@ export function CustomFieldsSettingsContent({
   const entityLabel = scope === 'deals' ? 'deal' : 'lead'
 
   useEffect(() => {
-    if (isOpen) {
-      setDraft(normalizeCustomFieldDefs(fields))
+    if (!isOpen) {
       setDirty(false)
+      return
     }
-  }, [isOpen, fields])
+    // Don't clobber in-progress edits when parent re-renders with a new
+    // fields array reference (resolve*CustomFields is often inline).
+    if (dirty) return
+    setDraft(normalizeCustomFieldDefs(fields))
+  }, [isOpen, fields, dirty])
 
   const updateField = useCallback((id, patch) => {
     setDraft((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+    setDirty(true)
+  }, [])
+
+  const updateOption = useCallback((fieldId, index, value) => {
+    setDraft((rows) => rows.map((r) => {
+      if (r.id !== fieldId) return r
+      const options = [...(r.options || [])]
+      options[index] = value
+      return { ...r, options }
+    }))
+    setDirty(true)
+  }, [])
+
+  const addOption = useCallback((fieldId) => {
+    setDraft((rows) => rows.map((r) => {
+      if (r.id !== fieldId) return r
+      return { ...r, options: [...(r.options || []), ''] }
+    }))
+    setDirty(true)
+  }, [])
+
+  const removeOption = useCallback((fieldId, index) => {
+    setDraft((rows) => rows.map((r) => {
+      if (r.id !== fieldId) return r
+      const options = [...(r.options || [])]
+      if (options.length <= 1) {
+        options[0] = ''
+        return { ...r, options }
+      }
+      options.splice(index, 1)
+      return { ...r, options }
+    }))
     setDirty(true)
   }, [])
 
@@ -48,7 +85,7 @@ export function CustomFieldsSettingsContent({
   }, [])
 
   const addField = useCallback(() => {
-    setDraft((rows) => [...rows, createDraftCustomField(`Field ${rows.length + 1}`, rows, 'text')])
+    setDraft((rows) => [...rows, createDraftCustomField('', rows, 'text')])
     setDirty(true)
   }, [])
 
@@ -121,6 +158,7 @@ export function CustomFieldsSettingsContent({
                   value={row.label}
                   onChange={(e) => updateField(row.id, { label: e.target.value })}
                   maxLength={60}
+                  placeholder="Field label"
                   className="flex-1 min-w-0 h-8 text-sm"
                   aria-label="Field label"
                 />
@@ -128,26 +166,23 @@ export function CustomFieldsSettingsContent({
                 <span className="flex-1 text-sm text-white/85">{row.label}</span>
               )}
               {canEdit ? (
-                <select
+                <InlineDropdown
                   value={row.type}
-                  onChange={(e) => {
-                    const type = e.target.value
+                  onChange={(type) => {
                     if (type === 'select') {
                       updateField(row.id, {
                         type,
-                        options: row.options?.length ? row.options : ['Option 1'],
+                        options: row.options?.length ? row.options : [''],
                       })
                     } else {
                       updateField(row.id, { type, options: undefined })
                     }
                   }}
-                  className="h-8 rounded-md border border-white/10 bg-black/30 px-2 text-xs text-white/80"
-                  aria-label="Field type"
-                >
-                  {CUSTOM_FIELD_TYPES.map((t) => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
-                  ))}
-                </select>
+                  options={CUSTOM_FIELD_TYPES}
+                  showLabel={false}
+                  className="w-[8.5rem] shrink-0"
+                  triggerClassName="h-8 min-h-8 py-1 px-2 text-xs"
+                />
               ) : (
                 <span className="text-xs text-white/45 capitalize">{row.type}</span>
               )}
@@ -165,21 +200,42 @@ export function CustomFieldsSettingsContent({
               )}
             </div>
             {row.type === 'select' && (
-              <div className="pl-1">
+              <div className="space-y-1.5 pl-1">
                 {canEdit ? (
-                  <Input
-                    value={(row.options || []).join(', ')}
-                    onChange={(e) => {
-                      const options = e.target.value
-                        .split(',')
-                        .map((s) => s.trim())
-                        .filter(Boolean)
-                      updateField(row.id, { options })
-                    }}
-                    placeholder="Options, comma-separated"
-                    className="h-8 text-sm"
-                    aria-label="Select options"
-                  />
+                  <>
+                    {(row.options?.length ? row.options : ['']).map((opt, optIndex) => (
+                      <div key={optIndex} className="flex items-center gap-1.5">
+                        <Input
+                          value={opt}
+                          onChange={(e) => updateOption(row.id, optIndex, e.target.value)}
+                          maxLength={80}
+                          placeholder="Option"
+                          className="flex-1 min-w-0 h-8 text-sm"
+                          aria-label={`Option ${optIndex + 1}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-white/45 hover:text-red-300"
+                          onClick={() => removeOption(row.id, optIndex)}
+                          title="Remove option"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-white/55 hover:text-white/80 gap-1"
+                      onClick={() => addOption(row.id)}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Add option
+                    </Button>
+                  </>
                 ) : (
                   <p className="text-xs text-white/45">{(row.options || []).join(' · ')}</p>
                 )}

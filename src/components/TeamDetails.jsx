@@ -32,9 +32,9 @@ const MEMBER_MENU_WIDTH = 200
 
 function TeamNestedSection({ title, children }) {
   return (
-    <div className="rounded-lg border border-white/10 overflow-hidden bg-white/[0.02] mb-5">
-      <p className="px-3 py-2.5 text-sm font-medium border-b border-white/10">{title}</p>
-      <div className="px-3 py-3">{children}</div>
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] mb-5">
+      <p className="px-3 py-2.5 text-sm font-medium border-b border-white/10 rounded-t-lg">{title}</p>
+      <div className="px-3 py-3 overflow-visible">{children}</div>
     </div>
   )
 }

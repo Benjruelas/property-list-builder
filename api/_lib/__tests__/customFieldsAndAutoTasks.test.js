@@ -127,30 +127,30 @@ describe('status autoTasks round-trip via normalizers', () => {
 
 describe('custom field value merge', () => {
   const defs = normalizeCustomFieldDefs([
-    { id: 'age', label: 'Age', type: 'number' },
+    { id: 'claim', label: 'Claim #', type: 'text' },
     { id: 'tier', label: 'Tier', type: 'select', options: ['A', 'B'] },
   ])
 
   it('merges and coerces values against defs', () => {
     const merged = mergeCustomFieldValues(
-      { age: '10', tier: 'A', unknown: 'x' },
-      { age: 3 },
+      { claim: ' 10 ', tier: 'A', unknown: 'x' },
+      { claim: '3' },
       defs,
     )
-    expect(merged).toEqual({ age: 10, tier: 'A' })
+    expect(merged).toEqual({ claim: '10', tier: 'A' })
   })
 
   it('preserves existing when body omits customFields', () => {
-    const merged = mergeCustomFieldValues(undefined, { age: 7, tier: 'B' }, defs)
-    expect(merged).toEqual({ age: 7, tier: 'B' })
+    const merged = mergeCustomFieldValues(undefined, { claim: '7', tier: 'B' }, defs)
+    expect(merged).toEqual({ claim: '7', tier: 'B' })
   })
 
   it('clears with explicit null', () => {
-    const merged = mergeCustomFieldValues({ age: null }, { age: 7, tier: 'A' }, defs)
+    const merged = mergeCustomFieldValues({ claim: null }, { claim: '7', tier: 'A' }, defs)
     expect(merged).toEqual({ tier: 'A' })
   })
 
   it('server coerce matches client expectations', () => {
-    expect(coerceCustomFieldValue(defs[0], '9')).toBe(9)
+    expect(coerceCustomFieldValue(defs[0], ' 9 ')).toBe('9')
   })
 })

@@ -2588,10 +2588,10 @@
 }
 
 /* Lead/Deal details — flat text links; outlined tiles, status chips, and fields keep borders */
-.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn):not(.lead-detail-file-action-btn),
+.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn):not(.lead-detail-file-action-btn):not(.custom-date-picker-btn):not(.schedule-nav-btn):not(.calendar-day-btn):not(.schedule-picker-footer-btn),
 .map-panel.lead-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.lead-detail-deal-card),
 .map-panel.lead-details-panel a,
-.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn):not(.lead-detail-file-action-btn),
+.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn):not(.lead-detail-file-action-btn):not(.custom-date-picker-btn):not(.schedule-nav-btn):not(.calendar-day-btn):not(.schedule-picker-footer-btn),
 .map-panel.deal-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.lead-detail-deal-card),
 .map-panel.deal-details-panel a {
   background: none !important;
@@ -2600,10 +2600,10 @@
   -webkit-backdrop-filter: none !important;
   border: none !important;
 }
-.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn):hover:not(:disabled),
+.map-panel.lead-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.lead-detail-status-btn):not(.panel-action-btn):not(.custom-date-picker-btn):not(.schedule-nav-btn):not(.calendar-day-btn):not(.schedule-picker-footer-btn):hover:not(:disabled),
 .map-panel.lead-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.lead-detail-deal-card):hover:not(:disabled),
 .map-panel.lead-details-panel a:hover,
-.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn):hover:not(:disabled),
+.map-panel.deal-details-panel button:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.panel-filter-option):not(.lead-detail-deal-card):not(.panel-action-btn):not(.custom-date-picker-btn):not(.schedule-nav-btn):not(.calendar-day-btn):not(.schedule-picker-footer-btn):hover:not(:disabled),
 .map-panel.deal-details-panel [role="button"]:not(.lead-detail-action-tile):not(.lead-detail-contact-row):not(.lead-detail-deal-card):hover:not(:disabled),
 .map-panel.deal-details-panel a:hover {
   background: none !important;
@@ -3877,6 +3877,35 @@
   color: var(--map-panel-text, #111827) !important;
 }
 
+/* Custom date field calendar trigger — high-contrast icon in light mode */
+.custom-date-picker-btn {
+  color: rgba(255, 255, 255, 0.8);
+}
+[data-ui-theme='light'] .custom-date-picker-btn {
+  background: rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+  color: #111827 !important;
+}
+[data-ui-theme='light'] .custom-date-picker-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: #0a0a0a !important;
+}
+[data-ui-theme='light'] .custom-date-picker-btn svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
+/* Native date/time inputs inherit html color-scheme:dark — force light chrome in light UI */
+[data-ui-theme='light'] input[type='date'],
+[data-ui-theme='light'] input[type='time'],
+[data-ui-theme='light'] input[type='datetime-local'] {
+  color-scheme: light;
+}
+[data-ui-theme='light'] input[type='date']::-webkit-calendar-picker-indicator {
+  opacity: 0.75;
+  cursor: pointer;
+}
+
 /* Hour / minute dropdown triggers */
 .list-panel .schedule-time-select-btn,
 .map-panel .schedule-time-select-btn,
@@ -5038,7 +5067,7 @@ html:has(.map-panel-dialog.deal-details-panel[data-state='open']) .map-panel-dia
 
 /* Icon-only buttons: no fills or outlines (except map buttons) */
 button.icon-only-btn:not(.map-controls-stack *):not(.map-search-stack *):not(.quick-create-fab-btn),
-button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.quick-create-fab-btn) {
+button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.quick-create-fab-btn):not(.custom-date-picker-btn) {
   background: none !important;
   border: none !important;
   backdrop-filter: none !important;
@@ -5046,7 +5075,7 @@ button:has(> svg:only-child):not(.map-controls-stack *):not(.map-search-stack *)
   box-shadow: none !important;
 }
 button.icon-only-btn:hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.quick-create-fab-btn),
-button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.quick-create-fab-btn) {
+button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not(.map-search-stack *):not(.schedule-picker-btn):not(.schedule-time-select-btn):not(.schedule-nav-btn):not(.schedule-ampm-btn):not(.schedule-ampm-switch__option):not(.schedule-time-chevron-btn):not(.quick-create-fab-btn):not(.custom-date-picker-btn) {
   background: none !important;
   border: none !important;
 }

@@ -4,9 +4,8 @@
 
 export const CUSTOM_FIELD_TYPES = [
   { id: 'text', label: 'Text' },
-  { id: 'number', label: 'Number' },
   { id: 'date', label: 'Date' },
-  { id: 'select', label: 'Single select' },
+  { id: 'select', label: 'Dropdown' },
 ]
 
 const TYPE_SET = new Set(CUSTOM_FIELD_TYPES.map((t) => t.id))
@@ -98,22 +97,18 @@ export function canEditDealCustomFields(teamMembership) {
 
 export function createDraftCustomField(label, existing = [], type = 'text') {
   const ids = new Set(existing.map((f) => f.id))
-  const id = slugifyCustomFieldId(label, ids)
+  const cleanLabel = String(label || '').trim()
+  const id = slugifyCustomFieldId(cleanLabel || 'field', ids)
   const t = TYPE_SET.has(type) ? type : 'text'
   if (t === 'select') {
-    return { id, label: String(label || '').trim() || 'New field', type: 'select', options: ['Option 1'] }
+    return { id, label: cleanLabel, type: 'select', options: [''] }
   }
-  return { id, label: String(label || '').trim() || 'New field', type: t }
+  return { id, label: cleanLabel, type: t }
 }
 
 export function coerceCustomFieldValue(def, value) {
   if (value === undefined || value === null || value === '') return null
   if (!def) return null
-  if (def.type === 'number') {
-    const n = typeof value === 'number' ? value : Number(String(value).trim())
-    if (!Number.isFinite(n)) return null
-    return n
-  }
   if (def.type === 'date') {
     const s = String(value).trim()
     const m = s.match(/^(\d{4}-\d{2}-\d{2})/)

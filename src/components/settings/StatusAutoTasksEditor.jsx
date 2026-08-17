@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, Plus, Trash2 } from 'lucide-react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
+import { TeamMemberAssignSection } from '../TeamMemberAssignSection'
 import { cn } from '@/lib/utils'
 import { createDraftAutoTask, normalizeAutoTaskTemplates } from '@/utils/statusAutoTasks'
 
@@ -15,10 +16,15 @@ export function StatusAutoTasksEditor({
   onChange,
 }) {
   const [expanded, setExpanded] = useState(() => (autoTasks?.length || 0) > 0)
-  const rows = normalizeAutoTaskTemplates(autoTasks)
+  // Keep blank titles while editing so clearing the field does not delete the row.
+  const rows = normalizeAutoTaskTemplates(autoTasks, { allowEmptyTitles: true })
+
+  useEffect(() => {
+    if ((autoTasks?.length || 0) > 0) setExpanded(true)
+  }, [autoTasks?.length])
 
   const updateRows = (next) => {
-    onChange?.(normalizeAutoTaskTemplates(next))
+    onChange?.(normalizeAutoTaskTemplates(next, { allowEmptyTitles: true }))
   }
 
   const updateRow = (id, patch) => {
@@ -31,7 +37,7 @@ export function StatusAutoTasksEditor({
 
   const addRow = () => {
     setExpanded(true)
-    updateRows([...rows, createDraftAutoTask('Follow up')])
+    updateRows([...rows, createDraftAutoTask()])
   }
 
   const countLabel = rows.length === 1 ? '1 auto task' : `${rows.length} auto tasks`
@@ -56,7 +62,7 @@ export function StatusAutoTasksEditor({
           {rows.map((row) => (
             <div
               key={row.id}
-              className="rounded-md border border-white/10 bg-black/20 px-2 py-2 space-y-1.5"
+              className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-2 space-y-1.5"
             >
               {canEdit ? (
                 <>
@@ -102,37 +108,20 @@ export function StatusAutoTasksEditor({
                     )}
                   </div>
                   {teamMembers.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-[11px] text-white/40">Assignees (optional)</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {teamMembers.map((m) => {
-                          const uid = m.uid
-                          const selected = (row.assignedUids || []).includes(uid)
-                          const label = m.email || m.displayName || uid
-                          return (
-                            <button
-                              key={uid}
-                              type="button"
-                              disabled={!canEdit}
-                              onClick={() => {
-                                const set = new Set(row.assignedUids || [])
-                                if (selected) set.delete(uid)
-                                else set.add(uid)
-                                updateRow(row.id, { assignedUids: [...set] })
-                              }}
-                              className={cn(
-                                'rounded-md border px-2 py-0.5 text-[11px] transition-colors',
-                                selected
-                                  ? 'border-blue-400/40 bg-blue-500/20 text-blue-100'
-                                  : 'border-white/10 bg-white/[0.03] text-white/55 hover:text-white/80',
-                              )}
-                            >
-                              {label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
+                    <TeamMemberAssignSection
+                      members={teamMembers}
+                      selectedUids={row.assignedUids || []}
+                      onToggle={(uid) => {
+                        const set = new Set(row.assignedUids || [])
+                        if (set.has(uid)) set.delete(uid)
+                        else set.add(uid)
+                        updateRow(row.id, { assignedUids: [...set] })
+                      }}
+                      disabled={!canEdit}
+                      title="Assignees (optional)"
+                      compact
+                      collapsible={false}
+                    />
                   )}
                 </>
               ) : (

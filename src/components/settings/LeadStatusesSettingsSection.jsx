@@ -28,11 +28,15 @@ export function LeadStatusesSettingsContent({
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    if (isOpen) {
-      setDraft(normalizeLeadStatuses(leadStatuses))
+    if (!isOpen) {
       setDirty(false)
+      return
     }
-  }, [isOpen, leadStatuses])
+    // Don't clobber in-progress edits when parent re-renders with a new
+    // leadStatuses array reference (resolveLeadStatuses is often inline).
+    if (dirty) return
+    setDraft(normalizeLeadStatuses(leadStatuses))
+  }, [isOpen, leadStatuses, dirty])
 
   const updateLabel = useCallback((id, label) => {
     setDraft((rows) => rows.map((r) => (r.id === id ? { ...r, label } : r)))

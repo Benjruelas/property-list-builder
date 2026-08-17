@@ -63,6 +63,16 @@ export default async function handler(req, res) {
 
   try {
     if (!gbpConfigured()) {
+      // Soft response on GET so browsers don't log a failed resource when GBP
+      // OAuth env vars are unset (common in local/dev). Mutations still fail clearly.
+      if (req.method === 'GET') {
+        return res.status(200).json({
+          configured: false,
+          connection: null,
+          pendingLocations: null,
+          maxFeatured: MAX_FEATURED_REVIEWS,
+        })
+      }
       return res.status(503).json({
         error: 'Google Business Profile is not configured on this server',
         configured: false,

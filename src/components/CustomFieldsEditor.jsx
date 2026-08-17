@@ -1,4 +1,6 @@
-import { Input } from '../ui/input'
+import { Input } from '@/components/ui/input'
+import { InlineDropdown } from '@/components/InlineDropdown'
+import { CustomDateField } from '@/components/CustomDateField'
 import { cn } from '@/lib/utils'
 
 /**
@@ -27,52 +29,37 @@ export function CustomFieldsEditor({
         const value = values?.[field.id] ?? ''
         const label = field.label || field.id
         if (field.type === 'select') {
+          const options = (field.options || []).map((opt) => ({
+            id: String(opt),
+            label: String(opt),
+          }))
           return (
-            <label key={field.id} className="block space-y-1">
+            <div key={field.id} className="block space-y-1">
               <span className="text-xs text-white/55">{label}</span>
-              <select
-                value={value || ''}
+              <InlineDropdown
+                value={value ? String(value) : ''}
+                onChange={(next) => setValue(field.id, next || null)}
+                options={options}
+                placeholder="—"
+                allowEmpty
+                emptyLabel="—"
+                showLabel={false}
                 disabled={disabled}
-                onChange={(e) => setValue(field.id, e.target.value || null)}
-                className="w-full h-9 rounded-md border border-white/10 bg-black/30 px-2 text-sm text-white/90"
-              >
-                <option value="">—</option>
-                {(field.options || []).map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            </label>
-          )
-        }
-        if (field.type === 'number') {
-          return (
-            <label key={field.id} className="block space-y-1">
-              <span className="text-xs text-white/55">{label}</span>
-              <Input
-                type="number"
-                value={value === null || value === undefined ? '' : value}
-                disabled={disabled}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setValue(field.id, v === '' ? null : Number(v))
-                }}
-                className="h-9 text-sm"
+                triggerClassName="h-9 min-h-9 py-1.5"
               />
-            </label>
+            </div>
           )
         }
         if (field.type === 'date') {
           return (
-            <label key={field.id} className="block space-y-1">
+            <div key={field.id} className="block space-y-1">
               <span className="text-xs text-white/55">{label}</span>
-              <Input
-                type="date"
+              <CustomDateField
                 value={value || ''}
                 disabled={disabled}
-                onChange={(e) => setValue(field.id, e.target.value || null)}
-                className="h-9 text-sm"
+                onChange={(next) => setValue(field.id, next)}
               />
-            </label>
+            </div>
           )
         }
         return (

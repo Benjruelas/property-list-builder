@@ -2,14 +2,21 @@
  * Client helpers for status auto-task templates (mirrors server normalizer).
  */
 
-export function normalizeAutoTaskTemplates(input) {
+/**
+ * @param {unknown} input
+ * @param {{ allowEmptyTitles?: boolean }} [opts]
+ *   When editing drafts, keep rows with blank titles so clearing the input
+ *   does not delete the task mid-edit. Save paths should omit this flag.
+ */
+export function normalizeAutoTaskTemplates(input, opts = {}) {
+  const allowEmptyTitles = opts.allowEmptyTitles === true
   if (!Array.isArray(input)) return []
   const out = []
   const seen = new Set()
   for (const raw of input) {
     if (!raw || typeof raw !== 'object') continue
     const title = String(raw.title || '').trim().slice(0, 200)
-    if (!title) continue
+    if (!title && !allowEmptyTitles) continue
     let id = String(raw.id || '').trim()
     if (!id) id = `autotask_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
     if (seen.has(id)) continue

@@ -28,11 +28,15 @@ export function DealStatusesSettingsContent({
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    if (isOpen) {
-      setDraft(normalizeDealStatuses(dealStatuses))
+    if (!isOpen) {
       setDirty(false)
+      return
     }
-  }, [isOpen, dealStatuses])
+    // Don't clobber in-progress edits when parent re-renders with a new
+    // dealStatuses array reference (resolveDealStatuses is often inline).
+    if (dirty) return
+    setDraft(normalizeDealStatuses(dealStatuses))
+  }, [isOpen, dealStatuses, dirty])
 
   const updateLabel = useCallback((id, label) => {
     setDraft((rows) => rows.map((row) => (row.id === id ? { ...row, label } : row)))
