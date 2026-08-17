@@ -4,22 +4,14 @@
  * Built via vite-plugin-pwa injectManifest (self.__WB_MANIFEST injected at build).
  */
 
-import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
-import { NavigationRoute, registerRoute } from 'workbox-routing'
-import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies'
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { registerRoute } from 'workbox-routing'
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 precacheAndRoute(self.__WB_MANIFEST || [])
 cleanupOutdatedCaches()
-
-// SPA shell for same-origin navigations (iOS Home Screen / standalone cold starts).
-// Avoid binding API or Firebase auth proxy paths to the HTML fallback.
-registerRoute(
-  new NavigationRoute(createHandlerBoundToURL('/index.html'), {
-    denylist: [/^\/api\//, /^\/__\//],
-  }),
-)
 
 self.addEventListener('install', () => {
   self.skipWaiting()
@@ -28,6 +20,64 @@ self.addEventListener('install', () => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
+
+/**
+ * One-shot recovery for stuck iOS Home Screen / Safari Web Clips.
+ * Visit https://knockscout.app/?recover=1 (in Safari) to wipe SW + caches.
+ */
+async function recoverAndFetch(request) {
+  try {
+    const keys = await caches.keys()
+    await Promise.all(keys.map((key) => caches.delete(key)))
+  } catch {
+    /* ignore */
+  }
+  try {
+    await self.registration.unregister()
+  } catch {
+    /* ignore */
+  }
+
+  const url = new URL(request.url)
+  url.searchParams.delete('recover')
+  url.searchParams.delete('nosw')
+  const clean = `${url.pathname}${url.search}${url.hash}` || '/'
+  return fetch(clean, { cache: 'reload' })
+}
+
+registerRoute(
+  ({ request, url }) => (
+    request.mode === 'navigate'
+    && (url.searchParams.has('recover') || url.searchParams.has('nosw'))
+  ),
+  ({ request }) => recoverAndFetch(request),
+)
+
+/**
+ * Navigations must prefer the network.
+ * Cache-only createHandlerBoundToURL('/index.html') can throw / fail when the
+ * Workbox precache is incomplete on iOS, which surfaces as Safari's native
+ * "not connected to the internet" page on Home Screen cold starts — even online.
+ */
+registerRoute(
+  ({ request, url }) => (
+    request.mode === 'navigate'
+    && !url.pathname.startsWith('/api/')
+    && !url.pathname.startsWith('/__/')
+  ),
+  new NetworkFirst({
+    cacheName: 'knockscout-navigations-v1',
+    networkTimeoutSeconds: 4,
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [200] }),
+      new ExpirationPlugin({
+        maxEntries: 8,
+        maxAgeSeconds: 7 * 24 * 60 * 60,
+        purgeOnQuotaError: true,
+      }),
+    ],
+  }),
+)
 
 // v3: do not cache opaque/status-0 responses (poisoned tiles on flaky iOS Safari).
 const TILE_CACHE = 'knockscout-map-tiles-v3'
