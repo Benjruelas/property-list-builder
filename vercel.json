@@ -82,7 +82,7 @@
       "destination": "/icon-180.png"
     },
     {
-      "source": "/((?!api/|@vite|@react-refresh|@fs/|src/|node_modules/|assets/|brand/|emblem-|manifest\\.webmanifest|favicon|apple-touch-icon|icon-|sw\\.js|workbox-).*)",
+      "source": "/((?!api/|@vite|@react-refresh|@fs/|src/|node_modules/|assets/|brand/|emblem-|manifest\\.webmanifest|favicon|apple-touch-icon|icon-|sw\\.js|workbox-|recover\\.html).*)",
       "destination": "/index.html"
     }
   ],
@@ -125,6 +125,15 @@
     },
     {
       "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/recover.html",
       "headers": [
         {
           "key": "Cache-Control",

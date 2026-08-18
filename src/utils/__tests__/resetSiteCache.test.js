@@ -55,6 +55,6 @@ describe('resetSiteCache', () => {
     expect(deleteCache).toHaveBeenCalledWith('workbox-precache-v2')
     expect(unregister).toHaveBeenCalledTimes(1)
     expect(replace).toHaveBeenCalledTimes(1)
-    expect(String(replace.mock.calls[0][0])).toContain('recover=1')
+    expect(String(replace.mock.calls[0][0])).toContain('/recover.html')
   })
 })
