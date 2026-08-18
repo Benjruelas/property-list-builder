@@ -1,6 +1,6 @@
 # Native mobile (Capacitor)
 
-KnockScout ships as a Vite + React PWA and can run inside a Capacitor native shell for iOS and Android. The native app adds **one-tap save to Photos/Gallery** for lead and deal images (with OS permission prompts).
+KnockScout ships as a Vite + React PWA and can run inside a Capacitor native shell for iOS and Android. The native app adds **one-tap save to Photos/Gallery** for lead and deal images (with OS permission prompts) and **native still photo capture** in Photo Mode (system shutter sound / lens blackout on iOS).
 
 ## One-time setup
 
@@ -37,6 +37,12 @@ The shared helper `src/utils/apiBase.js` routes:
 - **Native:** `VITE_API_URL` (falls back to the production Vercel host)
 - **Web prod:** `${window.location.origin}/api`
 
+## Photo Mode camera (native stills)
+
+On Capacitor iOS/Android, Photo Mode uses `@capacitor-community/camera-preview` with a transparent WebView overlay (`toBack: true`) so shutter uses the platform still-photo pipeline (`AVCapturePhotoOutput` / CameraX) instead of grabbing video frames. Web/PWA keeps the getUserMedia + canvas fallback.
+
+Implementation: `src/photos/nativeCameraPreview.js` → `PhotoCaptureModal.jsx`.
+
 ## Photo save behavior
 
 | Environment | Image save |
@@ -51,9 +57,13 @@ Implementation: `FilePreviewOverlay` → `saveBlobToDevice()` → `savePhotoNati
 
 **iOS** (`ios/App/App/Info.plist`):
 
+- `NSCameraUsageDescription` — “KnockScout uses the camera to take property photos in Photo Mode.”
 - `NSPhotoLibraryAddUsageDescription` — “KnockScout saves property photos to your library when you tap Save.”
 
-**Android:** Non-gallery mode — only `INTERNET` is required; the Media plugin writes to the app’s album without broad storage permissions.
+**Android** (`android/app/src/main/AndroidManifest.xml`):
+
+- `CAMERA` — required for Photo Mode native capture
+- Non-gallery Media mode — only `INTERNET` is required for saving to the app album (no broad storage permission)
 
 ## Manual QA
 
@@ -62,3 +72,5 @@ Implementation: `FilePreviewOverlay` → `saveBlobToDevice()` → `savePhotoNati
 3. iOS Capacitor — First save → permission prompt → photo in Photos.
 4. iOS Capacitor — Deny permission → error toast + Settings hint.
 5. Android Capacitor — Save photo → appears in Gallery.
+6. iOS Capacitor Photo Mode — Take photo → system shutter sound + brief blackout; rotate portrait↔landscape with chrome clear of notch; Done restores opaque UI.
+7. Android Capacitor Photo Mode — Take photo → still JPEG enqueued; flip / flash / pinch zoom work.

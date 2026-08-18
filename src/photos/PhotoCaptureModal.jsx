@@ -14,9 +14,23 @@ import { cn } from '@/lib/utils'
 import { getModalPortalContainer } from '@/utils/modalPortal'
 import { logLeadPhotosAdded } from '@/utils/leadActivity'
 import { photoLog, photoLogError, photoLogCameraEnvironment, photoLogWarn } from './photoDebug'
+import {
+  isNativeCameraPreviewAvailable,
+  startNativeCameraPreview,
+  stopNativeCameraPreview,
+  captureNativeStill,
+  flipNativeCamera,
+  setNativeFlashMode,
+  resizeNativeCameraPreview,
+  isNativeCameraPreviewStarted,
+} from './nativeCameraPreview'
+
+function canUseWebCamera() {
+  return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+}
 
 function canUseCamera() {
-  return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+  return isNativeCameraPreviewAvailable() || canUseWebCamera()
 }
 
 function isCameraNotFoundError(err) {
@@ -29,7 +43,10 @@ function isCameraNotFoundError(err) {
 
 function isCameraPermissionError(err) {
   const name = err?.name || ''
-  return name === 'NotAllowedError' || name === 'PermissionDeniedError'
+  const msg = String(err?.message || '')
+  return name === 'NotAllowedError'
+    || name === 'PermissionDeniedError'
+    || /permission|denied|not authorized|access/i.test(msg)
 }
 
 async function hasVideoInputDevice() {
@@ -43,8 +60,11 @@ async function hasVideoInputDevice() {
 }
 
 async function requestCameraStream(facingMode = 'environment') {
+  const portrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth
+  const idealW = portrait ? 1080 : 1920
+  const idealH = portrait ? 1920 : 1080
   const attempts = [
-    { video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+    { video: { facingMode: { ideal: facingMode }, width: { ideal: idealW }, height: { ideal: idealH } }, audio: false },
     { video: { facingMode: facingMode === 'environment' ? 'user' : 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
     { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
     { video: true, audio: false },
@@ -64,6 +84,69 @@ async function requestCameraStream(facingMode = 'environment') {
 async function bindStreamToVideo(video, stream) {
   video.srcObject = stream
   await video.play()
+}
+
+/**
+ * Crop the video frame to match object-fit: cover for the rendered element,
+ * then apply digital zoom (center crop).
+ */
+function captureCoverFrame(video, zoomScale = 1) {
+  if (!video?.videoWidth) return null
+  const vw = video.videoWidth
+  const vh = video.videoHeight
+  const rect = video.getBoundingClientRect?.()
+  const elW = rect?.width || video.clientWidth || vw
+  const elH = rect?.height || video.clientHeight || vh
+  if (!(elW > 0 && elH > 0)) return null
+
+  const videoAspect = vw / vh
+  const elAspect = elW / elH
+  let sx = 0
+  let sy = 0
+  let sw = vw
+  let sh = vh
+  if (videoAspect > elAspect) {
+    sw = vh * elAspect
+    sx = (vw - sw) / 2
+  } else if (videoAspect < elAspect) {
+    sh = vw / elAspect
+    sy = (vh - sh) / 2
+  }
+
+  const scale = Math.max(1, zoomScale)
+  if (scale > 1) {
+    const zw = sw / scale
+    const zh = sh / scale
+    sx += (sw - zw) / 2
+    sy += (sh - zh) / 2
+    sw = zw
+    sh = zh
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(sw))
+  canvas.height = Math.max(1, Math.round(sh))
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.92)
+}
+
+async function captureStillFromTrack(stream) {
+  const track = stream?.getVideoTracks?.()?.[0]
+  if (!track || typeof ImageCapture === 'undefined') return null
+  try {
+    const imageCapture = new ImageCapture(track)
+    if (typeof imageCapture.takePhoto !== 'function') return null
+    const blob = await imageCapture.takePhoto()
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
 }
 
 const ZOOM_PRESETS = [0.5, 1, 3]
@@ -122,6 +205,10 @@ function nearestPresetLabel(zoomFactor) {
   return String(best)
 }
 
+function facingToNativePosition(facingMode) {
+  return facingMode === 'user' ? 'front' : 'rear'
+}
+
 function PhotoCaptureModalInner({
   open,
   entityType = 'lead',
@@ -152,6 +239,10 @@ function PhotoCaptureModalInner({
   const galleryLongPressRef = useRef(null)
   const pinchRef = useRef({ active: false, startDist: 0, startZoom: 1 })
   const zoomFactorRef = useRef(1)
+  const useNativePreviewRef = useRef(false)
+  const resizeTimerRef = useRef(null)
+  const flashEnabledRef = useRef(false)
+  const startCameraRef = useRef(null)
 
   const [mode, setMode] = useState('chooser')
   const [sessionItems, setSessionItems] = useState([])
@@ -159,6 +250,7 @@ function PhotoCaptureModalInner({
   const [promotingLead, setPromotingLead] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
   const [useCamera, setUseCamera] = useState(false)
+  const [useNativePreview, setUseNativePreview] = useState(false)
   const [cameraStarting, setCameraStarting] = useState(false)
   const [viewerIndex, setViewerIndex] = useState(null)
   const [facingMode, setFacingMode] = useState('environment')
@@ -171,7 +263,7 @@ function PhotoCaptureModalInner({
   const maxZoom = Math.max(MAX_ZOOM, trackZoomRange?.max ?? MAX_ZOOM)
   const displayScale = displayScaleForZoom(zoomFactor)
   const activePreset = nearestPresetLabel(zoomFactor)
-  const wideZoomAvailable = trackZoomRange != null && trackZoomRange.min < 1
+  const wideZoomAvailable = !useNativePreview && trackZoomRange != null && trackZoomRange.min < 1
 
   const syncTrackZoom = useCallback((stream, factor, range) => {
     if (!stream || !range) return
@@ -183,6 +275,13 @@ function PhotoCaptureModalInner({
   }, [])
 
   const setZoom = useCallback((next, range = trackZoomRange) => {
+    if (useNativePreviewRef.current) {
+      // Native pinch zoom is handled by the camera-preview plugin (enableZoom).
+      const clamped = clampZoom(next, 1, MAX_ZOOM)
+      zoomFactorRef.current = clamped
+      setZoomFactor(clamped)
+      return
+    }
     const lo = range?.min ?? 1
     const hi = Math.max(MAX_ZOOM, range?.max ?? MAX_ZOOM)
     const clamped = clampZoom(next, lo, hi)
@@ -194,6 +293,14 @@ function PhotoCaptureModalInner({
   useEffect(() => {
     zoomFactorRef.current = zoomFactor
   }, [zoomFactor])
+
+  useEffect(() => {
+    useNativePreviewRef.current = useNativePreview
+  }, [useNativePreview])
+
+  useEffect(() => {
+    flashEnabledRef.current = flashEnabled
+  }, [flashEnabled])
 
   // Revoke session preview blob URLs when the modal closes or unmounts so each
   // capture session doesn't leak thumbnail bitmaps.
@@ -253,6 +360,11 @@ function PhotoCaptureModalInner({
       streamRef.current = null
     }
     if (videoRef.current) videoRef.current.srcObject = null
+    if (useNativePreviewRef.current || isNativeCameraPreviewStarted()) {
+      void stopNativeCameraPreview()
+    }
+    useNativePreviewRef.current = false
+    setUseNativePreview(false)
     setCameraReady(false)
     setCameraStarting(false)
     setUseCamera(false)
@@ -261,11 +373,41 @@ function PhotoCaptureModalInner({
   const showLibraryFallback = useCallback((message) => {
     setUseCamera(false)
     setCameraStarting(false)
+    setUseNativePreview(false)
+    useNativePreviewRef.current = false
     if (!cameraFallbackNotifiedRef.current) {
       cameraFallbackNotifiedRef.current = true
       showToast(message, 'info')
     }
   }, [])
+
+  const startWebCamera = useCallback(async (facing) => {
+    if (!canUseWebCamera()) {
+      showLibraryFallback('Camera not supported here — use Upload photos instead')
+      return
+    }
+
+    const hasCamera = await hasVideoInputDevice()
+    if (!hasCamera) {
+      photoLogWarn('capture.camera', 'No video input devices detected')
+      showLibraryFallback('No camera on this device — use Upload photos instead')
+      return
+    }
+
+    const stream = await requestCameraStream(facing)
+    streamRef.current = stream
+    const range = getTrackZoomRange(stream)
+    setTrackZoomRange(range)
+    zoomFactorRef.current = 1
+    setZoomFactor(1)
+    if (videoRef.current) await bindStreamToVideo(videoRef.current, stream)
+    if (range) void applyTrackZoom(stream, 1)
+    setUseNativePreview(false)
+    useNativePreviewRef.current = false
+    setCameraReady(true)
+    setCameraStarting(false)
+    photoLog('capture.camera', 'Web camera ready', { trackZoom: range })
+  }, [showLibraryFallback])
 
   const startCamera = useCallback(async (facing = facingMode) => {
     if (!canUseCamera()) {
@@ -275,27 +417,41 @@ function PhotoCaptureModalInner({
     stopCamera()
     setUseCamera(true)
     setCameraStarting(true)
-    photoLog('capture.camera', 'Requesting camera stream', { facing })
-
-    const hasCamera = await hasVideoInputDevice()
-    if (!hasCamera) {
-      photoLogWarn('capture.camera', 'No video input devices detected')
-      showLibraryFallback('No camera on this device — use Upload photos instead')
-      return
-    }
+    photoLog('capture.camera', 'Requesting camera', {
+      facing,
+      native: isNativeCameraPreviewAvailable(),
+    })
 
     try {
-      const stream = await requestCameraStream(facing)
-      streamRef.current = stream
-      const range = getTrackZoomRange(stream)
-      setTrackZoomRange(range)
-      zoomFactorRef.current = 1
-      setZoomFactor(1)
-      if (videoRef.current) await bindStreamToVideo(videoRef.current, stream)
-      if (range) void applyTrackZoom(stream, 1)
-      setCameraReady(true)
-      setCameraStarting(false)
-      photoLog('capture.camera', 'Camera ready', { trackZoom: range })
+      if (isNativeCameraPreviewAvailable()) {
+        try {
+          const ok = await startNativeCameraPreview({
+            position: facingToNativePosition(facing),
+            enableHighResolution: true,
+          })
+          if (ok) {
+            setUseNativePreview(true)
+            useNativePreviewRef.current = true
+            setTrackZoomRange(null)
+            zoomFactorRef.current = 1
+            setZoomFactor(1)
+            setCameraReady(true)
+            setCameraStarting(false)
+            if (flashEnabledRef.current) {
+              void setNativeFlashMode('on')
+            }
+            photoLog('capture.camera', 'Native camera preview ready')
+            return
+          }
+        } catch (nativeErr) {
+          photoLogWarn('capture.camera', 'Native preview failed — falling back to web', {
+            message: String(nativeErr?.message || nativeErr),
+          })
+          await stopNativeCameraPreview()
+        }
+      }
+
+      await startWebCamera(facing)
     } catch (err) {
       if (isCameraNotFoundError(err)) {
         showLibraryFallback('No camera on this device — use Upload photos instead')
@@ -306,7 +462,9 @@ function PhotoCaptureModalInner({
         showLibraryFallback('Camera unavailable — use Upload photos instead')
       }
     }
-  }, [facingMode, showLibraryFallback, stopCamera])
+  }, [facingMode, showLibraryFallback, startWebCamera, stopCamera])
+
+  startCameraRef.current = startCamera
 
   useEffect(() => {
     if (!open) {
@@ -332,23 +490,68 @@ function PhotoCaptureModalInner({
     })
     photoLogCameraEnvironment()
 
-    if (!window.isSecureContext) {
+    if (!window.isSecureContext && !isNativeCameraPreviewAvailable()) {
       photoLogWarn('capture.camera', 'Insecure context — camera blocked on mobile LAN. Use: npm run dev:mobile')
     }
 
     if (autoOpenCamera) {
       setMode('camera')
-      startCamera('environment')
+      void startCameraRef.current?.('environment')
     }
 
     return () => {
       stopCamera()
     }
-  }, [open, entityType, entity?.id, isLead, stopCamera, autoOpenCamera, startCamera])
+  }, [open, entityType, entity?.id, isLead, stopCamera, autoOpenCamera])
 
-  const triggerFlash = () => {
-    setFlash(true)
-    window.setTimeout(() => setFlash(false), 300)
+  // Remeasure native preview after rotate / resize.
+  useEffect(() => {
+    if (!open || !useNativePreview || !cameraReady) return undefined
+    const onResize = () => {
+      if (resizeTimerRef.current) window.clearTimeout(resizeTimerRef.current)
+      resizeTimerRef.current = window.setTimeout(() => {
+        void resizeNativeCameraPreview().catch((err) => {
+          photoLogWarn('capture.camera', 'Native resize failed', { message: String(err?.message || err) })
+        })
+      }, 250)
+    }
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+      if (resizeTimerRef.current) window.clearTimeout(resizeTimerRef.current)
+    }
+  }, [open, useNativePreview, cameraReady])
+
+  // Stop camera when the native app backgrounds.
+  useEffect(() => {
+    if (!open || !isNativeCameraPreviewAvailable()) return undefined
+    let remove = null
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { App } = await import('@capacitor/app')
+        if (cancelled) return
+        remove = await App.addListener('appStateChange', ({ isActive }) => {
+          if (!isActive && (useNativePreviewRef.current || streamRef.current)) {
+            stopCamera()
+            setMode('chooser')
+          }
+        })
+      } catch {
+        /* web / plugin missing */
+      }
+    })()
+    return () => {
+      cancelled = true
+      remove?.remove?.()
+    }
+  }, [open, stopCamera])
+
+  const triggerFlash = (kind = 'white') => {
+    setFlash(kind)
+    window.setTimeout(() => setFlash(false), kind === 'black' ? 120 : 300)
   }
 
   const buildMetadata = useCallback(async () => {
@@ -470,7 +673,7 @@ function PhotoCaptureModalInner({
     }
   }, [entityType, pipelineId, resolvedEntity, isDraft, ensureLeadSaved])
 
-  const addCapture = useCallback(async (source, { withFlash = false } = {}) => {
+  const addCapture = useCallback(async (source, { withFlash = false, flashKind = 'white' } = {}) => {
     if (storageFull) {
       photoLogWarn('capture.add', 'Storage full — capture blocked')
       showToast('Photo storage is full', 'error')
@@ -484,7 +687,7 @@ function PhotoCaptureModalInner({
       const blobs = await getBlobs(job.jobId)
       const previewUrl = blobs?.thumb ? URL.createObjectURL(blobs.thumb) : null
       setSessionItems((prev) => [{ jobId: job.jobId, previewUrl, createdAt: Date.now() }, ...prev])
-      if (withFlash) triggerFlash()
+      if (withFlash) triggerFlash(flashKind)
       if (leadId) {
         onPhotosAdded?.()
         void logLeadPhotosAdded(getToken, leadId, 1).catch(() => {})
@@ -495,31 +698,14 @@ function PhotoCaptureModalInner({
     }
   }, [storageFull, resolveCaptureRef, buildMetadata, enqueueCapture, onPhotosAdded, getToken])
 
-  const captureFromVideo = useCallback(() => {
-    const video = videoRef.current
-    if (!video?.videoWidth) return null
-    const scale = displayScaleForZoom(zoomFactorRef.current)
-    const vw = video.videoWidth
-    const vh = video.videoHeight
-    let sx = 0
-    let sy = 0
-    let sw = vw
-    let sh = vh
-    if (scale > 1) {
-      sw = vw / scale
-      sh = vh / scale
-      sx = (vw - sw) / 2
-      sy = (vh - sh) / 2
-    }
-    const canvas = document.createElement('canvas')
-    canvas.width = sw
-    canvas.height = sh
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh)
-    return canvas.toDataURL('image/jpeg', 0.92)
+  const captureFromVideo = useCallback(async () => {
+    const still = await captureStillFromTrack(streamRef.current)
+    if (still) return still
+    return captureCoverFrame(videoRef.current, displayScaleForZoom(zoomFactorRef.current))
   }, [])
 
   const handleViewportTouchStart = (e) => {
+    if (useNativePreviewRef.current) return
     if (e.touches.length === 2) {
       pinchRef.current = {
         active: true,
@@ -531,6 +717,7 @@ function PhotoCaptureModalInner({
   }
 
   const handleViewportTouchMove = (e) => {
+    if (useNativePreviewRef.current) return
     if (!pinchRef.current.active || e.touches.length !== 2) return
     e.preventDefault()
     const dist = touchDistance(e.touches[0], e.touches[1])
@@ -540,6 +727,7 @@ function PhotoCaptureModalInner({
   }
 
   const handleViewportTouchEnd = (e) => {
+    if (useNativePreviewRef.current) return
     if (e.touches.length < 2) {
       pinchRef.current.active = false
       setPinching(false)
@@ -547,6 +735,11 @@ function PhotoCaptureModalInner({
   }
 
   const handlePresetZoom = (preset) => {
+    if (useNativePreview) {
+      // Native optical/digital zoom is pinch-driven via the plugin.
+      setZoom(preset)
+      return
+    }
     if (preset === 0.5 && !wideZoomAvailable) {
       setZoom(1)
       return
@@ -556,9 +749,21 @@ function PhotoCaptureModalInner({
 
   const handleCapture = async () => {
     if (promotingLead) return
-    const dataUrl = captureFromVideo()
-    if (!dataUrl) return
-    await addCapture(dataUrl, { withFlash: true })
+    try {
+      if (useNativePreviewRef.current) {
+        const dataUrl = await captureNativeStill({ quality: 92 })
+        if (!dataUrl) return
+        // System shutter + blackout already ran; light black flash is optional polish only.
+        await addCapture(dataUrl, { withFlash: false })
+        return
+      }
+      const dataUrl = await captureFromVideo()
+      if (!dataUrl) return
+      await addCapture(dataUrl, { withFlash: true, flashKind: 'white' })
+    } catch (e) {
+      photoLogError('capture.shutter', 'Shutter failed', e)
+      showToast(e.message || 'Could not take photo', 'error')
+    }
   }
 
   const handleFilePick = async (e) => {
@@ -597,12 +802,30 @@ function PhotoCaptureModalInner({
     startCamera('environment')
   }
 
-  const handleFlipCamera = () => {
+  const handleFlipCamera = async () => {
     const next = facingMode === 'environment' ? 'user' : 'environment'
     setFacingMode(next)
     setZoomFactor(1)
     zoomFactorRef.current = 1
+    if (useNativePreviewRef.current) {
+      try {
+        await flipNativeCamera()
+        return
+      } catch (err) {
+        photoLogWarn('capture.camera', 'Native flip failed — restarting', {
+          message: String(err?.message || err),
+        })
+      }
+    }
     startCamera(next)
+  }
+
+  const handleToggleFlash = async () => {
+    const next = !flashEnabled
+    setFlashEnabled(next)
+    if (useNativePreviewRef.current) {
+      await setNativeFlashMode(next ? 'on' : 'off')
+    }
   }
 
   const sessionPreviewItems = useMemo(
@@ -685,19 +908,31 @@ function PhotoCaptureModalInner({
       )}
 
       {mode === 'camera' && (
-        <div className="photo-mode-overlay photo-mode-overlay--camera" role="dialog" aria-label="Photo mode">
+        <div
+          className={cn(
+            'photo-mode-overlay photo-mode-overlay--camera',
+            useNativePreview && 'photo-mode-overlay--native-preview',
+          )}
+          role="dialog"
+          aria-label="Photo mode"
+        >
           <div
             className={cn(
               'photo-mode-viewport photo-mode-viewport--immersive',
-              useCamera && cameraReady && 'photo-mode-viewport--pinchable',
+              useCamera && cameraReady && !useNativePreview && 'photo-mode-viewport--pinchable',
             )}
             onTouchStart={handleViewportTouchStart}
             onTouchMove={handleViewportTouchMove}
             onTouchEnd={handleViewportTouchEnd}
             onTouchCancel={handleViewportTouchEnd}
           >
-            {flash && <div className="photo-mode-flash absolute inset-0 z-20 bg-white/80 pointer-events-none animate-pulse" />}
-            {useCamera && (
+            {flash === 'white' && (
+              <div className="photo-mode-flash photo-mode-flash--white absolute inset-0 z-20 pointer-events-none" />
+            )}
+            {flash === 'black' && (
+              <div className="photo-mode-flash photo-mode-flash--black absolute inset-0 z-20 pointer-events-none" />
+            )}
+            {useCamera && !useNativePreview && (
               <div className="photo-mode-video-stage">
                 <video
                   ref={videoRef}
@@ -706,7 +941,11 @@ function PhotoCaptureModalInner({
                     !cameraReady && 'photo-mode-video--hidden',
                     pinching && 'photo-mode-video--pinching',
                   )}
-                  style={{ transform: `scale(${displayScale})` }}
+                  style={{
+                    transform: facingMode === 'user'
+                      ? `scale(${displayScale}) scaleX(-1)`
+                      : `scale(${displayScale})`,
+                  }}
                   playsInline
                   muted
                   autoPlay
@@ -745,7 +984,7 @@ function PhotoCaptureModalInner({
                 <button
                   type="button"
                   className="photo-mode-icon-btn"
-                  onClick={() => setFlashEnabled((v) => !v)}
+                  onClick={handleToggleFlash}
                   aria-label={flashEnabled ? 'Flash on' : 'Flash off'}
                 >
                   {flashEnabled ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
@@ -753,7 +992,7 @@ function PhotoCaptureModalInner({
               </div>
             </div>
 
-            {useCamera && cameraReady && (
+            {useCamera && cameraReady && !useNativePreview && (
               <div className="photo-mode-zoom-bar">
                 {ZOOM_PRESETS.filter((level) => level !== 0.5 || wideZoomAvailable).map((level) => (
                   <button
@@ -765,6 +1004,11 @@ function PhotoCaptureModalInner({
                     {level === 0.5 ? '.5x' : `${level}x`}
                   </button>
                 ))}
+              </div>
+            )}
+            {useCamera && cameraReady && useNativePreview && (
+              <div className="photo-mode-zoom-bar photo-mode-zoom-bar--hint" aria-hidden="true">
+                <span className="photo-mode-zoom-hint">Pinch to zoom</span>
               </div>
             )}
 

@@ -9151,6 +9151,18 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   background: #000;
 }
 
+/* Native toBack preview: let AVFoundation / CameraX show through the WebView */
+.photo-mode-overlay--camera.photo-mode-overlay--native-preview {
+  background: transparent;
+}
+
+html.photo-native-camera-active,
+html.photo-native-camera-active body,
+html.photo-native-camera-active #root,
+html.photo-native-camera-active #modal-root {
+  background: transparent !important;
+}
+
 .photo-mode-viewport--immersive {
   position: relative;
   flex: 1;
@@ -9159,6 +9171,10 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   height: 100%;
   background: #000;
   overflow: hidden;
+}
+
+.photo-mode-overlay--native-preview .photo-mode-viewport--immersive {
+  background: transparent;
 }
 
 .photo-mode-viewport--pinchable {
@@ -9187,6 +9203,20 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   transition: none;
 }
 
+.photo-mode-flash--white {
+  background: rgba(255, 255, 255, 0.8);
+  animation: photo-mode-flash-pulse 0.3s ease-out;
+}
+
+.photo-mode-flash--black {
+  background: #000;
+}
+
+@keyframes photo-mode-flash-pulse {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 .photo-mode-top-bar {
   position: absolute;
   top: 0;
@@ -9196,7 +9226,11 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+  padding:
+    calc(12px + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    12px
+    calc(16px + env(safe-area-inset-left, 0px));
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
   pointer-events: none;
 }
@@ -9242,6 +9276,19 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(8px);
+  max-width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+}
+
+.photo-mode-zoom-bar--hint {
+  pointer-events: none;
+  padding: 6px 12px;
+}
+
+.photo-mode-zoom-hint {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .photo-mode-zoom-btn {
@@ -9271,7 +9318,11 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding:
+    16px
+    calc(24px + env(safe-area-inset-right, 0px))
+    calc(24px + env(safe-area-inset-bottom, 0px))
+    calc(24px + env(safe-area-inset-left, 0px));
   background: linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent);
 }
 
@@ -9381,6 +9432,48 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   font-size: 12px;
   font-weight: 500;
   pointer-events: none;
+  max-width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+}
+
+/* Landscape / short viewports: keep chrome clear of notch + shutter */
+@media (orientation: landscape) and (max-height: 500px) {
+  .photo-mode-top-bar {
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    padding-bottom: 8px;
+  }
+
+  .photo-mode-zoom-bar {
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .photo-mode-bottom-bar {
+    padding-top: 10px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .photo-mode-shutter--camera {
+    width: 60px;
+    height: 60px;
+  }
+
+  .photo-mode-shutter-inner {
+    width: 46px;
+    height: 46px;
+  }
+
+  .photo-mode-gallery-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .photo-mode-done-btn {
+    min-width: 64px;
+    height: 40px;
+  }
+
+  .photo-mode-upload-badge {
+    top: calc(48px + env(safe-area-inset-top, 0px));
+  }
 }
 
 /* Add-photos popover — centered over CRM panel */
