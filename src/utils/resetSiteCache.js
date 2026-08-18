@@ -33,8 +33,6 @@ export async function resetSiteCache() {
     }
   }
 
-  // Hard navigation through the recover path so a controlling SW also nukes itself.
-  const url = new URL(window.location.href)
-  url.searchParams.set('recover', '1')
-  window.location.replace(url.toString())
+  // Prefer the static recover page so an old PrecacheRoute cannot swallow ?recover=1.
+  window.location.replace(`/recover.html?t=${Date.now()}`)
 }

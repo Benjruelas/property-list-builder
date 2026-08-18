@@ -328,7 +328,7 @@ export function SettingsPanel({
 
   const handleResetSiteCache = useCallback(async () => {
     const confirmed = await showConfirm(
-      'Open https://knockscout.app/?recover=1 in Safari to wipe this device\'s offline cache if the Home Screen icon shows Safari\'s offline page. Or use the button below. Your lists and account data on the server are not affected.',
+      'Open https://knockscout.app/recover.html in Safari to wipe this device\'s offline cache if the Home Screen icon shows Safari\'s offline page. Or use the button below. Your lists and account data on the server are not affected.',
       'Reset Site Cache'
     )
     if (!confirmed) return
@@ -683,7 +683,7 @@ export function SettingsPanel({
             </div>
             <p className="text-xs opacity-50 mt-2">
               If the Home Screen icon will not open, in Safari go to{' '}
-              <span className="opacity-80">knockscout.app/?recover=1</span>
+              <span className="opacity-80">knockscout.app/recover.html</span>
               , then delete and re-add the icon. Or use Reset Site Cache when the app loads.
             </p>
           </Section>
