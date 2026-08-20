@@ -1,12 +1,10 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { enforceIpRateLimit } from './_lib/rateLimit.js'
+import { emptyParcelTileStatus } from './_lib/parcelTileEmpty.js'
 
 const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 const EMPTY_MARKER = Buffer.alloc(0)
 const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'
-
-/** Must match PARCEL_MIN_ZOOM in PMTilesParcelLayer — below this we never request tiles. */
-const PARCEL_MIN_ZOOM = 15
 
 /**
  * LandRecords coverage is a sparse pyramid. MapLibre treats HTTP 204 as a successful
@@ -15,14 +13,13 @@ const PARCEL_MIN_ZOOM = 15
  * lower-z parents (maplibre-gl-js#5692).
  *
  * At the source minzoom there is no parent to keep, so return 204 (silent blank)
- * instead of 410 (which would only spam the console).
+ * instead of 410 (which would only spam the console). Cedar Hill (and other
+ * metros) have scattered z15 holes whose z14 parents still have parcels, so
+ * minzoom is 14 — see api/_lib/parcelTileEmpty.js.
  */
 function sendEmptyTile(res, zi) {
   res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
-  if (Number.isFinite(zi) && zi > PARCEL_MIN_ZOOM) {
-    return res.status(410).end()
-  }
-  return res.status(204).end()
+  return res.status(emptyParcelTileStatus(zi)).end()
 }
 
 let _s3
