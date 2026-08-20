@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>KnockScout — Reset</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+      main { max-width: 28rem; margin: 0 auto; padding: 2.5rem 1.25rem; }
+      h1 { font-size: 1.25rem; margin: 0 0 0.75rem; }
+      p { opacity: 0.75; line-height: 1.45; margin: 0 0 1rem; }
+      .status { margin-top: 1.5rem; font-size: 0.95rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Resetting KnockScout…</h1>
+      <p>Clearing offline data on this device. Keep this tab open.</p>
+      <p class="status" id="status">Working…</p>
+    </main>
+    <script>
+      (async function () {
+        var status = document.getElementById('status');
+        function set(msg) { if (status) status.textContent = msg; }
+        try {
+          if ('serviceWorker' in navigator) {
+            var regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(function (r) { return r.unregister(); }));
+            set('Service worker removed…');
+          }
+          if (typeof caches !== 'undefined' && caches.keys) {
+            var keys = await caches.keys();
+            await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            set('Caches cleared…');
+          }
+          try { sessionStorage.removeItem('knockscout_basemap_sessions'); } catch (e) {}
+          set('Done. Opening KnockScout…');
+          setTimeout(function () {
+            location.replace('/?nocache=' + Date.now());
+          }, 400);
+        } catch (err) {
+          set('Could not fully reset. Open iPhone Settings → Safari → Advanced → Website Data and remove KnockScout, then try again.');
+        }
+      })();
+    </script>
+  </body>
+</html>

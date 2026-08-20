@@ -2,15 +2,24 @@
 /**
  * Combined service worker: Workbox app-shell/tile/parcel caching + web push.
  * Built via vite-plugin-pwa injectManifest (self.__WB_MANIFEST injected at build).
+ *
+ * IMPORTANT (iOS Home Screen):
+ * Workbox PrecacheRoute matches navigations to `/` via directoryIndex → index.html.
+ * That route is registered by precacheAndRoute() and would win over later navigation
+ * handlers (first match wins). An incomplete/corrupt precache then surfaces as Safari's
+ * native "not connected to the internet" page — even when online — and can also swallow
+ * `/?recover=1` before our recover handler runs.
+ *
+ * So we: precache() assets, register navigation handlers FIRST, then addRoute().
  */
 
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { addRoute, cleanupOutdatedCaches, matchPrecache, precache } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
-import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies'
+import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
-precacheAndRoute(self.__WB_MANIFEST || [])
+precache(self.__WB_MANIFEST || [])
 cleanupOutdatedCaches()
 
 self.addEventListener('install', () => {
@@ -42,9 +51,41 @@ async function recoverAndFetch(request) {
   url.searchParams.delete('recover')
   url.searchParams.delete('nosw')
   const clean = `${url.pathname}${url.search}${url.hash}` || '/'
+  // fetch() from a SW goes to the network and does not re-enter this worker.
   return fetch(clean, { cache: 'reload' })
 }
 
+/**
+ * Network-first SPA navigations that never reject respondWith.
+ * Bare Workbox NetworkOnly throws `no-response` when fetch fails, which Safari
+ * surfaces as its native error page (even when a precached shell exists).
+ * We intentionally do NOT use PrecacheRoute for navigations (directoryIndex
+ * can poison Home Screen cold starts) — only an explicit matchPrecache fallback.
+ */
+async function networkThenPrecacheShell(request) {
+  try {
+    const response = await fetch(request)
+    if (response && response.ok) return response
+    // Non-OK (e.g. 5xx): still prefer live HTML when present; fall through only if empty.
+    if (response) return response
+  } catch {
+    /* network failed — try precached shell */
+  }
+
+  const shell = (await matchPrecache('/index.html')) || (await matchPrecache('index.html'))
+  if (shell) return shell
+
+  return new Response(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KnockScout</title></head><body><p>Unable to load KnockScout. Check your connection, then open <a href="/recover.html">recover.html</a> in Safari.</p></body></html>',
+    {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    },
+  )
+}
+
+// Navigation handlers MUST be registered before addRoute() / PrecacheRoute.
 registerRoute(
   ({ request, url }) => (
     request.mode === 'navigate'
@@ -53,35 +94,21 @@ registerRoute(
   ({ request }) => recoverAndFetch(request),
 )
 
-/**
- * Navigations must prefer the network.
- * Cache-only createHandlerBoundToURL('/index.html') can throw / fail when the
- * Workbox precache is incomplete on iOS, which surfaces as Safari's native
- * "not connected to the internet" page on Home Screen cold starts — even online.
- */
 registerRoute(
   ({ request, url }) => (
     request.mode === 'navigate'
     && !url.pathname.startsWith('/api/')
     && !url.pathname.startsWith('/__/')
   ),
-  new NetworkFirst({
-    cacheName: 'knockscout-navigations-v1',
-    networkTimeoutSeconds: 4,
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [200] }),
-      new ExpirationPlugin({
-        maxEntries: 8,
-        maxAgeSeconds: 7 * 24 * 60 * 60,
-        purgeOnQuotaError: true,
-      }),
-    ],
-  }),
+  ({ event }) => networkThenPrecacheShell(event.request),
 )
 
-// v3: do not cache opaque/status-0 responses (poisoned tiles on flaky iOS Safari).
-const TILE_CACHE = 'knockscout-map-tiles-v3'
-const PARCEL_CACHE = 'knockscout-parcel-details-v3'
+// Precache route for hashed assets / shell files (non-navigation requests win here).
+addRoute()
+
+// v5: tile/parcel runtime caches (bump to drop any poisoned iOS entries).
+const TILE_CACHE = 'knockscout-map-tiles-v5'
+const PARCEL_CACHE = 'knockscout-parcel-details-v5'
 
 function isSameOriginApi(url, pathPrefix) {
   try {
@@ -92,7 +119,6 @@ function isSameOriginApi(url, pathPrefix) {
   }
 }
 
-// Parcel vector tiles + Google basemap proxy — cache-first with expiry.
 registerRoute(
   ({ url, request }) => {
     if (request.method !== 'GET') return false
@@ -114,7 +140,6 @@ registerRoute(
   }),
 )
 
-// Parcel attribute lookups — stale-while-revalidate for recently viewed areas.
 registerRoute(
   ({ url, request }) => {
     if (request.method !== 'GET') return false
@@ -133,7 +158,7 @@ registerRoute(
   }),
 )
 
-// --- Push notifications (from legacy public/sw.js) ---
+// --- Push notifications ---
 
 self.addEventListener('push', (event) => {
   let data = { title: 'Notification', body: '' }

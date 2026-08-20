@@ -1,10 +1,12 @@
 /**
- * LandRecords parcel attribute lookup (WMS GetFeatureInfo).
- * Vector tiles omit attributes in some counties; this returns the full
- * pro:parcel_us record for a map click point.
+ * LandRecords parcel attribute lookup (WFS by lrid, then WMS GetFeatureInfo).
+ * The reduced `parcels` MVT layer often has geometry without situs; WMS at a
+ * click point can return an overlapping school/city polygon instead. When the
+ * client sends `lrid`, only that record is returned.
  */
 
 import { enforceIpRateLimit } from './_lib/rateLimit.js'
+import { pickParcelFeature, propertiesMatchRequestedLrid } from './_lib/parcelLookup.js'
 
 const WMS_BASE = 'https://api.landrecords.us/pro/wms'
 const WFS_BASE = 'https://api.landrecords.us/pro/wfs'
@@ -14,7 +16,7 @@ function authHeaders(apiKey) {
   return { Authorization: `Bearer ${apiKey}` }
 }
 
-async function fetchWmsByPoint(lat, lng, apiKey) {
+async function fetchWmsFeaturesByPoint(lat, lng, apiKey) {
   const minLat = lat - BBOX_DELTA
   const maxLat = lat + BBOX_DELTA
   const minLon = lng - BBOX_DELTA
@@ -32,14 +34,13 @@ async function fetchWmsByPoint(lat, lng, apiKey) {
   url.searchParams.set('i', '50')
   url.searchParams.set('j', '50')
   url.searchParams.set('info_format', 'application/json')
-  url.searchParams.set('feature_count', '1')
+  // Overlapping school/city polygons are common; callers pick by lrid or smallest area.
+  url.searchParams.set('feature_count', '10')
 
   const res = await fetch(url.toString(), { headers: authHeaders(apiKey) })
-  if (!res.ok) return null
+  if (!res.ok) return []
   const data = await res.json()
-  const feature = data?.features?.[0]
-  if (!feature?.properties) return null
-  return feature.properties
+  return Array.isArray(data?.features) ? data.features : []
 }
 
 async function fetchWfsByLrid(lrid, apiKey) {
@@ -98,8 +99,13 @@ export default async function handler(req, res) {
     }
 
     if (!properties) {
-      properties = await fetchWmsByPoint(lat, lng, apiKey)
+      const wmsFeature = pickParcelFeature(await fetchWmsFeaturesByPoint(lat, lng, apiKey), lrid)
+      properties = wmsFeature?.properties || null
       source = 'wms'
+    }
+
+    if (properties && !propertiesMatchRequestedLrid(properties, lrid)) {
+      properties = null
     }
 
     if (!properties) {
