@@ -26,6 +26,8 @@ import { getSenderDisplayName, getCompanyNameForSends } from '../../utils/profil
 import { findLeadById, displayLeadName } from '@/utils/leads'
 import { getLeadEmails, getLeadPhones } from '@/utils/leadContact'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
+import { resolveLeadCustomFields } from '@/utils/customFields'
+import { withLeadFieldTags, withLeadFieldTagData } from '@/utils/leadSendTags'
 import { LeadPickerField } from '../pickers/LeadPickerField'
 import { QuoteMessageTagEditor } from './QuoteMessageTagEditor'
 
@@ -39,10 +41,10 @@ const TEXT_MESSAGE_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--text w-f
 const SEGMENT_BTN =
   'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
 
-function TagInsertStrip({ onInsert, disabled }) {
+function TagInsertStrip({ tags = QUOTE_SEND_TAGS, onInsert, disabled }) {
   return (
     <div className="flex flex-wrap gap-1 mb-2">
-      {QUOTE_SEND_TAGS.map(({ key, label }) => (
+      {tags.map(({ key, label }) => (
         <button
           key={key}
           type="button"
@@ -148,6 +150,11 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
     [quote?.leadId, leads],
   )
 
+  const leadCustomFields = useMemo(
+    () => resolveLeadCustomFields({ settings: getSettings(), teams, teamMembership }),
+    [teams, teamMembership, open],
+  )
+
   const pickerLeads = useMemo(() => {
     if (!linkedLead?.id) return leads
     if (leads.some((l) => l.id === linkedLead.id)) return leads
@@ -163,7 +170,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
     [selectedLead],
   )
 
-  const tagData = useMemo(() => ({
+  const tagData = useMemo(() => withLeadFieldTagData({
     firstName: selectedLead?.firstName || '',
     lastName: selectedLead?.lastName || '',
     clientName: selectedLead
@@ -176,7 +183,12 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
     senderEmail: currentUser?.email || '',
     validUntil: quote?.validUntil?.slice(0, 10) || '',
     companyName: getCompanyNameForSends(teams, teamMembership),
-  }), [quote, selectedLead, recipient, lastLink, currentUser, teams, teamMembership])
+  }, selectedLead, leadCustomFields), [quote, selectedLead, recipient, lastLink, currentUser, teams, teamMembership, leadCustomFields])
+
+  const sendTags = useMemo(
+    () => withLeadFieldTags(QUOTE_SEND_TAGS, leadCustomFields),
+    [leadCustomFields],
+  )
 
   const subtitle = useMemo(() => {
     const title = quote?.title || 'Quote'
@@ -421,7 +433,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
                   <div>
                     <label className={FIELD_LABEL} htmlFor="quote-send-subject">Subject</label>
                     {focusedField === 'subject' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <QuoteMessageTagEditor
                       ref={subjectEditorRef}
@@ -429,6 +441,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
                       value={subject}
                       onChange={setSubject}
                       tagData={tagData}
+                      tags={sendTags}
                       className={SUBJECT_EDITOR}
                       placeholder="Email subject"
                       disabled={sending}
@@ -441,7 +454,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
                   <div>
                     <label className={FIELD_LABEL} htmlFor="quote-send-body">Message</label>
                     {focusedField === 'body' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <QuoteMessageTagEditor
                       ref={emailEditorRef}
@@ -449,6 +462,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
                       value={body}
                       onChange={setBody}
                       tagData={tagData}
+                      tags={sendTags}
                       className={MESSAGE_EDITOR}
                       placeholder="Optional message"
                       disabled={sending}
@@ -473,7 +487,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
                   <div>
                     <label className={FIELD_LABEL} htmlFor="quote-send-text">Message</label>
                     {focusedField === 'text' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <QuoteMessageTagEditor
                       ref={textEditorRef}
@@ -481,6 +495,7 @@ export function SendQuoteDialog({ open, quote, onClose, onSent, leads = [], team
                       value={textBody}
                       onChange={setTextBody}
                       tagData={tagData}
+                      tags={sendTags}
                       className={TEXT_MESSAGE_EDITOR}
                       placeholder="Text message"
                       disabled={sending}

@@ -5,6 +5,8 @@
 
 import { splitOwnerName, composeFullName } from './ownerName'
 import { getCachedOutreachTemplates } from './outreachTemplates'
+import { replaceMustacheTags } from './sendTemplateTags'
+import { buildCustomFieldTagData, buildLeadContactTagData } from './leadSendTags'
 
 const STORAGE_KEY = 'email_templates'
 
@@ -249,6 +251,8 @@ export function buildOutreachTagData(parcelData) {
       city: '',
       state: '',
       zip: '',
+      email: '',
+      phone: '',
     }
   }
   const properties = parcelData.properties || {}
@@ -258,21 +262,32 @@ export function buildOutreachTagData(parcelData) {
   const firstName = (parcelData.firstName || lead?.firstName || parsed.firstName || '').toString().trim()
   const lastName = (parcelData.lastName || lead?.lastName || parsed.lastName || '').toString().trim()
   const fullName = composeFullName(firstName, lastName) || ownerRaw || ''
+  const contact = buildLeadContactTagData(lead)
   return {
     firstName,
     lastName,
     fullName,
     ownerName: ownerRaw || fullName,
-    address: parcelData.address || properties.SITUS_ADDR || properties.SITE_ADDR || '',
+    address: parcelData.address || properties.SITUS_ADDR || properties.SITE_ADDR || lead?.address || '',
     city: properties.scity || properties.PROP_CITY || properties.SITUS_CITY || properties.CITY || '',
     state: properties.state2 || properties.PROP_STATE || properties.SITUS_STATE || properties.STATE || 'TX',
     zip: (properties.szip || properties.szip5 || properties.PROP_ZIP || properties.SITUS_ZIP || properties.ZIP || properties.ZIP_CODE || '').toString().trim() || '',
+    email: contact.email || String(parcelData.email || '').trim(),
+    phone: contact.phone || String(parcelData.phone || '').trim(),
   }
 }
 
-/** Resolve mustache (or brace) outreach template text against parcel data. */
-export function resolveOutreachTemplateText(text, parcelData) {
+/**
+ * Resolve mustache (or brace) outreach template text against parcel/lead data.
+ * Built-in brace tags stay brace-compatible; custom fields remain {{cf_*}} mustache.
+ */
+export function resolveOutreachTemplateText(text, parcelData, customFieldDefs = []) {
   if (!text) return ''
   const withBraces = mustacheToBraceTags(String(text))
-  return replaceTemplateTags(withBraces, parcelData)
+  const braceResolved = replaceTemplateTags(withBraces, parcelData)
+  const lead = parcelData?.lead || null
+  return replaceMustacheTags(braceResolved, {
+    ...buildOutreachTagData(parcelData),
+    ...buildCustomFieldTagData(lead, customFieldDefs),
+  })
 }

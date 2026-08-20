@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, Loader2 } from 'lucide-react'
 import {
   Dialog,
@@ -23,6 +23,7 @@ import {
   createOutreachTemplate,
   updateOutreachTemplateApi,
 } from '@/utils/outreachTemplates'
+import { withLeadFieldTags, withLeadFieldTagData } from '@/utils/leadSendTags'
 import {
   OUTREACH_TEMPLATE_PANEL_CLASS,
   OUTREACH_TEMPLATE_FIELD_LABEL,
@@ -32,10 +33,10 @@ import {
   OUTREACH_TEMPLATE_TEXT_MESSAGE_EDITOR,
 } from './outreachTemplatePanelShared'
 
-function TagInsertStrip({ onInsert, disabled }) {
+function TagInsertStrip({ tags = OUTREACH_SEND_TAGS, onInsert, disabled }) {
   return (
     <div className="flex flex-wrap gap-1 mb-2">
-      {OUTREACH_SEND_TAGS.map(({ key, label }) => (
+      {tags.map(({ key, label }) => (
         <button
           key={key}
           type="button"
@@ -59,6 +60,7 @@ export function OutreachTemplateEditorDialog({
   template = null,
   getToken = null,
   onSaved,
+  leadCustomFields = [],
 }) {
   const isEdit = !!template?.id
   const initializedRef = useRef(false)
@@ -72,7 +74,14 @@ export function OutreachTemplateEditorDialog({
   const [focusedField, setFocusedField] = useState(null)
   const [saving, setSaving] = useState(false)
 
-  const tagData = buildOutreachTagData(null)
+  const sendTags = useMemo(
+    () => withLeadFieldTags(OUTREACH_SEND_TAGS, leadCustomFields),
+    [leadCustomFields],
+  )
+  const tagData = useMemo(
+    () => withLeadFieldTagData(buildOutreachTagData(null), null, leadCustomFields),
+    [leadCustomFields],
+  )
 
   useEffect(() => {
     if (!open) {
@@ -204,7 +213,7 @@ export function OutreachTemplateEditorDialog({
                 Subject
               </label>
               {focusedField === 'subject' && (
-                <TagInsertStrip onInsert={insertTag} disabled={saving} />
+                <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={saving} />
               )}
               <MessageTagEditor
                 ref={subjectEditorRef}
@@ -212,7 +221,7 @@ export function OutreachTemplateEditorDialog({
                 value={subject}
                 onChange={setSubject}
                 tagData={tagData}
-                tags={OUTREACH_SEND_TAGS}
+                tags={sendTags}
                 className={OUTREACH_TEMPLATE_SUBJECT_EDITOR}
                 placeholder="Email subject line"
                 disabled={saving}
@@ -228,7 +237,7 @@ export function OutreachTemplateEditorDialog({
               {kind === 'email' ? 'Body' : 'Message'}
             </label>
             {focusedField === 'body' && (
-              <TagInsertStrip onInsert={insertTag} disabled={saving} />
+              <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={saving} />
             )}
             <MessageTagEditor
               ref={bodyEditorRef}
@@ -236,7 +245,7 @@ export function OutreachTemplateEditorDialog({
               value={body}
               onChange={setBody}
               tagData={tagData}
-              tags={OUTREACH_SEND_TAGS}
+              tags={sendTags}
               className={
                 kind === 'text'
                   ? OUTREACH_TEMPLATE_TEXT_MESSAGE_EDITOR
@@ -254,7 +263,7 @@ export function OutreachTemplateEditorDialog({
           </div>
 
           <p className="text-xs text-white/50 leading-relaxed">
-            Insert tags while editing — they become lead and parcel fields when you send.
+            Insert lead fields and custom fields while editing — they resolve when you send.
           </p>
         </div>
 

@@ -34,6 +34,8 @@ import { getSkipTracedParcel } from '../../utils/skipTrace'
 import { MessageTagEditor } from '../shared/MessageTagEditor'
 import { InlineDropdown } from '../InlineDropdown'
 import { OutreachCcField } from './OutreachCcField'
+import { resolveLeadCustomFields } from '../../utils/customFields'
+import { withLeadFieldTags, withLeadFieldTagData } from '../../utils/leadSendTags'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -45,10 +47,10 @@ const TEXT_MESSAGE_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--text w-f
 const SEGMENT_BTN =
   'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
 
-function TagInsertStrip({ onInsert, disabled }) {
+function TagInsertStrip({ tags = OUTREACH_SEND_TAGS, onInsert, disabled }) {
   return (
     <div className="flex flex-wrap gap-1 mb-2">
-      {OUTREACH_SEND_TAGS.map(({ key, label }) => (
+      {tags.map(({ key, label }) => (
         <button
           key={key}
           type="button"
@@ -185,6 +187,9 @@ export function SendOutreachDialog({
   getToken,
   currentUser,
   teamMembers = [],
+  teams = [],
+  teamMembership = null,
+  leadCustomFields: leadCustomFieldsProp = null,
   emailTestMode = false,
   testEmail = '',
 }) {
@@ -212,6 +217,20 @@ export function SendOutreachDialog({
     if (leadId) return findLeadById(leads, leadId)
     return null
   }, [lead, parcelData?.lead, leadId, leads])
+
+  const leadCustomFields = useMemo(() => {
+    if (Array.isArray(leadCustomFieldsProp)) return leadCustomFieldsProp
+    return resolveLeadCustomFields({
+      settings: getSettings(),
+      teams,
+      teamMembership,
+    })
+  }, [leadCustomFieldsProp, teams, teamMembership, open])
+
+  const sendTags = useMemo(
+    () => withLeadFieldTags(OUTREACH_SEND_TAGS, leadCustomFields),
+    [leadCustomFields],
+  )
 
   const leadPhones = useMemo(() => mergeUniquePhones(
     recipientPhone ? [recipientPhone] : [],
@@ -241,7 +260,10 @@ export function SendOutreachDialog({
     }
   }, [parcelData, resolvedLead])
 
-  const tagData = useMemo(() => buildOutreachTagData(tagParcelData), [tagParcelData])
+  const tagData = useMemo(
+    () => withLeadFieldTagData(buildOutreachTagData(tagParcelData), resolvedLead, leadCustomFields),
+    [tagParcelData, resolvedLead, leadCustomFields],
+  )
 
   const subtitle = useMemo(() => {
     const parts = []
@@ -375,8 +397,8 @@ export function SendOutreachDialog({
       return
     }
 
-    const resolvedSubject = resolveOutreachTemplateText(subject, tagParcelData)
-    const resolvedBody = resolveOutreachTemplateText(body, tagParcelData)
+    const resolvedSubject = resolveOutreachTemplateText(subject, tagParcelData, leadCustomFields)
+    const resolvedBody = resolveOutreachTemplateText(body, tagParcelData, leadCustomFields)
     const toAddr = actualRecipientEmail || trimmed
 
     const ccSummary = resolvedCcEmails.length ? `\nCC: ${resolvedCcEmails.join(', ')}` : ''
@@ -424,7 +446,7 @@ export function SendOutreachDialog({
       showToast('Enter a valid phone number', 'error')
       return
     }
-    const msg = resolveOutreachTemplateText(textBody, tagParcelData)
+    const msg = resolveOutreachTemplateText(textBody, tagParcelData, leadCustomFields)
     const url = msg
       ? `sms:${tel}?body=${encodeURIComponent(msg)}`
       : `sms:${tel}`
@@ -546,7 +568,7 @@ export function SendOutreachDialog({
                   <div>
                     <label className={FIELD_LABEL} htmlFor="outreach-send-subject">Subject</label>
                     {focusedField === 'subject' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <MessageTagEditor
                       ref={subjectEditorRef}
@@ -554,7 +576,7 @@ export function SendOutreachDialog({
                       value={subject}
                       onChange={setSubject}
                       tagData={tagData}
-                      tags={OUTREACH_SEND_TAGS}
+                      tags={sendTags}
                       className={SUBJECT_EDITOR}
                       placeholder="Email subject"
                       disabled={sending}
@@ -567,7 +589,7 @@ export function SendOutreachDialog({
                   <div>
                     <label className={FIELD_LABEL} htmlFor="outreach-send-body">Message</label>
                     {focusedField === 'body' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <MessageTagEditor
                       ref={emailEditorRef}
@@ -575,7 +597,7 @@ export function SendOutreachDialog({
                       value={body}
                       onChange={setBody}
                       tagData={tagData}
-                      tags={OUTREACH_SEND_TAGS}
+                      tags={sendTags}
                       className={MESSAGE_EDITOR}
                       placeholder="Email message"
                       disabled={sending}
@@ -663,7 +685,7 @@ export function SendOutreachDialog({
                   <div>
                     <label className={FIELD_LABEL} htmlFor="outreach-send-text">Message</label>
                     {focusedField === 'text' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <MessageTagEditor
                       ref={textEditorRef}
@@ -671,7 +693,7 @@ export function SendOutreachDialog({
                       value={textBody}
                       onChange={setTextBody}
                       tagData={tagData}
-                      tags={OUTREACH_SEND_TAGS}
+                      tags={sendTags}
                       className={TEXT_MESSAGE_EDITOR}
                       placeholder="Text message"
                       disabled={sending}

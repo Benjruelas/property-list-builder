@@ -25,6 +25,9 @@ import { invalidateCachedLeadForms } from '@/utils/leadForms'
 import { displayLeadName } from '@/utils/leads'
 import { getSenderDisplayName, getCompanyNameForSends } from '@/utils/profile'
 import { FORM_SEND_TAGS, replaceFormSendTags } from '@/utils/sendTemplateTags'
+import { getSettings } from '@/utils/settings'
+import { resolveLeadCustomFields } from '@/utils/customFields'
+import { withLeadFieldTags, withLeadFieldTagData } from '@/utils/leadSendTags'
 import { LeadPickerField } from '../pickers/LeadPickerField'
 import { MessageTagEditor } from '../shared/MessageTagEditor'
 
@@ -43,10 +46,10 @@ const TEXT_MESSAGE_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--text w-f
 const SEGMENT_BTN =
   'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
 
-function TagInsertStrip({ onInsert, disabled }) {
+function TagInsertStrip({ tags = FORM_SEND_TAGS, onInsert, disabled }) {
   return (
     <div className="flex flex-wrap gap-1 mb-2">
-      {FORM_SEND_TAGS.map(({ key, label }) => (
+      {tags.map(({ key, label }) => (
         <button
           key={key}
           type="button"
@@ -148,6 +151,16 @@ export function SendFormDialog({
   const focusBlurTimerRef = useRef(null)
   const canPdf = typeof preparePdf === 'function'
 
+  const leadCustomFields = useMemo(
+    () => resolveLeadCustomFields({ settings: getSettings(), teams, teamMembership }),
+    [teams, teamMembership, open],
+  )
+
+  const sendTags = useMemo(
+    () => withLeadFieldTags(FORM_SEND_TAGS, leadCustomFields),
+    [leadCustomFields],
+  )
+
   const pickerLeads = useMemo(() => {
     if (!lead?.id) return leads
     if (leads.some((l) => l.id === lead.id)) return leads
@@ -168,7 +181,7 @@ export function SendFormDialog({
     [prefillValues],
   )
 
-  const tagData = useMemo(() => ({
+  const tagData = useMemo(() => withLeadFieldTagData({
     firstName: selectedLead?.firstName || '',
     lastName: selectedLead?.lastName || '',
     clientName: selectedLead
@@ -179,7 +192,7 @@ export function SendFormDialog({
     senderName: getSenderDisplayName(currentUser),
     senderEmail: currentUser?.email || '',
     companyName: getCompanyNameForSends(teams, teamMembership),
-  }), [selectedLead, recipient, template?.name, lastLink, currentUser, teams, teamMembership])
+  }, selectedLead, leadCustomFields), [selectedLead, recipient, template?.name, lastLink, currentUser, teams, teamMembership, leadCustomFields])
 
   const subtitle = useMemo(() => {
     const parts = [template?.name || 'Form']
@@ -571,7 +584,7 @@ export function SendFormDialog({
                   <div>
                     <label className={FIELD_LABEL} htmlFor="form-send-subject">Subject</label>
                     {focusedField === 'subject' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <MessageTagEditor
                       ref={subjectEditorRef}
@@ -579,7 +592,7 @@ export function SendFormDialog({
                       value={subject}
                       onChange={setSubject}
                       tagData={tagData}
-                      tags={FORM_SEND_TAGS}
+                      tags={sendTags}
                       className={SUBJECT_EDITOR}
                       placeholder="Email subject"
                       disabled={sending}
@@ -592,7 +605,7 @@ export function SendFormDialog({
                   <div>
                     <label className={FIELD_LABEL} htmlFor="form-send-note">Message</label>
                     {focusedField === 'body' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <MessageTagEditor
                       ref={emailEditorRef}
@@ -600,7 +613,7 @@ export function SendFormDialog({
                       value={body}
                       onChange={setBody}
                       tagData={tagData}
-                      tags={FORM_SEND_TAGS}
+                      tags={sendTags}
                       className={MESSAGE_EDITOR}
                       placeholder="Optional message"
                       disabled={sending}
@@ -638,7 +651,7 @@ export function SendFormDialog({
                   <div>
                     <label className={FIELD_LABEL} htmlFor="form-send-text">Message</label>
                     {focusedField === 'text' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={sending} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     )}
                     <MessageTagEditor
                       ref={textEditorRef}
@@ -646,7 +659,7 @@ export function SendFormDialog({
                       value={textBody}
                       onChange={setTextBody}
                       tagData={tagData}
-                      tags={FORM_SEND_TAGS}
+                      tags={sendTags}
                       className={TEXT_MESSAGE_EDITOR}
                       placeholder="Text message"
                       disabled={sending}
