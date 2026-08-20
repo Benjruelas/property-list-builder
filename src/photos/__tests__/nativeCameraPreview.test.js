@@ -26,6 +26,7 @@ import {
   isNativeCameraPreviewAvailable,
   isNativeCameraPreviewStarted,
   NATIVE_CAMERA_BODY_CLASS,
+  resizeNativeCameraPreview,
   setNativeFlashMode,
   startNativeCameraPreview,
   stopNativeCameraPreview,
@@ -63,7 +64,11 @@ describe('nativeCameraPreview', () => {
       toBack: true,
       disableAudio: true,
       enableZoom: true,
+      rotateWhenOrientationChanged: true,
     }))
+    const startArg = plugin.start.mock.calls[0][0]
+    expect(startArg.width).toBe(startArg.height)
+    expect(startArg.width).toBeGreaterThan(0)
     expect(isNativeCameraPreviewStarted()).toBe(true)
     expect(document.documentElement.classList.contains(NATIVE_CAMERA_BODY_CLASS)).toBe(true)
 
@@ -94,5 +99,21 @@ describe('nativeCameraPreview', () => {
     __setCameraPreviewPluginForTests(plugin)
     await startNativeCameraPreview()
     await expect(captureNativeStill()).resolves.toBe('data:image/jpeg;base64,already')
+  })
+
+  it('does not restart the session on resizeNativeCameraPreview', async () => {
+    vi.mocked(isNativeApp).mockReturnValue(true)
+    const plugin = {
+      start: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      capture: vi.fn(async () => ({ value: 'x' })),
+      flip: vi.fn(async () => {}),
+      setFlashMode: vi.fn(async () => {}),
+    }
+    __setCameraPreviewPluginForTests(plugin)
+    await startNativeCameraPreview()
+    await expect(resizeNativeCameraPreview()).resolves.toBe(true)
+    expect(plugin.stop).not.toHaveBeenCalled()
+    expect(plugin.start).toHaveBeenCalledTimes(1)
   })
 })

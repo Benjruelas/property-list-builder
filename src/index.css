@@ -9111,6 +9111,16 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 /* Immersive camera-style photo mode */
 .photo-mode-overlay--camera {
   background: #000;
+  /* Stay pinned to the visual viewport so rotation only reflows chrome,
+     not a height jump from --vw-height / layout recalculation. */
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100vw;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
 }
 
 /* Native toBack preview: let AVFoundation / CameraX show through the WebView */
@@ -9125,9 +9135,22 @@ html.photo-native-camera-active #modal-root {
   background: transparent !important;
 }
 
+/* Avoid animating size/position of the camera stage during orientation changes */
+html.photo-native-camera-active,
+html.photo-native-camera-active body,
+html.photo-native-camera-active #root,
+html.photo-native-camera-active #modal-root,
+.photo-mode-overlay--camera,
+.photo-mode-overlay--camera .photo-mode-viewport--immersive,
+.photo-mode-overlay--camera .photo-mode-video-stage,
+.photo-mode-overlay--camera .photo-mode-video--immersive {
+  transition: none !important;
+}
+
 .photo-mode-viewport--immersive {
-  position: relative;
-  flex: 1;
+  position: absolute;
+  inset: 0;
+  flex: none;
   min-height: 0;
   width: 100%;
   height: 100%;

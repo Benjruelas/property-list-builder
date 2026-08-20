@@ -33,10 +33,18 @@ function setNativeCameraChromeActive(active) {
   document.body?.classList.toggle(NATIVE_CAMERA_BODY_CLASS, !!active)
 }
 
-function viewportSize() {
-  const w = Math.round(window.innerWidth || window.screen?.width || 0)
-  const h = Math.round(window.innerHeight || window.screen?.height || 0)
-  return { width: Math.max(1, w), height: Math.max(1, h) }
+/**
+ * Size the native preview as a square covering the long edge of the screen.
+ * That way orientation changes do not shrink/expand the camera layer into black
+ * bars — the HTML chrome reflows while the preview stays full-bleed.
+ */
+function previewCoverSize() {
+  const iw = Math.round(window.innerWidth || 0)
+  const ih = Math.round(window.innerHeight || 0)
+  const sw = Math.round(window.screen?.width || 0)
+  const sh = Math.round(window.screen?.height || 0)
+  const side = Math.max(iw, ih, sw, sh, 1)
+  return { width: side, height: side }
 }
 
 function toDataUrl(base64) {
@@ -55,7 +63,7 @@ export async function startNativeCameraPreview(opts = {}) {
   if (!plugin) return false
 
   const position = opts.position === 'front' ? 'front' : 'rear'
-  const { width, height } = viewportSize()
+  const { width, height } = previewCoverSize()
 
   if (started) {
     try {
@@ -75,6 +83,8 @@ export async function startNativeCameraPreview(opts = {}) {
       disableAudio: true,
       enableHighResolution: opts.enableHighResolution !== false,
       enableZoom: true,
+      // Keep true so videoOrientation updates; with a cover square the frame
+      // size stays constant so the preview does not visibly resize.
       rotateWhenOrientationChanged: true,
       x: 0,
       y: 0,
@@ -154,12 +164,12 @@ export async function setNativeFlashMode(mode) {
 }
 
 /**
- * Restart preview at current viewport size (after rotate / resize).
+ * Intentionally a no-op: restarting the session on rotate causes black gaps.
+ * The cover-square preview + plugin orientation handler keep the feed full-bleed
+ * while only the HTML chrome reflows.
  */
 export async function resizeNativeCameraPreview() {
-  if (!started) return false
-  const facing = activeFacing
-  return startNativeCameraPreview({ position: facing })
+  return started
 }
 
 /** Test helpers */
