@@ -1,9 +1,11 @@
 import { mapProperties, canonicalParcelId } from './parcelPropertyMap'
+import { propertiesMatchRequestedLrid } from '../../api/_lib/parcelLookup.js'
 
 /**
  * Fetch full parcel attributes from LandRecords via /api/parcel (WMS/WFS proxy).
  * Prefer rendered vector-tile properties when they already include situs/owner —
  * WFS/WMS coverage can lag tiles and return 404 for counties that still paint.
+ * Never accept a WMS hit for a different lrid (overlapping school/city polygons).
  */
 export async function fetchLandRecordsParcel({ lat, lng, lrid, signal }) {
   if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {
@@ -27,6 +29,7 @@ export async function fetchLandRecordsParcel({ lat, lng, lrid, signal }) {
   const data = await res.json()
   const raw = data?.properties
   if (!raw || typeof raw !== 'object') return null
+  if (!propertiesMatchRequestedLrid(raw, lrid)) return null
 
   const properties = mapProperties(raw)
   const parcelId = canonicalParcelId(raw) || properties.PROP_ID || lrid || ''

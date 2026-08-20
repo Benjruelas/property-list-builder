@@ -14,8 +14,10 @@ export function resolveParcelDisplayAddress(properties = {}) {
     return { title: situs, subtitle: '', fullAddress: situs, hasStreetAddress: true }
   }
 
-  const tail = state && zip ? `${state} ${zip}` : (state || zip)
-  const area = [city, tail].filter(Boolean).join(', ')
+  // Sparse LandRecords tiles often have parcelstate=TX and nothing else.
+  // State-only is not a location subtitle (and must not become the title).
+  const tail = state && zip ? `${state} ${zip}` : zip
+  const area = [city, city ? (tail || state) : tail].filter(Boolean).join(', ')
   const subtitleParts = []
   if (area) subtitleParts.push(area)
   if (county) subtitleParts.push(`${county} County`)

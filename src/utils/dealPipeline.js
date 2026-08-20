@@ -84,6 +84,14 @@ export const saveTitle = (title) => {
   }
 }
 
+const PLACEHOLDER_ADDRESSES = new Set([
+  '', 'unknown', 'no address', 'no street address', 'parcel', 'loading…', 'loading...',
+])
+
+function isPlaceholderAddress(value) {
+  return PLACEHOLDER_ADDRESSES.has(String(value || '').trim().toLowerCase())
+}
+
 /**
  * Build full SITUS (property) address only. Never mixes in mailing address.
  * Uses: SITUS_ADDR, SITE_ADDR, STREET, ADDR_LINE1; city/state/zip from situs fields only.
@@ -96,6 +104,7 @@ export function getFullAddress(data) {
   const city = p.scity || p.PROP_CITY || p.SITUS_CITY || p.CITY || ''
   const state = p.state2 || p.PROP_STATE || p.SITUS_STATE || p.STATE || ''
   const zip = (p.szip || p.szip5 || p.PROP_ZIP || p.SITUS_ZIP || p.ZIP || p.ZIP_CODE || '').toString().trim()
+  const fromData = isPlaceholderAddress(data?.address) ? '' : (data?.address || '')
 
   if (city || state || zip) {
     // Have separate situs city/state/zip - use street from situs only
@@ -105,14 +114,19 @@ export function getFullAddress(data) {
       return parts.join(', ').trim() || 'Unknown'
     }
     // Full situs string - never ADDRESS (could be mailing), never MAIL_*
-    const situsFull = data?.address || p.SITUS_ADDR || p.SITE_ADDR || ''
+    const situsFull = fromData || p.SITUS_ADDR || p.SITE_ADDR || ''
     const streetOnly = situsFull.indexOf(',') > 0 ? situsFull.slice(0, situsFull.indexOf(',')).trim() : situsFull.trim()
+    if (!(streetOnly || situsFull.trim())) {
+      // Sparse tiles often only have parcelstate=TX — that is not an address.
+      if (!city && !zip) return 'Unknown'
+      return [city, state && zip ? `${state} ${zip}` : (state || zip)].filter(Boolean).join(', ').trim() || 'Unknown'
+    }
     const parts = [streetOnly || situsFull, city, state && zip ? `${state} ${zip}` : (state || zip)].filter(Boolean)
     return parts.join(', ').trim() || 'Unknown'
   }
 
   // No separate situs city/state/zip - use situs full address only
-  const situsFull = data?.address || p.SITUS_ADDR || p.SITE_ADDR || p.STREET || p.ADDR_LINE1 || ''
+  const situsFull = fromData || p.SITUS_ADDR || p.SITE_ADDR || p.STREET || p.ADDR_LINE1 || ''
   return situsFull.trim() || 'Unknown'
 }
 
