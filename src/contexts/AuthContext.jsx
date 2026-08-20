@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth'
 import { auth } from '../config/firebase'
 import { showToast } from '../components/ui/toast'
+import { isIosStandalone } from '../utils/isIosStandalone'
 
 const AuthContext = createContext({})
 
@@ -24,6 +25,35 @@ export const useAuth = () => {
 
 const DEV_USER = { uid: 'dev-local', email: 'dev@localhost', displayName: 'Dev User' }
 const isDev = import.meta.env.DEV
+
+/** Codes that are expected on cold open (no pending redirect) — do not toast. */
+const SILENT_REDIRECT_CODES = new Set([
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+  'auth/no-auth-event',
+  'auth/null-user',
+])
+
+function googleSignInErrorMessage(error) {
+  const code = error?.code || ''
+  switch (code) {
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized for Google sign-in.'
+    case 'auth/network-request-failed':
+      return 'Network error during Google sign-in. Check your connection and try again.'
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method.'
+    case 'auth/operation-not-allowed':
+      return 'Google sign-in is not enabled for this project.'
+    case 'auth/internal-error':
+      return 'Google sign-in failed. Try again, or use email and password.'
+    default:
+      if (typeof error?.message === 'string' && error.message && !error.message.startsWith('Firebase:')) {
+        return error.message
+      }
+      return 'Google sign-in failed. Try again, or use email and password.'
+  }
+}
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(isDev ? DEV_USER : null)
@@ -76,15 +106,23 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Full-page redirect to Google (better on mobile than popup).
+  // Full-page redirect to Google (works in Safari tabs; blocked on iOS Home Screen).
   const signInWithGoogle = async () => {
+    if (isIosStandalone()) {
+      const err = new Error(
+        'Google sign-in is not available in the Home Screen app. Use email and password, or open knockscout.app in Safari.',
+      )
+      err.code = 'auth/operation-not-supported-in-this-environment'
+      showToast(err.message, 'error')
+      throw err
+    }
     try {
       const provider = new GoogleAuthProvider()
       provider.setCustomParameters({ prompt: 'select_account' })
       await signInWithRedirect(auth, provider)
       showToast('Redirecting to Google…', 'info')
     } catch (error) {
-      showToast(error.message || 'Failed to sign in with Google', 'error')
+      showToast(googleSignInErrorMessage(error), 'error')
       throw error
     }
   }
@@ -109,10 +147,9 @@ export const AuthProvider = ({ children }) => {
       })
       .catch((error) => {
         const code = error?.code || ''
-        if (code && code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
-          console.error('Google redirect sign-in failed:', error)
-          showToast(error.message || 'Sign-in failed', 'error')
-        }
+        if (!code || SILENT_REDIRECT_CODES.has(code)) return
+        console.error('Google redirect sign-in failed:', error)
+        showToast(googleSignInErrorMessage(error), 'error')
       })
   }, [])
 

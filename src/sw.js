@@ -13,9 +13,9 @@
  * So we: precache() assets, register navigation handlers FIRST, then addRoute().
  */
 
-import { addRoute, cleanupOutdatedCaches, precache } from 'workbox-precaching'
+import { addRoute, cleanupOutdatedCaches, matchPrecache, precache } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
-import { CacheFirst, NetworkOnly, StaleWhileRevalidate } from 'workbox-strategies'
+import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
@@ -55,6 +55,36 @@ async function recoverAndFetch(request) {
   return fetch(clean, { cache: 'reload' })
 }
 
+/**
+ * Network-first SPA navigations that never reject respondWith.
+ * Bare Workbox NetworkOnly throws `no-response` when fetch fails, which Safari
+ * surfaces as its native error page (even when a precached shell exists).
+ * We intentionally do NOT use PrecacheRoute for navigations (directoryIndex
+ * can poison Home Screen cold starts) — only an explicit matchPrecache fallback.
+ */
+async function networkThenPrecacheShell(request) {
+  try {
+    const response = await fetch(request)
+    if (response && response.ok) return response
+    // Non-OK (e.g. 5xx): still prefer live HTML when present; fall through only if empty.
+    if (response) return response
+  } catch {
+    /* network failed — try precached shell */
+  }
+
+  const shell = (await matchPrecache('/index.html')) || (await matchPrecache('index.html'))
+  if (shell) return shell
+
+  return new Response(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KnockScout</title></head><body><p>Unable to load KnockScout. Check your connection, then open <a href="/recover.html">recover.html</a> in Safari.</p></body></html>',
+    {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    },
+  )
+}
+
 // Navigation handlers MUST be registered before addRoute() / PrecacheRoute.
 registerRoute(
   ({ request, url }) => (
@@ -70,15 +100,15 @@ registerRoute(
     && !url.pathname.startsWith('/api/')
     && !url.pathname.startsWith('/__/')
   ),
-  new NetworkOnly(),
+  ({ event }) => networkThenPrecacheShell(event.request),
 )
 
 // Precache route for hashed assets / shell files (non-navigation requests win here).
 addRoute()
 
-// v4: tile/parcel runtime caches (bump to drop any poisoned iOS entries).
-const TILE_CACHE = 'knockscout-map-tiles-v4'
-const PARCEL_CACHE = 'knockscout-parcel-details-v4'
+// v5: tile/parcel runtime caches (bump to drop any poisoned iOS entries).
+const TILE_CACHE = 'knockscout-map-tiles-v5'
+const PARCEL_CACHE = 'knockscout-parcel-details-v5'
 
 function isSameOriginApi(url, pathPrefix) {
   try {
