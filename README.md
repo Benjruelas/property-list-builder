@@ -331,7 +331,7 @@ knockscout/
 
 The map uses **MapLibre GL** (via `react-map-gl`) with compass-based rotation. Basemap imagery is loaded through **`/api/google-tiles-session`** (Google Map Tiles API — satellite, street, hybrid) with **Mapbox raster** as fallback when the Google key is missing or session creation fails.
 
-Parcel boundaries are rendered from **vector tiles** (PBF) sourced from LandRecords.us, proxied through `api/tiles.js` which caches tiles in Cloudflare R2 for zero-egress re-serving. `PMTilesParcelLayer` adds the vector source same-origin (`/api/tiles`) for PWA reliability and handles hit-testing, selection highlighting, and list-color overlays.
+Parcel boundaries are rendered from **vector tiles** (PBF) via `api/tiles.js`: owned county tiles in R2 (`owned/tiles/...`) are preferred, then the LandRecords R2 cache, then LandRecords upstream as fallback. A batch county ingest pipeline fills owned tiles upfront (see [`docs/parcel-pipeline-agents.md`](docs/parcel-pipeline-agents.md)). `PMTilesParcelLayer` adds the vector source same-origin (`/api/tiles`) for PWA reliability and handles hit-testing, selection highlighting, and list-color overlays.
 
 **Map layers:**
 - **Satellite / street / hybrid:** Google Map Tiles API (2x high-DPI), Mapbox fallback
@@ -534,8 +534,10 @@ All endpoints require `Authorization: Bearer <Firebase ID token>` unless noted. 
 | GET/POST/PATCH/DELETE | `/api/teams` | Team management |
 | GET/POST | `/api/tags` | Tag registry |
 | GET | `/api/activity`, `/api/feed`, `/api/notifications` | Activity + notification feeds |
-| GET | `/api/tiles?z=&x=&y=` | Parcel vector tile (PBF), R2-cached, IP rate-limited |
+| GET | `/api/tiles?z=&x=&y=` | Parcel vector tile (PBF): owned R2 → cache → LandRecords, IP rate-limited |
 | GET | `/api/parcel` | Parcel lookup (IP rate-limited) |
+| GET/POST | `/api/parcel-pipeline/counties` | Ops: seed/claim/list county ingest catalog (pipeline secret) |
+| POST | `/api/parcel-pipeline/report` | Ops: report county ingest result (pipeline secret) |
 | GET | `/api/google-tiles-session` | Basemap session token (IP rate-limited) |
 | GET | `/api/hail-events?lat=&lng=` | Hail history near coordinates |
 | GET | `/api/solar-imagery`, `/api/sentinel-imagery`, `/api/eagleview-imagery` | Roof imagery providers (IP rate-limited) |

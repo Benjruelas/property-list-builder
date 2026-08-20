@@ -1,12 +1,15 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { enforceIpRateLimit } from './_lib/rateLimit.js'
+import {
+  OWNED_TILE_PREFIX,
+  LEGACY_TILE_PREFIX,
+  PARCEL_MIN_ZOOM,
+} from './_lib/parcelPipeline/constants.js'
+import { getOwnedPmtilesTile } from './_lib/parcelPipeline/pmtilesR2.js'
 
-const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
+const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days (LandRecords cache only)
 const EMPTY_MARKER = Buffer.alloc(0)
 const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'
-
-/** Must match PARCEL_MIN_ZOOM in PMTilesParcelLayer — below this we never request tiles. */
-const PARCEL_MIN_ZOOM = 15
 
 /**
  * LandRecords coverage is a sparse pyramid. MapLibre treats HTTP 204 as a successful
@@ -25,6 +28,11 @@ function sendEmptyTile(res, zi) {
   return res.status(204).end()
 }
 
+function ownedOnly() {
+  const v = String(process.env.PARCEL_TILES_OWNED_ONLY || '').toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes'
+}
+
 let _s3
 function getS3() {
   if (_s3) return _s3
@@ -39,14 +47,16 @@ function getS3() {
   return _s3
 }
 
-async function getFromR2(key) {
+async function getFromR2(key, { ignoreTtl = false } = {}) {
   try {
     const res = await getS3().send(new GetObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
     }))
-    const age = Date.now() - (res.LastModified?.getTime() ?? 0)
-    if (age > TTL_MS) return null // stale
+    if (!ignoreTtl) {
+      const age = Date.now() - (res.LastModified?.getTime() ?? 0)
+      if (age > TTL_MS) return null // stale LandRecords cache
+    }
     const chunks = []
     for await (const chunk of res.Body) chunks.push(chunk)
     return Buffer.concat(chunks)
@@ -65,6 +75,12 @@ function putToR2(key, body) {
   }))
 }
 
+function sendPbf(res, buf) {
+  res.setHeader('Content-Type', 'application/x-protobuf')
+  res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
+  return res.status(200).send(buf)
+}
+
 export default async function handler(req, res) {
   // Map tiles can't carry a bearer token, so throttle abuse per-IP instead.
   if (await enforceIpRateLimit(req, res, { name: 'tiles', limit: 4000, windowSec: 60 })) return
@@ -77,25 +93,52 @@ export default async function handler(req, res) {
   const zi = parseInt(z, 10)
   const xi = parseInt(x, 10)
   const yi = parseInt(y, 10)
-  const r2Key = `tiles/${zi}/${xi}/${yi}.pbf`
+  const ownedKey = `${OWNED_TILE_PREFIX}/${zi}/${xi}/${yi}.pbf`
+  const cacheKey = `${LEGACY_TILE_PREFIX}/${zi}/${xi}/${yi}.pbf`
 
-  // 1. Check R2 cache
+  // 1. Prefer county PMTiles archives (one object per county — fast ingest)
   try {
-    const cached = await getFromR2(r2Key)
+    const fromPmtiles = await getOwnedPmtilesTile(zi, xi, yi)
+    if (fromPmtiles !== null) {
+      if (fromPmtiles.length === 0) return sendEmptyTile(res, zi)
+      res.setHeader('X-Parcel-Tile-Source', 'owned-pmtiles')
+      return sendPbf(res, fromPmtiles)
+    }
+  } catch (e) {
+    console.error('R2 owned PMTiles read error:', e.message)
+  }
+
+  // 2. Legacy per-tile owned XYZ (counties uploaded before PMTiles cutover)
+  try {
+    const owned = await getFromR2(ownedKey, { ignoreTtl: true })
+    if (owned !== null) {
+      if (owned.length === 0) return sendEmptyTile(res, zi)
+      res.setHeader('X-Parcel-Tile-Source', 'owned')
+      return sendPbf(res, owned)
+    }
+  } catch (e) {
+    console.error('R2 owned read error:', e.message)
+  }
+
+  if (ownedOnly()) {
+    return sendEmptyTile(res, zi)
+  }
+
+  // 3. LandRecords R2 cache (90d TTL)
+  try {
+    const cached = await getFromR2(cacheKey)
     if (cached !== null) {
       if (cached.length === 0) {
-        // Empty marker — no parcels at this z/x/y (may exist on a parent zoom)
         return sendEmptyTile(res, zi)
       }
-      res.setHeader('Content-Type', 'application/x-protobuf')
-      res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
-      return res.status(200).send(cached)
+      res.setHeader('X-Parcel-Tile-Source', 'cache')
+      return sendPbf(res, cached)
     }
   } catch (e) {
     console.error('R2 read error (falling through to origin):', e.message)
   }
 
-  // 2. Fetch from LandRecords (TMS y-flip: tms_y = 2^z - 1 - y)
+  // 4. Fetch from LandRecords (TMS y-flip: tms_y = 2^z - 1 - y)
   const tmsY = (1 << zi) - 1 - yi
   const url = `${process.env.LANDRECORDS_TILE_URL}/${zi}/${xi}/${tmsY}.pbf`
 
@@ -111,7 +154,7 @@ export default async function handler(req, res) {
 
   if (upstream.status === 404 || upstream.status === 204) {
     // No parcels at this zoom — cache empty marker so we don't re-fetch
-    putToR2(r2Key, EMPTY_MARKER).catch(() => {})
+    putToR2(cacheKey, EMPTY_MARKER).catch(() => {})
     return sendEmptyTile(res, zi)
   }
 
@@ -122,15 +165,13 @@ export default async function handler(req, res) {
   const buf = Buffer.from(await upstream.arrayBuffer())
 
   if (buf.length === 0) {
-    putToR2(r2Key, EMPTY_MARKER).catch(() => {})
+    putToR2(cacheKey, EMPTY_MARKER).catch(() => {})
     return sendEmptyTile(res, zi)
   }
 
-  // 3. Write to R2 (fire-and-forget)
-  putToR2(r2Key, buf).catch(e => console.error('R2 write error:', e.message))
+  // 5. Write to R2 cache (fire-and-forget) — never overwrite owned/
+  putToR2(cacheKey, buf).catch(e => console.error('R2 write error:', e.message))
 
-  // 4. Return tile
-  res.setHeader('Content-Type', 'application/x-protobuf')
-  res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
-  return res.status(200).send(buf)
+  res.setHeader('X-Parcel-Tile-Source', 'landrecords')
+  return sendPbf(res, buf)
 }
