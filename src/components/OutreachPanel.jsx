@@ -17,6 +17,8 @@ import {
   Edit2,
   FileText,
   Plus,
+  Mail,
+  MessageSquare,
 } from 'lucide-react'
 import {
   PanelHeader,
@@ -26,7 +28,13 @@ import {
   PANEL_LIST_HEADER_STYLE,
 } from './ui/panel-header'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogFooter,
+} from './ui/dialog'
 import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { cn } from '@/lib/utils'
@@ -41,6 +49,9 @@ import {
 import { updateSettings } from '../utils/settings'
 import { OutreachEmailPrefsSection } from './outreach/OutreachEmailPrefsSection'
 
+const SEGMENT_BTN =
+  'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
+
 const OutreachTemplateEditorDialog = lazy(() =>
   import('./outreach/OutreachTemplateEditorDialog').then((m) => ({
     default: m.OutreachTemplateEditorDialog,
@@ -51,15 +62,14 @@ const LIST_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item flex flex-col gap-0.5 w-full text-left px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
 
 const TABS = [
-  { id: 'email', label: 'Email' },
-  { id: 'text', label: 'Text' },
+  { id: 'email', label: 'Email', icon: Mail },
+  { id: 'text', label: 'Text', icon: MessageSquare },
 ]
 
 function buildTabConfig(kind, getToken) {
   const channel = kind === 'text' ? 'text' : 'email'
   return {
     kind,
-    tabLabel: kind === 'email' ? 'Email' : 'Text',
     getTemplates: () => getCachedOutreachTemplates(channel),
     reloadFromServer: getToken
       ? () => fetchOutreachTemplates(getToken, channel)
@@ -74,30 +84,26 @@ function buildTabConfig(kind, getToken) {
 
 function OutreachTabs({ activeTab, onChange }) {
   return (
-    <div className="flex gap-4" role="tablist" aria-label="Outreach template type">
-      {TABS.map((tab) => {
-        const isActive = activeTab === tab.id
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onChange(tab.id)}
-            className={cn(
-              'pb-1.5 text-sm font-medium border-b-2 transition-opacity',
-              isActive ? 'opacity-100 border-white/70' : 'opacity-50 border-transparent hover:opacity-80'
-            )}
-          >
-            {tab.label}
-          </button>
-        )
-      })}
+    <div className="flex gap-2" role="tablist" aria-label="Outreach template type">
+      {TABS.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === id}
+          aria-pressed={activeTab === id}
+          onClick={() => onChange(id)}
+          className={SEGMENT_BTN}
+        >
+          <Icon className="h-4 w-4" />
+          {label}
+        </button>
+      ))}
     </div>
   )
 }
 
-function ShareOutreachDialog({ open, onOpenChange, template, serialize, tabLabel }) {
+function ShareOutreachDialog({ open, onOpenChange, template, serialize }) {
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
   if (!open || !template) return null
   const payload = serialize(template)
@@ -127,26 +133,58 @@ function ShareOutreachDialog({ open, onOpenChange, template, serialize, tabLabel
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="map-panel list-panel max-w-md p-0" showCloseButton nestedOverlay topLayer>
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/20 text-left">
-          <PanelHeader onBack={() => onOpenChange(false)} title="Share template" />
-          <DialogDescription className="sr-only">Share outreach template JSON</DialogDescription>
-          <p className="text-sm text-white/70 mt-2">
+      <DialogContent
+        className="map-panel list-panel share-list-dialog send-outreach-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl"
+        showCloseButton={false}
+        focusOverlay
+        topLayer
+        confirmLayer
+        data-send-outreach-dialog
+      >
+        <DialogHeader
+          className="px-6 pt-6 pb-3 border-b border-white/10 flex-shrink-0 text-left"
+          style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
+        >
+          <PanelHeader onBack={() => onOpenChange(false)} title="Share template" icon={Share2} />
+          <DialogDescription className="text-sm opacity-80 mt-1">
             Copy the template data or share it with a teammate.
-          </p>
+          </DialogDescription>
         </DialogHeader>
-        <div className="px-6 py-4 flex flex-col gap-2 sm:flex-row">
-          <Button type="button" variant="outline" onClick={copyPayload} className="create-list-btn flex-1">
+        <div className="px-6 py-3 space-y-3 flex-1 min-h-0 overflow-y-auto scrollbar-hide">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={copyPayload}
+            className="send-form-btn w-full min-h-[44px] justify-start"
+          >
             <Download className="h-4 w-4 mr-2" />
             Copy to clipboard
           </Button>
           {canNativeShare && (
-            <Button type="button" variant="outline" onClick={nativeShare} className="create-list-btn flex-1">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={nativeShare}
+              className="send-form-btn w-full min-h-[44px] justify-start"
+            >
               <Share2 className="h-4 w-4 mr-2" />
               Share…
             </Button>
           )}
         </div>
+        <DialogFooter
+          className="px-6 pt-3 pb-6 border-t border-white/10 flex-shrink-0"
+          style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
+            onClick={() => onOpenChange(false)}
+          >
+            Done
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -192,7 +230,7 @@ function TemplateDetail({ template, kind, onEdit }) {
           <p className="text-sm whitespace-pre-wrap leading-relaxed">{template.body?.trim() || '(no body)'}</p>
         </div>
       </div>
-      <Button type="button" variant="outline" className="create-list-btn w-full" onClick={onEdit}>
+      <Button type="button" variant="outline" className="send-form-btn send-form-btn--primary w-full min-h-[44px]" onClick={onEdit}>
         <Edit2 className="h-4 w-4 mr-2" />
         Edit template
       </Button>
@@ -289,7 +327,6 @@ function useTemplateTab(config, getToken) {
 
   return {
     kind: config.kind,
-    tabLabel: config.tabLabel,
     screen,
     selected,
     search,
@@ -323,7 +360,6 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
   const t = useTemplateTab(config, getToken)
   const {
     kind,
-    tabLabel,
     screen,
     selected,
     filtered,
@@ -388,7 +424,7 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
                   <Button
                     type="button"
                     variant="outline"
-                    className="create-list-btn mt-5 mx-auto"
+                    className="send-form-btn send-form-btn--primary mt-5 mx-auto min-h-[44px] px-4"
                     onClick={openCreate}
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -423,8 +459,6 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
             template={editorTemplate}
             onSaved={handleEditorSaved}
             getToken={getToken}
-            nestedOverlay
-            topLayer
           />
         </Suspense>
       )}
@@ -468,7 +502,6 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
         onOpenChange={(v) => { if (!v) setShareFor(null) }}
         template={shareFor}
         serialize={serialize}
-        tabLabel={tabLabel}
       />
     </>
   )
