@@ -9111,15 +9111,16 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 /* Immersive camera-style photo mode */
 .photo-mode-overlay--camera {
   background: #000;
-  /* Stay pinned to the visual viewport so rotation only reflows chrome,
-     not a height jump from --vw-height / layout recalculation. */
+  /* Pin to the visual viewport so chrome reflows on rotate without the
+     page --vw-height jump leaving black letterboxing around the overlay. */
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
-  max-width: 100vw;
-  max-height: 100vh;
-  max-height: 100dvh;
+  width: 100dvw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
   overflow: hidden;
 }
 
@@ -9166,11 +9167,22 @@ html.photo-native-camera-active #modal-root,
   touch-action: none;
 }
 
+/*
+ * Stable web camera stage: a centered square of the long viewport edge
+ * (100vmax). Portrait and landscape are both covered already, so rotating
+ * the phone only reflows the chrome — the <video> layer does not shrink
+ * into black bars.
+ */
 .photo-mode-video-stage {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
+  width: 100vmax;
+  height: 100vmax;
+  transform: translate(-50%, -50%);
   overflow: hidden;
   background: #000;
+  pointer-events: none;
 }
 
 .photo-mode-video--immersive {
@@ -9179,9 +9191,11 @@ html.photo-native-camera-active #modal-root,
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
   transform-origin: center center;
   will-change: transform;
-  transition: transform 0.15s ease-out;
+  transition: none;
+  background: #000;
 }
 
 .photo-mode-video--immersive.photo-mode-video--pinching {

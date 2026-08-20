@@ -86,16 +86,17 @@ async function bindStreamToVideo(video, stream) {
 }
 
 /**
- * Crop the video frame to match object-fit: cover for the rendered element,
- * then apply digital zoom (center crop).
+ * Crop the video frame to match what the user sees through the viewport
+ * (object-fit: cover into the window), then apply digital zoom.
+ * Use the window size — not the oversized vmax video stage — so capture
+ * matches the visible frame in every orientation.
  */
 function captureCoverFrame(video, zoomScale = 1) {
   if (!video?.videoWidth) return null
   const vw = video.videoWidth
   const vh = video.videoHeight
-  const rect = video.getBoundingClientRect?.()
-  const elW = rect?.width || video.clientWidth || vw
-  const elH = rect?.height || video.clientHeight || vh
+  const elW = window.innerWidth || video.clientWidth || vw
+  const elH = window.innerHeight || video.clientHeight || vh
   if (!(elW > 0 && elH > 0)) return null
 
   const videoAspect = vw / vh
@@ -527,6 +528,35 @@ function PhotoCaptureModalInner({
     }
   }, [open, stopCamera])
 
+  // Keep the web <video> playing across iOS Safari orientation changes.
+  // Safari often pauses the stream mid-rotate, which looks like a black reset.
+  useEffect(() => {
+    if (!open || !cameraReady || useNativePreview) return undefined
+    const resume = () => {
+      const video = videoRef.current
+      if (!video || !streamRef.current) return
+      if (video.srcObject !== streamRef.current) {
+        video.srcObject = streamRef.current
+      }
+      if (video.paused) {
+        void video.play().catch(() => {})
+      }
+    }
+    const onOrient = () => {
+      // After Safari finishes swapping the visual viewport.
+      window.setTimeout(resume, 50)
+      window.setTimeout(resume, 300)
+    }
+    window.addEventListener('orientationchange', onOrient)
+    window.addEventListener('resize', resume)
+    document.addEventListener('visibilitychange', resume)
+    return () => {
+      window.removeEventListener('orientationchange', onOrient)
+      window.removeEventListener('resize', resume)
+      document.removeEventListener('visibilitychange', resume)
+    }
+  }, [open, cameraReady, useNativePreview])
+
   const triggerFlash = (kind = 'white') => {
     setFlash(kind)
     window.setTimeout(() => setFlash(false), kind === 'black' ? 120 : 300)
@@ -911,7 +941,7 @@ function PhotoCaptureModalInner({
               <div className="photo-mode-flash photo-mode-flash--black absolute inset-0 z-20 pointer-events-none" />
             )}
             {useCamera && !useNativePreview && (
-              <div className="photo-mode-video-stage">
+              <div className="photo-mode-video-stage" aria-hidden="true">
                 <video
                   ref={videoRef}
                   className={cn(
