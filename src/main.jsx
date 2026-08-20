@@ -9,6 +9,7 @@ import './styles/quote-panel-actions.css'
 import { applyUiThemeFromStorage } from './utils/uiTheme'
 import { AuthProvider } from './contexts/AuthContext'
 import { initErrorTracking } from './utils/errorTracking'
+import { isIosStandalone } from './utils/isIosStandalone'
 
 initErrorTracking()
 applyUiThemeFromStorage()
@@ -36,12 +37,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   }
   // Defer registration slightly on iOS standalone so the first document paint
   // is not blocked by a half-activated worker (known WKWebView quirk).
-  const isIosStandalone = (
-    window.navigator.standalone === true
-    || window.matchMedia('(display-mode: standalone)').matches
-  ) && /iP(hone|od|ad)/.test(window.navigator.userAgent)
   const start = () => {
-    if (isIosStandalone) {
+    if (isIosStandalone()) {
       window.setTimeout(registerServiceWorker, 1500)
     } else {
       registerServiceWorker()
