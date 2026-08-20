@@ -1,20 +1,28 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { mapProperties, canonicalParcelId } from '@/utils/parcelPropertyMap'
+import { mapProperties } from '@/utils/parcelPropertyMap'
 import { parcelTileUrl } from '@/config/mapProviders'
 import { computeOwnerOccupied } from '@/utils/ownerOccupied'
+import {
+  PARCEL_SOURCE_MIN_ZOOM,
+  PARCEL_LAYER_MIN_ZOOM,
+  PARCEL_TILE_MAXZOOM,
+  PARCEL_SOURCE_ID as SOURCE_ID,
+  PARCEL_SOURCE_LAYERS,
+  PARCEL_FILL_LAYERS,
+  PARCEL_LINE_LAYERS,
+  PARCEL_LABEL_SOURCE as LABEL_SOURCE,
+  PARCEL_LABEL_LAYER as LABEL_LAYER,
+  parcelPromoteId,
+  parcelPromoteIdMatches,
+} from '@/config/parcelTiles'
 
-// LandRecords is a sparse pyramid: coverage starts around z15 in most metros (some
-// only at z16). Source maxzoom must stay at a level that usually has data — above
-// it MapLibre overzooms that tile. Empty levels inside the range must error (API 410)
-// so MapLibre keeps parent tiles instead of painting blanks — see api/tiles.js.
-const PARCEL_MIN_ZOOM = 15
-const PARCEL_TILE_MAXZOOM = 16
-const SOURCE_LAYER = 'parcel_us'
-const SOURCE_ID = 'parcels'
-const FILL_LAYER = 'parcels-fill'
-const LINE_LAYER = 'parcels-line'
-const LABEL_SOURCE = 'parcels-label-pts'
-const LABEL_LAYER = 'parcels-label'
+// LandRecords is a sparse pyramid. Source minzoom is 14 so empty z15 tiles can
+// keep a parent; layers themselves stay hidden until z15. maxzoom stays at a
+// level that usually has data — above it MapLibre overzooms. Empty levels inside
+// the range must error (API 410) so MapLibre keeps parents — see api/tiles.js.
+//
+// Tiles may use source-layer `parcel_us` OR `parcels` (Cedar Hill is mostly the
+// latter). Paint and hit-test both.
 const OO_ICON_YES_ID = 'parcel-owner-occupied'
 const OO_ICON_NO_ID = 'parcel-absentee'
 const OO_ICON_YES_COLOR = '#22c55e'
@@ -252,18 +260,83 @@ function featureStateIdFromRaw(raw, parcelId) {
   return raw?.lrid || raw?.parcelid || parcelId
 }
 
+function setParcelFeatureState(map, featureId, state) {
+  if (!map || !featureId) return
+  for (const sourceLayer of PARCEL_SOURCE_LAYERS) {
+    try {
+      map.setFeatureState(
+        { source: SOURCE_ID, sourceLayer, id: featureId },
+        state,
+      )
+    } catch { /* feature not in this source-layer / tile */ }
+  }
+}
+
 function queryFeatureStateIdForParcelId(map, parcelId) {
   if (!map || !parcelId) return null
   try {
-    const features = map.querySourceFeatures(SOURCE_ID, {
-      sourceLayer: SOURCE_LAYER,
-      filter: pidMatch(parcelId),
-    })
-    if (!features.length) return null
-    const raw = features[0].properties || {}
-    return featureStateIdFromRaw(raw, parcelId)
+    for (const sourceLayer of PARCEL_SOURCE_LAYERS) {
+      const features = map.querySourceFeatures(SOURCE_ID, {
+        sourceLayer,
+        filter: pidMatch(parcelId),
+      })
+      if (!features.length) continue
+      const raw = features[0].properties || {}
+      return featureStateIdFromRaw(raw, parcelId)
+    }
+    return null
   } catch {
     return null
+  }
+}
+
+function hasParcelFillLayer(map) {
+  try {
+    return PARCEL_FILL_LAYERS.some((id) => map.getLayer(id))
+  } catch {
+    return false
+  }
+}
+
+function removeParcelStyle(map) {
+  for (const id of [LABEL_LAYER, ...PARCEL_LINE_LAYERS, ...PARCEL_FILL_LAYERS]) {
+    try {
+      if (map.getLayer(id)) map.removeLayer(id)
+    } catch { /* ignore */ }
+  }
+  try {
+    if (map.getSource(LABEL_SOURCE)) map.removeSource(LABEL_SOURCE)
+  } catch { /* ignore */ }
+  try {
+    if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID)
+  } catch { /* ignore */ }
+}
+
+function addParcelPaintLayers(map, { color, opacity }) {
+  for (let i = 0; i < PARCEL_SOURCE_LAYERS.length; i++) {
+    const sourceLayer = PARCEL_SOURCE_LAYERS[i]
+    const fillId = PARCEL_FILL_LAYERS[i]
+    const lineId = PARCEL_LINE_LAYERS[i]
+    if (!map.getLayer(fillId)) {
+      map.addLayer({
+        id: fillId,
+        type: 'fill',
+        source: SOURCE_ID,
+        'source-layer': sourceLayer,
+        minzoom: PARCEL_LAYER_MIN_ZOOM,
+        paint: { 'fill-color': 'transparent', 'fill-opacity': 0.3 },
+      })
+    }
+    if (!map.getLayer(lineId)) {
+      map.addLayer({
+        id: lineId,
+        type: 'line',
+        source: SOURCE_ID,
+        'source-layer': sourceLayer,
+        minzoom: PARCEL_LAYER_MIN_ZOOM,
+        paint: { 'line-color': color, 'line-width': 2, 'line-opacity': opacity / 100 },
+      })
+    }
   }
 }
 
@@ -372,13 +445,7 @@ export function PMTilesParcelLayer({
       : null)
 
   const setClickedFeatureState = useCallback((map, featureId, clicked) => {
-    if (!map || !featureId) return
-    try {
-      map.setFeatureState(
-        { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureId },
-        { clicked: !!clicked }
-      )
-    } catch { /* feature not in loaded tiles yet */ }
+    setParcelFeatureState(map, featureId, { clicked: !!clicked })
   }, [])
 
   const applyClickedHighlight = useCallback((featureId, paintId = featureId) => {
@@ -436,23 +503,27 @@ export function PMTilesParcelLayer({
   function repaintNow() {
     const map = mapRef?.current
     if (!map || !layersAddedRef.current) return
-    try {
-      if (!map.getLayer(FILL_LAYER) || !map.getLayer(LINE_LAYER)) return
-    } catch { return }
+    if (!hasParcelFillLayer(map)) return
     const color = colorRef.current
     const clicked = clickedRef.current
     const idxMap = colorIndexRef.current
     try {
-      map.setPaintProperty(FILL_LAYER, 'fill-color',
-        buildFillColorExpression(clicked, idxMap, color))
-      map.setPaintProperty(LINE_LAYER, 'line-color',
-        buildColorExpression(clicked, idxMap, color))
-      map.setPaintProperty(LINE_LAYER, 'line-width',
-        buildWidthExpression(clicked, idxMap))
-      map.setPaintProperty(FILL_LAYER, 'fill-opacity',
-        buildFillOpacityExpression(clicked, idxMap))
-      map.setPaintProperty(LINE_LAYER, 'line-opacity',
-        (opacityRef.current ?? 80) / 100)
+      for (const fillId of PARCEL_FILL_LAYERS) {
+        if (!map.getLayer(fillId)) continue
+        map.setPaintProperty(fillId, 'fill-color',
+          buildFillColorExpression(clicked, idxMap, color))
+        map.setPaintProperty(fillId, 'fill-opacity',
+          buildFillOpacityExpression(clicked, idxMap))
+      }
+      for (const lineId of PARCEL_LINE_LAYERS) {
+        if (!map.getLayer(lineId)) continue
+        map.setPaintProperty(lineId, 'line-color',
+          buildColorExpression(clicked, idxMap, color))
+        map.setPaintProperty(lineId, 'line-width',
+          buildWidthExpression(clicked, idxMap))
+        map.setPaintProperty(lineId, 'line-opacity',
+          (opacityRef.current ?? 80) / 100)
+      }
       map.triggerRepaint()
     } catch { /* ignore if layers not ready */ }
   }
@@ -481,13 +552,7 @@ export function PMTilesParcelLayer({
   }, [boundaryColor, boundaryOpacity, clickedParcelId, applyClickedHighlight, clearClickedHighlight])
 
   const setSelectedFeatureState = useCallback((map, featureStateId, selected) => {
-    if (!map || !featureStateId) return
-    try {
-      map.setFeatureState(
-        { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureStateId },
-        { selected: !!selected }
-      )
-    } catch { /* feature not in loaded tiles yet */ }
+    setParcelFeatureState(map, featureStateId, { selected: !!selected })
   }, [])
 
   const setSelectedFeatureStateRef = useRef(setSelectedFeatureState)
@@ -507,11 +572,7 @@ export function PMTilesParcelLayer({
   const syncLeadFeatureStates = useCallback(() => {
     const map = mapRef?.current
     if (!map || !layersAddedRef.current) return
-    try {
-      if (!map.getLayer(FILL_LAYER)) return
-    } catch {
-      return
-    }
+    if (!hasParcelFillLayer(map)) return
 
     const leadColors = leadParcelColorsRef.current
     const prev = leadFeatureStateRef.current
@@ -520,7 +581,7 @@ export function PMTilesParcelLayer({
     if (leadColors?.size) {
       let features = []
       try {
-        features = map.queryRenderedFeatures({ layers: [FILL_LAYER] }) || []
+        features = map.queryRenderedFeatures({ layers: PARCEL_FILL_LAYERS }) || []
       } catch {
         features = []
       }
@@ -545,22 +606,12 @@ export function PMTilesParcelLayer({
 
     for (const [featureStateId] of prev) {
       if (next.has(featureStateId)) continue
-      try {
-        map.setFeatureState(
-          { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureStateId },
-          { hasLead: false, leadColor: undefined },
-        )
-      } catch { /* feature may have unloaded */ }
+      setParcelFeatureState(map, featureStateId, { hasLead: false, leadColor: undefined })
     }
 
     for (const [featureStateId, color] of next) {
       if (prev.get(featureStateId) === color) continue
-      try {
-        map.setFeatureState(
-          { source: SOURCE_ID, sourceLayer: SOURCE_LAYER, id: featureStateId },
-          { hasLead: true, leadColor: color },
-        )
-      } catch { /* feature may have unloaded */ }
+      setParcelFeatureState(map, featureStateId, { hasLead: true, leadColor: color })
     }
 
     leadFeatureStateRef.current = next
@@ -644,7 +695,7 @@ export function PMTilesParcelLayer({
             lastLabelRefreshAt = now
             return
           }
-          const features = map.queryRenderedFeatures({ layers: [FILL_LAYER] })
+          const features = map.queryRenderedFeatures({ layers: PARCEL_FILL_LAYERS })
           const geo = buildLabelGeoJSON(features)
           const key = labelGeoJSONKey(geo)
           if (key !== lastLabelKey) {
@@ -678,48 +729,25 @@ export function PMTilesParcelLayer({
       try {
         // promoteId tells MapLibre to use the 'lrid' property as feature.id,
         // which is required for setFeatureState({source, sourceLayer, id}, ...).
-        // If a previous mount (e.g. HMR) created the source without promoteId we
-        // remove dependent layers + source and recreate so feature-state works.
-        const expectedPromoteId = { [SOURCE_LAYER]: 'lrid' }
+        // Recreate if a previous mount only promoted parcel_us (Cedar Hill uses `parcels`).
+        const expectedPromoteId = parcelPromoteId()
         const styleSrc = map.getStyle()?.sources?.[SOURCE_ID]
-        const hasCorrectPromoteId = styleSrc
-          && JSON.stringify(styleSrc.promoteId) === JSON.stringify(expectedPromoteId)
-        if (styleSrc && !hasCorrectPromoteId) {
-          if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
-          if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
-          if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
-          if (map.getSource(LABEL_SOURCE)) map.removeSource(LABEL_SOURCE)
-          map.removeSource(SOURCE_ID)
+        if (styleSrc && !parcelPromoteIdMatches(styleSrc.promoteId)) {
+          removeParcelStyle(map)
         }
         if (!map.getSource(SOURCE_ID)) {
           map.addSource(SOURCE_ID, {
             type: 'vector',
             tiles: [tileUrl],
-            minzoom: PARCEL_MIN_ZOOM,
+            minzoom: PARCEL_SOURCE_MIN_ZOOM,
             maxzoom: PARCEL_TILE_MAXZOOM,
             promoteId: expectedPromoteId,
           })
         }
-        if (!map.getLayer(FILL_LAYER)) {
-          map.addLayer({
-            id: FILL_LAYER,
-            type: 'fill',
-            source: SOURCE_ID,
-            'source-layer': SOURCE_LAYER,
-            minzoom: PARCEL_MIN_ZOOM,
-            paint: { 'fill-color': 'transparent', 'fill-opacity': 0.3 },
-          })
-        }
-        if (!map.getLayer(LINE_LAYER)) {
-          map.addLayer({
-            id: LINE_LAYER,
-            type: 'line',
-            source: SOURCE_ID,
-            'source-layer': SOURCE_LAYER,
-            minzoom: PARCEL_MIN_ZOOM,
-            paint: { 'line-color': colorRef.current, 'line-width': 2, 'line-opacity': opacityRef.current / 100 },
-          })
-        }
+        addParcelPaintLayers(map, {
+          color: colorRef.current,
+          opacity: opacityRef.current ?? 80,
+        })
         ensureOwnershipIcons(map)
         if (!map.getSource(LABEL_SOURCE)) {
           map.addSource(LABEL_SOURCE, { type: 'geojson', data: emptyGeoJSON })
@@ -755,12 +783,17 @@ export function PMTilesParcelLayer({
     map.on('load', registerOoIcon)
 
     const onStyleData = () => {
-      if (!map.getSource(SOURCE_ID)) {
+      const styleSrc = map.getStyle()?.sources?.[SOURCE_ID]
+      if (!styleSrc || !parcelPromoteIdMatches(styleSrc.promoteId)) {
         layersAddedRef.current = false
         ensureLayers()
-      } else {
-        ensureOwnershipIcons(map)
+        return
       }
+      addParcelPaintLayers(map, {
+        color: colorRef.current,
+        opacity: opacityRef.current ?? 80,
+      })
+      ensureOwnershipIcons(map)
     }
     map.on('styledata', onStyleData)
 
@@ -779,7 +812,7 @@ export function PMTilesParcelLayer({
         if (leadHits?.length) return
       } catch { /* lead layers may not exist */ }
       const features = e.features?.length ? e.features : (() => {
-        try { return map.queryRenderedFeatures(e.point, { layers: [FILL_LAYER] }) } catch { return [] }
+        try { return map.queryRenderedFeatures(e.point, { layers: PARCEL_FILL_LAYERS }) } catch { return [] }
       })()
       if (!features?.length || !onParcelClickRef.current) return
       const feature = pickBestFeature(features)
@@ -816,9 +849,11 @@ export function PMTilesParcelLayer({
     const onEnter = () => { map.getCanvas().style.cursor = 'pointer' }
     const onLeave = () => { map.getCanvas().style.cursor = '' }
 
-    map.on('click', FILL_LAYER, onClick)
-    map.on('mouseenter', FILL_LAYER, onEnter)
-    map.on('mouseleave', FILL_LAYER, onLeave)
+    for (const fillId of PARCEL_FILL_LAYERS) {
+      map.on('click', fillId, onClick)
+      map.on('mouseenter', fillId, onEnter)
+      map.on('mouseleave', fillId, onLeave)
+    }
 
     return () => {
       cancelled = true
@@ -829,18 +864,16 @@ export function PMTilesParcelLayer({
         map.off('idle', idleLabelHandler)
         idleLabelHandler = null
       }
-      map.off('click', FILL_LAYER, onClick)
-      map.off('mouseenter', FILL_LAYER, onEnter)
-      map.off('mouseleave', FILL_LAYER, onLeave)
+      for (const fillId of PARCEL_FILL_LAYERS) {
+        map.off('click', fillId, onClick)
+        map.off('mouseenter', fillId, onEnter)
+        map.off('mouseleave', fillId, onLeave)
+      }
       map.off('styledata', onStyleData)
       map.off('style.load', registerOoIcon)
       map.off('load', registerOoIcon)
       try {
-        if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
-        if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
-        if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
-        if (map.getSource(LABEL_SOURCE)) map.removeSource(LABEL_SOURCE)
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID)
+        removeParcelStyle(map)
       } catch { /* ignore */ }
       layersAddedRef.current = false
     }
@@ -851,19 +884,19 @@ export function PMTilesParcelLayer({
     const map = mapRef?.current
     if (!map) return null
     try {
-      if (!map.getLayer(FILL_LAYER)) return null
+      if (!hasParcelFillLayer(map)) return null
       const point = map.project([lng, lat])
       const radius = Number(pixelRadius) > 0 ? Number(pixelRadius) : 0
       // Exact point first; optional box covers GPS jitter so the blue-dot
       // location still hits the parcel under the marker.
-      let features = map.queryRenderedFeatures(point, { layers: [FILL_LAYER] })
+      let features = map.queryRenderedFeatures(point, { layers: PARCEL_FILL_LAYERS })
       if (!features.length && radius > 0) {
         features = map.queryRenderedFeatures(
           [
             [point.x - radius, point.y - radius],
             [point.x + radius, point.y + radius],
           ],
-          { layers: [FILL_LAYER] },
+          { layers: PARCEL_FILL_LAYERS },
         )
       }
       if (!features.length) return null
@@ -916,8 +949,11 @@ export function PMTilesParcelLayer({
   const setBoundaryOpacity = useCallback((opacity) => {
     opacityRef.current = opacity
     const map = mapRef?.current
-    if (map && map.getLayer(LINE_LAYER)) {
-      map.setPaintProperty(LINE_LAYER, 'line-opacity', opacity / 100)
+    if (!map) return
+    for (const lineId of PARCEL_LINE_LAYERS) {
+      if (map.getLayer(lineId)) {
+        map.setPaintProperty(lineId, 'line-opacity', opacity / 100)
+      }
     }
   }, [mapRef])
 
@@ -925,36 +961,20 @@ export function PMTilesParcelLayer({
     const map = mapRef?.current
     if (!map) return
     try {
-      if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER)
-      if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER)
-      if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER)
-      if (map.getSource(LABEL_SOURCE)) map.removeSource(LABEL_SOURCE)
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID)
+      removeParcelStyle(map)
       layersAddedRef.current = false
       const tileUrl = parcelTileUrl()
       const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
       map.addSource(SOURCE_ID, {
         type: 'vector',
         tiles: [tileUrl],
-        minzoom: PARCEL_MIN_ZOOM,
+        minzoom: PARCEL_SOURCE_MIN_ZOOM,
         maxzoom: PARCEL_TILE_MAXZOOM,
-        promoteId: { [SOURCE_LAYER]: 'lrid' },
+        promoteId: parcelPromoteId(),
       })
-      map.addLayer({
-        id: FILL_LAYER,
-        type: 'fill',
-        source: SOURCE_ID,
-        'source-layer': SOURCE_LAYER,
-        minzoom: PARCEL_MIN_ZOOM,
-        paint: { 'fill-color': 'transparent', 'fill-opacity': 0.3 },
-      })
-      map.addLayer({
-        id: LINE_LAYER,
-        type: 'line',
-        source: SOURCE_ID,
-        'source-layer': SOURCE_LAYER,
-        minzoom: PARCEL_MIN_ZOOM,
-        paint: { 'line-color': colorRef.current, 'line-width': 2, 'line-opacity': opacityRef.current / 100 },
+      addParcelPaintLayers(map, {
+        color: colorRef.current,
+        opacity: opacityRef.current ?? 80,
       })
       ensureOwnershipIcons(map)
       map.addSource(LABEL_SOURCE, { type: 'geojson', data: emptyGeoJSON })
