@@ -87,6 +87,15 @@ const CANONICAL_CONSUMED = new Set([
   'updated', 'address_source', 'parval_source', 'improv_source', 'landval_source',
 ])
 
+/** GIS internals on the reduced `parcels` MVT layer — not assessor fields. */
+const INTERNAL_GIS_KEYS = new Set([
+  'elevavg', 'elevmin', 'elevmax',
+  'countyfp', 'cousubfp', 'placefp', 'statefp',
+  'surfpointx', 'surfpointy',
+  'accesstype', 'naicscode',
+  'frsid', 'dfrurl', 'cwapermit', 'caapermit', 'rcrapermit',
+])
+
 /** Map raw LandRecords parcel_us properties to canonical app fields. */
 export function mapProperties(raw) {
   const { city: mailCity, state: mailState } = splitCityState(raw.ownercity, raw.ownerstate)
@@ -177,11 +186,21 @@ export function mapProperties(raw) {
   }
 
   for (const [k, v] of Object.entries(raw || {})) {
-    if (CANONICAL_CONSUMED.has(k)) continue
+    if (CANONICAL_CONSUMED.has(k) || INTERNAL_GIS_KEYS.has(k)) continue
     if (v === '' || v === null || v === undefined) continue
     const key = String(k).toUpperCase().replace(/[^A-Z0-9_]/g, '_')
     if (!(key in canonical)) canonical[key] = v
   }
 
   return canonical
+}
+
+/** Fill empty tile fields from a matching WFS/WMS record — never overwrite situs. */
+export function mergeParcelProperties(base = {}, extra = {}) {
+  const out = { ...base }
+  for (const [k, v] of Object.entries(extra || {})) {
+    if (v == null || v === '') continue
+    if (out[k] == null || out[k] === '') out[k] = v
+  }
+  return out
 }

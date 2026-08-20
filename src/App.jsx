@@ -33,7 +33,7 @@ import { fetchLists, updateList, deleteList, validateShareEmail } from './utils/
 import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline, localPipelineMigrationKey, pipelinesUserCanWorkIn } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
-import { resolveParcelId } from './utils/parcelPropertyMap'
+import { resolveParcelId, mergeParcelProperties } from './utils/parcelPropertyMap'
 import { resolveParcelCenter } from './utils/parcelGeometry'
 import { resolveLeadParcelAtLocation, parcelDataFromLandRecords } from './utils/resolveLeadParcel'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
@@ -2666,10 +2666,11 @@ function App() {
       if (!result) return
       const { properties: apiProperties, parcelId: apiParcelId } = result
       const resolvedId = apiParcelId || tileParcelId
-      const display = resolveParcelDisplayAddress(apiProperties)
+      const properties = mergeParcelProperties(tileProperties, apiProperties)
+      const display = resolveParcelDisplayAddress(properties)
       return {
         id: resolvedId,
-        properties: apiProperties,
+        properties,
         address: display.title,
         addressDisplay: display,
         lat: parcelCenter.lat,
@@ -2682,9 +2683,9 @@ function App() {
       const controller = new AbortController()
       parcelFetchAbortRef.current = controller
       fetchLandRecordsParcel({
-        lat: latlng.lat,
-        lng: latlng.lng,
-        lrid: event.lrid || '',
+        lat: parcelCenter.lat,
+        lng: parcelCenter.lng,
+        lrid: event.lrid || tileProperties.lrid || '',
         signal: controller.signal,
       }).then((result) => {
         if (controller.signal.aborted || currentPopupRef.current !== requestId) return
