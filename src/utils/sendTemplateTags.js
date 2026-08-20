@@ -2,6 +2,8 @@
  * Shared {{tag}} substitution for outbound message templates (quotes, reports, forms).
  */
 
+import { passThroughLeadFieldValues } from './leadSendTags'
+
 /** @param {string} text @param {Record<string, string | number | null | undefined>} map */
 export function replaceMustacheTags(text, map = {}) {
   if (!text) return ''
@@ -162,7 +164,7 @@ export function replaceReportSendTags(template, data = {}) {
     companyName: data.companyName ?? data.CompanyName ?? 'KnockScout',
     leadAddress: data.leadAddress ?? data.LeadAddress ?? '',
   }
-  return replaceMustacheTags(template, map)
+  return replaceMustacheTags(template, passThroughLeadFieldValues(map, data))
 }
 
 export function replaceFormSendTags(template, data = {}) {
@@ -171,7 +173,7 @@ export function replaceFormSendTags(template, data = {}) {
   const clientName = String(data.clientName || '').trim()
     || [firstName, lastName].filter(Boolean).join(' ')
     || 'there'
-  return replaceMustacheTags(template, {
+  return replaceMustacheTags(template, passThroughLeadFieldValues({
     firstName: firstName || (clientName !== 'there' ? clientName.split(/\s+/)[0] : '') || 'there',
     lastName,
     clientName,
@@ -179,5 +181,5 @@ export function replaceFormSendTags(template, data = {}) {
     formLink: data.formLink || '',
     senderName: data.senderName || data.senderEmail?.split('@')[0] || 'Your rep',
     companyName: data.companyName || 'KnockScout',
-  })
+  }, data))
 }

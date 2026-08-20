@@ -353,7 +353,7 @@ function useTemplateTab(config, getToken) {
 }
 
 const TemplateTabPane = forwardRef(function TemplateTabPane(
-  { tab, searchQuery, onNavChange, getToken },
+  { tab, searchQuery, onNavChange, getToken, leadCustomFields = [] },
   ref
 ) {
   const config = buildTabConfig(tab, getToken)
@@ -459,6 +459,7 @@ const TemplateTabPane = forwardRef(function TemplateTabPane(
             template={editorTemplate}
             onSaved={handleEditorSaved}
             getToken={getToken}
+            leadCustomFields={leadCustomFields}
           />
         </Suspense>
       )}
@@ -515,6 +516,7 @@ export function OutreachPanel({
   getToken = null,
   settings = {},
   onSettingsChange,
+  leadCustomFields = [],
 }) {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
@@ -608,6 +610,7 @@ export function OutreachPanel({
             searchQuery={searchQuery}
             onNavChange={setNav}
             getToken={getToken}
+            leadCustomFields={leadCustomFields}
           />
         </div>
       </DialogContent>

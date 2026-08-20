@@ -8,6 +8,7 @@ import {
   mustacheToTagEditorHtml,
   tagEditorDomToMustache,
 } from './sendTemplateTags'
+import { passThroughLeadFieldValues } from './leadSendTags'
 
 export const QUOTE_SEND_TAGS = [
   { key: 'firstName', tag: '{{firstName}}', label: 'First Name' },
@@ -118,7 +119,7 @@ export function getQuoteTagPillText(key, data = {}) {
 
 export function replaceQuoteTags(text, data = {}) {
   if (!text) return ''
-  return replaceMustacheTags(text, buildQuoteTagValues(data))
+  return replaceMustacheTags(text, passThroughLeadFieldValues(buildQuoteTagValues(data), data))
 }
 
 export function getQuoteSendTemplatesFromSettings(appSettings) {

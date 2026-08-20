@@ -4723,6 +4723,7 @@ function App() {
         getToken={getToken}
         settings={settings}
         onSettingsChange={handleSettingsChange}
+        leadCustomFields={leadCustomFields}
       />
       </Suspense>
       )}
@@ -4756,6 +4757,9 @@ function App() {
         getToken={getToken}
         currentUser={currentUser}
         teamMembers={teamMembers}
+        teams={teams}
+        teamMembership={teamMembership}
+        leadCustomFields={leadCustomFields}
         emailTestMode={settings.emailTestMode}
         testEmail={settings.defaultEmail}
       />

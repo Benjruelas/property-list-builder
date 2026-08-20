@@ -25,9 +25,11 @@ import { displayLeadName, formatLeadAddress } from '@/utils/leads'
 import { getLeadEmails, getLeadPhones } from '@/utils/leadContact'
 import { formatPhoneDisplay } from '@/utils/phoneFormat'
 import { getSenderDisplayName, getCompanyNameForSends } from '../../utils/profile'
-import { updateSettings } from '../../utils/settings'
+import { getSettings, updateSettings } from '../../utils/settings'
 import { normalizeEmailAddress } from '@/utils/outreachAttachments'
 import { getAllTeamMembers } from '@/utils/teamTaskUtils'
+import { resolveLeadCustomFields } from '@/utils/customFields'
+import { withLeadFieldTags, withLeadFieldTagData } from '@/utils/leadSendTags'
 import { OutreachCcField } from '../outreach/OutreachCcField'
 import { LeadPickerField } from '../pickers/LeadPickerField'
 import { MessageTagEditor } from '../shared/MessageTagEditor'
@@ -42,10 +44,10 @@ const TEXT_MESSAGE_EDITOR = 'quote-msg-tag-editor quote-msg-tag-editor--text w-f
 const SEGMENT_BTN =
   'send-form-btn flex-1 min-h-[44px] rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors'
 
-function TagInsertStrip({ onInsert, disabled }) {
+function TagInsertStrip({ tags = REPORT_SEND_TAGS, onInsert, disabled }) {
   return (
     <div className="flex flex-wrap gap-1 mb-2">
-      {REPORT_SEND_TAGS.map(({ key, label }) => (
+      {tags.map(({ key, label }) => (
         <button
           key={key}
           type="button"
@@ -136,6 +138,16 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     [report?.leadId, leads],
   )
 
+  const leadCustomFields = useMemo(
+    () => resolveLeadCustomFields({ settings: getSettings(), teams, teamMembership }),
+    [teams, teamMembership, open],
+  )
+
+  const sendTags = useMemo(
+    () => withLeadFieldTags(REPORT_SEND_TAGS, leadCustomFields),
+    [leadCustomFields],
+  )
+
   const pickerLeads = useMemo(() => {
     if (!linkedLead?.id) return leads
     if (leads.some((l) => l.id === linkedLead.id)) return leads
@@ -156,7 +168,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     [report?.createdByName, currentUser],
   )
 
-  const tagData = useMemo(() => ({
+  const tagData = useMemo(() => withLeadFieldTagData({
     firstName: selectedLead?.firstName || '',
     lastName: selectedLead?.lastName || '',
     clientName: selectedLead ? displayLeadName(selectedLead) || '' : '',
@@ -165,7 +177,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
     senderName,
     companyName: getCompanyNameForSends(teams, teamMembership),
     leadAddress: selectedLead ? formatLeadAddress(selectedLead) : '',
-  }), [report, selectedLead, senderName, teams, teamMembership, lastLink])
+  }, selectedLead, leadCustomFields), [report, selectedLead, senderName, teams, teamMembership, lastLink, leadCustomFields])
 
   const resolvedCcEmails = useMemo(() => {
     const seen = new Set()
@@ -483,7 +495,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                   <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-subject">Subject</label>
                     {focusedField === 'subject' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={busy} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={busy} />
                     )}
                     <MessageTagEditor
                       ref={subjectEditorRef}
@@ -491,7 +503,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                       value={subject}
                       onChange={setSubject}
                       tagData={tagData}
-                      tags={REPORT_SEND_TAGS}
+                      tags={sendTags}
                       className={SUBJECT_EDITOR}
                       placeholder="Email subject"
                       disabled={busy}
@@ -504,7 +516,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                   <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-body">Message</label>
                     {focusedField === 'body' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={busy} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={busy} />
                     )}
                     <MessageTagEditor
                       ref={emailEditorRef}
@@ -512,7 +524,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                       value={body}
                       onChange={setBody}
                       tagData={tagData}
-                      tags={REPORT_SEND_TAGS}
+                      tags={sendTags}
                       className={MESSAGE_EDITOR}
                       placeholder="Optional message"
                       disabled={busy}
@@ -548,7 +560,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                   <div>
                     <label className={FIELD_LABEL} htmlFor="report-send-text">Message</label>
                     {focusedField === 'text' && (
-                      <TagInsertStrip onInsert={insertTag} disabled={busy} />
+                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={busy} />
                     )}
                     <MessageTagEditor
                       ref={textEditorRef}
@@ -556,7 +568,7 @@ export function SendReportDialog({ open, report, onClose, onSent, leads = [], te
                       value={textBody}
                       onChange={setTextBody}
                       tagData={tagData}
-                      tags={REPORT_SEND_TAGS}
+                      tags={sendTags}
                       className={TEXT_MESSAGE_EDITOR}
                       placeholder="Text message"
                       disabled={busy}
