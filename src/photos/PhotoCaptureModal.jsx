@@ -21,7 +21,6 @@ import {
   captureNativeStill,
   flipNativeCamera,
   setNativeFlashMode,
-  resizeNativeCameraPreview,
   isNativeCameraPreviewStarted,
 } from './nativeCameraPreview'
 
@@ -240,7 +239,6 @@ function PhotoCaptureModalInner({
   const pinchRef = useRef({ active: false, startDist: 0, startZoom: 1 })
   const zoomFactorRef = useRef(1)
   const useNativePreviewRef = useRef(false)
-  const resizeTimerRef = useRef(null)
   const flashEnabledRef = useRef(false)
   const startCameraRef = useRef(null)
 
@@ -503,26 +501,6 @@ function PhotoCaptureModalInner({
       stopCamera()
     }
   }, [open, entityType, entity?.id, isLead, stopCamera, autoOpenCamera])
-
-  // Remeasure native preview after rotate / resize.
-  useEffect(() => {
-    if (!open || !useNativePreview || !cameraReady) return undefined
-    const onResize = () => {
-      if (resizeTimerRef.current) window.clearTimeout(resizeTimerRef.current)
-      resizeTimerRef.current = window.setTimeout(() => {
-        void resizeNativeCameraPreview().catch((err) => {
-          photoLogWarn('capture.camera', 'Native resize failed', { message: String(err?.message || err) })
-        })
-      }, 250)
-    }
-    window.addEventListener('resize', onResize)
-    window.addEventListener('orientationchange', onResize)
-    return () => {
-      window.removeEventListener('resize', onResize)
-      window.removeEventListener('orientationchange', onResize)
-      if (resizeTimerRef.current) window.clearTimeout(resizeTimerRef.current)
-    }
-  }, [open, useNativePreview, cameraReady])
 
   // Stop camera when the native app backgrounds.
   useEffect(() => {
