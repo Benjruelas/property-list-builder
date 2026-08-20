@@ -43,6 +43,8 @@ On Capacitor iOS/Android, Photo Mode uses `@capacitor-community/camera-preview` 
 
 Implementation: `src/photos/nativeCameraPreview.js` → `PhotoCaptureModal.jsx`.
 
+**iOS rotation:** `patches/@capacitor-community+camera-preview+8.0.1.patch` keeps the native preview full-bleed during device rotation (correct `previewLayer` bounds, autoresizing through the animation, deferred `videoOrientation` update) so only the HTML chrome reflows — no black letterboxing from frame resets. `npm install` applies the patch via `postinstall` before `npx cap sync`.
+
 ## Photo save behavior
 
 | Environment | Image save |

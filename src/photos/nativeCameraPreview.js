@@ -33,18 +33,11 @@ function setNativeCameraChromeActive(active) {
   document.body?.classList.toggle(NATIVE_CAMERA_BODY_CLASS, !!active)
 }
 
-/**
- * Size the native preview as a square covering the long edge of the screen.
- * That way orientation changes do not shrink/expand the camera layer into black
- * bars — the HTML chrome reflows while the preview stays full-bleed.
- */
-function previewCoverSize() {
-  const iw = Math.round(window.innerWidth || 0)
-  const ih = Math.round(window.innerHeight || 0)
-  const sw = Math.round(window.screen?.width || 0)
-  const sh = Math.round(window.screen?.height || 0)
-  const side = Math.max(iw, ih, sw, sh, 1)
-  return { width: side, height: side }
+/** Full-window size at start; iOS patch keeps the layer matched through rotate. */
+export function previewCoverSize() {
+  const w = Math.round(window.innerWidth || window.screen?.width || 1)
+  const h = Math.round(window.innerHeight || window.screen?.height || 1)
+  return { width: Math.max(w, 1), height: Math.max(h, 1) }
 }
 
 function toDataUrl(base64) {
@@ -83,9 +76,10 @@ export async function startNativeCameraPreview(opts = {}) {
       disableAudio: true,
       enableHighResolution: opts.enableHighResolution !== false,
       enableZoom: true,
-      // Keep true so videoOrientation updates; with a cover square the frame
-      // size stays constant so the preview does not visibly resize.
+      // Patched iOS plugin: fill container bounds + defer videoOrientation so
+      // rotation only reflows chrome without black letterboxing / session reset.
       rotateWhenOrientationChanged: true,
+      lockAndroidOrientation: false,
       x: 0,
       y: 0,
       width,
@@ -164,9 +158,7 @@ export async function setNativeFlashMode(mode) {
 }
 
 /**
- * Intentionally a no-op: restarting the session on rotate causes black gaps.
- * The cover-square preview + plugin orientation handler keep the feed full-bleed
- * while only the HTML chrome reflows.
+ * No-op: never restart the JS session on rotate (causes black gaps).
  */
 export async function resizeNativeCameraPreview() {
   return started

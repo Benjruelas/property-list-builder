@@ -67,8 +67,8 @@ describe('nativeCameraPreview', () => {
       rotateWhenOrientationChanged: true,
     }))
     const startArg = plugin.start.mock.calls[0][0]
-    expect(startArg.width).toBe(startArg.height)
     expect(startArg.width).toBeGreaterThan(0)
+    expect(startArg.height).toBeGreaterThan(0)
     expect(isNativeCameraPreviewStarted()).toBe(true)
     expect(document.documentElement.classList.contains(NATIVE_CAMERA_BODY_CLASS)).toBe(true)
 

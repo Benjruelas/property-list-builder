@@ -1,0 +1,123 @@
+diff --git a/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraController.swift b/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraController.swift
+index 6ec075a..5fa1862 100644
+--- a/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraController.swift
++++ b/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraController.swift
+@@ -160,7 +160,9 @@ extension CameraController {
+         self.previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill
+ 
+         view.layer.insertSublayer(self.previewLayer!, at: 0)
+-        self.previewLayer?.frame = view.frame
++        // Layer frames are in the view's local coordinate space (bounds), not
++        // the superview frame — using view.frame misplaces the feed on rotate.
++        self.previewLayer?.frame = view.bounds
+ 
+         updateVideoOrientation()
+     }
+diff --git a/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraPreviewPlugin.swift b/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraPreviewPlugin.swift
+index aa18ca7..b3b0915 100644
+--- a/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraPreviewPlugin.swift
++++ b/node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraPreviewPlugin.swift
+@@ -7,6 +7,17 @@ import UIKit
+  * Please read the Capacitor iOS Plugin Development Guide
+  * here: https://capacitor.ionicframework.com/docs/plugins/ios
+  */
++
++/// Keeps AVCaptureVideoPreviewLayer matched to bounds through rotation animations.
++private final class CameraPreviewContainerView: UIView {
++    var onLayout: (() -> Void)?
++
++    override func layoutSubviews() {
++        super.layoutSubviews()
++        onLayout?()
++    }
++}
++
+ @objc(CameraPreview)
+ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
+ 
+@@ -50,28 +61,38 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
+     }
+ 
+     @objc func rotated() {
++        // KnockScout patch: keep the preview full-bleed on the container.
++        // Upstream rewrote previewView.frame from the original width/height and
++        // assigned previewLayer.frame = previewView.frame (superview coords),
++        // which shrinks/misplaces the layer and flashes black during rotation.
+         guard let previewView = self.previewView,
+-              let x = self.x,
+-              let y = self.y,
+-              let width = self.width,
+-              let height = self.height else {
++              let container = self.webView?.superview else {
+             return
+         }
+ 
+-        let adjustedHeight = self.paddingBottom != nil ? height - self.paddingBottom! : height
+         let orientation = getInterfaceOrientation()
+-
+-        if orientation.isLandscape {
+-            previewView.frame = CGRect(x: y, y: x, width: max(adjustedHeight, width), height: min(adjustedHeight, width))
+-            self.cameraController.previewLayer?.frame = previewView.frame
++        guard orientation.isPortrait || orientation.isLandscape else {
++            return
+         }
+ 
+-        if orientation.isPortrait {
+-            previewView.frame = CGRect(x: x, y: y, width: min(adjustedHeight, width), height: max(adjustedHeight, width))
+-            self.cameraController.previewLayer?.frame = previewView.frame
+-        }
++        previewView.frame = container.bounds
++        self.cameraController.previewLayer?.frame = previewView.bounds
++
++        // Defer buffer remapping until after the interface rotation animation
++        // so the feed does not visibly "reset" mid-turn.
++        NSObject.cancelPreviousPerformRequests(
++            withTarget: self,
++            selector: #selector(applyVideoOrientationAfterRotate),
++            object: nil
++        )
++        self.perform(#selector(applyVideoOrientationAfterRotate), with: nil, afterDelay: 0.4)
++    }
+ 
++    @objc func applyVideoOrientationAfterRotate() {
+         cameraController.updateVideoOrientation()
++        if let previewView = self.previewView {
++            self.cameraController.previewLayer?.frame = previewView.bounds
++        }
+     }
+ 
+     @objc func start(_ call: CAPPluginCall) {
+@@ -125,7 +146,20 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
+                     }
+ 
+                     let adjustedHeight = self.paddingBottom != nil ? height - self.paddingBottom! : height
+-                    self.previewView = UIView(frame: CGRect(x: self.x ?? 0, y: self.y ?? 0, width: width, height: adjustedHeight))
++                    // Prefer the live container bounds so we start full-bleed even if
++                    // JS passed a stale size; fall back to the requested frame.
++                    let containerBounds = self.webView?.superview?.bounds
++                    let startFrame = (containerBounds != nil && containerBounds!.width > 0 && containerBounds!.height > 0)
++                        ? containerBounds!
++                        : CGRect(x: self.x ?? 0, y: self.y ?? 0, width: width, height: adjustedHeight)
++                    let containerView = CameraPreviewContainerView(frame: startFrame)
++                    // Track container size through the system rotation animation.
++                    containerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
++                    containerView.onLayout = { [weak self, weak containerView] in
++                        guard let self = self, let containerView = containerView else { return }
++                        self.cameraController.previewLayer?.frame = containerView.bounds
++                    }
++                    self.previewView = containerView
+                     self.webView?.isOpaque = false
+                     self.webView?.backgroundColor = UIColor.clear
+                     self.webView?.scrollView.backgroundColor = UIColor.clear
+@@ -166,6 +200,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
+                 if self.rotateWhenOrientationChanged == true {
+                     NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+                 }
++                NSObject.cancelPreviousPerformRequests(
++                    withTarget: self,
++                    selector: #selector(applyVideoOrientationAfterRotate),
++                    object: nil
++                )
+ 
+                 if let previewView = self.previewView {
+                     previewView.removeFromSuperview()
