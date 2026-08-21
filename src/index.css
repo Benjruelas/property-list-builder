@@ -9168,17 +9168,17 @@ html.photo-native-camera-active #modal-root,
 }
 
 /*
- * Stable web camera stage: a centered square of the long viewport edge
- * (100vmax). Portrait and landscape are both covered already, so rotating
- * the phone only reflows the chrome — the <video> layer does not shrink
- * into black bars.
+ * Stable web camera stage: fixed px cover size locked when the camera opens
+ * (--photo-camera-cover). Do NOT use 100vmax — iOS recalculates vmax mid-rotate
+ * and the stage briefly shrinks to the short edge, then snaps. Chrome (bars /
+ * shutter) still reflows with the visual viewport; only the feed stays put.
  */
 .photo-mode-video-stage {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 100vmax;
-  height: 100vmax;
+  width: var(--photo-camera-cover, 100vmax);
+  height: var(--photo-camera-cover, 100vmax);
   transform: translate(-50%, -50%);
   overflow: hidden;
   background: #000;

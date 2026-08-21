@@ -209,6 +209,34 @@ function facingToNativePosition(facingMode) {
   return facingMode === 'user' ? 'front' : 'rear'
 }
 
+/** Stable CSS var — must not use vmax (iOS recalculates mid-rotate and snaps). */
+export const PHOTO_CAMERA_COVER_VAR = '--photo-camera-cover'
+
+/**
+ * Long-edge cover size in CSS px. Prefer screen.width/height — on iPhone those
+ * stay constant across orientation, unlike innerWidth/innerHeight / vmax.
+ */
+export function computeWebCameraCoverSizePx() {
+  const sw = Number(window.screen?.width) || 0
+  const sh = Number(window.screen?.height) || 0
+  const iw = Number(window.innerWidth) || 0
+  const ih = Number(window.innerHeight) || 0
+  // Slightly past the long edge so corners stay covered during the OS rotate animation.
+  const longEdge = Math.max(sw, sh, iw, ih, 1)
+  return Math.ceil(longEdge * 1.2)
+}
+
+function lockWebCameraCoverSize() {
+  if (typeof document === 'undefined') return
+  const px = computeWebCameraCoverSizePx()
+  document.documentElement.style.setProperty(PHOTO_CAMERA_COVER_VAR, `${px}px`)
+}
+
+function clearWebCameraCoverSize() {
+  if (typeof document === 'undefined') return
+  document.documentElement.style.removeProperty(PHOTO_CAMERA_COVER_VAR)
+}
+
 function PhotoCaptureModalInner({
   open,
   entityType = 'lead',
@@ -367,6 +395,7 @@ function PhotoCaptureModalInner({
     setCameraReady(false)
     setCameraStarting(false)
     setUseCamera(false)
+    clearWebCameraCoverSize()
   }, [])
 
   const showLibraryFallback = useCallback((message) => {
@@ -374,6 +403,7 @@ function PhotoCaptureModalInner({
     setCameraStarting(false)
     setUseNativePreview(false)
     useNativePreviewRef.current = false
+    clearWebCameraCoverSize()
     if (!cameraFallbackNotifiedRef.current) {
       cameraFallbackNotifiedRef.current = true
       showToast(message, 'info')
@@ -392,6 +422,9 @@ function PhotoCaptureModalInner({
       showLibraryFallback('No camera on this device — use Upload photos instead')
       return
     }
+
+    // Lock cover size once so iOS orientation changes only reflow chrome.
+    lockWebCameraCoverSize()
 
     const stream = await requestCameraStream(facing)
     streamRef.current = stream
@@ -529,7 +562,7 @@ function PhotoCaptureModalInner({
   }, [open, stopCamera])
 
   // Keep the web <video> playing across iOS Safari orientation changes.
-  // Safari often pauses the stream mid-rotate, which looks like a black reset.
+  // Do not touch layout size here — cover size is locked for the session.
   useEffect(() => {
     if (!open || !cameraReady || useNativePreview) return undefined
     const resume = () => {
@@ -542,16 +575,11 @@ function PhotoCaptureModalInner({
         void video.play().catch(() => {})
       }
     }
-    const onOrient = () => {
-      // After Safari finishes swapping the visual viewport.
-      window.setTimeout(resume, 50)
-      window.setTimeout(resume, 300)
-    }
-    window.addEventListener('orientationchange', onOrient)
+    window.addEventListener('orientationchange', resume)
     window.addEventListener('resize', resume)
     document.addEventListener('visibilitychange', resume)
     return () => {
-      window.removeEventListener('orientationchange', onOrient)
+      window.removeEventListener('orientationchange', resume)
       window.removeEventListener('resize', resume)
       document.removeEventListener('visibilitychange', resume)
     }
