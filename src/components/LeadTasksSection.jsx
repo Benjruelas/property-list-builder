@@ -100,6 +100,9 @@ export function LeadTasksSection({
   onOpenScheduleAtDate,
   refreshKey = 0,
   onNestedOverlayChange,
+  showCreateButton = true,
+  hideWhenEmpty = false,
+  createRequestKey = 0,
 }) {
   const [tasks, setTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(false)
@@ -371,10 +374,15 @@ export function LeadTasksSection({
     onOpenScheduleAtDate(at)
   }
 
-  const openAddTask = () => {
+  const openAddTask = useCallback(() => {
     setEditingTask(null)
     setShowAddTask(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!createRequestKey) return
+    openAddTask()
+  }, [createRequestKey, openAddTask])
 
   const openEditTask = (task) => {
     setShowAddTask(false)
@@ -399,12 +407,16 @@ export function LeadTasksSection({
     openTaskGroups.groups.length > 0 || openTaskGroups.unassigned.length > 0
   const hasCompletedTasks =
     completedTaskGroups.groups.length > 0 || completedTaskGroups.unassigned.length > 0
+  const hasAnyTasks = hasOpenTasks || hasCompletedTasks
+  const hideSection = hideWhenEmpty && !hasAnyTasks
 
   return (
     <>
+      {!hideSection && (
       <section className={cn('lead-detail-section', className)}>
         <div className="flex items-center justify-between mb-2.5">
           <h3 className="lead-detail-section-title">Tasks</h3>
+          {(completedTasks.length > 0 || showCreateButton) && (
           <div className="flex items-center gap-1">
             {completedTasks.length > 0 && (
               <CompletedTasksToggleButton
@@ -412,6 +424,7 @@ export function LeadTasksSection({
                 onToggle={() => setShowCompletedTasks((s) => !s)}
               />
             )}
+            {showCreateButton && (
             <Button
               type="button"
               size="sm"
@@ -423,7 +436,9 @@ export function LeadTasksSection({
               <Plus className="h-3.5 w-3.5 mr-1" />
               Create
             </Button>
+            )}
           </div>
+          )}
         </div>
         {tasksLoading && tasks.length === 0 ? (
           <TaskListLoading />
@@ -443,6 +458,7 @@ export function LeadTasksSection({
           </>
         )}
       </section>
+      )}
 
       <NewTaskDialog
         open={showTaskDialog}

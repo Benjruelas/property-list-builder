@@ -9,7 +9,7 @@ import {
   ChevronRight,
   MoreVertical,
   Share2,
-  Plus,
+  ListTodo,
   MessageSquare,
   StickyNote,
   ArrowRightLeft,
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
-import { PanelBackButton } from './ui/panel-header'
+import { PanelBackButton, PanelCreateButton } from './ui/panel-header'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { ignoreRadixMapPanelDismiss } from './ui/panelDialogUtils'
 import { DirectionsProviderDialog } from './DirectionsProviderDialog'
@@ -233,17 +233,19 @@ export function LeadDetails({
   const [notes, setNotes] = useState('')
   const [notesDirty, setNotesDirty] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [createMenuOpen, setCreateMenuOpen] = useState(false)
+  const [taskCreateRequestKey, setTaskCreateRequestKey] = useState(0)
   const [shareOpen, setShareOpen] = useState(false)
   const [externalShareOpen, setExternalShareOpen] = useState(false)
   const [localShareState, setLocalShareState] = useState(null)
   const [statusBusy, setStatusBusy] = useState(false)
   const [leadReports, setLeadReports] = useState(() => peekCachedLeadReports(lead?.id) ?? [])
-  const [leadReportsLoading, setLeadReportsLoading] = useState(() => {
+  const [, setLeadReportsLoading] = useState(() => {
     if (!lead?.id || !canAccessReports) return false
     return peekCachedLeadReports(lead.id) === undefined
   })
   const [leadForms, setLeadForms] = useState(() => peekCachedLeadForms(lead?.id) ?? [])
-  const [leadFormsLoading, setLeadFormsLoading] = useState(() => {
+  const [, setLeadFormsLoading] = useState(() => {
     if (!lead?.id || !canAccessForms) return false
     return peekCachedLeadForms(lead.id) === undefined
   })
@@ -307,6 +309,7 @@ export function LeadDetails({
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
   const fileInputRef = useRef(null)
   const menuTriggerRef = useRef(null)
+  const createMenuTriggerRef = useRef(null)
   const onOpenPhotoReportRef = useRef(onOpenPhotoReport)
   onOpenPhotoReportRef.current = onOpenPhotoReport
 
@@ -324,6 +327,7 @@ export function LeadDetails({
 
   useEffect(() => {
     setMenuOpen(false)
+    setCreateMenuOpen(false)
     setShareOpen(false)
     setLocalShareState(null)
   }, [lead?.id, isOpen])
@@ -491,7 +495,10 @@ export function LeadDetails({
   // External text/email share is available to anyone who can open the lead.
   const canExternalShareLead = Boolean(leadAccess)
   const canDeleteLead = canDelete(leadAccess)
-  const showLeadOptionsMenu = canShareLead || canExternalShareLead || canDeleteLead || !!onCreateDeal
+  const canCreateDeal = !!onCreateDeal
+  const canCreateReport = canAccessReports && !!onCreatePhotoReport
+  const canCreateForm = canAccessForms && !!onCreateLeadForm
+  const showLeadOptionsMenu = canShareLead || canExternalShareLead || canDeleteLead
 
   useEffect(() => {
     if (!shareOpen) {
@@ -627,8 +634,22 @@ export function LeadDetails({
 
   const openMenu = (event) => {
     event.stopPropagation()
+    createMenuTriggerRef.current = null
+    setCreateMenuOpen(false)
     menuTriggerRef.current = event.currentTarget
     setMenuOpen(true)
+  }
+
+  const closeCreateMenu = () => {
+    setCreateMenuOpen(false)
+  }
+
+  const openCreateMenu = (event) => {
+    event.stopPropagation()
+    menuTriggerRef.current = null
+    setMenuOpen(false)
+    createMenuTriggerRef.current = event.currentTarget
+    setCreateMenuOpen(true)
   }
 
   const handleStatusChange = async (nextStatus) => {
@@ -715,6 +736,10 @@ export function LeadDetails({
               </div>
             </div>
             <div className="map-panel-header-actions gap-1">
+              <PanelCreateButton
+                onClick={openCreateMenu}
+                title="Create"
+              />
               {showLeadOptionsMenu && (
                 <Button
                   variant="ghost"
@@ -848,6 +873,19 @@ export function LeadDetails({
                   </div>
                 )}
               </section>
+
+              {leadCustomFields.length > 0 && (
+                <section className="lead-detail-section">
+                  <CustomFieldsEditor
+                    fields={leadCustomFields}
+                    values={lead?.customFields || {}}
+                    onChange={(customFields) => {
+                      onLeadUpdate?.({ ...lead, customFields, updatedAt: new Date().toISOString() })
+                    }}
+                    disabled={!onLeadUpdate}
+                  />
+                </section>
+              )}
 
               <section className="lead-detail-section">
                 <LeadDetailSectionTitle>Status</LeadDetailSectionTitle>
@@ -998,42 +1036,100 @@ export function LeadDetails({
                 onOpenScheduleAtDate={onOpenScheduleAtDate}
                 refreshKey={taskListEpoch}
                 onNestedOverlayChange={setTasksNestedOverlay}
+                showCreateButton={false}
+                hideWhenEmpty
+                createRequestKey={taskCreateRequestKey}
               />
 
+              {linkedDeals.length > 0 && (
               <section className="lead-detail-section">
-                <LeadDetailSectionTitle
-                  action={onCreateDeal ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => onCreateDeal(lead)}
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-1" />
-                      Create
-                    </Button>
-                  ) : null}
-                >
+                <LeadDetailSectionTitle>
                   Deals
                 </LeadDetailSectionTitle>
-                {linkedDeals.length === 0 ? (
-                  <p className="text-xs text-white/40">No deals yet</p>
-                ) : (
+                <ul className="space-y-1.5">
+                  {linkedDeals.map((d) => (
+                    <li key={d.id}>
+                      <button
+                        type="button"
+                        onClick={() => onOpenDeal?.(d, d.__pipelineId)}
+                        className="lead-detail-deal-card lead-detail-list-card"
+                      >
+                        <Briefcase className="h-4 w-4 shrink-0 opacity-50" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{d.title || d.leadAddress}</div>
+                          <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
+                            <span>{getColumnName(d.status, d.__columns)}</span>
+                            {formatTimeInState(d) && <span>{formatTimeInState(d)}</span>}
+                            <DealProfitBadge deal={d} className="text-[11px]" canSeeDealAmounts={canSeeDealAmounts} />
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              )}
+
+              {canAccessReports && leadReports.length > 0 && (
+                <section className="lead-detail-section">
+                  <LeadDetailSectionTitle>
+                    Reports
+                  </LeadDetailSectionTitle>
                   <ul className="space-y-1.5">
-                    {linkedDeals.map((d) => (
-                      <li key={d.id}>
+                    {leadReports.map((report) => {
+                      const sectionCount = (report.sections || []).length
+                      const listDate = getReportListDate(report)
+                      return (
+                        <li key={report.id}>
+                          <button
+                            type="button"
+                            disabled={!onOpenPhotoReport}
+                            onClick={() => onOpenPhotoReport?.(report)}
+                            className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
+                          >
+                            <FileText className="h-4 w-4 shrink-0 opacity-50" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{report.title || 'Report'}</div>
+                              <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
+                                <QuoteStatusBadge status={report.status || 'draft'} />
+                                <span>{sectionCount} section{sectionCount === 1 ? '' : 's'}</span>
+                                {listDate && (
+                                  <span>{new Date(listDate).toLocaleDateString()}</span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {canAccessForms && leadForms.length > 0 && (
+                <section className="lead-detail-section">
+                  <LeadDetailSectionTitle>
+                    Forms
+                  </LeadDetailSectionTitle>
+                  <ul className="space-y-1.5">
+                    {leadForms.map((item) => (
+                      <li key={`${item.kind}-${item.id}`}>
                         <button
                           type="button"
-                          onClick={() => onOpenDeal?.(d, d.__pipelineId)}
-                          className="lead-detail-deal-card lead-detail-list-card"
+                          disabled={!onOpenLeadForm}
+                          onClick={() => onOpenLeadForm?.(item, lead)}
+                          className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
                         >
-                          <Briefcase className="h-4 w-4 shrink-0 opacity-50" />
+                          <ClipboardList className="h-4 w-4 shrink-0 opacity-50" />
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{d.title || d.leadAddress}</div>
+                            <div className="text-sm font-medium truncate">{item.templateName || 'Form'}</div>
                             <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
-                              <span>{getColumnName(d.status, d.__columns)}</span>
-                              {formatTimeInState(d) && <span>{formatTimeInState(d)}</span>}
-                              <DealProfitBadge deal={d} className="text-[11px]" canSeeDealAmounts={canSeeDealAmounts} />
+                              <span>{leadFormStatusLabel(item.status)}</span>
+                              {item.at && (
+                                <span>{new Date(item.at).toLocaleDateString()}</span>
+                              )}
                             </div>
                           </div>
                           <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
@@ -1041,123 +1137,6 @@ export function LeadDetails({
                       </li>
                     ))}
                   </ul>
-                )}
-              </section>
-
-              {canAccessReports && onCreatePhotoReport && (
-                <section className="lead-detail-section">
-                  <LeadDetailSectionTitle
-                    action={(
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => {
-                          invalidateCachedLeadReports(lead.id)
-                          onCreatePhotoReport(lead.id)
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Create
-                      </Button>
-                    )}
-                  >
-                    Reports
-                  </LeadDetailSectionTitle>
-                  {leadReportsLoading ? (
-                    <div className="flex items-center gap-2 py-2 text-xs opacity-50">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                      Loading reports…
-                    </div>
-                  ) : leadReports.length === 0 ? (
-                    <p className="text-xs text-white/40">No reports yet</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {leadReports.map((report) => {
-                        const sectionCount = (report.sections || []).length
-                        const listDate = getReportListDate(report)
-                        return (
-                          <li key={report.id}>
-                            <button
-                              type="button"
-                              disabled={!onOpenPhotoReport}
-                              onClick={() => onOpenPhotoReport?.(report)}
-                              className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
-                            >
-                              <FileText className="h-4 w-4 shrink-0 opacity-50" />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium truncate">{report.title || 'Report'}</div>
-                                <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
-                                  <QuoteStatusBadge status={report.status || 'draft'} />
-                                  <span>{sectionCount} section{sectionCount === 1 ? '' : 's'}</span>
-                                  {listDate && (
-                                    <span>{new Date(listDate).toLocaleDateString()}</span>
-                                  )}
-                                </div>
-                              </div>
-                              <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
-                </section>
-              )}
-
-              {canAccessForms && onCreateLeadForm && (
-                <section className="lead-detail-section">
-                  <LeadDetailSectionTitle
-                    action={(
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => {
-                          invalidateCachedLeadForms(lead.id)
-                          onCreateLeadForm(lead)
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Create
-                      </Button>
-                    )}
-                  >
-                    Forms
-                  </LeadDetailSectionTitle>
-                  {leadFormsLoading ? (
-                    <div className="flex items-center gap-2 py-2 text-xs opacity-50">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                      Loading forms…
-                    </div>
-                  ) : leadForms.length === 0 ? (
-                    <p className="text-xs text-white/40">No forms yet</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {leadForms.map((item) => (
-                        <li key={`${item.kind}-${item.id}`}>
-                          <button
-                            type="button"
-                            disabled={!onOpenLeadForm}
-                            onClick={() => onOpenLeadForm?.(item, lead)}
-                            className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
-                          >
-                            <ClipboardList className="h-4 w-4 shrink-0 opacity-50" />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{item.templateName || 'Form'}</div>
-                              <div className="text-[11px] text-white/45 flex gap-2 flex-wrap items-center mt-0.5">
-                                <span>{leadFormStatusLabel(item.status)}</span>
-                                {item.at && (
-                                  <span>{new Date(item.at).toLocaleDateString()}</span>
-                                )}
-                              </div>
-                            </div>
-                            <ChevronRight className="h-4 w-4 opacity-40 shrink-0" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </section>
               )}
 
@@ -1172,19 +1151,6 @@ export function LeadDetails({
                   placeholder="Lead notes…"
                 />
               </section>
-
-              {leadCustomFields.length > 0 && (
-                <section className="lead-detail-section">
-                  <CustomFieldsEditor
-                    fields={leadCustomFields}
-                    values={lead?.customFields || {}}
-                    onChange={(customFields) => {
-                      onLeadUpdate?.({ ...lead, customFields, updatedAt: new Date().toISOString() })
-                    }}
-                    disabled={!onLeadUpdate}
-                  />
-                </section>
-              )}
 
               <section className="lead-detail-section">
                 <LeadDetailSectionTitle>Activity</LeadDetailSectionTitle>
@@ -1236,6 +1202,48 @@ export function LeadDetails({
         initialIndex={previewFileIndex ?? 0}
       />
 
+      <OptionsMenuDropdown
+        open={createMenuOpen}
+        onClose={closeCreateMenu}
+        triggerRef={createMenuTriggerRef}
+        menuWidth={MENU_WIDTH}
+        dataAttr="data-lead-create-menu"
+      >
+        <OptionsMenuItem onClick={() => {
+          closeCreateMenu()
+          setTaskCreateRequestKey((key) => key + 1)
+        }}>
+          <ListTodo className="h-4 w-4 shrink-0" />
+          Task
+        </OptionsMenuItem>
+        {canCreateDeal && (
+          <OptionsMenuItem onClick={() => { closeCreateMenu(); onCreateDeal(lead) }}>
+            <Briefcase className="h-4 w-4 shrink-0" />
+            Deal
+          </OptionsMenuItem>
+        )}
+        {canCreateReport && (
+          <OptionsMenuItem onClick={() => {
+            closeCreateMenu()
+            invalidateCachedLeadReports(lead.id)
+            onCreatePhotoReport(lead.id)
+          }}>
+            <FileText className="h-4 w-4 shrink-0" />
+            Report
+          </OptionsMenuItem>
+        )}
+        {canCreateForm && (
+          <OptionsMenuItem onClick={() => {
+            closeCreateMenu()
+            invalidateCachedLeadForms(lead.id)
+            onCreateLeadForm(lead)
+          }}>
+            <ClipboardList className="h-4 w-4 shrink-0" />
+            Form
+          </OptionsMenuItem>
+        )}
+      </OptionsMenuDropdown>
+
       {showLeadOptionsMenu && (
       <OptionsMenuDropdown
         open={menuOpen}
@@ -1244,12 +1252,6 @@ export function LeadDetails({
         menuWidth={MENU_WIDTH}
         dataAttr="data-lead-details-menu"
       >
-        {onCreateDeal && (
-          <OptionsMenuItem onClick={() => { closeMenu(); onCreateDeal(lead) }}>
-            <Plus className="h-4 w-4 shrink-0" />
-            Create deal
-          </OptionsMenuItem>
-        )}
         {canShareLead && (
           <OptionsMenuItem onClick={() => { closeMenu(); setShareOpen(true) }}>
             <Share2 className="h-4 w-4 shrink-0" />
