@@ -95,6 +95,7 @@ export function ReportsPanel({
   const [pendingReportLeadId, setPendingReportLeadId] = useState(null)
   const [pendingPreferredTemplate, setPendingPreferredTemplate] = useState(null)
   const [sendReport, setSendReport] = useState(null)
+  const skipTemplatePickerCancelRef = useRef(false)
 
   const editorOpen = !!editorFrame
   const hasReportDetail = !!detailReportId
@@ -261,6 +262,9 @@ export function ReportsPanel({
   const finalizeNewReport = (template) => {
     const leadId = pendingReportLeadId || editorLeadId
     const wasAwaitingTemplate = awaitingTemplatePick
+    // Selecting a template also closes the picker. Ignore that dismiss so we
+    // don't treat it as Cancel (which would pop the editor before the builder opens).
+    skipTemplatePickerCancelRef.current = true
     resetReportCreateFlow()
     if (!leadId) return
 
@@ -626,6 +630,10 @@ export function ReportsPanel({
         open={showReportTemplatePicker}
         onOpenChange={(open) => {
           if (open) return
+          if (skipTemplatePickerCancelRef.current) {
+            skipTemplatePickerCancelRef.current = false
+            return
+          }
           if (awaitingTemplatePick) {
             onCloseEditor?.()
             return
