@@ -12,9 +12,9 @@ export const CARTO_LABEL_ATTRIBUTION = '&copy; OpenStreetMap &copy; CARTO'
 
 /** Same-origin parcel vector tiles (LandRecords via R2 cache). */
 export function parcelTileUrl() {
-  // `v=3`: bust SW/browser caches after sparse-pyramid empty-tile status change.
-  if (typeof window === 'undefined') return '/api/tiles?z={z}&x={x}&y={y}&v=3'
-  return `${window.location.origin}/api/tiles?z={z}&x={x}&y={y}&v=3`
+  // `v=4`: bust SW/browser caches after transient-403 / maxzoom-17 tile handling.
+  if (typeof window === 'undefined') return '/api/tiles?z={z}&x={x}&y={y}&v=4'
+  return `${window.location.origin}/api/tiles?z={z}&x={x}&y={y}&v=4`
 }
 
 const MAPBOX_TOKEN = () => import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''

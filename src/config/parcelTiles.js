@@ -10,7 +10,8 @@
 
 export const PARCEL_SOURCE_MIN_ZOOM = 14
 export const PARCEL_LAYER_MIN_ZOOM = 15
-export const PARCEL_TILE_MAXZOOM = 16
+/** Some metros (e.g. Duncanville) are empty at z16 but populated at z17. */
+export const PARCEL_TILE_MAXZOOM = 17
 
 export const PARCEL_SOURCE_ID = 'parcels'
 export const PARCEL_SOURCE_LAYERS = ['parcel_us', 'parcels']

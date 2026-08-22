@@ -5,6 +5,7 @@ import {
   PARCEL_LINE_LAYERS,
   PARCEL_SOURCE_MIN_ZOOM,
   PARCEL_LAYER_MIN_ZOOM,
+  PARCEL_TILE_MAXZOOM,
   parcelFillLayerId,
   parcelLineLayerId,
   parcelPromoteId,
@@ -34,5 +35,10 @@ describe('parcelTiles', () => {
     expect(PARCEL_SOURCE_MIN_ZOOM).toBe(14)
     expect(PARCEL_LAYER_MIN_ZOOM).toBe(15)
     expect(PARCEL_SOURCE_MIN_ZOOM).toBeLessThan(PARCEL_LAYER_MIN_ZOOM)
+  })
+
+  it('requests z17 so metros that are empty at z16 (Duncanville) still load', () => {
+    expect(PARCEL_TILE_MAXZOOM).toBe(17)
+    expect(PARCEL_TILE_MAXZOOM).toBeGreaterThan(PARCEL_LAYER_MIN_ZOOM)
   })
 })
