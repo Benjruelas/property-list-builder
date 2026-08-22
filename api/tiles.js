@@ -1,10 +1,16 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { enforceIpRateLimit } from './_lib/rateLimit.js'
-import { emptyParcelTileStatus } from './_lib/parcelTileEmpty.js'
+import {
+  emptyParcelTileStatus,
+  isTransientParcelUpstreamStatus,
+  transientParcelTileStatus,
+} from './_lib/parcelTileEmpty.js'
 
 const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 const EMPTY_MARKER = Buffer.alloc(0)
 const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600'
+const TRANSIENT_CACHE_CONTROL = 'private, no-store'
+const TRANSIENT_RETRY_DELAY_MS = 250
 
 /**
  * LandRecords coverage is a sparse pyramid. MapLibre treats HTTP 204 as a successful
@@ -20,6 +26,54 @@ const TILE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400, stale-while-r
 function sendEmptyTile(res, zi) {
   res.setHeader('Cache-Control', TILE_CACHE_CONTROL)
   return res.status(emptyParcelTileStatus(zi)).end()
+}
+
+/**
+ * Origin 401/403/5xx is a flake, not a missing parcel. Do not write an R2 empty
+ * marker (that would punch a 90-day hole). 410 above minzoom keeps parents;
+ * 503 at minzoom asks MapLibre to retry.
+ */
+function sendTransientTile(res, zi) {
+  res.setHeader('Cache-Control', TRANSIENT_CACHE_CONTROL)
+  return res.status(transientParcelTileStatus(zi)).end()
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchLandRecordsPbf(url) {
+  const headers = { Authorization: `Bearer ${process.env.LANDRECORDS_API_KEY}` }
+  const tryOnce = () => fetch(url, { headers })
+
+  let upstream
+  try {
+    upstream = await tryOnce()
+  } catch (e) {
+    try {
+      await delay(TRANSIENT_RETRY_DELAY_MS)
+      upstream = await tryOnce()
+    } catch (e2) {
+      return { error: e2 }
+    }
+  }
+
+  if (
+    upstream &&
+    !upstream.ok &&
+    upstream.status !== 404 &&
+    upstream.status !== 204 &&
+    isTransientParcelUpstreamStatus(upstream.status)
+  ) {
+    try {
+      await delay(TRANSIENT_RETRY_DELAY_MS)
+      upstream = await tryOnce()
+    } catch (e) {
+      return { error: e }
+    }
+  }
+
+  return { upstream }
 }
 
 let _s3
@@ -96,14 +150,10 @@ export default async function handler(req, res) {
   const tmsY = (1 << zi) - 1 - yi
   const url = `${process.env.LANDRECORDS_TILE_URL}/${zi}/${xi}/${tmsY}.pbf`
 
-  let upstream
-  try {
-    upstream = await fetch(url, {
-      headers: { Authorization: `Bearer ${process.env.LANDRECORDS_API_KEY}` },
-    })
-  } catch (e) {
-    console.error('LandRecords fetch error:', e.message)
-    return res.status(502).json({ error: 'upstream fetch failed' })
+  const { upstream, error: fetchError } = await fetchLandRecordsPbf(url)
+  if (fetchError || !upstream) {
+    console.error('LandRecords fetch error:', fetchError?.message || 'no response')
+    return sendTransientTile(res, zi)
   }
 
   if (upstream.status === 404 || upstream.status === 204) {
@@ -113,6 +163,12 @@ export default async function handler(req, res) {
   }
 
   if (!upstream.ok) {
+    if (isTransientParcelUpstreamStatus(upstream.status)) {
+      console.warn(
+        `LandRecords tile ${zi}/${xi}/${yi} upstream ${upstream.status}; not caching`,
+      )
+      return sendTransientTile(res, zi)
+    }
     return res.status(upstream.status).json({ error: `upstream ${upstream.status}` })
   }
 

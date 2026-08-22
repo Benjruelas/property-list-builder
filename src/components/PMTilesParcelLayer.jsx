@@ -17,9 +17,10 @@ import {
 } from '@/config/parcelTiles'
 
 // LandRecords is a sparse pyramid. Source minzoom is 14 so empty z15 tiles can
-// keep a parent; layers themselves stay hidden until z15. maxzoom stays at a
-// level that usually has data — above it MapLibre overzooms. Empty levels inside
-// the range must error (API 410) so MapLibre keeps parents — see api/tiles.js.
+// keep a parent; layers themselves stay hidden until z15. maxzoom is 17 because
+// some metros only have data at that level — above it MapLibre overzooms. Empty
+// or transient-failed levels inside the range must error (API 410/503) so
+// MapLibre keeps parents — see api/tiles.js.
 //
 // Tiles may use source-layer `parcel_us` OR `parcels` (Cedar Hill is mostly the
 // latter). Paint and hit-test both.
