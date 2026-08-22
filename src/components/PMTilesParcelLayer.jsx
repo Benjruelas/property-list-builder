@@ -617,25 +617,53 @@ export function PMTilesParcelLayer({
     let lastLabelRefreshAt = 0
     let idleLabelHandler = null
     let occupancyAbort = null
+    let iconPadding = 2
     const LABEL_DEBOUNCE_MS = 200
     const LABEL_MIN_INTERVAL_MS = 400
 
     const tileUrl = parcelTileUrl()
     const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
 
-    function applyLabelGeoJSON(labelSrc, features) {
+    function relayoutLabelIcons() {
+      if (!map.getLayer(LABEL_LAYER)) return
+      // MapLibre only fully re-places symbols on zoom. Nudge a layout property
+      // so home icons appear as soon as occupancy arrives, not on the next zoom.
+      iconPadding = iconPadding === 2 ? 2.001 : 2
+      try {
+        map.setLayoutProperty(LABEL_LAYER, 'icon-padding', iconPadding)
+      } catch { /* ignore */ }
+      try {
+        map.triggerRepaint()
+      } catch { /* ignore */ }
+    }
+
+    function applyLabelGeoJSON(labelSrc, features, { force = false, relayout = false } = {}) {
       const geo = buildLabelGeoJSON(features, occupancyCacheSnapshot())
       const key = labelGeoJSONKey(geo)
-      if (key !== lastLabelKey) {
-        lastLabelKey = key
-        labelSrc.setData(geo)
+      if (!force && key === lastLabelKey) return geo
+      lastLabelKey = key
+      labelSrc.setData(geo)
+      if (relayout) relayoutLabelIcons()
+      else {
+        try { map.triggerRepaint() } catch { /* ignore */ }
       }
       return geo
     }
 
-    async function enrichLabelOccupancy(features, labelSrc) {
+    function currentLabelFeatures() {
+      if (map.getZoom() < 17) return null
+      const labelSrc = map.getSource(LABEL_SOURCE)
+      if (!labelSrc) return null
+      return {
+        labelSrc,
+        features: map.queryRenderedFeatures({ layers: PARCEL_FILL_LAYERS }),
+      }
+    }
+
+    async function enrichLabelOccupancy(features, { restart = true } = {}) {
       const preview = buildLabelGeoJSON(features, occupancyCacheSnapshot())
       if (!labelLridsMissingOccupancy(preview, occupancyCacheSnapshot()).length) return
+      if (!restart && occupancyAbort && !occupancyAbort.signal.aborted) return
       occupancyAbort?.abort()
       const controller = new AbortController()
       occupancyAbort = controller
@@ -650,7 +678,9 @@ export function PMTilesParcelLayer({
           signal: controller.signal,
         })
         if (cancelled || controller.signal.aborted) return
-        applyLabelGeoJSON(labelSrc, features)
+        const live = currentLabelFeatures()
+        if (!live) return
+        applyLabelGeoJSON(live.labelSrc, live.features, { force: true, relayout: true })
       } catch (err) {
         if (err?.name === 'AbortError') return
       }
@@ -662,7 +692,7 @@ export function PMTilesParcelLayer({
       labelUpdateTimer = setTimeout(() => {
         if (cancelled) return
         const now = Date.now()
-        if (now - lastLabelRefreshAt < LABEL_MIN_INTERVAL_MS) return
+        const tooSoon = now - lastLabelRefreshAt < LABEL_MIN_INTERVAL_MS
         try {
           const zoom = map.getZoom()
           const labelSrc = map.getSource(LABEL_SOURCE)
@@ -677,9 +707,15 @@ export function PMTilesParcelLayer({
             return
           }
           const features = map.queryRenderedFeatures({ layers: PARCEL_FILL_LAYERS })
+          if (tooSoon) {
+            // House numbers can wait; still resolve occupancy so icons paint
+            // without a zoom. Do not abort a fetch that is already in flight.
+            enrichLabelOccupancy(features, { restart: false })
+            return
+          }
           applyLabelGeoJSON(labelSrc, features)
           lastLabelRefreshAt = now
-          enrichLabelOccupancy(features, labelSrc)
+          enrichLabelOccupancy(features)
         } catch { /* ignore */ }
       }, LABEL_DEBOUNCE_MS)
     }
