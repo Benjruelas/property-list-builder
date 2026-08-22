@@ -51,11 +51,28 @@ export function buildLabelGeoJSON(features, occupancyByLrid = new Map()) {
     const oo = occupancyCode(computeOwnerOccupied(mapped))
     pts.push({
       type: 'Feature',
+      // New identity when occupancy resolves so MapLibre re-places the home icon
+      // immediately instead of waiting for the next zoom layout pass.
+      id: `${id}:${oo}`,
       geometry: { type: 'Point', coordinates: [cx, cy] },
       properties: { _label: num, _oo: oo, _lrid: String(id) },
     })
   }
   return { type: 'FeatureCollection', features: pts }
+}
+
+/** Counts of Yes / No / unknown occupancy codes currently on the label source. */
+export function labelOccupancyFingerprint(geo) {
+  let yes = 0
+  let no = 0
+  let unknown = 0
+  for (const f of geo.features || []) {
+    const oo = f.properties?._oo
+    if (oo === 1) yes += 1
+    else if (oo === 0) no += 1
+    else unknown += 1
+  }
+  return `${yes}:${no}:${unknown}`
 }
 
 export function labelGeoJSONKey(geo) {
@@ -65,10 +82,9 @@ export function labelGeoJSONKey(geo) {
   const last = feats[feats.length - 1]
   return [
     feats.length,
+    labelOccupancyFingerprint(geo),
     first.properties?._label,
     last.properties?._label,
-    first.properties?._oo,
-    last.properties?._oo,
     first.geometry?.coordinates?.[0],
     first.geometry?.coordinates?.[1],
     last.geometry?.coordinates?.[0],

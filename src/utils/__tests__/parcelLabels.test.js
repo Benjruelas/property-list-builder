@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { extractHouseNumber, buildLabelGeoJSON, labelLridsMissingOccupancy } from '../parcelLabels'
+import {
+  extractHouseNumber,
+  buildLabelGeoJSON,
+  labelGeoJSONKey,
+  labelLridsMissingOccupancy,
+} from '../parcelLabels'
 import { rememberOccupancyMap, occupancyCacheSnapshot, clearOccupancyCache } from '../fetchParcelOccupancy'
 
 describe('extractHouseNumber', () => {
@@ -46,5 +51,32 @@ describe('buildLabelGeoJSON', () => {
     expect(labelLridsMissingOccupancy(geo, new Map())).toEqual(['abc-1'])
     rememberOccupancyMap({ 'abc-1': { owneraddr: '123 MAIN ST' } })
     expect(labelLridsMissingOccupancy(geo, occupancyCacheSnapshot())).toEqual([])
+  })
+
+  it('changes feature id when occupancy resolves so MapLibre re-places the icon', () => {
+    const unknown = buildLabelGeoJSON([feature])
+    expect(unknown.features[0].id).toBe('abc-1:-1')
+    const occ = new Map([['abc-1', { owneraddr: '123 MAIN ST', homestead_exemption: '' }]])
+    const known = buildLabelGeoJSON([feature], occ)
+    expect(known.features[0].id).toBe('abc-1:1')
+  })
+
+  it('changes the GeoJSON key when a middle parcel gets occupancy', () => {
+    const features = [1, 2, 3].map((n) => ({
+      properties: {
+        lrid: `abc-${n}`,
+        parceladdr: `${n}00 MAIN ST`,
+        centroidx: -97.1,
+        centroidy: 32.73,
+      },
+    }))
+    const before = buildLabelGeoJSON(features)
+    const after = buildLabelGeoJSON(features, new Map([
+      ['abc-2', { owneraddr: '200 MAIN ST', homestead_exemption: '' }],
+    ]))
+    expect(before.features[0].properties._oo).toBe(-1)
+    expect(before.features[2].properties._oo).toBe(-1)
+    expect(after.features[1].properties._oo).toBe(1)
+    expect(labelGeoJSONKey(after)).not.toBe(labelGeoJSONKey(before))
   })
 })
