@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { mapProperties } from '@/utils/parcelPropertyMap'
 import { parcelTileUrl } from '@/config/mapProviders'
-import { computeOwnerOccupied } from '@/utils/ownerOccupied'
 import {
   PARCEL_SOURCE_MIN_ZOOM,
   PARCEL_LAYER_MIN_ZOOM,
@@ -15,6 +14,11 @@ import {
   parcelPromoteId,
   parcelPromoteIdMatches,
 } from '@/config/parcelTiles'
+import { buildLabelGeoJSON, labelGeoJSONKey, labelLridsMissingOccupancy } from '@/utils/parcelLabels'
+import {
+  fetchViewportOccupancy,
+  occupancyCacheSnapshot,
+} from '@/utils/fetchParcelOccupancy'
 
 // LandRecords is a sparse pyramid. Source minzoom is 14 so empty z15 tiles can
 // keep a parent; layers themselves stay hidden until z15. maxzoom is 17 because
@@ -28,65 +32,6 @@ const OO_ICON_YES_ID = 'parcel-owner-occupied'
 const OO_ICON_NO_ID = 'parcel-absentee'
 const OO_ICON_YES_COLOR = '#22c55e'
 const OO_ICON_NO_COLOR = '#eab308'
-
-/** Leading house number from situs; skips assessor placeholders like "0" / "00". */
-function extractHouseNumber(addr) {
-  if (!addr) return ''
-  const trimmed = String(addr).trim()
-  if (!trimmed) return ''
-  const match = trimmed.match(/^(\d{1,5}[A-Za-z]?)\b/)
-  if (!match) return ''
-  const num = match[1]
-  const digits = num.replace(/[A-Za-z]/g, '')
-  if (!digits || /^0+$/.test(digits)) return ''
-  return num
-}
-
-const MAX_LABEL_FEATURES = 500
-
-function buildLabelGeoJSON(features) {
-  const seen = new Set()
-  const pts = []
-  for (const f of features) {
-    if (pts.length >= MAX_LABEL_FEATURES) break
-    const p = f.properties || {}
-    const id = p.lrid || p.parcelid
-    if (!id || seen.has(id)) continue
-    const cx = Number(p.centroidx)
-    const cy = Number(p.centroidy)
-    if (!cx || !cy || isNaN(cx) || isNaN(cy)) continue
-    const num = extractHouseNumber(p.parceladdr)
-    if (!num) continue
-    seen.add(id)
-    // Only color OO when we also emit a house number (same feature / gate).
-    // 1 = Yes, 0 = No, -1 = unknown (no home icon).
-    const ooStatus = computeOwnerOccupied(mapProperties(p))
-    const oo = ooStatus === 'Yes' ? 1 : ooStatus === 'No' ? 0 : -1
-    pts.push({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [cx, cy] },
-      properties: { _label: num, _oo: oo },
-    })
-  }
-  return { type: 'FeatureCollection', features: pts }
-}
-
-function labelGeoJSONKey(geo) {
-  const feats = geo.features
-  if (!feats.length) return 'empty'
-  const first = feats[0]
-  const last = feats[feats.length - 1]
-  return [
-    feats.length,
-    first.properties?._label,
-    last.properties?._label,
-    first.properties?._oo,
-    last.properties?._oo,
-    first.geometry?.coordinates?.[0],
-    first.geometry?.coordinates?.[1],
-    last.geometry?.coordinates?.[0],
-  ].join('|')
-}
 
 /** Shared layout for house-number labels with ownership home glyph (green / yellow). */
 function parcelLabelLayerLayout() {
@@ -671,11 +616,45 @@ export function PMTilesParcelLayer({
     let lastLabelKey = ''
     let lastLabelRefreshAt = 0
     let idleLabelHandler = null
+    let occupancyAbort = null
     const LABEL_DEBOUNCE_MS = 200
     const LABEL_MIN_INTERVAL_MS = 400
 
     const tileUrl = parcelTileUrl()
     const emptyGeoJSON = { type: 'FeatureCollection', features: [] }
+
+    function applyLabelGeoJSON(labelSrc, features) {
+      const geo = buildLabelGeoJSON(features, occupancyCacheSnapshot())
+      const key = labelGeoJSONKey(geo)
+      if (key !== lastLabelKey) {
+        lastLabelKey = key
+        labelSrc.setData(geo)
+      }
+      return geo
+    }
+
+    async function enrichLabelOccupancy(features, labelSrc) {
+      const preview = buildLabelGeoJSON(features, occupancyCacheSnapshot())
+      if (!labelLridsMissingOccupancy(preview, occupancyCacheSnapshot()).length) return
+      occupancyAbort?.abort()
+      const controller = new AbortController()
+      occupancyAbort = controller
+      try {
+        const bounds = map.getBounds()
+        if (!bounds) return
+        await fetchViewportOccupancy({
+          west: bounds.getWest(),
+          south: bounds.getSouth(),
+          east: bounds.getEast(),
+          north: bounds.getNorth(),
+          signal: controller.signal,
+        })
+        if (cancelled || controller.signal.aborted) return
+        applyLabelGeoJSON(labelSrc, features)
+      } catch (err) {
+        if (err?.name === 'AbortError') return
+      }
+    }
 
     function refreshViewportOverlays() {
       if (cancelled) return
@@ -689,6 +668,7 @@ export function PMTilesParcelLayer({
           const labelSrc = map.getSource(LABEL_SOURCE)
           if (!labelSrc) return
           if (zoom < 17) {
+            occupancyAbort?.abort()
             if (lastLabelKey !== 'empty') {
               labelSrc.setData(emptyGeoJSON)
               lastLabelKey = 'empty'
@@ -697,13 +677,9 @@ export function PMTilesParcelLayer({
             return
           }
           const features = map.queryRenderedFeatures({ layers: PARCEL_FILL_LAYERS })
-          const geo = buildLabelGeoJSON(features)
-          const key = labelGeoJSONKey(geo)
-          if (key !== lastLabelKey) {
-            lastLabelKey = key
-            labelSrc.setData(geo)
-          }
+          applyLabelGeoJSON(labelSrc, features)
           lastLabelRefreshAt = now
+          enrichLabelOccupancy(features, labelSrc)
         } catch { /* ignore */ }
       }, LABEL_DEBOUNCE_MS)
     }
@@ -858,6 +834,7 @@ export function PMTilesParcelLayer({
 
     return () => {
       cancelled = true
+      occupancyAbort?.abort()
       if (labelUpdateTimer) clearTimeout(labelUpdateTimer)
       map.off('moveend', scheduleLabelRefreshAfterMove)
       map.off('zoomend', scheduleLabelRefreshAfterMove)

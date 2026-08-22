@@ -6,6 +6,9 @@
     "api/parcel.js": {
       "maxDuration": 30
     },
+    "api/parcel-bbox.js": {
+      "maxDuration": 30
+    },
     "api/cron-task-reminders.js": {
       "maxDuration": 60
     },
