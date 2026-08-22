@@ -123,7 +123,7 @@ describe('resolveLeadParcelAtLocation', () => {
     vi.clearAllMocks()
   })
 
-  it('uses a rich tile hit without calling LandRecords WFS/WMS', async () => {
+  it('uses a tile hit with owner without calling LandRecords WFS/WMS', async () => {
     const tileParcel = {
       id: '20832----1----1',
       lrid: 'a1474373-2523-bfc6-8ec9-78eecd8d18d7',
@@ -133,6 +133,7 @@ describe('resolveLeadParcelAtLocation', () => {
         SITUS_CITY: 'Burleson',
         SITUS_STATE: 'TX',
         SITUS_ZIP: '76028',
+        OWNER_NAME: 'MANESS, TINA S',
       },
     }
 
@@ -144,6 +145,33 @@ describe('resolveLeadParcelAtLocation', () => {
     expect(fetchLandRecordsParcel).not.toHaveBeenCalled()
     expect(result?.id).toBe('20832----1----1')
     expect(result?.address).toContain('615 NE MCALISTER RD')
+  })
+
+  it('calls WFS when the tile has situs but no owner, and merges the result', async () => {
+    fetchLandRecordsParcel.mockResolvedValue({
+      parcelId: '20832----1----1',
+      properties: { PROP_ID: '20832----1----1', OWNER_NAME: 'MANESS, TINA S', SITUS_ADDR: '' },
+    })
+    const tileParcel = {
+      id: '20832----1----1',
+      lrid: 'a1474373-2523-bfc6-8ec9-78eecd8d18d7',
+      properties: {
+        PROP_ID: '20832----1----1',
+        SITUS_ADDR: '615 NE MCALISTER RD',
+        OWNER_NAME: '',
+        MKT_VAL: 250000,
+      },
+    }
+
+    const result = await resolveLeadParcelAtLocation(32.566, -97.33, {
+      lrid: tileParcel.lrid,
+      tileParcel,
+    })
+
+    expect(fetchLandRecordsParcel).toHaveBeenCalled()
+    expect(result?.properties?.SITUS_ADDR).toBe('615 NE MCALISTER RD')
+    expect(result?.properties?.OWNER_NAME).toBe('MANESS, TINA S')
+    expect(result?.properties?.MKT_VAL).toBe(250000)
   })
 
   it('falls back to a sparse tile hit when the API returns nothing', async () => {

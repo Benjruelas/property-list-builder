@@ -33,7 +33,7 @@ import { fetchLists, updateList, deleteList, validateShareEmail } from './utils/
 import { fetchPipelines, createPipeline, updatePipeline, deletePipeline, validateShareEmail as validatePipelineShareEmail, canAddDealsToPipeline, canAddLeadsToPipeline, localPipelineMigrationKey, pipelinesUserCanWorkIn } from './utils/pipelines'
 import { auth } from './config/firebase'
 import { skipTraceParcels, pollSkipTraceJobUntilComplete, saveSkipTracedParcel, saveSkipTracedParcels, getSkipTracedParcel, isParcelSkipTraced, deleteSkipTracedParcel, buildSkipTraceRequest } from './utils/skipTrace'
-import { resolveParcelId, mergeParcelProperties } from './utils/parcelPropertyMap'
+import { resolveParcelId, mergeParcelProperties, tileHasOwnerName, formatAssessorCurrency } from './utils/parcelPropertyMap'
 import { resolveParcelCenter } from './utils/parcelGeometry'
 import { resolveLeadParcelAtLocation, parcelDataFromLandRecords } from './utils/resolveLeadParcel'
 import { addParcelToSkipTracedList, addListToSkipTracedList } from './utils/skipTracedList'
@@ -2602,7 +2602,9 @@ function App() {
         parcelId, lat, lng, address,
         addressSubtitle: display.subtitle || '',
         assessorDataLimited: !isLoading && !display.hasStreetAddress,
-        ownerName: properties.OWNER_NAME || '', age,
+        ownerName: properties.OWNER_NAME || '',
+        marketValue: formatAssessorCurrency(properties.MKT_VAL),
+        age,
         ownerOccupied: computeOwnerOccupied(properties),
         listNames: listsWithParcel.map(l => l.name),
         hasSkipTraced, isSkipTracing: isSkipTracingInProgress,
@@ -2652,12 +2654,13 @@ function App() {
       ?? { lat: latlng.lat, lng: latlng.lng }
 
     const tileDisplay = resolveParcelDisplayAddress(tileProperties)
-    const hasTileData = tileDisplay.hasStreetAddress || !!(tileProperties.OWNER_NAME || '').trim()
+    const hasStreet = tileDisplay.hasStreetAddress
+    const needsEnrichment = !tileHasOwnerName(tileProperties)
     const buildTileParcelData = () => ({
       id: tileParcelId,
       properties: tileProperties,
-      address: hasTileData ? tileDisplay.title : 'Loading…',
-      addressDisplay: hasTileData ? tileDisplay : undefined,
+      address: hasStreet ? tileDisplay.title : (needsEnrichment ? 'Loading…' : tileDisplay.title),
+      addressDisplay: hasStreet ? tileDisplay : undefined,
       lat: parcelCenter.lat,
       lng: parcelCenter.lng,
     })
@@ -2692,7 +2695,7 @@ function App() {
         const parcelData = applyLandRecordsParcel(result)
         if (!parcelData) {
           // WFS/WMS often 404s while tiles still paint — keep tile attrs, drop "Loading…".
-          if (!hasTileData) {
+          if (!hasStreet) {
             const fallback = {
               ...buildTileParcelData(),
               address: tileDisplay.title || 'Parcel',
@@ -2737,7 +2740,7 @@ function App() {
         }
       }).catch((err) => {
         if (err?.name === 'AbortError') return
-        if (!hasTileData) {
+        if (!hasStreet) {
           onParcelReady?.({
             ...buildTileParcelData(),
             address: tileDisplay.title || 'Parcel',
@@ -2771,9 +2774,8 @@ function App() {
             })
             return newMap
           })
-          // Tile attrs are usually complete; only hit /api/parcel when sparse.
-          // LandRecords WFS/WMS coverage lags tiles in some counties (404s).
-          if (!hasTileData) loadLandRecordsParcel()
+          // Tile may have situs but no owner — still hit /api/parcel to fill assessor fields.
+          if (needsEnrichment) loadLandRecordsParcel()
         }
         return newSet
       })
@@ -2792,7 +2794,7 @@ function App() {
         presentParcelOnMap(data)
       }
 
-      if (!hasTileData) loadLandRecordsParcel(presentWhenCentered)
+      if (needsEnrichment) loadLandRecordsParcel(presentWhenCentered)
 
       if (parcelRecenterTimerRef.current) clearTimeout(parcelRecenterTimerRef.current)
       centerMapOnParcel({

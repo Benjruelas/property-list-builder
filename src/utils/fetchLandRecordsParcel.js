@@ -3,9 +3,8 @@ import { propertiesMatchRequestedLrid } from '../../api/_lib/parcelLookup.js'
 
 /**
  * Fetch full parcel attributes from LandRecords via /api/parcel (WMS/WFS proxy).
- * Prefer rendered vector-tile properties when they already include situs/owner —
- * WFS/WMS coverage can lag tiles and return 404 for counties that still paint.
- * Never accept a WMS hit for a different lrid (overlapping school/city polygons).
+ * Nationwide vector tiles often have situs/values but no ownername — still call
+ * WFS. Never accept a WMS hit for a different lrid (overlapping school/city polygons).
  */
 export async function fetchLandRecordsParcel({ lat, lng, lrid, signal }) {
   if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {

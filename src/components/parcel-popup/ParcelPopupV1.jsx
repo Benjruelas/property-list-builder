@@ -78,6 +78,9 @@ export function ParcelPopupV1({
             {popupData.ownerName && (
               <p className="parcel-popup-card__muted text-xs truncate mt-0.5">{popupData.ownerName}</p>
             )}
+            {popupData.marketValue && (
+              <p className="parcel-popup-card__muted text-xs truncate mt-0.5">{popupData.marketValue}</p>
+            )}
           </div>
           <button
             type="button"

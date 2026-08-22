@@ -1,20 +1,31 @@
 /**
  * LandRecords parcel attribute lookup (WFS by lrid, then WMS GetFeatureInfo).
- * The reduced `parcels` MVT layer often has geometry without situs; WMS at a
- * click point can return an overlapping school/city polygon instead. When the
- * client sends `lrid`, only that record is returned.
+ * Vector tiles are a reduced MVT (`parcels`): address + values, no owner.
+ * GET WFS with cql_filter looks like SQL to Cloudflare WAF, so we POST Filter XML.
  */
 
 import { enforceIpRateLimit } from './_lib/rateLimit.js'
-import { landRecordsAuthHeaders } from './_lib/landRecordsAuth.js'
+import { landRecordsFetch } from './_lib/landRecordsAuth.js'
 import { pickParcelFeature, propertiesMatchRequestedLrid } from './_lib/parcelLookup.js'
+import {
+  wfsGetFeatureByLridXml,
+  parseGeoJsonFeatureProperties,
+  parseGeoJsonFeatures,
+} from './_lib/parcelWfs.js'
 
 const WMS_BASE = 'https://api.landrecords.us/pro/wms'
 const WFS_BASE = 'https://api.landrecords.us/pro/wfs'
 const BBOX_DELTA = 0.00015
+const LRID_RE = /^[\w-]+$/
 
-function authHeaders(apiKey) {
-  return landRecordsAuthHeaders(apiKey)
+async function readJson(res) {
+  const text = await res.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }
 
 async function fetchWmsFeaturesByPoint(lat, lng, apiKey) {
@@ -35,16 +46,24 @@ async function fetchWmsFeaturesByPoint(lat, lng, apiKey) {
   url.searchParams.set('i', '50')
   url.searchParams.set('j', '50')
   url.searchParams.set('info_format', 'application/json')
-  // Overlapping school/city polygons are common; callers pick by lrid or smallest area.
   url.searchParams.set('feature_count', '10')
 
-  const res = await fetch(url.toString(), { headers: authHeaders(apiKey) })
-  if (!res.ok) return []
-  const data = await res.json()
-  return Array.isArray(data?.features) ? data.features : []
+  const res = await landRecordsFetch(url.toString(), { apiKey })
+  if (!res.ok) return { status: res.status, features: [] }
+  return { status: res.status, features: parseGeoJsonFeatures(await readJson(res)) }
 }
 
 async function fetchWfsByLrid(lrid, apiKey) {
+  const post = await landRecordsFetch(WFS_BASE, {
+    apiKey,
+    method: 'POST',
+    body: wfsGetFeatureByLridXml(lrid),
+    contentType: 'application/xml',
+  })
+  let data = await readJson(post)
+  let properties = parseGeoJsonFeatureProperties(data)
+  if (properties) return { status: post.status, properties, via: 'post' }
+
   const url = new URL(WFS_BASE)
   url.searchParams.set('service', 'WFS')
   url.searchParams.set('version', '2.0.0')
@@ -54,13 +73,10 @@ async function fetchWfsByLrid(lrid, apiKey) {
   url.searchParams.set('outputFormat', 'application/json')
   url.searchParams.set('count', '1')
 
-  const res = await fetch(url.toString(), { headers: authHeaders(apiKey) })
-  if (!res.ok) return null
-  const data = await res.json()
-  if (data?.error) return null
-  const feature = data?.features?.[0]
-  if (!feature?.properties) return null
-  return feature.properties
+  const get = await landRecordsFetch(url.toString(), { apiKey })
+  data = await readJson(get)
+  properties = parseGeoJsonFeatureProperties(data)
+  return { status: get.status, properties, via: 'get' }
 }
 
 export default async function handler(req, res) {
@@ -93,14 +109,22 @@ export default async function handler(req, res) {
   try {
     let properties = null
     let source = 'wms'
+    let wfsStatus = ''
+    let wmsStatus = ''
 
-    if (lrid && /^[\w-]+$/.test(lrid)) {
-      properties = await fetchWfsByLrid(lrid, apiKey)
-      if (properties) source = 'wfs'
+    if (lrid && LRID_RE.test(lrid)) {
+      const wfs = await fetchWfsByLrid(lrid, apiKey)
+      wfsStatus = String(wfs.status || '')
+      if (wfs.properties) {
+        properties = wfs.properties
+        source = 'wfs'
+      }
     }
 
     if (!properties) {
-      const wmsFeature = pickParcelFeature(await fetchWmsFeaturesByPoint(lat, lng, apiKey), lrid)
+      const wms = await fetchWmsFeaturesByPoint(lat, lng, apiKey)
+      wmsStatus = String(wms.status || '')
+      const wmsFeature = pickParcelFeature(wms.features, lrid)
       properties = wmsFeature?.properties || null
       source = 'wms'
     }
@@ -109,8 +133,10 @@ export default async function handler(req, res) {
       properties = null
     }
 
+    if (wfsStatus) res.setHeader('X-Parcel-Wfs', wfsStatus)
+    if (wmsStatus) res.setHeader('X-Parcel-Wms', wmsStatus)
+
     if (!properties) {
-      // Expected when WFS/WMS lag vector tiles — 200 keeps the browser console quiet.
       res.setHeader('Cache-Control', 'private, max-age=60')
       return res.status(200).json({ properties: null, source: 'none' })
     }

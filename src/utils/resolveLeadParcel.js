@@ -1,5 +1,5 @@
 import { fetchLandRecordsParcel } from './fetchLandRecordsParcel'
-import { resolveParcelId } from './parcelPropertyMap'
+import { resolveParcelId, mergeParcelProperties, tileHasOwnerName } from './parcelPropertyMap'
 import { getFullAddress } from './dealPipeline'
 import { buildLeadPrefillFromParcel } from './leads'
 import { geocodeAddressForLead } from './geocodeAddress'
@@ -41,9 +41,7 @@ export function parcelDataFromTileHit(tileHit, lat, lng) {
 }
 
 function tileHitHasAssessorData(tileParcel) {
-  const props = tileParcel?.properties
-  if (!props) return false
-  return !!(String(props.SITUS_ADDR || props.OWNER_NAME || '').trim())
+  return tileHasOwnerName(tileParcel?.properties)
 }
 
 /**
@@ -60,6 +58,13 @@ export async function resolveLeadParcelAtLocation(lat, lng, { lrid, signal, tile
 
   const result = await fetchLandRecordsParcel({ lat, lng, lrid, signal })
   const fromApi = parcelDataFromLandRecords(result, lat, lng)
+  if (fromApi && tileParcel?.properties) {
+    return parcelDataFromTileHit({
+      ...tileParcel,
+      id: fromApi.id || tileParcel.id,
+      properties: mergeParcelProperties(tileParcel.properties, fromApi.properties),
+    }, lat, lng)
+  }
   if (fromApi) return fromApi
   return parcelDataFromTileHit(tileParcel, lat, lng)
 }
