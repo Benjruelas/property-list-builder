@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveParcelId, collectParcelIdCandidates, mapProperties, mergeParcelProperties } from '../parcelPropertyMap'
+import { resolveParcelId, collectParcelIdCandidates, mapProperties, mergeParcelProperties, tileHasOwnerName, formatAssessorCurrency } from '../parcelPropertyMap'
 
 describe('resolveParcelId', () => {
   it('prefers PROP_ID over stale list tile id', () => {
@@ -46,6 +46,34 @@ describe('mapProperties', () => {
     expect(mapped.PLACEFP).toBeUndefined()
     expect(mapped.SURFPOINTX).toBeUndefined()
     expect(mapped.ACCESSTYPE).toBeUndefined()
+  })
+
+  it('maps ownertype from the reduced nationwide layer', () => {
+    const mapped = mapProperties({
+      lrid: 'abc',
+      parceladdr: '100 W ABRAM ST',
+      ownertype: 'GOVERNMENT',
+      totalvalue: 3611540,
+    })
+    expect(mapped.SITUS_ADDR).toBe('100 W ABRAM ST')
+    expect(mapped.OWNER_TYPE).toBe('GOVERNMENT')
+    expect(mapped.OWNER_NAME).toBe('')
+    expect(mapped.MKT_VAL).toBe(3611540)
+  })
+})
+
+describe('tileHasOwnerName', () => {
+  it('treats address-only tiles as needing WFS enrichment', () => {
+    expect(tileHasOwnerName({ SITUS_ADDR: '100 W ABRAM ST', MKT_VAL: 100 })).toBe(false)
+    expect(tileHasOwnerName({ OWNER_NAME: 'JANE DOE' })).toBe(true)
+  })
+})
+
+describe('formatAssessorCurrency', () => {
+  it('formats market value for the popup', () => {
+    expect(formatAssessorCurrency(3611540)).toBe('$3,611,540')
+    expect(formatAssessorCurrency('')).toBe('')
+    expect(formatAssessorCurrency(0)).toBe('')
   })
 })
 

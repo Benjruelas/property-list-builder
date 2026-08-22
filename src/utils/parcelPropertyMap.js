@@ -66,6 +66,7 @@ const CANONICAL_CONSUMED = new Set([
   'parcelid', 'lrid', 'parcelid2', 'll_uuid', 'll_stable_id', 'taxacctnum',
   'parceladdr', 'placename', 'parcelcity', 'parcelstate', 'parcelzip',
   'ownername', 'owneraddr', 'ownercity', 'ownerstate', 'ownerzip',
+  'ownertype', 'parceltype',
   'totalvalue', 'landvalue', 'imprvalue', 'agvalue',
   'saleamt', 'saledate', 'prior_sale_amount', 'prior_sale_date',
   'taxyear',
@@ -110,6 +111,8 @@ export function mapProperties(raw) {
     SITUS_STATE:    raw.parcelstate || '',
     SITUS_ZIP:      raw.parcelzip  || '',
     OWNER_NAME:     raw.ownername  || '',
+    OWNER_TYPE:     raw.ownertype  || '',
+    PARCEL_TYPE:    raw.parceltype || '',
     MAIL_ADDR:      raw.owneraddr  || '',
     MAIL_CITY:      mailCity,
     MAIL_STATE:     mailState,
@@ -193,6 +196,18 @@ export function mapProperties(raw) {
   }
 
   return canonical
+}
+
+/** True when the tile already has an owner — skip WFS. Address-only tiles do not count. */
+export function tileHasOwnerName(properties = {}) {
+  return !!String(properties.OWNER_NAME || properties.OWNER || properties.OWNERNME1 || '').trim()
+}
+
+export function formatAssessorCurrency(value) {
+  if (value == null || value === '') return ''
+  const num = parseFloat(String(value).replace(/[$,]/g, ''))
+  if (!Number.isFinite(num) || num === 0) return ''
+  return `$${num.toLocaleString()}`
 }
 
 /** Fill empty tile fields from a matching WFS/WMS record — never overwrite situs. */

@@ -18,6 +18,34 @@ export function landRecordsAuthHeaders(apiKey = process.env.LANDRECORDS_API_KEY)
   }
 }
 
+/**
+ * Fetch LandRecords. On 401/403, retry once with `?token=` (their gateway
+ * accepts header or token; Cloudflare sometimes strips Authorization).
+ */
+export async function landRecordsFetch(url, {
+  apiKey = process.env.LANDRECORDS_API_KEY,
+  method = 'GET',
+  body,
+  contentType,
+} = {}) {
+  const headers = landRecordsAuthHeaders(apiKey)
+  if (contentType) headers['Content-Type'] = contentType
+  if (method !== 'GET' && method !== 'HEAD') {
+    headers.Accept = 'application/json, application/geo+json, */*'
+  }
+
+  const send = (href) => fetch(href, { method, headers, body })
+  let res = await send(url)
+  if ((res.status === 401 || res.status === 403) && apiKey) {
+    const retryUrl = new URL(url)
+    if (!retryUrl.searchParams.has('token')) {
+      retryUrl.searchParams.set('token', apiKey)
+      res = await send(retryUrl.toString())
+    }
+  }
+  return res
+}
+
 export function isTmsTileBase(baseUrl) {
   return /\/tms\//i.test(String(baseUrl || ''))
 }
