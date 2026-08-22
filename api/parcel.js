@@ -6,6 +6,7 @@
  */
 
 import { enforceIpRateLimit } from './_lib/rateLimit.js'
+import { landRecordsAuthHeaders } from './_lib/landRecordsAuth.js'
 import { pickParcelFeature, propertiesMatchRequestedLrid } from './_lib/parcelLookup.js'
 
 const WMS_BASE = 'https://api.landrecords.us/pro/wms'
@@ -13,7 +14,7 @@ const WFS_BASE = 'https://api.landrecords.us/pro/wfs'
 const BBOX_DELTA = 0.00015
 
 function authHeaders(apiKey) {
-  return { Authorization: `Bearer ${apiKey}` }
+  return landRecordsAuthHeaders(apiKey)
 }
 
 async function fetchWmsFeaturesByPoint(lat, lng, apiKey) {

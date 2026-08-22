@@ -3,8 +3,10 @@ import { enforceIpRateLimit } from './_lib/rateLimit.js'
 import {
   emptyParcelTileStatus,
   isTransientParcelUpstreamStatus,
+  isRetryableParcelUpstreamStatus,
   transientParcelTileStatus,
 } from './_lib/parcelTileEmpty.js'
+import { landRecordsAuthHeaders, originParcelTileUrls } from './_lib/landRecordsAuth.js'
 
 const TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 const EMPTY_MARKER = Buffer.alloc(0)
@@ -33,8 +35,9 @@ function sendEmptyTile(res, zi) {
  * marker (that would punch a 90-day hole). 410 above minzoom keeps parents;
  * 503 at minzoom asks MapLibre to retry.
  */
-function sendTransientTile(res, zi) {
+function sendTransientTile(res, zi, upstreamStatus) {
   res.setHeader('Cache-Control', TRANSIENT_CACHE_CONTROL)
+  if (upstreamStatus) res.setHeader('X-Upstream-Status', String(upstreamStatus))
   return res.status(transientParcelTileStatus(zi)).end()
 }
 
@@ -42,38 +45,58 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function fetchLandRecordsPbf(url) {
-  const headers = { Authorization: `Bearer ${process.env.LANDRECORDS_API_KEY}` }
-  const tryOnce = () => fetch(url, { headers })
+async function fetchOnce(url, headers) {
+  return fetch(url, { headers })
+}
 
-  let upstream
-  try {
-    upstream = await tryOnce()
-  } catch (e) {
-    try {
-      await delay(TRANSIENT_RETRY_DELAY_MS)
-      upstream = await tryOnce()
-    } catch (e2) {
-      return { error: e2 }
-    }
-  }
+/**
+ * Cloudflare 403s `User-Agent: node`. Use a real UA, and if the configured
+ * GWC TMS path still 401/403, try the XYZ path the API root advertises.
+ */
+async function fetchLandRecordsPbf(zi, xi, yi) {
+  const headers = landRecordsAuthHeaders()
+  const urls = originParcelTileUrls(zi, xi, yi)
+  let lastError
+  let lastUpstream
 
-  if (
-    upstream &&
-    !upstream.ok &&
-    upstream.status !== 404 &&
-    upstream.status !== 204 &&
-    isTransientParcelUpstreamStatus(upstream.status)
-  ) {
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i]
+    let upstream
     try {
-      await delay(TRANSIENT_RETRY_DELAY_MS)
-      upstream = await tryOnce()
+      upstream = await fetchOnce(url, headers)
     } catch (e) {
-      return { error: e }
+      lastError = e
+      if (i === urls.length - 1) break
+      continue
+    }
+
+    if (upstream.ok || upstream.status === 404 || upstream.status === 204) {
+      return { upstream }
+    }
+
+    if (isRetryableParcelUpstreamStatus(upstream.status)) {
+      try {
+        await delay(TRANSIENT_RETRY_DELAY_MS)
+        upstream = await fetchOnce(url, headers)
+        if (upstream.ok || upstream.status === 404 || upstream.status === 204) {
+          return { upstream }
+        }
+      } catch (e) {
+        lastError = e
+        lastUpstream = upstream
+        continue
+      }
+    }
+
+    lastUpstream = upstream
+    // 401/403: next candidate URL (advertised XYZ). Other errors: stop.
+    if (upstream.status !== 401 && upstream.status !== 403) {
+      return { upstream }
     }
   }
 
-  return { upstream }
+  if (lastUpstream) return { upstream: lastUpstream }
+  return { error: lastError }
 }
 
 let _s3
@@ -146,11 +169,8 @@ export default async function handler(req, res) {
     console.error('R2 read error (falling through to origin):', e.message)
   }
 
-  // 2. Fetch from LandRecords (TMS y-flip: tms_y = 2^z - 1 - y)
-  const tmsY = (1 << zi) - 1 - yi
-  const url = `${process.env.LANDRECORDS_TILE_URL}/${zi}/${xi}/${tmsY}.pbf`
-
-  const { upstream, error: fetchError } = await fetchLandRecordsPbf(url)
+  // 2. Fetch from LandRecords (TMS Y-flip is applied only for /tms/ bases).
+  const { upstream, error: fetchError } = await fetchLandRecordsPbf(zi, xi, yi)
   if (fetchError || !upstream) {
     console.error('LandRecords fetch error:', fetchError?.message || 'no response')
     return sendTransientTile(res, zi)
@@ -167,7 +187,7 @@ export default async function handler(req, res) {
       console.warn(
         `LandRecords tile ${zi}/${xi}/${yi} upstream ${upstream.status}; not caching`,
       )
-      return sendTransientTile(res, zi)
+      return sendTransientTile(res, zi, upstream.status)
     }
     return res.status(upstream.status).json({ error: `upstream ${upstream.status}` })
   }
