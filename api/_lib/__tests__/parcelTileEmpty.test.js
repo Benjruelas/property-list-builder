@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   emptyParcelTileStatus,
   isTransientParcelUpstreamStatus,
+  isRetryableParcelUpstreamStatus,
   transientParcelTileStatus,
   PARCEL_SOURCE_MIN_ZOOM,
 } from '../parcelTileEmpty.js'
@@ -21,13 +22,20 @@ describe('emptyParcelTileStatus', () => {
 })
 
 describe('transient LandRecords upstream', () => {
-  it('treats origin 403/429/5xx as retryable — never as a cached empty tile', () => {
+  it('treats origin 403/429/5xx as a miss — never as a cached empty tile', () => {
     expect(isTransientParcelUpstreamStatus(403)).toBe(true)
     expect(isTransientParcelUpstreamStatus(429)).toBe(true)
     expect(isTransientParcelUpstreamStatus(502)).toBe(true)
     expect(isTransientParcelUpstreamStatus(404)).toBe(false)
     expect(isTransientParcelUpstreamStatus(204)).toBe(false)
     expect(isTransientParcelUpstreamStatus(200)).toBe(false)
+  })
+
+  it('retries 429/5xx on the same URL but not Cloudflare/auth 403', () => {
+    expect(isRetryableParcelUpstreamStatus(429)).toBe(true)
+    expect(isRetryableParcelUpstreamStatus(502)).toBe(true)
+    expect(isRetryableParcelUpstreamStatus(403)).toBe(false)
+    expect(isRetryableParcelUpstreamStatus(401)).toBe(false)
   })
 
   it('keeps parent tiles above minzoom and asks MapLibre to retry at minzoom', () => {
