@@ -3,7 +3,10 @@ import { FileUp, Loader2, Upload } from 'lucide-react'
 import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
+import { ResourceSharePicker } from './ResourceSharePicker'
 import { showToast } from './ui/toast'
+import { VISIBILITY, visibilityLabel } from '@/utils/access'
+import { getTeamForMembership } from '@/utils/profile'
 import { parseCsv } from '@/utils/csv'
 import {
   LEAD_IMPORT_FIELDS,
@@ -20,9 +23,12 @@ import { cn } from '@/lib/utils'
 
 const SELECT_CLASS = 'w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15'
 
+const EMPTY_SHARE = { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+
 function stepTitle(step) {
   if (step === 'map') return 'Map columns'
   if (step === 'preview') return 'Preview import'
+  if (step === 'share') return 'Sharing'
   if (step === 'importing') return 'Importing leads'
   if (step === 'result') return 'Import complete'
   return 'Import leads'
@@ -36,11 +42,15 @@ export function ImportLeadsDialog({
   leadStatuses = [],
   leadCustomFields = [],
   tagRegistry = { leads: [] },
+  teams = [],
+  teamMembership = null,
   onImported,
   nestedOverlay = false,
   topLayer: topLayerProp,
 }) {
   const topLayer = topLayerProp ?? nestedOverlay
+  const activeTeam = getTeamForMembership(teams, teamMembership) || teams?.[0] || null
+  const allowExternalSharing = teamMembership?.allowExternalSharing === true
   const fileInputRef = useRef(null)
   const [step, setStep] = useState('upload')
   const [fileName, setFileName] = useState('')
@@ -48,6 +58,7 @@ export function ImportLeadsDialog({
   const [rows, setRows] = useState([])
   const [mapping, setMapping] = useState(emptyColumnMapping)
   const [placeOnMap, setPlaceOnMap] = useState(true)
+  const [shareState, setShareState] = useState(EMPTY_SHARE)
   const [progress, setProgress] = useState(null)
   const [result, setResult] = useState(null)
 
@@ -58,6 +69,7 @@ export function ImportLeadsDialog({
     setRows([])
     setMapping(emptyColumnMapping())
     setPlaceOnMap(true)
+    setShareState(EMPTY_SHARE)
     setProgress(null)
     setResult(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -130,7 +142,10 @@ export function ImportLeadsDialog({
           onProgress: (done, total) => setProgress({ phase: 'geocode', done, total }),
         })
       }
-      const imported = await importLeadsInChunks(getToken, payloads, {}, {
+      const sharePayload = activeTeam
+        ? shareState
+        : { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+      const imported = await importLeadsInChunks(getToken, payloads, sharePayload, {
         onProgress: ({ processed, total }) => setProgress({ phase: 'import', done: processed, total }),
       })
       if (imported.created.length) onImported?.(imported.created)
@@ -140,6 +155,11 @@ export function ImportLeadsDialog({
         duplicates: preview.counts.duplicate,
         invalid: preview.counts.invalid,
         errors: imported.errors.slice(0, 8),
+        sharing: visibilityLabel({
+          visibility: sharePayload.visibility,
+          sharedMemberUids: sharePayload.sharedMemberUids,
+          teamShares: sharePayload.visibility === VISIBILITY.TEAM && activeTeam?.id ? [activeTeam.id] : [],
+        }),
       })
       setStep('result')
       if (imported.created.length) {
@@ -150,7 +170,7 @@ export function ImportLeadsDialog({
       }
     } catch (err) {
       showToast(err.message || 'Could not import leads', 'error')
-      setStep('preview')
+      setStep('share')
     } finally {
       setProgress(null)
     }
@@ -174,6 +194,7 @@ export function ImportLeadsDialog({
             onBack={() => {
               if (step === 'map') setStep('upload')
               else if (step === 'preview') setStep('map')
+              else if (step === 'share') setStep('preview')
               else onOpenChange(false)
             }}
             title={stepTitle(step)}
@@ -253,6 +274,22 @@ export function ImportLeadsDialog({
               </div>
             )}
 
+            {step === 'share' && (
+              <div className="space-y-3">
+                <p className="text-sm opacity-70">
+                  Who should be able to see these {preview.counts.valid} lead{preview.counts.valid === 1 ? '' : 's'}?
+                </p>
+                <ResourceSharePicker
+                  team={activeTeam}
+                  visibility={shareState.visibility}
+                  sharedMemberUids={shareState.sharedMemberUids}
+                  onChange={setShareState}
+                  allowExternalSharing={allowExternalSharing}
+                  defaultExpanded
+                />
+              </div>
+            )}
+
             {step === 'preview' && (
               <div className="space-y-3">
                 {preview.error ? (
@@ -313,6 +350,9 @@ export function ImportLeadsDialog({
                 <p>
                   Imported <strong>{result.created}</strong> lead{result.created === 1 ? '' : 's'}.
                 </p>
+                {result.sharing && (
+                  <p className="opacity-70">Sharing: {result.sharing}.</p>
+                )}
                 {result.duplicates > 0 && (
                   <p className="opacity-70">{result.duplicates} skipped as duplicates.</p>
                 )}
@@ -360,6 +400,21 @@ export function ImportLeadsDialog({
                 <Button
                   type="button"
                   disabled={!preview.counts.valid || !!preview.error}
+                  onClick={() => setStep('share')}
+                >
+                  Continue
+                </Button>
+              </>
+            )}
+            {step === 'share' && (
+              <>
+                <Button type="button" variant="ghost" onClick={() => setStep('preview')}>Back</Button>
+                <Button
+                  type="button"
+                  disabled={
+                    shareState.visibility === VISIBILITY.MEMBERS
+                    && !(shareState.sharedMemberUids || []).length
+                  }
                   onClick={handleImport}
                 >
                   Import {preview.counts.valid || 0} lead{preview.counts.valid === 1 ? '' : 's'}

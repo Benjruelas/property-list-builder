@@ -45,4 +45,22 @@ describe('importLeadsInChunks', () => {
     await expect(importLeadsInChunks(async () => null, [{ firstName: 'Ada' }]))
       .rejects.toThrow(/Sign in/)
   })
+
+  it('forwards the chosen sharing rule on each batch', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ created: [{ id: 'lead_1', firstName: 'Ada' }], errors: [] }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await importLeadsInChunks(
+      async () => 'token',
+      [{ firstName: 'Ada' }],
+      { visibility: 'members', sharedMemberUids: ['u2'] },
+    )
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.visibility).toBe('members')
+    expect(body.sharedMemberUids).toEqual(['u2'])
+  })
 })

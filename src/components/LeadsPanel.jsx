@@ -504,6 +504,8 @@ export function LeadsPanel({
         leadStatuses={leadStatuses}
         leadCustomFields={leadCustomFields}
         tagRegistry={tagRegistry}
+        teams={teams}
+        teamMembership={teamMembership}
         onImported={handleImported}
         nestedOverlay
       />

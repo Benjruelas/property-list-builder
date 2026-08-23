@@ -438,8 +438,8 @@ export async function importLeadsBatch(getToken, leads, shareState = {}) {
     },
     body: JSON.stringify({
       leads,
-      ...(shareState.visibility ? { visibility: shareState.visibility } : {}),
-      ...(shareState.sharedMemberUids ? { sharedMemberUids: shareState.sharedMemberUids } : {}),
+      visibility: shareState.visibility || 'private',
+      sharedMemberUids: Array.isArray(shareState.sharedMemberUids) ? shareState.sharedMemberUids : [],
     }),
   })
   const data = await res.json().catch(() => ({}))
