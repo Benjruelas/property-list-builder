@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { mergeLeadsByUpdatedAt } from '../leadRepo.js'
+import { mergeLeadPair, mergeLeadsByUpdatedAt } from '../leadRepo.js'
+
+describe('mergeLeadPair', () => {
+  it('keeps photos from the older copy when the newer copy is missing them', () => {
+    const stale = {
+      id: 'lead_1',
+      firstName: 'Jane',
+      photos: [{ id: 'photo_1' }],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    const fresh = {
+      id: 'lead_1',
+      firstName: 'Jane',
+      notes: 'Updated notes',
+      photos: [],
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    }
+    expect(mergeLeadPair(stale, fresh)).toEqual({
+      ...fresh,
+      photos: [{ id: 'photo_1' }],
+      files: [],
+      activity: [],
+    })
+  })
+})
 
 describe('mergeLeadsByUpdatedAt', () => {
   it('keeps the lead copy with the newest updatedAt', () => {
@@ -15,8 +39,16 @@ describe('mergeLeadsByUpdatedAt', () => {
       photos: [{ id: 'photo_1' }],
       updatedAt: '2026-02-01T00:00:00.000Z',
     }
-    expect(mergeLeadsByUpdatedAt([stale], [fresh])).toEqual([fresh])
-    expect(mergeLeadsByUpdatedAt([fresh], [stale])).toEqual([fresh])
+    expect(mergeLeadsByUpdatedAt([stale], [fresh])).toEqual([{
+      ...fresh,
+      activity: [],
+      files: [],
+    }])
+    expect(mergeLeadsByUpdatedAt([fresh], [stale])).toEqual([{
+      ...fresh,
+      activity: [],
+      files: [],
+    }])
   })
 
   it('includes leads that exist on only one side', () => {

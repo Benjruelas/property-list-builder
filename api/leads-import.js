@@ -105,8 +105,14 @@ export default async function handler(req, res) {
     })
 
     if (created.length) {
-      await mutateLeads((current) => [...current, ...created], {
+      await mutateLeads((current) => {
+        const existingIds = new Set(current.map((lead) => lead.id))
+        const toAdd = created.filter((lead) => !existingIds.has(lead.id))
+        if (!toAdd.length) return undefined
+        return [...current, ...toAdd]
+      }, {
         changedResources: created.map((resource) => ({ resource })),
+        appendOnly: true,
       })
 
       const tagMeta = created.flatMap((lead) => lead.tagMeta || [])

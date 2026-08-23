@@ -132,6 +132,10 @@ describe('POST /api/leads-import', () => {
     expect(res.body.created).toHaveLength(1)
     expect(res.body.errors).toHaveLength(1)
     expect(mutateLeads).toHaveBeenCalledTimes(1)
+    expect(mutateLeads).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ appendOnly: true }),
+    )
     expect(createTasksFromAutoTaskPlan).not.toHaveBeenCalled()
   })
 })

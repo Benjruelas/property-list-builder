@@ -11,6 +11,7 @@ import { KvLockUnavailableError } from './kvLockErrors.js'
 import { withTiming } from './timing.js'
 import {
   writeLeadToShards,
+  appendLeadsToShards,
   removeLeadIndex,
   syncSharedIndexForLead,
   getLeadOwnerId,
@@ -69,7 +70,7 @@ export async function getAllLeads() {
   })
 }
 
-export async function saveAllLeads(leads, { changedResources = [] } = {}) {
+export async function saveAllLeads(leads, { changedResources = [], appendOnlyLeads = null } = {}) {
   return withTiming('leadStore.saveAllLeads', async () => {
     invalidateLeadsReadCache()
     fallbackLeads = leads
@@ -81,7 +82,12 @@ export async function saveAllLeads(leads, { changedResources = [] } = {}) {
         console.warn('KV save failed (user_leads)', e.message)
       }
     }
-    await writeLeadToShards(leads)
+    if (appendOnlyLeads?.length) {
+      const allTeams = await getAllTeams()
+      await appendLeadsToShards(appendOnlyLeads, { allTeams })
+    } else if (appendOnlyLeads === null) {
+      await writeLeadToShards(leads)
+    }
     if (changedResources.length) {
       const changed = changedResources
         .map((item) => item.resource)
@@ -126,12 +132,15 @@ async function upsertLeadInMonolith(updated, prevResource, changedResources) {
  * mutatorFn receives the current array and must return the next array (or undefined to skip save).
  * changedResources: [{ resource, prevResource? }] for version bumps.
  */
-export async function mutateLeads(mutatorFn, { changedResources = [] } = {}) {
+export async function mutateLeads(mutatorFn, { changedResources = [], appendOnly = false } = {}) {
   const run = async () => {
     const all = await loadLeadsArray()
     const next = await mutatorFn(all)
     if (next === undefined || next === all) return all
-    return saveAllLeads(next, { changedResources })
+    const appendOnlyLeads = appendOnly
+      ? next.filter((lead) => lead?.id && !all.some((prev) => prev.id === lead.id))
+      : null
+    return saveAllLeads(next, { changedResources, appendOnlyLeads })
   }
 
   if (!flags.LEADS_LOCK()) return run()

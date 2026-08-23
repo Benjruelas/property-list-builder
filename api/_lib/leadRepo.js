@@ -118,6 +118,39 @@ async function syncSharedIndexesForLeads(allLeads, allTeams) {
   ))
 }
 
+function pickRichArray(primary, fallback) {
+  const a = Array.isArray(primary) ? primary : []
+  const b = Array.isArray(fallback) ? fallback : []
+  return a.length ? a : b
+}
+
+function mergeActivityArrays(a, b) {
+  const combined = [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]
+  if (!combined.length) return []
+  const seen = new Set()
+  const out = []
+  for (const item of combined) {
+    const key = item?.id || JSON.stringify(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out
+}
+
+/** Merge two copies of the same lead — prefer newer updatedAt but keep rich fields from either side. */
+export function mergeLeadPair(a, b) {
+  const aAt = Date.parse(a?.updatedAt || a?.createdAt || 0) || 0
+  const bAt = Date.parse(b?.updatedAt || b?.createdAt || 0) || 0
+  const [winner, loser] = bAt >= aAt ? [b, a] : [a, b]
+  return {
+    ...winner,
+    photos: pickRichArray(winner.photos, loser.photos),
+    files: pickRichArray(winner.files, loser.files),
+    activity: mergeActivityArrays(winner.activity, loser.activity),
+  }
+}
+
 /** Prefer the copy with the latest updatedAt when the monolith and shards diverge. */
 export function mergeLeadsByUpdatedAt(...groups) {
   const byId = new Map()
@@ -125,16 +158,39 @@ export function mergeLeadsByUpdatedAt(...groups) {
     for (const lead of group || []) {
       if (!lead?.id) continue
       const prev = byId.get(lead.id)
-      if (!prev) {
-        byId.set(lead.id, lead)
-        continue
-      }
-      const prevAt = Date.parse(prev.updatedAt || prev.createdAt || 0) || 0
-      const nextAt = Date.parse(lead.updatedAt || lead.createdAt || 0) || 0
-      byId.set(lead.id, nextAt >= prevAt ? lead : prev)
+      byId.set(lead.id, prev ? mergeLeadPair(prev, lead) : lead)
     }
   }
   return [...byId.values()]
+}
+
+/** Append new leads to owner shards without rewriting unrelated leads on the shard. */
+export async function appendLeadsToShards(newLeads, { allTeams } = {}) {
+  const mode = flags.LEADS_SHARDED()
+  if (mode === 'off' || !kvAvailable || !newLeads?.length) return
+
+  const byOwner = new Map()
+  const indexEntries = {}
+  for (const lead of newLeads) {
+    const ownerId = lead?.ownerId
+    if (!ownerId || !lead?.id) continue
+    if (!byOwner.has(ownerId)) byOwner.set(ownerId, [])
+    byOwner.get(ownerId).push(lead)
+    indexEntries[leadIndexKey(lead.id)] = ownerId
+  }
+
+  const teams = allTeams || await getAllTeams()
+  await Promise.all([
+    kvMSet(indexEntries),
+    ...[...byOwner.entries()].map(async ([ownerId, leads]) => {
+      const existing = await getOwnerLeads(ownerId)
+      const existingIds = new Set(existing.map((l) => l.id))
+      const toAppend = leads.filter((l) => !existingIds.has(l.id))
+      if (!toAppend.length) return
+      await saveOwnerLeads(ownerId, [...existing, ...toAppend])
+    }),
+    syncSharedIndexesForLeads(newLeads, teams),
+  ])
 }
 
 export async function writeLeadToShards(allLeads, { allTeams } = {}) {
@@ -244,7 +300,11 @@ export async function backfillLeadShards() {
   }
 
   await kvMSet(indexEntries)
-  await Promise.all([...byOwner.entries()].map(([ownerId, leads]) => saveOwnerLeads(ownerId, leads)))
+  await Promise.all([...byOwner.entries()].map(async ([ownerId, leads]) => {
+    const existing = await getOwnerLeads(ownerId)
+    const merged = mergeLeadsByUpdatedAt(leads, existing)
+    await saveOwnerLeads(ownerId, merged)
+  }))
   // Group shared links per uid so each uid is one SADD with all owners.
   const byUid = new Map()
   for (const [uid, ownerId] of sharedPairs) {
@@ -266,5 +326,6 @@ export default {
   getLeadsForUser,
   findLeadById,
   writeLeadToShards,
+  appendLeadsToShards,
   backfillLeadShards,
 }
