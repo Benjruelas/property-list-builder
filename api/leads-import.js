@@ -25,7 +25,7 @@ import { isKvLockUnavailable, respondKvLockUnavailable } from './_lib/kvLockErro
 import { getLeadsForUser } from './_lib/leadRepo.js'
 import { kv } from './_lib/kvBootstrap.js'
 import { rateLimit } from './_lib/rateLimit.js'
-import { prepareImportedLeads, MAX_IMPORT_BATCH, IMPORTS_PER_HOUR } from './_lib/importLeadsBatch.js'
+import { prepareImportedLeads, MAX_IMPORT_BATCH, MAX_IMPORT_LEADS_PER_HOUR } from './_lib/importLeadsBatch.js'
 
 export const config = {
   maxDuration: 30,
@@ -44,19 +44,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized. Sign in and send Authorization: Bearer <token>.' })
   }
 
-  const rl = await rateLimit({
-    key: `leads-import:${user.uid}`,
-    limit: IMPORTS_PER_HOUR,
-    windowSec: 3600,
-  })
-  if (!rl.allowed) {
-    res.setHeader('Retry-After', String(rl.retryAfter))
-    return res.status(429).json({
-      error: 'Too many imports. Please try again later.',
-      retryAfter: rl.retryAfter,
-    })
-  }
-
   const body = req.body || {}
   const inputs = body.leads
   if (!Array.isArray(inputs) || inputs.length === 0) {
@@ -66,6 +53,23 @@ export default async function handler(req, res) {
     return res.status(400).json({
       error: `Import up to ${MAX_IMPORT_BATCH} leads per request`,
     })
+  }
+
+  const isLocalDev = process.env.VERCEL_ENV === 'development'
+  if (!isLocalDev) {
+    const rl = await rateLimit({
+      key: `leads-import:${user.uid}`,
+      limit: MAX_IMPORT_LEADS_PER_HOUR,
+      windowSec: 3600,
+      increment: inputs.length,
+    })
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfter))
+      return res.status(429).json({
+        error: 'Too many imports. Please try again later.',
+        retryAfter: rl.retryAfter,
+      })
+    }
   }
 
   try {
