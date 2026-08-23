@@ -113,6 +113,8 @@ export function buildActivitySummary(type, ctx = {}) {
       return `${label} removed ${count} ${plural(count, 'parcel')} from "${listName}"`
     case 'lead.created':
       return `${label} created lead ${leadName}`
+    case 'lead.imported':
+      return `${label} imported ${count} ${plural(count, 'lead')}`
     case 'lead.updated':
       return count > 1
         ? `${label} updated ${count} leads`

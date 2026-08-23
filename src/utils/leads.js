@@ -23,6 +23,7 @@ export {
 
 import { getApiBase } from './apiBase'
 import { mutateOrQueue, newTempId } from './offlineMutate'
+import { IMPORT_BATCH_SIZE, chunkItems } from './leadCsvImport'
 
 const LOCAL_LEADS_KEY = 'user_leads_local'
 const LOCAL_LEADS_UID_KEY = 'user_leads_local_uid'
@@ -420,6 +421,65 @@ export async function createLead(getToken, leadData) {
   if (!lead) throw new Error('Failed to create lead')
   saveLocalLeads([...loadLocalLeads().filter((l) => l.id !== tempId && l.id !== lead.id), lead])
   return lead
+}
+
+/**
+ * Create a batch of leads via POST /api/leads-import.
+ * Requires sign-in — not queued offline.
+ */
+export async function importLeadsBatch(getToken, leads, shareState = {}) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to import leads')
+  const res = await fetch(`${getApiBase()}/leads-import`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      leads,
+      ...(shareState.visibility ? { visibility: shareState.visibility } : {}),
+      ...(shareState.sharedMemberUids ? { sharedMemberUids: shareState.sharedMemberUids } : {}),
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(data.error || 'Import failed')
+    err.status = res.status
+    err.retryAfter = data.retryAfter
+    throw err
+  }
+  return {
+    created: Array.isArray(data.created) ? data.created : [],
+    errors: Array.isArray(data.errors) ? data.errors : [],
+  }
+}
+
+export async function importLeadsInChunks(getToken, leads, shareState = {}, { onProgress } = {}) {
+  const chunks = chunkItems(leads || [], IMPORT_BATCH_SIZE)
+  const created = []
+  const errors = []
+  let processed = 0
+  for (const chunk of chunks) {
+    const result = await importLeadsBatch(getToken, chunk, shareState)
+    created.push(...result.created)
+    for (const err of result.errors) {
+      errors.push({ ...err, index: processed + (Number(err.index) || 0) })
+    }
+    processed += chunk.length
+    onProgress?.({
+      created: created.length,
+      processed,
+      total: leads.length,
+      errors,
+    })
+  }
+  if (created.length) {
+    const byId = new Map(loadLocalLeads().map((l) => [l.id, l]))
+    for (const lead of created) byId.set(lead.id, lead)
+    saveLocalLeads([...byId.values()])
+  }
+  return { created, errors }
 }
 
 /** Strip owner/sharing fields when syncing a full lead record (e.g. after photo upload). */
