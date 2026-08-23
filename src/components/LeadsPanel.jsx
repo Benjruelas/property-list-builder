@@ -507,6 +507,7 @@ export function LeadsPanel({
         teams={teams}
         teamMembership={teamMembership}
         onImported={handleImported}
+        onRefreshTags={onRefreshTags}
         nestedOverlay
       />
 

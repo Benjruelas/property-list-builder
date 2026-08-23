@@ -11,6 +11,7 @@ import { parseCsv } from '@/utils/csv'
 import {
   LEAD_IMPORT_FIELDS,
   MAX_IMPORT_ROWS,
+  applyCreatedTagsToLeads,
   downloadSampleLeadCsv,
   emptyColumnMapping,
   guessColumnMapping,
@@ -19,6 +20,7 @@ import {
 } from '@/utils/leadCsvImport'
 import { geocodeLeadsForImport } from '@/utils/geocodeAddress'
 import { displayLeadName, importLeadsInChunks } from '@/utils/leads'
+import { createTag, upsertTagInRegistry } from '@/utils/tags'
 import { cn } from '@/lib/utils'
 
 const SELECT_CLASS = 'w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15'
@@ -60,6 +62,7 @@ export function ImportLeadsDialog({
   teams = [],
   teamMembership = null,
   onImported,
+  onRefreshTags,
   nestedOverlay = false,
   topLayer: topLayerProp,
 }) {
@@ -177,7 +180,14 @@ export function ImportLeadsDialog({
     setStep('importing')
     setProgress({ phase: placeOnMap ? 'geocode' : 'import', done: 0, total: valid.length })
     try {
-      let payloads = valid.map((r) => r.lead)
+      let registry = tagRegistry
+      const namesToCreate = preview.tagsToCreate || []
+      for (const name of namesToCreate) {
+        const tag = await createTag(getToken, 'leads', name)
+        registry = upsertTagInRegistry(registry, 'leads', tag)
+        onRefreshTags?.(tag)
+      }
+      let payloads = applyCreatedTagsToLeads(valid.map((r) => r.lead), registry)
       if (placeOnMap) {
         payloads = await geocodeLeadsForImport(payloads, {
           onProgress: (done, total) => setProgress({ phase: 'geocode', done, total }),
@@ -285,6 +295,17 @@ export function ImportLeadsDialog({
             {step === 'map' && (
               <div className="space-y-3">
                 <p className="text-xs opacity-50 truncate">{fileName} · {rows.length} rows</p>
+                {mapping.source === 'jobber' && (
+                  <div className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm">
+                    Jobber export detected — {rows.length} row{rows.length === 1 ? '' : 's'} will become{' '}
+                    {preview.counts.total} client{preview.counts.total === 1 ? '' : 's'}.
+                    {(mapping.phoneColumns || []).length > 0 && (
+                      <div className="text-xs opacity-70 mt-1">
+                        All Jobber phone columns are included (main, mobile, work, home, other, SMS).
+                      </div>
+                    )}
+                  </div>
+                )}
                 {LEAD_IMPORT_FIELDS.map((field) => (
                   <label key={field.id} className="block">
                     <span className="text-xs opacity-60 mb-1 block">{field.label}</span>
@@ -388,10 +409,17 @@ export function ImportLeadsDialog({
                 ) : (
                   <>
                     <p className="text-sm opacity-70">
-                      {preview.counts.valid} ready
+                      {preview.source === 'jobber' && preview.counts.sourceRows != null
+                        ? `${preview.counts.sourceRows} rows → ${preview.counts.valid} ready`
+                        : `${preview.counts.valid} ready`}
                       {preview.counts.duplicate ? ` · ${preview.counts.duplicate} duplicate` : ''}
                       {preview.counts.invalid ? ` · ${preview.counts.invalid} invalid` : ''}
                     </p>
+                    {preview.tagsToCreate?.length > 0 && (
+                      <p className="text-xs opacity-60">
+                        Will create tag{preview.tagsToCreate.length === 1 ? '' : 's'}: {preview.tagsToCreate.join(', ')}
+                      </p>
+                    )}
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"

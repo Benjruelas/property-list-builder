@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseCsv } from '../csv'
 import {
   MAX_IMPORT_ROWS,
+  applyCreatedTagsToLeads,
   buildDuplicateIndex,
   buildLeadFromRow,
   composeAddress,
@@ -171,7 +172,18 @@ describe('previewImportRows', () => {
       Array.from({ length: MAX_IMPORT_ROWS + 1 }, () => ['Ada']),
       mapping,
     )
-    expect(tooBig.error).toMatch(/200/)
+    expect(tooBig.error).toMatch(String(MAX_IMPORT_ROWS))
+  })
+
+  it('accepts more than 200 generic rows', () => {
+    const mapping = emptyColumnMapping()
+    mapping.firstName = '0'
+    const preview = previewImportRows(
+      Array.from({ length: 250 }, (_, i) => [`Person ${i}`]),
+      mapping,
+    )
+    expect(preview.error).toBeNull()
+    expect(preview.counts.valid).toBe(250)
   })
 
   it('parses the sample template and treats every row as valid', () => {
@@ -196,5 +208,21 @@ describe('resolve helpers', () => {
       tagIds: ['tag_hot'],
       unknown: ['New'],
     })
+  })
+
+  it('skips numeric Jobber tag ids and flags named unknowns for create', () => {
+    expect(resolveImportTagIds('0, Client, 1', TAGS)).toEqual({
+      tagIds: [],
+      unknown: ['Client'],
+    })
+  })
+
+  it('attaches newly created tags and strips pending names', () => {
+    const leads = applyCreatedTagsToLeads(
+      [{ firstName: 'Ada', tagIds: ['tag_hot'], pendingTagNames: ['Client'] }],
+      { leads: [...TAGS.leads, { id: 'tag_client', name: 'Client' }] },
+    )
+    expect(leads[0].tagIds).toEqual(['tag_hot', 'tag_client'])
+    expect(leads[0].pendingTagNames).toBeUndefined()
   })
 })
