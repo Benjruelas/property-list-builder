@@ -209,8 +209,23 @@ export function mergeLeadDetail(prev, incoming) {
 export function mergeLeadDetailRespectingFreshness(prev, incoming) {
   if (!incoming) return prev
   if (!prev) return incoming
+  const prevPhotos = Array.isArray(prev.photos) ? prev.photos : []
+  const incPhotos = Array.isArray(incoming.photos) ? incoming.photos : []
   const prevAt = Date.parse(prev.updatedAt || '') || 0
   const incAt = Date.parse(incoming.updatedAt || '') || 0
+  if (prevPhotos.length === 0 && incPhotos.length > 0) {
+    return mergeLeadDetail(prev, incoming)
+  }
+  if (prevAt > incAt) {
+    return mergeLeadDetail(prev, {
+      ...incoming,
+      photos: prev.photos,
+      photoCount: prev.photoCount ?? incoming.photoCount,
+    })
+  }
+  if (incPhotos.length > prevPhotos.length) {
+    return mergeLeadDetail(prev, incoming)
+  }
   if (prevAt > incAt) {
     return mergeLeadDetail(prev, {
       ...incoming,
@@ -237,12 +252,25 @@ export function mergeListViewLeads(existing, incoming, { excludeIds } = {}) {
     const prev = prevById.get(inc.id)
     if (!prev) return inc
     if (inc?._listView) {
-      const prevPhotos = prev.photos
+      const prevPhotos = Array.isArray(prev.photos) ? prev.photos : null
       const serverPhotoCount = typeof inc.photoCount === 'number' ? inc.photoCount : null
       let photos = inc.photos
-      if (photos == null && Array.isArray(prevPhotos)) {
+      if (photos == null && prevPhotos) {
         if (serverPhotoCount != null && serverPhotoCount < prevPhotos.length) {
           photos = undefined
+        } else if (
+          prevPhotos.length === 0
+          && serverPhotoCount != null
+          && serverPhotoCount > 0
+        ) {
+          // Server has photos but local cache was cleared — hydrate instead of pinning [].
+          photos = undefined
+        } else if (
+          serverPhotoCount != null
+          && serverPhotoCount > prevPhotos.length
+          && prevPhotos.length > 0
+        ) {
+          photos = prevPhotos
         } else {
           photos = prevPhotos
         }
