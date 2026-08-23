@@ -1,5 +1,5 @@
 import { mapProperties, canonicalParcelId } from './parcelPropertyMap'
-import { propertiesMatchRequestedLrid } from '../../api/_lib/parcelLookup.js'
+import { propertiesMatchRequestedLrid } from './parcelLookup.js'
 
 /**
  * Fetch full parcel attributes from LandRecords via /api/parcel (WMS/WFS proxy).

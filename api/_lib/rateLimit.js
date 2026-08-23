@@ -10,15 +10,20 @@ import { kv, kvAvailable } from './kvBootstrap.js'
 
 const memory = new Map()
 
-function memoryLimit(key, limit, windowSec) {
+function memoryLimit(key, limit, windowSec, increment = 1) {
   const now = Date.now()
   const windowMs = windowSec * 1000
   const entry = memory.get(key)
   if (!entry || entry.reset <= now) {
-    memory.set(key, { count: 1, reset: now + windowMs })
-    return { allowed: true, remaining: limit - 1, retryAfter: 0 }
+    const allowed = increment <= limit
+    memory.set(key, { count: increment, reset: now + windowMs })
+    return {
+      allowed,
+      remaining: Math.max(0, limit - increment),
+      retryAfter: allowed ? 0 : Math.ceil(windowMs / 1000),
+    }
   }
-  entry.count += 1
+  entry.count += increment
   const allowed = entry.count <= limit
   return {
     allowed,
@@ -27,14 +32,26 @@ function memoryLimit(key, limit, windowSec) {
   }
 }
 
-export async function rateLimit({ key, limit, windowSec }) {
+async function kvIncrement(key, increment) {
+  if (increment <= 0) return 0
+  if (typeof kv.incrBy === 'function') return kv.incrBy(key, increment)
+  if (typeof kv.incrby === 'function') return kv.incrby(key, increment)
+  let count = 0
+  for (let i = 0; i < increment; i += 1) {
+    count = await kv.incr(key)
+  }
+  return count
+}
+
+export async function rateLimit({ key, limit, windowSec, increment = 1 }) {
   const bucketKey = `ratelimit:${key}`
+  const delta = Number.isFinite(increment) && increment > 0 ? Math.floor(increment) : 1
   if (!kvAvailable || !kv) {
-    return memoryLimit(bucketKey, limit, windowSec)
+    return memoryLimit(bucketKey, limit, windowSec, delta)
   }
   try {
-    const count = await kv.incr(bucketKey)
-    if (count === 1) {
+    const count = await kvIncrement(bucketKey, delta)
+    if (count === delta) {
       // First hit in this window: set expiry.
       if (typeof kv.expire === 'function') {
         await kv.expire(bucketKey, windowSec)
@@ -49,7 +66,7 @@ export async function rateLimit({ key, limit, windowSec }) {
     return { allowed, remaining: Math.max(0, limit - count), retryAfter }
   } catch (e) {
     console.warn('[rateLimit] KV error, falling back to memory:', e?.message || e)
-    return memoryLimit(bucketKey, limit, windowSec)
+    return memoryLimit(bucketKey, limit, windowSec, delta)
   }
 }
 

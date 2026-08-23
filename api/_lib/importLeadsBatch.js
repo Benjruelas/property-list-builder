@@ -2,7 +2,8 @@ import { getResourceAccess } from './resourceContext.js'
 import { normalizeLeadInput } from './normalizeLeadInput.js'
 
 export const MAX_IMPORT_BATCH = 50
-export const IMPORTS_PER_HOUR = 10
+/** Total leads a user may import per hour (not per HTTP request). */
+export const MAX_IMPORT_LEADS_PER_HOUR = 500
 
 function parsePhoneDigits(value) {
   if (value == null || value === '') return ''
