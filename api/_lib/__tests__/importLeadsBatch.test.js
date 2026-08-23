@@ -129,6 +129,28 @@ describe('prepareImportedLeads', () => {
     expect(errors.map((e) => e.message).join(' ')).toMatch(/parcel/)
   })
 
+  it('detects parcel conflicts from shard-only visible leads even when monolith is empty', () => {
+    const shardLead = {
+      id: 'lead_shard',
+      firstName: 'Photo',
+      lastName: 'Lead',
+      parcelId: 'parcel-99',
+      ownerId: user.uid,
+      photos: [{ id: 'photo_1' }],
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    }
+    const { created, errors } = prepareImportedLeads({
+      inputs: [{ firstName: 'Other', lastName: 'Person', parcelId: 'parcel-99', address: '9 Oak' }],
+      user,
+      ctx,
+      visibleLeads: [shardLead],
+      allLeads: [],
+      allowedStatusIds: allowed,
+    })
+    expect(created).toHaveLength(0)
+    expect(errors[0]?.message).toMatch(/parcel/)
+  })
+
   it('applies request-level visibility', () => {
     const { created } = prepareImportedLeads({
       inputs: [{ firstName: 'Ada' }],

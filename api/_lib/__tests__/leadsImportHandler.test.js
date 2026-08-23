@@ -26,7 +26,13 @@ vi.mock('../normalizeLeadInput.js', async () => {
     loadUserAppSettings: (...args) => loadUserAppSettings(...args),
   }
 })
-vi.mock('../leadRepo.js', () => ({ getLeadsForUser: (...args) => getLeadsForUser(...args) }))
+vi.mock('../leadRepo.js', async () => {
+  const actual = await vi.importActual('../leadRepo.js')
+  return {
+    ...actual,
+    getLeadsForUser: (...args) => getLeadsForUser(...args),
+  }
+})
 vi.mock('../leadStore.js', () => ({
   getAllLeads: (...args) => getAllLeads(...args),
   mutateLeads: (...args) => mutateLeads(...args),
