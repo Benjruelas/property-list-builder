@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileUp, Loader2, Upload } from 'lucide-react'
+import { FileUp, Loader2, Upload, X } from 'lucide-react'
 import { PanelHeader } from './ui/panel-header'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
@@ -24,6 +24,21 @@ import { cn } from '@/lib/utils'
 const SELECT_CLASS = 'w-full text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/15'
 
 const EMPTY_SHARE = { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function parseShareEmails(value) {
+  const parts = String(value || '')
+    .split(/[,;\s]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+  const valid = []
+  const invalid = []
+  for (const part of parts) {
+    if (EMAIL_RE.test(part) && part.length <= 254) valid.push(part)
+    else invalid.push(part)
+  }
+  return { valid: [...new Set(valid)], invalid }
+}
 
 function stepTitle(step) {
   if (step === 'map') return 'Map columns'
@@ -59,6 +74,8 @@ export function ImportLeadsDialog({
   const [mapping, setMapping] = useState(emptyColumnMapping)
   const [placeOnMap, setPlaceOnMap] = useState(true)
   const [shareState, setShareState] = useState(EMPTY_SHARE)
+  const [sharedWithEmails, setSharedWithEmails] = useState([])
+  const [shareEmailDraft, setShareEmailDraft] = useState('')
   const [progress, setProgress] = useState(null)
   const [result, setResult] = useState(null)
 
@@ -70,6 +87,8 @@ export function ImportLeadsDialog({
     setMapping(emptyColumnMapping())
     setPlaceOnMap(true)
     setShareState(EMPTY_SHARE)
+    setSharedWithEmails([])
+    setShareEmailDraft('')
     setProgress(null)
     setResult(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -127,11 +146,33 @@ export function ImportLeadsDialog({
     }))
   }
 
+  const addShareEmails = (raw = shareEmailDraft) => {
+    const { valid, invalid } = parseShareEmails(raw)
+    if (invalid.length) {
+      showToast(`Not a valid email: ${invalid[0]}`, 'error')
+      return
+    }
+    if (!valid.length) return
+    setSharedWithEmails((prev) => [...new Set([...prev, ...valid])])
+    setShareEmailDraft('')
+  }
+
   const handleImport = async () => {
     const valid = preview.records.filter((r) => r.status === 'valid' && r.lead)
     if (!valid.length) {
       showToast('No valid leads to import', 'warning')
       return
+    }
+    let emails = sharedWithEmails
+    if (!activeTeam && shareEmailDraft.trim()) {
+      const parsed = parseShareEmails(shareEmailDraft)
+      if (parsed.invalid.length) {
+        showToast(`Not a valid email: ${parsed.invalid[0]}`, 'error')
+        return
+      }
+      emails = [...new Set([...sharedWithEmails, ...parsed.valid])]
+      setSharedWithEmails(emails)
+      setShareEmailDraft('')
     }
     setStep('importing')
     setProgress({ phase: placeOnMap ? 'geocode' : 'import', done: 0, total: valid.length })
@@ -143,23 +184,26 @@ export function ImportLeadsDialog({
         })
       }
       const sharePayload = activeTeam
-        ? shareState
-        : { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [] }
+        ? { ...shareState, sharedWith: [] }
+        : { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [], sharedWith: emails }
       const imported = await importLeadsInChunks(getToken, payloads, sharePayload, {
         onProgress: ({ processed, total }) => setProgress({ phase: 'import', done: processed, total }),
       })
       if (imported.created.length) onImported?.(imported.created)
+      const sharing = sharePayload.sharedWith?.length
+        ? `Shared with ${sharePayload.sharedWith.join(', ')}`
+        : visibilityLabel({
+          visibility: sharePayload.visibility,
+          sharedMemberUids: sharePayload.sharedMemberUids,
+          teamShares: sharePayload.visibility === VISIBILITY.TEAM && activeTeam?.id ? [activeTeam.id] : [],
+        })
       setResult({
         created: imported.created.length,
         failed: imported.errors.length,
         duplicates: preview.counts.duplicate,
         invalid: preview.counts.invalid,
         errors: imported.errors.slice(0, 8),
-        sharing: visibilityLabel({
-          visibility: sharePayload.visibility,
-          sharedMemberUids: sharePayload.sharedMemberUids,
-          teamShares: sharePayload.visibility === VISIBILITY.TEAM && activeTeam?.id ? [activeTeam.id] : [],
-        }),
+        sharing,
       })
       setStep('result')
       if (imported.created.length) {
@@ -279,14 +323,61 @@ export function ImportLeadsDialog({
                 <p className="text-sm opacity-70">
                   Who should be able to see these {preview.counts.valid} lead{preview.counts.valid === 1 ? '' : 's'}?
                 </p>
-                <ResourceSharePicker
-                  team={activeTeam}
-                  visibility={shareState.visibility}
-                  sharedMemberUids={shareState.sharedMemberUids}
-                  onChange={setShareState}
-                  allowExternalSharing={allowExternalSharing}
-                  defaultExpanded
-                />
+                {activeTeam ? (
+                  <ResourceSharePicker
+                    team={activeTeam}
+                    visibility={shareState.visibility}
+                    sharedMemberUids={shareState.sharedMemberUids}
+                    onChange={setShareState}
+                    allowExternalSharing={allowExternalSharing}
+                    defaultExpanded
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs opacity-60">
+                      Leads stay private to you unless you add someone by email.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={shareEmailDraft}
+                        onChange={(e) => setShareEmailDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addShareEmails()
+                          }
+                        }}
+                        placeholder="user@example.com"
+                        className={cn(SELECT_CLASS, 'flex-1')}
+                        aria-label="Email to share with"
+                      />
+                      <Button type="button" variant="ghost" onClick={() => addShareEmails()}>
+                        Add
+                      </Button>
+                    </div>
+                    {sharedWithEmails.length > 0 && (
+                      <ul className="space-y-1">
+                        {sharedWithEmails.map((email) => (
+                          <li
+                            key={email}
+                            className="flex items-center justify-between gap-2 text-sm rounded-lg px-3 py-2 bg-white/5 border border-white/10"
+                          >
+                            <span className="truncate">{email}</span>
+                            <button
+                              type="button"
+                              className="opacity-60 hover:opacity-100"
+                              aria-label={`Remove ${email}`}
+                              onClick={() => setSharedWithEmails((prev) => prev.filter((e) => e !== email))}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

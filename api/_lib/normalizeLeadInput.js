@@ -1,5 +1,6 @@
 import { kv, kvAvailable } from './kvBootstrap.js'
-import { applyResourceVisibilityPatch } from './resourceContext.js'
+import { applyResourceVisibilityPatch, assertExternalSharingAllowed } from './resourceContext.js'
+import { isValidEmail } from './emailSafety.js'
 import { mergeEntityTags } from './tagHelpers.js'
 import {
   resolveAllowedLeadStatusIds,
@@ -39,6 +40,15 @@ export function resolveLeadStatusRegistry(ctx, userAppSettings) {
     return normalizeLeadStatuses(userAppSettings.leadStatuses)
   }
   return normalizeLeadStatuses(DEFAULT_LEAD_STATUSES)
+}
+
+export function normalizeSharedWithEmails(input) {
+  const arr = Array.isArray(input) ? input : []
+  return [...new Set(
+    arr
+      .map((e) => String(e || '').trim().toLowerCase())
+      .filter((e) => isValidEmail(e)),
+  )]
 }
 
 export function resolveLeadCustomFieldDefs(ctx, userAppSettings) {
@@ -114,8 +124,14 @@ export function normalizeLeadInput(body, user, existing = null, ctx = null, tagR
     existing?.autoTaskFiredStatusIds || [],
   )
 
+  let next = base
   if (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined) {
-    return applyResourceVisibilityPatch(base, body, ctx)
+    next = applyResourceVisibilityPatch(base, body, ctx)
+  } else if (body.sharedWith !== undefined) {
+    assertExternalSharingAllowed(ctx?.team, body)
   }
-  return base
+  if (body.sharedWith !== undefined) {
+    next = { ...next, sharedWith: normalizeSharedWithEmails(body.sharedWith) }
+  }
+  return next
 }

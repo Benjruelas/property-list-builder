@@ -107,6 +107,7 @@ export function prepareImportedLeads({
   fieldDefs = [],
   visibility,
   sharedMemberUids,
+  sharedWith,
 }) {
   const created = []
   const errors = []
@@ -122,6 +123,7 @@ export function prepareImportedLeads({
       ...raw,
       ...(visibility !== undefined ? { visibility } : {}),
       ...(sharedMemberUids !== undefined ? { sharedMemberUids } : {}),
+      ...(sharedWith !== undefined ? { sharedWith } : {}),
     }
     let lead
     try {

@@ -56,11 +56,12 @@ describe('importLeadsInChunks', () => {
     await importLeadsInChunks(
       async () => 'token',
       [{ firstName: 'Ada' }],
-      { visibility: 'members', sharedMemberUids: ['u2'] },
+      { visibility: 'members', sharedMemberUids: ['u2'], sharedWith: ['pat@example.com'] },
     )
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.visibility).toBe('members')
     expect(body.sharedMemberUids).toEqual(['u2'])
+    expect(body.sharedWith).toEqual(['pat@example.com'])
   })
 })

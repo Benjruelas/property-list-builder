@@ -7,6 +7,7 @@ vi.mock('../resourceContext.js', () => ({
     visibility: body.visibility || base.visibility,
     sharedMemberUids: body.sharedMemberUids || base.sharedMemberUids || [],
   }),
+  assertExternalSharingAllowed: () => {},
 }))
 
 vi.mock('../tagHelpers.js', () => ({
@@ -137,5 +138,18 @@ describe('prepareImportedLeads', () => {
       visibility: 'team',
     })
     expect(created[0].visibility).toBe('team')
+  })
+
+  it('stores collaborator emails for solo imports', () => {
+    const { created } = prepareImportedLeads({
+      inputs: [{ firstName: 'Ada' }],
+      user,
+      ctx: { team: null, teamsIndex: {} },
+      allowedStatusIds: allowed,
+      visibility: 'private',
+      sharedWith: ['Pat@Example.com', 'not-an-email', 'pat@example.com'],
+    })
+    expect(created[0].sharedWith).toEqual(['pat@example.com'])
+    expect(created[0].visibility).toBe('private')
   })
 })

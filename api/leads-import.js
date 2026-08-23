@@ -97,6 +97,7 @@ export default async function handler(req, res) {
       fieldDefs,
       visibility: body.visibility,
       sharedMemberUids: body.sharedMemberUids,
+      sharedWith: body.sharedWith,
     })
 
     if (created.length) {
