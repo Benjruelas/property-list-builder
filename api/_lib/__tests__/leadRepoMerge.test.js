@@ -2,6 +2,27 @@ import { describe, expect, it } from 'vitest'
 import { mergeLeadPair, mergeLeadsByUpdatedAt } from '../leadRepo.js'
 
 describe('mergeLeadPair', () => {
+  it('unions photos from both copies when the newer copy is missing some', () => {
+    const shard = {
+      id: 'lead_1',
+      firstName: 'Jane',
+      photos: [
+        { id: 'photo_1', capturedAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'photo_2', capturedAt: '2026-01-02T00:00:00.000Z' },
+      ],
+      updatedAt: '2026-01-15T00:00:00.000Z',
+    }
+    const monolith = {
+      id: 'lead_1',
+      firstName: 'Jane',
+      notes: 'Imported again',
+      photos: [{ id: 'photo_1', capturedAt: '2026-01-01T00:00:00.000Z' }],
+      updatedAt: '2026-03-01T00:00:00.000Z',
+    }
+    expect(mergeLeadPair(shard, monolith).photos).toHaveLength(2)
+    expect(mergeLeadPair(shard, monolith).photos.map((p) => p.id).sort()).toEqual(['photo_1', 'photo_2'])
+  })
+
   it('keeps photos from the older copy when the newer copy is missing them', () => {
     const stale = {
       id: 'lead_1',

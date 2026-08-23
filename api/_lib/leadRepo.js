@@ -118,10 +118,21 @@ async function syncSharedIndexesForLeads(allLeads, allTeams) {
   ))
 }
 
-function pickRichArray(primary, fallback) {
-  const a = Array.isArray(primary) ? primary : []
-  const b = Array.isArray(fallback) ? fallback : []
-  return a.length ? a : b
+function mergeRecordArrays(a, b) {
+  const byKey = new Map()
+  for (const item of [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]) {
+    if (!item) continue
+    const key = item.id || item.key || JSON.stringify(item)
+    const prev = byKey.get(key)
+    if (!prev) {
+      byKey.set(key, item)
+      continue
+    }
+    const prevAt = Date.parse(prev.updatedAt || prev.capturedAt || prev.createdAt || 0) || 0
+    const nextAt = Date.parse(item.updatedAt || item.capturedAt || item.createdAt || 0) || 0
+    if (nextAt >= prevAt) byKey.set(key, item)
+  }
+  return [...byKey.values()]
 }
 
 function mergeActivityArrays(a, b) {
@@ -145,8 +156,8 @@ export function mergeLeadPair(a, b) {
   const [winner, loser] = bAt >= aAt ? [b, a] : [a, b]
   return {
     ...winner,
-    photos: pickRichArray(winner.photos, loser.photos),
-    files: pickRichArray(winner.files, loser.files),
+    photos: mergeRecordArrays(winner.photos, loser.photos),
+    files: mergeRecordArrays(winner.files, loser.files),
     activity: mergeActivityArrays(winner.activity, loser.activity),
   }
 }
