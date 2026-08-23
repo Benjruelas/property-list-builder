@@ -118,6 +118,25 @@ async function syncSharedIndexesForLeads(allLeads, allTeams) {
   ))
 }
 
+/** Prefer the copy with the latest updatedAt when the monolith and shards diverge. */
+export function mergeLeadsByUpdatedAt(...groups) {
+  const byId = new Map()
+  for (const group of groups) {
+    for (const lead of group || []) {
+      if (!lead?.id) continue
+      const prev = byId.get(lead.id)
+      if (!prev) {
+        byId.set(lead.id, lead)
+        continue
+      }
+      const prevAt = Date.parse(prev.updatedAt || prev.createdAt || 0) || 0
+      const nextAt = Date.parse(lead.updatedAt || lead.createdAt || 0) || 0
+      byId.set(lead.id, nextAt >= prevAt ? lead : prev)
+    }
+  }
+  return [...byId.values()]
+}
+
 export async function writeLeadToShards(allLeads, { allTeams } = {}) {
   const mode = flags.LEADS_SHARDED()
   if (mode === 'off' || !kvAvailable) return
@@ -131,10 +150,14 @@ export async function writeLeadToShards(allLeads, { allTeams } = {}) {
     if (lead.id) indexEntries[leadIndexKey(lead.id)] = ownerId
   }
   const teams = allTeams || await getAllTeams()
-  // Batch the lead->owner index writes into one round trip instead of N.
+  // Never replace a shard wholesale from monolith — photo uploads can live on the shard first.
   await Promise.all([
     kvMSet(indexEntries),
-    ...[...byOwner.entries()].map(([ownerId, leads]) => saveOwnerLeads(ownerId, leads)),
+    ...[...byOwner.entries()].map(async ([ownerId, leads]) => {
+      const existing = await getOwnerLeads(ownerId)
+      const merged = mergeLeadsByUpdatedAt(leads, existing)
+      await saveOwnerLeads(ownerId, merged)
+    }),
     syncSharedIndexesForLeads(allLeads, teams),
   ])
 }

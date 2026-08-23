@@ -107,6 +107,20 @@ export async function saveAllLeads(leads, { changedResources = [] } = {}) {
   }, { count: Array.isArray(leads) ? leads.length : 0 })
 }
 
+async function upsertLeadInMonolith(updated, prevResource, changedResources) {
+  if (!updated?.id) return null
+  const all = await loadLeadsArray()
+  const idx = all.findIndex((l) => l.id === updated.id)
+  const next = idx === -1
+    ? [...all, updated]
+    : all.map((lead, i) => (i === idx ? updated : lead))
+  const prev = prevResource ?? (idx >= 0 ? all[idx] : null)
+  if (!changedResources.length) {
+    changedResources.push({ resource: updated, prevResource: prev })
+  }
+  return saveAllLeads(next, { changedResources })
+}
+
 /**
  * Atomic read-modify-write when FLAG_LEADS_LOCK is enabled.
  * mutatorFn receives the current array and must return the next array (or undefined to skip save).
@@ -152,6 +166,8 @@ async function mutateSingleLeadInShard(leadId, mutatorFn, changedResources) {
   if (flags.LEADS_SHARDED() !== 'off') {
     const allTeams = await getAllTeams()
     await syncSharedIndexForLead(updated, prevLead, allTeams)
+    await upsertLeadInMonolith(updated, prevLead, changedResources)
+    return updated
   }
   if (flags.VERSIONED_POLL()) {
     await bumpLeadsVersionsForResource(updated, { prevResource: prevLead })

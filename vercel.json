@@ -52,6 +52,9 @@
     },
     "api/leads-import.js": {
       "maxDuration": 30
+    },
+    "api/restore-lead-photos.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [

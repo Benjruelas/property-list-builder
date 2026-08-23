@@ -1,5 +1,6 @@
 import { getResourceAccess } from './resourceContext.js'
 import { normalizeLeadInput } from './normalizeLeadInput.js'
+import { mergeLeadsByUpdatedAt } from './leadRepo.js'
 
 export const MAX_IMPORT_BATCH = 50
 /** Total leads a user may import per hour (not per HTTP request). */
@@ -113,6 +114,7 @@ export function prepareImportedLeads({
   const created = []
   const errors = []
   const index = buildImportDuplicateIndex(visibleLeads)
+  const leadsForParcelCheck = mergeLeadsByUpdatedAt(allLeads, visibleLeads)
   const reservedParcelIds = new Set()
 
   ;(inputs || []).forEach((raw, indexInBatch) => {
@@ -139,7 +141,7 @@ export function prepareImportedLeads({
       errors.push({ index: indexInBatch, message: dup })
       return
     }
-    const parcelError = parcelConflicts(lead, allLeads, user, ctx, reservedParcelIds)
+    const parcelError = parcelConflicts(lead, leadsForParcelCheck, user, ctx, reservedParcelIds)
     if (parcelError) {
       errors.push({ index: indexInBatch, message: parcelError })
       return
