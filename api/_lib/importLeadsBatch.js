@@ -4,7 +4,7 @@ import { mergeLeadsByUpdatedAt } from './leadRepo.js'
 
 export const MAX_IMPORT_BATCH = 50
 /** Total leads a user may import per hour (not per HTTP request). */
-export const MAX_IMPORT_LEADS_PER_HOUR = 500
+export const MAX_IMPORT_LEADS_PER_HOUR = 2000
 
 function parsePhoneDigits(value) {
   if (value == null || value === '') return ''

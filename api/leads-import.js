@@ -56,6 +56,11 @@ export default async function handler(req, res) {
   }
 
   const isLocalDev = process.env.VERCEL_ENV === 'development'
+  let rateLimitInfo = {
+    limit: MAX_IMPORT_LEADS_PER_HOUR,
+    remaining: MAX_IMPORT_LEADS_PER_HOUR,
+    retryAfter: 0,
+  }
   if (!isLocalDev) {
     const rl = await rateLimit({
       key: `leads-import:${user.uid}`,
@@ -63,11 +68,17 @@ export default async function handler(req, res) {
       windowSec: 3600,
       increment: inputs.length,
     })
+    rateLimitInfo = {
+      limit: MAX_IMPORT_LEADS_PER_HOUR,
+      remaining: rl.remaining,
+      retryAfter: rl.retryAfter,
+    }
     if (!rl.allowed) {
       res.setHeader('Retry-After', String(rl.retryAfter))
       return res.status(429).json({
-        error: 'Too many imports. Please try again later.',
+        error: 'Import limit reached for this hour. Please wait and retry.',
         retryAfter: rl.retryAfter,
+        rateLimit: rateLimitInfo,
       })
     }
   }
@@ -154,7 +165,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ created, errors })
+    return res.status(200).json({ created, errors, rateLimit: rateLimitInfo })
   } catch (err) {
     if (isKvLockUnavailable(err)) return respondKvLockUnavailable(res, err)
     console.error('leads-import API error', err)

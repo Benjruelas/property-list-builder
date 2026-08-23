@@ -30,6 +30,7 @@ import {
 } from '@/utils/leadCsvImport'
 import { geocodeLeadsForImport } from '@/utils/geocodeAddress'
 import { displayLeadName, importLeadsInChunks } from '@/utils/leads'
+import { formatImportWait } from '@/utils/importRateLimit'
 import { createTag, upsertTagInRegistry } from '@/utils/tags'
 import { cn } from '@/lib/utils'
 
@@ -338,7 +339,17 @@ export function ImportLeadsDialog({
         ? { ...shareState, sharedWith: [] }
         : { visibility: VISIBILITY.PRIVATE, sharedMemberUids: [], sharedWith: emails }
       const imported = await importLeadsInChunks(getToken, payloads, sharePayload, {
-        onProgress: ({ processed, total }) => setProgress({ phase: 'import', done: processed, total }),
+        onProgress: ({ processed, total }) => {
+          setProgress({ phase: 'import', done: processed, total, waiting: null })
+        },
+        onRateLimitWait: ({ waitSec }) => {
+          setProgress((prev) => ({
+            phase: 'import',
+            done: prev?.done || 0,
+            total: prev?.total || valid.length,
+            waiting: { waitSec },
+          }))
+        },
       })
       if (imported.created.length) onImported?.(imported.created)
       const sharing = sharePayload.sharedWith?.length
@@ -714,7 +725,11 @@ export function ImportLeadsDialog({
                 <Loader2 className="h-8 w-8 animate-spin mx-auto opacity-70" />
                 <div>
                   <p className="text-sm">
-                    {progress?.phase === 'geocode' ? 'Finding map locations…' : 'Creating leads…'}
+                    {progress?.waiting
+                      ? `Import limit reached — resuming in about ${formatImportWait(progress.waiting.waitSec)}…`
+                      : progress?.phase === 'geocode'
+                        ? 'Finding map locations…'
+                        : 'Creating leads…'}
                   </p>
                   <p className="text-xs opacity-50 mt-1">
                     {progress?.done || 0} of {progress?.total || 0}

@@ -23,7 +23,8 @@ export {
 
 import { getApiBase } from './apiBase'
 import { mutateOrQueue, newTempId } from './offlineMutate'
-import { IMPORT_BATCH_SIZE, chunkItems } from './leadCsvImport'
+import { IMPORT_BATCH_SIZE } from './leadCsvImport'
+import { nextImportBatchSize, withImportRetry } from './importRateLimit'
 
 const LOCAL_LEADS_KEY = 'user_leads_local'
 const LOCAL_LEADS_UID_KEY = 'user_leads_local_uid'
@@ -447,31 +448,45 @@ export async function importLeadsBatch(getToken, leads, shareState = {}) {
   if (!res.ok) {
     const err = new Error(data.error || 'Import failed')
     err.status = res.status
-    err.retryAfter = data.retryAfter
+    err.retryAfter = data.retryAfter ?? Number(res.headers.get('Retry-After'))
+    err.rateLimit = data.rateLimit
     throw err
   }
   return {
     created: Array.isArray(data.created) ? data.created : [],
     errors: Array.isArray(data.errors) ? data.errors : [],
+    rateLimit: data.rateLimit || null,
   }
 }
 
-export async function importLeadsInChunks(getToken, leads, shareState = {}, { onProgress } = {}) {
-  const chunks = chunkItems(leads || [], IMPORT_BATCH_SIZE)
+export async function importLeadsInChunks(getToken, leads, shareState = {}, { onProgress, onRateLimitWait } = {}) {
+  const list = leads || []
   const created = []
   const errors = []
   let processed = 0
-  for (const chunk of chunks) {
-    const result = await importLeadsBatch(getToken, chunk, shareState)
+  let index = 0
+  let rateRemaining = null
+
+  while (index < list.length) {
+    const batchSize = nextImportBatchSize(IMPORT_BATCH_SIZE, rateRemaining)
+    const chunk = list.slice(index, index + batchSize)
+    const result = await withImportRetry(
+      () => importLeadsBatch(getToken, chunk, shareState),
+      { onRateLimitWait },
+    )
+    if (result.rateLimit && Number.isFinite(result.rateLimit.remaining)) {
+      rateRemaining = result.rateLimit.remaining
+    }
     created.push(...result.created)
     for (const err of result.errors) {
       errors.push({ ...err, index: processed + (Number(err.index) || 0) })
     }
     processed += chunk.length
+    index += chunk.length
     onProgress?.({
       created: created.length,
       processed,
-      total: leads.length,
+      total: list.length,
       errors,
     })
   }
