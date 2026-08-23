@@ -427,9 +427,10 @@ export function LeadsPanel({
                 <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">Create a lead to track a property and contact. Add deals to pipes when you&apos;re ready to work the job.</p>
                 <button
                   type="button"
-                  className="mt-4 text-sm underline underline-offset-2 opacity-70"
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
                   onClick={() => setImportOpen(true)}
                 >
+                  <FileUp className="h-4 w-4 opacity-70" />
                   Import CSV
                 </button>
               </div>

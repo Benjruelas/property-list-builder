@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseCsv } from '../csv'
 import {
+  LEAD_IMPORT_FIELDS,
+  LEAD_IMPORT_FIELD_GROUPS,
   MAX_IMPORT_ROWS,
   applyCreatedTagsToLeads,
   buildDuplicateIndex,
@@ -24,6 +26,13 @@ const STATUSES = [
 const TAGS = { leads: [{ id: 'tag_hot', name: 'Hot', color: '#f00' }] }
 
 const CUSTOM = [{ id: 'roof_type', label: 'Roof Type', type: 'text' }]
+
+describe('LEAD_IMPORT_FIELD_GROUPS', () => {
+  it('covers every import field exactly once', () => {
+    const grouped = LEAD_IMPORT_FIELD_GROUPS.flatMap((group) => group.fieldIds)
+    expect(grouped.sort()).toEqual(LEAD_IMPORT_FIELDS.map((field) => field.id).sort())
+  })
+})
 
 describe('composeAddress', () => {
   it('joins street + city + state + zip', () => {

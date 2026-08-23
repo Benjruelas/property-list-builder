@@ -37,6 +37,12 @@ export const LEAD_IMPORT_FIELDS = [
   { id: 'tags', label: 'Tags' },
 ]
 
+export const LEAD_IMPORT_FIELD_GROUPS = [
+  { id: 'contact', label: 'Contact', fieldIds: ['firstName', 'lastName', 'fullName', 'companyName', 'phone', 'email'] },
+  { id: 'address', label: 'Address', fieldIds: ['address', 'street', 'city', 'state', 'zip'] },
+  { id: 'details', label: 'Details', fieldIds: ['notes', 'status', 'tags'] },
+]
+
 const FIELD_ALIASES = {
   firstName: ['firstname', 'first', 'givenname', 'given'],
   lastName: ['lastname', 'last', 'surname', 'familyname', 'family'],
