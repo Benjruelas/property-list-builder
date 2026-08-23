@@ -1,11 +1,13 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useObscuredPanelRoot } from '@/hooks/useObscuredPanelRoot'
-import { Search, UserSearch } from 'lucide-react'
-import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton } from './ui/panel-header'
+import { FileUp, Search, UserSearch } from 'lucide-react'
+import { PanelHeader, PANEL_LIST_HEADER_CLASS, PANEL_LIST_HEADER_STYLE, PanelCreateButton, PanelOptionsButton } from './ui/panel-header'
+import { OptionsMenuDropdown, OptionsMenuItem } from './ui/OptionsMenuDropdown'
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from './ui/dialog'
 import { ignoreRadixMapPanelDismiss, useListDialogUnderDetail } from './ui/panelDialogUtils'
 import { LeadDetails } from './LeadDetails'
 import { CreateLeadDialog } from './CreateLeadDialog'
+import { ImportLeadsDialog } from './ImportLeadsDialog'
 import { CreateDealDialog } from './CreateDealDialog'
 import { DealTemplatePickerDialog } from './DealTemplatePickerDialog'
 import { FormTemplatePickerDialog } from './forms/FormTemplatePickerDialog'
@@ -39,6 +41,8 @@ import { showToast } from './ui/toast'
 import { LeadRow } from './LeadRow'
 import { PanelListBodyLoading } from './ui/PanelListLoadingShell'
 import { useWindowedList } from '@/hooks/useWindowedList'
+
+const LEADS_PANEL_MENU_W = 180
 
 export function LeadsPanel({
   isOpen,
@@ -107,6 +111,9 @@ export function LeadsPanel({
   const [statusFilter, setStatusFilter] = useState(null)
   const [sortMode, setSortMode] = useState('recent')
   const [createOpen, setCreateOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [leadsMenuOpen, setLeadsMenuOpen] = useState(false)
+  const leadsMenuTriggerRef = useRef(null)
   const [dealPickerOpen, setDealPickerOpen] = useState(false)
   const [pendingDealPrefill, setPendingDealPrefill] = useState(null)
   const [createDealOpen, setCreateDealOpen] = useState(false)
@@ -225,6 +232,19 @@ export function LeadsPanel({
     onLeadsChange?.([...leads, lead])
   }
 
+  const handleImported = useCallback((created) => {
+    if (!created?.length) return
+    onLeadsChange?.((prev) => {
+      const list = Array.isArray(prev) ? prev : []
+      const byId = new Map(list.map((l) => [l.id, l]))
+      for (const lead of created) {
+        if (lead?.id) byId.set(lead.id, lead)
+      }
+      return [...byId.values()]
+    })
+    onRefreshLeads?.()
+  }, [onLeadsChange, onRefreshLeads])
+
   const startCreateDeal = useCallback((lead) => {
     if (!lead?.id) return
     if (pipelinesCount > 0 && createDealPipelines.length === 0) {
@@ -282,7 +302,7 @@ export function LeadsPanel({
     showingLeadDetail && !reportsDetailOverLead && !formsFillOverLead,
   )
   const leadDetailDialogOpen = !!leadForDetail && (showLeadDetailPanel || reportsDetailOverLead || formsFillOverLead)
-  const hasNestedOverlay = showingLeadDetail || createOpen || dealPickerOpen || createDealOpen || leadFormPickerOpen
+  const hasNestedOverlay = showingLeadDetail || createOpen || importOpen || dealPickerOpen || createDealOpen || leadFormPickerOpen
   const listPanelRef = useRef(null)
   useObscuredPanelRoot(listPanelRef, listObscuredByDetail)
 
@@ -308,11 +328,20 @@ export function LeadsPanel({
           hideOverlay
           suppressBackdrop
           instantDismiss={instantDismiss && !isOpen}
+          onInteractOutside={(e) => {
+            if (e.target.closest?.('[data-leads-panel-menu]')) e.preventDefault()
+            if (e.target.closest?.('[data-panel-filter-menu]')) e.preventDefault()
+          }}
         >
           <DialogHeader className={cn(PANEL_LIST_HEADER_CLASS, 'pb-4')} style={PANEL_LIST_HEADER_STYLE}>
             <DialogDescription className="sr-only">Manage your leads</DialogDescription>
             <PanelHeader onBack={handlePanelBack} title="Leads">
               <PanelCreateButton onClick={() => setCreateOpen(true)} title="Create lead" />
+              <PanelOptionsButton
+                ref={leadsMenuTriggerRef}
+                title="Leads options"
+                onClick={() => setLeadsMenuOpen(true)}
+              />
             </PanelHeader>
           </DialogHeader>
 
@@ -396,6 +425,13 @@ export function LeadsPanel({
                 <UserSearch className="h-10 w-10 mx-auto mb-3 opacity-30" />
                 <p className="text-sm opacity-60">No leads yet.</p>
                 <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">Create a lead to track a property and contact. Add deals to pipes when you&apos;re ready to work the job.</p>
+                <button
+                  type="button"
+                  className="mt-4 text-sm underline underline-offset-2 opacity-70"
+                  onClick={() => setImportOpen(true)}
+                >
+                  Import CSV
+                </button>
               </div>
             ) : filteredLeads.length === 0 ? (
               <div className="text-center py-12">
@@ -444,6 +480,34 @@ export function LeadsPanel({
         existingLeads={leads}
         teams={teams}
         teamMembership={teamMembership}
+        nestedOverlay
+      />
+
+      <OptionsMenuDropdown
+        open={leadsMenuOpen}
+        onClose={() => setLeadsMenuOpen(false)}
+        triggerRef={leadsMenuTriggerRef}
+        menuWidth={LEADS_PANEL_MENU_W}
+        dataAttr="data-leads-panel-menu"
+      >
+        <OptionsMenuItem onClick={() => { setLeadsMenuOpen(false); setImportOpen(true) }}>
+          <FileUp className="h-4 w-4 flex-shrink-0" />
+          Import CSV
+        </OptionsMenuItem>
+      </OptionsMenuDropdown>
+
+      <ImportLeadsDialog
+        open={importOpen}
+        onOpenChange={(v) => { if (!v) setImportOpen(false) }}
+        getToken={getToken}
+        existingLeads={leads}
+        leadStatuses={leadStatuses}
+        leadCustomFields={leadCustomFields}
+        tagRegistry={tagRegistry}
+        teams={teams}
+        teamMembership={teamMembership}
+        onImported={handleImported}
+        onRefreshTags={onRefreshTags}
         nestedOverlay
       />
 

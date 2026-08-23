@@ -38,6 +38,17 @@ describe('feedCoalesce helpers', () => {
     })).toBe('Ben created lead Acme Roofing')
   })
 
+  it('summarizes a bulk lead import', () => {
+    expect(buildActivitySummary('lead.imported', {
+      label: 'Ben',
+      count: 12,
+    })).toBe('Ben imported 12 leads')
+    expect(buildActivitySummary('lead.imported', {
+      label: 'Ben',
+      count: 1,
+    })).toBe('Ben imported 1 lead')
+  })
+
   it('builds pipeline-level notification keys', () => {
     expect(buildNotificationCoalesceKey({
       type: 'pipelineDealStage',

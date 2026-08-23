@@ -6,7 +6,6 @@ import {
   canEdit,
   canDelete,
   canChangeVisibility,
-  applyResourceVisibilityPatch,
   activityAudienceForResource,
 } from './_lib/resourceContext.js'
 import {
@@ -14,11 +13,16 @@ import {
   actorLabel,
   teamIdsFromResource,
 } from './_lib/activityLog.js'
-import { loadTagRegistry, mergeEntityTags, syncTagMetaToCollaborators, collectDealTagMetaFromPipeline, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './_lib/tagHelpers.js'
-import { resolveAllowedLeadStatusIds, normalizeLeadStatusValue, normalizeLeadStatuses, DEFAULT_LEAD_STATUSES } from './_lib/leadStatuses.js'
-import { normalizeLeadContactsForStorage } from './_lib/leadContact.js'
-import { normalizeLeadAddressesForStorage } from './_lib/leadAddresses.js'
+import { loadTagRegistry, syncTagMetaToCollaborators, collectTagMetaFromEntities, hydrateUserRegistryFromTagMeta, adoptTagMetaIntoUserRegistry } from './_lib/tagHelpers.js'
+import { resolveAllowedLeadStatusIds } from './_lib/leadStatuses.js'
 import { getAllLeads, mutateLeads, deleteLeadFromStore } from './_lib/leadStore.js'
+import {
+  loadUserAppSettings,
+  leadDisplayName,
+  resolveLeadStatusRegistry,
+  resolveLeadCustomFieldDefs,
+  normalizeLeadInput,
+} from './_lib/normalizeLeadInput.js'
 import { isKvLockUnavailable, respondKvLockUnavailable } from './_lib/kvLockErrors.js'
 import { getLeadsForUser } from './_lib/leadRepo.js'
 import { deleteLeadContentFromStorage } from './_lib/leadCleanup.js'
@@ -33,44 +37,15 @@ import { projectLeadsForList } from './_lib/leadListProjection.js'
 import { paginateArray } from './_lib/pagination.js'
 import { kv, kvAvailable } from './_lib/kvBootstrap.js'
 import { beginIdempotent, finishIdempotent } from './_lib/idempotency.js'
-import { mergeCustomFieldValues, normalizeCustomFieldDefs } from './_lib/customFields.js'
-import {
-  planStatusAutoTasks,
-  normalizeAutoTaskFiredStatusIds,
-} from './_lib/statusAutoTasks.js'
+import { planStatusAutoTasks } from './_lib/statusAutoTasks.js'
 import { createTasksFromAutoTaskPlan } from './_lib/createStatusAutoTasks.js'
 
 /**
  * User-scoped leads CRM with team sharing v2. Firebase Bearer auth.
  */
 
-function userDataKey(uid) {
-  return `user_data_${uid}`
-}
-
-async function loadUserAppSettings(uid) {
-  if (!kvAvailable || !kv || !uid) return null
-  try {
-    const data = await kv.get(userDataKey(uid))
-    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    return parsed?.appSettings || null
-  } catch {
-    return null
-  }
-}
-
 const ACTIVITY_TYPES = new Set(['call', 'text', 'email', 'note', 'status', 'deal', 'photo', 'report', 'form'])
 const MAX_LEAD_ACTIVITY = 200
-
-function leadDisplayName(lead) {
-  const parts = [lead?.firstName, lead?.lastName].filter(Boolean)
-  if (parts.length) return parts.join(' ')
-  return (lead?.address || 'Lead').trim()
-}
-
-function normalizeLeadStatus(value, existing, allowedIds) {
-  return normalizeLeadStatusValue(value, existing, allowedIds)
-}
 
 function normalizeActivityEntry(entry, user, now) {
   if (!entry || typeof entry !== 'object') {
@@ -96,94 +71,6 @@ function normalizeActivityEntry(entry, user, now) {
     ...(byEmail ? { byEmail } : {}),
     ...(byName ? { byName } : {}),
   }
-}
-
-function resolveLeadStatusRegistry(ctx, userAppSettings) {
-  if (ctx?.team?.leadStatuses?.length) return normalizeLeadStatuses(ctx.team.leadStatuses)
-  if (!ctx?.team && userAppSettings?.leadStatuses?.length) {
-    return normalizeLeadStatuses(userAppSettings.leadStatuses)
-  }
-  return normalizeLeadStatuses(DEFAULT_LEAD_STATUSES)
-}
-
-function resolveLeadCustomFieldDefs(ctx, userAppSettings) {
-  if (ctx?.team) {
-    return normalizeCustomFieldDefs(ctx.team.leadCustomFields || [])
-  }
-  return normalizeCustomFieldDefs(userAppSettings?.leadCustomFields || [])
-}
-
-function normalizeLeadInput(body, user, existing = null, ctx = null, tagRegistry = null, allowedStatusIds = null, fieldDefs = []) {
-  const now = new Date().toISOString()
-  const firstName = String(body.firstName ?? existing?.firstName ?? '').trim()
-  const lastName = String(body.lastName ?? existing?.lastName ?? '').trim()
-  if (!firstName && !lastName) throw new Error('First or last name is required')
-
-  const contact = normalizeLeadContactsForStorage(body, existing)
-  const addressFields = normalizeLeadAddressesForStorage(body, existing)
-
-  const base = {
-    id: existing?.id || `lead_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-    firstName,
-    lastName,
-    address: addressFields.address,
-    parcelId: addressFields.parcelId,
-    lat: addressFields.lat,
-    lng: addressFields.lng,
-    addressDetails: addressFields.addressDetails,
-    phone: contact.phone,
-    email: contact.email,
-    phones: contact.phones,
-    emails: contact.emails,
-    phoneDetails: contact.phoneDetails,
-    emailDetails: contact.emailDetails,
-    notes: body.notes !== undefined ? String(body.notes || '') : (existing?.notes ?? ''),
-    properties: addressFields.properties,
-    ownerId: existing?.ownerId || user.uid,
-    ownerEmail: existing?.ownerEmail || user.email,
-    sharedWith: existing?.sharedWith || [],
-    teamShares: existing?.teamShares || [],
-    teamId: existing?.teamId ?? ctx?.team?.id ?? null,
-    visibility: existing?.visibility || 'private',
-    sharedMemberUids: existing?.sharedMemberUids || [],
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-  }
-
-  const tags = mergeEntityTags(body, existing, tagRegistry, 'leads')
-  base.tagIds = tags.tagIds
-  base.tagMeta = tags.tagMeta
-
-  const allowedIds = allowedStatusIds || resolveAllowedLeadStatusIds(ctx, null)
-  const nextStatus = normalizeLeadStatus(body.status, existing, allowedIds)
-  base.status = nextStatus
-  if (body.status !== undefined && (!existing || nextStatus !== existing.status)) {
-    base.statusUpdatedAt = now
-  } else {
-    base.statusUpdatedAt = existing?.statusUpdatedAt || (existing?.createdAt || now)
-  }
-  base.activity = Array.isArray(existing?.activity) ? existing.activity : []
-  base.photos = body.photos !== undefined
-    ? (Array.isArray(body.photos) ? body.photos : existing?.photos || [])
-    : (existing?.photos || [])
-  base.files = body.files !== undefined
-    ? (Array.isArray(body.files) ? body.files : existing?.files || [])
-    : (existing?.files || [])
-
-  base.customFields = mergeCustomFieldValues(
-    body.customFields,
-    existing?.customFields,
-    fieldDefs,
-  )
-  // Server-managed; clients cannot clear or invent fired status ids.
-  base.autoTaskFiredStatusIds = normalizeAutoTaskFiredStatusIds(
-    existing?.autoTaskFiredStatusIds || [],
-  )
-
-  if (body.visibility !== undefined || body.sharedMemberUids !== undefined || body.teamShares !== undefined) {
-    return applyResourceVisibilityPatch(base, body, ctx)
-  }
-  return base
 }
 
 async function applyLeadStatusAutoTasks({ lead, existing, user, ctx, statusRegistry }) {
