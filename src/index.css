@@ -10205,3 +10205,96 @@ html.photo-native-camera-active #modal-root,
   border-color: rgba(255, 255, 255, 0.35);
   opacity: 0.92;
 }
+
+/* ---- Legal pages & consent ---- */
+
+.legal-page {
+  color: #111827;
+}
+
+.legal-page-inner {
+  line-height: 1.6;
+}
+
+.legal-section-body a {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-section-body a:hover {
+  color: #1e3a8a;
+}
+
+.legal-section-body ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.legal-section-body li {
+  margin: 0.35rem 0;
+}
+
+.legal-section-body li::marker {
+  color: #6b7280;
+}
+
+.legal-section-body h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 1rem 0 0.5rem;
+}
+
+.legal-meta-note {
+  margin-top: 1rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.legal-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  text-align: left;
+}
+
+.legal-consent input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.legal-consent input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.legal-consent-label {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #374151;
+  cursor: pointer;
+}
+
+.legal-consent-label a {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-consent-label a:hover {
+  color: #1e3a8a;
+}
+
+.form-fill-footer-inner--public-submit .legal-consent {
+  margin-bottom: 0.75rem;
+}
+
+.form-fill-footer-inner--public-submit .legal-consent-label {
+  color: #4b5563;
+}

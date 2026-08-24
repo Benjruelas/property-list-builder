@@ -5,6 +5,9 @@ import { Input } from './ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { useAuth } from '../contexts/AuthContext'
 import { isIosStandalone } from '../utils/isIosStandalone'
+import { LegalConsentCheckbox } from './legal/LegalConsentCheckbox'
+import { LegalFooterLinks } from './legal/LegalFooterLinks'
+import { showToast } from './ui/toast'
 
 function SignUpPasswordField({
   id,
@@ -55,6 +58,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [legalAccepted, setLegalAccepted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [iosStandalone, setIosStandalone] = useState(false)
   const { signup, signInWithGoogle, currentUser, loading: authLoading } = useAuth()
@@ -73,6 +77,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
       setConfirmPassword('')
       setShowPassword(false)
       setShowConfirmPassword(false)
+      setLegalAccepted(false)
     }
   }, [isOpen])
 
@@ -92,6 +97,11 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
     e.preventDefault()
     
     if (!email || !password || !confirmPassword) {
+      return
+    }
+
+    if (!legalAccepted) {
+      showToast('Please accept the Terms of Service and Privacy Policy.', 'error')
       return
     }
 
@@ -118,6 +128,10 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
   }
 
   const handleGoogleSignIn = async () => {
+    if (!legalAccepted) {
+      showToast('Please accept the Terms of Service and Privacy Policy.', 'error')
+      return
+    }
     setIsLoading(true)
     try {
       await signInWithGoogle()
@@ -206,10 +220,18 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
             disabled={isLoading}
           />
 
+          <LegalConsentCheckbox
+            id="signup-legal-consent"
+            variant="signup"
+            checked={legalAccepted}
+            onChange={setLegalAccepted}
+            disabled={isLoading}
+          />
+
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading || !email || !password || !confirmPassword}
+            disabled={isLoading || !email || !password || !confirmPassword || !legalAccepted}
           >
             {isLoading ? (
               <>
@@ -252,7 +274,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
               variant="ghost"
               className="w-full border border-white hover:bg-white/20"
               onClick={handleGoogleSignIn}
-              disabled={isLoading}
+              disabled={isLoading || !legalAccepted}
             >
               <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
                 <path
@@ -276,6 +298,8 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
             </Button>
           </>
         )}
+
+        <LegalFooterLinks className="mt-4" />
 
         {onSwitchToLogin && (
           <div className="text-center text-sm text-gray-600 mt-4">

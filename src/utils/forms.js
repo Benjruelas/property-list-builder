@@ -220,13 +220,13 @@ export async function downloadPublicFormPdf(formToken) {
   return await res.arrayBuffer()
 }
 
-export async function submitPublicForm(formToken, { pdfBase64, values }) {
+export async function submitPublicForm(formToken, { pdfBase64, values, consent }) {
   const token = String(formToken || '').trim()
   if (!token) throw new Error('Form link is missing')
   const res = await fetch(`${getApiBase()}/public-form`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, pdfBase64, values })
+    body: JSON.stringify({ token, pdfBase64, values, consent }),
   })
   if (!res.ok) {
     const err = await parseJsonSafe(res)

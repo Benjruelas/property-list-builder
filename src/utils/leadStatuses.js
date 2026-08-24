@@ -3,32 +3,20 @@
  */
 
 import { normalizeAutoTaskTemplates } from './statusAutoTasks'
+import { STATUS_COLOR_PALETTE, resolveStatusColor } from './statusColorPalette'
 
 export const DEFAULT_LEAD_STATUSES = [
-  { id: 'new', label: 'New', color: 'bg-slate-500/25 text-slate-200 border-slate-400/40' },
-  { id: 'contacted', label: 'Contacted', color: 'bg-blue-500/20 text-blue-200 border-blue-400/40' },
-  { id: 'qualified', label: 'Qualified', color: 'bg-amber-500/20 text-amber-200 border-amber-400/40' },
-  { id: 'converted', label: 'Converted', color: 'bg-green-500/20 text-green-200 border-green-400/40' },
-  { id: 'lost', label: 'Lost', color: 'bg-red-500/20 text-red-200 border-red-400/40' },
+  { id: 'new', label: 'New', color: STATUS_COLOR_PALETTE[0] },
+  { id: 'contacted', label: 'Contacted', color: STATUS_COLOR_PALETTE[1] },
+  { id: 'qualified', label: 'Qualified', color: STATUS_COLOR_PALETTE[2] },
+  { id: 'converted', label: 'Converted', color: STATUS_COLOR_PALETTE[3] },
+  { id: 'lost', label: 'Lost', color: STATUS_COLOR_PALETTE[4] },
 ]
 
 /** @deprecated use DEFAULT_LEAD_STATUSES */
 export const LEAD_STATUSES = DEFAULT_LEAD_STATUSES
 
 export const PROTECTED_LEAD_STATUS_IDS = new Set(['new', 'converted'])
-
-const STATUS_COLOR_PALETTE = [
-  'bg-slate-500/25 text-slate-200 border-slate-400/40',
-  'bg-blue-500/20 text-blue-200 border-blue-400/40',
-  'bg-amber-500/20 text-amber-200 border-amber-400/40',
-  'bg-green-500/20 text-green-200 border-green-400/40',
-  'bg-red-500/20 text-red-200 border-red-400/40',
-  'bg-purple-500/20 text-purple-200 border-purple-400/40',
-  'bg-cyan-500/20 text-cyan-200 border-cyan-400/40',
-  'bg-orange-500/20 text-orange-200 border-orange-400/40',
-  'bg-pink-500/20 text-pink-200 border-pink-400/40',
-  'bg-emerald-500/20 text-emerald-200 border-emerald-400/40',
-]
 
 export function slugifyLeadStatusId(label, existingIds = new Set()) {
   const base = String(label || '')
@@ -61,9 +49,8 @@ export function normalizeLeadStatuses(input) {
     if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
     if (!label || label.length > 40) continue
     const prev = byId.get(id) || defaultsById.get(id) || {}
-    const color = typeof raw.color === 'string' && raw.color.trim()
-      ? raw.color.trim()
-      : (prev.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length])
+    const fallback = prev.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length]
+    const color = resolveStatusColor(raw.color, fallback)
     const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
     byId.set(id, { id, label, color, autoTasks })
   }

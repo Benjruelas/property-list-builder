@@ -12,6 +12,7 @@ import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
 import { AppLoadingScreen } from '../AppLoadingScreen'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
+import { LegalFooterLinks } from '../legal/LegalFooterLinks'
 
 function resolvePhotoUrl(url) {
   return resolveApiUrl(url)
@@ -184,6 +185,8 @@ export function PublicReportPage({ token }) {
           url={data?.pdfDownloadUrl}
           fileName={`${report?.title || 'Photo Report'}.pdf`}
         />
+
+        <LegalFooterLinks className="mt-8 pb-6" />
       </div>
 
       <FilePreviewOverlay

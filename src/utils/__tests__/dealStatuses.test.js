@@ -46,6 +46,31 @@ describe('normalizeDealStatuses', () => {
     ])
     expect(result.find((s) => s.id === 'open')?.autoTasks?.[0]?.title).toBe('Kickoff')
   })
+
+  it('preserves a known palette color and falls back when missing or invalid', () => {
+    const pink = 'bg-pink-500/20 text-pink-200 border-pink-400/40'
+    const withColor = normalizeDealStatuses([
+      { id: 'open', label: 'Open', color: pink },
+      { id: 'closed', label: 'Closed' },
+    ])
+    expect(withColor.find((s) => s.id === 'open')?.color).toBe(pink)
+
+    const withoutColor = normalizeDealStatuses([
+      { id: 'open', label: 'Started' },
+      { id: 'closed', label: 'Closed' },
+    ])
+    expect(withoutColor.find((s) => s.id === 'open')?.color).toBe(
+      'bg-slate-500/25 text-slate-200 border-slate-400/40',
+    )
+
+    const invalid = normalizeDealStatuses([
+      { id: 'open', label: 'Open', color: 'totally-invalid' },
+      { id: 'closed', label: 'Closed' },
+    ])
+    expect(invalid.find((s) => s.id === 'open')?.color).toBe(
+      'bg-slate-500/25 text-slate-200 border-slate-400/40',
+    )
+  })
 })
 
 describe('resolveDealStatuses', () => {

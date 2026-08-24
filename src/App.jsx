@@ -71,6 +71,8 @@ const HailDataPanel = lazy(panelLazy.hailData)
 import { setCachedDealQuotes, getCachedDealQuotes } from './utils/quotes'
 import { PublicFormPage } from './components/forms/PublicFormPage'
 import { ResetPasswordPage } from './components/ResetPasswordPage'
+import { TermsOfServicePage } from './components/legal/TermsOfServicePage'
+import { PrivacyPolicyPage } from './components/legal/PrivacyPolicyPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
 import { PublicReportPage } from './components/reports/PublicReportPage'
 import { LeadPickerDialog } from './components/photos/LeadPickerDialog'
@@ -5142,6 +5144,7 @@ function App() {
         leadStatuses={leadStatuses}
         leadCustomFields={leadCustomFields}
         dealCustomFields={dealCustomFields}
+        dealStatuses={dealStatuses}
         isDealsDetailStandalone={isDealsDetailStandalone}
         editLeadId={editLead?.id ?? null}
         leadContactActionOpen={isLeadContactActionOpen}
@@ -5298,6 +5301,8 @@ export function AppWithPublicFormRoute() {
   const formToken = publicRoute?.type === 'form' ? publicRoute.token : null
   const quoteToken = publicRoute?.type === 'quote' ? publicRoute.token : null
   const reportToken = publicRoute?.type === 'report' ? publicRoute.token : null
+  const isTerms = publicRoute?.type === 'terms'
+  const isPrivacy = publicRoute?.type === 'privacy'
   const isResetPassword = publicRoute?.type === 'reset-password'
   // /s/{token} is normally served by the share-landing API. If the SPA loads it
   // (e.g. local vite), bounce into the authenticated claim flow.
@@ -5305,6 +5310,22 @@ export function AppWithPublicFormRoute() {
     const next = `/?share=${encodeURIComponent(publicRoute.token)}`
     window.location.replace(next)
     return null
+  }
+  if (isTerms) {
+    return (
+      <div className="h-[100dvh] overflow-hidden">
+        <TermsOfServicePage />
+        <ToastContainer />
+      </div>
+    )
+  }
+  if (isPrivacy) {
+    return (
+      <div className="h-[100dvh] overflow-hidden">
+        <PrivacyPolicyPage />
+        <ToastContainer />
+      </div>
+    )
   }
   if (isResetPassword) {
     return (

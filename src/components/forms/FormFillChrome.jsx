@@ -1,6 +1,8 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Maximize2, PenLine } from 'lucide-react'
 import { Button } from '../ui/button'
 import { PublicFormBrand, PublicFormBrandBar } from './PublicFormBrand'
+import { LegalConsentCheckbox } from '../legal/LegalConsentCheckbox'
+import { LegalFooterLinks } from '../legal/LegalFooterLinks'
 
 function FieldGuideControls({
   stepLabel,
@@ -97,6 +99,8 @@ export function FormFillChrome({
   progressPct,
   filledCount,
   submitReady,
+  legalAccepted,
+  onLegalAcceptedChange,
 }) {
   const showFillGuide = fillMode && currentField && !sigOpen && !sendOpen
 
@@ -199,7 +203,14 @@ export function FormFillChrome({
             <p className="form-fill-review-hint form-fill-review-hint--public">
               Review your form above, then submit.
             </p>
+            <LegalConsentCheckbox
+              id="public-form-legal-consent"
+              variant="form"
+              checked={legalAccepted}
+              onChange={onLegalAcceptedChange}
+            />
             {renderSubmitButton('form-fill-footer-btn form-fill-submit-btn--footer')}
+            <LegalFooterLinks className="mt-3" />
           </div>
         </footer>
       )

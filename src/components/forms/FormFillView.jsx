@@ -5,6 +5,7 @@ import { showToast } from '../ui/toast'
 import { cn } from '@/lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
 import { downloadFormPdf, bytesToBase64, downloadPublicFormPdf, submitPublicForm } from '../../utils/forms'
+import { buildLegalConsentPayload } from '../../legal/legalMeta'
 import { SendFormDialog } from './SendFormDialog'
 import { SignaturePadModal } from './SignaturePadModal'
 import { resolveFormUiLayout } from './formFillLayout'
@@ -60,6 +61,7 @@ export function FormFillView({
   const [sigFieldId, setSigFieldId] = useState(null)
   const [sendOpen, setSendOpen] = useState(false)
   const [sending, setSending] = useState(false)
+  const [legalAccepted, setLegalAccepted] = useState(false)
   /** Public forms start in fill mode; authenticated forms open in view mode first. */
   const [fillMode, setFillMode] = useState(isPublic)
 
@@ -705,6 +707,10 @@ export function FormFillView({
   }, [template.fields, values])
 
   const handlePublicSubmit = useCallback(async () => {
+    if (!legalAccepted) {
+      showToast('Please accept the terms before submitting.', 'error')
+      return
+    }
     const missing = validateRequired()
     if (missing.length > 0) {
       showToast(
@@ -725,6 +731,7 @@ export function FormFillView({
       await submitPublicForm(publicToken, {
         pdfBase64,
         values: stripValuesForSubmit(),
+        consent: buildLegalConsentPayload(),
       })
       onSubmitted?.()
     } catch (e) {
@@ -733,7 +740,7 @@ export function FormFillView({
     } finally {
       setSending(false)
     }
-  }, [flattenPdf, isFieldFilled, onSubmitted, onSubmittingChange, activeTourFields, publicToken, stripValuesForSubmit, validateRequired, values])
+  }, [flattenPdf, isFieldFilled, legalAccepted, onSubmitted, onSubmittingChange, activeTourFields, publicToken, stripValuesForSubmit, validateRequired, values])
 
   const getFilledValuesForInvite = useCallback(() => {
     const out = {}
@@ -752,6 +759,10 @@ export function FormFillView({
   const tryOpenSend = useCallback(() => {
     const missing = validateRequired()
     if (isPublic) {
+      if (!legalAccepted) {
+        showToast('Please accept the terms before submitting.', 'error')
+        return
+      }
       if (!fillMode) {
         enterFillMode(activeTourFields[0]?.id)
       }
@@ -782,6 +793,7 @@ export function FormFillView({
     handlePublicSubmit,
     isFieldFilled,
     isPublic,
+    legalAccepted,
     validateRequired,
     values,
   ])
@@ -806,9 +818,9 @@ export function FormFillView({
   const totalFields = activeTourFields.length
   const progressPct = totalFields > 0 ? Math.round((filledCount / totalFields) * 100) : 0
   const allRequiredFilled = useMemo(() => validateRequired().length === 0, [validateRequired])
-  const submitReady = allRequiredFilled && !loading && !loadingErr && !sending
-
-  const showSubmitControl = isPublic ? submitReady : true
+  const fieldsReady = allRequiredFilled && !loading && !loadingErr && !sending
+  const submitReady = isPublic ? fieldsReady && legalAccepted : fieldsReady
+  const showSubmitControl = isPublic ? fieldsReady : true
 
   // Recipient only: auto-fit for review once every field is complete.
   useEffect(() => {
@@ -831,7 +843,7 @@ export function FormFillView({
 
   // Re-fit after the submit footer appears so the form stays fully visible.
   useEffect(() => {
-    if (fillMode || !viewFitReady || !submitReady) return
+    if (fillMode || !viewFitReady || !showSubmitControl) return
     let cancelled = false
     ;(async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -842,7 +854,7 @@ export function FormFillView({
       setReviewFitZoom(z)
     })()
     return () => { cancelled = true }
-  }, [fillMode, viewFitReady, submitReady, computeViewModeZoom])
+  }, [fillMode, viewFitReady, showSubmitControl, computeViewModeZoom])
 
   // Vertically center when the form fits; otherwise align to top so nothing is clipped.
   useEffect(() => {
@@ -874,7 +886,7 @@ export function FormFillView({
       <Button
         variant={submitReady && isPublic ? 'default' : 'outline'}
         onClick={tryOpenSend}
-        disabled={loading || !!loadingErr || sending}
+        disabled={loading || !!loadingErr || sending || (isPublic && !legalAccepted)}
         className={cn(
           'share-dialog-btn shrink-0',
           inFooter
@@ -935,6 +947,8 @@ export function FormFillView({
     progressPct,
     filledCount,
     submitReady,
+    legalAccepted,
+    onLegalAcceptedChange: setLegalAccepted,
   }
 
   return (

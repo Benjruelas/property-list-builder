@@ -42,6 +42,31 @@ describe('normalizeLeadStatuses', () => {
     ])
     expect(result.map((status) => status.id)).toEqual(['new', 'converted'])
   })
+
+  it('preserves a known palette color and falls back when missing or invalid', () => {
+    const purple = 'bg-purple-500/20 text-purple-200 border-purple-400/40'
+    const withColor = normalizeLeadStatuses([
+      { id: 'new', label: 'New', color: purple },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(withColor.find((s) => s.id === 'new')?.color).toBe(purple)
+
+    const withoutColor = normalizeLeadStatuses([
+      { id: 'new', label: 'Fresh' },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(withoutColor.find((s) => s.id === 'new')?.color).toBe(
+      'bg-slate-500/25 text-slate-200 border-slate-400/40',
+    )
+
+    const invalid = normalizeLeadStatuses([
+      { id: 'new', label: 'New', color: 'not-a-real-color' },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(invalid.find((s) => s.id === 'new')?.color).toBe(
+      'bg-slate-500/25 text-slate-200 border-slate-400/40',
+    )
+  })
 })
 
 describe('resolveLeadStatuses', () => {

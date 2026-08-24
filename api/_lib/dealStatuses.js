@@ -1,9 +1,10 @@
 import { normalizeAutoTaskTemplates } from './statusAutoTasks.js'
+import { STATUS_COLOR_PALETTE, resolveStatusColor } from './statusColorPalette.js'
 
 export const DEFAULT_DEAL_STATUSES = [
-  { id: 'open', label: 'Open' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'closed', label: 'Closed' },
+  { id: 'open', label: 'Open', color: STATUS_COLOR_PALETTE[0] },
+  { id: 'pending', label: 'Pending', color: STATUS_COLOR_PALETTE[2] },
+  { id: 'closed', label: 'Closed', color: STATUS_COLOR_PALETTE[3] },
 ]
 
 export function normalizeDealStatuses(input) {
@@ -17,8 +18,11 @@ export function normalizeDealStatuses(input) {
     const label = String(raw.label || '').trim()
     if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
     if (!label || label.length > 40) continue
+    const previous = byId.get(id) || defaultsById.get(id) || {}
+    const fallback = previous.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length]
+    const color = resolveStatusColor(raw.color, fallback)
     const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
-    byId.set(id, { id, label, autoTasks })
+    byId.set(id, { id, label, color, autoTasks })
   }
 
   if (!byId.has('open')) byId.set('open', { ...defaultsById.get('open'), autoTasks: [] })

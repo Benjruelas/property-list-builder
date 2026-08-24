@@ -73,6 +73,14 @@ async function streamPdfFromR2(key) {
   return Buffer.concat(chunks)
 }
 
+function sanitizeLegalConsent(consent) {
+  if (!consent || typeof consent !== 'object') return null
+  const acceptedAt = typeof consent.acceptedAt === 'string' ? consent.acceptedAt.trim() : ''
+  const version = typeof consent.version === 'string' ? consent.version.trim().slice(0, 64) : ''
+  if (!acceptedAt || !version) return null
+  return { acceptedAt, version }
+}
+
 function stripSignatureValues(values, fields) {
   const stripped = {}
   const fieldsById = new Map((fields || []).map((f) => [f.id, f]))
@@ -190,7 +198,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { token, pdfBase64, values } = req.body || {}
+      const { token, pdfBase64, values, consent } = req.body || {}
       const normalizedToken = String(token || '').trim()
       if (!normalizedToken) return res.status(400).json({ error: 'token is required' })
 
@@ -264,7 +272,8 @@ export default async function handler(req, res) {
         source: 'public_link',
         inviteId: invite.id,
         submitterEmail: recipientEmail,
-        values: stripSignatureValues(mergedValues, template?.fields)
+        values: stripSignatureValues(mergedValues, template?.fields),
+        consent: sanitizeLegalConsent(consent),
       }
       appendSubmission(submission).catch(() => {})
 

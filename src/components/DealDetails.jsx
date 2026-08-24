@@ -24,6 +24,7 @@ import { TagPicker } from './tags/TagPicker'
 import { VisibilityBadge } from './ResourceSharePicker'
 import { normalizeResourceVisibility, visibilityLabel } from '@/utils/access'
 import { collectTagMetaFromEntities } from '@/utils/tags'
+import { getDealStatusMeta } from '@/utils/dealStatuses'
 import { PhotoGallery } from '@/photos/PhotoGallery'
 import { SendResourceShareDialog } from './share/SendResourceShareDialog'
 import { CustomFieldsEditor } from './CustomFieldsEditor'
@@ -79,6 +80,7 @@ export function DealDetails({
   canAccessPhotos = true,
   currentUser = null,
   dealCustomFields = [],
+  dealStatuses = [],
 }) {
   const d = closedRecord?.deal || deal
   const pipelineMeta = closedRecord?.closedFrom || pipeline
@@ -164,6 +166,7 @@ export function DealDetails({
   if (!d) return null
 
   const stageName = getColumnName(d.status, columns)
+  const stageColor = getDealStatusMeta(d.status, dealStatuses)?.color
   const timeStr = formatTimeInState(d)
   const isClosed = !!closedRecord
   const canShareDealExternally = !readOnly
@@ -313,7 +316,7 @@ export function DealDetails({
                       'inline-flex text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wide font-medium',
                       isClosed
                         ? 'bg-white/10 text-white/70 border-white/20'
-                        : 'bg-blue-500/20 text-blue-200 border-blue-400/40',
+                        : (stageColor || 'bg-blue-500/20 text-blue-200 border-blue-400/40'),
                     )}
                   >
                     {isClosed ? 'Closed' : stageName}

@@ -12,6 +12,7 @@ import {
 } from '@/utils/dealStatuses'
 import { cn } from '@/lib/utils'
 import { StatusAutoTasksEditor } from './StatusAutoTasksEditor'
+import { StatusColorPicker } from './StatusColorPicker'
 
 export function DealStatusesSettingsContent({
   isOpen,
@@ -40,6 +41,11 @@ export function DealStatusesSettingsContent({
 
   const updateLabel = useCallback((id, label) => {
     setDraft((rows) => rows.map((row) => (row.id === id ? { ...row, label } : row)))
+    setDirty(true)
+  }, [])
+
+  const updateColor = useCallback((id, color) => {
+    setDraft((rows) => rows.map((row) => (row.id === id ? { ...row, color } : row)))
     setDirty(true)
   }, [])
 
@@ -86,9 +92,9 @@ export function DealStatusesSettingsContent({
 
   const description = teamMembership
     ? (canEdit
-      ? 'Team members use these statuses on all deals. Renaming updates labels everywhere; removing a status moves existing deals to Open.'
+      ? 'Team members use these statuses on all deals. You can rename labels, pick colors, and add or remove statuses; removing a status moves existing deals to Open.'
       : `Statuses are set by your team admin for ${teamMembership.teamName || 'your team'}.`)
-    : 'Customize labels and add or remove statuses for your deals.'
+    : 'Customize labels, colors, and add or remove statuses for your deals.'
 
   return (
     <>
@@ -140,6 +146,11 @@ export function DealStatusesSettingsContent({
                   </Button>
                 )}
               </div>
+              <StatusColorPicker
+                value={row.color}
+                disabled={!canEdit}
+                onChange={(color) => updateColor(row.id, color)}
+              />
               <StatusAutoTasksEditor
                 autoTasks={row.autoTasks}
                 canEdit={canEdit}

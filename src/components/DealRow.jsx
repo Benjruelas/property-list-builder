@@ -8,6 +8,7 @@ import { DealProfitBadge } from './DealLineItemsSection'
 import { dealHasFinancials } from '@/utils/dealFinances'
 import { cn } from '@/lib/utils'
 import { CRM_LIST_ROW_STATUS_BADGE_CLASS } from './crm/crmListBadgeStyles'
+import { getDealStatusMeta } from '@/utils/dealStatuses'
 
 export const DEAL_LIST_ROW_CLASS =
   'map-panel-list-item leads-panel-list-item crm-deal-row flex flex-col px-3.5 py-3 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] transition-all cursor-pointer'
@@ -27,14 +28,14 @@ function resolveDealLead(deal, leads) {
   return { leadName, leadAddress, hasLead: !!(leadName || leadAddress) }
 }
 
-function DealStageBadge({ label, closed = false, className, title }) {
+function DealStageBadge({ label, closed = false, color, className, title }) {
   return (
     <span
       className={cn(
         CRM_LIST_ROW_STATUS_BADGE_CLASS,
         closed
           ? 'bg-white/10 text-white/70 border-white/20'
-          : 'bg-blue-500/20 text-blue-200 border-blue-400/40',
+          : (color || 'bg-blue-500/20 text-blue-200 border-blue-400/40'),
         className
       )}
       title={title || label}
@@ -64,9 +65,11 @@ export function DealRow({
   onClick,
   canSeeDealAmounts = true,
   tagRegistry,
+  dealStatuses = [],
   className,
 }) {
   const stageName = getColumnName(deal.status, columns)
+  const stageColor = getDealStatusMeta(deal.status, dealStatuses)?.color
   const timeStr = formatTimeInState(deal)
   const leadName = lead ? displayLeadName(lead) : (deal.leadName || '')
   const leadAddress = lead
@@ -104,7 +107,7 @@ export function DealRow({
               <div className="text-xs text-white/35 mt-0.5">No lead linked</div>
             )}
           </div>
-          <DealStageBadge label={stageName} />
+          <DealStageBadge label={stageName} color={stageColor} />
         </div>
 
         {pipelineTitle && (
@@ -139,7 +142,12 @@ export function DealRow({
         </div>
 
         <div className="crm-col-stage min-w-0">
-          <DealStageBadge label={stageName} className="max-w-full truncate" title={stageName} />
+          <DealStageBadge
+            label={stageName}
+            color={stageColor}
+            className="max-w-full truncate"
+            title={stageName}
+          />
         </div>
 
         <div className="crm-col-lead min-w-0">

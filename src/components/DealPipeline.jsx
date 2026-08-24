@@ -1311,6 +1311,7 @@ export function DealPipeline({
           currentUser={currentUser}
           canAccessPhotos={canAccessPhotos}
           dealCustomFields={dealCustomFields}
+          dealStatuses={dealStatuses}
         />
       )}
 

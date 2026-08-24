@@ -46,6 +46,12 @@ export function parsePublicRoute(pathname = '', search = '') {
   if (/^\/reset-password\/?$/.test(path)) {
     return { type: 'reset-password' }
   }
+  if (/^\/terms\/?$/.test(path)) {
+    return { type: 'terms' }
+  }
+  if (/^\/privacy\/?$/.test(path)) {
+    return { type: 'privacy' }
+  }
   const quoteMatch = path.match(/^\/q\/([^/?#]+)\/?$/)
   if (quoteMatch) {
     return { type: 'quote', token: decodeURIComponent(quoteMatch[1]) }

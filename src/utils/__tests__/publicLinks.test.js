@@ -20,6 +20,11 @@ describe('publicLinks', () => {
       .toBe('https://app.test/s/ShareTok1234567890abcd')
   })
 
+  it('parses legal pages as public routes', () => {
+    expect(parsePublicRoute('/terms', '')).toEqual({ type: 'terms' })
+    expect(parsePublicRoute('/privacy/', '')).toEqual({ type: 'privacy' })
+  })
+
   it('parses short path routes', () => {
     expect(parsePublicRoute('/q/Ab3xK9mP2r', '')).toEqual({ type: 'quote', token: 'Ab3xK9mP2r' })
     expect(parsePublicRoute('/r/H3nQw8zK2p', '')).toEqual({ type: 'report', token: 'H3nQw8zK2p' })

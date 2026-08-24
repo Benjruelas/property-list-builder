@@ -3,27 +3,15 @@
  */
 
 import { normalizeAutoTaskTemplates } from './statusAutoTasks'
+import { STATUS_COLOR_PALETTE, resolveStatusColor } from './statusColorPalette'
 
 export const DEFAULT_DEAL_STATUSES = [
-  { id: 'open', label: 'Open', color: 'bg-slate-500/25 text-slate-200 border-slate-400/40' },
-  { id: 'pending', label: 'Pending', color: 'bg-amber-500/20 text-amber-200 border-amber-400/40' },
-  { id: 'closed', label: 'Closed', color: 'bg-green-500/20 text-green-200 border-green-400/40' },
+  { id: 'open', label: 'Open', color: STATUS_COLOR_PALETTE[0] },
+  { id: 'pending', label: 'Pending', color: STATUS_COLOR_PALETTE[2] },
+  { id: 'closed', label: 'Closed', color: STATUS_COLOR_PALETTE[3] },
 ]
 
 export const PROTECTED_DEAL_STATUS_IDS = new Set(['open', 'closed'])
-
-const STATUS_COLOR_PALETTE = [
-  'bg-slate-500/25 text-slate-200 border-slate-400/40',
-  'bg-amber-500/20 text-amber-200 border-amber-400/40',
-  'bg-green-500/20 text-green-200 border-green-400/40',
-  'bg-blue-500/20 text-blue-200 border-blue-400/40',
-  'bg-purple-500/20 text-purple-200 border-purple-400/40',
-  'bg-cyan-500/20 text-cyan-200 border-cyan-400/40',
-  'bg-orange-500/20 text-orange-200 border-orange-400/40',
-  'bg-pink-500/20 text-pink-200 border-pink-400/40',
-  'bg-red-500/20 text-red-200 border-red-400/40',
-  'bg-emerald-500/20 text-emerald-200 border-emerald-400/40',
-]
 
 export function slugifyDealStatusId(label, existingIds = new Set()) {
   const base = String(label || '')
@@ -53,9 +41,8 @@ export function normalizeDealStatuses(input) {
     if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
     if (!label || label.length > 40) continue
     const previous = byId.get(id) || defaultsById.get(id) || {}
-    const color = typeof raw.color === 'string' && raw.color.trim()
-      ? raw.color.trim()
-      : (previous.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length])
+    const fallback = previous.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length]
+    const color = resolveStatusColor(raw.color, fallback)
     const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
     byId.set(id, { id, label, color, autoTasks })
   }

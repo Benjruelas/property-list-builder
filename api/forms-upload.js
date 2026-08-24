@@ -1,7 +1,8 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { authenticate } from './_lib/auth.js'
 import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
-import { canonicalFormPdfKey } from './_lib/formPdfKey.js'
+import { getAllFormTemplates } from './_lib/formTemplateStore.js'
+import { canonicalFormPdfKey, isWellFormedFormPdfKey } from './_lib/formPdfKey.js'
 
 /**
  * Vercel Serverless Function - form PDF upload/download via R2.
@@ -16,41 +17,6 @@ import { canonicalFormPdfKey } from './_lib/formPdfKey.js'
  */
 
 const MAX_PDF_BYTES = 6 * 1024 * 1024 // hard cap before Vercel rejects
-
-let kv = null
-let kvAvailable = false
-
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-  try {
-    const kvModule = await import('@vercel/kv')
-    kv = kvModule.kv
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-} else if (process.env.REDIS_URL) {
-  try {
-    const { createClient } = await import('redis')
-    kv = createClient({ url: process.env.REDIS_URL })
-    await kv.connect()
-    kvAvailable = true
-  } catch {
-    kvAvailable = false
-  }
-}
-
-const TEMPLATES_KV_KEY = 'user_form_templates'
-
-async function loadTemplatesSnapshot() {
-  if (!kvAvailable || !kv) return []
-  try {
-    const data = await kv.get(TEMPLATES_KV_KEY)
-    const parsed = typeof data === 'string' ? (data ? JSON.parse(data) : null) : data
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 let _s3
 function s3() {
@@ -68,6 +34,19 @@ function s3() {
 
 function sanitizeId(v) {
   return String(v || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 80)
+}
+
+async function streamPdf(res, key) {
+  const r = await s3().send(new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+  }))
+  const chunks = []
+  for await (const c of r.Body) chunks.push(c)
+  const body = Buffer.concat(chunks)
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Cache-Control', 'private, max-age=300')
+  return res.status(200).send(body)
 }
 
 export const config = {
@@ -118,55 +97,50 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      const key = String(req.query.key || '')
+      const key = String(req.query.key || '').trim()
       if (!key) return res.status(400).json({ error: 'key is required' })
-
-      // Key format: forms/{ownerUid}/{templateId}/original.pdf
-      const parts = key.split('/')
-      if (parts.length < 4 || parts[0] !== 'forms') {
+      if (!isWellFormedFormPdfKey(key)) {
         return res.status(400).json({ error: 'Malformed key' })
       }
+
+      const parts = key.split('/')
+      const keyOwnerUid = parts[1]
       const templateId = parts[2]
 
-      // Fast path: the requester is the owner by key prefix. This keeps
-      // local dev / single-user use unchanged even when KV is unavailable.
-      let allowed = key.startsWith(`forms/${user.uid}/`)
-
-      if (!allowed) {
-        // Share path: look up the template and verify access via the same
-        // helper the forms API uses (sharedWith email or team membership).
-        const [templates, allTeams] = await Promise.all([
-          loadTemplatesSnapshot(),
-          getAllTeams()
-        ])
-        const template = templates.find((t) => t.id === templateId)
-        if (template) {
-          const teamsIndex = fullTeamsIndex(allTeams)
-          if (resolveAccess(template, user, teamsIndex)) allowed = true
+      // Owner fast path: key lives under forms/{uid}/… — do not require a KV
+      // template row (local/dev and just-uploaded PDFs still work if KV lags).
+      if (keyOwnerUid === user.uid) {
+        try {
+          return await streamPdf(res, key)
+        } catch (e) {
+          if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) {
+            return res.status(404).json({ error: 'PDF not found' })
+          }
+          throw e
         }
       }
 
-      if (!allowed) {
+      // Share path: template must exist, key must be canonical, and requester
+      // must have sharedWith / team access.
+      const [templates, allTeams] = await Promise.all([
+        getAllFormTemplates(),
+        getAllTeams(),
+      ])
+      const template = templates.find((t) => t.id === templateId)
+      if (!template) {
         return res.status(403).json({ error: 'Forbidden' })
       }
-
-      const template = (await loadTemplatesSnapshot()).find((t) => t.id === templateId)
-      const canonical = template ? canonicalFormPdfKey(template.ownerId, template.id) : null
+      const canonical = canonicalFormPdfKey(template.ownerId, template.id)
       if (!canonical || key !== canonical) {
+        return res.status(403).json({ error: 'Forbidden' })
+      }
+      const teamsIndex = fullTeamsIndex(allTeams)
+      if (!resolveAccess(template, user, teamsIndex)) {
         return res.status(403).json({ error: 'Forbidden' })
       }
 
       try {
-        const r = await s3().send(new GetObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME,
-          Key: key,
-        }))
-        const chunks = []
-        for await (const c of r.Body) chunks.push(c)
-        const body = Buffer.concat(chunks)
-        res.setHeader('Content-Type', 'application/pdf')
-        res.setHeader('Cache-Control', 'private, max-age=300')
-        return res.status(200).send(body)
+        return await streamPdf(res, key)
       } catch (e) {
         if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) {
           return res.status(404).json({ error: 'PDF not found' })

@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { TeamSettingsSection } from './TeamSettingsSection'
 import { GoogleBusinessProfileSection } from './settings/GoogleBusinessProfileSection'
+import { LegalFooterLinks } from './legal/LegalFooterLinks'
 
 const MAP_STYLES = [
   { value: 'satellite', label: 'Satellite' },
@@ -716,6 +717,8 @@ export function SettingsPanel({
               )}
             </div>
           )}
+
+          <LegalFooterLinks className="mt-6 pt-4 border-t border-white/15 text-white/50 [&_a]:text-blue-300 [&_a:hover]:text-blue-200" />
         </div>
       </DialogContent>
     </Dialog>

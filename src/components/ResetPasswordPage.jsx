@@ -4,6 +4,7 @@ import { Loader2, CheckCircle2, AlertCircle, Lock } from 'lucide-react'
 import { auth } from '../config/firebase'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { LegalFooterLinks } from './legal/LegalFooterLinks'
 
 function parseResetParams() {
   if (typeof window === 'undefined') return { oobCode: null, email: null }
@@ -97,12 +98,14 @@ export function ResetPasswordPage() {
 
   const pageClass =
     'min-h-[100dvh] flex flex-col items-center justify-center bg-[#0a0a0a] text-white px-4 py-10'
+  const legalFooterClass = 'mt-8 text-white/50 [&_a]:text-blue-300 [&_a:hover]:text-blue-200'
 
   if (verifying) {
     return (
       <div className={pageClass} role="status" aria-live="polite">
         <Loader2 className="h-8 w-8 animate-spin text-white/70 mb-3" />
         <p className="text-sm text-white/60">Verifying reset link…</p>
+        <LegalFooterLinks className={legalFooterClass} />
       </div>
     )
   }
@@ -120,6 +123,7 @@ export function ResetPasswordPage() {
             <a href="/">Open KnockScout</a>
           </Button>
         </div>
+        <LegalFooterLinks className={legalFooterClass} />
       </div>
     )
   }
@@ -135,6 +139,7 @@ export function ResetPasswordPage() {
             <a href="/">Back to KnockScout</a>
           </Button>
         </div>
+        <LegalFooterLinks className={legalFooterClass} />
       </div>
     )
   }
@@ -203,6 +208,7 @@ export function ResetPasswordPage() {
           </Button>
         </form>
       </div>
+      <LegalFooterLinks className={legalFooterClass} />
     </div>
   )
 }

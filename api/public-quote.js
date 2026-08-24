@@ -22,6 +22,14 @@ import { buildQuotePublicPath } from './_lib/publicLinks.js'
 const stripeKey = process.env.STRIPE_SECRET_KEY
 const stripe = stripeKey ? new Stripe(stripeKey) : null
 
+function sanitizeLegalConsent(consent) {
+  if (!consent || typeof consent !== 'object') return null
+  const acceptedAt = typeof consent.acceptedAt === 'string' ? consent.acceptedAt.trim() : ''
+  const version = typeof consent.version === 'string' ? consent.version.trim().slice(0, 64) : ''
+  if (!acceptedAt || !version) return null
+  return { acceptedAt, version }
+}
+
 function resolveOrigin(req) {
   const proto = req.headers['x-forwarded-proto'] || 'https'
   const host = req.headers['x-forwarded-host'] || req.headers.host || ''
@@ -332,6 +340,7 @@ export default async function handler(req, res) {
           message,
           respondedAt: now,
           selectedOptionalIds: action === 'accept' ? selectedOptionalIds : undefined,
+          consent: action === 'accept' ? sanitizeLegalConsent(body.consent) : undefined,
         },
         acceptedLineIds: acceptedLineIds || quote.acceptedLineIds,
         acceptedSubtotal: acceptedTotals?.subtotal ?? quote.acceptedSubtotal,

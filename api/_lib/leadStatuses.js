@@ -1,11 +1,12 @@
 import { normalizeAutoTaskTemplates } from './statusAutoTasks.js'
+import { STATUS_COLOR_PALETTE, resolveStatusColor } from './statusColorPalette.js'
 
 export const DEFAULT_LEAD_STATUSES = [
-  { id: 'new', label: 'New' },
-  { id: 'contacted', label: 'Contacted' },
-  { id: 'qualified', label: 'Qualified' },
-  { id: 'converted', label: 'Converted' },
-  { id: 'lost', label: 'Lost' },
+  { id: 'new', label: 'New', color: STATUS_COLOR_PALETTE[0] },
+  { id: 'contacted', label: 'Contacted', color: STATUS_COLOR_PALETTE[1] },
+  { id: 'qualified', label: 'Qualified', color: STATUS_COLOR_PALETTE[2] },
+  { id: 'converted', label: 'Converted', color: STATUS_COLOR_PALETTE[3] },
+  { id: 'lost', label: 'Lost', color: STATUS_COLOR_PALETTE[4] },
 ]
 
 export function normalizeLeadStatuses(input) {
@@ -20,8 +21,11 @@ export function normalizeLeadStatuses(input) {
     const label = String(raw.label || '').trim()
     if (!id || !/^[a-z][a-z0-9_]{0,31}$/.test(id)) continue
     if (!label || label.length > 40) continue
+    const prev = byId.get(id) || defaultsById.get(id) || {}
+    const fallback = prev.color || STATUS_COLOR_PALETTE[byId.size % STATUS_COLOR_PALETTE.length]
+    const color = resolveStatusColor(raw.color, fallback)
     const autoTasks = normalizeAutoTaskTemplates(raw.autoTasks)
-    byId.set(id, { id, label, autoTasks })
+    byId.set(id, { id, label, color, autoTasks })
   }
 
   const ordered = [...byId.values()]

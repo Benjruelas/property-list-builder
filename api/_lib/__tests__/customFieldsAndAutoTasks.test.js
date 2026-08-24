@@ -123,6 +123,39 @@ describe('status autoTasks round-trip via normalizers', () => {
     ])
     expect(result.find((s) => s.id === 'open')?.autoTasks?.[0]?.title).toBe('Kickoff')
   })
+
+  it('preserves known status colors on the server', () => {
+    const cyan = 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40'
+    const leads = normalizeLeadStatuses([
+      { id: 'new', label: 'New', color: cyan },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(leads.find((s) => s.id === 'new')?.color).toBe(cyan)
+
+    const deals = normalizeDealStatuses([
+      { id: 'open', label: 'Open', color: cyan },
+      { id: 'closed', label: 'Closed' },
+    ])
+    expect(deals.find((s) => s.id === 'open')?.color).toBe(cyan)
+  })
+
+  it('falls back when status color is missing or unknown on the server', () => {
+    const leads = normalizeLeadStatuses([
+      { id: 'new', label: 'New', color: 'nope' },
+      { id: 'converted', label: 'Converted' },
+    ])
+    expect(leads.find((s) => s.id === 'new')?.color).toBe(
+      'bg-slate-500/25 text-slate-200 border-slate-400/40',
+    )
+
+    const deals = normalizeDealStatuses([
+      { id: 'open', label: 'Open' },
+      { id: 'closed', label: 'Closed' },
+    ])
+    expect(deals.find((s) => s.id === 'open')?.color).toBe(
+      'bg-slate-500/25 text-slate-200 border-slate-400/40',
+    )
+  })
 })
 
 describe('custom field value merge', () => {

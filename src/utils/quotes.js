@@ -178,11 +178,11 @@ export async function fetchPublicQuote(token) {
   return data
 }
 
-export async function respondToPublicQuote(token, { action, message, selectedOptionalIds }) {
+export async function respondToPublicQuote(token, { action, message, selectedOptionalIds, consent }) {
   const res = await fetch(`${getApiBase()}/public-quote`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, action, message, selectedOptionalIds }),
+    body: JSON.stringify({ token, action, message, selectedOptionalIds, consent }),
   })
   const data = await parseJsonSafe(res)
   if (!res.ok) throw Object.assign(new Error(data.error || 'Failed to submit response'), { status: res.status, data })

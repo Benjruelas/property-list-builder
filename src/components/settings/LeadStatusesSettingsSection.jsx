@@ -12,6 +12,7 @@ import {
 } from '@/utils/leadStatuses'
 import { cn } from '@/lib/utils'
 import { StatusAutoTasksEditor } from './StatusAutoTasksEditor'
+import { StatusColorPicker } from './StatusColorPicker'
 
 export function LeadStatusesSettingsContent({
   isOpen,
@@ -40,6 +41,11 @@ export function LeadStatusesSettingsContent({
 
   const updateLabel = useCallback((id, label) => {
     setDraft((rows) => rows.map((r) => (r.id === id ? { ...r, label } : r)))
+    setDirty(true)
+  }, [])
+
+  const updateColor = useCallback((id, color) => {
+    setDraft((rows) => rows.map((r) => (r.id === id ? { ...r, color } : r)))
     setDirty(true)
   }, [])
 
@@ -86,9 +92,9 @@ export function LeadStatusesSettingsContent({
 
   const description = teamMembership
     ? (canEdit
-      ? 'Team members use these statuses on all leads. Renaming updates labels everywhere; removing a status moves existing leads to New.'
+      ? 'Team members use these statuses on all leads. You can rename labels, pick colors, and add or remove statuses; removing a status moves existing leads to New.'
       : `Statuses are set by your team admin for ${teamMembership.teamName || 'your team'}.`)
-    : 'Customize labels and add or remove statuses for your leads.'
+    : 'Customize labels, colors, and add or remove statuses for your leads.'
 
   return (
     <>
@@ -140,6 +146,11 @@ export function LeadStatusesSettingsContent({
                   </Button>
                 )}
               </div>
+              <StatusColorPicker
+                value={row.color}
+                disabled={!canEdit}
+                onChange={(color) => updateColor(row.id, color)}
+              />
               <StatusAutoTasksEditor
                 autoTasks={row.autoTasks}
                 canEdit={canEdit}

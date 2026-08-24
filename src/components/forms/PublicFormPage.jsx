@@ -4,6 +4,7 @@ import { fetchPublicForm } from '../../utils/forms'
 import { cn } from '@/lib/utils'
 import { PublicFormBrandBar } from './PublicFormBrand'
 import { PublicFormSubmittingOverlay } from './PublicFormSubmittingOverlay'
+import { LegalFooterLinks } from '../legal/LegalFooterLinks'
 import { AppLoadingScreen } from '../AppLoadingScreen'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 
@@ -82,6 +83,7 @@ export function PublicFormPage({ token }) {
             <p className="public-form-status-text">
               Thank you. Your completed form has been sent securely. This link is no longer active.
             </p>
+            <LegalFooterLinks className="mt-6" />
           </div>
         </div>
       </div>

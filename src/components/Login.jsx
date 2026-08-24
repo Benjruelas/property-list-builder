@@ -5,6 +5,7 @@ import { Input } from './ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { useAuth } from '../contexts/AuthContext'
 import { isIosStandalone } from '../utils/isIosStandalone'
+import { LegalFooterLinks } from './legal/LegalFooterLinks'
 
 const SIGN_IN_ERROR = 'Incorrect email or password'
 
@@ -222,6 +223,8 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
             </div>
           </>
         )}
+
+        <LegalFooterLinks className="mt-4" />
 
         {onSwitchToSignUp && (
           <div className="text-center text-sm text-gray-600 mt-4">

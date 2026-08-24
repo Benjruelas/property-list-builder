@@ -12,6 +12,10 @@ import { PublicOwnerPreviewBackBar } from '../shared/PublicOwnerPreviewBackBar'
 import { shouldShowOwnerPreviewBack } from '@/utils/clientPreview'
 import { AppLoadingScreen } from '../AppLoadingScreen'
 import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
+import { LegalConsentCheckbox } from '../legal/LegalConsentCheckbox'
+import { LegalFooterLinks } from '../legal/LegalFooterLinks'
+import { buildLegalConsentPayload } from '../../legal/legalMeta'
+import { showToast } from '../ui/toast'
 
 export function PublicQuotePage({ token }) {
   const [loading, setLoading] = useState(true)
@@ -20,6 +24,7 @@ export function PublicQuotePage({ token }) {
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [selectedOptionalIds, setSelectedOptionalIds] = useState([])
+  const [legalAccepted, setLegalAccepted] = useState(false)
   const [paymentParam] = useState(() =>
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('payment') : null
   )
@@ -77,12 +82,17 @@ export function PublicQuotePage({ token }) {
   }
 
   const handleRespond = async (action) => {
+    if (action === 'accept' && !legalAccepted) {
+      showToast('Please accept the terms before accepting this quote.', 'error')
+      return
+    }
     setSubmitting(true)
     try {
       const res = await respondToPublicQuote(token, {
         action,
         message: message.trim(),
         selectedOptionalIds: action === 'accept' ? selectedOptionalIds : undefined,
+        consent: action === 'accept' ? buildLegalConsentPayload() : undefined,
       })
       setData((prev) => ({ ...prev, ...res.quote, status: res.status }))
       if (res.canPay) {
@@ -299,11 +309,21 @@ export function PublicQuotePage({ token }) {
               readOnly={isPreview}
               tabIndex={isPreview ? -1 : undefined}
             />
+            {canRespond && (
+              <LegalConsentCheckbox
+                id="public-quote-legal-consent"
+                variant="quote"
+                checked={legalAccepted}
+                onChange={setLegalAccepted}
+                disabled={submitting || isPreview}
+                className="mb-1"
+              />
+            )}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className={cn('relative', isPreview && 'pointer-events-none')}>
                 <button
                   type="button"
-                  disabled={submitting}
+                  disabled={submitting || !legalAccepted}
                   className="w-full py-3 px-4 rounded-lg bg-green-600 text-white font-medium text-sm hover:bg-green-700 disabled:opacity-50"
                   onClick={() => handleRespond('accept')}
                 >
@@ -363,6 +383,8 @@ export function PublicQuotePage({ token }) {
         {data.status === 'accepted' && data.paymentEnabled && !data.stripeConfigured && (
           <p className="text-sm text-gray-500 text-center mt-4">Contact the sender to complete payment.</p>
         )}
+
+        <LegalFooterLinks className="mt-8 pb-6" />
       </div>
     </div>
   )

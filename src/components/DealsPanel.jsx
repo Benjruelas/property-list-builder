@@ -107,6 +107,7 @@ export function DealsPanel({
   leadStatuses = [],
   dealCustomFields = [],
   leadCustomFields = [],
+  dealStatuses = [],
   isDealsDetailStandalone = false,
   editLeadId = null,
   leadContactActionOpen = false,
@@ -568,6 +569,7 @@ export function DealsPanel({
                         onClick={(d) => onOpenDealDetail?.(d.id, row.pipeline.id)}
                         canSeeDealAmounts={canSeeDealAmounts}
                         tagRegistry={tagRegistry}
+                        dealStatuses={dealStatuses}
                       />
                     )
                   ))}
@@ -693,6 +695,7 @@ export function DealsPanel({
           currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
           canAccessPhotos={canAccessPhotos}
           dealCustomFields={dealCustomFields}
+          dealStatuses={dealStatuses}
         />
       )}
 
@@ -767,6 +770,7 @@ export function DealsPanel({
           currentUser={currentUser || (currentUserId ? { uid: currentUserId } : null)}
           canAccessPhotos={canAccessPhotos}
           dealCustomFields={dealCustomFields}
+          dealStatuses={dealStatuses}
         />
       )}
     </>
