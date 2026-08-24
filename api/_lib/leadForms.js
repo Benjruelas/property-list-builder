@@ -1,5 +1,7 @@
-import { getAllInvites, getAllSubmissions, getAllTemplates } from './formInvites.js'
-import { fullTeamsIndex, resolveAccess } from './teams.js'
+import { getAllInvites, getAllSubmissions } from './formInvites.js'
+import { getAllTeams } from './teams.js'
+import { getAllFormTemplates } from './formTemplateStore.js'
+import { buildAccessContext, getResourceAccess, canView } from './resourceContext.js'
 
 function inviteStatusLabel(invite) {
   if (invite.status === 'submitted') return 'completed'
@@ -21,12 +23,12 @@ export async function listLeadFormActivityForUser(leadId, user, allTeams) {
   const [invites, submissions, templates] = await Promise.all([
     getAllInvites(),
     getAllSubmissions(),
-    getAllTemplates(),
+    getAllFormTemplates(),
   ])
-  const teamsIndex = fullTeamsIndex(allTeams)
+  const ctx = buildAccessContext(allTeams, user)
   const templateById = new Map(templates.map((t) => [t.id, t]))
   const visibleTemplateIds = new Set(
-    templates.filter((t) => resolveAccess(t, user, teamsIndex)).map((t) => t.id),
+    templates.filter((t) => canView(getResourceAccess(t, user, ctx))).map((t) => t.id),
   )
 
   const items = []

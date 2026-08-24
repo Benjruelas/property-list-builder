@@ -6,8 +6,9 @@ import {
   buildFromAddress,
   escapeHtml,
 } from './_lib/senderBranding.js'
-import { getAllTemplates } from './_lib/formInvites.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { getAllTeams } from './_lib/teams.js'
+import { getAllFormTemplates } from './_lib/formTemplateStore.js'
+import { buildAccessContext, getResourceAccess, canView } from './_lib/resourceContext.js'
 import { rateLimit } from './_lib/rateLimit.js'
 import { sanitizeHeader } from './_lib/emailSafety.js'
 
@@ -134,11 +135,11 @@ export default async function handler(req, res) {
 
     // Verify the caller actually has access to this template so submissions
     // can't be attributed to someone else's template.
-    const [templates, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
+    const [templates, allTeams] = await Promise.all([getAllFormTemplates(), getAllTeams()])
     const template = templates.find((t) => t.id === String(templateId))
     if (!template) return res.status(404).json({ error: 'Template not found' })
-    const templateAccess = resolveAccess(template, user, fullTeamsIndex(allTeams))
-    if (!templateAccess) {
+    const ctx = buildAccessContext(allTeams, user)
+    if (!canView(getResourceAccess(template, user, ctx))) {
       return res.status(403).json({ error: 'You do not have access to this template' })
     }
 

@@ -1,10 +1,11 @@
 import { Resend } from 'resend'
 import { requireAuth } from './_lib/apiAuth.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { getAllTeams } from './_lib/teams.js'
+import { getAllFormTemplates } from './_lib/formTemplateStore.js'
+import { buildAccessContext, getResourceAccess, canView } from './_lib/resourceContext.js'
 import {
   getAllInvites,
   saveAllInvites,
-  getAllTemplates,
   generateToken,
   INVITE_EXPIRY_DAYS,
   isValidEmail,
@@ -23,7 +24,8 @@ import {
  * Vercel Serverless Function - create a single-use public form invite link
  * and email it to a recipient via Resend.
  *
- * POST (auth'd): { templateId, recipientEmail, subject?, message? }
+ * POST (auth'd): { templateId, recipientEmail?, recipientPhone?, subject?, message?, skipEmail? }
+ * - skipEmail + no recipient → copy-link invite (anonymous one-time URL)
  */
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -74,8 +76,9 @@ export default async function handler(req, res) {
     const trimmedPhone = recipientPhone ? String(recipientPhone).replace(/\D/g, '').slice(-10) : ''
     const hasEmail = isValidEmail(trimmedEmail)
     const hasPhone = trimmedPhone.length >= 10
+    const linkOnly = skipEmail === true && !hasEmail && !hasPhone
 
-    if (!hasEmail && !hasPhone) {
+    if (!hasEmail && !hasPhone && !linkOnly) {
       return res.status(400).json({ error: 'Valid recipientEmail or recipientPhone is required' })
     }
     if (skipEmail !== true && !hasEmail) {
@@ -87,16 +90,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Email service not configured. Please set RESEND_API_KEY.' })
     }
 
-    const [templates, allTeams] = await Promise.all([getAllTemplates(), getAllTeams()])
+    const [templates, allTeams] = await Promise.all([getAllFormTemplates(), getAllTeams()])
     const template = templates.find((t) => t.id === String(templateId))
     if (!template) return res.status(404).json({ error: 'Template not found' })
     if (!template.originalPdfKey) {
       return res.status(400).json({ error: 'Template has no PDF source' })
     }
 
-    const teamsIndex = fullTeamsIndex(allTeams)
-    const access = resolveAccess(template, user, teamsIndex)
-    if (!access) {
+    const ctx = buildAccessContext(allTeams, user)
+    if (!canView(getResourceAccess(template, user, ctx))) {
       return res.status(403).json({ error: 'You do not have access to this template' })
     }
 
@@ -140,6 +142,7 @@ export default async function handler(req, res) {
       sentByUid: senderResult.uid || user.uid,
       sentByEmail: (senderResult.email || user.email || '').toLowerCase() || null,
       sentByName: branding?.senderName || null,
+      linkOnly: linkOnly || undefined,
     }
 
     const { invites: nextInvites } = hasEmail
@@ -157,13 +160,16 @@ export default async function handler(req, res) {
 
     if (shouldSendEmail) {
       const senderLabel = branding.senderName
+      const recipientLine = trimmedRecipient
+        ? `<p style="color:#666;font-size:13px;">This link is for ${escapeHtml(trimmedRecipient)} and expires in ${INVITE_EXPIRY_DAYS} days. It can only be used once.</p>`
+        : `<p style="color:#666;font-size:13px;">This link expires in ${INVITE_EXPIRY_DAYS} days and can only be used once.</p>`
       const innerHtml = `
       <p>${escapeHtml(senderLabel)} has asked you to complete a form: <strong>${escapeHtml(templateName)}</strong>.</p>
       ${isResend ? '<p><strong>This is a new link.</strong> Any previous link sent to this address for this form is no longer valid.</p>' : ''}
       ${prefillCount > 0 ? `<p>Some fields have already been filled in. Please complete the remaining fields.</p>` : ''}
       ${safeMessage ? `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>` : ''}
       <p><a href="${escapeHtml(formLink)}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Open form</a></p>
-      <p style="color:#666;font-size:13px;">This link is for ${escapeHtml(trimmedRecipient)} and expires in ${INVITE_EXPIRY_DAYS} days. It can only be used once.</p>
+      ${recipientLine}
     `
       const htmlBody = buildBrandedEmailHtml({ branding, bodyHtml: innerHtml })
 
