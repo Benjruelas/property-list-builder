@@ -33,27 +33,41 @@ export async function listLeadFormActivityForUser(leadId, user, allTeams) {
 
   const items = []
 
+  const submissionsByInviteId = new Map()
+  for (const submission of submissions) {
+    if (submission.inviteId) submissionsByInviteId.set(submission.inviteId, submission)
+  }
+
   for (const invite of invites) {
     if (String(invite.leadId || '') !== normalizedLeadId) continue
     if (!visibleTemplateIds.has(invite.templateId)) continue
     const template = templateById.get(invite.templateId)
+    const linked = submissionsByInviteId.get(invite.id)
+    const status = inviteStatusLabel(invite)
+    // Completed invite whose submission was deleted — don't keep a ghost row.
+    if (status === 'completed' && !linked) continue
     items.push({
       id: invite.id,
       kind: 'invite',
       templateId: invite.templateId,
       templateName: template?.name || 'Form',
-      status: inviteStatusLabel(invite),
+      status,
       at: invite.submittedAt || invite.viewTracking?.lastViewedAt || invite.createdAt,
       viewedAt: invite.viewTracking?.firstViewedAt || null,
       recipientEmail: invite.recipientEmail || null,
       recipientPhone: invite.recipientPhone || null,
       inviteId: invite.id,
+      hasPdf: !!(linked?.pdfKey),
+      submissionId: linked?.id || null,
+      pdfKey: linked?.pdfKey || null,
     })
   }
 
   for (const submission of submissions) {
     if (String(submission.leadId || '') !== normalizedLeadId) continue
     if (!visibleTemplateIds.has(submission.templateId)) continue
+    // Prefer the invite row when this submission came from a public invite already listed.
+    if (submission.inviteId && items.some((i) => i.inviteId === submission.inviteId)) continue
     const template = templateById.get(submission.templateId)
     items.push({
       id: submission.id,
@@ -65,6 +79,8 @@ export async function listLeadFormActivityForUser(leadId, user, allTeams) {
       recipientEmail: submission.recipientEmail || null,
       recipientPhone: submission.recipientPhone || null,
       submissionId: submission.id,
+      hasPdf: !!submission.pdfKey,
+      pdfKey: submission.pdfKey || null,
     })
   }
 

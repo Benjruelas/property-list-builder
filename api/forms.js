@@ -42,10 +42,26 @@ function clamp01(n) {
   return v
 }
 
+const BUILTIN_LEAD_KEYS = new Set([
+  'firstName', 'lastName', 'fullName', 'email', 'phone',
+  'address', 'street', 'cityStateZip', 'notes',
+])
+
+function normalizeLeadKey(raw, fieldType) {
+  const key = String(raw || '').trim().slice(0, 80)
+  if (!key) return undefined
+  // Only text/date fields can bind to lead attributes.
+  if (fieldType !== 'text' && fieldType !== 'date') return undefined
+  if (BUILTIN_LEAD_KEYS.has(key)) return key
+  if (/^cf_[a-z][a-z0-9_]{0,31}$/.test(key)) return key
+  return undefined
+}
+
 function normalizeField(f) {
   if (!f || typeof f !== 'object') return null
   const type = String(f.type || '').toLowerCase()
   if (!ALLOWED_FIELD_TYPES.has(type)) return null
+  const leadKey = normalizeLeadKey(f.leadKey, type)
   return {
     id: String(f.id || `field_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`),
     type,
@@ -55,7 +71,8 @@ function normalizeField(f) {
     width: clamp01(f.width),
     height: clamp01(f.height),
     label: String(f.label || '').slice(0, 200),
-    required: !!f.required
+    required: !!f.required,
+    ...(leadKey ? { leadKey } : {}),
   }
 }
 

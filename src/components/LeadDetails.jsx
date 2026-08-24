@@ -100,6 +100,7 @@ import {
 } from '@/utils/leadFiles'
 import { StorageUsageBar } from './ui/StorageUsageBar'
 import { FilePreviewOverlay } from './ui/FilePreviewOverlay'
+import { FormCompletedView } from './forms/FormCompletedView'
 import { CustomFieldsEditor } from './CustomFieldsEditor'
 
 function getColumnName(colId, columns) {
@@ -304,9 +305,10 @@ export function LeadDetails({
 
   const [tasksNestedOverlay, setTasksNestedOverlay] = useState(false)
   const [photosNestedOverlay, setPhotosNestedOverlay] = useState(false)
-  const obscuredByNestedChild = obscuredByChild || tasksNestedOverlay || photosNestedOverlay
   const [uploading, setUploading] = useState(false)
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
+  const [previewFormSubmission, setPreviewFormSubmission] = useState(null)
+  const obscuredByNestedChild = obscuredByChild || tasksNestedOverlay || photosNestedOverlay || !!previewFormSubmission
   const fileInputRef = useRef(null)
   const menuTriggerRef = useRef(null)
   const createMenuTriggerRef = useRef(null)
@@ -1118,8 +1120,14 @@ export function LeadDetails({
                       <li key={`${item.kind}-${item.id}`}>
                         <button
                           type="button"
-                          disabled={!onOpenLeadForm}
-                          onClick={() => onOpenLeadForm?.(item, lead)}
+                          disabled={!onOpenLeadForm && !item.hasPdf}
+                          onClick={() => {
+                            if (item.hasPdf && item.pdfKey) {
+                              setPreviewFormSubmission(item)
+                              return
+                            }
+                            onOpenLeadForm?.(item, lead)
+                          }}
                           className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
                         >
                           <ClipboardList className="h-4 w-4 shrink-0 opacity-50" />
@@ -1201,6 +1209,51 @@ export function LeadDetails({
         items={leadFilePreviewItems}
         initialIndex={previewFileIndex ?? 0}
       />
+
+      <Dialog
+        open={!!previewFormSubmission?.pdfKey}
+        modal={false}
+        onOpenChange={(open) => { if (!open) setPreviewFormSubmission(null) }}
+      >
+        <DialogContent
+          className="map-panel forms-panel form-fill-panel fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full max-md:max-w-none"
+          showCloseButton={false}
+          topLayer
+          hideOverlay
+          suppressBackdrop
+          panelDockSlot={panelDockSlot}
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Completed form</DialogTitle>
+            <DialogDescription>View completed form PDF</DialogDescription>
+          </DialogHeader>
+          {previewFormSubmission?.pdfKey ? (
+            <FormCompletedView
+              title={previewFormSubmission.templateName || 'Completed form'}
+              fileName={`${previewFormSubmission.templateName || 'Form'}-completed.pdf`}
+              pdfKey={previewFormSubmission.pdfKey}
+              submissionId={previewFormSubmission.submissionId || previewFormSubmission.id}
+              onBack={() => setPreviewFormSubmission(null)}
+              onDeleted={() => {
+                const removed = previewFormSubmission
+                setPreviewFormSubmission(null)
+                setLeadForms((prev) => prev.filter((item) => {
+                  if (!removed) return true
+                  if (removed.pdfKey && item.pdfKey === removed.pdfKey) return false
+                  if (removed.submissionId && item.submissionId === removed.submissionId) return false
+                  if (removed.id && item.id === removed.id) return false
+                  if (removed.inviteId && item.inviteId === removed.inviteId) return false
+                  return true
+                }))
+                if (lead?.id) {
+                  invalidateCachedLeadForms(lead.id)
+                  fetchLeadForms(getToken, lead.id).then(setLeadForms).catch(() => {})
+                }
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <OptionsMenuDropdown
         open={createMenuOpen}

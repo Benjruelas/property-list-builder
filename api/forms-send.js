@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { requireAuth } from './_lib/apiAuth.js'
 import {
   resolveSendAsSender,
@@ -9,6 +10,7 @@ import {
 import { getAllTeams } from './_lib/teams.js'
 import { getAllFormTemplates } from './_lib/formTemplateStore.js'
 import { buildAccessContext, getResourceAccess, canView } from './_lib/resourceContext.js'
+import { canonicalFormSubmissionPdfKey } from './_lib/formPdfKey.js'
 import { rateLimit } from './_lib/rateLimit.js'
 import { sanitizeHeader } from './_lib/emailSafety.js'
 
@@ -181,10 +183,21 @@ export default async function handler(req, res) {
 
     // "Send me a copy" — BCC the signed-in user on the same message. Skip it
     // when the user is also the recipient (avoids a duplicate in their inbox).
-    const bccTarget = userEmail || senderEmail
-    const bccList = (sendMeCopy && bccTarget && bccTarget.toLowerCase() !== recipientEmail.trim().toLowerCase())
-      ? [bccTarget]
+    // Always include template creator (+ acting sender) so they retain a PDF copy.
+    const creatorEmail = typeof template.ownerEmail === 'string' && EMAIL_RE.test(template.ownerEmail.trim())
+      ? template.ownerEmail.trim().toLowerCase()
       : null
+    const bccTarget = userEmail || senderEmail
+    const recipientLower = recipientEmail.trim().toLowerCase()
+    const bccSet = new Set()
+    if (sendMeCopy && bccTarget && bccTarget.toLowerCase() !== recipientLower) {
+      bccSet.add(bccTarget.toLowerCase())
+    }
+    if (creatorEmail && creatorEmail !== recipientLower) bccSet.add(creatorEmail)
+    if (senderEmail && senderEmail.toLowerCase() !== recipientLower) {
+      bccSet.add(senderEmail.toLowerCase())
+    }
+    const bccList = bccSet.size > 0 ? [...bccSet] : null
 
     const { data, error } = await resend.emails.send({
       from: buildFromAddress(FROM_ADDRESS, branding.businessName),
@@ -201,10 +214,35 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to send email', message: error.message })
     }
 
+    const submissionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+    const pdfKey = canonicalFormSubmissionPdfKey(template.ownerId || user.uid, String(templateId), submissionId)
+    let storedPdfKey = null
+    if (pdfKey && process.env.R2_BUCKET_NAME && process.env.R2_ACCOUNT_ID) {
+      try {
+        const client = new S3Client({
+          region: 'auto',
+          endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+          credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+          },
+        })
+        await client.send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: pdfKey,
+          Body: buf,
+          ContentType: 'application/pdf',
+        }))
+        storedPdfKey = pdfKey
+      } catch (e) {
+        console.warn('forms-send PDF upload failed', e.message)
+      }
+    }
+
     const submission = {
-      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+      id: submissionId,
       templateId: String(templateId),
-      ownerId: user.uid,
+      ownerId: template.ownerId || user.uid,
       submittedAt: new Date().toISOString(),
       recipientEmail: recipientEmail.trim().toLowerCase(),
       recipientPhone: recipientPhone ? String(recipientPhone).replace(/\D/g, '').slice(-10) : null,
@@ -212,6 +250,7 @@ export default async function handler(req, res) {
       leadName: leadName ? String(leadName).trim().slice(0, 200) : null,
       sentCopyToSender: !!bccList,
       source: 'pdf_attachment',
+      pdfKey: storedPdfKey,
       values: values && typeof values === 'object' ? values : {}
     }
     appendSubmission(submission).catch(() => {})

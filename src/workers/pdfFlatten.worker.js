@@ -55,13 +55,16 @@ self.onmessage = async (evt) => {
         const value = raw == null ? '' : String(raw)
         if (!value) continue
         const fontSize = Math.max(6, Math.min(14, rect.height * 0.7))
+        const textWidth = helv.widthOfTextAtSize(value, fontSize) + 8
+        const maxGrow = Math.max(0, pw - rect.x)
+        const drawWidth = Math.min(maxGrow, Math.max(rect.width, textWidth))
         page.drawText(value, {
           x: rect.x + 2,
           y: rect.y + (rect.height - fontSize) / 2 + 1,
           size: fontSize,
           font: helv,
           color: rgb(0, 0, 0),
-          maxWidth: rect.width - 4,
+          maxWidth: Math.max(4, drawWidth - 4),
         })
       } else if (field.type === 'checkbox') {
         if (raw) {

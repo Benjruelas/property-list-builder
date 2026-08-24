@@ -2265,18 +2265,49 @@
   color: var(--map-panel-text-muted) !important;
 }
 
-/* Form fields rendered over a white PDF page need readable dark text,
-   overriding the glass-panel white-text defaults. */
+/* Form fill-in text sits on a white PDF — stay black in every theme.
+   Dark mode sets html color-scheme + .map-panel input { color: white },
+   which WebKit paints via -webkit-text-fill-color unless we override both. */
+.form-field-input,
+input.form-field-input,
+textarea.form-field-input,
+.map-panel .form-field-input,
+.map-panel input.form-field-input,
+.map-panel textarea.form-field-input,
+.list-panel .form-field-input,
+.list-panel input.form-field-input,
+.public-form-page .form-field-input {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  caret-color: #000 !important;
+  color-scheme: light;
+}
 .map-panel .form-field-input,
 .map-panel input.form-field-input,
 .map-panel textarea.form-field-input {
-  color: #111827 !important;
   background: rgba(239, 246, 255, 0.55) !important;
   border-color: rgba(59, 130, 246, 0.6) !important;
-  caret-color: #111827 !important;
 }
-.map-panel .form-field-input::placeholder {
-  color: rgba(17, 24, 39, 0.45) !important;
+.form-field-input::placeholder,
+.map-panel .form-field-input::placeholder,
+.public-form-page .form-field-input::placeholder {
+  color: rgba(0, 0, 0, 0.4) !important;
+  -webkit-text-fill-color: rgba(0, 0, 0, 0.4) !important;
+}
+.form-field-input::-webkit-datetime-edit,
+.form-field-input::-webkit-datetime-edit-fields-wrapper,
+.form-field-input::-webkit-datetime-edit-text,
+.form-field-input::-webkit-datetime-edit-month-field,
+.form-field-input::-webkit-datetime-edit-day-field,
+.form-field-input::-webkit-datetime-edit-year-field {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+}
+.form-field-input:-webkit-autofill,
+.form-field-input:-webkit-autofill:hover,
+.form-field-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #000 !important;
+  caret-color: #000;
 }
 
 /* Form field selection toolbar (Move / Delete / Sign).
@@ -5952,17 +5983,25 @@ body:has(.app-loading-screen--video) {
 .form-fill-fit-frame {
   display: flex;
   justify-content: center;
-  width: 100%;
+  align-items: flex-start;
   box-sizing: border-box;
+  /*
+   * Grow with the stage (max-content) but never narrower than the scroller (min-width 100%).
+   * Plain width:100% + justify center clips the left half when content overflows and scrollLeft=0.
+   */
+  min-width: 100%;
+  width: max-content;
 }
 .public-form-review-frame--fits,
 .form-fill-fit-frame--fits {
+  justify-content: center;
   align-items: center;
   min-height: 100%;
   padding: 0.75rem 0;
 }
 .public-form-review-frame--scroll,
 .form-fill-fit-frame--scroll {
+  justify-content: center;
   align-items: flex-start;
   min-height: auto;
   padding: 0.75rem 0 0.5rem;
@@ -5979,10 +6018,12 @@ body:has(.app-loading-screen--video) {
   flex-shrink: 0;
 }
 .public-form-page .form-field-input {
-  color: #111827 !important;
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
   background: transparent !important;
   border: none !important;
-  caret-color: #111827 !important;
+  caret-color: #000 !important;
+  color-scheme: light;
 }
 
 /* Form fill — smooth scroll when stepping between fields */
@@ -6250,6 +6291,15 @@ body:has(.app-loading-screen--video) {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
+}
+
+/* Preview step needs a fixed viewport so FormFillView can pan/zoom/scroll */
+.map-panel.send-form-dialog.send-form-dialog--preview,
+.map-panel.list-panel.fullscreen-panel.send-form-dialog.send-form-dialog--preview {
+  width: min(96vw, 56rem) !important;
+  max-width: min(96vw, 56rem) !important;
+  height: min(92vh, 900px) !important;
+  max-height: min(92vh, 900px) !important;
 }
 
 .map-panel-dialog.send-report-dialog[data-state='open'],

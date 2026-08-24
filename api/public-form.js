@@ -1,5 +1,5 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { canonicalFormPdfKey } from './_lib/formPdfKey.js'
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { canonicalFormPdfKey, canonicalFormSubmissionPdfKey } from './_lib/formPdfKey.js'
 import { Resend } from 'resend'
 import {
   findInviteByToken,
@@ -19,7 +19,7 @@ import { enforceIpRateLimit } from './_lib/rateLimit.js'
  *
  * GET  ?token=           → safe form metadata for fill UI
  * GET  ?token=&pdf=1     → stream original PDF
- * POST { token, pdfBase64, values } → submit completed form, email owner + recipient
+ * POST { token, pdfBase64, values, consent, submitterEmail? } → submit completed form
  */
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -71,6 +71,23 @@ async function streamPdfFromR2(key) {
   const chunks = []
   for await (const c of r.Body) chunks.push(c)
   return Buffer.concat(chunks)
+}
+
+async function uploadSubmissionPdf(key, buf) {
+  if (!key || !buf?.length) return false
+  if (!process.env.R2_BUCKET_NAME) return false
+  try {
+    await s3().send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      Body: buf,
+      ContentType: 'application/pdf',
+    }))
+    return true
+  } catch (e) {
+    console.warn('form submission PDF upload failed', e.message)
+    return false
+  }
 }
 
 function sanitizeLegalConsent(consent) {
@@ -194,11 +211,12 @@ export default async function handler(req, res) {
         status: viewedInvite.status,
         expiresAt: viewedInvite.expiresAt,
         viewedAt: viewedInvite.viewTracking?.firstViewedAt || null,
+        requiresSubmitterEmail: !isValidEmail(String(viewedInvite.recipientEmail || '').trim()),
       })
     }
 
     if (req.method === 'POST') {
-      const { token, pdfBase64, values, consent } = req.body || {}
+      const { token, pdfBase64, values, consent, submitterEmail } = req.body || {}
       const normalizedToken = String(token || '').trim()
       if (!normalizedToken) return res.status(400).json({ error: 'token is required' })
 
@@ -223,6 +241,23 @@ export default async function handler(req, res) {
         return res.status(413).json({ error: `PDF must be between 1 byte and ${MAX_PDF_BYTES} bytes` })
       }
 
+      // Validate invite + email gate before marking submitted.
+      const { invite: pendingInvite, error: inviteLookupError } = await findInviteByToken(normalizedToken)
+      if (inviteLookupError) {
+        return res.status(inviteErrorStatus(inviteLookupError)).json({
+          error: inviteErrorMessage(inviteLookupError),
+        })
+      }
+
+      const inviteRecipientEmail = (pendingInvite.recipientEmail || '').trim().toLowerCase()
+      const bodySubmitterEmail = String(submitterEmail || '').trim().toLowerCase()
+      const requiresSubmitterEmail = !isValidEmail(inviteRecipientEmail)
+      if (requiresSubmitterEmail && !isValidEmail(bodySubmitterEmail)) {
+        return res.status(400).json({
+          error: 'Email is required to receive a copy of the completed form',
+        })
+      }
+
       const markResult = await markInviteSubmitted(normalizedToken)
       if (!markResult.ok) {
         return res.status(inviteErrorStatus(markResult.reason)).json({
@@ -235,9 +270,18 @@ export default async function handler(req, res) {
       const templateName = template?.name || 'Form'
       const filename = `${sanitizeFilename(templateName)}_${Date.now()}.pdf`
 
-      const ownerEmail = (invite.ownerEmail || '').trim().toLowerCase()
-      const recipientEmail = (invite.recipientEmail || '').trim().toLowerCase()
-      const recipients = [...new Set([ownerEmail, recipientEmail].filter(isValidEmail))]
+      const ownerEmail = (invite.ownerEmail || template?.ownerEmail || '').trim().toLowerCase()
+      const senderEmail = (invite.sentByEmail || '').trim().toLowerCase()
+      const recipientEmail = isValidEmail(inviteRecipientEmail)
+        ? inviteRecipientEmail
+        : (isValidEmail(bodySubmitterEmail) ? bodySubmitterEmail : '')
+      const submitterEmailFinal = isValidEmail(bodySubmitterEmail)
+        ? bodySubmitterEmail
+        : recipientEmail
+
+      const recipients = [...new Set(
+        [ownerEmail, senderEmail, recipientEmail, submitterEmailFinal].filter(isValidEmail),
+      )]
 
       if (process.env.RESEND_API_KEY && recipients.length > 0) {
         const htmlBody = `
@@ -258,20 +302,32 @@ export default async function handler(req, res) {
       }
 
       const mergedValues = mergeInviteValues(invite, values)
+      const submissionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+      const pdfKey = canonicalFormSubmissionPdfKey(
+        invite.ownerId || template?.ownerId,
+        invite.templateId,
+        submissionId,
+      )
+      let storedPdfKey = null
+      if (pdfKey) {
+        const uploaded = await uploadSubmissionPdf(pdfKey, buf)
+        if (uploaded) storedPdfKey = pdfKey
+      }
 
       const submission = {
-        id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        id: submissionId,
         templateId: invite.templateId,
         ownerId: invite.ownerId,
         submittedAt: invite.submittedAt,
-        recipientEmail,
+        recipientEmail: recipientEmail || null,
         recipientPhone: invite.recipientPhone || null,
         leadId: invite.leadId || null,
         leadName: invite.leadName || null,
         sentCopyToSender: false,
         source: 'public_link',
         inviteId: invite.id,
-        submitterEmail: recipientEmail,
+        submitterEmail: submitterEmailFinal || null,
+        pdfKey: storedPdfKey,
         values: stripSignatureValues(mergedValues, template?.fields),
         consent: sanitizeLegalConsent(consent),
       }
@@ -281,7 +337,7 @@ export default async function handler(req, res) {
         const { notifyFormSubmitted } = await import('./_lib/pushUtils.js')
         await notifyFormSubmitted(ownerEmail, {
           formName: templateName,
-          submitterEmail: recipientEmail,
+          submitterEmail: submitterEmailFinal || recipientEmail,
           templateId: invite.templateId,
           inviteId: invite.id
         })
@@ -295,9 +351,9 @@ export default async function handler(req, res) {
         if (teamIds.length > 0) {
           await logTeamActivity({
             teamIds,
-            actor: { email: recipientEmail },
+            actor: { email: submitterEmailFinal || recipientEmail },
             type: 'form.submitted',
-            summary: `${recipientEmail || 'Someone'} submitted form "${templateName}"`,
+            summary: `${submitterEmailFinal || recipientEmail || 'Someone'} submitted form "${templateName}"`,
             entity: { kind: 'form', templateId: invite.templateId },
             nav: { type: 'form', templateId: invite.templateId },
           })

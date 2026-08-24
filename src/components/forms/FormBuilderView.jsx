@@ -13,6 +13,9 @@ import { Input } from '../ui/input'
 import { showToast } from '../ui/toast'
 import { useAuth } from '../../contexts/AuthContext'
 import { downloadFormPdf, updateTemplate } from '../../utils/forms'
+import { getSettings } from '@/utils/settings'
+import { resolveLeadCustomFields } from '@/utils/customFields'
+import { formLeadKeyOptions, normalizeFormLeadKey } from '@/utils/formLeadPrefill'
 import { FieldOverlay } from './FieldOverlay'
 
 const PALETTE = [
@@ -53,7 +56,13 @@ function useIsNarrowViewport() {
   return narrow
 }
 
-export function FormBuilderView({ template, onBack, onTemplateUpdated }) {
+export function FormBuilderView({
+  template,
+  onBack,
+  onTemplateUpdated,
+  teams = [],
+  teamMembership = null,
+}) {
   const { getToken } = useAuth()
   const isNarrow = useIsNarrowViewport()
   const [pdfDoc, setPdfDoc] = useState(null)
@@ -68,6 +77,11 @@ export function FormBuilderView({ template, onBack, onTemplateUpdated }) {
   const [draggingPaletteType, setDraggingPaletteType] = useState(null)
   const [builderZoom, setBuilderZoom] = useState(1)
   const [unscaledSize, setUnscaledSize] = useState({ w: 0, h: 0 })
+
+  const leadKeyOptions = useMemo(
+    () => formLeadKeyOptions(resolveLeadCustomFields({ settings: getSettings(), teams, teamMembership })),
+    [teams, teamMembership],
+  )
 
   const pageRefs = useRef({})
   const renderedPages = useRef(new Set())
@@ -698,6 +712,26 @@ export function FormBuilderView({ template, onBack, onTemplateUpdated }) {
               />
               Required
             </label>
+            {(selectedField.type === 'text' || selectedField.type === 'date') && (
+              <label className="text-xs text-gray-600">
+                Link to lead field
+                <select
+                  className="mt-1 h-9 w-full rounded-md border border-white/20 bg-black/20 px-2 text-sm"
+                  value={selectedField.leadKey || ''}
+                  onChange={(e) => {
+                    const leadKey = normalizeFormLeadKey(e.target.value)
+                    const next = { ...selectedField }
+                    if (leadKey) next.leadKey = leadKey
+                    else delete next.leadKey
+                    handleFieldChange(next)
+                  }}
+                >
+                  {leadKeyOptions.map((opt) => (
+                    <option key={opt.key || 'none'} value={opt.key}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -734,6 +768,26 @@ export function FormBuilderView({ template, onBack, onTemplateUpdated }) {
               className="mt-1 h-10"
             />
           </label>
+          {(selectedField.type === 'text' || selectedField.type === 'date') && (
+            <label className="form-builder-inspector-label text-xs">
+              Link to lead field
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-white/20 bg-black/20 px-2 text-sm"
+                value={selectedField.leadKey || ''}
+                onChange={(e) => {
+                  const leadKey = normalizeFormLeadKey(e.target.value)
+                  const next = { ...selectedField }
+                  if (leadKey) next.leadKey = leadKey
+                  else delete next.leadKey
+                  handleFieldChange(next)
+                }}
+              >
+                {leadKeyOptions.map((opt) => (
+                  <option key={opt.key || 'none'} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="flex items-center justify-between gap-3">
             <label className="form-builder-inspector-label flex items-center gap-2 text-sm min-h-[44px]">
               <input

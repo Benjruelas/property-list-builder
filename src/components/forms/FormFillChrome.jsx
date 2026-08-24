@@ -101,6 +101,9 @@ export function FormFillChrome({
   submitReady,
   legalAccepted,
   onLegalAcceptedChange,
+  requiresSubmitterEmail = false,
+  submitterEmail = '',
+  onSubmitterEmailChange,
 }) {
   const showFillGuide = fillMode && currentField && !sigOpen && !sendOpen
 
@@ -209,6 +212,19 @@ export function FormFillChrome({
               checked={legalAccepted}
               onChange={onLegalAcceptedChange}
             />
+            {requiresSubmitterEmail ? (
+              <label className="block text-left text-sm text-gray-700 mt-3">
+                Email for your copy of the completed form
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={submitterEmail}
+                  onChange={(e) => onSubmitterEmailChange?.(e.target.value)}
+                  placeholder="you@example.com"
+                  className="mt-1 w-full min-h-[44px] px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm"
+                />
+              </label>
+            ) : null}
             {renderSubmitButton('form-fill-footer-btn form-fill-submit-btn--footer')}
             <LegalFooterLinks className="mt-3" />
           </div>
@@ -222,16 +238,27 @@ export function FormFillChrome({
       return (
         <footer className="form-fill-footer form-fill-footer--fill shrink-0" aria-label="Form field navigation">
           <div className="form-fill-footer-inner form-fill-footer-inner--fill">
-            <div className="form-fill-footer-side form-fill-footer-side--left shrink-0">
+            <div className="form-fill-footer-side form-fill-footer-side--left shrink-0 flex items-center gap-1">
               <Button
                 variant="outline"
                 onClick={exitFillMode}
                 className="share-dialog-btn form-fill-action-bar-btn form-fill-footer-btn"
                 title="Return to view mode"
               >
-                <Maximize2 className="h-4 w-4 shrink-0" />
-                <span className="form-fill-footer-btn-label">Reset</span>
+                <Eye className="h-4 w-4 shrink-0" />
+                <span className="form-fill-footer-btn-label">View</span>
               </Button>
+              {needsViewReset ? (
+                <Button
+                  variant="outline"
+                  onClick={resetFillView}
+                  className="share-dialog-btn form-fill-action-bar-btn form-fill-footer-btn"
+                  title="Reset pan and zoom"
+                >
+                  <Maximize2 className="h-4 w-4 shrink-0" />
+                  <span className="form-fill-footer-btn-label">Reset</span>
+                </Button>
+              ) : null}
             </div>
             <div className="form-fill-footer-guide min-w-0 flex-1">
               <FieldGuideControls

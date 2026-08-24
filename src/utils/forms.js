@@ -220,17 +220,59 @@ export async function downloadPublicFormPdf(formToken) {
   return await res.arrayBuffer()
 }
 
-export async function submitPublicForm(formToken, { pdfBase64, values, consent }) {
+export async function submitPublicForm(formToken, { pdfBase64, values, consent, submitterEmail }) {
   const token = String(formToken || '').trim()
   if (!token) throw new Error('Form link is missing')
   const res = await fetch(`${getApiBase()}/public-form`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, pdfBase64, values, consent }),
+    body: JSON.stringify({ token, pdfBase64, values, consent, submitterEmail }),
   })
   if (!res.ok) {
     const err = await parseJsonSafe(res)
     throw new Error(err.error || 'Failed to submit form')
+  }
+  return parseJsonSafe(res)
+}
+
+export async function fetchFormSubmissions(getToken, templateId) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to view submissions')
+  const res = await fetch(
+    `${getApiBase()}/forms-submissions?templateId=${encodeURIComponent(templateId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to load submissions')
+  }
+  return parseJsonSafe(res)
+}
+
+export async function fetchFormSubmissionPdfBlob(getToken, pdfKey) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to view completed form')
+  return fetchAuthenticatedBlob(
+    getToken,
+    `${getApiBase()}/forms-submissions?pdfKey=${encodeURIComponent(pdfKey)}`,
+  )
+}
+
+export async function deleteFormSubmission(getToken, { submissionId, pdfKey } = {}) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to delete completed form')
+  const params = new URLSearchParams()
+  // Always send pdfKey when present — lead activity rows may use invite id as `id`.
+  if (pdfKey) params.set('pdfKey', pdfKey)
+  if (submissionId) params.set('submissionId', submissionId)
+  if (![...params.keys()].length) throw new Error('submissionId or pdfKey is required')
+  const res = await fetch(`${getApiBase()}/forms-submissions?${params}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to delete completed form')
   }
   return parseJsonSafe(res)
 }

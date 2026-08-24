@@ -118,6 +118,7 @@ export function PublicFormPage({ token }) {
             template={template}
             initialValues={prefillValues}
             lockedFieldIds={lockedFieldIds}
+            requiresSubmitterEmail={!!formData?.requiresSubmitterEmail}
             onSubmittingChange={setSubmitting}
             onSubmitted={() => setSubmitted(true)}
           />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { Loader2, CheckCircle2, Copy, Mail, MessageSquare, FileText, Link2 } from 'lucide-react'
 import {
   Dialog,
@@ -28,8 +28,11 @@ import { FORM_SEND_TAGS, replaceFormSendTags } from '@/utils/sendTemplateTags'
 import { getSettings } from '@/utils/settings'
 import { resolveLeadCustomFields } from '@/utils/customFields'
 import { withLeadFieldTags, withLeadFieldTagData } from '@/utils/leadSendTags'
+import { buildFormPrefillFromLead, mergeFormPrefill } from '@/utils/formLeadPrefill'
 import { LeadPickerField } from '../pickers/LeadPickerField'
 import { MessageTagEditor } from '../shared/MessageTagEditor'
+
+const FormFillViewLazy = lazy(() => import('./FormFillView'))
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -144,11 +147,17 @@ export function SendFormDialog({
   const [sentTo, setSentTo] = useState(null)
   const [lastLink, setLastLink] = useState('')
   const [sendMeCopy, setSendMeCopy] = useState(false)
+  const [step, setStep] = useState('compose') // compose | preview
+  const [previewValues, setPreviewValues] = useState({})
+  /** Stable seed for FormFillView — only set the first time we enter preview. */
+  const [previewSeed, setPreviewSeed] = useState({})
+  const [previewMounted, setPreviewMounted] = useState(false)
   const subjectEditorRef = useRef(null)
   const emailEditorRef = useRef(null)
   const textEditorRef = useRef(null)
   const [focusedField, setFocusedField] = useState(null)
   const focusBlurTimerRef = useRef(null)
+  const wasOpenRef = useRef(false)
   const canPdf = typeof preparePdf === 'function'
 
   const leadCustomFields = useMemo(
@@ -177,8 +186,8 @@ export function SendFormDialog({
   )
 
   const prefillCount = useMemo(
-    () => Object.keys(prefillValues || {}).length,
-    [prefillValues],
+    () => Object.keys(previewValues || prefillValues || {}).length,
+    [previewValues, prefillValues],
   )
 
   const tagData = useMemo(() => withLeadFieldTagData({
@@ -219,13 +228,29 @@ export function SendFormDialog({
   }
 
   const insertTag = (key) => {
-    if (focusedField === 'subject') subjectEditorRef.current?.insertTag(key)
-    else if (focusedField === 'text') textEditorRef.current?.insertTag(key)
-    else emailEditorRef.current?.insertTag(key)
+    const field = focusedField
+      || (tab === 'text' ? 'text' : 'body')
+    if (field === 'subject') {
+      subjectEditorRef.current?.focus?.()
+      subjectEditorRef.current?.insertTag(key)
+    } else if (field === 'text') {
+      textEditorRef.current?.focus?.()
+      textEditorRef.current?.insertTag(key)
+    } else {
+      emailEditorRef.current?.focus?.()
+      emailEditorRef.current?.insertTag(key)
+    }
   }
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    // Only reset when the dialog first opens — not when stepping back/forth or when
+    // parent re-renders with a new lead object reference.
+    if (wasOpenRef.current) return
+    wasOpenRef.current = true
     setTab('email')
     setDelivery(canPdf && initialDelivery === 'pdf' ? 'pdf' : 'link')
     setSelectedLead(lead || null)
@@ -235,6 +260,10 @@ export function SendFormDialog({
     setLastLink('')
     setSendMeCopy(false)
     setFocusedField(null)
+    setStep('compose')
+    setPreviewValues({})
+    setPreviewSeed({})
+    setPreviewMounted(false)
     setSubject(canPdf && initialDelivery === 'pdf' ? DEFAULT_PDF_SUBJECT : DEFAULT_LINK_SUBJECT)
     setBody(DEFAULT_LINK_NOTE)
     setTextBody(DEFAULT_TEXT_BODY)
@@ -268,6 +297,11 @@ export function SendFormDialog({
   const handleClose = () => {
     if (sending) return
     setSentTo(null)
+    setStep('compose')
+    setPreviewValues({})
+    setPreviewSeed({})
+    setPreviewMounted(false)
+    wasOpenRef.current = false
     onClose?.()
   }
 
@@ -293,6 +327,46 @@ export function SendFormDialog({
 
   const resolveTags = (text, extra = {}) => replaceFormSendTags(text, { ...tagData, ...extra })
 
+  /** Keep {{formLink}} for the server to fill after the invite URL exists. */
+  const resolveTagsForEmailInvite = (text) => resolveTags(text, { formLink: '{{formLink}}' })
+
+  const handleContinueToPreview = () => {
+    if (tab === 'email') {
+      const trimmed = recipient.trim()
+      if (!EMAIL_RE.test(trimmed)) {
+        showToast('Enter a valid recipient email', 'error')
+        return
+      }
+    } else {
+      const tel = (phone || '').replace(/[^\d+]/g, '')
+      if (tel.length < 10) {
+        showToast('Enter a valid phone number', 'error')
+        return
+      }
+      if (delivery === 'pdf') {
+        showToast('PDF attachments can only be emailed. Switch to Link to complete for text.', 'error')
+        return
+      }
+    }
+    if (!template?.id) return
+    if (!previewMounted) {
+      const fromLead = buildFormPrefillFromLead(template.fields || [], selectedLead, leadCustomFields)
+      const merged = mergeFormPrefill(fromLead, prefillValues || {})
+      setPreviewSeed(merged)
+      setPreviewValues(merged)
+      setPreviewMounted(true)
+    } else {
+      // Re-enter preview with the latest edits captured while on that step.
+      setPreviewSeed(previewValues)
+    }
+    setStep('preview')
+  }
+
+  const goBackToCompose = () => {
+    setPreviewSeed(previewValues)
+    setStep('compose')
+  }
+
   const logSent = async (summary, meta = {}) => {
     if (!selectedLead?.id) return
     try {
@@ -307,40 +381,56 @@ export function SendFormDialog({
     }
   }
 
-  const ensureInviteLink = async ({ email, phone: phoneVal, skipEmail = false } = {}) => {
+  const ensureInviteLink = async ({
+    email,
+    phone: phoneVal,
+    skipEmail = false,
+    fieldValues = null,
+  } = {}) => {
+    const filled = fieldValues && Object.keys(fieldValues).length > 0
+      ? fieldValues
+      : (Object.keys(previewValues || {}).length > 0 ? previewValues : (prefillValues || {}))
     const res = await createFormInvite(getToken, {
       templateId: template.id,
       recipientEmail: email || undefined,
       recipientPhone: phoneVal || undefined,
-      subject: resolveTags(subject) || undefined,
-      message: resolveTags(body) || undefined,
-      prefillValues: prefillCount > 0 ? prefillValues : undefined,
+      subject: resolveTagsForEmailInvite(subject) || undefined,
+      message: resolveTagsForEmailInvite(body) || undefined,
+      prefillValues: Object.keys(filled || {}).length > 0 ? filled : undefined,
       skipEmail,
       ...leadMeta,
     })
     return res.formLink
   }
 
-  const handleSendEmail = async () => {
+  const handleSendEmail = async (override = null) => {
     const trimmed = recipient.trim()
     if (!EMAIL_RE.test(trimmed)) {
       showToast('Enter a valid recipient email', 'error')
       return
     }
     if (!template?.id) return
+    const filled = override?.values || previewValues || prefillValues || {}
+    const stripVals = override?.stripValues || values || filled
     setSending(true)
     try {
-      const resolvedSubject = resolveTags(subject)
-      const resolvedMessage = resolveTags(body)
+      const resolvedSubject = delivery === 'pdf'
+        ? resolveTags(subject)
+        : resolveTagsForEmailInvite(subject)
+      const resolvedMessage = delivery === 'pdf'
+        ? resolveTags(body)
+        : resolveTagsForEmailInvite(body)
       if (delivery === 'pdf') {
-        if (!canPdf) {
+        if (!canPdf && !override?.preparePdf) {
           showToast('PDF send is not available here', 'error')
           return
         }
-        const pdfBase64 = await preparePdf()
+        const pdfBase64 = override?.preparePdf
+          ? await override.preparePdf()
+          : await preparePdf()
         const payload = buildSendPayload({
           template,
-          values: values || prefillValues || {},
+          values: stripVals || {},
           recipient: trimmed,
           subject: resolvedSubject || `Form: ${template.name || 'Form'}`,
           message: resolvedMessage,
@@ -369,7 +459,7 @@ export function SendFormDialog({
         recipientPhone: (phone || '').replace(/\D/g, '').slice(-10) || undefined,
         subject: resolvedSubject || undefined,
         message: resolvedMessage || undefined,
-        prefillValues: prefillCount > 0 ? prefillValues : undefined,
+        prefillValues: Object.keys(filled).length > 0 ? filled : undefined,
         ...leadMeta,
       })
       setLastLink(res.formLink || '')
@@ -388,7 +478,7 @@ export function SendFormDialog({
     }
   }
 
-  const handleSendText = async () => {
+  const handleSendText = async (override = null) => {
     const tel = (phone || '').replace(/[^\d+]/g, '')
     if (tel.length < 10) {
       showToast('Enter a valid phone number', 'error')
@@ -400,6 +490,7 @@ export function SendFormDialog({
     }
     if (!template?.id) return
 
+    const filled = override?.values || previewValues || prefillValues || {}
     let link = lastLink
     const email = recipient.trim()
     if (!link) {
@@ -409,6 +500,7 @@ export function SendFormDialog({
           phone: tel.slice(-10),
           email: EMAIL_RE.test(email) ? email : undefined,
           skipEmail: true,
+          fieldValues: Object.keys(filled).length > 0 ? filled : undefined,
         })
         setLastLink(link)
       } catch (e) {
@@ -431,14 +523,16 @@ export function SendFormDialog({
     onSent?.({ delivery: 'link', recipientPhone: tel.slice(-10), formLink: link })
   }
 
-  const handleCopyLink = async () => {
+  const handleCopyLink = async (override = null) => {
     try {
       let link = lastLink
       if (!link) {
         const email = recipient.trim()
+        const filled = override?.values || previewValues || prefillValues || {}
         link = await ensureInviteLink({
           email: EMAIL_RE.test(email) ? email : undefined,
           skipEmail: true,
+          fieldValues: Object.keys(filled).length > 0 ? filled : undefined,
         })
         setLastLink(link)
       }
@@ -449,19 +543,31 @@ export function SendFormDialog({
     }
   }
 
+  const handlePreviewConfirm = async (payload) => {
+    if (tab === 'text') {
+      await handleSendText(payload)
+      return
+    }
+    await handleSendEmail(payload)
+  }
+
   if (!template) return null
 
   const effectiveDelivery = tab === 'text' ? 'link' : delivery
+  const confirmSendLabel = tab === 'text'
+    ? 'Open SMS'
+    : (effectiveDelivery === 'pdf' ? 'Send PDF' : 'Send email')
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose() }}>
       <DialogContent
-        className="map-panel list-panel share-list-dialog forms-send-dialog send-form-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full md:max-w-2xl"
+        className={`map-panel list-panel share-list-dialog forms-send-dialog send-form-dialog fullscreen-panel flex flex-col min-h-0 overflow-hidden p-0 max-md:w-full ${step === 'preview' ? 'send-form-dialog--preview md:max-w-4xl' : 'md:max-w-2xl'}`}
         showCloseButton={false}
         focusOverlay
         topLayer
         confirmLayer
         data-send-form-dialog
+        data-send-form-step={sentTo ? 'done' : step}
       >
         {sentTo ? (
           <>
@@ -479,7 +585,7 @@ export function SendFormDialog({
             </DialogHeader>
             <div className="px-6 pb-4 space-y-3 flex-1 min-h-0 overflow-y-auto scrollbar-hide">
               {lastLink ? (
-                <Button variant="outline" className="send-form-btn w-full min-h-[44px]" onClick={handleCopyLink} disabled={sending}>
+                <Button variant="outline" className="send-form-btn w-full min-h-[44px]" onClick={() => handleCopyLink()} disabled={sending}>
                   <Copy className="h-4 w-4 mr-2" /> Copy link
                 </Button>
               ) : null}
@@ -493,6 +599,11 @@ export function SendFormDialog({
           </>
         ) : (
           <>
+            {/* Keep compose mounted while previewing so subject/message editors are not remounted. */}
+            <div
+              className={step === 'compose' ? 'contents' : 'hidden'}
+              aria-hidden={step !== 'compose'}
+            >
             <DialogHeader
               className="px-6 pt-6 pb-3 border-b border-white/10 flex-shrink-0 text-left"
               style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
@@ -583,9 +694,7 @@ export function SendFormDialog({
 
                   <div>
                     <label className={FIELD_LABEL} htmlFor="form-send-subject">Subject</label>
-                    {focusedField === 'subject' && (
-                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
-                    )}
+                    <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     <MessageTagEditor
                       ref={subjectEditorRef}
                       id="form-send-subject"
@@ -604,9 +713,7 @@ export function SendFormDialog({
 
                   <div>
                     <label className={FIELD_LABEL} htmlFor="form-send-note">Message</label>
-                    {focusedField === 'body' && (
-                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
-                    )}
+                    <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     <MessageTagEditor
                       ref={emailEditorRef}
                       id="form-send-note"
@@ -615,7 +722,7 @@ export function SendFormDialog({
                       tagData={tagData}
                       tags={sendTags}
                       className={MESSAGE_EDITOR}
-                      placeholder="Optional message"
+                      placeholder="Optional message — insert Form Link to include the URL"
                       disabled={sending}
                       onFocus={() => handleEditorFocus('body')}
                       onBlur={handleEditorBlur}
@@ -650,9 +757,7 @@ export function SendFormDialog({
 
                   <div>
                     <label className={FIELD_LABEL} htmlFor="form-send-text">Message</label>
-                    {focusedField === 'text' && (
-                      <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
-                    )}
+                    <TagInsertStrip tags={sendTags} onInsert={insertTag} disabled={sending} />
                     <MessageTagEditor
                       ref={textEditorRef}
                       id="form-send-text"
@@ -661,7 +766,7 @@ export function SendFormDialog({
                       tagData={tagData}
                       tags={sendTags}
                       className={TEXT_MESSAGE_EDITOR}
-                      placeholder="Text message"
+                      placeholder="Text message — include Form Link"
                       disabled={sending}
                       onFocus={() => handleEditorFocus('text')}
                       onBlur={handleEditorBlur}
@@ -672,48 +777,74 @@ export function SendFormDialog({
                   </p>
                 </>
               )}
-
-              {effectiveDelivery === 'link' ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="send-form-btn w-full min-h-[44px]"
-                  disabled={sending}
-                  onClick={handleCopyLink}
-                >
-                  <Copy className="h-4 w-4 mr-2" /> Copy link
-                </Button>
-              ) : null}
             </div>
 
             <DialogFooter
               className="px-6 pt-3 pb-6 border-t border-white/10 flex-shrink-0"
               style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
             >
-              {tab === 'email' ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
-                  disabled={sending}
-                  onClick={handleSendEmail}
-                >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
-                  {effectiveDelivery === 'pdf' ? 'Send PDF' : 'Send email'}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
-                  disabled={sending}
-                  onClick={handleSendText}
-                >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
-                  Open SMS
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="outline"
+                className="send-form-btn send-form-btn--primary w-full min-h-[44px]"
+                disabled={sending}
+                onClick={handleContinueToPreview}
+              >
+                Continue
+              </Button>
             </DialogFooter>
+            </div>
+
+            <div
+              className={step === 'preview' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : 'hidden'}
+              aria-hidden={step !== 'preview'}
+            >
+              <DialogHeader
+                className="px-4 pt-4 pb-2 border-b border-white/10 flex-shrink-0 text-left"
+                style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
+              >
+                <PanelHeader onBack={goBackToCompose} title="Preview form" icon={FileText} />
+                <DialogDescription className="text-sm opacity-80 mt-1">
+                  Review autofilled fields, then {confirmSendLabel.toLowerCase()}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                {previewMounted ? (
+                  <Suspense fallback={
+                    <div className="flex h-full items-center justify-center text-sm opacity-70">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading preview…
+                    </div>
+                  }>
+                    <FormFillViewLazy
+                      template={template}
+                      onBack={goBackToCompose}
+                      initialValues={previewSeed}
+                      onValuesChange={setPreviewValues}
+                      lead={selectedLead}
+                      leads={leads}
+                      teams={teams}
+                      teamMembership={teamMembership}
+                      confirmMode
+                      confirmLabel={confirmSendLabel}
+                      onConfirmSend={handlePreviewConfirm}
+                    />
+                  </Suspense>
+                ) : null}
+              </div>
+              {effectiveDelivery === 'link' && tab === 'email' ? (
+                <div className="px-4 py-3 border-t border-white/10 flex-shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="send-form-btn w-full min-h-[44px]"
+                    disabled={sending}
+                    onClick={() => handleCopyLink({ values: previewValues })}
+                  >
+                    <Copy className="h-4 w-4 mr-2" /> Copy link without emailing
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </>
         )}
       </DialogContent>

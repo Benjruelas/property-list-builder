@@ -157,6 +157,9 @@ export default async function handler(req, res) {
 
     const appOrigin = resolveOrigin(req)
     const formLink = `${appOrigin}/?form=${encodeURIComponent(token)}`
+    const fillFormLink = (text) => String(text || '').split('{{formLink}}').join(formLink)
+    const emailSubject = fillFormLink(safeSubject)
+    const emailMessage = fillFormLink(safeMessage)
 
     if (shouldSendEmail) {
       const senderLabel = branding.senderName
@@ -167,7 +170,7 @@ export default async function handler(req, res) {
       <p>${escapeHtml(senderLabel)} has asked you to complete a form: <strong>${escapeHtml(templateName)}</strong>.</p>
       ${isResend ? '<p><strong>This is a new link.</strong> Any previous link sent to this address for this form is no longer valid.</p>' : ''}
       ${prefillCount > 0 ? `<p>Some fields have already been filled in. Please complete the remaining fields.</p>` : ''}
-      ${safeMessage ? `<p>${escapeHtml(safeMessage).replace(/\n/g, '<br/>')}</p>` : ''}
+      ${emailMessage ? `<p>${escapeHtml(emailMessage).replace(/\n/g, '<br/>')}</p>` : ''}
       <p><a href="${escapeHtml(formLink)}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Open form</a></p>
       ${recipientLine}
     `
@@ -185,7 +188,7 @@ export default async function handler(req, res) {
         from: buildFromAddress(FROM_ADDRESS, branding.businessName),
         to: [trimmedRecipient],
         ...(replyTo ? { replyTo } : {}),
-        subject: safeSubject,
+        subject: emailSubject,
         html: htmlBody,
         headers: {
           'X-Entity-Ref-ID': invite.id,

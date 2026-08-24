@@ -43,10 +43,10 @@ export const REPORT_SEND_TAGS = [
 ]
 
 export const FORM_SEND_TAGS = [
+  { key: 'formLink', tag: '{{formLink}}', label: 'Form Link' },
   { key: 'firstName', tag: '{{firstName}}', label: 'First Name' },
   { key: 'lastName', tag: '{{lastName}}', label: 'Last Name' },
   { key: 'formName', tag: '{{formName}}', label: 'Form Name' },
-  { key: 'formLink', tag: '{{formLink}}', label: 'Form Link' },
   { key: 'senderName', tag: '{{senderName}}', label: 'Your Name' },
   { key: 'companyName', tag: '{{companyName}}', label: 'Company Name' },
 ]

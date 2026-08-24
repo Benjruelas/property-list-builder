@@ -26,7 +26,9 @@ export const MessageTagEditor = forwardRef(function MessageTagEditor(
   ref,
 ) {
   const editorRef = useRef(null)
-  const lastEmittedRef = useRef(value || '')
+  // Start unset so the first effect always hydrates the empty contentEditable from `value`.
+  // Initializing to `value` skipped setHtmlFromValue on remount and looked like a wipe.
+  const lastEmittedRef = useRef(undefined)
   const tagDataRef = useRef(tagData)
   const tagsRef = useRef(tags)
   const getPillTextRef = useRef(getPillText)
@@ -77,7 +79,7 @@ export const MessageTagEditor = forwardRef(function MessageTagEditor(
   }
 
   useEffect(() => {
-    if ((value || '') === lastEmittedRef.current) {
+    if (lastEmittedRef.current !== undefined && (value || '') === lastEmittedRef.current) {
       refreshPillLabels()
       return
     }

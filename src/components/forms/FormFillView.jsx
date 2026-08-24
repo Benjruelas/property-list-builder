@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Send, Loader2, CheckCircle2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
@@ -38,6 +38,13 @@ export function FormFillView({
   onFormSent,
   teams = [],
   teamMembership = null,
+  requiresSubmitterEmail = false,
+  /** When set, Send opens confirm callback instead of SendFormDialog (preview-before-send). */
+  confirmMode = false,
+  onConfirmSend = null,
+  confirmLabel = 'Send',
+  /** Optional: report field values upward (e.g. send preview step persistence). */
+  onValuesChange = null,
 }) {
   const isPublic = mode === 'public'
   const { getToken } = useAuth()
@@ -62,6 +69,7 @@ export function FormFillView({
   const [sendOpen, setSendOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [legalAccepted, setLegalAccepted] = useState(false)
+  const [submitterEmail, setSubmitterEmail] = useState('')
   /** Public forms start in fill mode; authenticated forms open in view mode first. */
   const [fillMode, setFillMode] = useState(isPublic)
 
@@ -111,6 +119,10 @@ export function FormFillView({
       return merged
     })
   }, [initialValues, lockedFieldKey, effectiveLockedSet])
+
+  useEffect(() => {
+    onValuesChange?.(values)
+  }, [values, onValuesChange])
 
   useEffect(() => {
     if (!isPublic || effectiveLockedSet.size === 0 || !activeTourFields.length) return
@@ -260,7 +272,8 @@ export function FormFillView({
     const pageEl = pageRefs.current[0]?.wrapper
     const inner = zoomInnerRef.current
     if (!scroller || !pageEl || pageEl.offsetWidth < 1) return 1
-    const padX = 16
+    // Match scroller padding (p-4 = 32px) plus a little slack so fit doesn't leave horizontal overflow.
+    const padX = 48
     const availableW = Math.max(120, scroller.clientWidth - padX)
     const fitZoomW = availableW / pageEl.offsetWidth
     if (!isPublic) {
@@ -276,13 +289,19 @@ export function FormFillView({
     return Math.min(FILL_ZOOM_MAX, Math.max(FIT_TO_SCREEN_MIN, fitZoom))
   }, [isPublic, pageSizes.length])
 
+  /** After fit/reset: top of form, horizontally centered in the scroller when wider than the viewport. */
+  const pinReviewScroll = useCallback(() => {
+    const scroller = scrollContainerRef.current
+    if (!scroller) return
+    const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth)
+    const left = maxLeft > 0 ? Math.round(maxLeft / 2) : 0
+    scroller.scrollTop = 0
+    scroller.scrollLeft = left
+    setScrollPos({ top: 0, left })
+  }, [])
+
   const applyReviewFit = useCallback(() => {
-    const s = scrollContainerRef.current
-    if (s) {
-      s.scrollTop = 0
-      s.scrollLeft = 0
-    }
-    setScrollPos({ top: 0, left: 0 })
+    pinReviewScroll()
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const z = computeViewModeZoom()
@@ -290,34 +309,28 @@ export function FormFillView({
         fillZoomRef.current = z
         setReviewFitZoom(z)
         requestAnimationFrame(() => {
-          const scroller = scrollContainerRef.current
-          if (scroller) {
-            scroller.scrollTop = 0
-            scroller.scrollLeft = 0
-          }
+          pinReviewScroll()
         })
       })
     })
-  }, [computeViewModeZoom])
+  }, [computeViewModeZoom, pinReviewScroll])
 
   const resetFillView = useCallback(() => {
     lastFocusedFieldRef.current = null
     formFocusZoomRef.current = null
-    const s = scrollContainerRef.current
-    if (s) {
-      s.scrollTop = 0
-      s.scrollLeft = 0
-    }
-    setScrollPos({ top: 0, left: 0 })
+    manualZoomRef.current = false
     if (fillMode) {
       requestAnimationFrame(() => {
         setFillZoom(1)
         fillZoomRef.current = 1
+        requestAnimationFrame(() => {
+          pinReviewScroll()
+        })
       })
       return
     }
     applyReviewFit()
-  }, [applyReviewFit, fillMode])
+  }, [applyReviewFit, fillMode, pinReviewScroll])
 
   const getFieldMetrics = useCallback((field, zoom) => {
     const pageEl = pageRefs.current[field.page]?.wrapper
@@ -417,7 +430,11 @@ export function FormFillView({
   }, [])
 
   const needsViewReset = useMemo(() => {
-    if (fillMode) return false
+    if (fillMode) {
+      if (Math.abs(fillZoom - 1) > 0.05) return true
+      if (scrollPos.top > 2 || scrollPos.left > 2) return true
+      return false
+    }
     if (Math.abs(fillZoom - reviewFitZoom) > 0.05) return true
     if (scrollPos.top > 2 || scrollPos.left > 2) return true
     return false
@@ -711,6 +728,13 @@ export function FormFillView({
       showToast('Please accept the terms before submitting.', 'error')
       return
     }
+    if (requiresSubmitterEmail) {
+      const email = String(submitterEmail || '').trim()
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showToast('Enter an email to receive your completed form PDF', 'error')
+        return
+      }
+    }
     const missing = validateRequired()
     if (missing.length > 0) {
       showToast(
@@ -732,6 +756,7 @@ export function FormFillView({
         pdfBase64,
         values: stripValuesForSubmit(),
         consent: buildLegalConsentPayload(),
+        submitterEmail: requiresSubmitterEmail ? String(submitterEmail).trim() : undefined,
       })
       onSubmitted?.()
     } catch (e) {
@@ -740,7 +765,20 @@ export function FormFillView({
     } finally {
       setSending(false)
     }
-  }, [flattenPdf, isFieldFilled, legalAccepted, onSubmitted, onSubmittingChange, activeTourFields, publicToken, stripValuesForSubmit, validateRequired, values])
+  }, [
+    flattenPdf,
+    isFieldFilled,
+    legalAccepted,
+    onSubmitted,
+    onSubmittingChange,
+    activeTourFields,
+    publicToken,
+    requiresSubmitterEmail,
+    stripValuesForSubmit,
+    submitterEmail,
+    validateRequired,
+    values,
+  ])
 
   const getFilledValuesForInvite = useCallback(() => {
     const out = {}
@@ -763,6 +801,13 @@ export function FormFillView({
         showToast('Please accept the terms before submitting.', 'error')
         return
       }
+      if (requiresSubmitterEmail) {
+        const email = String(submitterEmail || '').trim()
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showToast('Enter an email to receive your completed form PDF', 'error')
+          return
+        }
+      }
       if (!fillMode) {
         enterFillMode(activeTourFields[0]?.id)
       }
@@ -783,17 +828,32 @@ export function FormFillView({
       handlePublicSubmit()
       return
     }
+    if (confirmMode && typeof onConfirmSend === 'function') {
+      onConfirmSend({
+        values: getFilledValuesForInvite(),
+        stripValues: stripValuesForSubmit(),
+        preparePdf: preparePdfForSend,
+      })
+      return
+    }
     // Authenticated: always open the send dialog so the user can choose
     // link-to-complete (with prefills) or PDF attachment.
     setSendOpen(true)
   }, [
     activeTourFields,
+    confirmMode,
     enterFillMode,
     fillMode,
+    getFilledValuesForInvite,
     handlePublicSubmit,
     isFieldFilled,
     isPublic,
     legalAccepted,
+    onConfirmSend,
+    preparePdfForSend,
+    requiresSubmitterEmail,
+    stripValuesForSubmit,
+    submitterEmail,
     validateRequired,
     values,
   ])
@@ -819,7 +879,11 @@ export function FormFillView({
   const progressPct = totalFields > 0 ? Math.round((filledCount / totalFields) * 100) : 0
   const allRequiredFilled = useMemo(() => validateRequired().length === 0, [validateRequired])
   const fieldsReady = allRequiredFilled && !loading && !loadingErr && !sending
-  const submitReady = isPublic ? fieldsReady && legalAccepted : fieldsReady
+  const submitReady = isPublic
+    ? (fieldsReady && legalAccepted && (
+      !requiresSubmitterEmail || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(submitterEmail || '').trim())
+    ))
+    : fieldsReady
   const showSubmitControl = isPublic ? fieldsReady : true
 
   // Recipient only: auto-fit for review once every field is complete.
@@ -831,15 +895,24 @@ export function FormFillView({
   const publicReviewMode = isPublic && !fillMode
   const viewFitReady = !fillMode && unscaledSize.w > 0 && unscaledSize.h > 0
 
-  // View mode: keep form centered — clear scroll offset after zoom/layout changes.
+  // Vertically/horizontally center when the form fits; otherwise align top and center X via scroll.
   useEffect(() => {
     if (fillMode || !viewFitReady) return
     const scroller = scrollContainerRef.current
     if (!scroller) return
-    scroller.scrollLeft = 0
-    scroller.scrollTop = 0
-    setScrollPos({ top: 0, left: 0 })
-  }, [fillMode, viewFitReady, fillZoom, unscaledSize.w, unscaledSize.h])
+    const measure = () => {
+      const contentH = unscaledSize.h * fillZoom
+      const contentW = unscaledSize.w * fillZoom
+      const pad = 48
+      const fitsH = !contentH || contentH <= scroller.clientHeight - pad
+      const fitsW = !contentW || contentW <= scroller.clientWidth - pad
+      setReviewFitsViewport(fitsH && fitsW)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(scroller)
+    return () => ro.disconnect()
+  }, [fillMode, viewFitReady, unscaledSize.h, unscaledSize.w, fillZoom])
 
   // Re-fit after the submit footer appears so the form stays fully visible.
   useEffect(() => {
@@ -856,31 +929,19 @@ export function FormFillView({
     return () => { cancelled = true }
   }, [fillMode, viewFitReady, showSubmitControl, computeViewModeZoom])
 
-  // Vertically center when the form fits; otherwise align to top so nothing is clipped.
+  // View mode: keep the form horizontally centered (and top-aligned) after zoom/layout changes.
   useEffect(() => {
     if (fillMode || !viewFitReady) return
-    const scroller = scrollContainerRef.current
-    if (!scroller) return
-    const measure = () => {
-      const contentH = unscaledSize.h * fillZoom
-      const pad = 20
-      const fits = !contentH || contentH <= scroller.clientHeight - pad
-      setReviewFitsViewport(fits)
-      if (!fits) {
-        scroller.scrollTop = 0
-        setScrollPos({ top: 0, left: scroller.scrollLeft })
-      }
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(scroller)
-    return () => ro.disconnect()
-  }, [fillMode, viewFitReady, unscaledSize.h, fillZoom])
+    const id = requestAnimationFrame(() => {
+      pinReviewScroll()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [fillMode, viewFitReady, fillZoom, unscaledSize.w, unscaledSize.h, reviewFitsViewport, pinReviewScroll])
 
   const renderSubmitButton = (className) => {
     const label = isPublic
       ? (submitReady ? 'Submit now' : 'Submit')
-      : 'Send'
+      : (confirmMode ? confirmLabel : 'Send')
     const inFooter = className?.includes('form-fill-footer')
     return (
       <Button
@@ -897,10 +958,10 @@ export function FormFillView({
         )}
         title={isPublic
           ? (submitReady ? 'Review your form, then submit' : 'Submit form')
-          : 'Send form link or PDF'}
+          : (confirmMode ? confirmLabel : 'Send form link or PDF')}
         aria-label={isPublic
           ? (submitReady ? 'Submit completed form now' : 'Submit form')
-          : 'Send form link or PDF'}
+          : (confirmMode ? confirmLabel : 'Send form link or PDF')}
       >
         {sending ? (
           <Loader2 className="h-4 w-4 animate-spin shrink-0" />
@@ -949,6 +1010,9 @@ export function FormFillView({
     submitReady,
     legalAccepted,
     onLegalAcceptedChange: setLegalAccepted,
+    requiresSubmitterEmail,
+    submitterEmail,
+    onSubmitterEmailChange: setSubmitterEmail,
   }
 
   return (
@@ -967,10 +1031,13 @@ export function FormFillView({
         onScroll={handleScrollContainerScroll}
         className={cn(
           'fill-scroll-container scrollbar-hide flex-1 min-h-0 overscroll-behavior-contain bg-gray-200/50',
-          fillMode && 'p-4 overflow-y-auto overflow-x-auto',
-          !fillMode && 'form-fill-fit-scroll px-2 py-3',
+          // Authenticated / send-preview: allow pan both axes (view + edit).
+          // Public review keeps x locked via form-fill-fit-scroll.
+          (fillMode || !isPublic || confirmMode)
+            ? 'p-4 overflow-y-auto overflow-x-auto'
+            : 'form-fill-fit-scroll px-2 py-3',
         )}
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
       >
         {loading && (
           <div className="flex items-center justify-center py-20 text-sm text-gray-600">
@@ -1085,7 +1152,7 @@ export function FormFillView({
         initialDataUrl={sigFieldId ? values[sigFieldId] : null}
       />
 
-      {!isPublic && sendOpen && (
+      {!isPublic && !confirmMode && sendOpen && (
         <SendFormDialog
           open
           template={template}
@@ -1128,7 +1195,10 @@ function InteractiveFillField({
   onEnter,
 }) {
   const elRef = useRef(null)
+  const wrapperRef = useRef(null)
   const isReadOnly = viewOnly || locked
+  const canGrowWidth = field.type === 'text' || field.type === 'date'
+  const [displayWidthFrac, setDisplayWidthFrac] = useState(() => Number(field.width) || 0.2)
 
   useEffect(() => {
     if (isReadOnly || !isCurrent) return
@@ -1140,11 +1210,44 @@ function InteractiveFillField({
     return () => clearTimeout(t)
   }, [isCurrent, isReadOnly])
 
+  useLayoutEffect(() => {
+    if (!canGrowWidth) {
+      setDisplayWidthFrac(Number(field.width) || 0.2)
+      return
+    }
+    const wrapper = wrapperRef.current
+    const pageEl = wrapper?.offsetParent
+    const pageW = pageEl?.clientWidth || 0
+    const templateW = Math.max(0.01, Math.min(1, Number(field.width) || 0.2))
+    const maxW = Math.max(templateW, Math.min(1, 1 - (Number(field.x) || 0)))
+    if (!pageW) {
+      setDisplayWidthFrac(templateW)
+      return
+    }
+    const text = String(value || '').trim()
+    if (!text) {
+      setDisplayWidthFrac(templateW)
+      return
+    }
+    const style = window.getComputedStyle(wrapper)
+    const font = `${style.fontWeight || '400'} ${style.fontSize || '12px'} ${style.fontFamily || 'sans-serif'}`
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      setDisplayWidthFrac(templateW)
+      return
+    }
+    ctx.font = font
+    const neededPx = ctx.measureText(text).width + 16
+    const neededFrac = neededPx / pageW
+    setDisplayWidthFrac(Math.min(maxW, Math.max(templateW, neededFrac)))
+  }, [canGrowWidth, field.width, field.x, value, reviewTypography, field.height])
+
   const wrapperStyle = {
     position: 'absolute',
     left: `${field.x * 100}%`,
     top: `${field.y * 100}%`,
-    width: `${field.width * 100}%`,
+    width: `${(canGrowWidth ? displayWidthFrac : field.width) * 100}%`,
     height: `${field.height * 100}%`,
     display: 'flex',
     alignItems: 'center',
@@ -1164,13 +1267,14 @@ function InteractiveFillField({
         ? '1px dashed rgba(37,99,235,0.28)'
         : isCurrent ? '2px solid rgba(37,99,235,1)' : '1px dashed rgba(37,99,235,0.45)',
     borderRadius: 3,
-    overflow: 'hidden',
+    overflow: canGrowWidth ? 'visible' : 'hidden',
     zIndex: isCurrent ? 10 : locked ? 2 : 1,
     cursor: viewOnly && !locked ? 'pointer' : locked ? 'default' : undefined,
     boxShadow: isCurrent
       ? '0 0 0 4px rgba(59,130,246,0.18), 0 6px 16px rgba(37,99,235,0.35)'
       : 'none',
-    transition: 'box-shadow 0.25s ease, background 0.25s ease, border-color 0.25s ease',
+    transition: 'box-shadow 0.25s ease, background 0.25s ease, border-color 0.25s ease, width 0.15s ease',
+    color: '#000',
   }
 
   const handleWrapperClick = (e) => {
@@ -1215,7 +1319,9 @@ function InteractiveFillField({
           outline: 'none',
           fontSize: 'inherit',
           color: '#000',
+          WebkitTextFillColor: '#000',
           caretColor: '#000',
+          colorScheme: 'light',
           textAlign: 'center',
           pointerEvents: isReadOnly ? 'none' : 'auto',
         }}
@@ -1242,7 +1348,9 @@ function InteractiveFillField({
           outline: 'none',
           fontSize: 'inherit',
           color: '#000',
+          WebkitTextFillColor: '#000',
           caretColor: '#000',
+          colorScheme: 'light',
           textAlign: 'center',
           pointerEvents: isReadOnly ? 'none' : 'auto',
         }}
@@ -1300,6 +1408,7 @@ function InteractiveFillField({
 
   return (
     <div
+      ref={wrapperRef}
       style={wrapperStyle}
       className={isCurrent ? 'fill-field-current' : undefined}
       onClick={handleWrapperClick}

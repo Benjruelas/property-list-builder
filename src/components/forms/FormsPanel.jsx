@@ -36,9 +36,14 @@ import {
   fetchFormPdfBlob,
   downloadFormPdf,
   bytesToBase64,
+  fetchFormSubmissions,
 } from '../../utils/forms'
 import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 import { SendFormDialog } from './SendFormDialog'
+import { FormCompletedView } from './FormCompletedView'
+import { buildFormPrefillFromLead } from '@/utils/formLeadPrefill'
+import { resolveLeadCustomFields } from '@/utils/customFields'
+import { getSettings } from '@/utils/settings'
 
 const FormBuilderView = lazy(() => import('./FormBuilderView'))
 const FormFillView = lazy(() => import('./FormFillView'))
@@ -106,7 +111,8 @@ export function FormsPanel({
   const [openMenuId, setOpenMenuId] = useState(null)
   const menuTriggerRef = useRef(null)
   const hasNestedView = view !== 'list'
-  const formsSubViewPrimaryDetail = isFormsDetailStandalone && !formsFillOverLead
+  // Match reports: standalone fill/edit (including from a Lead) uses primary detail chrome.
+  const formsSubViewPrimaryDetail = isFormsDetailStandalone
   const listDialogOpen = mapListDialogOpen(isOpen && isFormsListOpen)
   const listObscuredByDetail = listPanelObscuredByDetail(isOpen && isFormsListOpen, hasNestedView)
 
@@ -114,6 +120,10 @@ export function FormsPanel({
   const [localShareState, setLocalShareState] = useState(null)
   const [linkTemplateId, setLinkTemplateId] = useState(null)
   const [linkPrefillValues, setLinkPrefillValues] = useState(null)
+  const [completedTemplateId, setCompletedTemplateId] = useState(null)
+  const [completedItems, setCompletedItems] = useState([])
+  const [completedLoading, setCompletedLoading] = useState(false)
+  const [previewSubmission, setPreviewSubmission] = useState(null)
   const [shareEmail, setShareEmail] = useState('')
   const [shareEmailValid, setShareEmailValid] = useState(null)
   const [shareEmailError, setShareEmailError] = useState('')
@@ -128,6 +138,22 @@ export function FormsPanel({
     }
     setPreviewTemplate(template)
   }, [])
+
+  const openCompletedForTemplate = useCallback(async (template) => {
+    if (!template?.id) return
+    setCompletedTemplateId(template.id)
+    setCompletedLoading(true)
+    setCompletedItems([])
+    try {
+      const data = await fetchFormSubmissions(getToken, template.id)
+      setCompletedItems(data.submissions || [])
+    } catch (e) {
+      showToast(e.message || 'Failed to load completed forms', 'error')
+      setCompletedTemplateId(null)
+    } finally {
+      setCompletedLoading(false)
+    }
+  }, [getToken])
 
   const refresh = useCallback(async ({ silent = false } = {}) => {
     if (!getToken) return
@@ -542,6 +568,9 @@ export function FormsPanel({
               <OptionsMenuItem onClick={() => { handlePreviewTemplate(t); setOpenMenuId(null) }}>
                 <Eye className="h-4 w-4" /> Preview PDF
               </OptionsMenuItem>
+              <OptionsMenuItem onClick={() => { openCompletedForTemplate(t); setOpenMenuId(null) }}>
+                <FileText className="h-4 w-4" /> Completed
+              </OptionsMenuItem>
               {owned && (
                 <OptionsMenuItem onClick={() => { onOpenEdit?.(t.id); setOpenMenuId(null) }}>
                   <Edit3 className="h-4 w-4" /> Edit
@@ -593,6 +622,8 @@ export function FormsPanel({
                 template={activeTemplate}
                 onBack={handleSubViewBack}
                 onTemplateUpdated={handleTemplateUpdated}
+                teams={teams}
+                teamMembership={teamMembership}
               />
             </Suspense>
           ) : (
@@ -628,6 +659,11 @@ export function FormsPanel({
                 onBack={handleSubViewBack}
                 lead={lead}
                 leads={leads}
+                initialValues={lead ? buildFormPrefillFromLead(
+                  activeTemplate.fields || [],
+                  lead,
+                  resolveLeadCustomFields({ settings: getSettings(), teams, teamMembership }),
+                ) : undefined}
                 onFormSent={onFormSent}
                 teams={teams}
                 teamMembership={teamMembership}
@@ -708,6 +744,91 @@ export function FormsPanel({
         }] : []}
         initialIndex={0}
       />
+
+      <Dialog
+        open={!!previewSubmission?.pdfKey}
+        modal={false}
+        onOpenChange={(open) => { if (!open) setPreviewSubmission(null) }}
+      >
+        <DialogContent
+          className={cn(FORM_SUB_PANEL_CLASS, 'form-fill-panel')}
+          showCloseButton={false}
+          topLayer
+          hideOverlay
+          suppressBackdrop
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Completed form</DialogTitle>
+            <DialogDescription>View completed form PDF</DialogDescription>
+          </DialogHeader>
+          {previewSubmission?.pdfKey ? (
+            <FormCompletedView
+              title={previewSubmission.templateName || 'Completed form'}
+              fileName={`${previewSubmission.templateName || 'Form'}-completed.pdf`}
+              pdfKey={previewSubmission.pdfKey}
+              submissionId={previewSubmission.id}
+              onBack={() => setPreviewSubmission(null)}
+              onDeleted={() => setPreviewSubmission(null)}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!completedTemplateId}
+        onOpenChange={(open) => { if (!open) setCompletedTemplateId(null) }}
+      >
+        <DialogContent
+          className="map-panel list-panel max-w-md"
+          showCloseButton
+          topLayer
+          confirmLayer
+        >
+          <DialogHeader>
+            <DialogTitle>Completed forms</DialogTitle>
+            <DialogDescription>
+              {templates.find((t) => t.id === completedTemplateId)?.name || 'Form'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto scrollbar-hide py-2">
+            {completedLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin opacity-60" />
+              </div>
+            ) : completedItems.length === 0 ? (
+              <p className="text-sm opacity-60 text-center py-6">No completed submissions yet.</p>
+            ) : (
+              completedItems.map((sub) => (
+                <button
+                  key={sub.id}
+                  type="button"
+                  className="w-full text-left p-3 rounded-lg border border-white/10 hover:bg-white/5 disabled:opacity-50"
+                  disabled={!sub.hasPdf}
+                  onClick={() => {
+                    if (!sub.hasPdf) {
+                      showToast('Completed PDF is not available for this submission', 'error')
+                      return
+                    }
+                    setPreviewSubmission({
+                      ...sub,
+                      templateName: templates.find((t) => t.id === completedTemplateId)?.name,
+                    })
+                    setCompletedTemplateId(null)
+                  }}
+                >
+                  <div className="text-sm font-medium truncate">
+                    {sub.leadName || sub.recipientEmail || sub.submitterEmail || 'Submission'}
+                  </div>
+                  <div className="text-xs opacity-60 mt-0.5">
+                    {sub.submittedAt ? new Date(sub.submittedAt).toLocaleString() : '—'}
+                    {sub.hasPdf ? '' : ' · PDF unavailable'}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

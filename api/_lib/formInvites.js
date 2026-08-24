@@ -97,6 +97,17 @@ export async function getAllSubmissions() {
   }
 }
 
+export async function saveAllSubmissions(submissions) {
+  const next = Array.isArray(submissions) ? submissions : []
+  fallbackSubmissions = next
+  if (!kvAvailable || !kv) return
+  try {
+    await kv.set(SUBMISSIONS_KV_KEY, next).catch(() => kv.set(SUBMISSIONS_KV_KEY, JSON.stringify(next)))
+  } catch (e) {
+    console.warn('form submissions KV save failed', e.message)
+  }
+}
+
 export function generateToken() {
   const bytes = new Uint8Array(32)
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
