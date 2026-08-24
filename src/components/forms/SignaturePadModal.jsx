@@ -257,10 +257,10 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
   if (isMobile && typeof document !== 'undefined') {
     const content = (
       <div
-        // z-index low enough that toasts (99999) sit above it.
+        // Above form-fill-panel (10021) and confirm dialogs (10041); below toasts (99999).
         // `pointerEvents: 'auto'` is required because #modal-root sets
         // pointer-events: none so clicks pass through when no modal is open.
-        className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/50"
+        className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50"
         style={{ pointerEvents: 'auto' }}
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose?.()
@@ -349,7 +349,8 @@ export function SignaturePadModal({ open, onClose, onSave, initialDataUrl = null
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose?.() }}>
-      <DialogContent className="max-w-md p-4" blurOverlay showCloseButton={false}>
+      {/* confirmLayer (10040/10041) sits above form-fill-panel (10021) so the pad is not covered */}
+      <DialogContent className="max-w-md p-4" blurOverlay showCloseButton={false} confirmLayer>
         <DialogHeader>
           <DialogTitle>Sign here</DialogTitle>
           <DialogDescription className="text-xs text-gray-500">
