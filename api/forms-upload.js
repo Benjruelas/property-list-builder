@@ -1,7 +1,8 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { authenticate } from './_lib/auth.js'
-import { getAllTeams, fullTeamsIndex, resolveAccess } from './_lib/teams.js'
+import { getAllTeams } from './_lib/teams.js'
 import { getAllFormTemplates } from './_lib/formTemplateStore.js'
+import { buildAccessContext, getResourceAccess, canView } from './_lib/resourceContext.js'
 import { canonicalFormPdfKey, isWellFormedFormPdfKey } from './_lib/formPdfKey.js'
 
 /**
@@ -11,9 +12,8 @@ import { canonicalFormPdfKey, isWellFormedFormPdfKey } from './_lib/formPdfKey.j
  *   Vercel JSON body cap is ~4.5MB so PDF source should be under ~3MB after base64 overhead.
  *   Returns { key, url } where url is the GET endpoint on this same function.
  * - GET  (auth'd): ?key=forms/{uid}/... → streams the PDF back. Access is
- *   granted to the template owner OR anyone with whom the template is
- *   shared (sharedWith email / teamShares), so shared users can render
- *   and fill the form.
+ *   granted to anyone who can view the template (same rules as /api/forms), so
+ *   team/shared collaborators can render and fill forms.
  */
 
 const MAX_PDF_BYTES = 6 * 1024 * 1024 // hard cap before Vercel rejects
@@ -47,6 +47,15 @@ async function streamPdf(res, key) {
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Cache-Control', 'private, max-age=300')
   return res.status(200).send(body)
+}
+
+/** True when the requested key belongs to this template. */
+function keyBelongsToTemplate(key, template) {
+  if (!template) return false
+  const registered = String(template.originalPdfKey || '').trim()
+  if (registered && registered === key) return true
+  const canonical = canonicalFormPdfKey(template.ownerId, template.id)
+  return !!(canonical && canonical === key)
 }
 
 export const config = {
@@ -120,22 +129,18 @@ export default async function handler(req, res) {
         }
       }
 
-      // Share path: template must exist, key must be canonical, and requester
-      // must have sharedWith / team access.
+      // Shared / team path: same visibility rules as GET /api/forms.
       const [templates, allTeams] = await Promise.all([
         getAllFormTemplates(),
         getAllTeams(),
       ])
       const template = templates.find((t) => t.id === templateId)
-      if (!template) {
+      if (!template || !keyBelongsToTemplate(key, template)) {
         return res.status(403).json({ error: 'Forbidden' })
       }
-      const canonical = canonicalFormPdfKey(template.ownerId, template.id)
-      if (!canonical || key !== canonical) {
-        return res.status(403).json({ error: 'Forbidden' })
-      }
-      const teamsIndex = fullTeamsIndex(allTeams)
-      if (!resolveAccess(template, user, teamsIndex)) {
+      const ctx = buildAccessContext(allTeams, user)
+      const access = getResourceAccess(template, user, ctx)
+      if (!canView(access)) {
         return res.status(403).json({ error: 'Forbidden' })
       }
 
