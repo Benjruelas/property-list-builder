@@ -339,7 +339,9 @@ export default async function handler(req, res) {
           formName: templateName,
           submitterEmail: submitterEmailFinal || recipientEmail,
           templateId: invite.templateId,
-          inviteId: invite.id
+          inviteId: invite.id,
+          submissionId: submission.id,
+          pdfKey: storedPdfKey,
         })
       } catch (e) {
         console.warn('form submit push notify', e.message)
@@ -354,8 +356,21 @@ export default async function handler(req, res) {
             actor: { email: submitterEmailFinal || recipientEmail },
             type: 'form.submitted',
             summary: `${submitterEmailFinal || recipientEmail || 'Someone'} submitted form "${templateName}"`,
-            entity: { kind: 'form', templateId: invite.templateId },
-            nav: { type: 'form', templateId: invite.templateId },
+            entity: {
+              kind: 'form',
+              templateId: invite.templateId,
+              inviteId: invite.id,
+              submissionId: submission.id,
+              pdfKey: storedPdfKey,
+            },
+            nav: {
+              type: 'formSubmitted',
+              templateId: invite.templateId,
+              inviteId: invite.id,
+              submissionId: submission.id,
+              pdfKey: storedPdfKey,
+              templateName,
+            },
           })
         }
       } catch (e) {

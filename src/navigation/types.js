@@ -120,6 +120,16 @@
  */
 
 /**
+ * @typedef {object} FormsCompletedFrame
+ * @property {'forms.completed'} type
+ * @property {string} [templateId]
+ * @property {string} [submissionId]
+ * @property {string} [pdfKey]
+ * @property {string} [inviteId]
+ * @property {string} [templateName]
+ */
+
+/**
  * @typedef {object} QuotesFrame
  * @property {'quotes'} type
  * @property {string} [tab]
@@ -198,7 +208,7 @@
  * @typedef {ActivityFrame | ListsFrame | ListsParcelsFrame | LeadsFrame | LeadsDetailFrame |
  *   DealsFrame | DealsDetailFrame | DealsClosedFrame | DealsLeadFrame |
  *   PipesFrame | PipesDealFrame | PipesLeadFrame | TasksFrame | ScheduleFrame | ScheduleLeadFrame |
- *   PathsFrame | FormsFrame | FormsEditFrame | FormsFillFrame |
+ *   PathsFrame | FormsFrame | FormsEditFrame | FormsFillFrame | FormsCompletedFrame |
  *   QuotesFrame | QuotesEditorFrame | QuotesDetailFrame |
  *   ReportsFrame | ReportsEditorFrame | ReportsDetailFrame |
  *   TeamsFrame | TeamsDetailFrame | SettingsFrame | SkipTracedFrame |

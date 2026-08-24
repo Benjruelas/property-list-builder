@@ -291,6 +291,10 @@ function App() {
     isFormsDetailStandalone,
     formsView,
     formsTemplateId,
+    formsCompletedSubmissionId,
+    formsCompletedPdfKey,
+    formsCompletedInviteId,
+    formsCompletedTemplateName,
     formsFillReturnToLead,
     formsEditReturnToLead,
     formsFillLeadId,
@@ -3731,9 +3735,12 @@ function App() {
       templateId: params.get('templateId') || undefined,
       leadId: params.get('leadId') || undefined,
       taskId: params.get('taskId') || undefined,
+      submissionId: params.get('submissionId') || undefined,
+      inviteId: params.get('inviteId') || undefined,
+      pdfKey: params.get('pdfKey') || undefined,
     })
     params.delete('notify')
-    ;['listId', 'pipelineId', 'pathId', 'teamId', 'templateId', 'leadId', 'taskId'].forEach((k) => params.delete(k))
+    ;['listId', 'pipelineId', 'pathId', 'teamId', 'templateId', 'leadId', 'taskId', 'submissionId', 'inviteId', 'pdfKey'].forEach((k) => params.delete(k))
     const qs = params.toString()
     window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`)
   }, [permissionsReady, handleNotificationNavigate])
@@ -4783,6 +4790,10 @@ function App() {
             onBack={handlePanelBack}
             formsView={formsView}
             formsTemplateId={formsTemplateId}
+            formsCompletedSubmissionId={formsCompletedSubmissionId}
+            formsCompletedPdfKey={formsCompletedPdfKey}
+            formsCompletedInviteId={formsCompletedInviteId}
+            formsCompletedTemplateName={formsCompletedTemplateName}
             formsFillLeadId={formsFillLeadId}
             formsFillReturnToLead={formsFillReturnToLead}
             formsEditReturnToFormPicker={formsEditReturnToFormPicker}

@@ -314,6 +314,7 @@ export function recipeOpenFormFillFromLeadDetail(currentStack, templateId, opts 
   const stripFormFrames = (f) =>
     f.type !== 'forms.fill' &&
     f.type !== 'forms.edit' &&
+    f.type !== 'forms.completed' &&
     f.type !== 'forms'
   const stripTransientList = (f) => f.type !== 'leads' && f.type !== 'forms'
 
@@ -344,6 +345,7 @@ export function recipeOpenFormEditFromLeadDetail(currentStack, templateId, opts 
   const stripFormFrames = (f) =>
     f.type !== 'forms.fill' &&
     f.type !== 'forms.edit' &&
+    f.type !== 'forms.completed' &&
     f.type !== 'forms'
   const stripTransientList = (f) => f.type !== 'leads' && f.type !== 'forms'
 

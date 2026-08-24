@@ -235,6 +235,24 @@ export async function submitPublicForm(formToken, { pdfBase64, values, consent, 
   return parseJsonSafe(res)
 }
 
+export async function fetchFormSubmission(getToken, { submissionId, inviteId } = {}) {
+  const token = await getToken()
+  if (!token) throw new Error('Sign in to view submissions')
+  const params = new URLSearchParams()
+  if (submissionId) params.set('submissionId', String(submissionId))
+  else if (inviteId) params.set('inviteId', String(inviteId))
+  else throw new Error('submissionId or inviteId is required')
+  const res = await fetch(`${getApiBase()}/forms-submissions?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const err = await parseJsonSafe(res)
+    throw new Error(err.error || 'Failed to load submission')
+  }
+  const data = await parseJsonSafe(res)
+  return data.submission || null
+}
+
 export async function fetchFormSubmissions(getToken, templateId) {
   const token = await getToken()
   if (!token) throw new Error('Sign in to view submissions')

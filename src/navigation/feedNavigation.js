@@ -128,7 +128,18 @@ export function feedDataToFrames(data, ctx, opts = {}) {
     }
   }
 
-  if (type === 'formsubmitted' || type === 'form') {
+  if (isSubmittedFormNav(type, data)) {
+    const frame = completedFormFrame(data)
+    if (frame) {
+      return {
+        ok: true,
+        frames: standaloneDetail ? [frame] : [{ type: 'forms' }, frame],
+      }
+    }
+    return { ok: true, frames: [{ type: 'forms' }] }
+  }
+
+  if (type === 'form' || type === 'formviewed') {
     if (data.templateId) {
       return {
         ok: true,
@@ -157,4 +168,24 @@ export function feedDataToFrames(data, ctx, opts = {}) {
 
 function normalizeFeedType(data) {
   return String(data?.type || '').toLowerCase()
+}
+
+function isSubmittedFormNav(type, data) {
+  return (
+    type === 'formsubmitted'
+    || type === 'form.submitted'
+    || !!(data?.submissionId || data?.pdfKey)
+  )
+}
+
+function completedFormFrame(data) {
+  if (!data?.templateId && !data?.submissionId && !data?.pdfKey && !data?.inviteId) return null
+  return {
+    type: 'forms.completed',
+    ...(data.templateId ? { templateId: data.templateId } : {}),
+    ...(data.submissionId ? { submissionId: data.submissionId } : {}),
+    ...(data.pdfKey ? { pdfKey: data.pdfKey } : {}),
+    ...(data.inviteId ? { inviteId: data.inviteId } : {}),
+    ...(data.templateName ? { templateName: data.templateName } : {}),
+  }
 }

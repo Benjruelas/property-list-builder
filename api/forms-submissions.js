@@ -39,6 +39,7 @@ function summarizeSubmission(sub) {
     submitterEmail: sub.submitterEmail || null,
     leadId: sub.leadId || null,
     leadName: sub.leadName || null,
+    inviteId: sub.inviteId || null,
     source: sub.source || null,
     hasPdf: !!sub.pdfKey,
     pdfKey: sub.pdfKey || null,
@@ -135,6 +136,20 @@ export default async function handler(req, res) {
         }
         throw e
       }
+    }
+
+    const inviteId = String(req.query.inviteId || '').trim()
+    if (inviteId) {
+      const sub = submissions.find((s) => s.inviteId === inviteId)
+      if (!sub || !visibleTemplateIds.has(sub.templateId)) {
+        return res.status(404).json({ error: 'Submission not found' })
+      }
+      return res.status(200).json({
+        submission: {
+          ...summarizeSubmission(sub),
+          templateName: templateById.get(sub.templateId)?.name || 'Form',
+        },
+      })
     }
 
     const submissionId = String(req.query.submissionId || '').trim()

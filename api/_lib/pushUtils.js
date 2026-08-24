@@ -406,7 +406,7 @@ export async function notifyNewPathShares(newEmails, { pathName, pathId, actorEm
   }
 }
 
-export async function notifyFormSubmitted(ownerEmail, { formName, submitterEmail, templateId, inviteId }) {
+export async function notifyFormSubmitted(ownerEmail, { formName, submitterEmail, templateId, inviteId, submissionId, pdfKey }) {
   const name = clip(formName) || 'Untitled form'
   const who = clip(submitterEmail, 40)
   await sendWebPushToEmail(
@@ -415,7 +415,7 @@ export async function notifyFormSubmitted(ownerEmail, { formName, submitterEmail
       title: 'Form submitted',
       body: who ? `${name} · ${who}` : name,
       tag: `form-submit-${inviteId || templateId || Date.now()}`,
-      data: { type: 'formSubmitted', templateId, inviteId },
+      data: { type: 'formSubmitted', templateId, inviteId, submissionId, pdfKey },
     },
     'formSubmitted',
     { email: submitterEmail }

@@ -409,7 +409,18 @@ export function useNotificationInbox({
   const handleClose = useCallback(() => setOpen(false), [setOpen])
 
   const handleOpenItem = useCallback((item) => {
-    const nav = item.nav || { type: item.type }
+    const itemType = String(item?.type || '').toLowerCase()
+    const nav = { ...(item?.nav && typeof item.nav === 'object' ? item.nav : {}) }
+    if (!nav.type) nav.type = item.type
+    if (itemType === 'form.submitted' || itemType === 'formsubmitted') {
+      nav.type = 'formSubmitted'
+      const entity = item.entity && typeof item.entity === 'object' ? item.entity : {}
+      if (!nav.templateId && entity.templateId) nav.templateId = entity.templateId
+      if (!nav.submissionId && entity.submissionId) nav.submissionId = entity.submissionId
+      if (!nav.pdfKey && entity.pdfKey) nav.pdfKey = entity.pdfKey
+      if (!nav.inviteId && entity.inviteId) nav.inviteId = entity.inviteId
+      if (!nav.templateName && entity.templateName) nav.templateName = entity.templateName
+    }
     if (isFeedItemNavActionable(nav)) onNavigate?.(nav)
   }, [onNavigate])
 

@@ -37,6 +37,7 @@ import {
   downloadFormPdf,
   bytesToBase64,
   fetchFormSubmissions,
+  fetchFormSubmission,
 } from '../../utils/forms'
 import { FilePreviewOverlay } from '../ui/FilePreviewOverlay'
 import { SendFormDialog } from './SendFormDialog'
@@ -88,6 +89,10 @@ export function FormsPanel({
   formsFillLeadId = null,
   formsFillReturnToLead = false,
   formsEditReturnToFormPicker = false,
+  formsCompletedSubmissionId = null,
+  formsCompletedPdfKey = null,
+  formsCompletedInviteId = null,
+  formsCompletedTemplateName = null,
   lead = null,
   leads = [],
   onOpenEdit,
@@ -633,6 +638,37 @@ export function FormsPanel({
       </Dialog>
 
       <Dialog
+        open={view === 'completed'}
+        modal={false}
+        onOpenChange={(open) => {
+          if (!open) handleSubViewBack()
+        }}
+      >
+        <DialogContent
+          className={cn(FORM_SUB_PANEL_CLASS, 'form-fill-panel')}
+          showCloseButton={false}
+          nestedOverlay={!formsSubViewPrimaryDetail}
+          topLayer
+          hideOverlay={formsSubViewPrimaryDetail}
+          suppressBackdrop={formsSubViewPrimaryDetail}
+          panelDockSlot={formsSubViewPrimaryDetail ? panelDockSlot : undefined}
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Completed form</DialogTitle>
+            <DialogDescription>View completed form PDF</DialogDescription>
+          </DialogHeader>
+          <CompletedFormLoader
+            templateId={activeTemplateId}
+            submissionId={formsCompletedSubmissionId}
+            pdfKey={formsCompletedPdfKey}
+            inviteId={formsCompletedInviteId}
+            templateName={formsCompletedTemplateName || activeTemplate?.name}
+            onBack={handleSubViewBack}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={view === 'fill'}
         modal={false}
         onOpenChange={(open) => {
@@ -830,6 +866,94 @@ export function FormsPanel({
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function CompletedFormLoader({
+  templateId,
+  submissionId,
+  pdfKey,
+  inviteId,
+  templateName,
+  onBack,
+}) {
+  const { getToken } = useAuth()
+  const [resolved, setResolved] = useState(() => (
+    pdfKey
+      ? { pdfKey, submissionId, templateName: templateName || 'Completed form' }
+      : null
+  ))
+  const [loading, setLoading] = useState(!pdfKey)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (pdfKey) {
+        setResolved({
+          pdfKey,
+          submissionId,
+          templateName: templateName || 'Completed form',
+        })
+        setLoading(false)
+        setError(null)
+        return
+      }
+      setLoading(true)
+      setError(null)
+      try {
+        let submission = null
+        let listTemplateName = ''
+        if (submissionId || inviteId) {
+          submission = await fetchFormSubmission(getToken, { submissionId, inviteId })
+        }
+        if (!submission?.pdfKey && templateId) {
+          const data = await fetchFormSubmissions(getToken, templateId)
+          listTemplateName = data.templateName || ''
+          const items = data.submissions || []
+          submission = items.find((s) => s.hasPdf && s.pdfKey) || items[0] || submission
+        }
+        if (cancelled) return
+        if (!submission?.pdfKey) {
+          throw new Error('Completed PDF is not available for this submission')
+        }
+        setResolved({
+          pdfKey: submission.pdfKey,
+          submissionId: submission.id || submissionId,
+          templateName: submission.templateName || listTemplateName || templateName || 'Completed form',
+        })
+      } catch (e) {
+        if (!cancelled) {
+          setError(e.message || 'Failed to load completed form')
+          showToast(e.message || 'Failed to load completed form', 'error')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [getToken, templateId, submissionId, pdfKey, inviteId, templateName])
+
+  if (loading) return <LoadingScreen label="Loading completed form…" />
+  if (error || !resolved?.pdfKey) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 py-20 px-6 text-center">
+        <p className="text-sm opacity-70">{error || 'Completed form is unavailable.'}</p>
+        <Button className="mt-4" variant="outline" onClick={onBack}>Back</Button>
+      </div>
+    )
+  }
+
+  return (
+    <FormCompletedView
+      title={resolved.templateName || 'Completed form'}
+      fileName={`${resolved.templateName || 'Form'}-completed.pdf`}
+      pdfKey={resolved.pdfKey}
+      submissionId={resolved.submissionId}
+      onBack={onBack}
+      onDeleted={onBack}
+    />
   )
 }
 

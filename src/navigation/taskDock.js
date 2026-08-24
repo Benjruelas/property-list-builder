@@ -134,7 +134,8 @@ export function isActivityFeedDestinationFrame(frame) {
     type === 'lists.parcels' ||
     type === 'quotes.detail' ||
     type === 'teams.detail' ||
-    type === 'forms.fill'
+    type === 'forms.fill' ||
+    type === 'forms.completed'
   )
 }
 

@@ -153,6 +153,7 @@ export function selectPanelProps(state) {
   const listsParcels = findFrame(state, 'lists.parcels')
   const formsEdit = findFrame(state, 'forms.edit')
   const formsFill = findFrame(state, 'forms.fill')
+  const formsCompleted = findFrame(state, 'forms.completed')
   const quotesEditor = findFrame(state, 'quotes.editor')
   const quotesDetail = findFrame(state, 'quotes.detail')
   const reportsEditor = findFrame(state, 'reports.editor')
@@ -204,9 +205,13 @@ export function selectPanelProps(state) {
     isPathsPanelOpen: hasFrameRoot(state, 'paths'),
     isFormsPanelOpen: hasFrameRoot(state, 'forms'),
     isFormsListOpen: hasExactFrame(state, 'forms'),
-    isFormsDetailStandalone: !!(formsFill || formsEdit) && !hasExactFrame(state, 'forms'),
-    formsView: formsFill ? 'fill' : formsEdit ? 'edit' : 'list',
-    formsTemplateId: formsFill?.templateId ?? formsEdit?.templateId ?? null,
+    isFormsDetailStandalone: !!(formsFill || formsEdit || formsCompleted) && !hasExactFrame(state, 'forms'),
+    formsView: formsCompleted ? 'completed' : formsFill ? 'fill' : formsEdit ? 'edit' : 'list',
+    formsTemplateId: formsCompleted?.templateId ?? formsFill?.templateId ?? formsEdit?.templateId ?? null,
+    formsCompletedSubmissionId: formsCompleted?.submissionId ?? null,
+    formsCompletedPdfKey: formsCompleted?.pdfKey ?? null,
+    formsCompletedInviteId: formsCompleted?.inviteId ?? null,
+    formsCompletedTemplateName: formsCompleted?.templateName ?? null,
     isQuotesPanelOpen: hasFrameRoot(state, 'quotes'),
     isQuotesListOpen: hasExactFrame(state, 'quotes'),
     isQuotesEditorStandalone: !!quotesEditor && !hasExactFrame(state, 'quotes'),

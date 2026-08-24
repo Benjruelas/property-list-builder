@@ -327,6 +327,34 @@ describe('feedNavigation', () => {
     expect(r.frames).toEqual([{ type: 'forms.fill', templateId: 'tpl1' }])
   })
 
+  it('maps submitted form activity to standalone forms.completed', () => {
+    const r = feedDataToFrames({
+      type: 'formSubmitted',
+      templateId: 'tpl1',
+      submissionId: 'sub1',
+      pdfKey: 'forms/u1/tpl1/submissions/sub1.pdf',
+    }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{
+      type: 'forms.completed',
+      templateId: 'tpl1',
+      submissionId: 'sub1',
+      pdfKey: 'forms/u1/tpl1/submissions/sub1.pdf',
+    }])
+  })
+
+  it('maps form.submitted activity type to standalone forms.completed', () => {
+    const r = feedDataToFrames({ type: 'form.submitted', templateId: 'tpl1' }, ctx, { standaloneDetail: true })
+    expect(r.frames).toEqual([{ type: 'forms.completed', templateId: 'tpl1' }])
+  })
+
+  it('maps formSubmitted notification to forms list + completed', () => {
+    const r = feedDataToFrames({ type: 'formSubmitted', templateId: 'tpl1', inviteId: 'inv1' }, ctx)
+    expect(r.frames).toEqual([
+      { type: 'forms' },
+      { type: 'forms.completed', templateId: 'tpl1', inviteId: 'inv1' },
+    ])
+  })
+
   it('maps team activity to settings with team detail', () => {
     const r = feedDataToFrames({ type: 'team', teamId: 'team1' }, ctx, { standaloneDetail: true })
     expect(r.frames).toEqual([
