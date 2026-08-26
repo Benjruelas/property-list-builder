@@ -104,10 +104,13 @@ export function FormFillChrome({
   requiresSubmitterEmail = false,
   submitterEmail = '',
   onSubmitterEmailChange,
+  /** Send-preview embeds this under SendFormDialog's own header — skip duplicate chrome. */
+  confirmMode = false,
 }) {
   const showFillGuide = fillMode && currentField && !sigOpen && !sendOpen
 
   if (part === 'header') {
+    if (confirmMode) return null
     if (layout === 'recipient') {
       return (
         <header

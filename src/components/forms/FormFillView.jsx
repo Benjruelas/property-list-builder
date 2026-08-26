@@ -1013,6 +1013,7 @@ export function FormFillView({
     requiresSubmitterEmail,
     submitterEmail,
     onSubmitterEmailChange: setSubmitterEmail,
+    confirmMode,
   }
 
   return (

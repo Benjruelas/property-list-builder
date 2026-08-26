@@ -2267,7 +2267,9 @@
 
 /* Form fill-in text sits on a white PDF — stay black in every theme.
    Dark mode sets html color-scheme + .map-panel input { color: white },
-   which WebKit paints via -webkit-text-fill-color unless we override both. */
+   which WebKit paints via -webkit-text-fill-color unless we override both.
+   Match :not() specificity from .list-panel input rules, and beat
+   .forms-send-dialog / .send-form-dialog input whites used during send preview. */
 .form-field-input,
 input.form-field-input,
 textarea.form-field-input,
@@ -2276,6 +2278,11 @@ textarea.form-field-input,
 .map-panel textarea.form-field-input,
 .list-panel .form-field-input,
 .list-panel input.form-field-input,
+.list-panel input.form-field-input:not([type='checkbox']):not([type='radio']),
+.forms-send-dialog input.form-field-input,
+.forms-send-dialog textarea.form-field-input,
+.send-form-dialog input.form-field-input,
+.send-form-dialog textarea.form-field-input,
 .public-form-page .form-field-input {
   color: #000 !important;
   -webkit-text-fill-color: #000 !important;
@@ -6311,10 +6318,12 @@ body:has(.app-loading-screen--video) {
 @media (max-width: 767px) {
   .map-panel.send-report-dialog.fullscreen-panel,
   .map-panel.send-form-dialog.fullscreen-panel,
+  .map-panel.send-form-dialog.send-form-dialog--preview.fullscreen-panel,
   .map-panel.send-quote-dialog.fullscreen-panel,
   .map-panel.send-outreach-dialog.fullscreen-panel,
   .map-panel.list-panel.fullscreen-panel.send-report-dialog,
   .map-panel.list-panel.fullscreen-panel.send-form-dialog,
+  .map-panel.list-panel.fullscreen-panel.send-form-dialog.send-form-dialog--preview,
   .map-panel.list-panel.fullscreen-panel.send-quote-dialog,
   .map-panel.list-panel.fullscreen-panel.send-outreach-dialog {
     width: 100% !important;
@@ -6343,21 +6352,34 @@ body:has(.app-loading-screen--video) {
   max-width: 8rem;
   margin-inline: auto;
 }
-.forms-send-dialog input,
-.forms-send-dialog textarea,
+.forms-send-dialog input:not(.form-field-input),
+.forms-send-dialog textarea:not(.form-field-input),
 .forms-send-dialog select,
-.share-list-dialog input,
-.share-list-dialog textarea,
+.share-list-dialog input:not(.form-field-input),
+.share-list-dialog textarea:not(.form-field-input),
 .share-list-dialog select {
   background: rgba(0, 0, 0, 0.35) !important;
   border: 1px solid rgba(255, 255, 255, 0.28) !important;
   color: rgba(255, 255, 255, 0.98) !important;
 }
-.forms-send-dialog input::placeholder,
-.forms-send-dialog textarea::placeholder,
-.share-list-dialog input::placeholder,
-.share-list-dialog textarea::placeholder {
+.forms-send-dialog input:not(.form-field-input)::placeholder,
+.forms-send-dialog textarea:not(.form-field-input)::placeholder,
+.share-list-dialog input:not(.form-field-input)::placeholder,
+.share-list-dialog textarea:not(.form-field-input)::placeholder {
   color: rgba(255, 255, 255, 0.5) !important;
+}
+/* Send preview PDF fields — must win over any later panel input remaps */
+.forms-send-dialog input.form-field-input,
+.forms-send-dialog textarea.form-field-input,
+.send-form-dialog input.form-field-input,
+.send-form-dialog textarea.form-field-input,
+.list-panel.send-form-dialog input.form-field-input:not([type='checkbox']):not([type='radio']) {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  caret-color: #000 !important;
+  color-scheme: light;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 .forms-send-dialog select option,
 .share-list-dialog select option {
