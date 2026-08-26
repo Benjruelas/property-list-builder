@@ -15,8 +15,10 @@ function inviteStatusLabel(invite) {
 
 /**
  * List form invites and submissions tied to a lead, visible to the current user.
+ * When hasLeadAccess is true (caller verified lead ACL), all activity for the lead
+ * is returned regardless of form template sharing.
  */
-export async function listLeadFormActivityForUser(leadId, user, allTeams) {
+export async function listLeadFormActivityForUser(leadId, user, allTeams, { hasLeadAccess = false } = {}) {
   const normalizedLeadId = String(leadId || '').trim()
   if (!normalizedLeadId) return []
 
@@ -30,6 +32,7 @@ export async function listLeadFormActivityForUser(leadId, user, allTeams) {
   const visibleTemplateIds = new Set(
     templates.filter((t) => canView(getResourceAccess(t, user, ctx))).map((t) => t.id),
   )
+  const canSeeTemplate = (templateId) => hasLeadAccess || visibleTemplateIds.has(templateId)
 
   const items = []
 
@@ -40,7 +43,7 @@ export async function listLeadFormActivityForUser(leadId, user, allTeams) {
 
   for (const invite of invites) {
     if (String(invite.leadId || '') !== normalizedLeadId) continue
-    if (!visibleTemplateIds.has(invite.templateId)) continue
+    if (!canSeeTemplate(invite.templateId)) continue
     const template = templateById.get(invite.templateId)
     const linked = submissionsByInviteId.get(invite.id)
     const status = inviteStatusLabel(invite)
@@ -65,7 +68,7 @@ export async function listLeadFormActivityForUser(leadId, user, allTeams) {
 
   for (const submission of submissions) {
     if (String(submission.leadId || '') !== normalizedLeadId) continue
-    if (!visibleTemplateIds.has(submission.templateId)) continue
+    if (!canSeeTemplate(submission.templateId)) continue
     // Prefer the invite row when this submission came from a public invite already listed.
     if (submission.inviteId && items.some((i) => i.inviteId === submission.inviteId)) continue
     const template = templateById.get(submission.templateId)
