@@ -6037,6 +6037,10 @@ body:has(.app-loading-screen--video) {
 .fill-scroll-container {
   scroll-behavior: smooth;
 }
+/* Public review settle must not inherit smooth resets — field pans still pass behavior via scrollTo(). */
+.public-form-page .fill-scroll-container {
+  scroll-behavior: auto;
+}
 
 /* Form fill header — icon-only, no fills (matches pipeline / list panels) */
 .map-panel .form-fill-icon-btn,
