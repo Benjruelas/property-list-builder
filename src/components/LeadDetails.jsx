@@ -503,6 +503,7 @@ export function LeadDetails({
   // External text/email share is available to anyone who can open the lead.
   const canExternalShareLead = Boolean(leadAccess)
   const canDeleteLead = canDelete(leadAccess)
+  const canMutateLeadForms = !!leadAccess && canEdit(leadAccess)
   const canCreateDeal = !!onCreateDeal
   const canCreateReport = canAccessReports && !!onCreatePhotoReport
   const canCreateForm = canAccessForms && !!onCreateLeadForm
@@ -767,7 +768,7 @@ export function LeadDetails({
 
   const handleFormActionDelete = async () => {
     const item = formActionsItem
-    if (!item || formActionBusy) return
+    if (!item || formActionBusy || !canMutateLeadForms) return
     closeFormActionsMenu()
     const hasCompletedPdf = !!(item.pdfKey || item.hasPdf || item.submissionId || item.status === 'completed')
     const ok = await showConfirm({
@@ -1370,6 +1371,7 @@ export function LeadDetails({
               fileName={`${previewFormSubmission.templateName || 'Form'}-completed.pdf`}
               pdfKey={previewFormSubmission.pdfKey}
               submissionId={previewFormSubmission.submissionId || previewFormSubmission.id}
+              canDelete={canMutateLeadForms}
               onBack={() => setPreviewFormSubmission(null)}
               onDeleted={() => {
                 const removed = previewFormSubmission
@@ -1401,7 +1403,7 @@ export function LeadDetails({
         </OptionsMenuItem>
         <OptionsMenuItem
           destructive
-          disabled={formActionBusy}
+          disabled={formActionBusy || !canMutateLeadForms}
           className="list-panel-delete-btn rounded-b-xl pb-2 hover:bg-red-600/80"
           onClick={handleFormActionDelete}
         >

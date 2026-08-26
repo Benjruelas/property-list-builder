@@ -1,5 +1,6 @@
 import { requireAuth } from './_lib/apiAuth.js'
 import { getAllTeams } from './_lib/teams.js'
+import { getLeadWithAccess } from './_lib/leadAccess.js'
 import { listLeadFormActivityForUser } from './_lib/leadForms.js'
 
 /**
@@ -19,8 +20,11 @@ export default async function handler(req, res) {
     const leadId = String(req.query?.leadId || '').trim()
     if (!leadId) return res.status(400).json({ error: 'leadId is required' })
 
+    const { lead, access } = await getLeadWithAccess(user, leadId)
+    if (!lead || !access) return res.status(404).json({ error: 'Lead not found' })
+
     const allTeams = await getAllTeams()
-    const items = await listLeadFormActivityForUser(leadId, user, allTeams)
+    const items = await listLeadFormActivityForUser(leadId, user, allTeams, { hasLeadAccess: true })
     return res.status(200).json({ items })
   } catch (err) {
     console.error('lead-forms error', err)
