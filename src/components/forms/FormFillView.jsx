@@ -23,6 +23,8 @@ const FIT_TO_SCREEN_MIN = 0.35
 /** Auto-focus zoom when stepping between fields */
 const FILL_FOCUS_ZOOM_MIN = 1.45
 const FILL_FOCUS_ZOOM_MAX = 2.35
+/** One font size for every text/date field overlay (fill + review). */
+const FORM_FIELD_FONT_SIZE = '12px'
 
 export function FormFillView({
   template,
@@ -1275,7 +1277,7 @@ function InteractiveFillField({
     const neededPx = ctx.measureText(text).width + 16
     const neededFrac = neededPx / pageW
     setDisplayWidthFrac(Math.min(maxW, Math.max(templateW, neededFrac)))
-  }, [canGrowWidth, field.width, field.x, value, reviewTypography, field.height])
+  }, [canGrowWidth, field.width, field.x, value, field.height])
 
   const wrapperStyle = {
     position: 'absolute',
@@ -1286,9 +1288,7 @@ function InteractiveFillField({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: reviewTypography || plainFilled
-      ? `clamp(10px, ${field.height * 90}cqh, 20px)`
-      : `clamp(9px, ${field.height * 70}cqh, 16px)`,
+    fontSize: FORM_FIELD_FONT_SIZE,
     boxSizing: 'border-box',
     background: plainFilled
       ? 'transparent'
