@@ -5,14 +5,15 @@ import { getAllFormTemplates } from './_lib/formTemplateStore.js'
 import { getAllSubmissions, saveAllSubmissions, getAllInvites, saveAllInvites } from './_lib/formInvites.js'
 import { buildAccessContext, getResourceAccess, canView, canEdit } from './_lib/resourceContext.js'
 import { isWellFormedFormSubmissionPdfKey } from './_lib/formPdfKey.js'
+import { canViewFormSubmission, canDeleteFormSubmission } from './_lib/formSubmissionAccess.js'
 
 /**
  * Auth'd form submissions list + completed PDF download/delete.
  *
  * GET ?templateId=     → submissions for a template the user can view
  * GET ?submissionId=   → single submission metadata
- * GET ?pdfKey=         → stream completed PDF (access via parent template)
- * DELETE ?submissionId= or ?pdfKey= → remove submission + PDF (requires edit on template)
+ * GET ?pdfKey=         → stream completed PDF (template or lead access)
+ * DELETE ?submissionId= or ?pdfKey= → remove submission + PDF (template edit or lead edit)
  */
 
 let _s3
@@ -90,8 +91,8 @@ export default async function handler(req, res) {
           ? submissions.find((s) => s.pdfKey === pdfKey)
           : null)
       if (!sub) return res.status(404).json({ error: 'Submission not found' })
-      const template = templateById.get(sub.templateId)
-      if (!template || !canEdit(getResourceAccess(template, user, ctx))) {
+      const allowed = await canDeleteFormSubmission(sub, user, ctx, templateById)
+      if (!allowed) {
         return res.status(403).json({ error: 'You do not have permission to delete this submission' })
       }
       if (sub.pdfKey) await deleteR2Key(sub.pdfKey)
@@ -114,7 +115,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid pdfKey' })
       }
       const sub = submissions.find((s) => s.pdfKey === pdfKey)
-      if (!sub || !visibleTemplateIds.has(sub.templateId)) {
+      if (!sub || !(await canViewFormSubmission(sub, user, ctx, templateById))) {
         return res.status(403).json({ error: 'You do not have access to this submission' })
       }
       try {
@@ -141,7 +142,7 @@ export default async function handler(req, res) {
     const inviteId = String(req.query.inviteId || '').trim()
     if (inviteId) {
       const sub = submissions.find((s) => s.inviteId === inviteId)
-      if (!sub || !visibleTemplateIds.has(sub.templateId)) {
+      if (!sub || !(await canViewFormSubmission(sub, user, ctx, templateById))) {
         return res.status(404).json({ error: 'Submission not found' })
       }
       return res.status(200).json({
@@ -155,7 +156,7 @@ export default async function handler(req, res) {
     const submissionId = String(req.query.submissionId || '').trim()
     if (submissionId) {
       const sub = submissions.find((s) => s.id === submissionId)
-      if (!sub || !visibleTemplateIds.has(sub.templateId)) {
+      if (!sub || !(await canViewFormSubmission(sub, user, ctx, templateById))) {
         return res.status(404).json({ error: 'Submission not found' })
       }
       return res.status(200).json({
