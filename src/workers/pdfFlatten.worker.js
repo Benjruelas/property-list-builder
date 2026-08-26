@@ -54,7 +54,7 @@ self.onmessage = async (evt) => {
       if (field.type === 'text' || field.type === 'date') {
         const value = raw == null ? '' : String(raw)
         if (!value) continue
-        const fontSize = Math.max(6, Math.min(14, rect.height * 0.7))
+        const fontSize = 11
         const textWidth = helv.widthOfTextAtSize(value, fontSize) + 8
         const maxGrow = Math.max(0, pw - rect.x)
         const drawWidth = Math.min(maxGrow, Math.max(rect.width, textWidth))
