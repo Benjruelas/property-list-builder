@@ -338,6 +338,10 @@ export function LeadDetails({
     setCreateMenuOpen(false)
     setShareOpen(false)
     setLocalShareState(null)
+    setFormActionsItem(null)
+    setFormActionBusy(false)
+    setPreviewFormSubmission(null)
+    formActionsMenuTriggerRef.current = null
   }, [lead?.id, isOpen])
 
   useEffect(() => {
@@ -552,6 +556,23 @@ export function LeadDetails({
     onLeadUpdate?.({ ...lead, ...patch, updatedAt: new Date().toISOString() })
   }, [lead, onLeadUpdate])
 
+  // Must stay above the `if (!isOpen || !lead) return null` guard — closing the
+  // panel must not change hook order (Rules of Hooks).
+  const removeLeadFormFromList = useCallback((removed) => {
+    setLeadForms((prev) => prev.filter((item) => {
+      if (!removed) return true
+      if (removed.pdfKey && item.pdfKey === removed.pdfKey) return false
+      if (removed.submissionId && item.submissionId === removed.submissionId) return false
+      if (removed.id && item.id === removed.id) return false
+      if (removed.inviteId && item.inviteId === removed.inviteId) return false
+      return true
+    }))
+    if (lead?.id) {
+      invalidateCachedLeadForms(lead.id)
+      fetchLeadForms(getToken, lead.id).then(setLeadForms).catch(() => {})
+    }
+  }, [getToken, lead?.id])
+
   const leadFilesUsed = sumLeadFileBytes(lead?.files)
   const leadStorageFull = leadFilesUsed >= LEAD_FILE_STORAGE_LIMIT_BYTES
   const leadFilePreviewItems = (lead?.files || []).map((f) => ({
@@ -678,21 +699,6 @@ export function LeadDetails({
     formActionsMenuTriggerRef.current = event.currentTarget
     setFormActionsItem(item)
   }
-
-  const removeLeadFormFromList = useCallback((removed) => {
-    setLeadForms((prev) => prev.filter((item) => {
-      if (!removed) return true
-      if (removed.pdfKey && item.pdfKey === removed.pdfKey) return false
-      if (removed.submissionId && item.submissionId === removed.submissionId) return false
-      if (removed.id && item.id === removed.id) return false
-      if (removed.inviteId && item.inviteId === removed.inviteId) return false
-      return true
-    }))
-    if (lead?.id) {
-      invalidateCachedLeadForms(lead.id)
-      fetchLeadForms(getToken, lead.id).then(setLeadForms).catch(() => {})
-    }
-  }, [getToken, lead?.id])
 
   const resolveLeadFormPdfKey = async (item) => {
     if (item?.pdfKey) return item.pdfKey
