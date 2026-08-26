@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Upload,
   Download,
+  Eye,
   Loader2,
 } from 'lucide-react'
 import { Button } from './ui/button'
@@ -102,6 +103,8 @@ import { StorageUsageBar } from './ui/StorageUsageBar'
 import { FilePreviewOverlay } from './ui/FilePreviewOverlay'
 import { FormCompletedView } from './forms/FormCompletedView'
 import { CustomFieldsEditor } from './CustomFieldsEditor'
+import { fetchFormSubmissionPdfBlob, deleteFormSubmission } from '@/utils/forms'
+import { saveBlobToDevice } from '@/utils/filePreview'
 
 function getColumnName(colId, columns) {
   const col = columns?.find((c) => c.id === colId)
@@ -308,10 +311,13 @@ export function LeadDetails({
   const [uploading, setUploading] = useState(false)
   const [previewFileIndex, setPreviewFileIndex] = useState(null)
   const [previewFormSubmission, setPreviewFormSubmission] = useState(null)
+  const [formActionsItem, setFormActionsItem] = useState(null)
+  const [formActionBusy, setFormActionBusy] = useState(false)
   const obscuredByNestedChild = obscuredByChild || tasksNestedOverlay || photosNestedOverlay || !!previewFormSubmission
   const fileInputRef = useRef(null)
   const menuTriggerRef = useRef(null)
   const createMenuTriggerRef = useRef(null)
+  const formActionsMenuTriggerRef = useRef(null)
   const onOpenPhotoReportRef = useRef(onOpenPhotoReport)
   onOpenPhotoReportRef.current = onOpenPhotoReport
 
@@ -637,7 +643,9 @@ export function LeadDetails({
   const openMenu = (event) => {
     event.stopPropagation()
     createMenuTriggerRef.current = null
+    formActionsMenuTriggerRef.current = null
     setCreateMenuOpen(false)
+    setFormActionsItem(null)
     menuTriggerRef.current = event.currentTarget
     setMenuOpen(true)
   }
@@ -646,12 +654,100 @@ export function LeadDetails({
     setCreateMenuOpen(false)
   }
 
+  const closeFormActionsMenu = () => {
+    setFormActionsItem(null)
+  }
+
   const openCreateMenu = (event) => {
     event.stopPropagation()
     menuTriggerRef.current = null
+    formActionsMenuTriggerRef.current = null
     setMenuOpen(false)
+    setFormActionsItem(null)
     createMenuTriggerRef.current = event.currentTarget
     setCreateMenuOpen(true)
+  }
+
+  const openFormActionsMenu = (item, event) => {
+    event.stopPropagation()
+    menuTriggerRef.current = null
+    createMenuTriggerRef.current = null
+    setMenuOpen(false)
+    setCreateMenuOpen(false)
+    formActionsMenuTriggerRef.current = event.currentTarget
+    setFormActionsItem(item)
+  }
+
+  const removeLeadFormFromList = useCallback((removed) => {
+    setLeadForms((prev) => prev.filter((item) => {
+      if (!removed) return true
+      if (removed.pdfKey && item.pdfKey === removed.pdfKey) return false
+      if (removed.submissionId && item.submissionId === removed.submissionId) return false
+      if (removed.id && item.id === removed.id) return false
+      if (removed.inviteId && item.inviteId === removed.inviteId) return false
+      return true
+    }))
+    if (lead?.id) {
+      invalidateCachedLeadForms(lead.id)
+      fetchLeadForms(getToken, lead.id).then(setLeadForms).catch(() => {})
+    }
+  }, [getToken, lead?.id])
+
+  const handleFormActionView = () => {
+    const item = formActionsItem
+    closeFormActionsMenu()
+    if (!item) return
+    if (item.hasPdf && item.pdfKey) {
+      setPreviewFormSubmission(item)
+      return
+    }
+    onOpenLeadForm?.(item, lead)
+  }
+
+  const handleFormActionDownload = async () => {
+    const item = formActionsItem
+    if (!item?.hasPdf || !item?.pdfKey || formActionBusy) return
+    closeFormActionsMenu()
+    setFormActionBusy(true)
+    try {
+      const blob = await fetchFormSubmissionPdfBlob(getToken, item.pdfKey)
+      await saveBlobToDevice(blob, `${item.templateName || 'Form'}-completed.pdf`, {
+        contentType: 'application/pdf',
+        onToast: showToast,
+      })
+    } catch (e) {
+      if (e?.name !== 'AbortError') {
+        showToast(e?.message || 'Could not save PDF', 'error')
+      }
+    } finally {
+      setFormActionBusy(false)
+    }
+  }
+
+  const handleFormActionDelete = async () => {
+    const item = formActionsItem
+    if (!item?.hasPdf || !item?.pdfKey || formActionBusy) return
+    closeFormActionsMenu()
+    const ok = await showConfirm({
+      title: 'Delete completed form?',
+      description: 'This permanently removes the completed PDF. This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (!ok) return
+    setFormActionBusy(true)
+    try {
+      await deleteFormSubmission(getToken, {
+        submissionId: item.submissionId || item.id,
+        pdfKey: item.pdfKey,
+      })
+      showToast('Completed form deleted', 'success')
+      removeLeadFormFromList(item)
+    } catch (e) {
+      showToast(e.message || 'Failed to delete', 'error')
+    } finally {
+      setFormActionBusy(false)
+    }
   }
 
   const handleStatusChange = async (nextStatus) => {
@@ -1121,13 +1217,7 @@ export function LeadDetails({
                         <button
                           type="button"
                           disabled={!onOpenLeadForm && !item.hasPdf}
-                          onClick={() => {
-                            if (item.hasPdf && item.pdfKey) {
-                              setPreviewFormSubmission(item)
-                              return
-                            }
-                            onOpenLeadForm?.(item, lead)
-                          }}
+                          onClick={(e) => openFormActionsMenu(item, e)}
                           className="lead-detail-deal-card lead-detail-list-card disabled:opacity-60 disabled:pointer-events-none"
                         >
                           <ClipboardList className="h-4 w-4 shrink-0 opacity-50" />
@@ -1237,23 +1327,41 @@ export function LeadDetails({
               onDeleted={() => {
                 const removed = previewFormSubmission
                 setPreviewFormSubmission(null)
-                setLeadForms((prev) => prev.filter((item) => {
-                  if (!removed) return true
-                  if (removed.pdfKey && item.pdfKey === removed.pdfKey) return false
-                  if (removed.submissionId && item.submissionId === removed.submissionId) return false
-                  if (removed.id && item.id === removed.id) return false
-                  if (removed.inviteId && item.inviteId === removed.inviteId) return false
-                  return true
-                }))
-                if (lead?.id) {
-                  invalidateCachedLeadForms(lead.id)
-                  fetchLeadForms(getToken, lead.id).then(setLeadForms).catch(() => {})
-                }
+                removeLeadFormFromList(removed)
               }}
             />
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <OptionsMenuDropdown
+        open={!!formActionsItem}
+        onClose={closeFormActionsMenu}
+        triggerRef={formActionsMenuTriggerRef}
+        menuWidth={MENU_WIDTH}
+        dataAttr="data-lead-form-actions-menu"
+      >
+        <OptionsMenuItem onClick={handleFormActionView}>
+          <Eye className="h-4 w-4 shrink-0" />
+          View
+        </OptionsMenuItem>
+        <OptionsMenuItem
+          disabled={!formActionsItem?.hasPdf || !formActionsItem?.pdfKey || formActionBusy}
+          onClick={handleFormActionDownload}
+        >
+          <Download className="h-4 w-4 shrink-0" />
+          Download
+        </OptionsMenuItem>
+        <OptionsMenuItem
+          destructive
+          disabled={!formActionsItem?.hasPdf || !formActionsItem?.pdfKey || formActionBusy}
+          className="list-panel-delete-btn rounded-b-xl pb-2 hover:bg-red-600/80"
+          onClick={handleFormActionDelete}
+        >
+          <Trash2 className="h-4 w-4 shrink-0" />
+          Delete
+        </OptionsMenuItem>
+      </OptionsMenuDropdown>
 
       <OptionsMenuDropdown
         open={createMenuOpen}
