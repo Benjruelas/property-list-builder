@@ -70,8 +70,8 @@ export function FormFillView({
   const [sending, setSending] = useState(false)
   const [legalAccepted, setLegalAccepted] = useState(false)
   const [submitterEmail, setSubmitterEmail] = useState('')
-  /** Public forms start in fill mode; authenticated forms open in view mode first. */
-  const [fillMode, setFillMode] = useState(isPublic)
+  /** Open in view mode; enter fill mode when the user taps a field. */
+  const [fillMode, setFillMode] = useState(false)
 
   const scrollContainerRef = useRef(null)
   const zoomInnerRef = useRef(null)
@@ -807,9 +807,6 @@ export function FormFillView({
           showToast('Enter an email to receive your completed form PDF', 'error')
           return
         }
-      }
-      if (!fillMode) {
-        enterFillMode(activeTourFields[0]?.id)
       }
       if (missing.length > 0) {
         showToast(
