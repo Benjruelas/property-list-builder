@@ -3,7 +3,6 @@ import {
   getAllTeams,
   loadTeamsForUser,
 } from './_lib/teams.js'
-import { getTeamMemberRole } from './_lib/access.js'
 import {
   getInbox,
   markNotificationsRead,
@@ -19,6 +18,7 @@ import {
   ensureActivityStoreReady,
 } from './_lib/activityStore.js'
 import { mergeActivityFeeds } from './_lib/activityLog.js'
+import { filterActivitiesForUser } from './_lib/activityAccess.js'
 import { collapseFeedItems, expandActivityIdsForMarkSeen, collectActivityIdsFromFeedItems } from './_lib/feedCoalesce.js'
 
 /**
@@ -85,15 +85,9 @@ async function loadActivitiesForUser(user, teamIdFilter, limit) {
 
   const targetTeamIds = teamIdFilter ? [teamIdFilter] : userTeams.map((t) => t.id)
   const feeds = await Promise.all(targetTeamIds.map((tid) => getTeamActivity(tid)))
-  let activities = mergeActivityFeeds(feeds, { limit: limit * 2 })
-
-  const adminTeamIds = new Set(
-    userTeams.filter((t) => getTeamMemberRole(t, user.uid) === 'admin').map((t) => t.id)
-  )
-  activities = activities.filter((a) => {
-    if (adminTeamIds.has(a.teamId)) return true
-    return a.audience !== 'admin_only'
-  })
+  // Over-fetch before access filtering so members-only pipes don't starve the page.
+  let activities = mergeActivityFeeds(feeds, { limit: Math.min(Math.max(limit * 4, limit), 200) })
+  activities = await filterActivitiesForUser(activities, user, userTeams, allTeams)
   activities = activities.slice(0, Math.min(Math.max(limit, 1), 100))
 
   return {
