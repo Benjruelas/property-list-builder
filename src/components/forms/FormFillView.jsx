@@ -1195,6 +1195,14 @@ function InteractiveFillField({
   const elRef = useRef(null)
   const wrapperRef = useRef(null)
   const isReadOnly = viewOnly || locked
+  const hasValue = field.type === 'checkbox'
+    ? !!value
+    : (typeof value === 'string' ? !!value.trim() : !!value)
+  /** Filled values render as ink only in view mode (and for locked prefills while filling). */
+  const plainFilled = hasValue && (viewOnly || locked)
+  /** Empty view-mode fields stay tappable; filled unlocked can still be tapped to edit. */
+  const canActivate = viewOnly && !locked
+  const emptyViewTarget = canActivate && !hasValue
   const canGrowWidth = field.type === 'text' || field.type === 'date'
   const [displayWidthFrac, setDisplayWidthFrac] = useState(() => Number(field.width) || 0.2)
 
@@ -1250,33 +1258,37 @@ function InteractiveFillField({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: reviewTypography
+    fontSize: reviewTypography || plainFilled
       ? `clamp(10px, ${field.height * 90}cqh, 20px)`
       : `clamp(9px, ${field.height * 70}cqh, 16px)`,
     boxSizing: 'border-box',
-    background: locked
-      ? 'rgba(107,114,128,0.14)'
-      : viewOnly
-        ? 'rgba(59,130,246,0.04)'
-        : isCurrent ? 'rgba(59,130,246,0.18)' : 'rgba(59,130,246,0.05)',
-    border: locked
-      ? '1px solid rgba(107,114,128,0.4)'
-      : viewOnly
-        ? '1px dashed rgba(37,99,235,0.28)'
-        : isCurrent ? '2px solid rgba(37,99,235,1)' : '1px dashed rgba(37,99,235,0.45)',
-    borderRadius: 3,
+    background: plainFilled
+      ? 'transparent'
+      : locked
+        ? 'rgba(107,114,128,0.14)'
+        : viewOnly
+          ? 'rgba(59,130,246,0.04)'
+          : isCurrent ? 'rgba(59,130,246,0.18)' : 'rgba(59,130,246,0.05)',
+    border: plainFilled
+      ? 'none'
+      : locked
+        ? '1px solid rgba(107,114,128,0.4)'
+        : viewOnly
+          ? '1px dashed rgba(37,99,235,0.28)'
+          : isCurrent ? '2px solid rgba(37,99,235,1)' : '1px dashed rgba(37,99,235,0.45)',
+    borderRadius: plainFilled ? 0 : 3,
     overflow: canGrowWidth ? 'visible' : 'hidden',
-    zIndex: isCurrent ? 10 : locked ? 2 : 1,
-    cursor: viewOnly && !locked ? 'pointer' : locked ? 'default' : undefined,
-    boxShadow: isCurrent
-      ? '0 0 0 4px rgba(59,130,246,0.18), 0 6px 16px rgba(37,99,235,0.35)'
-      : 'none',
+    zIndex: isCurrent ? 10 : locked || plainFilled ? 2 : 1,
+    cursor: emptyViewTarget ? 'pointer' : canActivate ? 'text' : locked || plainFilled ? 'default' : undefined,
+    boxShadow: plainFilled || !isCurrent
+      ? 'none'
+      : '0 0 0 4px rgba(59,130,246,0.18), 0 6px 16px rgba(37,99,235,0.35)',
     transition: 'box-shadow 0.25s ease, background 0.25s ease, border-color 0.25s ease, width 0.15s ease',
     color: '#000',
   }
 
   const handleWrapperClick = (e) => {
-    if (!viewOnly || locked) return
+    if (!canActivate) return
     e.stopPropagation()
     onActivate?.()
   }
@@ -1408,12 +1420,18 @@ function InteractiveFillField({
     <div
       ref={wrapperRef}
       style={wrapperStyle}
-      className={isCurrent ? 'fill-field-current' : undefined}
+      className={cn(isCurrent && 'fill-field-current', plainFilled && 'form-field-plain')}
       onClick={handleWrapperClick}
-      role={viewOnly && !locked ? 'button' : undefined}
-      tabIndex={viewOnly && !locked ? 0 : undefined}
-      onKeyDown={viewOnly && !locked ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate?.() } } : undefined}
-      aria-label={viewOnly && !locked ? `Fill ${field.label || field.type}` : locked ? `${field.label || field.type} (pre-filled)` : undefined}
+      role={emptyViewTarget ? 'button' : undefined}
+      tabIndex={emptyViewTarget ? 0 : undefined}
+      onKeyDown={emptyViewTarget ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate?.() } } : undefined}
+      aria-label={
+        emptyViewTarget
+          ? `Fill ${field.label || field.type}`
+          : locked || plainFilled
+            ? `${field.label || field.type}${locked ? ' (pre-filled)' : ''}`
+            : undefined
+      }
     >
       {inner}
     </div>
