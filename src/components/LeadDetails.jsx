@@ -103,7 +103,7 @@ import { StorageUsageBar } from './ui/StorageUsageBar'
 import { FilePreviewOverlay } from './ui/FilePreviewOverlay'
 import { FormCompletedView } from './forms/FormCompletedView'
 import { CustomFieldsEditor } from './CustomFieldsEditor'
-import { fetchFormSubmissionPdfBlob, deleteFormSubmission } from '@/utils/forms'
+import { fetchFormSubmissionPdfBlob, fetchFormSubmission, deleteFormSubmission } from '@/utils/forms'
 import { saveBlobToDevice } from '@/utils/filePreview'
 
 function getColumnName(colId, columns) {
@@ -694,24 +694,65 @@ export function LeadDetails({
     }
   }, [getToken, lead?.id])
 
-  const handleFormActionView = () => {
+  const resolveLeadFormPdfKey = async (item) => {
+    if (item?.pdfKey) return item.pdfKey
+    const submissionId = item?.submissionId || (item?.kind === 'submission' ? item.id : null) || null
+    const inviteId = item?.inviteId || (item?.kind === 'invite' ? item.id : null) || null
+    if (!submissionId && !inviteId) return null
+    try {
+      // Prefer inviteId for invite rows — submissionId on those rows is the linked submission when present.
+      const submission = await fetchFormSubmission(getToken, submissionId
+        ? { submissionId }
+        : { inviteId })
+      return submission?.pdfKey || null
+    } catch {
+      if (submissionId && inviteId) {
+        try {
+          const submission = await fetchFormSubmission(getToken, { inviteId })
+          return submission?.pdfKey || null
+        } catch {
+          return null
+        }
+      }
+      return null
+    }
+  }
+
+  const handleFormActionView = async () => {
     const item = formActionsItem
     closeFormActionsMenu()
     if (!item) return
-    if (item.hasPdf && item.pdfKey) {
+    if (item.pdfKey) {
       setPreviewFormSubmission(item)
       return
+    }
+    if (item.hasPdf || item.status === 'completed' || item.submissionId) {
+      setFormActionBusy(true)
+      try {
+        const pdfKey = await resolveLeadFormPdfKey(item)
+        if (pdfKey) {
+          setPreviewFormSubmission({ ...item, pdfKey, hasPdf: true })
+          return
+        }
+      } finally {
+        setFormActionBusy(false)
+      }
     }
     onOpenLeadForm?.(item, lead)
   }
 
   const handleFormActionDownload = async () => {
     const item = formActionsItem
-    if (!item?.hasPdf || !item?.pdfKey || formActionBusy) return
+    if (!item || formActionBusy) return
     closeFormActionsMenu()
     setFormActionBusy(true)
     try {
-      const blob = await fetchFormSubmissionPdfBlob(getToken, item.pdfKey)
+      const pdfKey = await resolveLeadFormPdfKey(item)
+      if (!pdfKey) {
+        showToast('No completed PDF available for this form', 'error')
+        return
+      }
+      const blob = await fetchFormSubmissionPdfBlob(getToken, pdfKey)
       await saveBlobToDevice(blob, `${item.templateName || 'Form'}-completed.pdf`, {
         contentType: 'application/pdf',
         onToast: showToast,
@@ -727,22 +768,28 @@ export function LeadDetails({
 
   const handleFormActionDelete = async () => {
     const item = formActionsItem
-    if (!item?.hasPdf || !item?.pdfKey || formActionBusy) return
+    if (!item || formActionBusy || !canMutateLeadForms) return
     closeFormActionsMenu()
+    const hasCompletedPdf = !!(item.pdfKey || item.hasPdf || item.submissionId || item.status === 'completed')
     const ok = await showConfirm({
-      title: 'Delete completed form?',
-      description: 'This permanently removes the completed PDF. This cannot be undone.',
+      title: hasCompletedPdf ? 'Delete completed form?' : 'Remove this form?',
+      description: hasCompletedPdf
+        ? 'This permanently removes the form and any completed PDF. This cannot be undone.'
+        : 'This removes the form from this lead. This cannot be undone.',
       confirmLabel: 'Delete',
       destructive: true,
     })
     if (!ok) return
     setFormActionBusy(true)
     try {
+      const submissionId = item.submissionId || (item.kind === 'submission' ? item.id : null)
+      const inviteId = item.inviteId || (item.kind === 'invite' ? item.id : null)
       await deleteFormSubmission(getToken, {
-        submissionId: item.submissionId || item.id,
-        pdfKey: item.pdfKey,
+        submissionId: submissionId || undefined,
+        pdfKey: item.pdfKey || undefined,
+        inviteId: inviteId || undefined,
       })
-      showToast('Completed form deleted', 'success')
+      showToast(hasCompletedPdf ? 'Completed form deleted' : 'Form removed', 'success')
       removeLeadFormFromList(item)
     } catch (e) {
       showToast(e.message || 'Failed to delete', 'error')
@@ -1348,7 +1395,7 @@ export function LeadDetails({
           View
         </OptionsMenuItem>
         <OptionsMenuItem
-          disabled={!formActionsItem?.hasPdf || !formActionsItem?.pdfKey || formActionBusy}
+          disabled={formActionBusy}
           onClick={handleFormActionDownload}
         >
           <Download className="h-4 w-4 shrink-0" />
@@ -1356,7 +1403,7 @@ export function LeadDetails({
         </OptionsMenuItem>
         <OptionsMenuItem
           destructive
-          disabled={!formActionsItem?.hasPdf || !formActionsItem?.pdfKey || formActionBusy || !canMutateLeadForms}
+          disabled={formActionBusy || !canMutateLeadForms}
           className="list-panel-delete-btn rounded-b-xl pb-2 hover:bg-red-600/80"
           onClick={handleFormActionDelete}
         >

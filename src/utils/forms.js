@@ -276,21 +276,22 @@ export async function fetchFormSubmissionPdfBlob(getToken, pdfKey) {
   )
 }
 
-export async function deleteFormSubmission(getToken, { submissionId, pdfKey } = {}) {
+export async function deleteFormSubmission(getToken, { submissionId, pdfKey, inviteId } = {}) {
   const token = await getToken()
-  if (!token) throw new Error('Sign in to delete completed form')
+  if (!token) throw new Error('Sign in to delete form')
   const params = new URLSearchParams()
   // Always send pdfKey when present — lead activity rows may use invite id as `id`.
   if (pdfKey) params.set('pdfKey', pdfKey)
   if (submissionId) params.set('submissionId', submissionId)
-  if (![...params.keys()].length) throw new Error('submissionId or pdfKey is required')
+  if (inviteId) params.set('inviteId', inviteId)
+  if (![...params.keys()].length) throw new Error('submissionId, pdfKey, or inviteId is required')
   const res = await fetch(`${getApiBase()}/forms-submissions?${params}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) {
     const err = await parseJsonSafe(res)
-    throw new Error(err.error || 'Failed to delete completed form')
+    throw new Error(err.error || 'Failed to delete form')
   }
   return parseJsonSafe(res)
 }

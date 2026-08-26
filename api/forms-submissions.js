@@ -3,7 +3,7 @@ import { requireAuth } from './_lib/apiAuth.js'
 import { getAllTeams } from './_lib/teams.js'
 import { getAllFormTemplates } from './_lib/formTemplateStore.js'
 import { getAllSubmissions, saveAllSubmissions, getAllInvites, saveAllInvites } from './_lib/formInvites.js'
-import { buildAccessContext, getResourceAccess, canView, canEdit } from './_lib/resourceContext.js'
+import { buildAccessContext, getResourceAccess, canView } from './_lib/resourceContext.js'
 import { isWellFormedFormSubmissionPdfKey } from './_lib/formPdfKey.js'
 import { canViewFormSubmission, canDeleteFormSubmission } from './_lib/formSubmissionAccess.js'
 
@@ -83,26 +83,58 @@ export default async function handler(req, res) {
     if (req.method === 'DELETE') {
       const submissionId = String(req.query.submissionId || '').trim()
       const pdfKey = String(req.query.pdfKey || '').trim()
-      // Prefer exact submission id; fall back to pdfKey (lead list rows often use invite id as `id`).
+      const inviteId = String(req.query.inviteId || '').trim()
+      // Prefer exact submission id; fall back to pdfKey / inviteId (lead list rows often use invite id as `id`).
       const sub = (submissionId
         ? submissions.find((s) => s.id === submissionId)
         : null)
         || (pdfKey
           ? submissions.find((s) => s.pdfKey === pdfKey)
           : null)
-      if (!sub) return res.status(404).json({ error: 'Submission not found' })
-      const allowed = await canDeleteFormSubmission(sub, user, ctx, templateById)
-      if (!allowed) {
-        return res.status(403).json({ error: 'You do not have permission to delete this submission' })
+        || (inviteId
+          ? submissions.find((s) => s.inviteId === inviteId)
+          : null)
+        || (submissionId
+          ? submissions.find((s) => s.inviteId === submissionId)
+          : null)
+
+      if (sub) {
+        const allowed = await canDeleteFormSubmission(sub, user, ctx, templateById)
+        if (!allowed) {
+          return res.status(403).json({ error: 'You do not have permission to delete this submission' })
+        }
+        if (sub.pdfKey) await deleteR2Key(sub.pdfKey)
+        await saveAllSubmissions(submissions.filter((s) => s.id !== sub.id))
+        // Remove the linked invite so Lead Details doesn't keep a "Completed" ghost row.
+        const linkedInviteId = sub.inviteId || inviteId || null
+        if (linkedInviteId) {
+          const invites = await getAllInvites()
+          await saveAllInvites(invites.filter((inv) => inv.id !== linkedInviteId))
+        }
+        return res.status(200).json({ ok: true, id: sub.id })
       }
-      if (sub.pdfKey) await deleteR2Key(sub.pdfKey)
-      await saveAllSubmissions(submissions.filter((s) => s.id !== sub.id))
-      // Remove the linked invite so Lead Details doesn't keep a "Completed" ghost row.
-      if (sub.inviteId) {
+
+      // Invite-only row (pending/viewed/sent with no submission yet).
+      const inviteKey = inviteId || submissionId
+      if (inviteKey) {
         const invites = await getAllInvites()
-        await saveAllInvites(invites.filter((inv) => inv.id !== sub.inviteId))
+        const invite = invites.find((inv) => inv.id === inviteKey)
+        if (!invite) return res.status(404).json({ error: 'Form not found' })
+        // Reuse submission delete rules against a synthetic record with the invite's lead/template.
+        const allowed = await canDeleteFormSubmission(
+          { templateId: invite.templateId, leadId: invite.leadId || null },
+          user,
+          ctx,
+          templateById,
+        )
+        if (!allowed) {
+          return res.status(403).json({ error: 'You do not have permission to delete this form' })
+        }
+        await saveAllInvites(invites.filter((inv) => inv.id !== invite.id))
+        return res.status(200).json({ ok: true, id: invite.id, kind: 'invite' })
       }
-      return res.status(200).json({ ok: true, id: sub.id })
+
+      return res.status(400).json({ error: 'submissionId, pdfKey, or inviteId is required' })
     }
 
     const visibleTemplateIds = new Set(
