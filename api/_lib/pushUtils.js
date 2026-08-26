@@ -484,11 +484,16 @@ export function diffDealStatusChanges(oldDeals, newDeals) {
   return changes
 }
 
-export async function notifyPipelineDealStatusChanges(
-  changes,
-  { pipelineTitle, pipelineId, columns, ownerEmail, sharedWith, actorEmail }
-) {
-  if (!changes?.length) return
+export function dealStageRecipientEmails({
+  ownerEmail,
+  sharedWith,
+  sharedMemberUids,
+  visibility,
+  teamId,
+  teamsIndex = {},
+  actorEmail,
+  actorUid,
+} = {}) {
   const recipients = new Set()
   const o = (ownerEmail || '').toLowerCase().trim()
   if (o) recipients.add(o)
@@ -496,8 +501,50 @@ export async function notifyPipelineDealStatusChanges(
     const t = (s || '').toLowerCase().trim()
     if (t) recipients.add(t)
   }
+
+  const team = teamId ? teamsIndex[teamId] : null
+  const vis = visibility || (Array.isArray(sharedMemberUids) && sharedMemberUids.length ? 'members' : null)
+
+  if (vis === 'team' && team) {
+    for (const email of getTeamMemberEmails(team)) recipients.add(email)
+  } else if (vis === 'members' && team && Array.isArray(sharedMemberUids) && sharedMemberUids.length) {
+    for (const email of memberEmailsForUids(team, sharedMemberUids, actorUid)) {
+      recipients.add(email)
+    }
+  }
+
   const actor = (actorEmail || '').toLowerCase().trim()
-  recipients.delete(actor)
+  if (actor) recipients.delete(actor)
+  return [...recipients]
+}
+
+export async function notifyPipelineDealStatusChanges(
+  changes,
+  {
+    pipelineTitle,
+    pipelineId,
+    columns,
+    ownerEmail,
+    sharedWith,
+    sharedMemberUids,
+    visibility,
+    teamId,
+    teamsIndex,
+    actorEmail,
+    actorUid,
+  }
+) {
+  if (!changes?.length) return
+  const recipients = dealStageRecipientEmails({
+    ownerEmail,
+    sharedWith,
+    sharedMemberUids,
+    visibility,
+    teamId,
+    teamsIndex,
+    actorEmail,
+    actorUid,
+  })
 
   const count = changes.length
   const coalesceKey = buildNotificationCoalesceKey({

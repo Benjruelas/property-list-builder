@@ -176,7 +176,12 @@ async function runPipelinePushNotifications({
           columns: pipeline.columns || [],
           ownerEmail: pipeline.ownerEmail,
           sharedWith: pipeline.sharedWith || [],
-          actorEmail: user.email
+          sharedMemberUids: pipeline.sharedMemberUids || [],
+          visibility: pipeline.visibility,
+          teamId: pipeline.teamId,
+          teamsIndex,
+          actorEmail: user.email,
+          actorUid: user.uid,
         })
       }
     }
@@ -206,12 +211,14 @@ async function runPipelineActivityLog({
       diffDealChanges,
       batchPipelineDealActivities,
     } = await import('./_lib/activityLog.js')
+    const { activityAudienceForResource } = await import('./_lib/resourceContext.js')
 
     const teamIds = teamIdsFromResource(pipeline)
     if (teamIds.length === 0) return
 
     const label = actorLabel(user)
     const pipeTitle = pipeline.title || 'pipeline'
+    const audience = activityAudienceForResource(pipeline)
 
     if (newlyAddedTeamShares?.length > 0) {
       for (const tid of newlyAddedTeamShares) {
@@ -222,6 +229,7 @@ async function runPipelineActivityLog({
           summary: `${label} shared pipe "${pipeTitle}" with the team`,
           entity: { kind: 'pipeline', pipelineId: pipeline.id },
           nav: { type: 'pipeline', pipelineId: pipeline.id },
+          audience,
         })
       }
     }
@@ -240,6 +248,7 @@ async function runPipelineActivityLog({
         summaryContext: batch.summaryContext,
         entity: batch.entity,
         nav: batch.nav,
+        audience,
       })
     }
   } catch (e) {
