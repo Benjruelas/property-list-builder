@@ -89,14 +89,16 @@ export function OptionsMenuDropdown({
   )
 }
 
-export function OptionsMenuItem({ onClick, children, className, destructive = false }) {
+export function OptionsMenuItem({ onClick, children, className, destructive = false, disabled = false }) {
   return (
     <button
       type="button"
       role="menuitem"
+      disabled={disabled}
       className={cn(
         'hamburger-menu-btn w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors',
         destructive ? 'text-red-400' : 'text-gray-900',
+        disabled && 'opacity-40 pointer-events-none',
         className
       )}
       onClick={onClick}
