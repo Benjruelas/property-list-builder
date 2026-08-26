@@ -289,14 +289,17 @@ export function FormFillView({
     return Math.min(FILL_ZOOM_MAX, Math.max(FIT_TO_SCREEN_MIN, fitZoom))
   }, [isPublic, pageSizes.length])
 
-  /** After fit/reset: top of form, horizontally centered in the scroller when wider than the viewport. */
+  /** After fit/reset: top of form, horizontally centered. Always instant — CSS
+   *  scroll-behavior:smooth must not animate resets during review settle. */
   const pinReviewScroll = useCallback(() => {
     const scroller = scrollContainerRef.current
     if (!scroller) return
+    const prevBehavior = scroller.style.scrollBehavior
+    scroller.style.scrollBehavior = 'auto'
     const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth)
     const left = maxLeft > 0 ? Math.round(maxLeft / 2) : 0
-    scroller.scrollTop = 0
-    scroller.scrollLeft = left
+    scroller.scrollTo({ top: 0, left, behavior: 'auto' })
+    scroller.style.scrollBehavior = prevBehavior
     setScrollPos({ top: 0, left })
   }, [])
 
@@ -314,6 +317,18 @@ export function FormFillView({
       })
     })
   }, [computeViewModeZoom, pinReviewScroll])
+
+  const cancelScrollerSmooth = useCallback(() => {
+    const scroller = scrollContainerRef.current
+    if (!scroller) return
+    scroller.style.scrollBehavior = 'auto'
+    // Re-assert current position to abort an in-flight smooth scroll animation.
+    scroller.scrollTo({
+      top: scroller.scrollTop,
+      left: scroller.scrollLeft,
+      behavior: 'auto',
+    })
+  }, [])
 
   const resetFillView = useCallback(() => {
     lastFocusedFieldRef.current = null
@@ -557,11 +572,21 @@ export function FormFillView({
   }, [activeTourFields, effectiveLockedSet])
 
   const exitFillMode = useCallback(() => {
-    setFillMode(false)
+    cancelScrollerSmooth()
     formFocusZoomRef.current = null
     lastFocusedFieldRef.current = null
-    applyReviewFit()
-  }, [applyReviewFit])
+    manualZoomRef.current = false
+    // Drop focus zoom in the same turn as leaving fill mode so the zoom spacer
+    // and oversized transform don't leave a tall empty scroll region.
+    setFillZoom(1)
+    fillZoomRef.current = 1
+    setFillMode(false)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        applyReviewFit()
+      })
+    })
+  }, [applyReviewFit, cancelScrollerSmooth])
 
   const setStepForField = useCallback((fieldId) => {
     if (effectiveLockedSet.has(fieldId)) return
@@ -922,9 +947,12 @@ export function FormFillView({
       setFillZoom(z)
       fillZoomRef.current = z
       setReviewFitZoom(z)
+      requestAnimationFrame(() => {
+        if (!cancelled) pinReviewScroll()
+      })
     })()
     return () => { cancelled = true }
-  }, [fillMode, viewFitReady, showSubmitControl, computeViewModeZoom])
+  }, [fillMode, viewFitReady, showSubmitControl, computeViewModeZoom, pinReviewScroll])
 
   // View mode: keep the form horizontally centered (and top-aligned) after zoom/layout changes.
   useEffect(() => {
