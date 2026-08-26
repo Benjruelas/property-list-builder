@@ -3,7 +3,7 @@ import { requireAuth } from './_lib/apiAuth.js'
 import { getAllTeams } from './_lib/teams.js'
 import { getAllFormTemplates } from './_lib/formTemplateStore.js'
 import { getAllSubmissions, saveAllSubmissions, getAllInvites, saveAllInvites } from './_lib/formInvites.js'
-import { buildAccessContext, getResourceAccess, canView, canEdit } from './_lib/resourceContext.js'
+import { buildAccessContext, getResourceAccess, canView } from './_lib/resourceContext.js'
 import { isWellFormedFormSubmissionPdfKey } from './_lib/formPdfKey.js'
 import { canViewFormSubmission, canDeleteFormSubmission } from './_lib/formSubmissionAccess.js'
 
