@@ -266,7 +266,7 @@
   -webkit-backdrop-filter: none !important;
 }
 
-[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog, .send-outreach-dialog, .outreach-panel) :is(input, textarea, select, .quote-msg-tag-editor) {
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog, .send-outreach-dialog, .outreach-panel) :is(input:not(.form-field-input), textarea:not(.form-field-input), select, .quote-msg-tag-editor) {
   background: var(--map-panel-input-bg, rgba(0, 0, 0, 0.04)) !important;
   border-color: var(--map-panel-input-border, rgba(0, 0, 0, 0.15)) !important;
   color: var(--map-panel-text, #111827) !important;
@@ -274,9 +274,17 @@
   caret-color: var(--map-panel-text, #111827) !important;
 }
 
-[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog, .send-outreach-dialog, .outreach-panel) :is(input, textarea)::placeholder {
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog, .send-outreach-dialog, .outreach-panel) :is(input:not(.form-field-input), textarea:not(.form-field-input))::placeholder {
   color: var(--map-panel-text-muted, rgba(17, 24, 39, 0.55)) !important;
   -webkit-text-fill-color: var(--map-panel-text-muted, rgba(17, 24, 39, 0.55)) !important;
+}
+
+/* PDF overlays in send preview — keep black ink even under #modal-root light remaps */
+[data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .send-form-dialog) :is(input.form-field-input, textarea.form-field-input) {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  caret-color: #000 !important;
+  color-scheme: light;
 }
 
 [data-ui-theme='light'] #modal-root :is(.forms-send-dialog, .share-list-dialog, .send-form-dialog, .send-report-dialog, .send-quote-dialog, .send-outreach-dialog, .outreach-panel) select option {
