@@ -6368,6 +6368,19 @@ body:has(.app-loading-screen--video) {
 .share-list-dialog textarea:not(.form-field-input)::placeholder {
   color: rgba(255, 255, 255, 0.5) !important;
 }
+/* Send preview PDF fields — must win over any later panel input remaps */
+.forms-send-dialog input.form-field-input,
+.forms-send-dialog textarea.form-field-input,
+.send-form-dialog input.form-field-input,
+.send-form-dialog textarea.form-field-input,
+.list-panel.send-form-dialog input.form-field-input:not([type='checkbox']):not([type='radio']) {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  caret-color: #000 !important;
+  color-scheme: light;
+  background: transparent !important;
+  border-color: transparent !important;
+}
 .forms-send-dialog select option,
 .share-list-dialog select option {
   background: rgb(18, 22, 34);
