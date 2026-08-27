@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo } 
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
@@ -11,7 +12,6 @@ import {
 } from 'firebase/auth'
 import { auth } from '../config/firebase'
 import { showToast } from '../components/ui/toast'
-import { isIosStandalone } from '../utils/isIosStandalone'
 
 const AuthContext = createContext({})
 
@@ -106,22 +106,28 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Full-page redirect to Google (works in Safari tabs; blocked on iOS Home Screen).
+  // Popup first (no full-page redirect). Fall back to redirect only if the browser blocks popups.
   const signInWithGoogle = async () => {
-    if (isIosStandalone()) {
-      const err = new Error(
-        'Google sign-in is not available in the Home Screen app. Use email and password, or open knockscout.app in Safari.',
-      )
-      err.code = 'auth/operation-not-supported-in-this-environment'
-      showToast(err.message, 'error')
-      throw err
-    }
+    const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: 'select_account' })
     try {
-      const provider = new GoogleAuthProvider()
-      provider.setCustomParameters({ prompt: 'select_account' })
-      await signInWithRedirect(auth, provider)
-      showToast('Redirecting to Google…', 'info')
+      await signInWithPopup(auth, provider)
+      showToast('Signed in with Google successfully!', 'success')
     } catch (error) {
+      const code = error?.code || ''
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        return
+      }
+      if (code === 'auth/popup-blocked') {
+        try {
+          await signInWithRedirect(auth, provider)
+          showToast('Redirecting to Google…', 'info')
+          return
+        } catch (redirectError) {
+          showToast(googleSignInErrorMessage(redirectError), 'error')
+          throw redirectError
+        }
+      }
       showToast(googleSignInErrorMessage(error), 'error')
       throw error
     }
