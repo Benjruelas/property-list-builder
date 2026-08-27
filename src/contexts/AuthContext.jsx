@@ -14,7 +14,6 @@ import { auth } from '../config/firebase'
 import { showToast } from '../components/ui/toast'
 import { isIosStandalone } from '../utils/isIosStandalone'
 import {
-  buildHandoffSafariUrl,
   clearStoredHandoff,
   readStoredHandoff,
   startGoogleHandoff,
@@ -152,7 +151,8 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // iOS Home Screen: Safari handoff + custom token (popup/redirect cannot share storage).
+  // iOS Home Screen: open Google OAuth on accounts.google.com (Safari), then poll
+  // for a custom token. Same-origin handoff URLs get reclaimed by the PWA.
   // Safari / desktop: full-page redirect (stable with custom authDomain).
   const signInWithGoogle = async () => {
     if (isIosStandalone()) {
@@ -161,15 +161,16 @@ export const AuthProvider = ({ children }) => {
       const safariWindow = window.open('about:blank', '_blank')
       try {
         const session = await startGoogleHandoff()
-        const safariUrl = buildHandoffSafariUrl(session.handoffId)
+        // External Google host — not knockscout.app — so iOS opens Safari.
+        const safariUrl = session.authUrl || session.safariUrl
         storeHandoff({ ...session, safariUrl })
-        if (safariWindow && !safariWindow.closed) {
+        if (safariWindow && !safariWindow.closed && safariUrl) {
           safariWindow.location.href = safariUrl
         } else {
           // Popup blocked — user can tap the Safari link in the login UI.
-          showToast('Tap “Open Safari again” below, then follow the KnockScout steps.', 'info')
+          showToast('Tap “Open Safari again” below, then choose your Google account.', 'info')
         }
-        showToast('Safari opened — follow the KnockScout steps there, then return here.', 'info')
+        showToast('Safari opened — choose your Google account, then return here.', 'info')
         await runHandoffPoll({ ...session, safariUrl })
         return
       } catch (error) {

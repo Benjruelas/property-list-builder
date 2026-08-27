@@ -292,9 +292,9 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
           <div className="mt-3 space-y-3 text-center text-sm text-gray-600">
             <p className="font-medium text-gray-800">Google sign-up continues in Safari</p>
             <ol className="text-left space-y-1.5 mx-auto max-w-xs">
-              <li>1. In Safari, tap <span className="font-medium">Continue with Google</span></li>
-              <li>2. Choose your Google account</li>
-              <li>3. Wait for the KnockScout success screen</li>
+              <li>1. Choose your Google account in Safari</li>
+              <li>2. Wait for the KnockScout success screen</li>
+              <li>3. Tap <span className="font-medium">Open KnockScout</span> if needed</li>
               <li>4. Return here — we&apos;ll finish automatically</li>
             </ol>
             {safariUrl ? (
