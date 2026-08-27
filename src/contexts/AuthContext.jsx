@@ -151,30 +151,27 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // iOS Home Screen: open Google OAuth on accounts.google.com (Safari), then poll
-  // for a custom token. Same-origin handoff URLs get reclaimed by the PWA.
-  // Safari / desktop: full-page redirect (stable with custom authDomain).
+  // iOS Home Screen: full-page navigate to Google (not window.open).
+  // Popups/Safari sheets get reclaimed by the PWA and drop the OAuth redirect.
+  // Callback HTML signs in with a custom token in this same WebView.
+  // Safari / desktop: full-page Firebase redirect (stable with custom authDomain).
   const signInWithGoogle = async () => {
     if (isIosStandalone()) {
-      // Must open the window synchronously in the tap gesture — awaiting first
-      // causes iOS to block window.open and leaves users in a dead loop.
-      const safariWindow = window.open('about:blank', '_blank')
       try {
+        setGoogleHandoffPending(true)
         const session = await startGoogleHandoff()
-        // External Google host — not knockscout.app — so iOS opens Safari.
-        const safariUrl = session.authUrl || session.safariUrl
-        storeHandoff({ ...session, safariUrl })
-        if (safariWindow && !safariWindow.closed && safariUrl) {
-          safariWindow.location.href = safariUrl
-        } else {
-          // Popup blocked — user can tap the Safari link in the login UI.
-          showToast('Tap “Open Safari again” below, then choose your Google account.', 'info')
+        const authUrl = session.authUrl || session.safariUrl
+        if (!authUrl) {
+          throw Object.assign(new Error('Google sign-in did not return an authorization URL.'), {
+            code: 'handoff/start-failed',
+          })
         }
-        showToast('Safari opened — choose your Google account, then return here.', 'info')
-        await runHandoffPoll({ ...session, safariUrl })
+        storeHandoff({ ...session, safariUrl: authUrl })
+        showToast('Continuing to Google…', 'info')
+        // Top-level navigation keeps the OAuth return in this WebView.
+        window.location.assign(authUrl)
         return
       } catch (error) {
-        try { safariWindow?.close() } catch { /* ignore */ }
         if (error?.code === 'handoff/cancelled') return
         showToast(googleSignInErrorMessage(error), 'error')
         clearStoredHandoff()
@@ -203,7 +200,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
-  // Resume Home Screen handoff after returning from Safari / cold start.
+  // Resume handoff if callback stored a token but auto sign-in did not complete.
   useEffect(() => {
     if (isDev || !isIosStandalone()) return undefined
     const stored = readStoredHandoff()
@@ -214,6 +211,11 @@ export const AuthProvider = ({ children }) => {
         await runHandoffPoll(stored)
       } catch (error) {
         if (cancelled || error?.code === 'handoff/cancelled') return
+        // Ignore expired sessions after a successful in-callback sign-in cleared KV.
+        if (error?.code === 'handoff/expired' || error?.code === 'handoff/timeout') {
+          clearStoredHandoff()
+          return
+        }
         showToast(googleSignInErrorMessage(error), 'error')
       }
     })()

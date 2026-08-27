@@ -1,12 +1,12 @@
 /**
  * Google OAuth redirect target for iOS Home Screen PWA handoff.
  *
- * Google redirects here (Safari) after account selection. We exchange the
- * authorization code (PKCE), mint a Firebase custom token into KV for the
- * waiting PWA, and show a branded KnockScout result page.
+ * The Home Screen app top-level-navigates to accounts.google.com; Google then
+ * returns here with ?code=&state=. We exchange the code (PKCE), mint a Firebase
+ * custom token (KV + inline sign-in), and send the user back into KnockScout.
  *
- * Opening accounts.google.com (not a same-origin /auth/* page) is required so
- * iOS does not reclaim the flow into the standalone WebView.
+ * Do not use window.open/Safari sheets for this flow — iOS reclaims same-origin
+ * returns and drops the OAuth code.
  */
 
 import {
@@ -67,6 +67,7 @@ function renderResultHtml({
 <script type="module">
   const customToken = ${tokenJson};
   const firebaseConfig = ${cfgJson};
+  const homeUrl = ${JSON.stringify(openHref)};
   try {
     const { initializeApp } = await import('https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js');
     const { getAuth, setPersistence, browserLocalPersistence, signInWithCustomToken } =
@@ -75,12 +76,17 @@ function renderResultHtml({
     const auth = getAuth(app);
     await setPersistence(auth, browserLocalPersistence);
     await signInWithCustomToken(auth, customToken);
+    try {
+      localStorage.removeItem('knockscout.googleHandoff.v1');
+      sessionStorage.removeItem('knockscout.googleHandoff.v1');
+    } catch (_) {}
     const el = document.getElementById('ks-auto');
-    if (el) el.textContent = 'Signed in on this device. You can return to KnockScout.';
+    if (el) el.textContent = 'Signed in — opening KnockScout…';
+    window.location.replace(homeUrl);
   } catch (err) {
     console.warn('[google-oauth-callback] auto sign-in', err);
     const el = document.getElementById('ks-auto');
-    if (el) el.textContent = 'Return to the KnockScout Home Screen app to finish.';
+    if (el) el.textContent = 'Tap Open KnockScout below to finish.';
   }
 </script>`
     : ''
@@ -233,7 +239,7 @@ export default async function handler(req, res) {
     return sendHtml(res, 200, renderResultHtml({
       ok: true,
       title: 'You are signed in',
-      copy: 'Return to the KnockScout Home Screen app — it will finish automatically. Or tap Open KnockScout below.',
+      copy: 'Finishing sign-in and returning to KnockScout…',
       customToken,
       appOrigin,
     }))

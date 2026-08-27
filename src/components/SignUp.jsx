@@ -7,7 +7,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { LegalConsentCheckbox } from './legal/LegalConsentCheckbox'
 import { LegalFooterLinks } from './legal/LegalFooterLinks'
 import { showToast } from './ui/toast'
-import { readStoredHandoff } from '../utils/googleHandoff'
 
 function SignUpPasswordField({
   id,
@@ -65,15 +64,13 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
     signInWithGoogle,
     cancelGoogleHandoff,
     googleHandoffPending,
-    googleHandoffSafariUrl,
     currentUser,
     loading: authLoading,
   } = useAuth()
 
   const busy = isLoading || googleHandoffPending
-  const safariUrl = googleHandoffSafariUrl || readStoredHandoff()?.safariUrl || ''
 
-  // Reset loading state when dialog closes
+  // Reset loading state when dialog closes (don't clear an in-flight Google handoff).
   useEffect(() => {
     if (!isOpen) {
       setIsLoading(false)
@@ -84,9 +81,8 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
       setShowPassword(false)
       setShowConfirmPassword(false)
       setLegalAccepted(false)
-      if (googleHandoffPending) cancelGoogleHandoff()
     }
-  }, [isOpen, googleHandoffPending, cancelGoogleHandoff])
+  }, [isOpen])
 
   // Close dialog when user successfully signs up (auth state updates)
   useEffect(() => {
@@ -285,28 +281,13 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          {googleHandoffPending ? 'Waiting for Safari…' : 'Sign up with Google'}
+          {googleHandoffPending ? 'Continuing to Google…' : 'Sign up with Google'}
         </Button>
 
         {googleHandoffPending && (
           <div className="mt-3 space-y-3 text-center text-sm text-gray-600">
-            <p className="font-medium text-gray-800">Google sign-up continues in Safari</p>
-            <ol className="text-left space-y-1.5 mx-auto max-w-xs">
-              <li>1. Choose your Google account in Safari</li>
-              <li>2. Wait for the KnockScout success screen</li>
-              <li>3. Tap <span className="font-medium">Open KnockScout</span> if needed</li>
-              <li>4. Return here — we&apos;ll finish automatically</li>
-            </ol>
-            {safariUrl ? (
-              <a
-                href={safariUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block text-blue-600 hover:text-blue-800 hover:underline font-medium"
-              >
-                Open Safari again
-              </a>
-            ) : null}
+            <p className="font-medium text-gray-800">Continuing to Google…</p>
+            <p className="text-gray-600">Choose your account, then we&apos;ll bring you back here signed in.</p>
             <button
               type="button"
               onClick={cancelGoogleHandoff}
