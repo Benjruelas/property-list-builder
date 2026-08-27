@@ -127,6 +127,15 @@ export async function resolveGoogleOAuthWebClientId() {
   return ''
 }
 
+/** Client secret for the Web OAuth client (required by Firebase/Google web clients). */
+export function resolveGoogleOAuthWebClientSecret() {
+  return (
+    process.env.GOOGLE_OAUTH_WEB_CLIENT_SECRET
+    || process.env.GOOGLE_CLIENT_SECRET
+    || ''
+  ).trim()
+}
+
 export function buildGooglePkceAuthUrl({
   clientId,
   redirectUri,
@@ -149,20 +158,21 @@ export function buildGooglePkceAuthUrl({
 
 export async function exchangeGoogleAuthCode({ code, redirectUri, codeVerifier }) {
   const clientId = await resolveGoogleOAuthWebClientId()
-  const clientSecret = (
-    process.env.GOOGLE_OAUTH_WEB_CLIENT_SECRET
-    || process.env.GOOGLE_CLIENT_SECRET
-    || ''
-  ).trim()
+  const clientSecret = resolveGoogleOAuthWebClientSecret()
+  if (!clientSecret) {
+    const err = new Error('Google sign-in is not configured. Set GOOGLE_OAUTH_WEB_CLIENT_SECRET.')
+    err.code = 'missing_client_secret'
+    throw err
+  }
 
   const body = new URLSearchParams({
     code,
     client_id: clientId,
+    client_secret: clientSecret,
     redirect_uri: redirectUri,
     grant_type: 'authorization_code',
     code_verifier: codeVerifier,
   })
-  if (clientSecret) body.set('client_secret', clientSecret)
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
