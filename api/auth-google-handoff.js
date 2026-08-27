@@ -1,9 +1,12 @@
 /**
  * Google OAuth handoff for iOS Home Screen PWAs.
  *
- * POST { action: 'start' } → { handoffId, pollToken }
- * POST { action: 'complete', handoffId, idToken } → { ok: true }
+ * POST { action: 'start' } → { handoffId, pollToken, authUrl }
+ * POST { action: 'complete', handoffId, idToken } → { ok: true } (legacy bridge)
  * GET  ?handoffId=&pollToken= → { status, customToken? } (token redeemed once)
+ *
+ * Home Screen opens authUrl (accounts.google.com). Google returns to
+ * /api/auth-google-oauth-callback which mints the custom token into KV.
  */
 
 import { applyCors } from './_lib/cors.js'
@@ -14,6 +17,10 @@ import {
   HANDOFF_TTL_SEC,
   MAX_AUTH_AGE_SEC,
   createHandoffSecrets,
+  createPkcePair,
+  buildGooglePkceAuthUrl,
+  googleOAuthRedirectUri,
+  resolveGoogleOAuthWebClientId,
   handoffKvKey,
   hashPollToken,
   kvDelKey,
@@ -75,12 +82,29 @@ async function handleStart(req, res) {
     return res.status(503).json({ error: 'Sign-in handoff temporarily unavailable.' })
   }
 
+  const clientId = await resolveGoogleOAuthWebClientId()
+  if (!clientId) {
+    return res.status(503).json({
+      error: 'Google sign-in is not configured. Set GOOGLE_OAUTH_WEB_CLIENT_ID.',
+    })
+  }
+
   const { handoffId, pollToken, pollTokenHash } = createHandoffSecrets()
+  const { verifier, challenge } = createPkcePair()
+  const redirectUri = googleOAuthRedirectUri()
+  const authUrl = buildGooglePkceAuthUrl({
+    clientId,
+    redirectUri,
+    state: handoffId,
+    codeChallenge: challenge,
+  })
+
   const ok = await kvSetJsonEx(
     handoffKvKey(handoffId),
     {
       status: 'pending',
       pollTokenHash,
+      pkceVerifier: verifier,
       createdAt: Date.now(),
     },
     HANDOFF_TTL_SEC,
@@ -89,7 +113,12 @@ async function handleStart(req, res) {
     return res.status(503).json({ error: 'Sign-in handoff temporarily unavailable.' })
   }
 
-  return res.status(200).json({ handoffId, pollToken, expiresInSec: HANDOFF_TTL_SEC })
+  return res.status(200).json({
+    handoffId,
+    pollToken,
+    authUrl,
+    expiresInSec: HANDOFF_TTL_SEC,
+  })
 }
 
 async function handleComplete(req, res) {

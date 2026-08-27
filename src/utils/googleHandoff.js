@@ -1,5 +1,8 @@
 /**
  * Client helpers for iOS Home Screen Google OAuth handoff via Safari.
+ *
+ * Opens accounts.google.com (not a same-origin KnockScout URL) so iOS does not
+ * reclaim the window into the standalone PWA before Google finishes.
  */
 
 import { resolveApiUrl } from './apiBase'
@@ -8,39 +11,63 @@ const STORAGE_KEY = 'knockscout.googleHandoff.v1'
 export const HANDOFF_POLL_MS = 2000
 export const HANDOFF_TIMEOUT_MS = 5 * 60 * 1000
 
-export function readStoredHandoff() {
+function storageBackends() {
+  const list = []
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (!parsed?.handoffId || !parsed?.pollToken) return null
-    return parsed
+    if (typeof sessionStorage !== 'undefined') list.push(sessionStorage)
   } catch {
-    return null
+    /* ignore */
   }
+  try {
+    if (typeof localStorage !== 'undefined') list.push(localStorage)
+  } catch {
+    /* ignore */
+  }
+  return list
+}
+
+export function readStoredHandoff() {
+  for (const store of storageBackends()) {
+    try {
+      const raw = store.getItem(STORAGE_KEY)
+      if (!raw) continue
+      const parsed = JSON.parse(raw)
+      if (!parsed?.handoffId || !parsed?.pollToken) continue
+      return parsed
+    } catch {
+      /* try next */
+    }
+  }
+  return null
 }
 
 export function storeHandoff(session) {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-      handoffId: session.handoffId,
-      pollToken: session.pollToken,
-      startedAt: session.startedAt || Date.now(),
-      safariUrl: session.safariUrl || '',
-    }))
-  } catch {
-    /* ignore quota / private mode */
+  const payload = JSON.stringify({
+    handoffId: session.handoffId,
+    pollToken: session.pollToken,
+    startedAt: session.startedAt || Date.now(),
+    safariUrl: session.safariUrl || '',
+  })
+  for (const store of storageBackends()) {
+    try {
+      store.setItem(STORAGE_KEY, payload)
+    } catch {
+      /* ignore quota / private mode */
+    }
   }
 }
 
 export function clearStoredHandoff() {
-  try {
-    sessionStorage.removeItem(STORAGE_KEY)
-  } catch {
-    /* ignore */
+  for (const store of storageBackends()) {
+    try {
+      store.removeItem(STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
   }
 }
 
+/** @deprecated Prefer session.authUrl / session.safariUrl from startGoogleHandoff */
 export function buildHandoffSafariUrl(handoffId, origin = window.location.origin) {
   const url = new URL('/auth/google-handoff', origin)
   url.searchParams.set('id', handoffId)
@@ -59,9 +86,16 @@ export async function startGoogleHandoff() {
     err.code = 'handoff/start-failed'
     throw err
   }
+  if (!data.authUrl) {
+    const err = new Error('Google sign-in did not return an authorization URL.')
+    err.code = 'handoff/start-failed'
+    throw err
+  }
   const session = {
     handoffId: data.handoffId,
     pollToken: data.pollToken,
+    authUrl: data.authUrl,
+    safariUrl: data.authUrl,
     startedAt: Date.now(),
   }
   storeHandoff(session)
