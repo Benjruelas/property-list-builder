@@ -244,17 +244,20 @@ export default async function handler(req, res) {
       appOrigin,
     }))
   } catch (err) {
-    console.error('[auth-google-oauth-callback]', err?.message || err)
-    // Leave session pending briefly so a retry from Google is unlikely; clear verifier abuse path.
+    console.error('[auth-google-oauth-callback]', err?.code || '', err?.message || err)
     try {
       await kvDelKey(key)
     } catch {
       /* ignore */
     }
+    const missingSecret = err?.code === 'missing_client_secret'
+      || /client_secret is missing/i.test(String(err?.message || ''))
     return sendHtml(res, 500, renderResultHtml({
       ok: false,
       title: 'Google sign-in failed',
-      copy: 'Return to the KnockScout Home Screen app and try again.',
+      copy: missingSecret
+        ? 'Server is missing GOOGLE_OAUTH_WEB_CLIENT_SECRET. Add it in Vercel, redeploy, then try again.'
+        : 'Return to the KnockScout Home Screen app and try again.',
       appOrigin,
     }))
   }

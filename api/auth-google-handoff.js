@@ -21,6 +21,7 @@ import {
   buildGooglePkceAuthUrl,
   googleOAuthRedirectUri,
   resolveGoogleOAuthWebClientId,
+  resolveGoogleOAuthWebClientSecret,
   handoffKvKey,
   hashPollToken,
   kvDelKey,
@@ -86,6 +87,11 @@ async function handleStart(req, res) {
   if (!clientId) {
     return res.status(503).json({
       error: 'Google sign-in is not configured. Set GOOGLE_OAUTH_WEB_CLIENT_ID.',
+    })
+  }
+  if (!resolveGoogleOAuthWebClientSecret()) {
+    return res.status(503).json({
+      error: 'Google sign-in is not configured. Set GOOGLE_OAUTH_WEB_CLIENT_SECRET.',
     })
   }
 
