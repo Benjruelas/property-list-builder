@@ -111,6 +111,30 @@ function StepList({ steps }) {
   )
 }
 
+function OpenAppButton({
+  label = 'Open KnockScout',
+  variant = 'default',
+  className = 'w-full mt-6',
+}) {
+  return (
+    <Button asChild variant={variant} className={className}>
+      <a href="/" aria-label={label}>
+        <Home className="mr-2 h-4 w-4" />
+        {label}
+      </a>
+    </Button>
+  )
+}
+
+function OpenHomeScreenHint() {
+  return (
+    <p className="mt-3 text-xs text-white/45 text-center leading-relaxed">
+      For the Home Screen app: swipe up (or press Home), then tap the{' '}
+      <span className="text-white/70">KnockScout</span> icon. The app finishes sign-in automatically.
+    </p>
+  )
+}
+
 /**
  * Safari bridge for Home Screen Google sign-in — branded KnockScout pages with clear next actions.
  */
@@ -237,6 +261,8 @@ export function GoogleHandoffPage() {
             'Safari will open this page again with a valid link',
           ]}
         />
+        <OpenAppButton label="Open KnockScout" />
+        <OpenHomeScreenHint />
       </Shell>
     )
   }
@@ -271,6 +297,11 @@ export function GoogleHandoffPage() {
           <GoogleMark className="mr-2 h-5 w-5" />
           Continue with Google
         </Button>
+        <OpenAppButton
+          label="Cancel and open KnockScout"
+          variant="outline"
+          className="w-full mt-3 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
+        />
         <p className="mt-4 text-xs text-white/45 text-center leading-relaxed">
           After Google, stay in Safari until you see the success screen. Then switch back to the Home Screen app.
         </p>
@@ -311,13 +342,13 @@ export function GoogleHandoffPage() {
         <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400 mb-4" />
         <h1 className="text-xl font-semibold text-center mb-2">You&apos;re signed in</h1>
         <p className="text-sm text-white/70 text-center">
-          Google sign-in succeeded. One last step: open the KnockScout app on your Home Screen.
+          Google sign-in succeeded. Return to KnockScout to continue.
         </p>
         <div className="mt-6 rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-4 text-left space-y-3">
           <div className="flex gap-3 text-sm text-emerald-50">
             <Home className="h-5 w-5 shrink-0 text-emerald-300 mt-0.5" />
             <span>
-              <span className="font-medium text-white">Return to the Home Screen app</span>
+              <span className="font-medium text-white">Best: Home Screen icon</span>
               <span className="block text-white/70 mt-1">
                 Swipe up from the bottom (or press Home), then tap the KnockScout icon.
               </span>
@@ -333,9 +364,8 @@ export function GoogleHandoffPage() {
             </span>
           </div>
         </div>
-        <p className="mt-5 text-xs text-white/45 text-center">
-          You can close this Safari tab after you&apos;re back in the app.
-        </p>
+        <OpenAppButton label="Open KnockScout" />
+        <OpenHomeScreenHint />
       </Shell>
     )
   }
@@ -347,18 +377,18 @@ export function GoogleHandoffPage() {
       <h1 className="text-xl font-semibold text-center mb-2">Google sign-in didn&apos;t finish</h1>
       <p className="text-sm text-red-200/90 text-center mb-2">{error || 'Something went wrong.'}</p>
       <p className="text-sm text-white/70 text-center mb-6">
-        You can try again here, or start over from the KnockScout Home Screen app.
+        You can try again here, or go back to KnockScout and start over.
       </p>
       <Button type="button" className="w-full" onClick={handleContinue} disabled={busy}>
         <GoogleMark className="mr-2 h-5 w-5" />
         Try Google again
       </Button>
-      <StepList
-        steps={[
-          'Or open KnockScout from your Home Screen',
-          'Tap Sign in with Google to get a fresh Safari link',
-        ]}
+      <OpenAppButton
+        label="Open KnockScout"
+        variant="outline"
+        className="w-full mt-3 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
       />
+      <OpenHomeScreenHint />
     </Shell>
   )
 }
