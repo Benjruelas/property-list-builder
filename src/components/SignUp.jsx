@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { LegalConsentCheckbox } from './legal/LegalConsentCheckbox'
 import { LegalFooterLinks } from './legal/LegalFooterLinks'
 import { showToast } from './ui/toast'
+import { readStoredHandoff } from '../utils/googleHandoff'
 
 function SignUpPasswordField({
   id,
@@ -59,7 +60,18 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [legalAccepted, setLegalAccepted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const { signup, signInWithGoogle, currentUser, loading: authLoading } = useAuth()
+  const {
+    signup,
+    signInWithGoogle,
+    cancelGoogleHandoff,
+    googleHandoffPending,
+    googleHandoffSafariUrl,
+    currentUser,
+    loading: authLoading,
+  } = useAuth()
+
+  const busy = isLoading || googleHandoffPending
+  const safariUrl = googleHandoffSafariUrl || readStoredHandoff()?.safariUrl || ''
 
   // Reset loading state when dialog closes
   useEffect(() => {
@@ -72,8 +84,9 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
       setShowPassword(false)
       setShowConfirmPassword(false)
       setLegalAccepted(false)
+      if (googleHandoffPending) cancelGoogleHandoff()
     }
-  }, [isOpen])
+  }, [isOpen, googleHandoffPending, cancelGoogleHandoff])
 
   // Close dialog when user successfully signs up (auth state updates)
   useEffect(() => {
@@ -168,7 +181,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="pl-10"
-                disabled={isLoading}
+                disabled={busy}
               />
             </div>
           </div>
@@ -187,7 +200,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
                 onChange={(e) => setEmail(e.target.value)}
                 className="pl-10"
                 required
-                disabled={isLoading}
+                disabled={busy}
               />
             </div>
           </div>
@@ -200,7 +213,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
             onChange={(e) => setPassword(e.target.value)}
             visible={showPassword}
             onToggleVisible={() => setShowPassword((v) => !v)}
-            disabled={isLoading}
+            disabled={busy}
           />
 
           <SignUpPasswordField
@@ -211,7 +224,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
             onChange={(e) => setConfirmPassword(e.target.value)}
             visible={showConfirmPassword}
             onToggleVisible={() => setShowConfirmPassword((v) => !v)}
-            disabled={isLoading}
+            disabled={busy}
           />
 
           <LegalConsentCheckbox
@@ -219,15 +232,15 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
             variant="signup"
             checked={legalAccepted}
             onChange={setLegalAccepted}
-            disabled={isLoading}
+            disabled={busy}
           />
 
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading || !email || !password || !confirmPassword || !legalAccepted}
+            disabled={busy || !email || !password || !confirmPassword || !legalAccepted}
           >
-            {isLoading ? (
+            {busy && !googleHandoffPending ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 Creating account...
@@ -252,7 +265,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
           variant="ghost"
           className="w-full border border-white hover:bg-white/20"
           onClick={handleGoogleSignIn}
-          disabled={isLoading || !legalAccepted}
+          disabled={busy || !legalAccepted}
         >
           <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
             <path
@@ -272,8 +285,33 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Sign up with Google
+          {googleHandoffPending ? 'Waiting for Safari…' : 'Sign up with Google'}
         </Button>
+
+        {googleHandoffPending && (
+          <div className="mt-3 space-y-2 text-center text-sm text-gray-600">
+            <p>
+              Finish Google sign-in in Safari, then return to this app. We&apos;ll complete sign-in automatically.
+            </p>
+            {safariUrl ? (
+              <a
+                href={safariUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-blue-600 hover:text-blue-800 hover:underline font-medium"
+              >
+                Open Safari
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={cancelGoogleHandoff}
+              className="block mx-auto text-blue-600 hover:text-blue-800 hover:underline font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
         <LegalFooterLinks className="mt-4" />
 

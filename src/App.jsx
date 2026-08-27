@@ -71,6 +71,7 @@ const HailDataPanel = lazy(panelLazy.hailData)
 import { setCachedDealQuotes, getCachedDealQuotes } from './utils/quotes'
 import { PublicFormPage } from './components/forms/PublicFormPage'
 import { ResetPasswordPage } from './components/ResetPasswordPage'
+import { GoogleHandoffPage } from './components/GoogleHandoffPage'
 import { TermsOfServicePage } from './components/legal/TermsOfServicePage'
 import { PrivacyPolicyPage } from './components/legal/PrivacyPolicyPage'
 import { PublicQuotePage } from './components/quotes/PublicQuotePage'
@@ -5315,12 +5316,21 @@ export function AppWithPublicFormRoute() {
   const isTerms = publicRoute?.type === 'terms'
   const isPrivacy = publicRoute?.type === 'privacy'
   const isResetPassword = publicRoute?.type === 'reset-password'
+  const isGoogleHandoff = publicRoute?.type === 'google-handoff'
   // /s/{token} is normally served by the share-landing API. If the SPA loads it
   // (e.g. local vite), bounce into the authenticated claim flow.
   if (publicRoute?.type === 'share-redirect' && publicRoute.token && typeof window !== 'undefined') {
     const next = `/?share=${encodeURIComponent(publicRoute.token)}`
     window.location.replace(next)
     return null
+  }
+  if (isGoogleHandoff) {
+    return (
+      <div className="h-[100dvh] overflow-hidden">
+        <GoogleHandoffPage />
+        <ToastContainer />
+      </div>
+    )
   }
   if (isTerms) {
     return (
