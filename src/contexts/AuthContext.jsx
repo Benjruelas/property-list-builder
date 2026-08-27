@@ -167,7 +167,7 @@ export const AuthProvider = ({ children }) => {
           safariWindow.location.href = safariUrl
         } else {
           // Popup blocked — user can tap the Safari link in the login UI.
-          showToast('Tap “Open Safari” below to finish Google sign-in.', 'info')
+          showToast('Tap “Open Safari again” below, then follow the KnockScout steps.', 'info')
         }
         showToast('Safari opened — follow the KnockScout steps there, then return here.', 'info')
         await runHandoffPoll({ ...session, safariUrl })
