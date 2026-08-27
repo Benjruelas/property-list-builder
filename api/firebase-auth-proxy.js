@@ -31,8 +31,39 @@ export default async function handler(req, res) {
     let body = await fetchRes.text()
     const contentType = fetchRes.headers.get('content-type') || ''
     if (contentType.includes('text/html')) {
-      const hideStyle = '<style>html,body,a,*{visibility:hidden!important;opacity:0!important;pointer-events:none!important}</style>'
-      body = body.includes('</head>') ? body.replace('</head>', `${hideStyle}</head>`) : hideStyle + body
+      // Keep Firebase scripts running, but show a branded KnockScout shell instead of a blank page.
+      const brandShell = `
+<style>
+  html,body{background:#0a0a0a!important;margin:0!important}
+  body>*:not(#ks-auth-brand){visibility:hidden!important;opacity:0!important}
+  #ks-auth-brand{
+    visibility:visible!important;opacity:1!important;pointer-events:none;
+    position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px;padding:28px 20px;
+    background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,sans-serif;text-align:center
+  }
+  #ks-auth-brand img{width:48px;height:48px}
+  #ks-auth-brand .ks-title{font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0}
+  #ks-auth-brand .ks-copy{font-size:14px;line-height:1.45;color:rgba(255,255,255,.72);margin:0;max-width:28rem}
+  #ks-auth-brand .ks-spin{
+    width:28px;height:28px;border:2px solid rgba(125,211,252,.25);border-top-color:#7dd3fc;
+    border-radius:50%;animation:ks-spin .8s linear infinite;margin-top:4px
+  }
+  @keyframes ks-spin{to{transform:rotate(360deg)}}
+</style>
+<div id="ks-auth-brand" role="status" aria-live="polite">
+  <img src="/brand/emblem-white.svg" alt="" width="48" height="48"/>
+  <p class="ks-title">KnockScout</p>
+  <p class="ks-copy">Completing Google sign-in. You&apos;ll return to KnockScout next — keep this Safari tab open.</p>
+  <div class="ks-spin" aria-hidden="true"></div>
+</div>`
+      if (body.includes('</body>')) {
+        body = body.replace('</body>', `${brandShell}</body>`)
+      } else if (body.includes('</head>')) {
+        body = body.replace('</head>', `</head>${brandShell}`)
+      } else {
+        body = brandShell + body
+      }
     }
     // Don't forward encoding/length: fetch().text() decompresses the body,
     // so forwarding Content-Encoding causes ERR_CONTENT_DECODING_FAILED.

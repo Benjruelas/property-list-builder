@@ -169,7 +169,7 @@ export const AuthProvider = ({ children }) => {
           // Popup blocked — user can tap the Safari link in the login UI.
           showToast('Tap “Open Safari” below to finish Google sign-in.', 'info')
         }
-        showToast('Finish Google sign-in in Safari, then return here.', 'info')
+        showToast('Safari opened — follow the KnockScout steps there, then return here.', 'info')
         await runHandoffPoll({ ...session, safariUrl })
         return
       } catch (error) {

@@ -289,10 +289,14 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
         </Button>
 
         {googleHandoffPending && (
-          <div className="mt-3 space-y-2 text-center text-sm text-gray-600">
-            <p>
-              Finish Google sign-in in Safari, then return to this app. We&apos;ll complete sign-in automatically.
-            </p>
+          <div className="mt-3 space-y-3 text-center text-sm text-gray-600">
+            <p className="font-medium text-gray-800">Google sign-up continues in Safari</p>
+            <ol className="text-left space-y-1.5 mx-auto max-w-xs">
+              <li>1. In Safari, tap <span className="font-medium">Continue with Google</span></li>
+              <li>2. Choose your Google account</li>
+              <li>3. Wait for the KnockScout success screen</li>
+              <li>4. Return here — we&apos;ll finish automatically</li>
+            </ol>
             {safariUrl ? (
               <a
                 href={safariUrl}
@@ -300,7 +304,7 @@ export function SignUp({ isOpen, onClose, onSwitchToLogin }) {
                 rel="noopener noreferrer"
                 className="inline-block text-blue-600 hover:text-blue-800 hover:underline font-medium"
               >
-                Open Safari
+                Open Safari again
               </a>
             ) : null}
             <button
