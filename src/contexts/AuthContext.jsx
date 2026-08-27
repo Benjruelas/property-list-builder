@@ -1,9 +1,9 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
+  signInWithCustomToken,
   getRedirectResult,
   GoogleAuthProvider,
   signOut,
@@ -12,6 +12,15 @@ import {
 } from 'firebase/auth'
 import { auth } from '../config/firebase'
 import { showToast } from '../components/ui/toast'
+import { isIosStandalone } from '../utils/isIosStandalone'
+import {
+  buildHandoffSafariUrl,
+  clearStoredHandoff,
+  readStoredHandoff,
+  startGoogleHandoff,
+  storeHandoff,
+  waitForGoogleHandoffCustomToken,
+} from '../utils/googleHandoff'
 
 const AuthContext = createContext({})
 
@@ -47,6 +56,11 @@ function googleSignInErrorMessage(error) {
       return 'Google sign-in is not enabled for this project.'
     case 'auth/internal-error':
       return 'Google sign-in failed. Try again, or use email and password.'
+    case 'handoff/cancelled':
+      return 'Google sign-in cancelled.'
+    case 'handoff/timeout':
+    case 'handoff/expired':
+      return error.message || 'Google sign-in timed out. Try again.'
     default:
       if (typeof error?.message === 'string' && error.message && !error.message.startsWith('Firebase:')) {
         return error.message
@@ -58,6 +72,38 @@ function googleSignInErrorMessage(error) {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(isDev ? DEV_USER : null)
   const [loading, setLoading] = useState(!isDev)
+  const [googleHandoffPending, setGoogleHandoffPending] = useState(false)
+  const [googleHandoffSafariUrl, setGoogleHandoffSafariUrl] = useState('')
+  const handoffAbortRef = useRef(null)
+
+  const cancelGoogleHandoff = useCallback(() => {
+    handoffAbortRef.current?.abort()
+    handoffAbortRef.current = null
+    clearStoredHandoff()
+    setGoogleHandoffPending(false)
+    setGoogleHandoffSafariUrl('')
+  }, [])
+
+  const runHandoffPoll = useCallback(async (session) => {
+    const controller = new AbortController()
+    handoffAbortRef.current?.abort()
+    handoffAbortRef.current = controller
+    setGoogleHandoffPending(true)
+    if (session.safariUrl) setGoogleHandoffSafariUrl(session.safariUrl)
+    try {
+      const customToken = await waitForGoogleHandoffCustomToken(session, {
+        signal: controller.signal,
+      })
+      await signInWithCustomToken(auth, customToken)
+      showToast('Signed in with Google successfully!', 'success')
+    } finally {
+      if (handoffAbortRef.current === controller) {
+        handoffAbortRef.current = null
+      }
+      setGoogleHandoffPending(false)
+      setGoogleHandoffSafariUrl('')
+    }
+  }, [])
 
   // Sign up with email and password
   const signup = async (email, password, displayName) => {
@@ -106,28 +152,42 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Popup first (no full-page redirect). Fall back to redirect only if the browser blocks popups.
+  // iOS Home Screen: Safari handoff + custom token (popup/redirect cannot share storage).
+  // Safari / desktop: full-page redirect (stable with custom authDomain).
   const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider()
-    provider.setCustomParameters({ prompt: 'select_account' })
-    try {
-      await signInWithPopup(auth, provider)
-      showToast('Signed in with Google successfully!', 'success')
-    } catch (error) {
-      const code = error?.code || ''
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-        return
-      }
-      if (code === 'auth/popup-blocked') {
-        try {
-          await signInWithRedirect(auth, provider)
-          showToast('Redirecting to Google…', 'info')
-          return
-        } catch (redirectError) {
-          showToast(googleSignInErrorMessage(redirectError), 'error')
-          throw redirectError
+    if (isIosStandalone()) {
+      // Must open the window synchronously in the tap gesture — awaiting first
+      // causes iOS to block window.open and leaves users in a dead loop.
+      const safariWindow = window.open('about:blank', '_blank')
+      try {
+        const session = await startGoogleHandoff()
+        const safariUrl = buildHandoffSafariUrl(session.handoffId)
+        storeHandoff({ ...session, safariUrl })
+        if (safariWindow && !safariWindow.closed) {
+          safariWindow.location.href = safariUrl
+        } else {
+          // Popup blocked — user can tap the Safari link in the login UI.
+          showToast('Tap “Open Safari” below to finish Google sign-in.', 'info')
         }
+        showToast('Finish Google sign-in in Safari, then return here.', 'info')
+        await runHandoffPoll({ ...session, safariUrl })
+        return
+      } catch (error) {
+        try { safariWindow?.close() } catch { /* ignore */ }
+        if (error?.code === 'handoff/cancelled') return
+        showToast(googleSignInErrorMessage(error), 'error')
+        clearStoredHandoff()
+        setGoogleHandoffPending(false)
+        throw error
       }
+    }
+
+    try {
+      const provider = new GoogleAuthProvider()
+      provider.setCustomParameters({ prompt: 'select_account' })
+      await signInWithRedirect(auth, provider)
+      showToast('Redirecting to Google…', 'info')
+    } catch (error) {
       showToast(googleSignInErrorMessage(error), 'error')
       throw error
     }
@@ -142,9 +202,32 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  // Resume Home Screen handoff after returning from Safari / cold start.
+  useEffect(() => {
+    if (isDev || !isIosStandalone()) return undefined
+    const stored = readStoredHandoff()
+    if (!stored) return undefined
+    let cancelled = false
+    ;(async () => {
+      try {
+        await runHandoffPoll(stored)
+      } catch (error) {
+        if (cancelled || error?.code === 'handoff/cancelled') return
+        showToast(googleSignInErrorMessage(error), 'error')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [runHandoffPoll])
+
   // Handle redirect result when returning from Google OAuth
   useEffect(() => {
     if (isDev) return
+    // Safari handoff bridge owns getRedirectResult for /auth/google-handoff.
+    if (typeof window !== 'undefined' && /^\/auth\/google-handoff\/?$/.test(window.location.pathname)) {
+      return
+    }
     getRedirectResult(auth)
       .then((userCredential) => {
         if (userCredential?.user) {
@@ -176,6 +259,7 @@ export const AuthProvider = ({ children }) => {
   // Sign out
   const logout = async () => {
     try {
+      cancelGoogleHandoff()
       await signOut(auth)
       // onAuthStateChanged will automatically set currentUser to null
       // But we can also explicitly clear it here for immediate feedback
@@ -259,12 +343,15 @@ export const AuthProvider = ({ children }) => {
     signup,
     login,
     signInWithGoogle,
+    cancelGoogleHandoff,
+    googleHandoffPending,
+    googleHandoffSafariUrl,
     logout,
     resetPassword,
     updateDisplayName,
     loading
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [currentUser, loading, getToken])
+  }), [currentUser, loading, getToken, googleHandoffPending, googleHandoffSafariUrl, cancelGoogleHandoff])
 
   return (
     <AuthContext.Provider value={value}>

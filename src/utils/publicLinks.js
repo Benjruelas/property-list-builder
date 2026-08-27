@@ -46,6 +46,9 @@ export function parsePublicRoute(pathname = '', search = '') {
   if (/^\/reset-password\/?$/.test(path)) {
     return { type: 'reset-password' }
   }
+  if (/^\/auth\/google-handoff\/?$/.test(path)) {
+    return { type: 'google-handoff' }
+  }
   if (/^\/terms\/?$/.test(path)) {
     return { type: 'terms' }
   }

@@ -5,6 +5,7 @@ import { Input } from './ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { useAuth } from '../contexts/AuthContext'
 import { LegalFooterLinks } from './legal/LegalFooterLinks'
+import { readStoredHandoff } from '../utils/googleHandoff'
 
 const SIGN_IN_ERROR = 'Incorrect email or password'
 
@@ -13,7 +14,18 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [signInError, setSignInError] = useState('')
-  const { login, signInWithGoogle, currentUser, loading: authLoading } = useAuth()
+  const {
+    login,
+    signInWithGoogle,
+    cancelGoogleHandoff,
+    googleHandoffPending,
+    googleHandoffSafariUrl,
+    currentUser,
+    loading: authLoading,
+  } = useAuth()
+
+  const busy = isLoading || googleHandoffPending
+  const safariUrl = googleHandoffSafariUrl || readStoredHandoff()?.safariUrl || ''
 
   // Reset loading state when dialog closes
   useEffect(() => {
@@ -22,8 +34,9 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
       setEmail('')
       setPassword('')
       setSignInError('')
+      if (googleHandoffPending) cancelGoogleHandoff()
     }
-  }, [isOpen])
+  }, [isOpen, googleHandoffPending, cancelGoogleHandoff])
 
   // Close dialog when user successfully signs in (auth state updates)
   useEffect(() => {
@@ -101,7 +114,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
                 }}
                 className="pl-10"
                 required
-                disabled={isLoading}
+                disabled={busy}
               />
             </div>
           </div>
@@ -134,7 +147,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
                 }}
                 className="pl-10"
                 required
-                disabled={isLoading}
+                disabled={busy}
               />
             </div>
           </div>
@@ -143,9 +156,9 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
             type="submit"
             variant="ghost"
             className="w-full border border-white hover:bg-white/20"
-            disabled={isLoading || !email || !password}
+            disabled={busy || !email || !password}
           >
-            {isLoading ? (
+            {busy && !googleHandoffPending ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
                 Signing in...
@@ -176,7 +189,7 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
           variant="ghost"
           className="login-google-btn w-full border-0"
           onClick={handleGoogleSignIn}
-          disabled={isLoading}
+          disabled={busy}
         >
           <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
             <path
@@ -196,9 +209,34 @@ export function Login({ isOpen, onClose, onSwitchToSignUp, onSwitchToForgotPassw
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Sign in with Google
+          {googleHandoffPending ? 'Waiting for Safari…' : 'Sign in with Google'}
         </Button>
         </div>
+
+        {googleHandoffPending && (
+          <div className="mt-3 space-y-2 text-center text-sm text-gray-600">
+            <p>
+              Finish Google sign-in in Safari, then return to this app. We&apos;ll complete sign-in automatically.
+            </p>
+            {safariUrl ? (
+              <a
+                href={safariUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="login-link-btn inline-block text-blue-600 hover:text-blue-800 hover:underline font-medium"
+              >
+                Open Safari
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={cancelGoogleHandoff}
+              className="login-link-btn block mx-auto text-blue-600 hover:text-blue-800 hover:underline font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
         <LegalFooterLinks className="mt-4" />
 

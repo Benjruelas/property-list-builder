@@ -23,6 +23,9 @@ describe('publicLinks', () => {
   it('parses legal pages as public routes', () => {
     expect(parsePublicRoute('/terms', '')).toEqual({ type: 'terms' })
     expect(parsePublicRoute('/privacy/', '')).toEqual({ type: 'privacy' })
+    expect(parsePublicRoute('/auth/google-handoff', '')).toEqual({ type: 'google-handoff' })
+    expect(parsePublicRoute('/auth/google-handoff/', '?id=abc')).toEqual({ type: 'google-handoff' })
+    expect(parsePublicRoute('/reset-password', '')).toEqual({ type: 'reset-password' })
   })
 
   it('parses short path routes', () => {
