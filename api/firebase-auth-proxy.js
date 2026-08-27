@@ -49,6 +49,11 @@ export default async function handler(req, res) {
     width:28px;height:28px;border:2px solid rgba(125,211,252,.25);border-top-color:#7dd3fc;
     border-radius:50%;animation:ks-spin .8s linear infinite;margin-top:4px
   }
+  #ks-auth-brand a.ks-open{
+    pointer-events:auto;margin-top:16px;display:inline-flex;align-items:center;justify-content:center;
+    padding:10px 16px;border-radius:8px;background:#2563eb;color:#fff;font-size:14px;font-weight:600;
+    text-decoration:none
+  }
   @keyframes ks-spin{to{transform:rotate(360deg)}}
 </style>
 <div id="ks-auth-brand" role="status" aria-live="polite">
@@ -56,6 +61,7 @@ export default async function handler(req, res) {
   <p class="ks-title">KnockScout</p>
   <p class="ks-copy">Completing Google sign-in. You&apos;ll return to KnockScout next — keep this Safari tab open.</p>
   <div class="ks-spin" aria-hidden="true"></div>
+  <a class="ks-open" href="/">Open KnockScout</a>
 </div>`
       if (body.includes('</body>')) {
         body = body.replace('</body>', `${brandShell}</body>`)
