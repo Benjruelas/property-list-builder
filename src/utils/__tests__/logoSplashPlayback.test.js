@@ -4,6 +4,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   beginLogoSplashPlayback,
+  remountLogoSplashSource,
+  watchLogoSplashProgress,
   getLogoSplashScale,
   getBootLogoLayout,
   setBootLogoLayout,
@@ -11,6 +13,9 @@ import {
   logoDrawRect,
   isLogoSplashGreyPlaceholder,
   isUsableLogoSplashPlateSample,
+  isLogoSplashActivelyPlaying,
+  prefersDirectLogoVideo,
+  applyDirectLogoVideoLayout,
   BOOT_LOGO_LAYOUT_KEY,
   LOGO_SPLASH_SCALE_DESKTOP,
   LOGO_SPLASH_SCALE_MOBILE,
@@ -29,28 +34,62 @@ describe('logoSplashPlayback', () => {
       defaultMuted: false,
       volume: 1,
       paused: true,
+      ended: false,
       currentTime: 0.5,
       readyState: 2,
+      currentSrc: '',
+      src: '',
+      style: { setProperty: vi.fn(), width: '', height: '' },
+      classList: { add: vi.fn() },
       pause: vi.fn(),
       play: vi.fn().mockResolvedValue(undefined),
+      load: vi.fn(),
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
+      getAttribute: vi.fn().mockReturnValue('/brand/knockscout-LogoMark-on-black.mp4'),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     }
   })
 
   afterEach(() => {
     clearBootLogoLayout()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
-  it('plays muted from the start', async () => {
-    await beginLogoSplashPlayback(video)
+  it('plays muted from the start when restart is requested', async () => {
+    await beginLogoSplashPlayback(video, { restart: true })
     expect(video.pause).toHaveBeenCalled()
     expect(video.currentTime).toBe(0)
     expect(video.muted).toBe(true)
     expect(video.volume).toBe(0)
     expect(video.setAttribute).toHaveBeenCalledWith('muted', '')
     expect(video.play).toHaveBeenCalled()
+  })
+
+  it('does not seek to t=0 when already playing (HTML→React handoff)', async () => {
+    video.paused = false
+    video.currentTime = 1.25
+    await beginLogoSplashPlayback(video, { restart: false })
+    expect(video.pause).not.toHaveBeenCalled()
+    expect(video.currentTime).toBe(1.25)
+    expect(video.play).toHaveBeenCalled()
+  })
+
+  it('defaults to continue-without-restart for handoff safety', async () => {
+    video.paused = false
+    video.currentTime = 0.8
+    await beginLogoSplashPlayback(video)
+    expect(video.currentTime).toBe(0.8)
+    expect(video.pause).not.toHaveBeenCalled()
+  })
+
+  it('detects active playback', () => {
+    expect(isLogoSplashActivelyPlaying({ paused: false, ended: false, currentTime: 0.2 })).toBe(true)
+    expect(isLogoSplashActivelyPlaying({ paused: true, ended: false, currentTime: 1 })).toBe(false)
+    expect(isLogoSplashActivelyPlaying({ paused: false, ended: true, currentTime: 4 })).toBe(false)
+    expect(isLogoSplashActivelyPlaying({ paused: false, ended: false, currentTime: 0 })).toBe(false)
   })
 
   it('uses a smaller logo scale on desktop viewports', () => {
@@ -110,6 +149,7 @@ describe('logoSplashPlayback', () => {
       defaultMuted: false,
       volume: 1,
       paused: true,
+      ended: false,
       currentTime: 0.5,
       readyState: 2,
       pause: vi.fn(),
@@ -122,6 +162,7 @@ describe('logoSplashPlayback', () => {
       defaultMuted: false,
       volume: 1,
       paused: true,
+      ended: false,
       currentTime: 0.5,
       readyState: 2,
       pause: vi.fn(),
@@ -130,10 +171,117 @@ describe('logoSplashPlayback', () => {
       removeAttribute: vi.fn(),
     }
     // Overlap calls the way HTML→React handoff / Strict remount can.
-    const p1 = beginLogoSplashPlayback(first)
-    const p2 = beginLogoSplashPlayback(second)
+    const p1 = beginLogoSplashPlayback(first, { restart: true })
+    const p2 = beginLogoSplashPlayback(second, { restart: true })
     await Promise.all([p1, p2])
     expect(first.play).toHaveBeenCalled()
     expect(second.play).toHaveBeenCalled()
+  })
+
+  it('prefers direct video on iPhone / Capacitor iOS', () => {
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)',
+      platform: 'iPhone',
+      maxTouchPoints: 5,
+    })
+    expect(prefersDirectLogoVideo()).toBe(true)
+
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+      platform: 'MacIntel',
+      maxTouchPoints: 0,
+    })
+    vi.stubGlobal('Capacitor', { getPlatform: () => 'ios' })
+    expect(prefersDirectLogoVideo()).toBe(true)
+  })
+
+  it('does not prefer direct video on desktop Chrome', () => {
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+      platform: 'Win32',
+      maxTouchPoints: 0,
+    })
+    vi.stubGlobal('Capacitor', undefined)
+    expect(prefersDirectLogoVideo()).toBe(false)
+  })
+
+  it('applies locked layout + scale CSS for direct video', () => {
+    setBootLogoLayout(390, 700)
+    matchMediaMock.mockReturnValue({ matches: false })
+    applyDirectLogoVideoLayout(video)
+    expect(video.classList.add).toHaveBeenCalledWith('is-direct')
+    expect(video.style.setProperty).toHaveBeenCalledWith('--ks-logo-splash-scale', String(LOGO_SPLASH_SCALE_MOBILE))
+    expect(video.style.setProperty).toHaveBeenCalledWith('--ks-boot-logo-w', '390px')
+    expect(video.style.setProperty).toHaveBeenCalledWith('--ks-boot-logo-h', '700px')
+  })
+
+  it('remounts source with a cache-busting query for stall recovery', async () => {
+    await remountLogoSplashSource(video, '/brand/knockscout-LogoMark-on-black.mp4')
+    expect(video.removeAttribute).toHaveBeenCalledWith('src')
+    expect(video.load).toHaveBeenCalled()
+    expect(video.src).toMatch(/^\/brand\/knockscout-LogoMark-on-black\.mp4\?splash=\d+$/)
+    expect(video.play).toHaveBeenCalled()
+  })
+
+  it('watchLogoSplashProgress fires onStalled when time does not advance', () => {
+    const onStalled = vi.fn()
+    let now = 1_000
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const rafCbs = []
+    vi.stubGlobal('requestAnimationFrame', (cb) => {
+      rafCbs.push(cb)
+      return rafCbs.length
+    })
+
+    const el = {
+      paused: false,
+      ended: false,
+      currentTime: 0,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }
+    const cancel = watchLogoSplashProgress(el, { timeoutMs: 50, onStalled })
+
+    // First rAF: still within timeout
+    expect(rafCbs.length).toBeGreaterThan(0)
+    const first = rafCbs.shift()
+    now = 1_020
+    first(now)
+    expect(onStalled).not.toHaveBeenCalled()
+
+    // Second rAF: past timeout with frozen currentTime
+    expect(rafCbs.length).toBeGreaterThan(0)
+    const second = rafCbs.shift()
+    now = 1_060
+    second(now)
+    expect(onStalled).toHaveBeenCalledTimes(1)
+    cancel()
+  })
+
+  it('watchLogoSplashProgress does not stall when currentTime advances', () => {
+    const onStalled = vi.fn()
+    let now = 1_000
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const rafCbs = []
+    vi.stubGlobal('requestAnimationFrame', (cb) => {
+      rafCbs.push(cb)
+      return rafCbs.length
+    })
+
+    const el = {
+      paused: false,
+      ended: false,
+      currentTime: 0,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }
+    const cancel = watchLogoSplashProgress(el, { timeoutMs: 50, onStalled })
+    const first = rafCbs.shift()
+    el.currentTime = 0.2
+    now = 1_060
+    first(now)
+    expect(onStalled).not.toHaveBeenCalled()
+    expect(rafCbs.length).toBe(0)
+    cancel()
   })
 })

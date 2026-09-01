@@ -133,6 +133,7 @@
       /*
        * Keep the media element full-bleed + opacity 0 (not 1×1 offscreen).
        * iOS often skips decoding tiny/offscreen videos, so the canvas stays black.
+       * On Apple WebKit we switch to .is-direct (visible video) — see boot script.
        */
       #initial-loader #boot-logo-video {
         position: fixed;
@@ -142,6 +143,18 @@
         opacity: 0;
         pointer-events: none;
         object-fit: contain;
+      }
+      #initial-loader #boot-logo-video.is-direct {
+        inset: auto;
+        top: 0;
+        left: 50%;
+        width: var(--ks-boot-logo-w, 100%);
+        height: var(--ks-boot-logo-h, 100%);
+        opacity: 1;
+        z-index: 1;
+        background: #000000;
+        transform: translateX(-50%) scale(var(--ks-logo-splash-scale, 1.875));
+        transform-origin: center center;
       }
       #initial-loader #boot-logo-canvas {
         position: fixed;
@@ -154,6 +167,9 @@
         display: block;
         background: #000000;
         z-index: 1;
+      }
+      #initial-loader #boot-logo-canvas.is-direct-hidden {
+        display: none !important;
       }
       @media (prefers-reduced-motion: reduce) {
         #initial-loader #boot-logo-video,
@@ -229,14 +245,7 @@
           canvas.remove();
           return;
         }
-        var ctx = null;
-        try {
-          ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
-        } catch (e) {
-          ctx = canvas.getContext('2d', { alpha: false });
-        }
-        if (!ctx) return;
-        var raf = 0;
+
         var LOGO_SCALE_MOBILE = 1.875;
         var LOGO_SCALE_DESKTOP = 1.0;
         var LOGO_DESKTOP_MIN = 768;
@@ -245,107 +254,160 @@
             ? LOGO_SCALE_DESKTOP
             : LOGO_SCALE_MOBILE;
         };
-        var EDGE_COVER_RATIO = 0.035;
-        var EDGE_COVER_MIN_PX = 3;
-        var EDGE_COVER_TOP_RATIO = 0.12;
-        var EDGE_COVER_TOP_MIN_PX = 14;
-        var plateFill = '#000000';
-        // iOS / Capacitor often expose a neutral grey placeholder before real decode
-        // (dark #111 through classic mid-grey). Keep the plate pure black until a
-        // real logo frame arrives.
-        var isGreyPlaceholder = function(r, g, b) {
-          var max = Math.max(r, g, b);
-          var min = Math.min(r, g, b);
-          if (max <= 12) return false;
-          return (max - min) <= 28 && max <= 220;
-        };
-        var probe = document.createElement('canvas');
-        probe.width = 48;
-        probe.height = 48;
-        var probeCtx = null;
+        // Apple mobile WebKit / Capacitor iOS: show the real <video>. Canvas
+        // mirroring + seek-to-0 handoff breaks after iOS 26 media changes.
+        var prefersDirect = false;
         try {
-          probeCtx = probe.getContext('2d', { alpha: false, colorSpace: 'srgb' });
-        } catch (e) {
-          probeCtx = probe.getContext('2d', { alpha: false });
+          if (window.Capacitor && typeof window.Capacitor.getPlatform === 'function'
+              && window.Capacitor.getPlatform() === 'ios') {
+            prefersDirect = true;
+          }
+        } catch (e) { /* ignore */ }
+        var ua = (navigator.userAgent || '');
+        if (/iP(hone|od|ad)/.test(ua)) prefersDirect = true;
+        if (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1) {
+          prefersDirect = true;
         }
-        var fillPlate = function() {
-          ctx.fillStyle = plateFill;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        };
-        // Freeze logo center to first measured CSS box so iOS/PWA viewport growth
-        // only expands the black plate (React reuses window.__bootLogoLayout).
-        var syncSize = function() {
-          var dpr = Math.min(window.devicePixelRatio || 1, 2);
-          var cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
-          var cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
+
+        var lockLayout = function() {
+          var cssW = Math.max(1, Math.round(window.innerWidth || 1));
+          var cssH = Math.max(1, Math.round(window.innerHeight || 1));
           var locked = window.__bootLogoLayout;
           if (!locked || !(locked.w > 0) || !(locked.h > 0)) {
             locked = { w: cssW, h: cssH };
             window.__bootLogoLayout = locked;
           }
-          var w = Math.round(cssW * dpr);
-          var h = Math.round(cssH * dpr);
-          if (canvas.width !== w || canvas.height !== h) {
-            canvas.width = w;
-            canvas.height = h;
-            fillPlate();
-          }
-          return { cssW: cssW, cssH: cssH, dpr: dpr, lockedW: locked.w, lockedH: locked.h };
-        };
-        var paint = function() {
-          var size = syncSize();
-          fillPlate();
-          if (!(video.readyState >= 2 && video.videoWidth > 0) || !probeCtx) return;
-          probeCtx.drawImage(video, 0, 0, probe.width, probe.height);
-          var r = 0, g = 0, b = 0;
-          try {
-            var pix = probeCtx.getImageData(4, 4, 1, 1).data;
-            r = pix[0]; g = pix[1]; b = pix[2];
-          } catch (e) { return; }
-          if (isGreyPlaceholder(r, g, b)) return;
-          var vw = video.videoWidth;
-          var vh = video.videoHeight;
-          var fit = Math.min(size.lockedW / vw, size.lockedH / vh) * logoSplashScale();
-          var dw = vw * fit * size.dpr;
-          var dh = vh * fit * size.dpr;
-          var dx = (size.lockedW * size.dpr - dw) / 2;
-          var dy = (size.lockedH * size.dpr - dh) / 2;
-          ctx.drawImage(video, dx, dy, dw, dh);
-          var coverBottom = Math.max(EDGE_COVER_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_RATIO));
-          var coverTop = Math.max(EDGE_COVER_TOP_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_TOP_RATIO));
-          ctx.fillStyle = plateFill;
-          ctx.fillRect(dx, dy, dw, coverTop);
-          ctx.fillRect(dx, dy + dh - coverBottom, dw, coverBottom);
-        };
-        syncSize();
-        fillPlate();
-        var draw = function() {
-          paint();
-          raf = requestAnimationFrame(draw);
-        };
-        draw();
-        window.addEventListener('resize', paint);
-        window.__stopBootLogoMirror = function() {
-          cancelAnimationFrame(raf);
-          window.removeEventListener('resize', paint);
+          return locked;
         };
 
-        // Preload only — React starts the single synced play from t=0 (no boot timeline drift).
         video.muted = true;
         video.defaultMuted = true;
-        video.volume = 1;
+        video.volume = 0;
         video.preload = 'auto';
-        var primeFrame = function() {
+        try {
+          video.setAttribute('playsinline', '');
+          video.setAttribute('webkit-playsinline', '');
+          video.setAttribute('muted', '');
+        } catch (e) { /* ignore */ }
+
+        if (prefersDirect) {
+          var locked = lockLayout();
+          canvas.classList.add('is-direct-hidden');
+          video.classList.add('is-direct');
+          video.style.setProperty('--ks-logo-splash-scale', String(logoSplashScale()));
+          video.style.setProperty('--ks-boot-logo-w', locked.w + 'px');
+          video.style.setProperty('--ks-boot-logo-h', locked.h + 'px');
+          window.__stopBootLogoMirror = function() {};
+        } else {
+          var ctx = null;
           try {
-            video.currentTime = 0;
-          } catch (e) { /* ignore */ }
+            ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+          } catch (e) {
+            ctx = canvas.getContext('2d', { alpha: false });
+          }
+          if (!ctx) {
+            // Still attempt unmuted-path play so splash is not blank if canvas fails.
+          } else {
+            var raf = 0;
+            var EDGE_COVER_RATIO = 0.035;
+            var EDGE_COVER_MIN_PX = 3;
+            var EDGE_COVER_TOP_RATIO = 0.12;
+            var EDGE_COVER_TOP_MIN_PX = 14;
+            var plateFill = '#000000';
+            // iOS / Capacitor often expose a neutral grey placeholder before real decode
+            // (dark #111 through classic mid-grey). Keep the plate pure black until a
+            // real logo frame arrives.
+            var isGreyPlaceholder = function(r, g, b) {
+              var max = Math.max(r, g, b);
+              var min = Math.min(r, g, b);
+              if (max <= 12) return false;
+              return (max - min) <= 28 && max <= 220;
+            };
+            var probe = document.createElement('canvas');
+            probe.width = 48;
+            probe.height = 48;
+            var probeCtx = null;
+            try {
+              probeCtx = probe.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+            } catch (e) {
+              probeCtx = probe.getContext('2d', { alpha: false });
+            }
+            var fillPlate = function() {
+              ctx.fillStyle = plateFill;
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+            };
+            // Freeze logo center to first measured CSS box so iOS/PWA viewport growth
+            // only expands the black plate (React reuses window.__bootLogoLayout).
+            var syncSize = function() {
+              var dpr = Math.min(window.devicePixelRatio || 1, 2);
+              var cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
+              var cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
+              var lockedBox = window.__bootLogoLayout;
+              if (!lockedBox || !(lockedBox.w > 0) || !(lockedBox.h > 0)) {
+                lockedBox = { w: cssW, h: cssH };
+                window.__bootLogoLayout = lockedBox;
+              }
+              var w = Math.round(cssW * dpr);
+              var h = Math.round(cssH * dpr);
+              if (canvas.width !== w || canvas.height !== h) {
+                canvas.width = w;
+                canvas.height = h;
+                fillPlate();
+              }
+              return { cssW: cssW, cssH: cssH, dpr: dpr, lockedW: lockedBox.w, lockedH: lockedBox.h };
+            };
+            var paint = function() {
+              var size = syncSize();
+              fillPlate();
+              if (!(video.readyState >= 2 && video.videoWidth > 0) || !probeCtx) return;
+              probeCtx.drawImage(video, 0, 0, probe.width, probe.height);
+              var r = 0, g = 0, b = 0;
+              try {
+                var pix = probeCtx.getImageData(4, 4, 1, 1).data;
+                r = pix[0]; g = pix[1]; b = pix[2];
+              } catch (e) { return; }
+              if (isGreyPlaceholder(r, g, b)) return;
+              var vw = video.videoWidth;
+              var vh = video.videoHeight;
+              var fit = Math.min(size.lockedW / vw, size.lockedH / vh) * logoSplashScale();
+              var dw = vw * fit * size.dpr;
+              var dh = vh * fit * size.dpr;
+              var dx = (size.lockedW * size.dpr - dw) / 2;
+              var dy = (size.lockedH * size.dpr - dh) / 2;
+              ctx.drawImage(video, dx, dy, dw, dh);
+              var coverBottom = Math.max(EDGE_COVER_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_RATIO));
+              var coverTop = Math.max(EDGE_COVER_TOP_MIN_PX * size.dpr, Math.round(dh * EDGE_COVER_TOP_RATIO));
+              ctx.fillStyle = plateFill;
+              ctx.fillRect(dx, dy, dw, coverTop);
+              ctx.fillRect(dx, dy + dh - coverBottom, dw, coverBottom);
+            };
+            syncSize();
+            fillPlate();
+            var draw = function() {
+              paint();
+              raf = requestAnimationFrame(draw);
+            };
+            draw();
+            window.addEventListener('resize', paint);
+            window.__stopBootLogoMirror = function() {
+              cancelAnimationFrame(raf);
+              window.removeEventListener('resize', paint);
+            };
+          }
+        }
+
+        // Start muted playback immediately on all platforms. React continues
+        // without seeking to t=0 so the HTML→React handoff does not restart.
+        lockLayout();
+        var startBootPlay = function() {
           try {
-            video.pause();
+            var p = video.play();
+            if (p && typeof p.catch === 'function') p.catch(function() {});
           } catch (e) { /* ignore */ }
-          paint();
         };
-        video.addEventListener('loadeddata', primeFrame, { once: true });
-        if (video.readyState >= 2) primeFrame();
+        video.addEventListener('loadeddata', startBootPlay, { once: true });
+        video.addEventListener('canplay', startBootPlay, { once: true });
+        startBootPlay();
       })();
     </script>
     <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate; background: transparent;"></div>

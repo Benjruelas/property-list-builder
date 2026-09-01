@@ -10,6 +10,26 @@ export const LOGO_SPLASH_DESKTOP_MIN_WIDTH_PX = 768
 export const BOOT_LOGO_LAYOUT_KEY = '__bootLogoLayout'
 
 /**
+ * True on Apple mobile WebKit (Safari, Home Screen, Capacitor iOS) where
+ * video→canvas mirroring and PWA media resume are unreliable (esp. iOS 26+).
+ *
+ * @returns {boolean}
+ */
+export function prefersDirectLogoVideo() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  try {
+    if (window.Capacitor?.getPlatform?.() === 'ios') return true
+  } catch {
+    /* ignore */
+  }
+  const ua = navigator.userAgent || ''
+  if (/iP(hone|od|ad)/.test(ua)) return true
+  // iPadOS “desktop” UA
+  if (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1) return true
+  return false
+}
+
+/**
  * @returns {{ w: number, h: number } | null}
  */
 export function getBootLogoLayout() {
@@ -97,6 +117,28 @@ export function getLogoSplashScale() {
 }
 
 /**
+ * Size/position the visible <video> inside the locked boot box so iOS viewport
+ * growth only expands the black plate (matches canvas logoDrawRect anchoring).
+ *
+ * @param {HTMLVideoElement} video
+ * @param {{ w?: number, h?: number } | null} [layout]
+ */
+export function applyDirectLogoVideoLayout(video, layout) {
+  if (!video) return
+  const locked = layout || getBootLogoLayout()
+  const scale = getLogoSplashScale()
+  video.classList.add('is-direct')
+  video.style.setProperty('--ks-logo-splash-scale', String(scale))
+  if (locked?.w > 0 && locked?.h > 0) {
+    video.style.setProperty('--ks-boot-logo-w', `${locked.w}px`)
+    video.style.setProperty('--ks-boot-logo-h', `${locked.h}px`)
+  } else {
+    video.style.setProperty('--ks-boot-logo-w', '100%')
+    video.style.setProperty('--ks-boot-logo-h', '100%')
+  }
+}
+
+/**
  * @param {HTMLVideoElement} video
  */
 export function configureLogoVideoElement(video) {
@@ -113,15 +155,38 @@ export function configureLogoVideoElement(video) {
 }
 
 /**
- * Muted logo playback from t=0 (reliable autoplay on mobile).
- * Concurrent callers are chained so each video still gets its own play() —
- * a prior in-flight setup must not swallow a later handoff play.
+ * True when the element is already advancing — do not seek to t=0 (restart).
  *
  * @param {HTMLVideoElement} video
+ * @returns {boolean}
  */
-export async function beginLogoSplashPlayback(video) {
+export function isLogoSplashActivelyPlaying(video) {
+  if (!video) return false
+  if (video.ended) return false
+  if (video.paused) return false
+  return (video.currentTime || 0) > 0.05
+}
+
+/**
+ * Muted logo playback. By default continues an in-progress play (HTML→React
+ * handoff). Pass `{ restart: true }` to force t=0 (stall recovery / fresh el).
+ * Concurrent callers are chained so each video still gets its own play().
+ *
+ * @param {HTMLVideoElement} video
+ * @param {{ restart?: boolean }} [opts]
+ */
+export async function beginLogoSplashPlayback(video, opts = {}) {
+  const restart = opts.restart === true
   const run = async () => {
     configureLogoVideoElement(video)
+    if (!restart && isLogoSplashActivelyPlaying(video)) {
+      try {
+        await video.play()
+      } catch {
+        /* already playing / autoplay race */
+      }
+      return
+    }
     try {
       video.pause()
     } catch {
@@ -146,5 +211,78 @@ export async function beginLogoSplashPlayback(video) {
     await next
   } finally {
     if (playSetupInFlight === next) playSetupInFlight = null
+  }
+}
+
+/**
+ * Remount the media source (iOS 26 Home Screen / PWA can stick on frame 0).
+ *
+ * @param {HTMLVideoElement} video
+ * @param {string} src
+ */
+export async function remountLogoSplashSource(video, src) {
+  const base = (src || video.getAttribute('src') || video.currentSrc || '').split('?')[0]
+  if (!base) return
+  configureLogoVideoElement(video)
+  try {
+    video.pause()
+  } catch {
+    /* ignore */
+  }
+  try {
+    video.removeAttribute('src')
+    video.load()
+  } catch {
+    /* ignore */
+  }
+  video.src = `${base}?splash=${Date.now()}`
+  try {
+    video.load()
+  } catch {
+    /* ignore */
+  }
+  await beginLogoSplashPlayback(video, { restart: true })
+}
+
+/**
+ * Watch for currentTime advancing after play(). Invokes onStalled once if the
+ * timeline stays frozen (iOS 26 PWA stuck-first-frame regression).
+ *
+ * @param {HTMLVideoElement} video
+ * @param {{ onStalled?: () => void, timeoutMs?: number }} [opts]
+ * @returns {() => void} cancel
+ */
+export function watchLogoSplashProgress(video, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 900
+  const onStalled = opts.onStalled
+  if (!video) return () => {}
+
+  let cancelled = false
+  const startTime = video.currentTime || 0
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+
+  const tick = () => {
+    if (cancelled) return
+    if (video.ended || (video.currentTime || 0) > startTime + 0.08) return
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    if (now - startedAt >= timeoutMs) {
+      onStalled?.()
+      return
+    }
+    requestAnimationFrame(tick)
+  }
+
+  const onPlaying = () => {
+    if (!cancelled) requestAnimationFrame(tick)
+  }
+  video.addEventListener('playing', onPlaying, { once: true })
+  // Already moving / already frozen after a prior play()
+  if (!video.paused || (video.currentTime || 0) > 0) {
+    requestAnimationFrame(tick)
+  }
+
+  return () => {
+    cancelled = true
+    video.removeEventListener('playing', onPlaying)
   }
 }
