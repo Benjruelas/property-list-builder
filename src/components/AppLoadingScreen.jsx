@@ -5,9 +5,12 @@ import {
   configureLogoVideoElement,
   beginLogoSplashPlayback,
   remountLogoSplashSource,
+  playLogoSplashFromBlob,
   watchLogoSplashProgress,
   clearBootLogoLayout,
   applyDirectLogoVideoLayout,
+  isLogoSplashActivelyPlaying,
+  clearLogoSplashBlobCache,
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` / `#initial-loader.is-exiting` duration. */
@@ -27,6 +30,19 @@ function loadingPortalTarget() {
 function prefersReducedMotion() {
   return typeof window !== 'undefined'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function isLikelyAppleWebKit() {
+  if (typeof navigator === 'undefined') return false
+  try {
+    if (window.Capacitor?.getPlatform?.() === 'ios') return true
+  } catch {
+    /* ignore */
+  }
+  const ua = navigator.userAgent || ''
+  if (/iP(hone|od|ad)/.test(ua)) return true
+  if (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1) return true
+  return false
 }
 
 /**
@@ -76,7 +92,6 @@ export function AppLoadingScreen({
 
   useLayoutEffect(() => {
     if (reduceMotion) {
-      // Drop HTML boot chrome; portal shows the static poster.
       window.__removeInitialLoader?.()
       clearBootLogoLayout()
       setHost('portal')
@@ -86,8 +101,8 @@ export function AppLoadingScreen({
     const boot = document.getElementById(BOOT_LOADER_ID)
     let video = boot?.querySelector('video') || document.getElementById(BOOT_VIDEO_ID)
     const useBoot = !!(boot && video instanceof HTMLVideoElement)
+    const apple = isLikelyAppleWebKit()
 
-    let cancelProgressWatch = () => {}
     let stopEnsure = () => {}
 
     const markCompleted = () => {
@@ -104,8 +119,6 @@ export function AppLoadingScreen({
 
     if (useBoot) {
       setHost('boot')
-      // Keep the element where HTML put it — moving a playing <video> on iOS
-      // restarts/glitches the animation.
       window.__removeInitialLoader = null
       boot.classList.add(
         'app-loading-screen',
@@ -116,11 +129,8 @@ export function AppLoadingScreen({
       boot.setAttribute('aria-live', 'polite')
       boot.setAttribute('aria-label', message)
       screenRef.current = boot
-
-      // Drop leftover canvas from older boots if present.
       boot.querySelectorAll('canvas').forEach((c) => c.remove())
 
-      // Keep id for Strict Mode remount; query via loader as fallback.
       video.className = 'app-loading-screen__video is-cover'
       video.setAttribute('aria-hidden', 'true')
       configureLogoVideoElement(video)
@@ -148,26 +158,48 @@ export function AppLoadingScreen({
         if (!playCompletedRef.current) markCompleted()
       }, PLAY_FALLBACK_MS)
 
+      let stallRecovered = false
+      const recoverIfStalled = () => {
+        if (stallRecovered || playCompletedRef.current || el.ended) return
+        if (isLogoSplashActivelyPlaying(el)) return
+        stallRecovered = true
+        void remountLogoSplashSource(el, LOGO_VIDEO_SRC).then(() => {
+          applyDirectLogoVideoLayout(el)
+        })
+      }
+
       const ensurePlaying = () => {
         if (playCompletedRef.current || el.ended) return
+        if (isLogoSplashActivelyPlaying(el)) return
+        if (apple && !(el.currentSrc || '').startsWith('blob:')) {
+          void playLogoSplashFromBlob(el, LOGO_VIDEO_SRC).then(() => {
+            applyDirectLogoVideoLayout(el)
+          }).catch(() => {
+            void beginLogoSplashPlayback(el, { restart: false })
+          })
+          return
+        }
         void beginLogoSplashPlayback(el, { restart: false })
       }
-      void beginLogoSplashPlayback(el, { restart: false })
+
+      if (apple && !isLogoSplashActivelyPlaying(el)) {
+        void playLogoSplashFromBlob(el, LOGO_VIDEO_SRC, {
+          bustCache: !window.__bootLogoBlobUrl,
+        }).then(() => {
+          applyDirectLogoVideoLayout(el)
+        }).catch(ensurePlaying)
+      } else {
+        void beginLogoSplashPlayback(el, { restart: false })
+      }
+
       el.addEventListener('loadeddata', ensurePlaying)
       el.addEventListener('canplay', ensurePlaying)
       const playRetryTimer = window.setTimeout(ensurePlaying, 200)
-      const playRetryTimer2 = window.setTimeout(ensurePlaying, 800)
+      const playRetryTimer2 = window.setTimeout(ensurePlaying, 700)
 
-      let stallRecovered = false
-      cancelProgressWatch = watchLogoSplashProgress(el, {
-        timeoutMs: 900,
-        onStalled: () => {
-          if (stallRecovered || playCompletedRef.current) return
-          stallRecovered = true
-          void remountLogoSplashSource(el, LOGO_VIDEO_SRC).then(() => {
-            applyDirectLogoVideoLayout(el)
-          })
-        },
+      const cancelProgressWatch = watchLogoSplashProgress(el, {
+        timeoutMs: 450,
+        onStalled: recoverIfStalled,
       })
 
       return () => {
@@ -191,12 +223,10 @@ export function AppLoadingScreen({
     return undefined
   }, [message, reduceMotion])
 
-  // Portal-only: create the cover video inside the portal stage.
   useLayoutEffect(() => {
     if (host !== 'portal' || reduceMotion) return undefined
     const stage = stageRef.current
     if (!stage) return undefined
-    // Boot path already bound a video.
     if (videoRef.current && document.body.contains(videoRef.current)
       && !stage.contains(videoRef.current)) {
       return undefined
@@ -205,7 +235,6 @@ export function AppLoadingScreen({
     let video = videoRef.current
     if (!(video instanceof HTMLVideoElement) || !stage.contains(video)) {
       video = document.createElement('video')
-      video.src = LOGO_VIDEO_SRC
       video.setAttribute('aria-hidden', 'true')
       video.className = 'app-loading-screen__video is-cover'
       configureLogoVideoElement(video)
@@ -214,6 +243,7 @@ export function AppLoadingScreen({
       videoRef.current = video
     }
 
+    const apple = isLikelyAppleWebKit()
     const markCompleted = () => {
       if (playCompletedRef.current) return
       playCompletedRef.current = true
@@ -232,26 +262,38 @@ export function AppLoadingScreen({
       if (!playCompletedRef.current) markCompleted()
     }, PLAY_FALLBACK_MS)
 
-    const ensurePlaying = () => {
-      if (playCompletedRef.current || video.ended) return
-      void beginLogoSplashPlayback(video, { restart: false })
-    }
-    void beginLogoSplashPlayback(video, { restart: false })
-    video.addEventListener('loadeddata', ensurePlaying)
-    video.addEventListener('canplay', ensurePlaying)
-    const playRetryTimer = window.setTimeout(ensurePlaying, 200)
-    const playRetryTimer2 = window.setTimeout(ensurePlaying, 800)
-
     let stallRecovered = false
-    const cancelProgressWatch = watchLogoSplashProgress(video, {
-      timeoutMs: 900,
-      onStalled: () => {
-        if (stallRecovered || playCompletedRef.current) return
-        stallRecovered = true
-        void remountLogoSplashSource(video, LOGO_VIDEO_SRC).then(() => {
+    const recoverIfStalled = () => {
+      if (stallRecovered || playCompletedRef.current || video.ended) return
+      if (isLogoSplashActivelyPlaying(video)) return
+      stallRecovered = true
+      void remountLogoSplashSource(video, LOGO_VIDEO_SRC).then(() => {
+        applyDirectLogoVideoLayout(video)
+      })
+    }
+
+    const start = () => {
+      if (playCompletedRef.current || video.ended) return
+      if (apple) {
+        void playLogoSplashFromBlob(video, LOGO_VIDEO_SRC).then(() => {
           applyDirectLogoVideoLayout(video)
-        })
-      },
+        }).catch(() => beginLogoSplashPlayback(video, { restart: false }))
+      } else {
+        if (!video.getAttribute('src') && !video.querySelector('source')) {
+          video.src = LOGO_VIDEO_SRC
+        }
+        void beginLogoSplashPlayback(video, { restart: false })
+      }
+    }
+    start()
+    video.addEventListener('loadeddata', start)
+    video.addEventListener('canplay', start)
+    const playRetryTimer = window.setTimeout(start, 200)
+    const playRetryTimer2 = window.setTimeout(start, 700)
+
+    const cancelProgressWatch = watchLogoSplashProgress(video, {
+      timeoutMs: 450,
+      onStalled: recoverIfStalled,
     })
 
     return () => {
@@ -259,8 +301,8 @@ export function AppLoadingScreen({
       window.clearTimeout(playRetryTimer)
       window.clearTimeout(playRetryTimer2)
       video.removeEventListener('ended', onEnded)
-      video.removeEventListener('loadeddata', ensurePlaying)
-      video.removeEventListener('canplay', ensurePlaying)
+      video.removeEventListener('loadeddata', start)
+      video.removeEventListener('canplay', start)
       cancelProgressWatch()
     }
   }, [host, reduceMotion])
@@ -323,6 +365,7 @@ export function AppLoadingScreen({
         setExiting(false)
         exitingRef.current = false
         clearBootLogoLayout()
+        clearLogoSplashBlobCache()
       },
       reduceMotion ? 0 : FADE_OUT_MS
     )
@@ -331,7 +374,6 @@ export function AppLoadingScreen({
 
   if (typeof document === 'undefined' || !mounted) return null
 
-  // Boot host: HTML #initial-loader is the visible splash — no portal.
   if (host === 'boot' && !reduceMotion) return null
 
   return createPortal(

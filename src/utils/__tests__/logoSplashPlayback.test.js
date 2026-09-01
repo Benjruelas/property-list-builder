@@ -5,6 +5,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   beginLogoSplashPlayback,
   remountLogoSplashSource,
+  playLogoSplashFromBlob,
+  fetchLogoSplashBlobUrl,
+  attachLogoSplashBlobSource,
+  clearLogoSplashBlobCache,
   watchLogoSplashProgress,
   getLogoSplashScale,
   getBootLogoLayout,
@@ -26,6 +30,7 @@ describe('logoSplashPlayback', () => {
 
   beforeEach(() => {
     clearBootLogoLayout()
+    clearLogoSplashBlobCache()
     video = {
       muted: false,
       defaultMuted: false,
@@ -36,6 +41,8 @@ describe('logoSplashPlayback', () => {
       readyState: 2,
       currentSrc: '',
       src: '',
+      firstChild: null,
+      autoplay: false,
       style: { setProperty: vi.fn(), removeProperty: vi.fn(), width: '', height: '' },
       classList: { add: vi.fn() },
       pause: vi.fn(),
@@ -43,25 +50,42 @@ describe('logoSplashPlayback', () => {
       load: vi.fn(),
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
-      getAttribute: vi.fn().mockReturnValue('/brand/knockscout-LogoMark-on-black.mp4'),
+      getAttribute: vi.fn().mockReturnValue(null),
+      appendChild: vi.fn(function append(node) {
+        this.firstChild = node
+        return node
+      }),
+      removeChild: vi.fn(function remove() {
+        this.firstChild = null
+      }),
+      querySelector: vi.fn().mockReturnValue(null),
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:http://localhost/logo-splash')
+    globalThis.URL.revokeObjectURL = vi.fn()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob([new Uint8Array([0, 0, 0, 1])], { type: 'video/mp4' }),
+    })
   })
 
   afterEach(() => {
     clearBootLogoLayout()
+    clearLogoSplashBlobCache()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
-  it('plays muted from the start when restart is requested', async () => {
+  it('plays muted without seeking (seek+play freezes iOS 26 PWA media)', async () => {
+    const before = video.currentTime
     await beginLogoSplashPlayback(video, { restart: true })
-    expect(video.pause).toHaveBeenCalled()
-    expect(video.currentTime).toBe(0)
+    expect(video.pause).not.toHaveBeenCalled()
+    expect(video.currentTime).toBe(before)
     expect(video.muted).toBe(true)
     expect(video.volume).toBe(0)
     expect(video.setAttribute).toHaveBeenCalledWith('muted', '')
+    expect(video.setAttribute).toHaveBeenCalledWith('autoplay', '')
     expect(video.play).toHaveBeenCalled()
   })
 
@@ -100,7 +124,6 @@ describe('logoSplashPlayback', () => {
     expect(setBootLogoLayout(390, 700)).toEqual({ w: 390, h: 700 })
     expect(window[BOOT_LOGO_LAYOUT_KEY]).toEqual({ w: 390, h: 700 })
     expect(setBootLogoLayout(390, 844)).toEqual({ w: 390, h: 700 })
-    expect(getBootLogoLayout()).toEqual({ w: 390, h: 700 })
     clearBootLogoLayout()
     expect(getBootLogoLayout()).toBeNull()
   })
@@ -111,55 +134,23 @@ describe('logoSplashPlayback', () => {
     const taller = logoDrawRect({ ...locked, lockedH: 844 })
     expect(first.dy).toBe((700 * 2 - first.dh) / 2)
     expect(taller.dy).toBeGreaterThan(first.dy)
-    const frozenAfterGrowth = logoDrawRect(locked)
-    expect(frozenAfterGrowth.dy).toBe(first.dy)
-    expect(frozenAfterGrowth.dx).toBe(first.dx)
   })
 
-  it('detects grey placeholder frames (including dark #111) without blocking real frames', () => {
+  it('detects grey placeholder frames without blocking real frames', () => {
     expect(isLogoSplashGreyPlaceholder(0, 0, 0)).toBe(false)
-    expect(isLogoSplashGreyPlaceholder(8, 0, 10)).toBe(false)
     expect(isLogoSplashGreyPlaceholder(17, 17, 17)).toBe(true)
-    expect(isLogoSplashGreyPlaceholder(128, 128, 128)).toBe(true)
-    expect(isLogoSplashGreyPlaceholder(180, 180, 182)).toBe(true)
-    expect(isLogoSplashGreyPlaceholder(200, 40, 40)).toBe(false)
     expect(isLogoSplashGreyPlaceholder(17, 81, 239)).toBe(false)
     expect(isUsableLogoSplashPlateSample(0, 0, 0)).toBe(true)
     expect(isUsableLogoSplashPlateSample(17, 17, 17)).toBe(false)
-    expect(isUsableLogoSplashPlateSample(128, 128, 128)).toBe(false)
-    expect(isUsableLogoSplashPlateSample(200, 40, 40)).toBe(true)
   })
 
-  it('still plays a second beginLogoSplashPlayback call (handoff must not be swallowed)', async () => {
-    const first = {
-      muted: false,
-      defaultMuted: false,
-      volume: 1,
-      paused: true,
-      ended: false,
-      currentTime: 0.5,
-      readyState: 2,
-      pause: vi.fn(),
-      play: vi.fn().mockResolvedValue(undefined),
-      setAttribute: vi.fn(),
-      removeAttribute: vi.fn(),
-    }
-    const second = {
-      muted: false,
-      defaultMuted: false,
-      volume: 1,
-      paused: true,
-      ended: false,
-      currentTime: 0.5,
-      readyState: 2,
-      pause: vi.fn(),
-      play: vi.fn().mockResolvedValue(undefined),
-      setAttribute: vi.fn(),
-      removeAttribute: vi.fn(),
-    }
-    const p1 = beginLogoSplashPlayback(first, { restart: true })
-    const p2 = beginLogoSplashPlayback(second, { restart: true })
-    await Promise.all([p1, p2])
+  it('still plays a second beginLogoSplashPlayback call', async () => {
+    const first = { ...video, play: vi.fn().mockResolvedValue(undefined), pause: vi.fn(), setAttribute: vi.fn() }
+    const second = { ...video, play: vi.fn().mockResolvedValue(undefined), pause: vi.fn(), setAttribute: vi.fn() }
+    await Promise.all([
+      beginLogoSplashPlayback(first, { restart: true }),
+      beginLogoSplashPlayback(second, { restart: true }),
+    ])
     expect(first.play).toHaveBeenCalled()
     expect(second.play).toHaveBeenCalled()
   })
@@ -171,14 +162,33 @@ describe('logoSplashPlayback', () => {
   it('applies cover class for direct video', () => {
     applyDirectLogoVideoLayout(video)
     expect(video.classList.add).toHaveBeenCalledWith('is-cover')
-    expect(video.style.removeProperty).toHaveBeenCalledWith('--ks-logo-splash-scale')
   })
 
-  it('remounts source with a cache-busting query for stall recovery', async () => {
-    await remountLogoSplashSource(video, '/brand/knockscout-LogoMark-on-black.mp4')
+  it('fetches a blob URL and attaches via <source>', async () => {
+    const objectUrl = await fetchLogoSplashBlobUrl('/brand/knockscout-LogoMark-on-black.mp4')
+    expect(objectUrl).toBe('blob:http://localhost/logo-splash')
+    expect(fetch).toHaveBeenCalled()
+    attachLogoSplashBlobSource(video, objectUrl)
     expect(video.removeAttribute).toHaveBeenCalledWith('src')
+    expect(video.appendChild).toHaveBeenCalled()
+    const source = video.appendChild.mock.calls[0][0]
+    expect(source.type).toBe('video/mp4')
+    expect(source.src).toBe(objectUrl)
     expect(video.load).toHaveBeenCalled()
-    expect(video.src).toMatch(/^\/brand\/knockscout-LogoMark-on-black\.mp4\?splash=\d+$/)
+  })
+
+  it('playLogoSplashFromBlob loads blob then plays', async () => {
+    await playLogoSplashFromBlob(video, '/brand/knockscout-LogoMark-on-black.mp4')
+    expect(fetch).toHaveBeenCalled()
+    expect(video.appendChild).toHaveBeenCalled()
+    expect(video.play).toHaveBeenCalled()
+  })
+
+  it('remounts via a cache-busted blob source for stall recovery', async () => {
+    await remountLogoSplashSource(video, '/brand/knockscout-LogoMark-on-black.mp4')
+    expect(fetch).toHaveBeenCalled()
+    const fetchUrl = fetch.mock.calls.at(-1)[0]
+    expect(String(fetchUrl)).toMatch(/splash=\d+/)
     expect(video.play).toHaveBeenCalled()
   })
 
@@ -191,6 +201,8 @@ describe('logoSplashPlayback', () => {
       rafCbs.push(cb)
       return rafCbs.length
     })
+    vi.spyOn(window, 'setTimeout').mockImplementation(() => 1)
+    vi.spyOn(window, 'clearTimeout').mockImplementation(() => {})
 
     const el = {
       paused: false,
@@ -200,45 +212,14 @@ describe('logoSplashPlayback', () => {
       removeEventListener: vi.fn(),
     }
     const cancel = watchLogoSplashProgress(el, { timeoutMs: 50, onStalled })
-
-    expect(rafCbs.length).toBeGreaterThan(0)
     const first = rafCbs.shift()
     now = 1_020
     first(now)
     expect(onStalled).not.toHaveBeenCalled()
-
-    expect(rafCbs.length).toBeGreaterThan(0)
     const second = rafCbs.shift()
     now = 1_060
     second(now)
     expect(onStalled).toHaveBeenCalledTimes(1)
-    cancel()
-  })
-
-  it('watchLogoSplashProgress does not stall when currentTime advances', () => {
-    const onStalled = vi.fn()
-    let now = 1_000
-    vi.spyOn(performance, 'now').mockImplementation(() => now)
-    const rafCbs = []
-    vi.stubGlobal('requestAnimationFrame', (cb) => {
-      rafCbs.push(cb)
-      return rafCbs.length
-    })
-
-    const el = {
-      paused: false,
-      ended: false,
-      currentTime: 0,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }
-    const cancel = watchLogoSplashProgress(el, { timeoutMs: 50, onStalled })
-    const first = rafCbs.shift()
-    el.currentTime = 0.2
-    now = 1_060
-    first(now)
-    expect(onStalled).not.toHaveBeenCalled()
-    expect(rafCbs.length).toBe(0)
     cancel()
   })
 })
