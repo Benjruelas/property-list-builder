@@ -5310,10 +5310,12 @@ body:has(.app-loading-screen--video) {
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   min-height: var(--vw-height, 100dvh);
+  overflow: hidden;
 }
 /*
  * Media element stays full-bleed under the canvas at opacity 0.
  * 1×1 / offscreen sizing makes iOS skip decode → black canvas, no logo.
+ * `.is-direct` (Apple WebKit): paint the real <video> instead of canvas.
  */
 .app-loading-screen__video-source {
   position: fixed !important;
@@ -5324,6 +5326,20 @@ body:has(.app-loading-screen--video) {
   pointer-events: none !important;
   object-fit: contain !important;
   z-index: 0 !important;
+}
+.app-loading-screen__video-source.is-direct {
+  inset: auto !important;
+  top: 0 !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: var(--ks-boot-logo-w, 100%) !important;
+  height: var(--ks-boot-logo-h, 100%) !important;
+  opacity: 1 !important;
+  z-index: 1 !important;
+  background: var(--ks-logo-plate, #000000) !important;
+  transform: translateX(-50%) scale(var(--ks-logo-splash-scale, 1.875)) !important;
+  transform-origin: center center !important;
 }
 /* Full-bleed canvas — logo is drawn centered inside (no scaled box edge / hairline). */
 .app-loading-screen__video,

@@ -4,12 +4,16 @@ import { APP_LOADING_MESSAGES } from '@/config/appLoadingMessages'
 import {
   configureLogoVideoElement,
   beginLogoSplashPlayback,
+  remountLogoSplashSource,
+  watchLogoSplashProgress,
   getLogoSplashScale,
   getBootLogoLayout,
   setBootLogoLayout,
   clearBootLogoLayout,
   logoDrawRect,
   isLogoSplashGreyPlaceholder,
+  prefersDirectLogoVideo,
+  applyDirectLogoVideoLayout,
 } from '@/utils/logoSplashPlayback'
 
 /** Match `.app-loading-screen.is-exiting` animation duration. */
@@ -194,6 +198,8 @@ export function AppLoadingScreen({
       return undefined
     }
 
+    const useDirectVideo = prefersDirectLogoVideo()
+
     // Prefer the HTML boot video so playback continues across React mount.
     let video = document.getElementById(BOOT_VIDEO_ID)
     if (video instanceof HTMLVideoElement) {
@@ -205,19 +211,31 @@ export function AppLoadingScreen({
       video.setAttribute('aria-hidden', 'true')
     }
 
-    // Keep the media element off-screen; paint via canvas for sRGB-matched blues.
-    video.className = 'app-loading-screen__video-source'
     configureLogoVideoElement(video)
     videoRef.current = video
 
-    const canvas = document.createElement('canvas')
-    canvas.className = 'app-loading-screen__video'
-    canvas.setAttribute('aria-hidden', 'true')
-    canvasRef.current = canvas
+    const cssW = Math.max(1, Math.round(window.innerWidth || stage.clientWidth || 1))
+    const cssH = Math.max(1, Math.round(window.innerHeight || stage.clientHeight || 1))
+    const locked = getBootLogoLayout() || setBootLogoLayout(cssW, cssH)
 
-    stage.replaceChildren(video, canvas)
+    let stopMirror = () => {}
+    if (useDirectVideo) {
+      // iOS 26+: paint with the real <video> — video→canvas mirroring stalls / jumps.
+      video.className = 'app-loading-screen__video-source is-direct'
+      applyDirectLogoVideoLayout(video, locked)
+      stage.replaceChildren(video)
+    } else {
+      // Keep the media element off-screen; paint via canvas for edge covers.
+      video.className = 'app-loading-screen__video-source'
+      const canvas = document.createElement('canvas')
+      canvas.className = 'app-loading-screen__video'
+      canvas.setAttribute('aria-hidden', 'true')
+      canvasRef.current = canvas
+      stage.replaceChildren(video, canvas)
+      stopMirror = startCanvasMirror(video, canvas)
+    }
+
     // Paint one frozen frame before removing the HTML loader to avoid a gap/jump.
-    const stopMirror = startCanvasMirror(video, canvas)
     window.__removeInitialLoader?.()
 
     const markCompleted = () => {
@@ -239,17 +257,32 @@ export function AppLoadingScreen({
       if (!playCompletedRef.current) markCompleted()
     }, PLAY_FALLBACK_MS)
 
-    // iOS can miss the first play() before the element is ready — retry briefly.
-    // Never re-call once playing (beginLogoSplashPlayback seeks to t=0).
+    // Continue HTML boot playback when possible — never seek to t=0 while playing
+    // (that restart looked broken after iOS media/session changes).
     const ensurePlaying = () => {
-      if (playCompletedRef.current || video.ended || !video.paused) return
-      void beginLogoSplashPlayback(video)
+      if (playCompletedRef.current || video.ended) return
+      void beginLogoSplashPlayback(video, { restart: false })
     }
-    void beginLogoSplashPlayback(video)
+    void beginLogoSplashPlayback(video, { restart: false })
     video.addEventListener('loadeddata', ensurePlaying)
     video.addEventListener('canplay', ensurePlaying)
     const playRetryTimer = window.setTimeout(ensurePlaying, 200)
     const playRetryTimer2 = window.setTimeout(ensurePlaying, 800)
+
+    let cancelProgressWatch = () => {}
+    let stallRecovered = false
+    if (useDirectVideo) {
+      cancelProgressWatch = watchLogoSplashProgress(video, {
+        timeoutMs: 900,
+        onStalled: () => {
+          if (stallRecovered || playCompletedRef.current) return
+          stallRecovered = true
+          void remountLogoSplashSource(video, LOGO_VIDEO_SRC).then(() => {
+            applyDirectLogoVideoLayout(video, locked)
+          })
+        },
+      })
+    }
 
     return () => {
       window.clearTimeout(fallbackTimer)
@@ -258,6 +291,7 @@ export function AppLoadingScreen({
       video.removeEventListener('ended', onEnded)
       video.removeEventListener('loadeddata', ensurePlaying)
       video.removeEventListener('canplay', ensurePlaying)
+      cancelProgressWatch()
       stopMirror()
     }
   }, [])
