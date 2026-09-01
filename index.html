@@ -72,7 +72,7 @@
     <link rel="preconnect" href="https://tile.googleapis.com" crossorigin />
     <link rel="dns-prefetch" href="https://tile.googleapis.com" />
     <link rel="preconnect" href="https://firebase.googleapis.com" crossorigin />
-    <link rel="preload" href="/brand/knockscout-LogoMark-on-black.mp4" as="video" type="video/mp4" />
+    <link rel="preload" href="/brand/knockscout-LogoMark-on-black.webp" as="image" type="image/webp" />
     <script>
       (function () {
         var h = window.innerHeight || 0;
@@ -112,11 +112,10 @@
         min-height: var(--vw-height, 100vh);
         background: #000000;
       }
-      /* Critical boot loader — full-bleed cover video until React fades it out */
+      /* Critical boot loader — animated WebP (no <video>; iOS 26 PWA freezes video). */
       #initial-loader {
         position: fixed;
         inset: 0;
-        /* Above #modal-root chrome while the splash is up */
         z-index: 2147483647;
         display: flex;
         align-items: center;
@@ -140,23 +139,20 @@
         from { opacity: 1; }
         to { opacity: 0; }
       }
-      /*
-       * Cover the viewport so the centered logo mark reads at a sensible size
-       * on phones (the MP4 is 16:9 with a small mark). Do not reparent this
-       * element — iOS glitches when a playing <video> moves in the DOM.
-       */
-      #initial-loader #boot-logo-video {
-        position: fixed;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: center center;
-        background: #000000;
+      #initial-loader #boot-logo-anim,
+      #initial-loader .boot-logo-anim {
+        position: relative;
+        width: min(72vw, 300px);
+        height: auto;
+        aspect-ratio: 1 / 1;
+        object-fit: contain;
+        display: block;
         pointer-events: none;
+        background: transparent;
       }
       @media (prefers-reduced-motion: reduce) {
-        #initial-loader #boot-logo-video { display: none !important; }
+        #initial-loader #boot-logo-anim,
+        #initial-loader .boot-logo-anim { display: none !important; }
       }
       /* Firebase OAuth relay iframes — keep off-screen if layout glitches */
       iframe[src*="/__/auth/"],
@@ -197,16 +193,16 @@
     </script>
     <!-- Keep boot splash outside #root so React mount cannot tear it down. -->
     <div id="initial-loader" aria-label="Loading KnockScout" role="status">
-      <video
-        id="boot-logo-video"
-        class="boot-logo-video is-cover"
-        muted
-        playsinline
-        webkit-playsinline
-        autoplay
-        preload="auto"
+      <img
+        id="boot-logo-anim"
+        class="boot-logo-anim"
+        src="/brand/knockscout-LogoMark-on-black.webp"
+        alt=""
+        width="420"
+        height="420"
+        decoding="async"
         aria-hidden="true"
-      ></video>
+      />
     </div>
     <div id="root"></div>
     <script>
@@ -215,74 +211,24 @@
         if (el) el.remove();
       };
       (function() {
-        var video = document.getElementById('boot-logo-video');
-        if (!video) return;
+        var LOGO_MS = 4150;
+        var FADE_MS = 320;
         if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          video.remove();
-          return;
+          var img = document.getElementById('boot-logo-anim');
+          if (img) img.src = '/brand/knockscout-LogoMark-on-black-poster.png';
         }
-        var LOGO_SRC = '/brand/knockscout-LogoMark-on-black.mp4';
-        video.muted = true;
-        video.defaultMuted = true;
-        video.volume = 0;
-        video.preload = 'auto';
-        video.playsInline = true;
-        video.autoplay = true;
-        try {
-          video.setAttribute('playsinline', '');
-          video.setAttribute('webkit-playsinline', '');
-          video.setAttribute('muted', '');
-          video.setAttribute('autoplay', '');
-        } catch (e) { /* ignore */ }
-
-        // iOS 26 Home Screen / PWA often sticks HTTP <video src> on frame 0.
-        // Fetch into a blob: URL and attach via <source> (TikTok-style workaround).
-        var attachBlobAndPlay = function(objectUrl) {
-          try { video.removeAttribute('src'); } catch (e) { /* ignore */ }
-          while (video.firstChild) video.removeChild(video.firstChild);
-          var source = document.createElement('source');
-          source.type = 'video/mp4';
-          source.src = objectUrl;
-          video.appendChild(source);
-          try { video.load(); } catch (e) { /* ignore */ }
-          try {
-            var p = video.play();
-            if (p && typeof p.catch === 'function') p.catch(function() {});
-          } catch (e) { /* ignore */ }
-        };
-
-        var playHttpFallback = function() {
-          if (!video.getAttribute('src') && !video.querySelector('source')) {
-            video.src = LOGO_SRC;
-          }
-          try {
-            var p = video.play();
-            if (p && typeof p.catch === 'function') p.catch(function() {});
-          } catch (e) { /* ignore */ }
-        };
-
-        var startBootPlay = function() {
-          if (window.__bootLogoBlobUrl) {
-            attachBlobAndPlay(window.__bootLogoBlobUrl);
-            return;
-          }
-          var bust = LOGO_SRC + (LOGO_SRC.indexOf('?') >= 0 ? '&' : '?') + 'splash=' + Date.now();
-          fetch(bust, { cache: 'reload', credentials: 'same-origin' })
-            .then(function(res) {
-              if (!res.ok) throw new Error('splash fetch ' + res.status);
-              return res.blob();
-            })
-            .then(function(blob) {
-              var objectUrl = URL.createObjectURL(blob);
-              window.__bootLogoBlobUrl = objectUrl;
-              attachBlobAndPlay(objectUrl);
-            })
-            .catch(function() {
-              playHttpFallback();
-            });
-        };
-
-        startBootPlay();
+        // Failsafe: if React never claims the splash, fade it out after the WebP plays.
+        window.setTimeout(function() {
+          if (window.__bootSplashOwnedByReact) return;
+          var el = document.getElementById('initial-loader');
+          if (!el || el.classList.contains('is-exiting')) return;
+          el.classList.add('is-exiting');
+          window.setTimeout(function() {
+            if (window.__bootSplashOwnedByReact) return;
+            if (typeof window.__removeInitialLoader === 'function') window.__removeInitialLoader();
+            else if (el && el.parentNode) el.parentNode.removeChild(el);
+          }, FADE_MS);
+        }, LOGO_MS);
       })();
     </script>
     <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate; background: transparent;"></div>
