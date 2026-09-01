@@ -1,32 +1,22 @@
 /** @type {Promise<void> | null} */
 let playSetupInFlight = null
 
-/** Logo size vs viewport-fitted contain (1 = fit). Mobile uses a slight zoom to hide edge artifacts. */
-export const LOGO_SPLASH_SCALE_MOBILE = 1.875
-export const LOGO_SPLASH_SCALE_DESKTOP = 1.0
+/** @deprecated Cover sizing replaced mobile zoom; kept for older imports/tests. */
+export const LOGO_SPLASH_SCALE_MOBILE = 1
+export const LOGO_SPLASH_SCALE_DESKTOP = 1
 export const LOGO_SPLASH_DESKTOP_MIN_WIDTH_PX = 768
 
-/** window key shared with index.html boot canvas mirror */
+/** window key — optional layout hint (no longer required for cover video). */
 export const BOOT_LOGO_LAYOUT_KEY = '__bootLogoLayout'
 
 /**
- * True on Apple mobile WebKit (Safari, Home Screen, Capacitor iOS) where
- * video→canvas mirroring and PWA media resume are unreliable (esp. iOS 26+).
+ * Always prefer painting the real <video> (object-fit: cover).
+ * Canvas mirroring was abandoned after iOS 26 media regressions.
  *
  * @returns {boolean}
  */
 export function prefersDirectLogoVideo() {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
-  try {
-    if (window.Capacitor?.getPlatform?.() === 'ios') return true
-  } catch {
-    /* ignore */
-  }
-  const ua = navigator.userAgent || ''
-  if (/iP(hone|od|ad)/.test(ua)) return true
-  // iPadOS “desktop” UA
-  if (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1) return true
-  return false
+  return true
 }
 
 /**
@@ -40,8 +30,6 @@ export function getBootLogoLayout() {
 }
 
 /**
- * Capture splash layout once (CSS px). Later calls return the existing lock.
- *
  * @param {number} w
  * @param {number} h
  * @returns {{ w: number, h: number } | null}
@@ -56,7 +44,6 @@ export function setBootLogoLayout(w, h) {
   return layout
 }
 
-/** Drop the boot layout lock so a later splash can capture a fresh one. */
 export function clearBootLogoLayout() {
   if (typeof window === 'undefined') return
   try {
@@ -67,11 +54,9 @@ export function clearBootLogoLayout() {
 }
 
 /**
- * Device-pixel draw rect for the logo, centered in the locked CSS box.
- * Canvas may grow larger than the lock; dy/dx stay anchored to the lock.
- *
  * @param {{ lockedW: number, lockedH: number, videoW: number, videoH: number, scale: number, dpr: number }} args
  * @returns {{ dx: number, dy: number, dw: number, dh: number, fit: number }}
+ * @deprecated Canvas splash path removed; kept for unit tests.
  */
 export function logoDrawRect({ lockedW, lockedH, videoW, videoH, scale, dpr }) {
   const fit = Math.min(lockedW / videoW, lockedH / videoH) * scale
@@ -83,10 +68,6 @@ export function logoDrawRect({ lockedW, lockedH, videoW, videoH, scale, dpr }) {
 }
 
 /**
- * iOS often exposes a neutral grey placeholder before the first real decode
- * (including Capacitor-like dark greys around #111 and classic mid-greys).
- * Those frames must not be drawn (and must never become the full-screen plate).
- *
  * @param {number} r
  * @param {number} g
  * @param {number} b
@@ -95,47 +76,31 @@ export function logoDrawRect({ lockedW, lockedH, videoW, videoH, scale, dpr }) {
 export function isLogoSplashGreyPlaceholder(r, g, b) {
   const max = Math.max(r, g, b)
   const min = Math.min(r, g, b)
-  // Near-black plate / real logo corners stay drawable (allow tiny decode noise).
   if (max <= 12) return false
-  // Any near-neutral grey above near-black — skip (dark #111 through light grey).
   return (max - min) <= 28 && max <= 220
 }
 
-/** @deprecated Use isLogoSplashGreyPlaceholder — kept for older imports/tests. */
+/** @deprecated Use isLogoSplashGreyPlaceholder */
 export function isUsableLogoSplashPlateSample(r, g, b) {
   return !isLogoSplashGreyPlaceholder(r, g, b)
 }
 
-/**
- * @returns {number}
- */
+/** @returns {number} */
 export function getLogoSplashScale() {
-  if (typeof window === 'undefined') return LOGO_SPLASH_SCALE_MOBILE
-  return window.matchMedia(`(min-width: ${LOGO_SPLASH_DESKTOP_MIN_WIDTH_PX}px)`).matches
-    ? LOGO_SPLASH_SCALE_DESKTOP
-    : LOGO_SPLASH_SCALE_MOBILE
+  return 1
 }
 
 /**
- * Size/position the visible <video> inside the locked boot box so iOS viewport
- * growth only expands the black plate (matches canvas logoDrawRect anchoring).
+ * Full-bleed cover layout for the visible logo <video>.
  *
  * @param {HTMLVideoElement} video
- * @param {{ w?: number, h?: number } | null} [layout]
  */
-export function applyDirectLogoVideoLayout(video, layout) {
+export function applyDirectLogoVideoLayout(video) {
   if (!video) return
-  const locked = layout || getBootLogoLayout()
-  const scale = getLogoSplashScale()
-  video.classList.add('is-direct')
-  video.style.setProperty('--ks-logo-splash-scale', String(scale))
-  if (locked?.w > 0 && locked?.h > 0) {
-    video.style.setProperty('--ks-boot-logo-w', `${locked.w}px`)
-    video.style.setProperty('--ks-boot-logo-h', `${locked.h}px`)
-  } else {
-    video.style.setProperty('--ks-boot-logo-w', '100%')
-    video.style.setProperty('--ks-boot-logo-h', '100%')
-  }
+  video.classList.add('is-cover')
+  video.style.removeProperty('--ks-logo-splash-scale')
+  video.style.removeProperty('--ks-boot-logo-w')
+  video.style.removeProperty('--ks-boot-logo-h')
 }
 
 /**
@@ -155,8 +120,6 @@ export function configureLogoVideoElement(video) {
 }
 
 /**
- * True when the element is already advancing — do not seek to t=0 (restart).
- *
  * @param {HTMLVideoElement} video
  * @returns {boolean}
  */
@@ -168,9 +131,7 @@ export function isLogoSplashActivelyPlaying(video) {
 }
 
 /**
- * Muted logo playback. By default continues an in-progress play (HTML→React
- * handoff). Pass `{ restart: true }` to force t=0 (stall recovery / fresh el).
- * Concurrent callers are chained so each video still gets its own play().
+ * Muted logo playback. Continues an in-progress play by default (no seek).
  *
  * @param {HTMLVideoElement} video
  * @param {{ restart?: boolean }} [opts]
@@ -245,12 +206,9 @@ export async function remountLogoSplashSource(video, src) {
 }
 
 /**
- * Watch for currentTime advancing after play(). Invokes onStalled once if the
- * timeline stays frozen (iOS 26 PWA stuck-first-frame regression).
- *
  * @param {HTMLVideoElement} video
  * @param {{ onStalled?: () => void, timeoutMs?: number }} [opts]
- * @returns {() => void} cancel
+ * @returns {() => void}
  */
 export function watchLogoSplashProgress(video, opts = {}) {
   const timeoutMs = opts.timeoutMs ?? 900
@@ -276,7 +234,6 @@ export function watchLogoSplashProgress(video, opts = {}) {
     if (!cancelled) requestAnimationFrame(tick)
   }
   video.addEventListener('playing', onPlaying, { once: true })
-  // Already moving / already frozen after a prior play()
   if (!video.paused || (video.currentTime || 0) > 0) {
     requestAnimationFrame(tick)
   }

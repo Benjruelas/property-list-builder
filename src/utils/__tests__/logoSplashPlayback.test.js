@@ -23,11 +23,8 @@ import {
 
 describe('logoSplashPlayback', () => {
   let video
-  let matchMediaMock
 
   beforeEach(() => {
-    matchMediaMock = vi.fn().mockReturnValue({ matches: false })
-    vi.stubGlobal('matchMedia', matchMediaMock)
     clearBootLogoLayout()
     video = {
       muted: false,
@@ -39,7 +36,7 @@ describe('logoSplashPlayback', () => {
       readyState: 2,
       currentSrc: '',
       src: '',
-      style: { setProperty: vi.fn(), width: '', height: '' },
+      style: { setProperty: vi.fn(), removeProperty: vi.fn(), width: '', height: '' },
       classList: { add: vi.fn() },
       pause: vi.fn(),
       play: vi.fn().mockResolvedValue(undefined),
@@ -92,20 +89,16 @@ describe('logoSplashPlayback', () => {
     expect(isLogoSplashActivelyPlaying({ paused: false, ended: false, currentTime: 0 })).toBe(false)
   })
 
-  it('uses a smaller logo scale on desktop viewports', () => {
-    matchMediaMock.mockReturnValue({ matches: false })
-    expect(getLogoSplashScale()).toBe(LOGO_SPLASH_SCALE_MOBILE)
-
-    matchMediaMock.mockReturnValue({ matches: true })
-    expect(getLogoSplashScale()).toBe(LOGO_SPLASH_SCALE_DESKTOP)
-    expect(matchMediaMock).toHaveBeenCalledWith('(min-width: 768px)')
+  it('uses unit cover scale (no mobile zoom hack)', () => {
+    expect(getLogoSplashScale()).toBe(1)
+    expect(LOGO_SPLASH_SCALE_MOBILE).toBe(1)
+    expect(LOGO_SPLASH_SCALE_DESKTOP).toBe(1)
   })
 
   it('locks boot logo layout once and clears it', () => {
     expect(getBootLogoLayout()).toBeNull()
     expect(setBootLogoLayout(390, 700)).toEqual({ w: 390, h: 700 })
     expect(window[BOOT_LOGO_LAYOUT_KEY]).toEqual({ w: 390, h: 700 })
-    // Later taller viewport must not replace the lock.
     expect(setBootLogoLayout(390, 844)).toEqual({ w: 390, h: 700 })
     expect(getBootLogoLayout()).toEqual({ w: 390, h: 700 })
     clearBootLogoLayout()
@@ -116,11 +109,8 @@ describe('logoSplashPlayback', () => {
     const locked = { lockedW: 390, lockedH: 700, videoW: 1000, videoH: 1000, scale: 1, dpr: 2 }
     const first = logoDrawRect(locked)
     const taller = logoDrawRect({ ...locked, lockedH: 844 })
-    // If paint incorrectly used the live taller box, dy would increase.
     expect(first.dy).toBe((700 * 2 - first.dh) / 2)
     expect(taller.dy).toBeGreaterThan(first.dy)
-
-    // Frozen paint path: keep using the original lock after growth.
     const frozenAfterGrowth = logoDrawRect(locked)
     expect(frozenAfterGrowth.dy).toBe(first.dy)
     expect(frozenAfterGrowth.dx).toBe(first.dx)
@@ -129,14 +119,11 @@ describe('logoSplashPlayback', () => {
   it('detects grey placeholder frames (including dark #111) without blocking real frames', () => {
     expect(isLogoSplashGreyPlaceholder(0, 0, 0)).toBe(false)
     expect(isLogoSplashGreyPlaceholder(8, 0, 10)).toBe(false)
-    // Capacitor default splash / iOS dark-grey decoder plate
     expect(isLogoSplashGreyPlaceholder(17, 17, 17)).toBe(true)
     expect(isLogoSplashGreyPlaceholder(128, 128, 128)).toBe(true)
     expect(isLogoSplashGreyPlaceholder(180, 180, 182)).toBe(true)
-    // Saturated brand / logo pixels must still draw
     expect(isLogoSplashGreyPlaceholder(200, 40, 40)).toBe(false)
     expect(isLogoSplashGreyPlaceholder(17, 81, 239)).toBe(false)
-    // Compatibility wrapper: usable == not grey placeholder
     expect(isUsableLogoSplashPlateSample(0, 0, 0)).toBe(true)
     expect(isUsableLogoSplashPlateSample(17, 17, 17)).toBe(false)
     expect(isUsableLogoSplashPlateSample(128, 128, 128)).toBe(false)
@@ -170,7 +157,6 @@ describe('logoSplashPlayback', () => {
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
     }
-    // Overlap calls the way HTML→React handoff / Strict remount can.
     const p1 = beginLogoSplashPlayback(first, { restart: true })
     const p2 = beginLogoSplashPlayback(second, { restart: true })
     await Promise.all([p1, p2])
@@ -178,41 +164,14 @@ describe('logoSplashPlayback', () => {
     expect(second.play).toHaveBeenCalled()
   })
 
-  it('prefers direct video on iPhone / Capacitor iOS', () => {
-    vi.stubGlobal('navigator', {
-      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)',
-      platform: 'iPhone',
-      maxTouchPoints: 5,
-    })
-    expect(prefersDirectLogoVideo()).toBe(true)
-
-    vi.stubGlobal('navigator', {
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      platform: 'MacIntel',
-      maxTouchPoints: 0,
-    })
-    vi.stubGlobal('Capacitor', { getPlatform: () => 'ios' })
+  it('always prefers direct cover video', () => {
     expect(prefersDirectLogoVideo()).toBe(true)
   })
 
-  it('does not prefer direct video on desktop Chrome', () => {
-    vi.stubGlobal('navigator', {
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-      platform: 'Win32',
-      maxTouchPoints: 0,
-    })
-    vi.stubGlobal('Capacitor', undefined)
-    expect(prefersDirectLogoVideo()).toBe(false)
-  })
-
-  it('applies locked layout + scale CSS for direct video', () => {
-    setBootLogoLayout(390, 700)
-    matchMediaMock.mockReturnValue({ matches: false })
+  it('applies cover class for direct video', () => {
     applyDirectLogoVideoLayout(video)
-    expect(video.classList.add).toHaveBeenCalledWith('is-direct')
-    expect(video.style.setProperty).toHaveBeenCalledWith('--ks-logo-splash-scale', String(LOGO_SPLASH_SCALE_MOBILE))
-    expect(video.style.setProperty).toHaveBeenCalledWith('--ks-boot-logo-w', '390px')
-    expect(video.style.setProperty).toHaveBeenCalledWith('--ks-boot-logo-h', '700px')
+    expect(video.classList.add).toHaveBeenCalledWith('is-cover')
+    expect(video.style.removeProperty).toHaveBeenCalledWith('--ks-logo-splash-scale')
   })
 
   it('remounts source with a cache-busting query for stall recovery', async () => {
@@ -242,14 +201,12 @@ describe('logoSplashPlayback', () => {
     }
     const cancel = watchLogoSplashProgress(el, { timeoutMs: 50, onStalled })
 
-    // First rAF: still within timeout
     expect(rafCbs.length).toBeGreaterThan(0)
     const first = rafCbs.shift()
     now = 1_020
     first(now)
     expect(onStalled).not.toHaveBeenCalled()
 
-    // Second rAF: past timeout with frozen currentTime
     expect(rafCbs.length).toBeGreaterThan(0)
     const second = rafCbs.shift()
     now = 1_060
