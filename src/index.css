@@ -5141,7 +5141,8 @@ button:has(> svg:only-child):hover:not(:disabled):not(.map-controls-stack *):not
   --ks-logo-plate: #000000;
   position: fixed;
   inset: 0;
-  z-index: 10045;
+  /* Stay above #modal-root (max z-index) while the splash is visible */
+  z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5313,37 +5314,13 @@ body:has(.app-loading-screen--video) {
   overflow: hidden;
 }
 /*
- * Media element stays full-bleed under the canvas at opacity 0.
- * 1×1 / offscreen sizing makes iOS skip decode → black canvas, no logo.
- * `.is-direct` (Apple WebKit): paint the real <video> instead of canvas.
+ * Full-bleed cover video — logo mark is small in the 16:9 master, so cover
+ * sizes it correctly on phones. Never opacity-0 + canvas on iOS.
  */
-.app-loading-screen__video-source {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  object-fit: contain !important;
-  z-index: 0 !important;
-}
-.app-loading-screen__video-source.is-direct {
-  inset: auto !important;
-  top: 0 !important;
-  left: 50% !important;
-  right: auto !important;
-  bottom: auto !important;
-  width: var(--ks-boot-logo-w, 100%) !important;
-  height: var(--ks-boot-logo-h, 100%) !important;
-  opacity: 1 !important;
-  z-index: 1 !important;
-  background: var(--ks-logo-plate, #000000) !important;
-  transform: translateX(-50%) scale(var(--ks-logo-splash-scale, 1.875)) !important;
-  transform-origin: center center !important;
-}
-/* Full-bleed canvas — logo is drawn centered inside (no scaled box edge / hairline). */
 .app-loading-screen__video,
-#initial-loader #boot-logo-canvas {
+.app-loading-screen__video-source,
+#initial-loader #boot-logo-video,
+#initial-loader .app-loading-screen__video {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -5352,8 +5329,17 @@ body:has(.app-loading-screen--video) {
   min-height: -webkit-fill-available;
   min-height: var(--vw-height, 100dvh);
   display: block;
+  object-fit: cover;
+  object-position: center center;
   background: var(--ks-logo-plate, #000000);
   z-index: 1;
+  pointer-events: none;
+  opacity: 1;
+}
+.app-loading-screen__video--static {
+  object-fit: contain;
+  padding: 12vh 10vw;
+  box-sizing: border-box;
 }
 
 @media (prefers-reduced-motion: reduce) {

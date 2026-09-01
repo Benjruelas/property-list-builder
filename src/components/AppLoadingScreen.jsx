@@ -6,28 +6,21 @@ import {
   beginLogoSplashPlayback,
   remountLogoSplashSource,
   watchLogoSplashProgress,
-  getLogoSplashScale,
-  getBootLogoLayout,
-  setBootLogoLayout,
   clearBootLogoLayout,
-  logoDrawRect,
-  isLogoSplashGreyPlaceholder,
-  prefersDirectLogoVideo,
   applyDirectLogoVideoLayout,
 } from '@/utils/logoSplashPlayback'
 
-/** Match `.app-loading-screen.is-exiting` animation duration. */
+/** Match `.app-loading-screen.is-exiting` / `#initial-loader.is-exiting` duration. */
 const FADE_OUT_MS = 320
 /** Fallback if `ended` never fires (decode error). */
 const PLAY_FALLBACK_MS = 4500
 const LOGO_VIDEO_SRC = '/brand/knockscout-LogoMark-on-black.mp4'
 const LOGO_POSTER_SRC = '/brand/knockscout-LogoMark-on-black-poster.png'
 const BOOT_VIDEO_ID = 'boot-logo-video'
+const BOOT_LOADER_ID = 'initial-loader'
 const LOGO_PLATE = '#000000'
 
 function loadingPortalTarget() {
-  // #modal-root sits at max z-index (map chrome / FAB / action bar live there).
-  // Portaling here keeps the splash above that chrome; body alone cannot.
   return document.getElementById('modal-root') || document.body
 }
 
@@ -36,126 +29,10 @@ function prefersReducedMotion() {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** Logo size vs viewport-fitted contain — see getLogoSplashScale(). */
-/** Cover this fraction of the drawn video height at top + bottom (hides edge black lines). */
-const EDGE_COVER_RATIO = 0.035
-const EDGE_COVER_MIN_PX = 3
-/** Extra top band — hides hairline above the logo plate. */
-const EDGE_COVER_TOP_RATIO = 0.12
-const EDGE_COVER_TOP_MIN_PX = 14
-
-/**
- * Full-bleed canvas: black plate + logo contained & centered at getLogoSplashScale().
- * Plate stays #000 (never sampled) so iOS grey placeholders cannot flash the screen.
- */
-function startCanvasMirror(video, canvas) {
-  let ctx = null
-  try {
-    ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' })
-  } catch {
-    ctx = canvas.getContext('2d', { alpha: false })
-  }
-  if (!ctx) return () => {}
-
-  let raf = 0
-  let stopped = false
-  const plateFill = LOGO_PLATE
-  const probe = document.createElement('canvas')
-  probe.width = 48
-  probe.height = 48
-  let probeCtx = null
-  try {
-    probeCtx = probe.getContext('2d', { alpha: false, colorSpace: 'srgb' })
-  } catch {
-    probeCtx = probe.getContext('2d', { alpha: false })
-  }
-
-  const fillPlate = () => {
-    ctx.fillStyle = plateFill
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-  }
-
-  const syncSize = () => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth))
-    const cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight))
-    // Prefer HTML boot lock so handoff does not re-center in a taller viewport.
-    const locked = getBootLogoLayout() || setBootLogoLayout(cssW, cssH) || { w: cssW, h: cssH }
-    const w = Math.round(cssW * dpr)
-    const h = Math.round(cssH * dpr)
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w
-      canvas.height = h
-      fillPlate()
-    }
-    return { cssW, cssH, dpr, lockedW: locked.w, lockedH: locked.h }
-  }
-
-  const paint = () => {
-    const { dpr, lockedW, lockedH } = syncSize()
-    fillPlate()
-
-    if (!(video.readyState >= 2 && video.videoWidth > 0) || !probeCtx) return
-
-    probeCtx.drawImage(video, 0, 0, probe.width, probe.height)
-    let r = 0
-    let g = 0
-    let b = 0
-    try {
-      ;[r, g, b] = probeCtx.getImageData(4, 4, 1, 1).data
-    } catch {
-      return
-    }
-
-    // Skip iOS mid-grey decoder placeholders; keep black until a real frame.
-    if (isLogoSplashGreyPlaceholder(r, g, b)) return
-
-    const { dx, dy, dw, dh } = logoDrawRect({
-      lockedW,
-      lockedH,
-      videoW: video.videoWidth,
-      videoH: video.videoHeight,
-      scale: getLogoSplashScale(),
-      dpr,
-    })
-    ctx.drawImage(video, dx, dy, dw, dh)
-
-    // Plate-colored bands over the top/bottom video edges (hide black scan lines).
-    const coverBottom = Math.max(EDGE_COVER_MIN_PX * dpr, Math.round(dh * EDGE_COVER_RATIO))
-    const coverTop = Math.max(EDGE_COVER_TOP_MIN_PX * dpr, Math.round(dh * EDGE_COVER_TOP_RATIO))
-    ctx.fillStyle = plateFill
-    ctx.fillRect(dx, dy, dw, coverTop)
-    ctx.fillRect(dx, dy + dh - coverBottom, dw, coverBottom)
-  }
-
-  syncSize()
-  fillPlate()
-
-  const onResize = () => {
-    syncSize()
-    paint()
-  }
-  window.addEventListener('resize', onResize)
-
-  const draw = () => {
-    if (stopped) return
-    paint()
-    raf = requestAnimationFrame(draw)
-  }
-
-  draw()
-  return () => {
-    stopped = true
-    cancelAnimationFrame(raf)
-    window.removeEventListener('resize', onResize)
-  }
-}
-
 /**
  * Full-screen KnockScout boot splash.
- * Plays the brand logo MP4 once, then opens the app immediately — does not
- * keep waiting on auth/basemap after playback ends. Reduced-motion still
- * holds until `active` clears (no video end event).
+ * Prefers the HTML `#initial-loader` video in place (no DOM reparent — that
+ * glitches on iOS). Falls back to a portal video for public pages.
  *
  * @param {{ active: boolean, message?: string, onVisibleChange?: (visible: boolean) => void }} props
  */
@@ -164,14 +41,23 @@ export function AppLoadingScreen({
   message = APP_LOADING_MESSAGES.mapAuth,
   onVisibleChange,
 }) {
+  const reduceMotion = prefersReducedMotion()
   const [mounted, setMounted] = useState(active)
   const [exiting, setExiting] = useState(false)
-  const [playCompleted, setPlayCompleted] = useState(() => prefersReducedMotion())
-  const reduceMotion = prefersReducedMotion()
+  const [playCompleted, setPlayCompleted] = useState(() => reduceMotion)
+  /** 'boot' = reuse #initial-loader; 'portal' = React-owned overlay */
+  const [host, setHost] = useState(() => (
+    typeof document !== 'undefined'
+      && document.getElementById(BOOT_LOADER_ID)
+      && document.getElementById(BOOT_VIDEO_ID)
+      && !prefersReducedMotion()
+      ? 'boot'
+      : 'portal'
+  ))
+
   const screenRef = useRef(null)
   const stageRef = useRef(null)
   const videoRef = useRef(null)
-  const canvasRef = useRef(null)
   const activeRef = useRef(active)
   const playCompletedRef = useRef(playCompleted)
   const exitingRef = useRef(false)
@@ -183,60 +69,150 @@ export function AppLoadingScreen({
   const tryExit = () => {
     if (exitingRef.current) return
     if (!playCompletedRef.current) return
-    // No MP4 end signal — keep covering until the caller marks inactive.
     if (reduceMotion && activeRef.current) return
     exitingRef.current = true
     setExiting(true)
   }
 
   useLayoutEffect(() => {
-    const stage = stageRef.current
-    if (!stage || prefersReducedMotion()) {
+    if (reduceMotion) {
+      // Drop HTML boot chrome; portal shows the static poster.
       window.__removeInitialLoader?.()
-      // HTML boot may have locked layout; static/reduced-motion path does not use it.
       clearBootLogoLayout()
+      setHost('portal')
       return undefined
     }
 
-    const useDirectVideo = prefersDirectLogoVideo()
+    const boot = document.getElementById(BOOT_LOADER_ID)
+    let video = boot?.querySelector('video') || document.getElementById(BOOT_VIDEO_ID)
+    const useBoot = !!(boot && video instanceof HTMLVideoElement)
 
-    // Prefer the HTML boot video so playback continues across React mount.
-    let video = document.getElementById(BOOT_VIDEO_ID)
-    if (video instanceof HTMLVideoElement) {
-      video.removeAttribute('id')
+    let cancelProgressWatch = () => {}
+    let stopEnsure = () => {}
+
+    const markCompleted = () => {
+      if (playCompletedRef.current) return
+      playCompletedRef.current = true
+      setPlayCompleted(true)
+      try {
+        video?.pause()
+      } catch {
+        /* ignore */
+      }
+      tryExit()
+    }
+
+    if (useBoot) {
+      setHost('boot')
+      // Keep the element where HTML put it — moving a playing <video> on iOS
+      // restarts/glitches the animation.
+      window.__removeInitialLoader = null
+      boot.classList.add(
+        'app-loading-screen',
+        'app-loading-screen--visible',
+        'app-loading-screen--video',
+      )
+      boot.setAttribute('role', 'status')
+      boot.setAttribute('aria-live', 'polite')
+      boot.setAttribute('aria-label', message)
+      screenRef.current = boot
+
+      // Drop leftover canvas from older boots if present.
+      boot.querySelectorAll('canvas').forEach((c) => c.remove())
+
+      // Keep id for Strict Mode remount; query via loader as fallback.
+      video.className = 'app-loading-screen__video is-cover'
+      video.setAttribute('aria-hidden', 'true')
+      configureLogoVideoElement(video)
+      applyDirectLogoVideoLayout(video)
+      videoRef.current = video
+
+      if (video.ended || (video.currentTime > 0 && video.paused && video.readyState >= 2
+        && video.duration > 0 && video.currentTime >= video.duration - 0.05)) {
+        markCompleted()
+      }
     } else {
+      setHost('portal')
+      window.__removeInitialLoader?.()
+      video = null
+    }
+
+    const bindVideo = (el) => {
+      if (!el) return () => {}
+      video = el
+      videoRef.current = el
+      const onEnded = () => markCompleted()
+      el.addEventListener('ended', onEnded)
+
+      const fallbackTimer = window.setTimeout(() => {
+        if (!playCompletedRef.current) markCompleted()
+      }, PLAY_FALLBACK_MS)
+
+      const ensurePlaying = () => {
+        if (playCompletedRef.current || el.ended) return
+        void beginLogoSplashPlayback(el, { restart: false })
+      }
+      void beginLogoSplashPlayback(el, { restart: false })
+      el.addEventListener('loadeddata', ensurePlaying)
+      el.addEventListener('canplay', ensurePlaying)
+      const playRetryTimer = window.setTimeout(ensurePlaying, 200)
+      const playRetryTimer2 = window.setTimeout(ensurePlaying, 800)
+
+      let stallRecovered = false
+      cancelProgressWatch = watchLogoSplashProgress(el, {
+        timeoutMs: 900,
+        onStalled: () => {
+          if (stallRecovered || playCompletedRef.current) return
+          stallRecovered = true
+          void remountLogoSplashSource(el, LOGO_VIDEO_SRC).then(() => {
+            applyDirectLogoVideoLayout(el)
+          })
+        },
+      })
+
+      return () => {
+        window.clearTimeout(fallbackTimer)
+        window.clearTimeout(playRetryTimer)
+        window.clearTimeout(playRetryTimer2)
+        el.removeEventListener('ended', onEnded)
+        el.removeEventListener('loadeddata', ensurePlaying)
+        el.removeEventListener('canplay', ensurePlaying)
+        cancelProgressWatch()
+      }
+    }
+
+    if (video) {
+      stopEnsure = bindVideo(video)
+      return () => {
+        stopEnsure()
+      }
+    }
+
+    return undefined
+  }, [message, reduceMotion])
+
+  // Portal-only: create the cover video inside the portal stage.
+  useLayoutEffect(() => {
+    if (host !== 'portal' || reduceMotion) return undefined
+    const stage = stageRef.current
+    if (!stage) return undefined
+    // Boot path already bound a video.
+    if (videoRef.current && document.body.contains(videoRef.current)
+      && !stage.contains(videoRef.current)) {
+      return undefined
+    }
+
+    let video = videoRef.current
+    if (!(video instanceof HTMLVideoElement) || !stage.contains(video)) {
       video = document.createElement('video')
       video.src = LOGO_VIDEO_SRC
-      // No poster attr — iOS can flash a grey decoder frame; canvas stays black until a real frame.
       video.setAttribute('aria-hidden', 'true')
-    }
-
-    configureLogoVideoElement(video)
-    videoRef.current = video
-
-    const cssW = Math.max(1, Math.round(window.innerWidth || stage.clientWidth || 1))
-    const cssH = Math.max(1, Math.round(window.innerHeight || stage.clientHeight || 1))
-    const locked = getBootLogoLayout() || setBootLogoLayout(cssW, cssH)
-
-    let stopMirror = () => {}
-    if (useDirectVideo) {
-      // iOS 26+: paint with the real <video> — video→canvas mirroring stalls / jumps.
-      video.className = 'app-loading-screen__video-source is-direct'
-      applyDirectLogoVideoLayout(video, locked)
+      video.className = 'app-loading-screen__video is-cover'
+      configureLogoVideoElement(video)
+      applyDirectLogoVideoLayout(video)
       stage.replaceChildren(video)
-    } else {
-      // Keep the media element off-screen; paint via canvas for edge covers.
-      video.className = 'app-loading-screen__video-source'
-      const canvas = document.createElement('canvas')
-      canvas.className = 'app-loading-screen__video'
-      canvas.setAttribute('aria-hidden', 'true')
-      canvasRef.current = canvas
-      stage.replaceChildren(video, canvas)
-      stopMirror = startCanvasMirror(video, canvas)
+      videoRef.current = video
     }
-
-    // Paint one frozen frame before removing the HTML loader to avoid a gap/jump.
-    window.__removeInitialLoader?.()
 
     const markCompleted = () => {
       if (playCompletedRef.current) return
@@ -252,13 +228,10 @@ export function AppLoadingScreen({
 
     const onEnded = () => markCompleted()
     video.addEventListener('ended', onEnded)
-
     const fallbackTimer = window.setTimeout(() => {
       if (!playCompletedRef.current) markCompleted()
     }, PLAY_FALLBACK_MS)
 
-    // Continue HTML boot playback when possible — never seek to t=0 while playing
-    // (that restart looked broken after iOS media/session changes).
     const ensurePlaying = () => {
       if (playCompletedRef.current || video.ended) return
       void beginLogoSplashPlayback(video, { restart: false })
@@ -269,20 +242,17 @@ export function AppLoadingScreen({
     const playRetryTimer = window.setTimeout(ensurePlaying, 200)
     const playRetryTimer2 = window.setTimeout(ensurePlaying, 800)
 
-    let cancelProgressWatch = () => {}
     let stallRecovered = false
-    if (useDirectVideo) {
-      cancelProgressWatch = watchLogoSplashProgress(video, {
-        timeoutMs: 900,
-        onStalled: () => {
-          if (stallRecovered || playCompletedRef.current) return
-          stallRecovered = true
-          void remountLogoSplashSource(video, LOGO_VIDEO_SRC).then(() => {
-            applyDirectLogoVideoLayout(video, locked)
-          })
-        },
-      })
-    }
+    const cancelProgressWatch = watchLogoSplashProgress(video, {
+      timeoutMs: 900,
+      onStalled: () => {
+        if (stallRecovered || playCompletedRef.current) return
+        stallRecovered = true
+        void remountLogoSplashSource(video, LOGO_VIDEO_SRC).then(() => {
+          applyDirectLogoVideoLayout(video)
+        })
+      },
+    })
 
     return () => {
       window.clearTimeout(fallbackTimer)
@@ -292,18 +262,14 @@ export function AppLoadingScreen({
       video.removeEventListener('loadeddata', ensurePlaying)
       video.removeEventListener('canplay', ensurePlaying)
       cancelProgressWatch()
-      stopMirror()
     }
-  }, [])
+  }, [host, reduceMotion])
 
-  // Stay "visible" through the fade so FAB / chrome stay hidden until opacity hits 0.
   useEffect(() => {
     onVisibleChangeRef.current?.(mounted)
   }, [mounted])
 
   useEffect(() => {
-    // After the logo has played, never remount just because auth/basemap are
-    // still loading — open as soon as the MP4 ends.
     if (active && (!playCompleted || reduceMotion)) {
       exitingRef.current = false
       setExiting(false)
@@ -315,11 +281,14 @@ export function AppLoadingScreen({
     return undefined
   }, [active, mounted, exiting, playCompleted, reduceMotion])
 
-  // Double rAF ensures the browser paints opacity:1 before the exit animation starts.
   useLayoutEffect(() => {
-    if (!exiting || !screenRef.current) return undefined
+    if (!exiting) return undefined
 
-    const el = screenRef.current
+    const el = host === 'boot'
+      ? (screenRef.current || document.getElementById(BOOT_LOADER_ID))
+      : screenRef.current
+    if (!el) return undefined
+
     el.classList.remove('is-exiting')
     void el.offsetHeight
 
@@ -332,6 +301,7 @@ export function AppLoadingScreen({
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
         el.classList.add('is-exiting')
+        el.setAttribute('aria-hidden', 'true')
       })
     })
 
@@ -339,25 +309,30 @@ export function AppLoadingScreen({
       cancelAnimationFrame(raf1)
       cancelAnimationFrame(raf2)
     }
-  }, [exiting])
+  }, [exiting, host])
 
   useEffect(() => {
     if (!exiting) return undefined
-    const reduceMotion = prefersReducedMotion()
     const t = window.setTimeout(
       () => {
+        if (host === 'boot') {
+          const boot = document.getElementById(BOOT_LOADER_ID) || screenRef.current
+          boot?.remove()
+        }
         setMounted(false)
         setExiting(false)
         exitingRef.current = false
-        // Allow a later splash (e.g. public pages) to capture a fresh lock.
         clearBootLogoLayout()
       },
       reduceMotion ? 0 : FADE_OUT_MS
     )
     return () => window.clearTimeout(t)
-  }, [exiting])
+  }, [exiting, host, reduceMotion])
 
   if (typeof document === 'undefined' || !mounted) return null
+
+  // Boot host: HTML #initial-loader is the visible splash — no portal.
+  if (host === 'boot' && !reduceMotion) return null
 
   return createPortal(
     <div
@@ -371,7 +346,7 @@ export function AppLoadingScreen({
     >
       <div className="app-loading-screen__content app-loading-screen__content--video">
         <div ref={stageRef} className="app-loading-screen__video-slot">
-          {prefersReducedMotion() ? (
+          {reduceMotion ? (
             <img
               src={LOGO_POSTER_SRC}
               alt="KnockScout"
