@@ -1,6 +1,12 @@
 /** @type {Promise<void> | null} */
 let playSetupInFlight = null
 
+/** @type {Promise<string> | null} */
+let blobUrlInFlight = null
+
+/** @type {string | null} */
+let cachedBlobUrl = null
+
 /** @deprecated Cover sizing replaced mobile zoom; kept for older imports/tests. */
 export const LOGO_SPLASH_SCALE_MOBILE = 1
 export const LOGO_SPLASH_SCALE_DESKTOP = 1
@@ -11,7 +17,6 @@ export const BOOT_LOGO_LAYOUT_KEY = '__bootLogoLayout'
 
 /**
  * Always prefer painting the real <video> (object-fit: cover).
- * Canvas mirroring was abandoned after iOS 26 media regressions.
  *
  * @returns {boolean}
  */
@@ -110,6 +115,8 @@ export function configureLogoVideoElement(video) {
   video.playsInline = true
   video.setAttribute('playsinline', '')
   video.setAttribute('webkit-playsinline', '')
+  video.setAttribute('autoplay', '')
+  video.autoplay = true
   video.controls = false
   video.loop = false
   video.preload = 'auto'
@@ -130,8 +137,101 @@ export function isLogoSplashActivelyPlaying(video) {
   return (video.currentTime || 0) > 0.05
 }
 
+/** Drop cached blob URL (tests / after splash exits). */
+export function clearLogoSplashBlobCache() {
+  blobUrlInFlight = null
+  if (cachedBlobUrl) {
+    try {
+      URL.revokeObjectURL(cachedBlobUrl)
+    } catch {
+      /* ignore */
+    }
+  }
+  cachedBlobUrl = null
+  if (typeof window !== 'undefined') {
+    try {
+      delete window.__bootLogoBlobUrl
+    } catch {
+      window.__bootLogoBlobUrl = undefined
+    }
+  }
+}
+
 /**
- * Muted logo playback. Continues an in-progress play by default (no seek).
+ * Fetch the logo MP4 into a blob: URL. iOS 26 Home Screen / PWA often refuses
+ * to advance HTTP-sourced video after relaunch; blob sources still play.
+ *
+ * @param {string} src
+ * @param {{ bustCache?: boolean }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function fetchLogoSplashBlobUrl(src, opts = {}) {
+  const base = (src || '').split('?')[0]
+  if (!base) throw new Error('logo splash src missing')
+
+  if (!opts.bustCache && cachedBlobUrl) return cachedBlobUrl
+  if (!opts.bustCache && blobUrlInFlight) return blobUrlInFlight
+
+  const run = (async () => {
+    const url = opts.bustCache ? `${base}?splash=${Date.now()}` : base
+    const res = await fetch(url, {
+      cache: opts.bustCache ? 'reload' : 'force-cache',
+      credentials: 'same-origin',
+    })
+    if (!res.ok) throw new Error(`logo splash fetch ${res.status}`)
+    const blob = await res.blob()
+    if (cachedBlobUrl) {
+      try {
+        URL.revokeObjectURL(cachedBlobUrl)
+      } catch {
+        /* ignore */
+      }
+    }
+    cachedBlobUrl = URL.createObjectURL(blob)
+    if (typeof window !== 'undefined') {
+      window.__bootLogoBlobUrl = cachedBlobUrl
+    }
+    return cachedBlobUrl
+  })()
+
+  blobUrlInFlight = run
+  try {
+    return await run
+  } finally {
+    if (blobUrlInFlight === run) blobUrlInFlight = null
+  }
+}
+
+/**
+ * Attach a blob: URL via <source> (more reliable than video.src on iOS).
+ *
+ * @param {HTMLVideoElement} video
+ * @param {string} objectUrl
+ */
+export function attachLogoSplashBlobSource(video, objectUrl) {
+  configureLogoVideoElement(video)
+  try {
+    video.removeAttribute('src')
+  } catch {
+    /* ignore */
+  }
+  while (video.firstChild) {
+    video.removeChild(video.firstChild)
+  }
+  const source = document.createElement('source')
+  source.type = 'video/mp4'
+  source.src = objectUrl
+  video.appendChild(source)
+  try {
+    video.load()
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Muted logo playback without seek-to-0 (seek+play is toxic on iOS WebKit).
+ * Pass `{ restart: true }` only after a fresh source attach.
  *
  * @param {HTMLVideoElement} video
  * @param {{ restart?: boolean }} [opts]
@@ -148,20 +248,11 @@ export async function beginLogoSplashPlayback(video, opts = {}) {
       }
       return
     }
-    try {
-      video.pause()
-    } catch {
-      /* ignore */
-    }
-    try {
-      if (video.readyState >= 1) video.currentTime = 0
-    } catch {
-      /* ignore */
-    }
+    // Soft play — never pause()+seek; that freezes iOS 26 PWA media sessions.
     try {
       await video.play()
     } catch {
-      /* decode / autoplay blocked — caller may retry on canplay */
+      /* decode / autoplay blocked — caller may remount via blob */
     }
   }
 
@@ -176,33 +267,31 @@ export async function beginLogoSplashPlayback(video, opts = {}) {
 }
 
 /**
- * Remount the media source (iOS 26 Home Screen / PWA can stick on frame 0).
+ * Remount via a fresh blob: URL (iOS 26 stuck-first-frame recovery).
  *
  * @param {HTMLVideoElement} video
  * @param {string} src
  */
 export async function remountLogoSplashSource(video, src) {
   const base = (src || video.getAttribute('src') || video.currentSrc || '').split('?')[0]
-  if (!base) return
-  configureLogoVideoElement(video)
-  try {
-    video.pause()
-  } catch {
-    /* ignore */
-  }
-  try {
-    video.removeAttribute('src')
-    video.load()
-  } catch {
-    /* ignore */
-  }
-  video.src = `${base}?splash=${Date.now()}`
-  try {
-    video.load()
-  } catch {
-    /* ignore */
-  }
+    || '/brand/knockscout-LogoMark-on-black.mp4'
+  const objectUrl = await fetchLogoSplashBlobUrl(base, { bustCache: true })
+  attachLogoSplashBlobSource(video, objectUrl)
   await beginLogoSplashPlayback(video, { restart: true })
+}
+
+/**
+ * Load blob source + play. Preferred cold-start path for Apple WebKit.
+ *
+ * @param {HTMLVideoElement} video
+ * @param {string} src
+ * @param {{ bustCache?: boolean }} [opts]
+ */
+export async function playLogoSplashFromBlob(video, src, opts = {}) {
+  const objectUrl = await fetchLogoSplashBlobUrl(src, opts)
+  attachLogoSplashBlobSource(video, objectUrl)
+  await beginLogoSplashPlayback(video, { restart: true })
+  return objectUrl
 }
 
 /**
@@ -211,20 +300,27 @@ export async function remountLogoSplashSource(video, src) {
  * @returns {() => void}
  */
 export function watchLogoSplashProgress(video, opts = {}) {
-  const timeoutMs = opts.timeoutMs ?? 900
+  const timeoutMs = opts.timeoutMs ?? 450
   const onStalled = opts.onStalled
   if (!video) return () => {}
 
   let cancelled = false
   const startTime = video.currentTime || 0
   const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  let stalledFired = false
+
+  const fireStalled = () => {
+    if (cancelled || stalledFired) return
+    stalledFired = true
+    onStalled?.()
+  }
 
   const tick = () => {
-    if (cancelled) return
+    if (cancelled || stalledFired) return
     if (video.ended || (video.currentTime || 0) > startTime + 0.08) return
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
     if (now - startedAt >= timeoutMs) {
-      onStalled?.()
+      fireStalled()
       return
     }
     requestAnimationFrame(tick)
@@ -234,12 +330,14 @@ export function watchLogoSplashProgress(video, opts = {}) {
     if (!cancelled) requestAnimationFrame(tick)
   }
   video.addEventListener('playing', onPlaying, { once: true })
-  if (!video.paused || (video.currentTime || 0) > 0) {
-    requestAnimationFrame(tick)
-  }
+  // Always arm the watchdog — iOS can report paused=false while frozen at t=0.
+  requestAnimationFrame(tick)
+  // Wall-clock backup if rAF is throttled during boot.
+  const wall = window.setTimeout(fireStalled, timeoutMs + 50)
 
   return () => {
     cancelled = true
+    window.clearTimeout(wall)
     video.removeEventListener('playing', onPlaying)
   }
 }
