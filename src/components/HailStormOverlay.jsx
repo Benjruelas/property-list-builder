@@ -1,6 +1,7 @@
-import { Source, Layer, Marker as MapMarker } from 'react-map-gl/maplibre'
+import { useEffect } from 'react'
+import { Source, Layer, Marker as MapMarker, useMap } from 'react-map-gl/maplibre'
 import { ChevronLeft, ChevronRight, CloudRain, Home, Loader2, X } from 'lucide-react'
-import { formatEventTimeLocal } from '../utils/nexradOverlay'
+import { formatEventTimeLocal, IEM_RADAR_TILE_MAXZOOM, radarDisplayName } from '../utils/nexradOverlay'
 
 /** Parcel + hail report pins while viewing storm radar. */
 export function HailStormMapMarkers({ parcel, event, address }) {
@@ -48,7 +49,31 @@ export function HailStormMapMarkers({ parcel, event, address }) {
   )
 }
 
+const RADAR_LAYER_ID = 'hail-storm-radar-layer'
+
 export function HailStormOverlay({ tileUrl }) {
+  const maps = useMap()
+  const mapRef = maps?.current
+
+  useEffect(() => {
+    const map = mapRef?.getMap?.() ?? mapRef
+    if (!map || !tileUrl) return
+
+    const promote = () => {
+      try {
+        if (map.getLayer(RADAR_LAYER_ID)) map.moveLayer(RADAR_LAYER_ID)
+      } catch {
+        /* style not ready */
+      }
+    }
+
+    promote()
+    map.on('styledata', promote)
+    return () => {
+      map.off('styledata', promote)
+    }
+  }, [mapRef, tileUrl])
+
   if (!tileUrl) return null
 
   return (
@@ -59,12 +84,14 @@ export function HailStormOverlay({ tileUrl }) {
       tiles={[tileUrl]}
       tileSize={256}
       scheme="xyz"
+      minzoom={1}
+      maxzoom={IEM_RADAR_TILE_MAXZOOM}
       attribution="NEXRAD via Iowa Environmental Mesonet"
     >
       <Layer
-        id="hail-storm-radar-layer"
+        id={RADAR_LAYER_ID}
         type="raster"
-        paint={{ 'raster-opacity': 0.72, 'raster-fade-duration': 0 }}
+        paint={{ 'raster-opacity': 0.78, 'raster-fade-duration': 0 }}
       />
     </Source>
   )
@@ -139,10 +166,13 @@ export function HailStormDismissPill({
     stepNext,
     hasRadarData,
     isReportFrame,
+    radarName,
+    radarId,
   } = timeline ?? {}
 
   const radarOk = event?.year >= 1995
   const timeLabel = formatEventTimeLocal(event.time_utc, event.date, undefined, event)
+  const siteLabel = radarDisplayName(radarId, radarName)
   const progressPct = timelineProgress(frameIndex, frameCount)
   const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
   const reportMarkerPct =
@@ -165,6 +195,7 @@ export function HailStormDismissPill({
             <p className="hail-storm-panel-title">{formatStormTitleDate(event.date)}</p>
             <p className="hail-storm-panel-subtitle">
               {timeLabel ? `Report ${timeLabel}` : 'NEXRAD radar replay'}
+              {radarOk && siteLabel ? ` · ${siteLabel}` : ''}
             </p>
           </div>
           <span className="hail-storm-panel-badge" aria-hidden>

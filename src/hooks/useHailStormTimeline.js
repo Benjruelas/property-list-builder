@@ -75,6 +75,8 @@ export function useHailStormTimeline(event) {
     frameCount: frames.length,
     frameLabel: current?.label ?? '',
     tileUrl: current?.tileUrl ?? null,
+    radarId: current?.radarId ?? null,
+    radarName: current?.radarName ?? null,
     hasRadarData: !!current?.tileUrl,
     loading,
     canStep: frames.length > 1,

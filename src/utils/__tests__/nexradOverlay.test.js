@@ -3,14 +3,21 @@ import {
   STORM_TIMELINE_BEFORE_HOURS,
   STORM_TIMELINE_AFTER_HOURS,
   STORM_SCAN_MAX_DIFF_MS,
+  STORM_VIEW_MAX_ZOOM,
+  STORM_VIEW_PAD_DEG,
   buildStormTimelineOffsets,
   eventDateTimeUTC,
   eventUsesConvectiveDayClock,
   formatEventTimeLocal,
   formatStormFrameLabel,
   hailEventTimelineKey,
+  hailStormViewBounds,
+  iemIsoMinute,
   initialStormFrameIndex,
+  parseIemScanTime,
+  pickNearestNexradId,
   pickNearestScanTimestamp,
+  pickSiteProduct,
   preferredRadarProduct,
 } from '../nexradOverlay.js'
 
@@ -104,9 +111,38 @@ describe('storm radar timeline', () => {
       lng: -96.8,
       year: 2023,
     })
-    expect(key).toContain('v4')
+    expect(key).toContain('v5')
     expect(key).toContain('b6')
     expect(key).toContain('a3')
     expect(key).toContain('2023-05-15')
+  })
+
+  it('parses IEM scan stamps that omit seconds', () => {
+    expect(parseIemScanTime('2026-04-26T03:30Z')?.toISOString()).toBe('2026-04-26T03:30:00.000Z')
+    expect(parseIemScanTime('2026-04-26T03:30:00Z')?.toISOString()).toBe('2026-04-26T03:30:00.000Z')
+    expect(iemIsoMinute(new Date('2026-04-26T03:30:00.000Z'))).toBe('2026-04-26T03:30Z')
+  })
+
+  it('prefers the nearest single-site NEXRAD and N0B when archived', () => {
+    expect(pickNearestNexradId([
+      { id: 'USCOMP', type: 'COMPOSITE' },
+      { id: 'FWS', type: 'NEXRAD', name: 'Dallas/Fort Worth' },
+      { id: 'DAL', type: 'TWDR' },
+    ])).toBe('FWS')
+    expect(pickSiteProduct([{ id: 'N0S' }, { id: 'N0B' }])).toBe('N0B')
+    expect(pickSiteProduct([{ id: 'N0Q' }])).toBe('N0Q')
+    expect(pickSiteProduct([])).toBe('N0Q')
+  })
+
+  it('frames the storm camera wide enough to keep the parent cell on screen', () => {
+    const bounds = hailStormViewBounds(
+      { lat: 32.76, lng: -97.48 },
+      { lat: 32.76, lng: -97.51 }
+    )
+    expect(bounds).toEqual([
+      [-97.51 - STORM_VIEW_PAD_DEG, 32.76 - STORM_VIEW_PAD_DEG],
+      [-97.48 + STORM_VIEW_PAD_DEG, 32.76 + STORM_VIEW_PAD_DEG],
+    ])
+    expect(STORM_VIEW_MAX_ZOOM).toBe(9)
   })
 })

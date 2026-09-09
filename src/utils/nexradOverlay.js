@@ -16,9 +16,16 @@ export const STORM_SCAN_MAX_DIFF_MS = 20 * 60 * 1000
 export const N0Q_ARCHIVE_START_MS = Date.UTC(2010, 10, 13, 16, 25)
 export const STORM_LOCAL_TIME_ZONE = 'America/Chicago'
 
-const TIMELINE_CACHE_VERSION = 'v4'
+const TIMELINE_CACHE_VERSION = 'v5'
 /** Compiled SPC archive ends in 2024; later years come from 12Z convective-day files. */
 const SPC_DAILY_REPORT_START_YEAR = 2025
+const COMPOSITE_RADAR_ID = 'USCOMP'
+const SITE_PRODUCT_PREFERENCE = ['N0B', 'N0Q', 'N0R', 'N0Z']
+/** IEM ridge tiles stay sharp through ~z10; higher zooms are stretched mosaic pixels. */
+export const IEM_RADAR_TILE_MAXZOOM = 10
+/** Pad the storm camera so the parent cell stays in view (degrees). */
+export const STORM_VIEW_PAD_DEG = 0.2
+export const STORM_VIEW_MAX_ZOOM = 9
 
 /** Round a Date down to the nearest N minutes (NEXRAD volumes ~every 5 min). */
 export function iemTimestamp(date) {
@@ -83,7 +90,7 @@ export function nexradTileUrlForTimestamp(radarId, product, ts) {
   return `${IEM_TILE_BASE}/ridge::${radarId}-${product}-${ts}/{z}/{x}/{y}.png`
 }
 
-export function nexradTileUrl(evt, radarId = 'USCOMP', product = preferredRadarProduct(evt)) {
+export function nexradTileUrl(evt, radarId = COMPOSITE_RADAR_ID, product = preferredRadarProduct(evt)) {
   const dt = eventDateTimeUTC(evt)
   if (!dt) return null
   return nexradTileUrlForTimestamp(radarId, product, iemTimestamp(dt))
@@ -91,6 +98,68 @@ export function nexradTileUrl(evt, radarId = 'USCOMP', product = preferredRadarP
 
 function isoUtc(date) {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+/** IEM JSON services want `YYYY-MM-DDTHH:MMZ` (no seconds). */
+export function iemIsoMinute(date) {
+  if (!date) return ''
+  return `${date.toISOString().slice(0, 16)}Z`
+}
+
+/** IEM scan stamps are often `2026-04-26T03:30Z` — some browsers reject missing seconds. */
+export function parseIemScanTime(ts) {
+  if (!ts) return null
+  const raw = String(ts).trim()
+  const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/.test(raw)
+    ? `${raw.slice(0, 16)}:00Z`
+    : raw
+  const dt = new Date(normalized)
+  return Number.isFinite(dt.getTime()) ? dt : null
+}
+
+/** First single-site NEXRAD in IEM's nearest-first available list. */
+export function pickNearestNexradId(radars) {
+  const site = (radars || []).find((r) => (
+    r?.type === 'NEXRAD' && r.id && r.id !== COMPOSITE_RADAR_ID
+  ))
+  return site?.id || COMPOSITE_RADAR_ID
+}
+
+export function pickSiteProduct(products, fallback = 'N0Q') {
+  const ids = new Set((products || []).map((p) => p?.id || p).filter(Boolean))
+  for (const id of SITE_PRODUCT_PREFERENCE) {
+    if (ids.has(id)) return id
+  }
+  return fallback
+}
+
+export function radarDisplayName(radarId, radarName) {
+  if (radarName) return radarName
+  if (!radarId || radarId === COMPOSITE_RADAR_ID) return 'National mosaic'
+  return radarId
+}
+
+/**
+ * Camera bounds around the property + hail report so the parent cell stays visible.
+ */
+export function hailStormViewBounds(parcel, event) {
+  const lats = [parcel?.lat, event?.lat]
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n))
+  const lngs = [parcel?.lng, event?.lng]
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n))
+  if (!lats.length || !lngs.length) return null
+  const minLat = Math.min(...lats)
+  const maxLat = Math.max(...lats)
+  const minLng = Math.min(...lngs)
+  const maxLng = Math.max(...lngs)
+  const lngPad = Math.max(STORM_VIEW_PAD_DEG, (maxLng - minLng) * 0.35)
+  const latPad = Math.max(STORM_VIEW_PAD_DEG, (maxLat - minLat) * 0.35)
+  return [
+    [minLng - lngPad, minLat - latPad],
+    [maxLng + lngPad, maxLat + latPad],
+  ]
 }
 
 const SCAN_LIST_CACHE = new Map()
@@ -117,8 +186,8 @@ export function getCachedStormTimeline(evt) {
   return key ? TIMELINE_CACHE.get(key) ?? null : null
 }
 
-async function fetchScanList(start, end, product = 'N0Q') {
-  const key = `${product}|${isoUtc(start)}|${isoUtc(end)}`
+async function fetchScanList(start, end, product = 'N0Q', radar = COMPOSITE_RADAR_ID) {
+  const key = `${radar}|${product}|${isoUtc(start)}|${isoUtc(end)}`
   const cached = SCAN_LIST_CACHE.get(key)
   if (cached && Date.now() - cached.fetchedAt < SCAN_CACHE_TTL_MS) {
     return cached.scans
@@ -126,7 +195,7 @@ async function fetchScanList(start, end, product = 'N0Q') {
 
   const url = new URL('https://mesonet.agron.iastate.edu/json/radar.py')
   url.searchParams.set('operation', 'list')
-  url.searchParams.set('radar', 'USCOMP')
+  url.searchParams.set('radar', radar)
   url.searchParams.set('product', product)
   url.searchParams.set('start', isoUtc(start))
   url.searchParams.set('end', isoUtc(end))
@@ -139,23 +208,82 @@ async function fetchScanList(start, end, product = 'N0Q') {
   return scans
 }
 
-/** Load preferred product scans; fall back to the other composite if empty. */
-export async function fetchScansForEvent(evt, start, end) {
+async function fetchIemJson(url) {
+  const res = await fetch(url.toString())
+  if (!res.ok) throw new Error(`IEM radar: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * Nearest single-site NEXRAD + a reflectivity product that site actually archived.
+ * Falls back to the national mosaic when IEM has no local site.
+ */
+export async function resolveRadarCoverage(evt) {
   const preferred = preferredRadarProduct(evt)
-  const fallback = preferred === 'N0Q' ? 'N0R' : 'N0Q'
-  try {
-    const primary = await fetchScanList(start, end, preferred)
-    if (primary.length) return { product: preferred, scans: primary }
-  } catch {
-    /* try fallback */
+  const fallback = {
+    radarId: COMPOSITE_RADAR_ID,
+    radarName: 'National mosaic',
+    product: preferred,
   }
+  const dt = eventDateTimeUTC(evt)
+  const lat = Number(evt?.lat)
+  const lng = Number(evt?.lng)
+  if (!dt || !Number.isFinite(lat) || !Number.isFinite(lng)) return fallback
+
   try {
-    const secondary = await fetchScanList(start, end, fallback)
-    if (secondary.length) return { product: fallback, scans: secondary }
+    const availableUrl = new URL('https://mesonet.agron.iastate.edu/json/radar.py')
+    availableUrl.searchParams.set('operation', 'available')
+    availableUrl.searchParams.set('lat', String(lat))
+    availableUrl.searchParams.set('lon', String(lng))
+    availableUrl.searchParams.set('start', iemIsoMinute(dt))
+    const available = await fetchIemJson(availableUrl)
+    const radarId = pickNearestNexradId(available.radars)
+    const radarName = (available.radars || []).find((r) => r.id === radarId)?.name || null
+
+    if (radarId === COMPOSITE_RADAR_ID) {
+      return { ...fallback, radarName: radarName || fallback.radarName }
+    }
+
+    const productsUrl = new URL('https://mesonet.agron.iastate.edu/json/radar.py')
+    productsUrl.searchParams.set('operation', 'products')
+    productsUrl.searchParams.set('radar', radarId)
+    productsUrl.searchParams.set('start', iemIsoMinute(dt))
+    const products = await fetchIemJson(productsUrl)
+    const product = pickSiteProduct(products.products, preferred)
+    return { radarId, radarName: radarName || radarId, product }
   } catch {
-    /* no scans */
+    return fallback
   }
-  return { product: preferred, scans: [] }
+}
+
+/** Load site scans first; fall back to the national mosaic if the site is empty. */
+export async function fetchScansForEvent(evt, start, end) {
+  const coverage = await resolveRadarCoverage(evt)
+  const attempts = [
+    coverage,
+    {
+      radarId: COMPOSITE_RADAR_ID,
+      radarName: 'National mosaic',
+      product: preferredRadarProduct(evt),
+    },
+  ]
+
+  const seen = new Set()
+  for (const attempt of attempts) {
+    const key = `${attempt.radarId}|${attempt.product}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    try {
+      const scans = await fetchScanList(start, end, attempt.product, attempt.radarId)
+      if (scans.length) {
+        return { ...attempt, scans }
+      }
+    } catch {
+      /* try next coverage */
+    }
+  }
+
+  return { ...coverage, scans: [] }
 }
 
 /**
@@ -173,14 +301,17 @@ export function pickNearestScanTimestamp(
   let bestTs = null
   let bestDiff = Infinity
   for (const scan of scans) {
-    const diff = Math.abs(new Date(scan.ts).getTime() - target)
+    const scanAt = parseIemScanTime(scan.ts)
+    if (!scanAt) continue
+    const diff = Math.abs(scanAt.getTime() - target)
     if (diff < bestDiff) {
       bestDiff = diff
       bestTs = scan.ts
     }
   }
   if (bestTs == null || bestDiff > maxDiffMs) return null
-  return iemTimestamp(new Date(bestTs))
+  const stampAt = parseIemScanTime(bestTs)
+  return stampAt ? iemTimestamp(stampAt) : null
 }
 
 /**
@@ -269,14 +400,19 @@ export function formatEventTimeLocal(timeUtc, dateStr, timeZone = STORM_LOCAL_TI
 }
 
 /** Pick the scan timestamp closest to a target time from IEM. */
-export async function resolveNearestScanTimestampAt(at, windowMinutes = 60, product = 'N0Q') {
+export async function resolveNearestScanTimestampAt(
+  at,
+  windowMinutes = 60,
+  product = 'N0Q',
+  radar = COMPOSITE_RADAR_ID
+) {
   if (!at) return null
 
   const start = new Date(at.getTime() - windowMinutes * 60 * 1000)
   const end = new Date(at.getTime() + windowMinutes * 60 * 1000)
 
   try {
-    const scans = await fetchScanList(start, end, product)
+    const scans = await fetchScanList(start, end, product, radar)
     if (!scans.length) return null
     return pickNearestScanTimestamp(scans, at)
   } catch {
@@ -288,12 +424,15 @@ export async function resolveNearestScanTimestampAt(at, windowMinutes = 60, prod
 export async function resolveNearestScanTimestamp(evt, windowMinutes = 60) {
   const dt = eventDateTimeUTC(evt)
   if (!dt) return null
-  const product = preferredRadarProduct(evt)
-  const ts = await resolveNearestScanTimestampAt(dt, windowMinutes, product)
-  if (ts) return { ts, product }
-  const fallback = product === 'N0Q' ? 'N0R' : 'N0Q'
-  const alt = await resolveNearestScanTimestampAt(dt, windowMinutes, fallback)
-  return alt ? { ts: alt, product: fallback } : null
+  const coverage = await resolveRadarCoverage(evt)
+  const ts = await resolveNearestScanTimestampAt(dt, windowMinutes, coverage.product, coverage.radarId)
+  if (ts) return { ts, product: coverage.product, radarId: coverage.radarId }
+  if (coverage.radarId !== COMPOSITE_RADAR_ID) {
+    const mosaicProduct = preferredRadarProduct(evt)
+    const alt = await resolveNearestScanTimestampAt(dt, windowMinutes, mosaicProduct, COMPOSITE_RADAR_ID)
+    if (alt) return { ts: alt, product: mosaicProduct, radarId: COMPOSITE_RADAR_ID }
+  }
+  return null
 }
 
 /** Resolve radar frames around the hail report (before/after + fine near-report steps). */
@@ -310,7 +449,7 @@ export async function resolveStormTimeline(evt) {
   const start = new Date(reportAt.getTime() - STORM_TIMELINE_BEFORE_HOURS * 3600000 - padMs)
   const end = new Date(reportAt.getTime() + STORM_TIMELINE_AFTER_HOURS * 3600000 + padMs)
 
-  const { product, scans } = await fetchScansForEvent(evt, start, end)
+  const { product, scans, radarId = COMPOSITE_RADAR_ID, radarName } = await fetchScansForEvent(evt, start, end)
 
   const offsets = buildStormTimelineOffsets()
   const frames = offsets.map((offsetHours) => {
@@ -321,7 +460,9 @@ export async function resolveStormTimeline(evt) {
       at,
       ts,
       product,
-      tileUrl: ts ? nexradTileUrlForTimestamp('USCOMP', product, ts) : null,
+      radarId,
+      radarName: radarName || radarDisplayName(radarId),
+      tileUrl: ts ? nexradTileUrlForTimestamp(radarId, product, ts) : null,
       label: formatStormFrameLabel(at, reportAt),
     }
   })
@@ -335,5 +476,5 @@ export async function resolveRadarTileUrl(evt) {
   if (!evt || !radarAvailableForEvent(evt)) return null
   const resolved = await resolveNearestScanTimestamp(evt)
   if (!resolved?.ts) return null
-  return nexradTileUrlForTimestamp('USCOMP', resolved.product, resolved.ts)
+  return nexradTileUrlForTimestamp(resolved.radarId || COMPOSITE_RADAR_ID, resolved.product, resolved.ts)
 }

@@ -116,6 +116,7 @@ import { findDockablePrimaryRoot } from './navigation/taskDock'
 import { resolvePanelDockSlot } from './navigation/panelDockSlot'
 import { HailStormOverlay, HailStormDismissPill, HailStormMapMarkers } from './components/HailStormOverlay'
 import { useHailStormTimeline } from './hooks/useHailStormTimeline'
+import { hailStormViewBounds, STORM_VIEW_MAX_ZOOM } from './utils/nexradOverlay'
 import { PermissionPrompt, hasCompletedPermissionOnboarding } from './components/PermissionPrompt'
 import { NotificationPrompt } from './components/NotificationPrompt'
 import { useNotificationInbox } from './components/NotificationInbox'
@@ -740,24 +741,13 @@ function App() {
     programmaticMoveRef.current = true
     const map = mapRef.current
 
-    if (hailParcelCoords) {
-      const minLng = Math.min(hailParcelCoords.lng, selectedHailEvent.lng)
-      const maxLng = Math.max(hailParcelCoords.lng, selectedHailEvent.lng)
-      const minLat = Math.min(hailParcelCoords.lat, selectedHailEvent.lat)
-      const maxLat = Math.max(hailParcelCoords.lat, selectedHailEvent.lat)
-      const lngPad = Math.max(0.035, (maxLng - minLng) * 0.25)
-      const latPad = Math.max(0.035, (maxLat - minLat) * 0.25)
-      map.fitBounds(
-        [
-          [minLng - lngPad, minLat - latPad],
-          [maxLng + lngPad, maxLat + latPad],
-        ],
-        { padding: 64, maxZoom: 11, duration: 700 }
-      )
+    const bounds = hailStormViewBounds(hailParcelCoords, selectedHailEvent)
+    if (bounds) {
+      map.fitBounds(bounds, { padding: 64, maxZoom: STORM_VIEW_MAX_ZOOM, duration: 700 })
     } else if (selectedHailEvent.lng != null && selectedHailEvent.lat != null) {
       map.easeTo({
         center: [selectedHailEvent.lng, selectedHailEvent.lat],
-        zoom: 10,
+        zoom: STORM_VIEW_MAX_ZOOM,
         duration: 700,
       })
     }
