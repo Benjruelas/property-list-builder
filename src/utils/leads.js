@@ -189,17 +189,39 @@ export function isPhotosOnlyEntityChange(prev, next) {
   return true
 }
 
+/**
+ * Keep a newer local status when a stale list/hydrate payload arrives
+ * mid-drag. Prefer an explicit pending flag, then statusUpdatedAt.
+ */
+export function fresherLeadStatusFields(prev, incoming) {
+  if (!prev?.status) return {}
+  if (prev._pendingStatus && prev.status !== incoming?.status) {
+    return {
+      status: prev.status,
+      statusUpdatedAt: prev.statusUpdatedAt,
+      _pendingStatus: true,
+    }
+  }
+  const prevAt = Date.parse(prev.statusUpdatedAt || '') || 0
+  const incomingAt = Date.parse(incoming?.statusUpdatedAt || '') || 0
+  if (prev.status !== incoming?.status && prevAt > incomingAt) {
+    return { status: prev.status, statusUpdatedAt: prev.statusUpdatedAt }
+  }
+  return {}
+}
+
 /** Merge a full lead fetch/detail payload onto existing client state. */
 export function mergeLeadDetail(prev, incoming) {
   if (!incoming) return prev
   if (!prev) return incoming
-  return {
+  const merged = {
     ...prev,
     ...incoming,
     photos: mergeLeadPhotos(prev.photos, incoming.photos),
     files: incoming.files ?? prev.files,
     activity: incoming.activity ?? prev.activity,
   }
+  return { ...merged, ...fresherLeadStatusFields(prev, incoming) }
 }
 
 /**
@@ -280,9 +302,10 @@ export function mergeListViewLeads(existing, incoming, { excludeIds } = {}) {
         activity: prev.activity ?? inc.activity,
         photos,
         files: prev.files ?? inc.files,
+        ...fresherLeadStatusFields(prev, inc),
       }
     }
-    return inc
+    return { ...inc, ...fresherLeadStatusFields(prev, inc) }
   })
   return exclude ? merged.filter(Boolean) : merged
 }

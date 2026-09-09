@@ -4,11 +4,14 @@ import { enforceIpRateLimit } from './_lib/rateLimit.js'
 const CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000
 const RESPONSE_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const RECENT_BUNDLE_TTL_MS = 24 * 60 * 60 * 1000
-const RECENT_FETCH_TIMEOUT_MS = 5000
+const RECENT_FETCH_TIMEOUT_MS = 15000
 const SPC_HAIL_URL = 'https://www.spc.noaa.gov/wcm/data/1955-2024_hail.csv.zip'
-const SPC_COMPILED_MAX_YEAR = 2024
+export const SPC_COMPILED_MAX_YEAR = 2024
 /** v2 added time_utc; read v1 grid cells so existing R2 cache stays warm after deploy. */
 const GRID_CACHE_PREFIXES = ['hail/grid/v2', 'hail/grid']
+const RECENT_MONTH_CACHE_PREFIX = 'hail/recent/v2'
+const RECENT_BUNDLE_CACHE_PREFIX = 'hail/recent-bundle/v2'
+const RESPONSE_CACHE_PREFIX = 'hail/response/v3'
 
 let _s3
 function getS3() {
@@ -210,7 +213,30 @@ async function extractCsvFromZip(zipBuffer) {
   throw new Error('CSV entry not found in ZIP')
 }
 
-function parseSpcDailyReport(csvText, dateStr) {
+export function listRecentHailMonths(now = new Date(), compiledMaxYear = SPC_COMPILED_MAX_YEAR) {
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() + 1
+  const months = []
+  for (let year = compiledMaxYear + 1; year <= currentYear; year++) {
+    const endMonth = year === currentYear ? currentMonth : 12
+    for (let month = 1; month <= endMonth; month++) {
+      months.push({
+        year,
+        month,
+        isCurrent: year === currentYear && month === currentMonth,
+      })
+    }
+  }
+  return months
+}
+
+/** Only persist a month when most daily SPC files actually loaded. */
+export function shouldCacheRecentMonth(okDays, daysInMonth) {
+  if (!daysInMonth || daysInMonth < 1) return false
+  return okDays >= Math.max(1, Math.ceil(daysInMonth * 0.6))
+}
+
+export function parseSpcDailyReport(csvText, dateStr) {
   const lines = csvText.split('\n')
   const events = []
 
@@ -249,7 +275,7 @@ function parseSpcDailyReport(csvText, dateStr) {
 }
 
 async function fetchMonthEvents(year, month, lat, lng, isCurrentMonth) {
-  const cacheKey = `hail/recent/${year}/${String(month).padStart(2, '0')}/${Math.floor(lat)}/${Math.floor(lng)}.json`
+  const cacheKey = `${RECENT_MONTH_CACHE_PREFIX}/${year}/${String(month).padStart(2, '0')}/${Math.floor(lat)}/${Math.floor(lng)}.json`
   const ttl = isCurrentMonth ? 24 * 60 * 60 * 1000 : 180 * 24 * 60 * 60 * 1000
 
   try {
@@ -281,21 +307,26 @@ async function fetchMonthEvents(year, month, lat, lng, isCurrentMonth) {
   }
 
   const monthEvents = []
+  let okDays = 0
   const BATCH = 15
   for (let i = 0; i < dates.length; i += BATCH) {
     const batch = dates.slice(i, i + BATCH)
     const results = await Promise.all(batch.map(async (dateStr) => {
       try {
-        const url = `https://www.spc.noaa.gov/climo/reports/${dateStr}_rpts_filtered_hail.csv`
+        // Unfiltered daily hail file keeps local reports that the "filtered" product drops.
+        const url = `https://www.spc.noaa.gov/climo/reports/${dateStr}_rpts_hail.csv`
         const res = await fetch(url)
-        if (!res.ok) return []
+        if (!res.ok) return { ok: false, events: [] }
         const text = await res.text()
-        return parseSpcDailyReport(text, dateStr)
+        return { ok: true, events: parseSpcDailyReport(text, dateStr) }
       } catch {
-        return []
+        return { ok: false, events: [] }
       }
     }))
-    for (const dayEvents of results) monthEvents.push(...dayEvents)
+    for (const day of results) {
+      if (day.ok) okDays += 1
+      monthEvents.push(...day.events)
+    }
   }
 
   const nearby = monthEvents.filter(evt => {
@@ -304,42 +335,42 @@ async function fetchMonthEvents(year, month, lat, lng, isCurrentMonth) {
     return dLat <= 1.5 && dLng <= 1.5
   })
 
-  putToR2(cacheKey, Buffer.from(JSON.stringify(nearby))).catch(() => {})
+  if (shouldCacheRecentMonth(okDays, daysInMonth)) {
+    putToR2(cacheKey, Buffer.from(JSON.stringify(nearby))).catch(() => {})
+  }
   return nearby
 }
 
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => resolve(null), ms)),
-  ])
-}
-
-async function fetchRecentHailEvents(lat, lng) {
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() + 1
-  const recentEvents = []
-
-  const months = []
-  for (let year = SPC_COMPILED_MAX_YEAR + 1; year <= currentYear; year++) {
-    const endMonth = year === currentYear ? currentMonth : 12
-    for (let month = 1; month <= endMonth; month++) {
-      const isCurrent = year === currentYear && month === currentMonth
-      months.push({ year, month, isCurrent })
-    }
-  }
-
-  // Fetch all months in parallel — each month is at most ~31 daily fetches
-  // but completed months will hit cache instantly
-  const results = await Promise.all(
-    months.map(({ year, month, isCurrent }) =>
-      fetchMonthEvents(year, month, lat, lng, isCurrent).catch(() => [])
-    )
+async function fetchRecentHailEvents(lat, lng, { timeoutMs = null } = {}) {
+  const months = listRecentHailMonths()
+  const collected = []
+  const monthPromises = months.map(({ year, month, isCurrent }) =>
+    fetchMonthEvents(year, month, lat, lng, isCurrent).catch(() => [])
   )
 
-  for (const monthEvents of results) recentEvents.push(...monthEvents)
-  return recentEvents
+  if (timeoutMs == null) {
+    const results = await Promise.all(monthPromises)
+    for (const monthEvents of results) collected.push(...monthEvents)
+    return { events: collected, complete: true }
+  }
+
+  let remaining = monthPromises.length
+  let resolveAll
+  const allDone = new Promise((resolve) => { resolveAll = resolve })
+  for (const promise of monthPromises) {
+    promise.then((monthEvents) => {
+      collected.push(...monthEvents)
+      remaining -= 1
+      if (remaining === 0) resolveAll()
+    })
+  }
+  if (remaining === 0) resolveAll()
+
+  await Promise.race([
+    allDone,
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ])
+  return { events: collected, complete: remaining === 0 }
 }
 
 async function readGridCell(gLat, gLng) {
@@ -363,12 +394,12 @@ async function loadNeighborGridCells(latF, lngF) {
 }
 
 async function getRecentHailBundle(lat, lng) {
-  const key = `hail/recent-bundle/v1/${Math.floor(lat)}/${Math.floor(lng)}.json`
+  const key = `${RECENT_BUNDLE_CACHE_PREFIX}/${Math.floor(lat)}/${Math.floor(lng)}.json`
   return getJsonFromR2(key, RECENT_BUNDLE_TTL_MS)
 }
 
 async function storeRecentHailBundle(lat, lng, events) {
-  const key = `hail/recent-bundle/v1/${Math.floor(lat)}/${Math.floor(lng)}.json`
+  const key = `${RECENT_BUNDLE_CACHE_PREFIX}/${Math.floor(lat)}/${Math.floor(lng)}.json`
   putToR2(key, Buffer.from(JSON.stringify(events))).catch(() => {})
 }
 
@@ -472,7 +503,7 @@ export default async function handler(req, res) {
 
   try {
     const responseCacheKey =
-      `hail/response/v2/${responseCacheCoordKey(latF, lngF)}/${radius}/${startYear}.json`
+      `${RESPONSE_CACHE_PREFIX}/${responseCacheCoordKey(latF, lngF)}/${radius}/${startYear}.json`
     const cachedResponse = await getJsonFromR2(responseCacheKey, RESPONSE_CACHE_TTL_MS)
     if (cachedResponse) {
       res.setHeader('Cache-Control', 'public, max-age=3600')
@@ -488,28 +519,30 @@ export default async function handler(req, res) {
     }
 
     let recentEvents = await getRecentHailBundle(latF, lngF)
+    let recentComplete = !!recentEvents
     if (!recentEvents) {
       try {
-        const fetchRecent = fetchRecentHailEvents(latF, lngF)
-        const fetched = hasCachedData
-          ? await withTimeout(fetchRecent, RECENT_FETCH_TIMEOUT_MS)
-          : await fetchRecent
-        if (fetched) {
-          recentEvents = fetched
-          storeRecentHailBundle(latF, lngF, recentEvents)
-        } else if (hasCachedData) {
-          recentEvents = []
-        }
+        const fetched = await fetchRecentHailEvents(latF, lngF, {
+          timeoutMs: hasCachedData ? RECENT_FETCH_TIMEOUT_MS : null,
+        })
+        recentEvents = fetched.events
+        recentComplete = fetched.complete
+        if (recentComplete) storeRecentHailBundle(latF, lngF, recentEvents)
       } catch (e) {
         console.error('Recent hail fetch error:', e.message)
         recentEvents = []
+        recentComplete = false
       }
     }
 
     const payload = buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents || [])
-    putToR2(responseCacheKey, Buffer.from(JSON.stringify(payload))).catch(() => {})
-
-    res.setHeader('Cache-Control', 'public, max-age=3600')
+    if (recentComplete) {
+      putToR2(responseCacheKey, Buffer.from(JSON.stringify(payload))).catch(() => {})
+      res.setHeader('Cache-Control', 'public, max-age=3600')
+    } else {
+      // Incomplete recent years (timeout) — do not pin a 2025/2026-less payload.
+      res.setHeader('Cache-Control', 'public, max-age=60')
+    }
     return res.status(200).json(payload)
   } catch (e) {
     console.error('Hail events error:', e)

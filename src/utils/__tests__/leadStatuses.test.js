@@ -43,6 +43,23 @@ describe('normalizeLeadStatuses', () => {
     expect(result.map((status) => status.id)).toEqual(['new', 'converted'])
   })
 
+  it('preserves a custom status order', () => {
+    const result = normalizeLeadStatuses([
+      { id: 'lost', label: 'Lost' },
+      { id: 'qualified', label: 'Qualified' },
+      { id: 'new', label: 'New' },
+      { id: 'converted', label: 'Converted' },
+      { id: 'contacted', label: 'Contacted' },
+    ])
+    expect(result.map((status) => status.id)).toEqual([
+      'lost',
+      'qualified',
+      'new',
+      'converted',
+      'contacted',
+    ])
+  })
+
   it('preserves a known palette color and falls back when missing or invalid', () => {
     const purple = 'bg-purple-500/20 text-purple-200 border-purple-400/40'
     const withColor = normalizeLeadStatuses([

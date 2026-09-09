@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, Trash2, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, GripVertical, Loader2, Plus, Trash2 } from 'lucide-react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { showToast } from '../ui/toast'
@@ -14,6 +14,15 @@ import { cn } from '@/lib/utils'
 import { StatusAutoTasksEditor } from './StatusAutoTasksEditor'
 import { StatusColorPicker } from './StatusColorPicker'
 
+function moveStatus(rows, id, toIndex) {
+  const fromIndex = rows.findIndex((row) => row.id === id)
+  if (fromIndex < 0 || toIndex < 0 || toIndex >= rows.length || fromIndex === toIndex) return rows
+  const next = [...rows]
+  const [item] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, item)
+  return next
+}
+
 export function LeadStatusesSettingsContent({
   isOpen,
   leadStatuses,
@@ -27,10 +36,14 @@ export function LeadStatusesSettingsContent({
   const [draft, setDraft] = useState(leadStatuses)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [dragId, setDragId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
 
   useEffect(() => {
     if (!isOpen) {
       setDirty(false)
+      setDragId(null)
+      setDragOverId(null)
       return
     }
     // Don't clobber in-progress edits when parent re-renders with a new
@@ -70,6 +83,24 @@ export function LeadStatusesSettingsContent({
     setDirty(true)
   }, [])
 
+  const moveRowTo = useCallback((id, toIndex) => {
+    setDraft((rows) => moveStatus(rows, id, toIndex))
+    setDirty(true)
+  }, [])
+
+  const moveRowBy = useCallback((id, offset) => {
+    setDraft((rows) => {
+      const fromIndex = rows.findIndex((row) => row.id === id)
+      return moveStatus(rows, id, fromIndex + offset)
+    })
+    setDirty(true)
+  }, [])
+
+  const clearDrag = useCallback(() => {
+    setDragId(null)
+    setDragOverId(null)
+  }, [])
+
   const handleSave = useCallback(async () => {
     const normalized = normalizeLeadStatuses(draft)
     setSaving(true)
@@ -92,23 +123,80 @@ export function LeadStatusesSettingsContent({
 
   const description = teamMembership
     ? (canEdit
-      ? 'Team members use these statuses on all leads. You can rename labels, pick colors, and add or remove statuses; removing a status moves existing leads to New.'
+      ? 'Team members use these statuses on all leads. You can rename labels, pick colors, reorder, and add or remove statuses; removing a status moves existing leads to New.'
       : `Statuses are set by your team admin for ${teamMembership.teamName || 'your team'}.`)
-    : 'Customize labels, colors, and add or remove statuses for your leads.'
+    : 'Customize labels, colors, order, and add or remove statuses for your leads.'
 
   return (
     <>
       <p className="text-xs opacity-50">{description}</p>
 
       <ul className="space-y-2">
-        {draft.map((row) => {
+        {draft.map((row, index) => {
           const removable = canEdit && canRemoveLeadStatus(row.id, draft)
           return (
             <li
               key={row.id}
-              className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
+              className={cn(
+                'rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 transition-opacity',
+                dragId === row.id && 'opacity-45',
+                dragOverId === row.id && dragId && dragId !== row.id && 'ring-2 ring-blue-400/55 border-blue-400/40',
+              )}
+              onDragOver={(event) => {
+                if (!canEdit || !dragId) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+                if (dragOverId !== row.id) setDragOverId(row.id)
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                const fromId = event.dataTransfer.getData('text/plain') || dragId
+                if (fromId) moveRowTo(fromId, index)
+                clearDrag()
+              }}
             >
               <div className="flex items-center gap-2">
+                {canEdit && (
+                  <div className="flex items-center shrink-0 -ml-0.5">
+                    <button
+                      type="button"
+                      draggable
+                      className="p-0.5 text-white/30 hover:text-white/65 cursor-grab active:cursor-grabbing"
+                      aria-label={`Drag to reorder ${row.label || 'status'}`}
+                      title="Drag to reorder"
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData('text/plain', row.id)
+                        event.dataTransfer.effectAllowed = 'move'
+                        setDragId(row.id)
+                      }}
+                      onDragEnd={clearDrag}
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </button>
+                    <div className="flex flex-col">
+                      <button
+                        type="button"
+                        className="text-white/30 hover:text-white/70 disabled:opacity-20 leading-none"
+                        disabled={index === 0}
+                        onClick={() => moveRowBy(row.id, -1)}
+                        aria-label={`Move ${row.label || 'status'} up`}
+                        title="Move up"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="text-white/30 hover:text-white/70 disabled:opacity-20 leading-none"
+                        disabled={index === draft.length - 1}
+                        onClick={() => moveRowBy(row.id, 1)}
+                        aria-label={`Move ${row.label || 'status'} down`}
+                        title="Move down"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <span
                   className={cn(
                     'crm-row-status-badge inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[10px] uppercase tracking-wide',

@@ -515,6 +515,7 @@ function App() {
   const hydratingLeadIdsRef = useRef(new Set())
   const deletedLeadIdsRef = useRef(new Set())
   const refreshLeadsGenerationRef = useRef(0)
+  const refreshPipelinesGenerationRef = useRef(0)
   const [photoModeParcelId, setPhotoModeParcelId] = useState(null)
   const [photoModeAddress, setPhotoModeAddress] = useState('')
   const [photoModeAutoCamera, setPhotoModeAutoCamera] = useState(false)
@@ -1554,11 +1555,13 @@ function App() {
 
   const refreshPipelines = useCallback(async () => {
     if (!currentUser) return
+    const requestId = ++refreshPipelinesGenerationRef.current
     const showSpinner = pipelinesRef.current.length === 0
     if (showSpinner) setPipelinesLoading(true)
     const migrationKey = localPipelineMigrationKey(currentUser.uid)
     try {
       const next = await fetchPipelines(getToken)
+      if (requestId !== refreshPipelinesGenerationRef.current) return
       if (next?.notModified) return
       if (next.length > 0) {
         setPipelines(next)
@@ -1715,6 +1718,11 @@ function App() {
     }
     return dealPipelineDeals
   }, [pipelines, activePipelineId, dealPipelineDeals])
+
+  const applyLocalLeadList = useCallback((updater) => {
+    refreshLeadsGenerationRef.current += 1
+    setLeads(updater)
+  }, [])
 
   const isParcelALeadCheck = useCallback((parcelId) => isParcelInLeadsList(leads, parcelId), [leads])
 
@@ -4571,18 +4579,22 @@ function App() {
         leads={leads}
         deals={activePipelineDeals}
         onDealsChange={pipelines.length > 0 ? async (newDeals) => {
-          if (!activePipelineId) return
+          if (!activePipelineId) throw new Error('No active pipeline')
           const pipe = pipelines.find((p) => p.id === activePipelineId)
           if (!pipe || !canAddDealsToPipeline(currentUser, pipe, teams)) {
             showToast('You cannot update deals on this pipeline', 'error')
-            return
+            throw new Error('You cannot update deals on this pipeline')
           }
           try {
             await updatePipeline(getToken, activePipelineId, { deals: newDeals })
+            refreshPipelinesGenerationRef.current += 1
             setPipelines((prev) => prev.map((p) => (p.id === activePipelineId
               ? { ...p, deals: newDeals }
               : p)))
-          } catch (e) { showToast(e.message || 'Failed to update', 'error') }
+          } catch (e) {
+            showToast(e.message || 'Failed to update', 'error')
+            throw e
+          }
         } : setDealPipelineDeals}
         onOpenCreateDeal={(prefill) => openCreateDealDialog({ pipelineId: activePipelineId, ...prefill })}
         onColumnsChange={pipelines.length > 0 && activePipelineId ? async (cols) => {
@@ -4608,7 +4620,7 @@ function App() {
         onRequestCloseDeal={handleCloseDeal}
         onRequestRemoveDeal={handleRemoveDeal}
         onRequestMoveDeal={handleRequestMoveDeal}
-        onLeadsChange={setLeads}
+        onLeadsChange={applyLocalLeadList}
         onRefreshLeads={refreshLeads}
         onCreateQuoteForDeal={handleCreateQuoteForDeal}
         onOpenQuoteFromDeal={handleOpenQuoteFromDeal}

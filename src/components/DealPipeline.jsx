@@ -31,6 +31,13 @@ import { ShareResourceDialog } from './ShareResourceDialog'
 import { PipelineDealCard, PipelineLeadCard } from './DealRow'
 import { PipeStageHeader } from './PipeStageHeader'
 import { VISIBILITY, normalizeResourceVisibility } from '@/utils/access'
+import { moveDealStatus } from '@/utils/deals'
+import {
+  applyPendingStatuses,
+  createSerialAsyncQueue,
+  pruneResolvedPendingStatuses,
+  setPendingStatus,
+} from '@/utils/pendingStatusMoves'
 
 const MAX_COLUMNS = 10
 const PIPELINE_OPTIONS_MENU_W = 200
@@ -150,7 +157,20 @@ export function DealPipeline({
   const [columns, setColumns] = useState([])
   const [localDeals, setLocalDeals] = useState([])
   const [optimisticDeals, setOptimisticDeals] = useState(null)
-  const displayDeals = optimisticDeals ?? (onDealsChange ? deals : localDeals)
+  const [pendingDealStatusById, setPendingDealStatusById] = useState(() => new Map())
+  const [pendingLeadStatusById, setPendingLeadStatusById] = useState(() => new Map())
+  const latestDealsRef = useRef(null)
+  const dealPersistQueueRef = useRef(null)
+  if (!dealPersistQueueRef.current) dealPersistQueueRef.current = createSerialAsyncQueue()
+  const baseDeals = optimisticDeals ?? (onDealsChange ? deals : localDeals)
+  const displayDeals = useMemo(
+    () => applyPendingStatuses(baseDeals, pendingDealStatusById),
+    [baseDeals, pendingDealStatusById],
+  )
+  const displayLeads = useMemo(
+    () => applyPendingStatuses(leads, pendingLeadStatusById),
+    [leads, pendingLeadStatusById],
+  )
   const [editingColumnId, setEditingColumnId] = useState(null)
   const [editingColumnName, setEditingColumnName] = useState('')
   const [showAddColumn, setShowAddColumn] = useState(false)
@@ -191,6 +211,14 @@ export function DealPipeline({
   const [isValidatingShare, setIsValidatingShare] = useState(false)
   const validateShareTimeoutRef = useRef(null)
   const justDraggedRef = useRef(false)
+
+  useEffect(() => {
+    setPendingDealStatusById((prev) => pruneResolvedPendingStatuses(deals, prev))
+  }, [deals])
+
+  useEffect(() => {
+    setPendingLeadStatusById((prev) => pruneResolvedPendingStatuses(leads, prev))
+  }, [leads])
 
   const isStageCollapsed = useCallback(
     (stageId) => collapsedStageIds.has(`${pipeView}:${stageId}`),
@@ -463,8 +491,20 @@ export function DealPipeline({
         return
       }
       if (apiMode && onDealsChange) {
+        latestDealsRef.current = d
         setOptimisticDeals(d)
-        onDealsChange(d).then(() => setOptimisticDeals(null)).catch(() => setOptimisticDeals(null))
+        dealPersistQueueRef.current(async () => {
+          const latest = latestDealsRef.current
+          try {
+            await onDealsChange(latest)
+            if (latestDealsRef.current === latest) setOptimisticDeals(null)
+          } catch {
+            if (latestDealsRef.current === latest) {
+              setOptimisticDeals(null)
+              setPendingDealStatusById(new Map())
+            }
+          }
+        })
       } else {
         setLocalDeals(d)
         saveDeals(d)
@@ -555,16 +595,10 @@ export function DealPipeline({
   }
 
   const handleMoveDeal = (dealId, newStatus) => {
-    const now = Date.now()
-    persistDeals(displayDeals.map(d => {
-      if (d.id !== dealId) return d
-      if (d.status === newStatus) return d
-      const entered = d.statusEnteredAt ?? d.createdAt ?? now
-      const stintMs = Math.max(0, now - entered)
-      const cum = { ...(d.cumulativeTimeByStatus || {}) }
-      cum[d.status] = (cum[d.status] || 0) + stintMs
-      return { ...d, status: newStatus, statusEnteredAt: now, cumulativeTimeByStatus: cum }
-    }))
+    const deal = displayDeals.find((d) => d.id === dealId)
+    if (!deal || deal.status === newStatus) return
+    setPendingDealStatusById((prev) => setPendingStatus(prev, dealId, newStatus))
+    persistDeals(displayDeals.map((d) => (d.id === dealId ? moveDealStatus(d, newStatus) : d)))
   }
 
   const handleMoveToNext = (dealId) => {
@@ -617,26 +651,32 @@ export function DealPipeline({
     return leadStatusIds.has(raw) ? raw : (leadStatuses[0]?.id || 'new')
   }, [leadStatusIds, leadStatuses])
   const getLeadsForColumn = useCallback(
-    (statusId) => (leads || []).filter((lead) => leadStatusFor(lead) === statusId),
-    [leads, leadStatusFor],
+    (statusId) => displayLeads.filter((lead) => leadStatusFor(lead) === statusId),
+    [displayLeads, leadStatusFor],
   )
 
   const handleMoveLead = useCallback(async (leadId, status) => {
-    const lead = (leads || []).find((row) => row.id === leadId)
+    const lead = displayLeads.find((row) => row.id === leadId)
     if (!lead || leadStatusFor(lead) === status) return
     const previousStatus = lead.status
-    const optimistic = { ...lead, status, statusUpdatedAt: new Date().toISOString() }
-    onLeadsChange?.((rows) => rows.map((row) => row.id === leadId ? optimistic : row))
+    const statusUpdatedAt = new Date().toISOString()
+    setPendingLeadStatusById((prev) => setPendingStatus(prev, leadId, status))
+    const optimistic = { ...lead, status, statusUpdatedAt, _pendingStatus: true }
+    onLeadsChange?.((rows) => rows.map((row) => (row.id === leadId ? optimistic : row)))
     try {
-      const saved = await updateLead(getToken, leadId, { status })
-      onLeadsChange?.((rows) => rows.map((row) => row.id === leadId ? { ...row, ...saved } : row))
+      const saved = await updateLead(getToken, leadId, { status, statusUpdatedAt })
+      const { _pendingStatus, ...rest } = saved || {}
+      onLeadsChange?.((rows) => rows.map((row) => (
+        row.id === leadId ? { ...row, ...rest, status: rest.status || status, _pendingStatus: undefined } : row
+      )))
     } catch (error) {
-      onLeadsChange?.((rows) => rows.map((row) =>
-        row.id === leadId ? { ...row, status: previousStatus } : row
-      ))
+      setPendingLeadStatusById((prev) => setPendingStatus(prev, leadId, null))
+      onLeadsChange?.((rows) => rows.map((row) => (
+        row.id === leadId ? { ...row, status: previousStatus, _pendingStatus: undefined } : row
+      )))
       showToast(error.message || 'Could not move lead', 'error')
     }
-  }, [getToken, leadStatusFor, leads, onLeadsChange])
+  }, [displayLeads, getToken, leadStatusFor, onLeadsChange])
 
   const openDealFromTask = (task) => {
     if (task.dealId) {

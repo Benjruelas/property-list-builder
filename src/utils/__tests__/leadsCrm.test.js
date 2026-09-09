@@ -4,6 +4,7 @@ import {
   lastContactedAt,
   formatLastContacted,
   mergeListViewLeads,
+  fresherLeadStatusFields,
   findLeadById,
   findLeadByParcelId,
   isParcelALead,
@@ -136,6 +137,31 @@ describe('lead CRM helpers', () => {
     const merged = mergeListViewLeads(existing, incoming, { excludeIds: new Set(['l1']) })
     expect(merged).toHaveLength(1)
     expect(merged[0].id).toBe('l2')
+  })
+
+  it('fresherLeadStatusFields keeps a pending local status over stale incoming', () => {
+    const prev = { status: 'contacted', statusUpdatedAt: '2026-04-01T00:00:00.000Z', _pendingStatus: true }
+    const incoming = { status: 'new', statusUpdatedAt: '2026-03-01T00:00:00.000Z' }
+    expect(fresherLeadStatusFields(prev, incoming)).toEqual({
+      status: 'contacted',
+      statusUpdatedAt: '2026-04-01T00:00:00.000Z',
+      _pendingStatus: true,
+    })
+  })
+
+  it('mergeListViewLeads does not revert a newer local status', () => {
+    const existing = [{
+      id: 'l1',
+      status: 'qualified',
+      statusUpdatedAt: '2026-04-02T00:00:00.000Z',
+    }]
+    const incoming = [{
+      id: 'l1',
+      status: 'new',
+      _listView: true,
+    }]
+    const merged = mergeListViewLeads(existing, incoming)
+    expect(merged[0].status).toBe('qualified')
   })
 
   it('mergeListViewLeads uses server photos on full poll payloads', () => {
