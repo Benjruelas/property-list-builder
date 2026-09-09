@@ -2,6 +2,8 @@
   "_comment": "Documented exceptions for `npm audit` high/critical advisories, consumed by scripts/audit-ci.mjs. Each entry is a GHSA id mapped to the reason it is temporarily accepted. NEW high/critical advisories that are not listed here will fail CI. Re-review periodically and remove entries once an upstream fix is adopted.",
   "allow": {
     "GHSA-hq66-cqwq-w95j": "pdfjs-dist 5.x. Fix requires a major 5->6 upgrade; PDFs rendered are app-generated/user-supplied within the user's own session. Track deliberate major upgrade.",
-    "GHSA-jmr9-qjv8-65gv": "extract-zip (via puppeteer-core/@puppeteer/browsers). Fix requires puppeteer-core major bump; only runs in serverless PDF rendering with trusted inputs."
+    "GHSA-jmr9-qjv8-65gv": "extract-zip (via puppeteer-core/@puppeteer/browsers). Fix requires puppeteer-core major bump; only runs in serverless PDF rendering with trusted inputs.",
+    "GHSA-7pqw-9j4j-h8q3": "extract-zip (via puppeteer-core/@puppeteer/browsers). Same trusted server-side PDF pipeline as GHSA-jmr9-qjv8-65gv; no upstream fix without puppeteer-core major bump.",
+    "GHSA-jrc7-96c5-q579": "maplibre-gl 5.x XSS sanitizer bypass. Fix requires maplibre 6.x (CSP worker path breaking change). Map content is first-party tiles and user-owned GeoJSON; track deliberate v6 migration."
   }
 }
