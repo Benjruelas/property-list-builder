@@ -5,6 +5,7 @@ import {
   STORM_SCAN_MAX_DIFF_MS,
   buildStormTimelineOffsets,
   eventDateTimeUTC,
+  eventUsesConvectiveDayClock,
   formatEventTimeLocal,
   formatStormFrameLabel,
   hailEventTimelineKey,
@@ -41,6 +42,31 @@ describe('storm radar timeline', () => {
     expect(dt.toISOString()).toBe('2023-05-15T21:30:00.000Z')
   })
 
+  it('rolls SPC daily-report times before 12Z onto the next calendar day', () => {
+    const overnight = eventDateTimeUTC({
+      date: '2026-04-25',
+      time_utc: '03:30',
+      year: 2026,
+      convective_day: true,
+    })
+    expect(overnight.toISOString()).toBe('2026-04-26T03:30:00.000Z')
+    expect(eventUsesConvectiveDayClock({ year: 2026, date: '2026-04-25' })).toBe(true)
+
+    const afternoon = eventDateTimeUTC({
+      date: '2026-04-25',
+      time_utc: '21:00',
+      year: 2026,
+    })
+    expect(afternoon.toISOString()).toBe('2026-04-25T21:00:00.000Z')
+
+    const compiledOvernight = eventDateTimeUTC({
+      date: '2023-05-15',
+      time_utc: '03:30',
+      year: 2023,
+    })
+    expect(compiledOvernight.toISOString()).toBe('2023-05-15T03:30:00.000Z')
+  })
+
   it('selects N0R before the N0Q archive and N0Q after', () => {
     expect(preferredRadarProduct({ date: '2010-05-15', time_utc: '21:00', year: 2010 })).toBe('N0R')
     expect(preferredRadarProduct({ date: '2010-11-13', time_utc: '16:00', year: 2010 })).toBe('N0R')
@@ -66,6 +92,8 @@ describe('storm radar timeline', () => {
     expect(formatStormFrameLabel(reportAt, reportAt)).toContain('CT')
     expect(formatStormFrameLabel(earlier, reportAt)).toContain('-15m')
     expect(formatEventTimeLocal('21:00', '2023-05-15')).toMatch(/CT$/)
+    expect(formatEventTimeLocal('03:30', '2026-04-25', 'America/Chicago', { year: 2026 }))
+      .toBe('10:30 PM CT')
   })
 
   it('versions the timeline cache key for the new window', () => {
@@ -76,7 +104,7 @@ describe('storm radar timeline', () => {
       lng: -96.8,
       year: 2023,
     })
-    expect(key).toContain('v3')
+    expect(key).toContain('v4')
     expect(key).toContain('b6')
     expect(key).toContain('a3')
     expect(key).toContain('2023-05-15')

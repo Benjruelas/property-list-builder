@@ -11,7 +11,7 @@ export const SPC_COMPILED_MAX_YEAR = 2024
 const GRID_CACHE_PREFIXES = ['hail/grid/v2', 'hail/grid']
 const RECENT_MONTH_CACHE_PREFIX = 'hail/recent/v2'
 const RECENT_BUNDLE_CACHE_PREFIX = 'hail/recent-bundle/v2'
-const RESPONSE_CACHE_PREFIX = 'hail/response/v3'
+const RESPONSE_CACHE_PREFIX = 'hail/response/v4'
 
 let _s3
 function getS3() {
@@ -269,6 +269,7 @@ export function parseSpcDailyReport(csvText, dateStr) {
       lng,
       size_inches: size ? size / 100 : null,
       time_utc: spcUtcTimeFromDailyReport(timeRaw),
+      convective_day: true,
     })
   }
   return events
@@ -452,6 +453,7 @@ function buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents) {
           hail_size_inches: evt.size_inches,
           year: evt.year,
           time_utc: evt.time_utc || null,
+          convective_day: evt.convective_day === true,
         })
       }
     }
@@ -469,6 +471,7 @@ function buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents) {
         hail_size_inches: evt.size_inches,
         year: evt.year,
         time_utc: evt.time_utc || null,
+        convective_day: evt.convective_day === true,
       })
     }
   }

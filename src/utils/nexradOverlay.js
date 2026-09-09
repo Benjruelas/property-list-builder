@@ -16,7 +16,9 @@ export const STORM_SCAN_MAX_DIFF_MS = 20 * 60 * 1000
 export const N0Q_ARCHIVE_START_MS = Date.UTC(2010, 10, 13, 16, 25)
 export const STORM_LOCAL_TIME_ZONE = 'America/Chicago'
 
-const TIMELINE_CACHE_VERSION = 'v3'
+const TIMELINE_CACHE_VERSION = 'v4'
+/** Compiled SPC archive ends in 2024; later years come from 12Z convective-day files. */
+const SPC_DAILY_REPORT_START_YEAR = 2025
 
 /** Round a Date down to the nearest N minutes (NEXRAD volumes ~every 5 min). */
 export function iemTimestamp(date) {
@@ -34,6 +36,18 @@ export function iemTimestamp(date) {
 }
 
 /**
+ * SPC daily climo files (`YYMMDD_rpts_hail.csv`) cover 12Z–12Z.
+ * Times 00:00–11:59 UTC are the next calendar day.
+ */
+export function eventUsesConvectiveDayClock(evt) {
+  if (!evt) return false
+  if (evt.convective_day === true) return true
+  if (evt.convective_day === false) return false
+  const year = Number(evt.year) || Number(String(evt.date || '').slice(0, 4))
+  return Number.isFinite(year) && year >= SPC_DAILY_REPORT_START_YEAR
+}
+
+/**
  * Build a UTC Date for the event. Uses evt.time_utc when present,
  * otherwise defaults to 21:00 UTC (afternoon CONUS hail).
  */
@@ -43,7 +57,12 @@ export function eventDateTimeUTC(evt) {
   if (!y || !m || !d) return null
   if (evt.time_utc) {
     const [hh, mm] = evt.time_utc.split(':').map(Number)
-    return new Date(Date.UTC(y, m - 1, d, hh || 0, mm || 0))
+    const hour = hh || 0
+    const dt = new Date(Date.UTC(y, m - 1, d, hour, mm || 0))
+    if (eventUsesConvectiveDayClock(evt) && hour < 12) {
+      dt.setUTCDate(dt.getUTCDate() + 1)
+    }
+    return dt
   }
   return new Date(Date.UTC(y, m - 1, d, 21, 0))
 }
@@ -86,6 +105,7 @@ export function hailEventTimelineKey(evt) {
     `a${STORM_TIMELINE_AFTER_HOURS}`,
     evt.date,
     evt.time_utc ?? '',
+    evt.convective_day === true ? 'cd' : '',
     evt.lat,
     evt.lng,
     evt.year,
@@ -232,9 +252,14 @@ export function formatStormFrameLabel(at, reportAt, timeZone = STORM_LOCAL_TIME_
 }
 
 /** Format hail report clock for UI (Central Time). */
-export function formatEventTimeLocal(timeUtc, dateStr, timeZone = STORM_LOCAL_TIME_ZONE) {
+export function formatEventTimeLocal(timeUtc, dateStr, timeZone = STORM_LOCAL_TIME_ZONE, extra = null) {
   if (!timeUtc || !dateStr) return null
-  const evt = eventDateTimeUTC({ date: dateStr, time_utc: timeUtc })
+  const evt = eventDateTimeUTC({
+    date: dateStr,
+    time_utc: timeUtc,
+    year: extra?.year,
+    convective_day: extra?.convective_day,
+  })
   if (!evt) return null
   return evt.toLocaleString('en-US', {
     hour: 'numeric',

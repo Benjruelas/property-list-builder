@@ -33,7 +33,7 @@ function HailSizeIndicator({ inches, size = 'md' }) {
 }
 
 function HailReportFields({ evt, year, showDate = true }) {
-  const timeLabel = formatEventTimeLocal(evt.time_utc, evt.date || String(year))
+  const timeLabel = formatEventTimeLocal(evt.time_utc, evt.date || String(year), undefined, evt)
 
   return (
     <div className="hail-event-row-grid">

@@ -8056,6 +8056,45 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   font-size: 1.25rem;
   font-weight: 700;
 }
+.hail-storm-legend {
+  padding: 0.5rem 0.85rem 0.45rem;
+  border-bottom: 1px solid var(--map-panel-section-border);
+}
+.hail-storm-legend-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--map-panel-text-muted);
+}
+.hail-storm-legend-scale {
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+.hail-storm-legend-stop {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+.hail-storm-legend-swatch {
+  display: block;
+  width: 100%;
+  height: 0.45rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.hail-storm-legend-stop-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--map-panel-text-muted);
+}
 .hail-storm-radar-label {
   margin: 0 0 0.35rem;
   font-size: 0.6875rem;

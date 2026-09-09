@@ -43,6 +43,7 @@ describe('parseSpcDailyReport', () => {
         lng: -97.46,
         size_inches: 1,
         time_utc: '03:30',
+        convective_day: true,
       },
       {
         date: '2026-04-25',
@@ -51,6 +52,7 @@ describe('parseSpcDailyReport', () => {
         lng: -97.51,
         size_inches: 2.75,
         time_utc: '03:51',
+        convective_day: true,
       },
     ])
   })

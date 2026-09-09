@@ -53,18 +53,44 @@ export function HailStormOverlay({ tileUrl }) {
 
   return (
     <Source
+      key={tileUrl}
       id="hail-storm-radar"
       type="raster"
       tiles={[tileUrl]}
       tileSize={256}
+      scheme="xyz"
       attribution="NEXRAD via Iowa Environmental Mesonet"
     >
       <Layer
         id="hail-storm-radar-layer"
         type="raster"
-        paint={{ 'raster-opacity': 0.6 }}
+        paint={{ 'raster-opacity': 0.72, 'raster-fade-duration': 0 }}
       />
     </Source>
+  )
+}
+
+const RADAR_LEGEND_STOPS = [
+  { color: '#72f472', label: 'Light' },
+  { color: '#f8f020', label: 'Mod' },
+  { color: '#f09000', label: 'Heavy' },
+  { color: '#e01010', label: 'Severe' },
+  { color: '#f040f0', label: 'Hail' },
+]
+
+function StormRadarLegend() {
+  return (
+    <div className="hail-storm-legend" aria-label="Radar reflectivity key">
+      <p className="hail-storm-legend-label">Radar key</p>
+      <div className="hail-storm-legend-scale">
+        {RADAR_LEGEND_STOPS.map((stop) => (
+          <div key={stop.label} className="hail-storm-legend-stop">
+            <span className="hail-storm-legend-swatch" style={{ background: stop.color }} aria-hidden />
+            <span className="hail-storm-legend-stop-label">{stop.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -116,7 +142,7 @@ export function HailStormDismissPill({
   } = timeline ?? {}
 
   const radarOk = event?.year >= 1995
-  const timeLabel = formatEventTimeLocal(event.time_utc, event.date)
+  const timeLabel = formatEventTimeLocal(event.time_utc, event.date, undefined, event)
   const progressPct = timelineProgress(frameIndex, frameCount)
   const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
   const reportMarkerPct =
@@ -157,6 +183,8 @@ export function HailStormDismissPill({
             highlight
           />
         </div>
+
+        {radarOk ? <StormRadarLegend /> : null}
 
         {radarOk && canStep ? (
           <div className="hail-storm-panel-radar">

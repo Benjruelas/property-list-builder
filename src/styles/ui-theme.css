@@ -471,7 +471,9 @@
 }
 [data-ui-theme='glass'] .hail-storm-panel-subtitle,
 [data-ui-theme='glass'] .hail-storm-detail-label,
-[data-ui-theme='glass'] .hail-storm-radar-label {
+[data-ui-theme='glass'] .hail-storm-radar-label,
+[data-ui-theme='glass'] .hail-storm-legend-label,
+[data-ui-theme='glass'] .hail-storm-legend-stop-label {
   color: rgba(255, 255, 255, 0.65);
 }
 [data-ui-theme='glass'] .hail-storm-detail-value-highlight {
