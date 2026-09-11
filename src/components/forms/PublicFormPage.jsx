@@ -53,12 +53,11 @@ export function PublicFormPage({ token }) {
 
   const pageClass = cn('public-form-page flex flex-col min-h-screen bg-gray-100 text-gray-900')
 
+  let body = null
   if (loading) {
-    return <AppLoadingScreen active message={APP_LOADING_MESSAGES.form} />
-  }
-
-  if (error) {
-    return (
+    body = null
+  } else if (error) {
+    body = (
       <div className={pageClass}>
         <PublicFormBrandBar className="public-form-brand-bar--page" />
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
@@ -68,10 +67,8 @@ export function PublicFormPage({ token }) {
         </div>
       </div>
     )
-  }
-
-  if (submitted) {
-    return (
+  } else if (submitted) {
+    body = (
       <div className={pageClass}>
         <PublicFormBrandBar className="public-form-brand-bar--page" />
         <div className="flex flex-1 items-center justify-center px-6 py-10">
@@ -88,43 +85,52 @@ export function PublicFormPage({ token }) {
         </div>
       </div>
     )
+  } else {
+    body = (
+      <div className={cn('public-form-page flex flex-col h-[100dvh] overflow-hidden bg-white text-gray-900 relative')}>
+        {submitting && <PublicFormSubmittingOverlay />}
+        {formData?.message && (
+          <div className="shrink-0 px-4 py-3 bg-blue-50 border-b border-blue-100 text-sm text-blue-900">
+            {formData.message}
+          </div>
+        )}
+        {formData?.recipientEmail && (
+          <div className="shrink-0 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs text-gray-600">
+            This form was sent to {formData.recipientEmail}
+          </div>
+        )}
+        <div className="flex flex-1 min-h-0 flex flex-col">
+          <Suspense fallback={
+            <div className="flex flex-1 flex-col">
+              <PublicFormBrandBar className="public-form-brand-bar--page" />
+              <div className="flex flex-1 items-center justify-center text-sm text-gray-600">
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading form…
+              </div>
+            </div>
+          }>
+            <FormFillView
+              mode="public"
+              publicToken={token}
+              template={template}
+              initialValues={prefillValues}
+              lockedFieldIds={lockedFieldIds}
+              requiresSubmitterEmail={!!formData?.requiresSubmitterEmail}
+              onSubmittingChange={setSubmitting}
+              onSubmitted={() => setSubmitted(true)}
+            />
+          </Suspense>
+        </div>
+      </div>
+    )
   }
 
+  // Keep AppLoadingScreen mounted — unmounting while it owns #initial-loader
+  // leaves the looping splash stuck over the form.
   return (
-    <div className={cn('public-form-page flex flex-col h-[100dvh] overflow-hidden bg-white text-gray-900 relative')}>
-      {submitting && <PublicFormSubmittingOverlay />}
-      {formData?.message && (
-        <div className="shrink-0 px-4 py-3 bg-blue-50 border-b border-blue-100 text-sm text-blue-900">
-          {formData.message}
-        </div>
-      )}
-      {formData?.recipientEmail && (
-        <div className="shrink-0 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs text-gray-600">
-          This form was sent to {formData.recipientEmail}
-        </div>
-      )}
-      <div className="flex flex-1 min-h-0 flex flex-col">
-        <Suspense fallback={
-          <div className="flex flex-1 flex-col">
-            <PublicFormBrandBar className="public-form-brand-bar--page" />
-            <div className="flex flex-1 items-center justify-center text-sm text-gray-600">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading form…
-            </div>
-          </div>
-        }>
-          <FormFillView
-            mode="public"
-            publicToken={token}
-            template={template}
-            initialValues={prefillValues}
-            lockedFieldIds={lockedFieldIds}
-            requiresSubmitterEmail={!!formData?.requiresSubmitterEmail}
-            onSubmittingChange={setSubmitting}
-            onSubmitted={() => setSubmitted(true)}
-          />
-        </Suspense>
-      </div>
-    </div>
+    <>
+      <AppLoadingScreen active={loading} message={APP_LOADING_MESSAGES.form} />
+      {body}
+    </>
   )
 }
 
