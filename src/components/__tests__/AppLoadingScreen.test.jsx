@@ -111,4 +111,33 @@ describe('AppLoadingScreen boot ownership', () => {
     })
     expect(window.__bootSplashOwnedByReact).toBe(false)
   })
+
+  it('holds the boot splash while active when holdWhileActive is set', async () => {
+    mountBootLoader()
+    const { rerender } = render(
+      <AppLoadingScreen active holdWhileActive message="Loading report" />
+    )
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(400)
+    })
+
+    expect(document.getElementById('initial-loader')).toBeTruthy()
+    expect(window.__bootSplashOwnedByReact).toBe(true)
+
+    rerender(
+      <AppLoadingScreen active={false} holdWhileActive message="Loading report" />
+    )
+
+    await act(async () => {
+      vi.advanceTimersByTime(400)
+    })
+
+    await waitFor(() => {
+      expect(document.getElementById('initial-loader')).toBeNull()
+    })
+  })
 })

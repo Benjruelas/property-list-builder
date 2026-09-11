@@ -128,7 +128,7 @@ export function PublicFormPage({ token }) {
   // leaves the looping splash stuck over the form.
   return (
     <>
-      <AppLoadingScreen active={loading} message={APP_LOADING_MESSAGES.form} />
+      <AppLoadingScreen active={loading} holdWhileActive message={APP_LOADING_MESSAGES.form} />
       {body}
     </>
   )
