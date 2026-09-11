@@ -2,6 +2,7 @@ import { enforceIpRateLimit } from './_lib/rateLimit.js'
 import { requireAuth } from './_lib/apiAuth.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './_lib/reportStore.js'
 import { getLeadWithAccess } from './_lib/leadAccess.js'
+import { canMutateLeadLinkedResource } from './_lib/leadLinkedAccess.js'
 import { resolveSenderBranding } from './_lib/senderBranding.js'
 import { buildReportPdfBuffer, reportPdfStorageKey } from './_lib/buildReportPdf.js'
 import { r2GetBuffer } from './_lib/ensureReportPdf.js'
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
     if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
     const { report, index, all } = await getPhotoReportById(reportId)
-    if (!report || report.ownerId !== user.uid) {
+    if (!report || !(await canMutateLeadLinkedResource(user, report))) {
       return res.status(404).json({ error: 'Report not found' })
     }
 
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
       getImageBuffer: r2GetBuffer,
     })
 
-    const pdfKey = reportPdfStorageKey(user.uid, report.id)
+    const pdfKey = reportPdfStorageKey(report.ownerId || user.uid, report.id)
     await s3().send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: pdfKey,

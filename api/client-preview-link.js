@@ -1,7 +1,7 @@
 import { requireAuth } from './_lib/apiAuth.js'
 import { getQuoteById } from './_lib/quoteStore.js'
 import { getPhotoReportById } from './_lib/reportStore.js'
-import { getLeadWithAccess } from './_lib/leadAccess.js'
+import { canAccessLeadLinkedResource } from './_lib/leadLinkedAccess.js'
 import { mintQuotePreviewToken, mintReportPreviewToken } from './_lib/previewToken.js'
 import { buildQuotePublicUrl, buildReportPublicUrl } from './_lib/publicLinks.js'
 
@@ -14,7 +14,7 @@ function resolveOrigin(req) {
 
 async function getOrCreateQuotePreviewUrl(user, quoteId, origin) {
   const { quote } = await getQuoteById(quoteId)
-  if (!quote || quote.ownerId !== user.uid) {
+  if (!quote || !(await canAccessLeadLinkedResource(user, quote))) {
     return { error: 'Quote not found', status: 404 }
   }
 
@@ -26,12 +26,8 @@ async function getOrCreateQuotePreviewUrl(user, quoteId, origin) {
 
 async function getOrCreateReportPreviewUrl(user, reportId, origin) {
   const { report } = await getPhotoReportById(reportId)
-  if (!report) {
+  if (!report || !(await canAccessLeadLinkedResource(user, report))) {
     return { error: 'Report not found', status: 404 }
-  }
-  if (report.ownerId !== user.uid) {
-    const { lead } = await getLeadWithAccess(user, report.leadId)
-    if (!lead) return { error: 'Report not found', status: 404 }
   }
 
   const token = mintReportPreviewToken(report.id)

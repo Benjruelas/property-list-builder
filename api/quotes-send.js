@@ -20,6 +20,7 @@ import {
 } from './_lib/senderBranding.js'
 import { rateLimit } from './_lib/rateLimit.js'
 import { sanitizeHeader } from './_lib/emailSafety.js'
+import { canMutateLeadLinkedResource } from './_lib/leadLinkedAccess.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
     }
 
     const { quote, index, all } = await getQuoteById(quoteId)
-    if (!quote || quote.ownerId !== user.uid) {
+    if (!quote || !(await canMutateLeadLinkedResource(user, quote))) {
       return res.status(404).json({ error: 'Quote not found' })
     }
 
