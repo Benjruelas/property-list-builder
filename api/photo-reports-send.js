@@ -14,6 +14,7 @@ import {
 import { buildReportPublicUrl } from './_lib/publicLinks.js'
 import { getPhotoReportById, updatePhotoReportAtIndex } from './_lib/reportStore.js'
 import { getLeadWithAccess } from './_lib/leadAccess.js'
+import { canAccessLeadLinkedResource } from './_lib/leadLinkedAccess.js'
 import {
   resolveSendAsSender,
   buildBrandedEmailHtml,
@@ -25,12 +26,6 @@ import { rateLimit } from './_lib/rateLimit.js'
 import { sanitizeHeader } from './_lib/emailSafety.js'
 import { ensureReportPdf } from './_lib/ensureReportPdf.js'
 import { getAllLeads } from './_lib/leadAccess.js'
-
-async function canAccessReport(user, report) {
-  if (report.ownerId === user.uid) return true
-  const { lead } = await getLeadWithAccess(user, report.leadId)
-  return !!lead
-}
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DEFAULT_FROM = 'KnockScout <onboarding@resend.dev>'
@@ -118,7 +113,7 @@ export default async function handler(req, res) {
     if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
     const { report, index, all } = await getPhotoReportById(reportId)
-    if (!report || !(await canAccessReport(user, report))) {
+    if (!report || !(await canAccessLeadLinkedResource(user, report))) {
       return res.status(404).json({ error: 'Report not found' })
     }
 

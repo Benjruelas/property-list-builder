@@ -9,9 +9,14 @@ import {
   normalizeQuoteStatus,
 } from './_lib/quoteMath.js'
 import { paginateArray } from './_lib/pagination.js'
+import { getLeadWithAccess } from './_lib/leadAccess.js'
+import {
+  canMutateLeadLinkedResource,
+  filterVisibleLeadLinkedResources,
+} from './_lib/leadLinkedAccess.js'
 
 /**
- * Quote instances CRUD — owner-only v1.
+ * Quote instances CRUD — team members with lead/deal access may view and mutate.
  */
 
 function buildQuoteFromBody(body, user, existing = null) {
@@ -83,7 +88,7 @@ export default async function handler(req, res) {
     if (method === 'GET') {
       const { quoteId, dealId } = req.query || {}
       const all = await getAllQuotes()
-      let quotes = all.filter((q) => q.ownerId === user.uid)
+      let quotes = await filterVisibleLeadLinkedResources(user, all)
 
       if (quoteId) {
         const q = quotes.find((x) => x.id === quoteId)
@@ -107,6 +112,11 @@ export default async function handler(req, res) {
     if (method === 'POST') {
       const { templateId, fromTemplate } = body
       let seed = body
+
+      if (body.leadId) {
+        const { lead } = await getLeadWithAccess(user, body.leadId)
+        if (!lead) return res.status(404).json({ error: 'Lead not found' })
+      }
 
       if (templateId || fromTemplate) {
         const templates = await getAllQuoteTemplates()
@@ -138,7 +148,7 @@ export default async function handler(req, res) {
       if (!quoteId) return res.status(400).json({ error: 'quoteId is required' })
 
       const { quote: existing, index, all } = await getQuoteById(quoteId)
-      if (!existing || existing.ownerId !== user.uid) {
+      if (!existing || !(await canMutateLeadLinkedResource(user, existing))) {
         return res.status(404).json({ error: 'Quote not found' })
       }
 
@@ -167,11 +177,12 @@ export default async function handler(req, res) {
       const { quoteId } = body
       if (!quoteId) return res.status(400).json({ error: 'quoteId is required' })
 
-      const all = await getAllQuotes()
-      const idx = all.findIndex((q) => q.id === quoteId && q.ownerId === user.uid)
-      if (idx === -1) return res.status(404).json({ error: 'Quote not found' })
+      const { quote: existing, index, all } = await getQuoteById(quoteId)
+      if (!existing || !(await canMutateLeadLinkedResource(user, existing))) {
+        return res.status(404).json({ error: 'Quote not found' })
+      }
 
-      all.splice(idx, 1)
+      all.splice(index, 1)
       await saveAllQuotes(all)
       return res.status(200).json({ message: 'Quote deleted' })
     }

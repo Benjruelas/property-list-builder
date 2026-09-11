@@ -6,7 +6,12 @@ import {
   updatePhotoReportAtIndex,
   getAllReportTemplates,
 } from './_lib/reportStore.js'
-import { getLeadWithAccess, getVisibleLeads } from './_lib/leadAccess.js'
+import { getLeadWithAccess } from './_lib/leadAccess.js'
+import {
+  canAccessLeadLinkedResource,
+  canMutateLeadLinkedResource,
+  filterVisibleLeadLinkedResources,
+} from './_lib/leadLinkedAccess.js'
 import { paginateArray } from './_lib/pagination.js'
 import { presignedPhotosEnabled, createPresignedGetUrl } from './_lib/photoPresign.js'
 import { resolveSenderBranding } from './_lib/senderBranding.js'
@@ -67,12 +72,6 @@ function s3() {
   return _s3
 }
 
-async function canAccessReport(user, report) {
-  if (report.ownerId === user.uid) return true
-  const { lead } = await getLeadWithAccess(user, report.leadId)
-  return !!lead
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
@@ -91,7 +90,7 @@ export default async function handler(req, res) {
         if (!key.startsWith('report-pdfs/')) return res.status(400).json({ error: 'Malformed key' })
         const all = await getAllPhotoReports()
         const report = all.find((r) => r.pdfKey === key)
-        if (!report || !(await canAccessReport(user, report))) {
+        if (!report || !(await canAccessLeadLinkedResource(user, report))) {
           return res.status(403).json({ error: 'Forbidden' })
         }
         // ?format=url → presigned R2 URL so the client downloads directly
@@ -112,12 +111,8 @@ export default async function handler(req, res) {
         return res.status(200).send(body)
       }
 
-      const visibleLeads = await getVisibleLeads(user)
-      const visibleLeadIds = new Set(visibleLeads.map((l) => l.id))
       const all = await getAllPhotoReports()
-      let reports = all.filter(
-        (r) => r.ownerId === user.uid || visibleLeadIds.has(r.leadId)
-      )
+      let reports = await filterVisibleLeadLinkedResources(user, all)
 
       if (reportId) {
         const r = reports.find((x) => x.id === reportId)
@@ -188,11 +183,8 @@ export default async function handler(req, res) {
       if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
       const { report, index, all } = await getPhotoReportById(reportId)
-      if (!report || !(await canAccessReport(user, report))) {
+      if (!report || !(await canMutateLeadLinkedResource(user, report))) {
         return res.status(404).json({ error: 'Report not found' })
-      }
-      if (report.ownerId !== user.uid) {
-        return res.status(403).json({ error: 'Only the report owner can edit' })
       }
 
       let updated
@@ -216,7 +208,7 @@ export default async function handler(req, res) {
       if (!reportId) return res.status(400).json({ error: 'reportId is required' })
 
       const { report, index, all } = await getPhotoReportById(reportId)
-      if (!report || report.ownerId !== user.uid) {
+      if (!report || !(await canMutateLeadLinkedResource(user, report))) {
         return res.status(404).json({ error: 'Report not found' })
       }
 
