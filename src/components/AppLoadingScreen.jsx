@@ -11,6 +11,8 @@ import {
 
 /** Match `.app-loading-screen.is-exiting` / `#initial-loader.is-exiting` duration. */
 const FADE_OUT_MS = 320
+/** Hard ceiling so holdWhileActive / ownership leaks cannot trap the splash. */
+const HARD_DISMISS_MS = LOGO_SPLASH_ANIM_MS + 12000
 const BOOT_LOADER_ID = 'initial-loader'
 const LOGO_PLATE = '#000000'
 
@@ -79,6 +81,7 @@ export function AppLoadingScreen({
   const activeRef = useRef(active)
   const playCompletedRef = useRef(playCompleted)
   const exitingRef = useRef(false)
+  const hardDismissedRef = useRef(false)
   const ownershipGenRef = useRef(0)
   const holdWhileActiveRef = useRef(holdWhileActive)
   const onVisibleChangeRef = useRef(onVisibleChange)
@@ -87,12 +90,12 @@ export function AppLoadingScreen({
   playCompletedRef.current = playCompleted
   holdWhileActiveRef.current = holdWhileActive
 
-  const tryExit = () => {
+  const tryExit = ({ force = false } = {}) => {
     if (exitingRef.current) return
-    if (!playCompletedRef.current) return
+    if (!force && !playCompletedRef.current) return
     // Map boot may reveal under the splash once the logo finishes; public
     // routes pass holdWhileActive so we do not uncover an empty page.
-    if ((reduceMotion || holdWhileActiveRef.current) && activeRef.current) return
+    if (!force && (reduceMotion || holdWhileActiveRef.current) && activeRef.current) return
     exitingRef.current = true
     setExiting(true)
   }
@@ -154,7 +157,25 @@ export function AppLoadingScreen({
     onVisibleChangeRef.current?.(mounted)
   }, [mounted])
 
+  // Absolute dismiss: even with holdWhileActive, never leave the splash up forever
+  // (hung public-report fetch / ownership bugs previously looped the logo endlessly).
   useEffect(() => {
+    if (!mounted || reduceMotion) return undefined
+    const t = window.setTimeout(() => {
+      hardDismissedRef.current = true
+      playCompletedRef.current = true
+      setPlayCompleted(true)
+      tryExit({ force: true })
+    }, HARD_DISMISS_MS)
+    return () => window.clearTimeout(t)
+  }, [mounted, reduceMotion])
+
+  useEffect(() => {
+    if (hardDismissedRef.current) {
+      if (!mounted || exiting) return undefined
+      tryExit({ force: true })
+      return undefined
+    }
     if (active && (!playCompleted || reduceMotion || holdWhileActive)) {
       exitingRef.current = false
       setExiting(false)

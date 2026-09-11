@@ -213,22 +213,34 @@
       (function() {
         var LOGO_MS = 4150;
         var FADE_MS = 320;
+        // Absolute ceiling so a React ownership leak can never leave the splash forever.
+        var HARD_MS = LOGO_MS + 12000;
+        function forceRemoveBootSplash() {
+          window.__bootSplashOwnedByReact = false;
+          var el = document.getElementById('initial-loader');
+          if (!el) return;
+          if (typeof window.__removeInitialLoader === 'function') window.__removeInitialLoader();
+          else if (el.parentNode) el.parentNode.removeChild(el);
+        }
+        function fadeBootSplash(respectOwnership) {
+          var el = document.getElementById('initial-loader');
+          if (!el || el.classList.contains('is-exiting')) return;
+          if (respectOwnership && window.__bootSplashOwnedByReact) return;
+          el.classList.add('is-exiting');
+          window.setTimeout(function() {
+            if (respectOwnership && window.__bootSplashOwnedByReact) return;
+            forceRemoveBootSplash();
+          }, FADE_MS);
+        }
         if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           var img = document.getElementById('boot-logo-anim');
           if (img) img.src = '/brand/knockscout-LogoMark-on-black-poster.png';
         }
-        // Failsafe: if React never claims the splash, fade it out after the WebP plays.
-        window.setTimeout(function() {
-          if (window.__bootSplashOwnedByReact) return;
-          var el = document.getElementById('initial-loader');
-          if (!el || el.classList.contains('is-exiting')) return;
-          el.classList.add('is-exiting');
-          window.setTimeout(function() {
-            if (window.__bootSplashOwnedByReact) return;
-            if (typeof window.__removeInitialLoader === 'function') window.__removeInitialLoader();
-            else if (el && el.parentNode) el.parentNode.removeChild(el);
-          }, FADE_MS);
-        }, LOGO_MS);
+        // Soft failsafe: if React never claims the splash, fade it out after the WebP plays.
+        window.setTimeout(function() { fadeBootSplash(true); }, LOGO_MS);
+        // Hard failsafe: always tear down leftover #initial-loader (ownership leaks /
+        // public report unmount bugs used to leave the looping logo forever).
+        window.setTimeout(function() { fadeBootSplash(false); }, HARD_MS);
       })();
     </script>
     <div id="modal-root" style="position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; isolation: isolate; background: transparent;"></div>

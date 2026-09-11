@@ -1,4 +1,4 @@
-/** Duration of knockscout-LogoMark-on-black.webp (83 frames @ 20fps). */
+/** Duration of knockscout-LogoMark-on-black.webp (83 frames @ 20fps, loop once). */
 export const LOGO_SPLASH_ANIM_MS = 4150
 
 export const LOGO_SPLASH_WEBP_SRC = '/brand/knockscout-LogoMark-on-black.webp'

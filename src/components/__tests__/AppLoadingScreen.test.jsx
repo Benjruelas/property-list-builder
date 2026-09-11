@@ -140,4 +140,22 @@ describe('AppLoadingScreen boot ownership', () => {
       expect(document.getElementById('initial-loader')).toBeNull()
     })
   })
+
+  it('hard-dismisses a held splash after the absolute ceiling', async () => {
+    mountBootLoader()
+    render(<AppLoadingScreen active holdWhileActive message="Loading report" />)
+
+    // Logo duration (1000) + hard ceiling buffer (12000) + fade (320)
+    await act(async () => {
+      vi.advanceTimersByTime(1000 + 12000)
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(400)
+    })
+
+    await waitFor(() => {
+      expect(document.getElementById('initial-loader')).toBeNull()
+    })
+    expect(window.__bootSplashOwnedByReact).toBe(false)
+  })
 })
