@@ -50,12 +50,18 @@ function releaseBootSplashOwnership(generation) {
  * `#initial-loader` used to leave the looping splash stuck forever (public
  * report/quote/form routes).
  *
- * @param {{ active: boolean, message?: string, onVisibleChange?: (visible: boolean) => void }} props
+ * @param {{
+ *   active: boolean,
+ *   message?: string,
+ *   onVisibleChange?: (visible: boolean) => void,
+ *   holdWhileActive?: boolean,
+ * }} props
  */
 export function AppLoadingScreen({
   active,
   message = APP_LOADING_MESSAGES.mapAuth,
   onVisibleChange,
+  holdWhileActive = false,
 }) {
   const reduceMotion = prefersReducedMotion()
   const [mounted, setMounted] = useState(active)
@@ -74,15 +80,19 @@ export function AppLoadingScreen({
   const playCompletedRef = useRef(playCompleted)
   const exitingRef = useRef(false)
   const ownershipGenRef = useRef(0)
+  const holdWhileActiveRef = useRef(holdWhileActive)
   const onVisibleChangeRef = useRef(onVisibleChange)
   onVisibleChangeRef.current = onVisibleChange
   activeRef.current = active
   playCompletedRef.current = playCompleted
+  holdWhileActiveRef.current = holdWhileActive
 
   const tryExit = () => {
     if (exitingRef.current) return
     if (!playCompletedRef.current) return
-    if (reduceMotion && activeRef.current) return
+    // Map boot may reveal under the splash once the logo finishes; public
+    // routes pass holdWhileActive so we do not uncover an empty page.
+    if ((reduceMotion || holdWhileActiveRef.current) && activeRef.current) return
     exitingRef.current = true
     setExiting(true)
   }
@@ -145,7 +155,7 @@ export function AppLoadingScreen({
   }, [mounted])
 
   useEffect(() => {
-    if (active && (!playCompleted || reduceMotion)) {
+    if (active && (!playCompleted || reduceMotion || holdWhileActive)) {
       exitingRef.current = false
       setExiting(false)
       setMounted(true)
@@ -154,7 +164,7 @@ export function AppLoadingScreen({
     if (!mounted || exiting) return undefined
     tryExit()
     return undefined
-  }, [active, mounted, exiting, playCompleted, reduceMotion])
+  }, [active, mounted, exiting, playCompleted, reduceMotion, holdWhileActive])
 
   useLayoutEffect(() => {
     if (!exiting) return undefined

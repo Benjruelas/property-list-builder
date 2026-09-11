@@ -101,7 +101,7 @@ export function PublicReportPage({ token }) {
   // owns #initial-loader leaves the looping splash stuck over the report.
   return (
     <>
-      <AppLoadingScreen active={loading} message={APP_LOADING_MESSAGES.report} />
+      <AppLoadingScreen active={loading} holdWhileActive message={APP_LOADING_MESSAGES.report} />
       {loading ? null : error && !data ? (
         <div className={pageClass}>
           <PublicFormBrandBar className="public-form-brand-bar--page" />

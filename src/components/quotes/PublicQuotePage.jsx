@@ -390,7 +390,7 @@ export function PublicQuotePage({ token }) {
   // leaves the looping splash stuck over the quote.
   return (
     <>
-      <AppLoadingScreen active={loading} message={APP_LOADING_MESSAGES.quote} />
+      <AppLoadingScreen active={loading} holdWhileActive message={APP_LOADING_MESSAGES.quote} />
       {body}
     </>
   )
