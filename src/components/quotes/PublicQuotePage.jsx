@@ -134,12 +134,11 @@ export function PublicQuotePage({ token }) {
     <PublicFormBrandBar className="public-form-brand-bar--page" />
   )
 
+  let body = null
   if (loading) {
-    return <AppLoadingScreen active message={APP_LOADING_MESSAGES.quote} />
-  }
-
-  if (error && !data) {
-    return (
+    body = null
+  } else if (error && !data) {
+    body = (
       <div className={pageClass}>
         <PublicFormBrandBar className="public-form-brand-bar--page" />
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
@@ -149,10 +148,8 @@ export function PublicQuotePage({ token }) {
         </div>
       </div>
     )
-  }
-
-  if (data?.status === 'paid' || paymentParam === 'success') {
-    return (
+  } else if (data?.status === 'paid' || paymentParam === 'success') {
+    body = (
       <div className={pageClass}>
         {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
         {brandChrome}
@@ -168,9 +165,8 @@ export function PublicQuotePage({ token }) {
         </div>
       </div>
     )
-  }
-
-  return (
+  } else if (data) {
+    body = (
     <div className={pageClass}>
       {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
       {brandChrome}
@@ -387,5 +383,15 @@ export function PublicQuotePage({ token }) {
         <LegalFooterLinks className="mt-8 pb-6" />
       </div>
     </div>
+    )
+  }
+
+  // Keep AppLoadingScreen mounted — unmounting while it owns #initial-loader
+  // leaves the looping splash stuck over the quote.
+  return (
+    <>
+      <AppLoadingScreen active={loading} message={APP_LOADING_MESSAGES.quote} />
+      {body}
+    </>
   )
 }
