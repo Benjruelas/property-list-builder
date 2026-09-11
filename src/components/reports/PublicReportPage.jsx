@@ -97,104 +97,103 @@ export function PublicReportPage({ token }) {
     <PublicFormBrandBar className="public-form-brand-bar--page" />
   )
 
-  if (loading) {
-    return <AppLoadingScreen active message={APP_LOADING_MESSAGES.report} />
-  }
-
-  if (error && !data) {
-    return (
-      <div className={pageClass}>
-        <PublicFormBrandBar className="public-form-brand-bar--page" />
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-          <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
-          <h1 className="text-lg font-semibold mb-2">Report unavailable</h1>
-          <p className="text-sm text-gray-600 max-w-md">{error}</p>
-        </div>
-      </div>
-    )
-  }
-
+  // Keep AppLoadingScreen mounted and toggle `active` — unmounting it while it
+  // owns #initial-loader leaves the looping splash stuck over the report.
   return (
-    <div className={pageClass}>
-      {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
-      {brandChrome}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 max-w-2xl mx-auto w-full">
-        {data?.preview && (
-          <div
-            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
-            role="status"
-          >
-            Preview only — this is how your client will see the report.
+    <>
+      <AppLoadingScreen active={loading} holdWhileActive message={APP_LOADING_MESSAGES.report} />
+      {loading ? null : error && !data ? (
+        <div className={pageClass}>
+          <PublicFormBrandBar className="public-form-brand-bar--page" />
+          <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+            <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
+            <h1 className="text-lg font-semibold mb-2">Report unavailable</h1>
+            <p className="text-sm text-gray-600 max-w-md">{error}</p>
           </div>
-        )}
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">{report?.title || 'Photo Report'}</h1>
-          {lead?.name && (
-            <p className="text-sm text-gray-500 mt-1">Prepared for {lead.name}</p>
-          )}
-          {lead?.address && (
-            <p className="text-sm text-gray-500 mt-0.5">{lead.address}</p>
-          )}
-          {data?.message ? (
-            <p className="mt-3 text-sm text-gray-700 bg-white rounded-lg p-3 border border-gray-200 whitespace-pre-wrap">
-              {data.message}
-            </p>
-          ) : null}
-        </header>
-
-        {sections.map((sec, i) => (
-          <section
-            key={sec.id || i}
-            className="public-report-section mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm"
-          >
-            <div className="px-5 pt-5 pb-3">
-              {sec.subtitle ? (
-                <h2 className="text-lg font-semibold text-gray-900">{sec.subtitle}</h2>
-              ) : null}
-              {sec.description ? (
-                <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{sec.description}</p>
-              ) : null}
-            </div>
-            {sec.photos?.length > 0 ? (
-              <div className="public-report-photo-grid px-5 pb-5 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {sec.photos.map((photo) => (
-                  <button
-                    key={photo.id}
-                    type="button"
-                    className="public-report-photo-tile relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    onClick={() => setPreviewIndex(photoIndexMap.get(photo.id) ?? 0)}
-                  >
-                    <img
-                      src={resolvePhotoUrl(photo.thumbUrl || photo.imageUrl)}
-                      alt={photo.caption || 'Report photo'}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  </button>
-                ))}
+        </div>
+      ) : !data ? null : (
+        <div className={pageClass}>
+          {showOwnerBack ? <PublicOwnerPreviewBackBar /> : null}
+          {brandChrome}
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 max-w-2xl mx-auto w-full">
+            {data?.preview && (
+              <div
+                className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
+                role="status"
+              >
+                Preview only — this is how your client will see the report.
               </div>
-            ) : (
-              <p className="px-5 pb-5 text-xs text-gray-400">No photos in this section</p>
             )}
-          </section>
-        ))}
+            <header className="mb-6">
+              <h1 className="text-2xl font-bold text-gray-900">{report?.title || 'Photo Report'}</h1>
+              {lead?.name && (
+                <p className="text-sm text-gray-500 mt-1">Prepared for {lead.name}</p>
+              )}
+              {lead?.address && (
+                <p className="text-sm text-gray-500 mt-0.5">{lead.address}</p>
+              )}
+              {data?.message ? (
+                <p className="mt-3 text-sm text-gray-700 bg-white rounded-lg p-3 border border-gray-200 whitespace-pre-wrap">
+                  {data.message}
+                </p>
+              ) : null}
+            </header>
 
-        <GoogleReviewsBlock googleReviews={branding?.googleReviews} className="mb-6" />
+            {sections.map((sec, i) => (
+              <section
+                key={sec.id || i}
+                className="public-report-section mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm"
+              >
+                <div className="px-5 pt-5 pb-3">
+                  {sec.subtitle ? (
+                    <h2 className="text-lg font-semibold text-gray-900">{sec.subtitle}</h2>
+                  ) : null}
+                  {sec.description ? (
+                    <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{sec.description}</p>
+                  ) : null}
+                </div>
+                {sec.photos?.length > 0 ? (
+                  <div className="public-report-photo-grid px-5 pb-5 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {sec.photos.map((photo) => (
+                      <button
+                        key={photo.id}
+                        type="button"
+                        className="public-report-photo-tile relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        onClick={() => setPreviewIndex(photoIndexMap.get(photo.id) ?? 0)}
+                      >
+                        <img
+                          src={resolvePhotoUrl(photo.thumbUrl || photo.imageUrl)}
+                          alt={photo.caption || 'Report photo'}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-5 pb-5 text-xs text-gray-400">No photos in this section</p>
+                )}
+              </section>
+            ))}
 
-        <PublicPdfDownload
-          url={data?.pdfDownloadUrl}
-          fileName={`${report?.title || 'Photo Report'}.pdf`}
-        />
+            <GoogleReviewsBlock googleReviews={branding?.googleReviews} className="mb-6" />
 
-        <LegalFooterLinks className="mt-8 pb-6" />
-      </div>
+            <PublicPdfDownload
+              url={data?.pdfDownloadUrl}
+              fileName={`${report?.title || 'Photo Report'}.pdf`}
+            />
 
-      <FilePreviewOverlay
-        open={previewIndex != null}
-        initialIndex={previewIndex ?? 0}
-        items={galleryItems}
-        onClose={() => setPreviewIndex(null)}
-      />
-    </div>
+            <LegalFooterLinks className="mt-8 pb-6" />
+          </div>
+
+          <FilePreviewOverlay
+            open={previewIndex != null}
+            initialIndex={previewIndex ?? 0}
+            items={galleryItems}
+            onClose={() => setPreviewIndex(null)}
+          />
+        </div>
+      )}
+    </>
   )
 }
