@@ -11,6 +11,8 @@ import {
 
 /** Match `.app-loading-screen.is-exiting` / `#initial-loader.is-exiting` duration. */
 const FADE_OUT_MS = 320
+/** Hard ceiling so holdWhileActive / ownership leaks cannot trap the splash. */
+const HARD_DISMISS_MS = LOGO_SPLASH_ANIM_MS + 12000
 const BOOT_LOADER_ID = 'initial-loader'
 const LOGO_PLATE = '#000000'
 
@@ -23,17 +25,45 @@ function prefersReducedMotion() {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
+function restoreInitialLoaderRemover() {
+  window.__removeInitialLoader = function removeInitialLoader() {
+    document.getElementById(BOOT_LOADER_ID)?.remove()
+  }
+}
+
+/**
+ * Release HTML boot splash ownership. Generation-gated so React Strict Mode
+ * remounts can reclaim before a deferred cleanup runs.
+ */
+function releaseBootSplashOwnership(generation) {
+  if (window.__bootSplashOwnerGen !== generation) return
+  window.__bootSplashOwnedByReact = false
+  document.getElementById(BOOT_LOADER_ID)?.remove()
+  restoreInitialLoaderRemover()
+  clearBootLogoLayout()
+}
+
 /**
  * Full-screen KnockScout boot splash.
  * Uses an animated WebP <img> (not <video>) so iOS 26 Home Screen / PWA
  * media regressions cannot freeze the logo mark.
  *
- * @param {{ active: boolean, message?: string, onVisibleChange?: (visible: boolean) => void }} props
+ * Keep this component mounted and toggle `active` — unmounting while it owns
+ * `#initial-loader` used to leave the looping splash stuck forever (public
+ * report/quote/form routes).
+ *
+ * @param {{
+ *   active: boolean,
+ *   message?: string,
+ *   onVisibleChange?: (visible: boolean) => void,
+ *   holdWhileActive?: boolean,
+ * }} props
  */
 export function AppLoadingScreen({
   active,
   message = APP_LOADING_MESSAGES.mapAuth,
   onVisibleChange,
+  holdWhileActive = false,
 }) {
   const reduceMotion = prefersReducedMotion()
   const [mounted, setMounted] = useState(active)
@@ -51,15 +81,21 @@ export function AppLoadingScreen({
   const activeRef = useRef(active)
   const playCompletedRef = useRef(playCompleted)
   const exitingRef = useRef(false)
+  const hardDismissedRef = useRef(false)
+  const ownershipGenRef = useRef(0)
+  const holdWhileActiveRef = useRef(holdWhileActive)
   const onVisibleChangeRef = useRef(onVisibleChange)
   onVisibleChangeRef.current = onVisibleChange
   activeRef.current = active
   playCompletedRef.current = playCompleted
+  holdWhileActiveRef.current = holdWhileActive
 
-  const tryExit = () => {
+  const tryExit = ({ force = false } = {}) => {
     if (exitingRef.current) return
-    if (!playCompletedRef.current) return
-    if (reduceMotion && activeRef.current) return
+    if (!force && !playCompletedRef.current) return
+    // Map boot may reveal under the splash once the logo finishes; public
+    // routes pass holdWhileActive so we do not uncover an empty page.
+    if (!force && (reduceMotion || holdWhileActiveRef.current) && activeRef.current) return
     exitingRef.current = true
     setExiting(true)
   }
@@ -67,6 +103,7 @@ export function AppLoadingScreen({
   useLayoutEffect(() => {
     if (reduceMotion) {
       window.__removeInitialLoader?.()
+      window.__bootSplashOwnedByReact = false
       clearBootLogoLayout()
       setHost('portal')
       return undefined
@@ -83,6 +120,8 @@ export function AppLoadingScreen({
 
     if (boot) {
       setHost('boot')
+      const gen = (window.__bootSplashOwnerGen = (window.__bootSplashOwnerGen || 0) + 1)
+      ownershipGenRef.current = gen
       window.__bootSplashOwnedByReact = true
       window.__removeInitialLoader = null
       boot.classList.add(
@@ -101,7 +140,11 @@ export function AppLoadingScreen({
       // Leave the HTML WebP src alone so React mount does not restart mid-animation.
 
       const cancel = scheduleLogoSplashComplete(markCompleted, LOGO_SPLASH_ANIM_MS)
-      return () => cancel()
+      return () => {
+        cancel()
+        // Defer so Strict Mode remount can reclaim ownership before teardown.
+        queueMicrotask(() => releaseBootSplashOwnership(gen))
+      }
     }
 
     setHost('portal')
@@ -114,8 +157,26 @@ export function AppLoadingScreen({
     onVisibleChangeRef.current?.(mounted)
   }, [mounted])
 
+  // Absolute dismiss: even with holdWhileActive, never leave the splash up forever
+  // (hung public-report fetch / ownership bugs previously looped the logo endlessly).
   useEffect(() => {
-    if (active && (!playCompleted || reduceMotion)) {
+    if (!mounted || reduceMotion) return undefined
+    const t = window.setTimeout(() => {
+      hardDismissedRef.current = true
+      playCompletedRef.current = true
+      setPlayCompleted(true)
+      tryExit({ force: true })
+    }, HARD_DISMISS_MS)
+    return () => window.clearTimeout(t)
+  }, [mounted, reduceMotion])
+
+  useEffect(() => {
+    if (hardDismissedRef.current) {
+      if (!mounted || exiting) return undefined
+      tryExit({ force: true })
+      return undefined
+    }
+    if (active && (!playCompleted || reduceMotion || holdWhileActive)) {
       exitingRef.current = false
       setExiting(false)
       setMounted(true)
@@ -124,7 +185,7 @@ export function AppLoadingScreen({
     if (!mounted || exiting) return undefined
     tryExit()
     return undefined
-  }, [active, mounted, exiting, playCompleted, reduceMotion])
+  }, [active, mounted, exiting, playCompleted, reduceMotion, holdWhileActive])
 
   useLayoutEffect(() => {
     if (!exiting) return undefined
@@ -158,6 +219,8 @@ export function AppLoadingScreen({
         if (host === 'boot') {
           const boot = document.getElementById(BOOT_LOADER_ID) || screenRef.current
           boot?.remove()
+          window.__bootSplashOwnedByReact = false
+          restoreInitialLoaderRemover()
         }
         setMounted(false)
         setExiting(false)
