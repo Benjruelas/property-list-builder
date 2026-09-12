@@ -8249,7 +8249,7 @@ button.leads-analytics-stat-value-toggle:focus-visible {
     color-mix(in srgb, var(--map-accent-blue) 55%, transparent),
     var(--map-accent-blue)
   );
-  transition: width 220ms ease;
+  transition: none;
   pointer-events: none;
 }
 .hail-storm-progress-report {
@@ -8282,7 +8282,7 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   background: var(--map-panel-surface);
   border: 2px solid var(--map-accent-blue);
   box-shadow: var(--map-chrome-shadow);
-  transition: left 220ms ease;
+  transition: none;
   pointer-events: none;
   z-index: 1;
 }
