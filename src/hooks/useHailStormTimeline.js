@@ -12,6 +12,15 @@ function applyTimelineFrames(frames, setFrames, setFrameIndex) {
   setFrameIndex(initialStormFrameIndex(frames))
 }
 
+function nearestFrameWithTiles(frames, fromIndex, direction) {
+  if (!frames?.length) return fromIndex
+  const step = direction < 0 ? -1 : 1
+  for (let j = fromIndex + step; j >= 0 && j < frames.length; j += step) {
+    if (frames[j]?.tileUrl) return j
+  }
+  return Math.max(0, Math.min(frames.length - 1, fromIndex + step))
+}
+
 export function useHailStormTimeline(event) {
   const [frames, setFrames] = useState([])
   const [frameIndex, setFrameIndex] = useState(0)
@@ -58,11 +67,17 @@ export function useHailStormTimeline(event) {
   const canNext = frameIndex < frames.length - 1
 
   const stepPrev = useCallback(() => {
-    setFrameIndex((i) => Math.max(0, i - 1))
-  }, [])
+    setFrameIndex((i) => nearestFrameWithTiles(frames, i, -1))
+  }, [frames])
 
   const stepNext = useCallback(() => {
-    setFrameIndex((i) => Math.min(frames.length - 1, i + 1))
+    setFrameIndex((i) => nearestFrameWithTiles(frames, i, 1))
+  }, [frames])
+
+  const goToFrame = useCallback((index) => {
+    if (!frames.length) return
+    const clamped = Math.max(0, Math.min(frames.length - 1, Math.round(index)))
+    setFrameIndex(clamped)
   }, [frames.length])
 
   const goToReportFrame = useCallback(() => {
@@ -84,6 +99,7 @@ export function useHailStormTimeline(event) {
     canNext,
     stepPrev,
     stepNext,
+    goToFrame,
     goToReportFrame,
     isReportFrame: current?.offsetHours === 0,
   }), [
@@ -95,6 +111,7 @@ export function useHailStormTimeline(event) {
     canNext,
     stepPrev,
     stepNext,
+    goToFrame,
     goToReportFrame,
   ])
 }

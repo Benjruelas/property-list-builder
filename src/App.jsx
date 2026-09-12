@@ -4245,14 +4245,16 @@ function App() {
               parcelLayerRef.current = layerFunctions
             }}
           />
-          <LeadMapLayer
-            mapRef={mapInstanceRef}
-            mapReady={mapReady}
-            leads={leads}
-            leadStatuses={leadStatuses}
-            dealCountByLead={dealCountByLead}
-            onLeadClick={openLeadDetailsFromMap}
-          />
+          {!selectedHailEvent ? (
+            <LeadMapLayer
+              mapRef={mapInstanceRef}
+              mapReady={mapReady}
+              leads={leads}
+              leadStatuses={leadStatuses}
+              dealCountByLead={dealCountByLead}
+              onLeadClick={openLeadDetailsFromMap}
+            />
+          ) : null}
           <PathTracker
             ref={pathTrackerRef}
             mapRef={mapInstanceRef}
@@ -4262,7 +4264,9 @@ function App() {
             smoothingLevel={settings.pathSmoothing}
           />
           <LocationMarker />
-          <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
+          {selectedHailEvent ? (
+            <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
+          ) : null}
           {selectedHailEvent && hailParcelCoords ? (
             <HailStormMapMarkers
               parcel={hailParcelCoords}
