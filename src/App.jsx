@@ -4245,14 +4245,16 @@ function App() {
               parcelLayerRef.current = layerFunctions
             }}
           />
-          <LeadMapLayer
-            mapRef={mapInstanceRef}
-            mapReady={mapReady}
-            leads={leads}
-            leadStatuses={leadStatuses}
-            dealCountByLead={dealCountByLead}
-            onLeadClick={openLeadDetailsFromMap}
-          />
+          {!selectedHailEvent ? (
+            <LeadMapLayer
+              mapRef={mapInstanceRef}
+              mapReady={mapReady}
+              leads={leads}
+              leadStatuses={leadStatuses}
+              dealCountByLead={dealCountByLead}
+              onLeadClick={openLeadDetailsFromMap}
+            />
+          ) : null}
           <PathTracker
             ref={pathTrackerRef}
             mapRef={mapInstanceRef}
