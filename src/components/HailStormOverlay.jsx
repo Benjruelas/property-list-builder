@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Source, Layer, Marker as MapMarker, useMap } from 'react-map-gl/maplibre'
 import { ChevronLeft, ChevronRight, CloudRain, Home, Loader2, X } from 'lucide-react'
 import { formatEventTimeLocal, IEM_RADAR_TILE_MAXZOOM, radarDisplayName } from '../utils/nexradOverlay'
@@ -54,10 +54,16 @@ const RADAR_LAYER_ID = 'hail-storm-radar-layer'
 export function HailStormOverlay({ tileUrl }) {
   const maps = useMap()
   const mapRef = maps?.current
+  // Keep the last good frame mounted so null/503 gaps don't blank the map.
+  const [displayUrl, setDisplayUrl] = useState(tileUrl || null)
+
+  useEffect(() => {
+    if (tileUrl) setDisplayUrl(tileUrl)
+  }, [tileUrl])
 
   useEffect(() => {
     const map = mapRef?.getMap?.() ?? mapRef
-    if (!map || !tileUrl) return
+    if (!map || !displayUrl) return
 
     const promote = () => {
       try {
@@ -72,16 +78,15 @@ export function HailStormOverlay({ tileUrl }) {
     return () => {
       map.off('styledata', promote)
     }
-  }, [mapRef, tileUrl])
+  }, [mapRef, displayUrl])
 
-  if (!tileUrl) return null
+  if (!displayUrl) return null
 
   return (
     <Source
-      key={tileUrl}
       id="hail-storm-radar"
       type="raster"
-      tiles={[tileUrl]}
+      tiles={[displayUrl]}
       tileSize={256}
       scheme="xyz"
       minzoom={1}
@@ -164,6 +169,8 @@ export function HailStormDismissPill({
     canNext,
     stepPrev,
     stepNext,
+    goToFrame,
+    goToReportFrame,
     hasRadarData,
     isReportFrame,
     radarName,
@@ -177,6 +184,17 @@ export function HailStormDismissPill({
   const reportIdx = frames.findIndex((f) => f.offsetHours === 0)
   const reportMarkerPct =
     reportIdx >= 0 && frameCount > 1 ? timelineProgress(reportIdx, frameCount) : null
+
+  const seekFromPointer = (clientX, target) => {
+    if (!goToFrame || frameCount <= 1 || loading) return
+    const track = target?.closest?.('.hail-storm-progress')?.querySelector('.hail-storm-progress-track')
+      || target
+    if (!track?.getBoundingClientRect) return
+    const rect = track.getBoundingClientRect()
+    if (!rect.width) return
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    goToFrame(ratio * (frameCount - 1))
+  }
 
   return (
     <div className="hail-storm-panel-wrap" aria-label="Hail storm map controls">
@@ -256,10 +274,35 @@ export function HailStormDismissPill({
               <div
                 className="hail-storm-progress"
                 role="slider"
+                tabIndex={0}
                 aria-valuemin={0}
                 aria-valuemax={Math.max(0, frameCount - 1)}
                 aria-valuenow={frameIndex}
                 aria-label={`Radar timeline, ${isReportFrame ? 'at report time' : frameLabel}`}
+                onPointerDown={(e) => {
+                  if (e.button != null && e.button !== 0) return
+                  e.currentTarget.setPointerCapture?.(e.pointerId)
+                  seekFromPointer(e.clientX, e.currentTarget)
+                }}
+                onPointerMove={(e) => {
+                  if (!e.currentTarget.hasPointerCapture?.(e.pointerId)) return
+                  seekFromPointer(e.clientX, e.currentTarget)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowLeft') {
+                    e.preventDefault()
+                    stepPrev?.()
+                  } else if (e.key === 'ArrowRight') {
+                    e.preventDefault()
+                    stepNext?.()
+                  } else if (e.key === 'Home') {
+                    e.preventDefault()
+                    goToFrame?.(0)
+                  } else if (e.key === 'End') {
+                    e.preventDefault()
+                    goToFrame?.(frameCount - 1)
+                  }
+                }}
               >
                 <div className="hail-storm-progress-track">
                   <div
@@ -267,11 +310,17 @@ export function HailStormDismissPill({
                     style={{ width: `${progressPct}%` }}
                   />
                   {reportMarkerPct != null ? (
-                    <span
+                    <button
+                      type="button"
                       className="hail-storm-progress-report"
                       style={{ left: `${reportMarkerPct}%` }}
-                      title="Hail report time"
-                      aria-hidden
+                      title="Jump to hail report time"
+                      aria-label="Jump to hail report time"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        goToReportFrame?.()
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
                     />
                   ) : null}
                   <span

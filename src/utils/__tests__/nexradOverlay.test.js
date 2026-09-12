@@ -13,6 +13,7 @@ import {
   hailEventTimelineKey,
   hailStormViewBounds,
   iemIsoMinute,
+  iemScanTileStamp,
   initialStormFrameIndex,
   parseIemScanTime,
   pickNearestNexradId,
@@ -92,6 +93,15 @@ describe('storm radar timeline', () => {
     expect(pickNearestScanTimestamp([], at)).toBeNull()
   })
 
+  it('keeps exact site-radar scan minutes instead of flooring to 5 minutes', () => {
+    expect(iemScanTileStamp('2024-04-28T22:01Z')).toBe('202404282201')
+    expect(iemScanTileStamp('2024-04-28T21:09:00Z')).toBe('202404282109')
+    const at = new Date('2024-04-28T22:00:00Z')
+    expect(
+      pickNearestScanTimestamp([{ ts: '2024-04-28T22:01Z' }], at, STORM_SCAN_MAX_DIFF_MS)
+    ).toBe('202404282201')
+  })
+
   it('labels frames in Central Time relative to the report', () => {
     const reportAt = new Date('2023-05-15T21:00:00Z')
     const earlier = new Date('2023-05-15T20:45:00Z')
@@ -111,7 +121,7 @@ describe('storm radar timeline', () => {
       lng: -96.8,
       year: 2023,
     })
-    expect(key).toContain('v5')
+    expect(key).toContain('v6')
     expect(key).toContain('b6')
     expect(key).toContain('a3')
     expect(key).toContain('2023-05-15')

@@ -4264,7 +4264,9 @@ function App() {
             smoothingLevel={settings.pathSmoothing}
           />
           <LocationMarker />
-          <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
+          {selectedHailEvent ? (
+            <HailStormOverlay tileUrl={hailStormTimeline.tileUrl} />
+          ) : null}
           {selectedHailEvent && hailParcelCoords ? (
             <HailStormMapMarkers
               parcel={hailParcelCoords}

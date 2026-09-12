@@ -8223,7 +8223,13 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 }
 .hail-storm-progress {
   width: 100%;
-  padding: 0 0.15rem;
+  padding: 0.45rem 0.15rem;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.hail-storm-progress:focus-visible .hail-storm-progress-track {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--map-accent-blue) 55%, transparent);
 }
 .hail-storm-progress-track {
   position: relative;
@@ -8249,14 +8255,21 @@ button.leads-analytics-stat-value-toggle:focus-visible {
 .hail-storm-progress-report {
   position: absolute;
   top: 50%;
-  width: 2px;
-  height: 10px;
-  margin-left: -1px;
+  width: 3px;
+  height: 14px;
+  margin-left: -1.5px;
+  padding: 0;
+  border: 0;
   transform: translateY(-50%);
   border-radius: 1px;
   background: rgba(250, 204, 21, 0.95);
   box-shadow: 0 0 6px rgba(250, 204, 21, 0.65);
-  pointer-events: none;
+  cursor: pointer;
+  z-index: 2;
+}
+.hail-storm-progress-report:focus-visible {
+  outline: 2px solid rgba(250, 204, 21, 0.9);
+  outline-offset: 2px;
 }
 .hail-storm-progress-thumb {
   position: absolute;
@@ -8271,6 +8284,7 @@ button.leads-analytics-stat-value-toggle:focus-visible {
   box-shadow: var(--map-chrome-shadow);
   transition: left 220ms ease;
   pointer-events: none;
+  z-index: 1;
 }
 .hail-storm-panel-status {
   margin: 0;

@@ -16,7 +16,7 @@ export const STORM_SCAN_MAX_DIFF_MS = 20 * 60 * 1000
 export const N0Q_ARCHIVE_START_MS = Date.UTC(2010, 10, 13, 16, 25)
 export const STORM_LOCAL_TIME_ZONE = 'America/Chicago'
 
-const TIMELINE_CACHE_VERSION = 'v5'
+const TIMELINE_CACHE_VERSION = 'v6'
 /** Compiled SPC archive ends in 2024; later years come from 12Z convective-day files. */
 const SPC_DAILY_REPORT_START_YEAR = 2025
 const COMPOSITE_RADAR_ID = 'USCOMP'
@@ -39,6 +39,28 @@ export function iemTimestamp(date) {
     pad(d.getUTCDate()) +
     pad(d.getUTCHours()) +
     pad(d.getUTCMinutes())
+  )
+}
+
+/**
+ * Tile stamp for an IEM scan list entry (`2024-04-28T21:01Z` → `202404282101`).
+ * Site NEXRAD (N0B) volumes are not on a 5-minute grid — flooring them 503s.
+ */
+export function iemScanTileStamp(ts) {
+  if (!ts) return null
+  const match = String(ts).trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (match) {
+    return `${match[1]}${match[2]}${match[3]}${match[4]}${match[5]}`
+  }
+  const at = parseIemScanTime(ts)
+  if (!at) return null
+  const pad = (n) => String(n).padStart(2, '0')
+  return (
+    at.getUTCFullYear().toString() +
+    pad(at.getUTCMonth() + 1) +
+    pad(at.getUTCDate()) +
+    pad(at.getUTCHours()) +
+    pad(at.getUTCMinutes())
   )
 }
 
@@ -259,12 +281,19 @@ export async function resolveRadarCoverage(evt) {
 /** Load site scans first; fall back to the national mosaic if the site is empty. */
 export async function fetchScansForEvent(evt, start, end) {
   const coverage = await resolveRadarCoverage(evt)
+  const preferred = preferredRadarProduct(evt)
+  const mosaicFallback = preferred === 'N0Q' ? 'N0R' : 'N0Q'
   const attempts = [
     coverage,
     {
       radarId: COMPOSITE_RADAR_ID,
       radarName: 'National mosaic',
-      product: preferredRadarProduct(evt),
+      product: preferred,
+    },
+    {
+      radarId: COMPOSITE_RADAR_ID,
+      radarName: 'National mosaic',
+      product: mosaicFallback,
     },
   ]
 
@@ -310,8 +339,7 @@ export function pickNearestScanTimestamp(
     }
   }
   if (bestTs == null || bestDiff > maxDiffMs) return null
-  const stampAt = parseIemScanTime(bestTs)
-  return stampAt ? iemTimestamp(stampAt) : null
+  return iemScanTileStamp(bestTs)
 }
 
 /**
@@ -467,7 +495,10 @@ export async function resolveStormTimeline(evt) {
     }
   })
 
-  if (cacheKey) TIMELINE_CACHE.set(cacheKey, frames)
+  // Only cache successful timelines so transient IEM failures can retry.
+  if (cacheKey && frames.some((f) => f.tileUrl)) {
+    TIMELINE_CACHE.set(cacheKey, frames)
+  }
   return frames
 }
 
