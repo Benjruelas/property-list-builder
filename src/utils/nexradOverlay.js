@@ -1,8 +1,8 @@
 const IEM_TILE_BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0'
 
 /** Hours before / after hail report time for the scrub window. */
-export const STORM_TIMELINE_BEFORE_HOURS = 6
-export const STORM_TIMELINE_AFTER_HOURS = 3
+export const STORM_TIMELINE_BEFORE_HOURS = 12
+export const STORM_TIMELINE_AFTER_HOURS = 6
 /** @deprecated Prefer STORM_TIMELINE_BEFORE_HOURS / AFTER — kept for older callers. */
 export const STORM_TIMELINE_RADIUS_HOURS = STORM_TIMELINE_BEFORE_HOURS
 export const STORM_TIMELINE_LOOKBACK_HOURS = STORM_TIMELINE_BEFORE_HOURS
@@ -16,7 +16,7 @@ export const STORM_SCAN_MAX_DIFF_MS = 20 * 60 * 1000
 export const N0Q_ARCHIVE_START_MS = Date.UTC(2010, 10, 13, 16, 25)
 export const STORM_LOCAL_TIME_ZONE = 'America/Chicago'
 
-const TIMELINE_CACHE_VERSION = 'v7'
+const TIMELINE_CACHE_VERSION = 'v8'
 /** Compiled SPC archive ends in 2024; later years come from 12Z convective-day files. */
 const SPC_DAILY_REPORT_START_YEAR = 2025
 const COMPOSITE_RADAR_ID = 'USCOMP'

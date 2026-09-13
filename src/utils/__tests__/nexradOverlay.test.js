@@ -30,8 +30,12 @@ describe('storm radar timeline', () => {
     expect(offsets).toContain(0)
     expect(offsets).toContain(-0.25)
     expect(offsets).toContain(0.25)
-    expect(STORM_TIMELINE_BEFORE_HOURS).toBe(6)
-    expect(STORM_TIMELINE_AFTER_HOURS).toBe(3)
+    expect(offsets).toContain(-12)
+    expect(offsets).toContain(-7)
+    expect(offsets).toContain(4)
+    expect(offsets).toContain(6)
+    expect(STORM_TIMELINE_BEFORE_HOURS).toBe(12)
+    expect(STORM_TIMELINE_AFTER_HOURS).toBe(6)
   })
 
   it('opens the timeline on the hail report frame', () => {
@@ -138,9 +142,9 @@ describe('storm radar timeline', () => {
       lng: -96.8,
       year: 2023,
     })
-    expect(key).toContain('v7')
-    expect(key).toContain('b6')
-    expect(key).toContain('a3')
+    expect(key).toContain('v8')
+    expect(key).toContain('b12')
+    expect(key).toContain('a6')
     expect(key).toContain('2023-05-15')
   })
 
