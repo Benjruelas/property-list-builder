@@ -263,6 +263,18 @@ export async function getLeadsForUser(user, ctx) {
     return monolith
   }
 
+  // Fail-open: incomplete shard backfill / missing shared-leads index must not
+  // hide leads the monolith still considers visible for this user.
+  const diff = diffLeadSets(monolith, sharded)
+  if (diff.onlyA.length) {
+    console.warn(JSON.stringify({
+      type: 'lead_shard_undercount',
+      ...diff,
+      uid: user.uid,
+    }))
+    return mergeLeadsByUpdatedAt(monolith, sharded)
+  }
+
   return sharded
 }
 

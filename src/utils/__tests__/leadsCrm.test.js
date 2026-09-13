@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import {
   getLeadStatus,
   lastContactedAt,
@@ -475,5 +475,62 @@ describe('findLeadByParcelId', () => {
   it('isParcelALead reflects findLeadByParcelId', () => {
     expect(isParcelALead(leads, { lat: 32.78, lng: -96.8 })).toBe(true)
     expect(isParcelALead(leads, { lat: 0, lng: 0 })).toBe(false)
+  })
+})
+
+describe('fetchLeads conditional GET', () => {
+  beforeEach(() => {
+    mockLocalStorage()
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('skips If-None-Match when allowNotModified is false', async () => {
+    const { fetchLeads, resetLeadsListEtag } = await import('../leads')
+    resetLeadsListEtag()
+    // Seed an etag via a successful fetch first
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: (h) => (h === 'ETag' ? '"42"' : null) },
+      json: async () => ({ leads: [{ id: 'l1' }] }),
+    })
+    await fetchLeads(async () => 'tok')
+
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ leads: [{ id: 'l2' }] }),
+    })
+    await fetchLeads(async () => 'tok', { allowNotModified: false })
+
+    const headers = fetch.mock.calls.at(-1)[1].headers
+    expect(headers['If-None-Match']).toBeUndefined()
+    expect(headers.Authorization).toBe('Bearer tok')
+  })
+
+  it('sends If-None-Match when allowNotModified is true and etag is set', async () => {
+    const { fetchLeads, resetLeadsListEtag } = await import('../leads')
+    resetLeadsListEtag()
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: (h) => (h === 'ETag' ? '"99"' : null) },
+      json: async () => ({ leads: [{ id: 'l1' }] }),
+    })
+    await fetchLeads(async () => 'tok')
+
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 304,
+      headers: { get: () => null },
+    })
+    const result = await fetchLeads(async () => 'tok', { allowNotModified: true })
+    expect(result).toEqual({ notModified: true })
+    expect(fetch.mock.calls.at(-1)[1].headers['If-None-Match']).toBe('99')
   })
 })
