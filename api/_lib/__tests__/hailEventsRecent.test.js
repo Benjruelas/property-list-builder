@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   listRecentHailMonths,
   parseSpcDailyReport,
+  resolveCompiledDateUtc,
   shouldCacheRecentMonth,
+  spcLocalTimeToUtc,
 } from '../../hail-events.js'
 
 describe('listRecentHailMonths', () => {
@@ -23,6 +25,58 @@ describe('shouldCacheRecentMonth', () => {
   it('caches a month after most daily files load', () => {
     expect(shouldCacheRecentMonth(18, 30)).toBe(true)
     expect(shouldCacheRecentMonth(8, 8)).toBe(true)
+  })
+})
+
+describe('spcLocalTimeToUtc', () => {
+  it('keeps the UTC calendar day when CST evening times roll past midnight', () => {
+    expect(spcLocalTimeToUtc('2023-05-15', '19:00', '3')).toEqual({
+      time_utc: '01:00',
+      date_utc: '2023-05-16',
+    })
+    expect(spcLocalTimeToUtc('2023-05-15', '18:00', '3')).toEqual({
+      time_utc: '00:00',
+      date_utc: '2023-05-16',
+    })
+    expect(spcLocalTimeToUtc('2023-05-15', '17:00', '3')).toEqual({
+      time_utc: '23:00',
+      date_utc: '2023-05-15',
+    })
+  })
+
+  it('leaves GMT reports on the same UTC date', () => {
+    expect(spcLocalTimeToUtc('2023-05-15', '03:00', '9')).toEqual({
+      time_utc: '03:00',
+      date_utc: '2023-05-15',
+    })
+  })
+})
+
+describe('resolveCompiledDateUtc', () => {
+  it('recovers the lost next UTC day from cached time_utc-only events', () => {
+    expect(resolveCompiledDateUtc({
+      date: '2023-05-15',
+      time_utc: '01:00',
+      year: 2023,
+    })).toBe('2023-05-16')
+    expect(resolveCompiledDateUtc({
+      date: '2023-05-15',
+      time_utc: '23:00',
+      year: 2023,
+    })).toBe('2023-05-15')
+  })
+
+  it('prefers an explicit date_utc and skips convective-day events', () => {
+    expect(resolveCompiledDateUtc({
+      date: '2023-05-15',
+      date_utc: '2023-05-16',
+      time_utc: '01:00',
+    })).toBe('2023-05-16')
+    expect(resolveCompiledDateUtc({
+      date: '2026-04-25',
+      time_utc: '03:30',
+      convective_day: true,
+    })).toBeNull()
   })
 })
 
