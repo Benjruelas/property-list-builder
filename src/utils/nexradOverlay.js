@@ -16,7 +16,7 @@ export const STORM_SCAN_MAX_DIFF_MS = 20 * 60 * 1000
 export const N0Q_ARCHIVE_START_MS = Date.UTC(2010, 10, 13, 16, 25)
 export const STORM_LOCAL_TIME_ZONE = 'America/Chicago'
 
-const TIMELINE_CACHE_VERSION = 'v6'
+const TIMELINE_CACHE_VERSION = 'v7'
 /** Compiled SPC archive ends in 2024; later years come from 12Z convective-day files. */
 const SPC_DAILY_REPORT_START_YEAR = 2025
 const COMPOSITE_RADAR_ID = 'USCOMP'
@@ -79,17 +79,30 @@ export function eventUsesConvectiveDayClock(evt) {
 /**
  * Build a UTC Date for the event. Uses evt.time_utc when present,
  * otherwise defaults to 21:00 UTC (afternoon CONUS hail).
+ *
+ * Calendar date preference:
+ * 1. `date_utc` when the API preserved the CST→UTC day roll
+ * 2. SPC `date` + convective-day overnight roll (2025+ daily files)
+ * 3. SPC `date` + compiled-archive evening wrap (time_utc 00–05 without date_utc)
  */
 export function eventDateTimeUTC(evt) {
-  if (!evt?.date) return null
-  const [y, m, d] = evt.date.split('-').map(Number)
+  if (!evt?.date && !evt?.date_utc) return null
+  const dateStr = evt.date_utc || evt.date
+  const [y, m, d] = String(dateStr).split('-').map(Number)
   if (!y || !m || !d) return null
   if (evt.time_utc) {
     const [hh, mm] = evt.time_utc.split(':').map(Number)
     const hour = hh || 0
     const dt = new Date(Date.UTC(y, m - 1, d, hour, mm || 0))
-    if (eventUsesConvectiveDayClock(evt) && hour < 12) {
-      dt.setUTCDate(dt.getUTCDate() + 1)
+    // date_utc is already absolute — do not apply further day rolls.
+    if (!evt.date_utc) {
+      if (eventUsesConvectiveDayClock(evt) && hour < 12) {
+        dt.setUTCDate(dt.getUTCDate() + 1)
+      } else if (!eventUsesConvectiveDayClock(evt) && hour < 6) {
+        // Compiled SPC archive converted CST→UTC but only stored HH:MM.
+        // Evening local times (18:00–23:59 CST) become 00:00–05:59 UTC next day.
+        dt.setUTCDate(dt.getUTCDate() + 1)
+      }
     }
     return dt
   }
@@ -195,6 +208,7 @@ export function hailEventTimelineKey(evt) {
     `b${STORM_TIMELINE_BEFORE_HOURS}`,
     `a${STORM_TIMELINE_AFTER_HOURS}`,
     evt.date,
+    evt.date_utc ?? '',
     evt.time_utc ?? '',
     evt.convective_day === true ? 'cd' : '',
     evt.lat,
@@ -418,6 +432,7 @@ export function formatEventTimeLocal(timeUtc, dateStr, timeZone = STORM_LOCAL_TI
     time_utc: timeUtc,
     year: extra?.year,
     convective_day: extra?.convective_day,
+    date_utc: extra?.date_utc,
   })
   if (!evt) return null
   return evt.toLocaleString('en-US', {

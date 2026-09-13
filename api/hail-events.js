@@ -7,11 +7,11 @@ const RECENT_BUNDLE_TTL_MS = 24 * 60 * 60 * 1000
 const RECENT_FETCH_TIMEOUT_MS = 15000
 const SPC_HAIL_URL = 'https://www.spc.noaa.gov/wcm/data/1955-2024_hail.csv.zip'
 export const SPC_COMPILED_MAX_YEAR = 2024
-/** v2 added time_utc; read v1 grid cells so existing R2 cache stays warm after deploy. */
-const GRID_CACHE_PREFIXES = ['hail/grid/v2', 'hail/grid']
+/** v3 stores date_utc so evening CST→UTC day rolls survive; keep reading older grids. */
+const GRID_CACHE_PREFIXES = ['hail/grid/v3', 'hail/grid/v2', 'hail/grid']
 const RECENT_MONTH_CACHE_PREFIX = 'hail/recent/v2'
 const RECENT_BUNDLE_CACHE_PREFIX = 'hail/recent-bundle/v2'
-const RESPONSE_CACHE_PREFIX = 'hail/response/v4'
+const RESPONSE_CACHE_PREFIX = 'hail/response/v5'
 
 let _s3
 function getS3() {
@@ -91,17 +91,46 @@ function spcTimeParts(timeStr) {
   return { hh, mm }
 }
 
-function spcLocalTimeToUtc(date, timeStr, tz) {
+/**
+ * Convert SPC compiled-archive local time to UTC.
+ * Returns both clock and calendar date — evening CST (+6h) rolls into the next UTC day,
+ * and callers must keep that date or radar opens 24h early.
+ */
+export function spcLocalTimeToUtc(date, timeStr, tz) {
   if (!date || !timeStr) return null
   const parts = spcTimeParts(timeStr)
   if (!parts) return null
   const [y, m, d] = date.split('-').map(Number)
+  if (!y || !m || !d) return null
   const tzNum = parseInt(tz, 10)
   // SPC converts all times to CST except GMT (tz=9) which stays UTC
   const utcAddHours = tzNum === 9 ? 0 : 6
   const dt = new Date(Date.UTC(y, m - 1, d, parts.hh + utcAddHours, parts.mm))
   const pad = (n) => String(n).padStart(2, '0')
-  return `${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}`
+  return {
+    time_utc: `${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}`,
+    date_utc: `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`,
+  }
+}
+
+/**
+ * Recover UTC calendar date for compiled events that only stored time_utc.
+ * Evening CST reports land at 00:00–05:59 UTC the next day; without date_utc
+ * that day roll was previously discarded.
+ */
+export function resolveCompiledDateUtc(evt) {
+  if (!evt?.date) return null
+  if (evt.date_utc) return evt.date_utc
+  if (evt.convective_day === true) return null
+  if (!evt.time_utc) return evt.date
+  const hour = parseInt(String(evt.time_utc).split(':')[0], 10)
+  if (!Number.isFinite(hour) || hour >= 6) return evt.date
+  const [y, m, d] = evt.date.split('-').map(Number)
+  if (!y || !m || !d) return evt.date
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + 1)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`
 }
 
 function spcUtcTimeFromDailyReport(timeRaw) {
@@ -110,7 +139,7 @@ function spcUtcTimeFromDailyReport(timeRaw) {
   return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`
 }
 
-const HAIL_GRID_CACHE_PREFIX = 'hail/grid/v2'
+const HAIL_GRID_CACHE_PREFIX = 'hail/grid/v3'
 
 function gridKey(lat, lng) {
   return `${Math.floor(lat)}/${Math.floor(lng)}`
@@ -142,13 +171,15 @@ function parseSpcCsv(csvText) {
 
     const key = gridKey(lat, lng)
     if (!grid[key]) grid[key] = []
+    const converted = spcLocalTimeToUtc(date, time, tz)
     grid[key].push({
       date,
       year,
       lat,
       lng,
       size_inches: isNaN(mag) ? null : mag,
-      time_utc: spcLocalTimeToUtc(date, time, tz),
+      time_utc: converted?.time_utc ?? null,
+      date_utc: converted?.date_utc ?? null,
     })
   }
 
@@ -445,6 +476,7 @@ function buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents) {
       if (evt.year < startYear) continue
       const dist = haversineDistance(latF, lngF, evt.lat, evt.lng)
       if (dist <= radius) {
+        const dateUtc = resolveCompiledDateUtc(evt)
         allNearbyEvents.push({
           date: evt.date,
           lat: evt.lat,
@@ -453,6 +485,7 @@ function buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents) {
           hail_size_inches: evt.size_inches,
           year: evt.year,
           time_utc: evt.time_utc || null,
+          date_utc: dateUtc && dateUtc !== evt.date ? dateUtc : (evt.date_utc || null),
           convective_day: evt.convective_day === true,
         })
       }
@@ -471,6 +504,7 @@ function buildHailResponse(latF, lngF, radius, startYear, cells, recentEvents) {
         hail_size_inches: evt.size_inches,
         year: evt.year,
         time_utc: evt.time_utc || null,
+        date_utc: evt.date_utc || null,
         convective_day: evt.convective_day === true,
       })
     }

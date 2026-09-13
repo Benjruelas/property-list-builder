@@ -67,12 +67,29 @@ describe('storm radar timeline', () => {
     })
     expect(afternoon.toISOString()).toBe('2026-04-25T21:00:00.000Z')
 
-    const compiledOvernight = eventDateTimeUTC({
+    // Compiled archive evening CST→UTC (19:00 CST → 01:00Z next day) only stored HH:MM.
+    const compiledEvening = eventDateTimeUTC({
       date: '2023-05-15',
-      time_utc: '03:30',
+      time_utc: '01:00',
       year: 2023,
     })
-    expect(compiledOvernight.toISOString()).toBe('2023-05-15T03:30:00.000Z')
+    expect(compiledEvening.toISOString()).toBe('2023-05-16T01:00:00.000Z')
+
+    const compiledWithDateUtc = eventDateTimeUTC({
+      date: '2023-05-15',
+      date_utc: '2023-05-16',
+      time_utc: '01:00',
+      year: 2023,
+    })
+    expect(compiledWithDateUtc.toISOString()).toBe('2023-05-16T01:00:00.000Z')
+
+    // Afternoon compiled times do not wrap.
+    const compiledAfternoon = eventDateTimeUTC({
+      date: '2023-05-15',
+      time_utc: '23:00',
+      year: 2023,
+    })
+    expect(compiledAfternoon.toISOString()).toBe('2023-05-15T23:00:00.000Z')
   })
 
   it('selects N0R before the N0Q archive and N0Q after', () => {
@@ -121,7 +138,7 @@ describe('storm radar timeline', () => {
       lng: -96.8,
       year: 2023,
     })
-    expect(key).toContain('v6')
+    expect(key).toContain('v7')
     expect(key).toContain('b6')
     expect(key).toContain('a3')
     expect(key).toContain('2023-05-15')
