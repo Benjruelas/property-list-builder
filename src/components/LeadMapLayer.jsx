@@ -95,6 +95,9 @@ function heatmapPaintForColor(hex) {
 /**
  * Always-on lead overlay: status heatmaps (zoomed out), glowing dots + lead icon,
  * click opens lead details.
+ *
+ * Keep mounted across hail-storm view — toggling `visible` hides layers without
+ * unmounting the MapLibre source (remount can fail to restore markers on mobile).
  */
 export function LeadMapLayer({
   mapRef,
@@ -103,9 +106,12 @@ export function LeadMapLayer({
   leadStatuses = null,
   dealCountByLead = null,
   onLeadClick,
+  visible = true,
 }) {
   const onLeadClickRef = useRef(onLeadClick)
+  const visibleRef = useRef(visible)
   useEffect(() => { onLeadClickRef.current = onLeadClick }, [onLeadClick])
+  useEffect(() => { visibleRef.current = visible }, [visible])
 
   const geojson = useMemo(
     () => buildLeadMapGeoJSON(leads, { dealCountByLead, leadStatuses }),
@@ -113,6 +119,11 @@ export function LeadMapLayer({
   )
 
   const statusColors = useMemo(() => distinctLeadMapColors(geojson), [geojson])
+
+  const heatLayerIds = useMemo(
+    () => statusColors.map((color) => `leads-heat-${colorLayerKey(color)}`),
+    [statusColors],
+  )
 
   useEffect(() => {
     if (!mapReady) return undefined
@@ -134,9 +145,34 @@ export function LeadMapLayer({
     const map = mapRef?.current
     if (!map) return undefined
 
+    const allLayerIds = [...heatLayerIds, GLOW_LAYER, CORE_LAYER, ICON_LAYER]
+    const applyVisibility = () => {
+      const value = visibleRef.current ? 'visible' : 'none'
+      for (const layerId of allLayerIds) {
+        try {
+          if (map.getLayer?.(layerId)) map.setLayoutProperty(layerId, 'visibility', value)
+        } catch {
+          /* layer not ready */
+        }
+      }
+    }
+
+    applyVisibility()
+    map.on?.('idle', applyVisibility)
+    return () => {
+      map.off?.('idle', applyVisibility)
+    }
+  }, [mapRef, mapReady, visible, heatLayerIds, geojson.features.length])
+
+  useEffect(() => {
+    if (!mapReady || !visible) return undefined
+    const map = mapRef?.current
+    if (!map) return undefined
+
     const interactiveIds = [GLOW_LAYER, CORE_LAYER, ICON_LAYER]
 
     const onClick = (e) => {
+      if (!visibleRef.current) return
       const leadId = e.features?.[0]?.properties?.leadId
         || (map.queryRenderedFeatures?.(e.point, { layers: interactiveIds }) || [])[0]?.properties?.leadId
       if (!leadId) return
@@ -146,6 +182,7 @@ export function LeadMapLayer({
     }
 
     const onEnter = () => {
+      if (!visibleRef.current) return
       const canvas = map.getCanvas?.()
       if (canvas) canvas.style.cursor = 'pointer'
     }
@@ -186,9 +223,11 @@ export function LeadMapLayer({
       const canvas = map.getCanvas?.()
       if (canvas) canvas.style.cursor = ''
     }
-  }, [mapRef, mapReady, statusColors.length])
+  }, [mapRef, mapReady, visible, statusColors.length])
 
   if (!geojson.features.length) return null
+
+  const layerVisibility = visible ? 'visible' : 'none'
 
   return (
     <Source id={SOURCE_ID} type="geojson" data={geojson}>
@@ -201,6 +240,7 @@ export function LeadMapLayer({
             type="heatmap"
             maxzoom={HEATMAP_MAX_ZOOM}
             filter={['==', ['get', 'color'], color]}
+            layout={{ visibility: layerVisibility }}
             paint={heatmapPaintForColor(color)}
           />
         )
@@ -209,6 +249,7 @@ export function LeadMapLayer({
         id={GLOW_LAYER}
         type="circle"
         minzoom={DOTS_MIN_ZOOM}
+        layout={{ visibility: layerVisibility }}
         paint={{
           'circle-color': ['get', 'color'],
           'circle-radius': [
@@ -231,6 +272,7 @@ export function LeadMapLayer({
         id={CORE_LAYER}
         type="circle"
         minzoom={DOTS_MIN_ZOOM}
+        layout={{ visibility: layerVisibility }}
         paint={{
           'circle-color': ['get', 'color'],
           'circle-radius': [
@@ -262,6 +304,7 @@ export function LeadMapLayer({
         type="symbol"
         minzoom={DOTS_MIN_ZOOM}
         layout={{
+          visibility: layerVisibility,
           'icon-image': ICON_ID,
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],

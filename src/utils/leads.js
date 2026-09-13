@@ -361,11 +361,17 @@ export function collectLeadsNeedingPhotoHydrate(
   return ids
 }
 
-export async function fetchLeads(getToken, { view = 'list' } = {}) {
+/**
+ * @param {() => Promise<string|null>} getToken
+ * @param {{ view?: string, allowNotModified?: boolean }} [options]
+ *   When `allowNotModified` is false (client has no leads), skip If-None-Match so a
+ *   stale in-memory ETag cannot 304 and leave the UI empty.
+ */
+export async function fetchLeads(getToken, { view = 'list', allowNotModified = true } = {}) {
   const token = await getToken()
   if (!token) return loadLocalLeads()
   const headers = { Authorization: `Bearer ${token}` }
-  if (leadsListEtag) headers['If-None-Match'] = leadsListEtag
+  if (allowNotModified && leadsListEtag) headers['If-None-Match'] = leadsListEtag
   const query = view ? `?view=${encodeURIComponent(view)}` : ''
   const res = await fetch(`${getApiBase()}/leads${query}`, {
     method: 'GET',

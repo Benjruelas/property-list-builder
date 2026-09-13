@@ -158,6 +158,7 @@ import {
   getLeadStatus,
   leadNeedsPhotoHydrate,
   collectLeadsNeedingPhotoHydrate,
+  resetLeadsListEtag,
 } from './utils/leads'
 import {
   logLeadOutreach,
@@ -1449,11 +1450,24 @@ function App() {
     if (showSpinner) setLeadsLoading(true)
     let mergedLeads = null
     try {
-      const next = await fetchLeads(getToken)
+      // Never conditional-GET when the client has nothing to show — a sticky ETag
+      // 304 would leave the leads panel / map empty.
+      const hasClientLeads = baseline.length > 0 || leadsRef.current.length > 0
+      let next = await fetchLeads(getToken, { allowNotModified: hasClientLeads })
       if (requestId !== refreshLeadsGenerationRef.current) return
       if (next?.notModified) {
-        await hydrateSharedLeadPhotosRef.current?.()
-        return
+        if (leadsRef.current.length === 0 && baseline.length === 0) {
+          resetLeadsListEtag()
+          next = await fetchLeads(getToken, { allowNotModified: false })
+          if (requestId !== refreshLeadsGenerationRef.current) return
+          if (next?.notModified) {
+            await hydrateSharedLeadPhotosRef.current?.()
+            return
+          }
+        } else {
+          await hydrateSharedLeadPhotosRef.current?.()
+          return
+        }
       }
       const excludeIds = deletedLeadIdsRef.current
       setLeads((prev) => {
@@ -4245,16 +4259,15 @@ function App() {
               parcelLayerRef.current = layerFunctions
             }}
           />
-          {!selectedHailEvent ? (
-            <LeadMapLayer
-              mapRef={mapInstanceRef}
-              mapReady={mapReady}
-              leads={leads}
-              leadStatuses={leadStatuses}
-              dealCountByLead={dealCountByLead}
-              onLeadClick={openLeadDetailsFromMap}
-            />
-          ) : null}
+          <LeadMapLayer
+            mapRef={mapInstanceRef}
+            mapReady={mapReady}
+            leads={leads}
+            leadStatuses={leadStatuses}
+            dealCountByLead={dealCountByLead}
+            onLeadClick={openLeadDetailsFromMap}
+            visible={!selectedHailEvent}
+          />
           <PathTracker
             ref={pathTrackerRef}
             mapRef={mapInstanceRef}
