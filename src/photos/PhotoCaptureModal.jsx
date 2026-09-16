@@ -87,9 +87,8 @@ async function bindStreamToVideo(video, stream) {
 
 /**
  * Crop the video frame to match what the user sees through the viewport
- * (object-fit: cover into the window), then apply digital zoom.
- * Use the window size — not the oversized vmax video stage — so capture
- * matches the visible frame in every orientation.
+ * (object-fit: cover into the window), then apply any remaining digital zoom
+ * that hardware track zoom could not cover.
  */
 function captureCoverFrame(video, zoomScale = 1) {
   if (!video?.videoWidth) return null
@@ -149,8 +148,9 @@ async function captureStillFromTrack(stream) {
   }
 }
 
-const ZOOM_PRESETS = [0.5, 1, 3]
-const MAX_ZOOM = 5
+/** UI zoom presets (.5x when ultra-wide exists; 1x is true main-lens FOV). */
+export const ZOOM_PRESETS = [0.5, 1, 2, 3, 5]
+export const MAX_ZOOM = 5
 
 function touchDistance(t1, t2) {
   const dx = t1.clientX - t2.clientX
@@ -187,9 +187,25 @@ async function applyTrackZoom(stream, zoom) {
   }
 }
 
-/** CSS scale is always >= 1 so object-fit: cover keeps the preview full screen. */
-function displayScaleForZoom(zoomFactor) {
-  return Math.max(1, zoomFactor)
+/**
+ * CSS digital scale on top of hardware track zoom.
+ * Keep scale >= 1 so object-fit: cover stays full-bleed. Below 1x is hardware
+ * ultra-wide only. Within the track's range, hardware does the work; CSS only
+ * amplifies past track.max.
+ */
+export function displayScaleForZoom(zoomFactor, range = null) {
+  if (!(zoomFactor > 1)) return 1
+  if (range && range.max > 1) {
+    if (zoomFactor <= range.max) return 1
+    return zoomFactor / range.max
+  }
+  return zoomFactor
+}
+
+/** Map UI zoom factor onto the MediaStreamTrack zoom constraint. */
+export function trackZoomForFactor(zoomFactor, range) {
+  if (!range) return null
+  return clampZoom(zoomFactor, range.min, range.max)
 }
 
 function nearestPresetLabel(zoomFactor) {
@@ -205,32 +221,17 @@ function nearestPresetLabel(zoomFactor) {
   return String(best)
 }
 
+function formatZoomPresetLabel(level) {
+  if (level === 0.5) return '.5x'
+  return `${level}x`
+}
+
 function facingToNativePosition(facingMode) {
   return facingMode === 'user' ? 'front' : 'rear'
 }
 
-/** Stable CSS var — must not use vmax (iOS recalculates mid-rotate and snaps). */
+/** @deprecated Cleared on stop so older sessions don't leave a mega-crop stage size. */
 export const PHOTO_CAMERA_COVER_VAR = '--photo-camera-cover'
-
-/**
- * Long-edge cover size in CSS px. Prefer screen.width/height — on iPhone those
- * stay constant across orientation, unlike innerWidth/innerHeight / vmax.
- */
-export function computeWebCameraCoverSizePx() {
-  const sw = Number(window.screen?.width) || 0
-  const sh = Number(window.screen?.height) || 0
-  const iw = Number(window.innerWidth) || 0
-  const ih = Number(window.innerHeight) || 0
-  // Slightly past the long edge so corners stay covered during the OS rotate animation.
-  const longEdge = Math.max(sw, sh, iw, ih, 1)
-  return Math.ceil(longEdge * 1.2)
-}
-
-function lockWebCameraCoverSize() {
-  if (typeof document === 'undefined') return
-  const px = computeWebCameraCoverSizePx()
-  document.documentElement.style.setProperty(PHOTO_CAMERA_COVER_VAR, `${px}px`)
-}
 
 function clearWebCameraCoverSize() {
   if (typeof document === 'undefined') return
@@ -267,6 +268,7 @@ function PhotoCaptureModalInner({
   const galleryLongPressRef = useRef(null)
   const pinchRef = useRef({ active: false, startDist: 0, startZoom: 1 })
   const zoomFactorRef = useRef(1)
+  const trackZoomRangeRef = useRef(null)
   const useNativePreviewRef = useRef(false)
   const flashEnabledRef = useRef(false)
   const startCameraRef = useRef(null)
@@ -286,19 +288,15 @@ function PhotoCaptureModalInner({
   const [pinching, setPinching] = useState(false)
   const [trackZoomRange, setTrackZoomRange] = useState(null)
 
-  const minZoom = trackZoomRange?.min ?? 1
-  const maxZoom = Math.max(MAX_ZOOM, trackZoomRange?.max ?? MAX_ZOOM)
-  const displayScale = displayScaleForZoom(zoomFactor)
+  const displayScale = displayScaleForZoom(zoomFactor, trackZoomRange)
   const activePreset = nearestPresetLabel(zoomFactor)
   const wideZoomAvailable = !useNativePreview && trackZoomRange != null && trackZoomRange.min < 1
 
   const syncTrackZoom = useCallback((stream, factor, range) => {
     if (!stream || !range) return
-    if (factor < 1) {
-      void applyTrackZoom(stream, range.min)
-    } else {
-      void applyTrackZoom(stream, 1)
-    }
+    const trackZoom = trackZoomForFactor(factor, range)
+    if (trackZoom == null) return
+    void applyTrackZoom(stream, trackZoom)
   }, [])
 
   const setZoom = useCallback((next, range = trackZoomRange) => {
@@ -309,7 +307,7 @@ function PhotoCaptureModalInner({
       setZoomFactor(clamped)
       return
     }
-    const lo = range?.min ?? 1
+    const lo = range?.min != null && range.min < 1 ? range.min : 1
     const hi = Math.max(MAX_ZOOM, range?.max ?? MAX_ZOOM)
     const clamped = clampZoom(next, lo, hi)
     zoomFactorRef.current = clamped
@@ -320,6 +318,10 @@ function PhotoCaptureModalInner({
   useEffect(() => {
     zoomFactorRef.current = zoomFactor
   }, [zoomFactor])
+
+  useEffect(() => {
+    trackZoomRangeRef.current = trackZoomRange
+  }, [trackZoomRange])
 
   useEffect(() => {
     useNativePreviewRef.current = useNativePreview
@@ -423,17 +425,18 @@ function PhotoCaptureModalInner({
       return
     }
 
-    // Lock cover size once so iOS orientation changes only reflow chrome.
-    lockWebCameraCoverSize()
+    // Viewport-sized stage: object-fit:cover matches true 1x FOV (no oversized square crop).
+    clearWebCameraCoverSize()
 
     const stream = await requestCameraStream(facing)
     streamRef.current = stream
     const range = getTrackZoomRange(stream)
     setTrackZoomRange(range)
+    trackZoomRangeRef.current = range
     zoomFactorRef.current = 1
     setZoomFactor(1)
     if (videoRef.current) await bindStreamToVideo(videoRef.current, stream)
-    if (range) void applyTrackZoom(stream, 1)
+    if (range) void applyTrackZoom(stream, trackZoomForFactor(1, range) ?? 1)
     setUseNativePreview(false)
     useNativePreviewRef.current = false
     setCameraReady(true)
@@ -562,7 +565,6 @@ function PhotoCaptureModalInner({
   }, [open, stopCamera])
 
   // Keep the web <video> playing across iOS Safari orientation changes.
-  // Do not touch layout size here — cover size is locked for the session.
   useEffect(() => {
     if (!open || !cameraReady || useNativePreview) return undefined
     const resume = () => {
@@ -735,9 +737,13 @@ function PhotoCaptureModalInner({
   }, [storageFull, resolveCaptureRef, buildMetadata, enqueueCapture, onPhotosAdded, getToken])
 
   const captureFromVideo = useCallback(async () => {
-    const still = await captureStillFromTrack(streamRef.current)
-    if (still) return still
-    return captureCoverFrame(videoRef.current, displayScaleForZoom(zoomFactorRef.current))
+    const scale = displayScaleForZoom(zoomFactorRef.current, trackZoomRangeRef.current)
+    // ImageCapture stills follow hardware zoom, but not CSS digital crop.
+    if (scale <= 1) {
+      const still = await captureStillFromTrack(streamRef.current)
+      if (still) return still
+    }
+    return captureCoverFrame(videoRef.current, scale)
   }, [])
 
   const handleViewportTouchStart = (e) => {
@@ -1037,7 +1043,7 @@ function PhotoCaptureModalInner({
                     className={cn('photo-mode-zoom-btn', activePreset === String(level) && 'photo-mode-zoom-btn--active')}
                     onClick={() => handlePresetZoom(level)}
                   >
-                    {level === 0.5 ? '.5x' : `${level}x`}
+                    {formatZoomPresetLabel(level)}
                   </button>
                 ))}
               </div>

@@ -9294,18 +9294,15 @@ html.photo-native-camera-active #modal-root,
 }
 
 /*
- * Stable web camera stage: fixed px cover size locked when the camera opens
- * (--photo-camera-cover). Do NOT use 100vmax — iOS recalculates vmax mid-rotate
- * and the stage briefly shrinks to the short edge, then snaps. Chrome (bars /
- * shutter) still reflows with the visual viewport; only the feed stays put.
+ * Web camera stage fills the viewport. object-fit:cover then matches a normal
+ * camera-app 1x FOV. (An oversized square stage was previously used for rotate
+ * stability but cropped ~2× past true 1x.)
  */
 .photo-mode-video-stage {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: var(--photo-camera-cover, 100vmax);
-  height: var(--photo-camera-cover, 100vmax);
-  transform: translate(-50%, -50%);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: #000;
   pointer-events: none;
@@ -9417,14 +9414,14 @@ html.photo-native-camera-active #modal-root,
 }
 
 .photo-mode-zoom-btn {
-  min-width: 36px;
-  height: 32px;
-  padding: 0 8px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
   border: none;
   border-radius: 999px;
   background: transparent;
   color: rgba(255, 255, 255, 0.75);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   touch-action: manipulation;
 }
