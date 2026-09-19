@@ -138,6 +138,15 @@ export function FilePreviewOverlay({
     }
 
     cleanup()
+    const cached = item.getCachedBlob?.()
+    if (cached instanceof Blob) {
+      const { url, revoke } = createPreviewSource(cached)
+      revokeRef.current = revoke
+      setBlob(cached)
+      setPreviewUrl(url)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const entry = await loadItemIntoCache(item, index)
