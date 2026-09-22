@@ -101,6 +101,8 @@ export function MobileActionBar({
   currentUser,
   onLogin,
   activityUnreadCount = 0,
+  /** When true, fade out and ignore pointer events (e.g. map search / keyboard). */
+  faded = false,
 }) {
   const elevateBar = useDesktopActionBarElevated()
   const { barIds, overflowPrimaryIds, isDesktop } = useActionBarLayout()
@@ -146,6 +148,10 @@ export function MobileActionBar({
     prefetchPanel('pipes')
     prefetchPanel('quotes')
   }, [showMenu])
+
+  useEffect(() => {
+    if (faded && showMenu) setShowMenu?.(false)
+  }, [faded, showMenu, setShowMenu])
 
   const handlers = {
     pipes: onOpenPipes,
@@ -195,9 +201,14 @@ export function MobileActionBar({
         anchor={menuAnchor}
       />
       <nav
-        className={cn('mobile-action-bar', elevateBar && 'mobile-action-bar--elevated')}
+        className={cn(
+          'mobile-action-bar',
+          elevateBar && 'mobile-action-bar--elevated',
+          faded && 'mobile-action-bar--faded',
+        )}
         role="navigation"
         aria-label="Primary actions"
+        aria-hidden={faded || undefined}
         data-action-bar-count={barIds.length}
       >
         <div className="mobile-action-bar-inner">
@@ -222,6 +233,7 @@ export function MobileActionBar({
                 aria-label={label}
                 title={label}
                 aria-expanded={id === 'menu' ? showMenu : undefined}
+                tabIndex={faded ? -1 : undefined}
                 data-tour={tourId}
               >
                 <span className="mobile-action-bar-icon-wrap">

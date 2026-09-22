@@ -83,18 +83,19 @@
     </script>
     <style>
       /*
-       * iOS black-translucent PWA: use 100vh (not height:100% / fill-available) so
-       * the shell fills the true screen. A short % height leaves a bottom dead band;
-       * after ce50bfe that band is pure #000 under the action bar.
+       * iOS black-translucent PWA: use 100vh / 100lvh (not height:100% / fill-available
+       * or 100dvh) so the shell fills the true screen and does not shrink with the
+       * software keyboard. A short % height leaves a bottom dead band; after ce50bfe
+       * that band is pure #000 under the action bar.
        */
       html,
       body {
         margin: 0;
         padding: 0;
         height: 100vh;
-        height: 100dvh;
+        height: 100lvh;
         min-height: 100vh;
-        min-height: 100dvh;
+        min-height: 100lvh;
         min-height: var(--vw-height, 100vh);
         background: #000000 !important;
         color-scheme: dark;
@@ -106,9 +107,9 @@
         left: 0;
         width: 100%;
         height: 100vh;
-        height: 100dvh;
+        height: 100lvh;
         min-height: 100vh;
-        min-height: 100dvh;
+        min-height: 100lvh;
         min-height: var(--vw-height, 100vh);
         background: #000000;
       }
@@ -175,20 +176,34 @@
       (function() {
         var ruler = document.createElement('div');
         // Measure 100vh only — -webkit-fill-available can be the short safe-area box on iOS.
-        ruler.style.cssText = 'position:fixed;width:1px;height:100vh;top:0;left:0;pointer-events:none;visibility:hidden;';
+        // Prefer large viewport units when available so the keyboard does not shrink the ruler.
+        ruler.style.cssText = 'position:fixed;width:1px;height:100vh;height:100lvh;top:0;left:0;pointer-events:none;visibility:hidden;';
         document.body.appendChild(ruler);
-        function setViewportHeight() {
+        var lockedH = 0;
+        var lastW = window.innerWidth || 0;
+        function setViewportHeight(force) {
+          var w = window.innerWidth || 0;
           var h = Math.max(ruler.offsetHeight || 0, window.innerHeight || 0);
           if (!(h > 0)) return;
-          document.documentElement.style.setProperty('--vw-height', h + 'px');
+          // Width/orientation change: re-lock. Keyboard-only shrink: keep prior height.
+          if (force || w !== lastW || lockedH === 0) {
+            lockedH = h;
+            lastW = w;
+          } else if (h > lockedH) {
+            lockedH = h; // URL bar hide / chrome collapse may grow the viewport
+          }
+          document.documentElement.style.setProperty('--vw-height', lockedH + 'px');
         }
-        setViewportHeight();
-        requestAnimationFrame(setViewportHeight);
-        window.visualViewport && window.visualViewport.addEventListener('resize', setViewportHeight);
-        window.visualViewport && window.visualViewport.addEventListener('scroll', setViewportHeight);
-        window.addEventListener('resize', setViewportHeight);
-        window.addEventListener('orientationchange', setViewportHeight);
-        window.addEventListener('load', setViewportHeight);
+        setViewportHeight(true);
+        requestAnimationFrame(function() { setViewportHeight(true); });
+        window.visualViewport && window.visualViewport.addEventListener('resize', function() { setViewportHeight(false); });
+        window.visualViewport && window.visualViewport.addEventListener('scroll', function() { setViewportHeight(false); });
+        window.addEventListener('resize', function() { setViewportHeight(false); });
+        window.addEventListener('orientationchange', function() {
+          // After rotation, remeasure once layout settles
+          setTimeout(function() { setViewportHeight(true); }, 300);
+        });
+        window.addEventListener('load', function() { setViewportHeight(true); });
       })();
     </script>
     <!-- Keep boot splash outside #root so React mount cannot tear it down. -->

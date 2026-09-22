@@ -10,6 +10,7 @@ import { StateBoundaryLayer } from './components/StateBoundaryLayer'
 import { MapControls } from './components/MapControls'
 import { MobileActionBar } from './components/MobileActionBar'
 import { AddressSearch } from './components/AddressSearch'
+import { useKeyboardViewport } from './hooks/useKeyboardViewport'
 import { ListPanel } from './components/ListPanel'
 import { SkipTracedListPanel } from './components/SkipTracedListPanel'
 import { ParcelListPanel } from './components/ParcelListPanel'
@@ -768,6 +769,9 @@ function App() {
       window.visualViewport?.removeEventListener('scroll', handler)
     }
   }, [])
+
+  // Keep fixed chrome from riding up when the iOS keyboard opens
+  useKeyboardViewport()
 
   // Initial center on first GPS fix (imperative — GPS ticks don't re-render App)
   useEffect(() => {
@@ -4445,6 +4449,7 @@ function App() {
         onOpenSettings={openSettingsPanel}
         currentUser={currentUser}
         onLogin={openLogin}
+        faded={isMapSearchOpen}
       />
 
       <ListPanel
