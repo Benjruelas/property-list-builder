@@ -23,8 +23,7 @@
 
 1. Requires `CRON_SECRET` in production.
 2. `push_subscribers` set must be populated; avoid `KEYS` scans.
-3. Vercel Hobby allows only one cron run per day (`vercel.json` uses `0 14 * * *`). For ~5‑minute reminder ticks, set repository secrets `CRON_SECRET` + optional `APP_ORIGIN` so `.github/workflows/cron-task-reminders.yml` can call the endpoint (or restore `*/5 * * * *` on a Pro plan).
-4. Re-run manually: `curl -H "Authorization: Bearer $CRON_SECRET" https://knockscout.app/api/cron-task-reminders`
+3. Re-run manually: `curl -H "Authorization: Bearer $CRON_SECRET" https://knockscout.app/api/cron-task-reminders`
 
 ## Account-switch data leak
 
