@@ -60,7 +60,12 @@
   "redirects": [
     {
       "source": "/:path*",
-      "has": [{ "type": "host", "value": "www.knockscout.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "www.knockscout.app"
+        }
+      ],
       "destination": "https://knockscout.app/:path*",
       "permanent": true
     }
@@ -93,12 +98,6 @@
     {
       "source": "/((?!api/|@vite|@react-refresh|@fs/|src/|node_modules/|assets/|brand/|emblem-|manifest\\.webmanifest|favicon|apple-touch-icon|icon-|sw\\.js|workbox-|recover\\.html).*)",
       "destination": "/index.html"
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron-task-reminders",
-      "schedule": "*/5 * * * *"
     }
   ],
   "headers": [
