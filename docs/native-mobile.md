@@ -67,6 +67,21 @@ Implementation: `FilePreviewOverlay` → `saveBlobToDevice()` → `savePhotoNati
 - `CAMERA` — required for Photo Mode native capture
 - Non-gallery Media mode — only `INTERNET` is required for saving to the app album (no broad storage permission)
 
+## Keyboard (iOS)
+
+The action bar is `position: fixed; bottom: 0`. If the WKWebView resizes when the
+software keyboard opens, that dock rides up above the keys (e.g. map address search).
+
+Capacitor is configured with `@capacitor/keyboard` `resize: "none"` so the WebView
+stays full-screen; the web shell also locks `--vw-height` against keyboard shrinks
+and fades the action bar while map search / the keyboard is open.
+
+After changing keyboard config, rebuild and sync:
+
+```bash
+npm run cap:sync
+```
+
 ## Manual QA
 
 1. Desktop Chrome — Save photo → file downloads.

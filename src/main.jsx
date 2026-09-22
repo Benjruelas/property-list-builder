@@ -10,9 +10,11 @@ import { applyUiThemeFromStorage } from './utils/uiTheme'
 import { AuthProvider } from './contexts/AuthContext'
 import { initErrorTracking } from './utils/errorTracking'
 import { isIosStandalone } from './utils/isIosStandalone'
+import { initCapacitorKeyboard } from './utils/capacitorKeyboard'
 
 initErrorTracking()
 applyUiThemeFromStorage()
+initCapacitorKeyboard()
 import { NavigationProvider } from './navigation/NavigationContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 

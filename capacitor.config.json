@@ -16,6 +16,9 @@
   "plugins": {
     "Media": {
       "androidGalleryMode": false
+    },
+    "Keyboard": {
+      "resize": "none"
     }
   }
 }
